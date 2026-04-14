@@ -53,6 +53,36 @@ components:
     status: active_doc
     purpose: Stable kernel rule for writable execution vs advisory multi-runtime reasoning
 
+  - id: product_positioning_pack
+    name: Product Positioning Pack
+    layer: product
+    status: active_doc
+    purpose: One-pager, pain statement, message hierarchy, and landing copy for product framing
+
+  - id: market_boundary_pack
+    name: Market and Boundary Pack
+    layer: product
+    status: active_doc
+    purpose: Provider boundaries, competitor map, and external reference posture
+
+  - id: design_workflow_pack
+    name: Design Workflow Pack
+    layer: product
+    status: active_doc
+    purpose: Figma workflow, design decisions, and tooling guidance for public entry flow
+
+  - id: research_source_pack
+    name: Research Source Pack
+    layer: research
+    status: active_doc
+    purpose: Background source material informing the Goalrail product direction
+
+  - id: reference_screens_pack
+    name: Reference Screens Pack
+    layer: design
+    status: active_doc
+    purpose: Screenshot references and explorations imported from the final pack
+
   - id: ops_status
     name: STATUS
     layer: ops

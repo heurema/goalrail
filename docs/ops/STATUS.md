@@ -14,6 +14,8 @@ The project currently has:
 - implementation guide
 - project spine schema note
 - two kernel ADRs
+- supplemental positioning / GTM / design docs from the final pack
+- research source material and reference screens
 - ops rails
 - no implementation baseline yet
 
@@ -26,6 +28,7 @@ The project currently has:
   - Delivery / Execution
 - Project Spine fixed as the canonical center
 - runtime-neutral, CLI-first posture is explicit
+- supporting market, messaging, competitor, and landing docs are now checked into the repo
 
 ### Architecture
 - one primary writer runtime per writable run is explicit
