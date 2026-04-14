@@ -1,0 +1,138 @@
+components:
+  - id: docs_index
+    name: Docs Index
+    layer: ops
+    status: active_doc
+    purpose: Canonical reading order and source-of-truth entrypoint
+
+  - id: product_brief
+    name: Product Brief
+    layer: product
+    status: active_doc
+    purpose: Product thesis, positioning, users, MVP promise
+
+  - id: mvp_blueprint
+    name: MVP Blueprint
+    layer: product
+    status: active_doc
+    purpose: Canonical architecture and layer map
+
+  - id: build_roadmap
+    name: Build Roadmap
+    layer: product
+    status: active_doc
+    purpose: Phase order, checkpoints, exits, and demo targets
+
+  - id: parallel_execution_model
+    name: Parallel Execution Model
+    layer: runtime
+    status: active_doc
+    purpose: Task execution groups, advisory panels, isolation, and barrier rules
+
+  - id: implementation_guide
+    name: Implementation Guide
+    layer: ops
+    status: active_doc
+    purpose: Bounded slice workflow and editing rules
+
+  - id: project_spine_schema_note
+    name: Project Spine Schema Note
+    layer: kernel
+    status: active_doc
+    purpose: Canonical objects, derived views, event envelope, and ownership boundaries
+
+  - id: adr_runtime_neutral_cli_first
+    name: ADR-0001 Runtime-neutral CLI-first
+    layer: ops
+    status: active_doc
+    purpose: Stable kernel rule for runtime integration boundaries
+
+  - id: adr_single_writer_advisory_panels
+    name: ADR-0002 Single-writer and Advisory Panels
+    layer: ops
+    status: active_doc
+    purpose: Stable kernel rule for writable execution vs advisory multi-runtime reasoning
+
+  - id: ops_status
+    name: STATUS
+    layer: ops
+    status: active_doc
+    purpose: Current state and active checkpoint
+
+  - id: ops_next
+    name: NEXT
+    layer: ops
+    status: active_doc
+    purpose: Immediate bounded slices only
+
+  - id: ops_decisions
+    name: DECISIONS
+    layer: ops
+    status: active_doc
+    purpose: Compact decision log
+
+  - id: project_spine
+    name: Project Spine
+    layer: kernel
+    status: planned
+    purpose: Canonical object model, evented state truth, and recovery or routing records
+
+  - id: work_ledger_view
+    name: Work Ledger View
+    layer: kernel
+    status: planned
+    purpose: Derived current-state and next-action projection over canonical events
+
+  - id: intent_plane
+    name: Intent Plane
+    layer: product
+    status: planned
+    purpose: Goal clarification and handoff generation
+
+  - id: contract_shaping
+    name: Contract, Risk and Task Shaping
+    layer: kernel
+    status: planned
+    purpose: Approved contract generation, task planning, and routing defaults
+
+  - id: runtime_registry
+    name: Runtime Registry
+    layer: runtime
+    status: planned
+    purpose: Discover configured runtimes, auth status, and capability metadata
+
+  - id: routing_policy_engine
+    name: Routing Policy Engine
+    layer: kernel
+    status: planned
+    purpose: Assign risk levels and runtime or advisory routing per task
+
+  - id: delivery_runtime
+    name: Delivery Runtime
+    layer: runtime
+    status: planned
+    purpose: Bounded execution through primary runtime adapters with baseline capture
+
+  - id: execution_groups
+    name: Execution Groups
+    layer: runtime
+    status: planned
+    purpose: Parallel task scheduling with explicit isolation and fan-in barriers
+
+  - id: advisory_panels
+    name: Advisory Panels
+    layer: trust
+    status: planned
+    purpose: Multi-runtime panel, quorum, verify, and diverge flows over bounded inputs
+
+  - id: consensus_synthesizer
+    name: Consensus Synthesizer
+    layer: trust
+    status: planned
+    purpose: Normalize advisory outputs into inspectable split or consensus records
+
+  - id: gate_proof
+    name: Gate / Verify / Proof
+    layer: trust
+    status: planned
+    purpose: Final verdict, repo invariants, and inspectable proof artifacts
