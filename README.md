@@ -8,8 +8,12 @@ Goalrail is an intent-to-delivery layer for software teams.
 
 This repository currently holds the canonical documentation baseline for Goalrail:
 
-- product docs in `docs/product/`
+- core product docs in `docs/product/`
+- kernel support docs in `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/`
 - operating docs in `docs/ops/`
+- supporting GTM / positioning / design docs in `docs/product/`
+- research materials in `docs/research/`
+- reference screens in `design/reference_screens/`
 - repo-local agent guidance in `AGENTS.md`
 
 It does **not** contain a real implementation baseline yet.
@@ -22,6 +26,7 @@ It does **not** contain a real implementation baseline yet.
 - the parallel execution model is documented
 - the project spine schema note and kernel ADRs are documented
 - the implementation workflow is documented
+- supplemental positioning / design docs from the final pack are merged
 - implementation will proceed through `punk` in bounded slices
 
 ## Read in this order
@@ -41,7 +46,9 @@ It does **not** contain a real implementation baseline yet.
 
 ## Working rule
 
-- `docs/product/` is the canonical product source
+- `docs/product/` core canon is the product source of truth
+- `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/` hold kernel support truth
+- supplemental docs in `docs/product/`, `docs/research/`, and `design/reference_screens/` support positioning/design work and do not override the canon
 - `docs/ops/` is the current working layer
 - implementation in this repo goes through `punk`
 - changes should stay small, bounded, and reviewable
@@ -52,11 +59,15 @@ It does **not** contain a real implementation baseline yet.
 .
 ├─ README.md
 ├─ AGENTS.md
+├─ design/
+│  └─ reference_screens/
 ├─ docs/
 │  ├─ INDEX.md
-│  ├─ product/
+│  ├─ PROJECT_SPINE_SCHEMA.md
+│  ├─ adr/
 │  ├─ ops/
-│  └─ adr/
+│  ├─ product/
+│  └─ research/
 ├─ apps/
 ├─ crates/
 ├─ scripts/
