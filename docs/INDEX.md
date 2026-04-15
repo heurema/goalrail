@@ -1,96 +1,109 @@
 # Goalrail Docs Index
 
-> Стартовая точка для работы над проектом.
+> Единая точка входа в проект.
+> Сначала читаем бизнесовый канон, затем deployment и pilot-модель, затем product shape, затем архитектуру и только потом build / ops.
 
 ## Read in this order
 
-### Core product canon
-1. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
-2. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-3. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-4. `docs/PROJECT_SPINE_SCHEMA.md`
-5. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-6. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-7. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-8. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+### 1. Concept canon
+1. `docs/product/GOALRAIL_PRODUCT_CONCEPT.md`
+2. `docs/product/GOALRAIL_OPERATING_MODEL.md`
+3. `docs/product/GOALRAIL_DEPLOYMENT_MODEL.md`
+4. `docs/product/GOALRAIL_PILOT_MODEL.md`
+5. `docs/product/GOALRAIL_GTM_MODEL.md`
+6. `docs/product/GOALRAIL_ICP.md`
 
-### Supporting product / GTM / design docs
-9. `docs/product/GOALRAIL_ONE_PAGER.md`
-10. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
-11. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
-12. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-13. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-14. `docs/product/GOALRAIL_FIGMA_WORKFLOW.md`
-15. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-16. `docs/product/GOALRAIL_TOOLING_DECISION.md`
-17. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
-18. `docs/product/GOALRAIL_LANDING_COPY.md`
+### 2. Product summary and market framing
+7. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
+8. `docs/product/GOALRAIL_ONE_PAGER.md`
+9. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
+10. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
 
-### Ops
-19. `docs/ops/STATUS.md`
-20. `docs/ops/NEXT.md`
-21. `docs/ops/DECISIONS.md`
-22. `docs/ops/COMPONENTS.yaml`
+### 3. Product shape and external posture
+11. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
+12. `docs/product/GOALRAIL_LANDING_COPY.md`
+13. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+14. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+15. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
-### Research / sources
-23. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
-24. `design/reference_screens/`
+### 4. Architecture canon
+16. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+17. `docs/PROJECT_SPINE_SCHEMA.md`
+18. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+19. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+20. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+
+### 5. Delivery and build
+21. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+22. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+23. `docs/ops/STATUS.md`
+24. `docs/ops/NEXT.md`
+25. `docs/ops/DECISIONS.md`
+26. `docs/ops/COMPONENTS.yaml`
+
+### 6. Research and source material
+27. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
+28. `design/reference_screens/`
 
 ## Roles of the main docs
 
-### Core product source
-- `GOALRAIL_PRODUCT_BRIEF.md` — product thesis, positioning, users, MVP promise
-- `GOALRAIL_MVP_BLUEPRINT.md` — canonical MVP architecture and layer map
-- `GOALRAIL_BUILD_ROADMAP.md` — phases, checkpoints, exits, demo targets
-- `GOALRAIL_PARALLEL_EXECUTION_MODEL.md` — execution groups, advisory panels, isolation, fan-in barrier
-- `GOALRAIL_IMPLEMENTATION_GUIDE.md` — operating rules for bounded implementation
+### Concept canon
+- `GOALRAIL_PRODUCT_CONCEPT.md` — канонический ответ на вопрос, что такое Goalrail как продукт и какую проблему он решает
+- `GOALRAIL_OPERATING_MODEL.md` — core operating flow: как входящая задача становится contract -> execution -> verify -> proof
+- `GOALRAIL_DEPLOYMENT_MODEL.md` — как Goalrail подключается к команде и раскатывается как productized operating layer
+- `GOALRAIL_PILOT_MODEL.md` — как выглядит первый pilot engagement, что входит, что не входит и какой результат считается успехом
+- `GOALRAIL_GTM_MODEL.md` — как Goalrail продаётся, через какой motion заходит в компанию и какой CTA используется
+- `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
 
-### Kernel support notes
-- `PROJECT_SPINE_SCHEMA.md` — canonical objects, derived views, event envelope, ownership boundaries
-- `docs/adr/ADR-0001-runtime-neutral-cli-first.md` — runtime boundary decision
-- `docs/adr/ADR-0002-single-writer-and-advisory-panels.md` — execution vs advisory boundary decision
+### Product summary
+- `GOALRAIL_PRODUCT_BRIEF.md` — короткая executive-версия продукта
+- `GOALRAIL_ONE_PAGER.md` — краткая summary-версия для внутреннего и внешнего использования
+- `GOALRAIL_PAIN_STATEMENT.md` — pain framing и market case
+- `GOALRAIL_MESSAGE_HIERARCHY.md` — message stack и public wording
 
-### Supporting product docs
-- `GOALRAIL_ONE_PAGER.md` — concise product summary for internal/external use
-- `GOALRAIL_PAIN_STATEMENT.md` — market pain framing and sources
-- `GOALRAIL_MESSAGE_HIERARCHY.md` — messaging stack and hero narrative
-- `GOALRAIL_PROVIDER_BOUNDARIES.md` — supplement-vs-replace boundary rules
-- `GOALRAIL_COMPETITOR_MAP.md` — competitor and wedge mapping
-- `GOALRAIL_FIGMA_WORKFLOW.md` — design workflow guidance
-- `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow and design constraints
-- `GOALRAIL_TOOLING_DECISION.md` — Stitch vs Figma workflow decision
-- `GOALRAIL_REFERENCE_DECISION.md` — external reference posture
-- `GOALRAIL_LANDING_COPY.md` — first public scene copy draft
+### Product shape
+- `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
+- `GOALRAIL_LANDING_COPY.md` — first landing / entry scene copy
+- `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
+- `GOALRAIL_COMPETITOR_MAP.md` — reference market map
+- `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture
 
-### Ops source
-- `STATUS.md` — where the project is now
-- `NEXT.md` — next bounded slices only
-- `DECISIONS.md` — compact decision log
-- `COMPONENTS.yaml` — compact component map
+### Architecture canon
+- `GOALRAIL_MVP_BLUEPRINT.md` — перевод концепта в продуктовые слои и архитектурные границы
+- `PROJECT_SPINE_SCHEMA.md` — канонические объекты и границы истины
+- `GOALRAIL_PARALLEL_EXECUTION_MODEL.md` — writable execution vs advisory parallelism
+- `ADR-0001` — runtime-neutral CLI-first boundary
+- `ADR-0002` — single-writer and advisory-panels boundary
 
-### Research / reference assets
-- `docs/research/*` — source material and background research
-- `design/reference_screens/` — collected screenshots and explorations from the final pack
+### Delivery and build
+- `GOALRAIL_BUILD_ROADMAP.md` — очередность фаз и checkpoints
+- `GOALRAIL_IMPLEMENTATION_GUIDE.md` — правила bounded implementation
+- `STATUS.md` — текущее состояние
+- `NEXT.md` — ближайшие bounded slices
+- `DECISIONS.md` — компактный decision log
+- `COMPONENTS.yaml` — component map
 
 ## Source-of-truth priority
 
-1. Core product canon in `docs/product/` (`GOALRAIL_PRODUCT_BRIEF.md` -> `GOALRAIL_IMPLEMENTATION_GUIDE.md`)
-2. Kernel support notes (`docs/PROJECT_SPINE_SCHEMA.md`, `docs/adr/*`)
-3. Supporting product docs in `docs/product/`
-4. `docs/ops/*`
-5. chat context
+1. Concept canon
+2. Product summary and market framing
+3. Product shape
+4. Architecture canon
+5. Delivery and build
+6. Research / reference
+7. Chat context
 
-## Working rule
+## Working rules
 
-Advance one bounded slice at a time.
-Implementation work proceeds through `punk`.
-Every completed slice should leave behind:
-- updated `STATUS.md`
-- updated `NEXT.md`
-- any changed decision in `DECISIONS.md`
-- proof or demo note referenced from the completed slice
+1. Сначала обновляется concept canon.
+2. Затем при необходимости обновляются summary / GTM / landing docs.
+3. Затем обновляется architecture canon.
+4. Только после этого меняются roadmap, implementation и ops docs.
+5. Нельзя менять implementation scope без сверки с concept canon.
+6. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
+7. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
 
-## Current top-level build thesis
+## Current top-level thesis
 
 Goalrail is:
 
