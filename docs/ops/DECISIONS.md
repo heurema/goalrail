@@ -72,7 +72,7 @@ Status: accepted
 Decision:
 - tasks carry an explicit risk level
 - risk affects review depth and advisory fan-out
-- policy may narrow runtime exposure beyond what risk alone suggests
+- policy may narrow runtime exposure beyond what risk alone would suggest
 - sensitive tasks may require `single-vendor-only`, `local-only`, or human signoff
 
 ## D-0009 — Gate reads frozen verification inputs
@@ -101,3 +101,48 @@ Decision:
 - canonical objects remain the source of truth
 - views such as WorkLedgerView, GroupSummary, and PanelSummary are derived projections
 - UX and helper flows must not become hidden truth stores
+
+## D-0012 — Goalrail is a productized operating layer
+Date: 2026-04-15
+Status: accepted
+
+Decision:
+- Goalrail is designed and sold as a productized operating layer for AI-assisted delivery
+- the core promise is contract -> execution -> verify -> proof, not generic agent autonomy
+- Goalrail supplements existing tools rather than replacing the stack
+
+## D-0013 — Goalrail keeps a fixed operating core with configurable knobs
+Date: 2026-04-15
+Status: accepted
+
+Decision:
+- the fixed core includes contract-first logic, bounded execution, one primary writer per writable run, and proof as required output
+- organization-specific differences are handled through limited knobs such as tracker binding, runtime binding, policy profile, review depth, terminology mapping, approval profile, proof strictness, and scope templates
+- configuration must not break the fixed operating core
+
+## D-0014 — Early deployment is managed-first
+Date: 2026-04-15
+Status: accepted
+
+Decision:
+- early Goalrail deployments default to managed deployment
+- guided deployment comes later after the playbook stabilizes
+- Goalrail should not enter as bespoke process redesign per customer
+
+## D-0015 — Commercial entry is free qualification plus paid pilot
+Date: 2026-04-15
+Status: accepted
+
+Decision:
+- the early commercial flow is fit check / qualification first, then a paid pilot
+- the first sellable object is a bounded pilot for one team, one repo, and one visible task-to-proof loop
+- the pilot ends with an explicit expand / stabilize / stop decision
+
+## D-0016 — Early GTM is RU-first and founder-led
+Date: 2026-04-15
+Status: accepted
+
+Decision:
+- initial market entry is Russian-speaking
+- the early sales motion is founder-led and pilot-first
+- landing and outreach should be lead-capture and contract-centered, not prompt-tool centric

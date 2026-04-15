@@ -5,11 +5,53 @@ components:
     status: active_doc
     purpose: Canonical reading order and source-of-truth entrypoint
 
+  - id: product_concept
+    name: Product Concept
+    layer: product
+    status: active_doc
+    purpose: Canonical definition of Goalrail as a productized operating layer and its fixed core
+
+  - id: operating_model
+    name: Operating Model
+    layer: product
+    status: active_doc
+    purpose: Canonical contract -> execution -> verify -> proof workflow for team operations
+
+  - id: deployment_model
+    name: Deployment Model
+    layer: product
+    status: active_doc
+    purpose: Managed-first deployment posture, rollout phases, and limited configuration model
+
+  - id: pilot_model
+    name: Pilot Model
+    layer: product
+    status: active_doc
+    purpose: First commercial pilot shape, scope, outputs, and success criteria
+
+  - id: gtm_model
+    name: GTM Model
+    layer: product
+    status: active_doc
+    purpose: RU-first, founder-led, pilot-first go-to-market motion and lead-capture posture
+
+  - id: icp
+    name: ICP
+    layer: product
+    status: active_doc
+    purpose: Qualification logic for best-fit teams, sponsors, and no-fit cases
+
+  - id: decision_recommendations
+    name: Decision Recommendations
+    layer: product
+    status: active_doc
+    purpose: Recommended answers for current canon structure, pilot, proof, runtime, and pricing decisions
+
   - id: product_brief
     name: Product Brief
     layer: product
     status: active_doc
-    purpose: Product thesis, positioning, users, MVP promise
+    purpose: Executive summary of the product thesis, users, and MVP promise
 
   - id: mvp_blueprint
     name: MVP Blueprint
@@ -57,7 +99,7 @@ components:
     name: Product Positioning Pack
     layer: product
     status: active_doc
-    purpose: One-pager, pain statement, message hierarchy, and landing copy for product framing
+    purpose: One-pager, pain statement, message hierarchy, and supporting positioning docs
 
   - id: market_boundary_pack
     name: Market and Boundary Pack
@@ -166,3 +208,15 @@ components:
     layer: trust
     status: planned
     purpose: Final verdict, repo invariants, and inspectable proof artifacts
+
+  - id: offer_doc
+    name: Offer Document
+    layer: product
+    status: active_doc
+    purpose: Sellable packaging of free qualification, paid pilot, outputs, non-goals, and expansion path
+
+  - id: cto_deck
+    name: CTO Deck
+    layer: product
+    status: planned
+    purpose: 6–8 slide sales deck for CTO / Head of Engineering conversations

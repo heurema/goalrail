@@ -12,38 +12,39 @@
 4. `docs/product/GOALRAIL_PILOT_MODEL.md`
 5. `docs/product/GOALRAIL_GTM_MODEL.md`
 6. `docs/product/GOALRAIL_ICP.md`
+7. `docs/product/GOALRAIL_OFFER.md`
 
 ### 2. Product summary and market framing
-7. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
-8. `docs/product/GOALRAIL_ONE_PAGER.md`
-9. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
-10. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
+8. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
+9. `docs/product/GOALRAIL_ONE_PAGER.md`
+10. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
+11. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
 
 ### 3. Product shape and external posture
-11. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-12. `docs/product/GOALRAIL_LANDING_COPY.md`
-13. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-14. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-15. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+12. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
+13. `docs/product/GOALRAIL_LANDING_COPY.md`
+14. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+15. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+16. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 4. Architecture canon
-16. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-17. `docs/PROJECT_SPINE_SCHEMA.md`
-18. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-19. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-20. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+17. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+18. `docs/PROJECT_SPINE_SCHEMA.md`
+19. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+20. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+21. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
 
 ### 5. Delivery and build
-21. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-22. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-23. `docs/ops/STATUS.md`
-24. `docs/ops/NEXT.md`
-25. `docs/ops/DECISIONS.md`
-26. `docs/ops/COMPONENTS.yaml`
+22. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+23. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+24. `docs/ops/STATUS.md`
+25. `docs/ops/NEXT.md`
+26. `docs/ops/DECISIONS.md`
+27. `docs/ops/COMPONENTS.yaml`
 
 ### 6. Research and source material
-27. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
-28. `design/reference_screens/`
+28. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
+29. `design/reference_screens/`
 
 ## Roles of the main docs
 
@@ -54,6 +55,7 @@
 - `GOALRAIL_PILOT_MODEL.md` — как выглядит первый pilot engagement, что входит, что не входит и какой результат считается успехом
 - `GOALRAIL_GTM_MODEL.md` — как Goalrail продаётся, через какой motion заходит в компанию и какой CTA используется
 - `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
+- `GOALRAIL_OFFER.md` — текущее sellable package: free qualification, paid pilot, outputs, non-goals и expansion path
 
 ### Product summary
 - `GOALRAIL_PRODUCT_BRIEF.md` — короткая executive-версия продукта
