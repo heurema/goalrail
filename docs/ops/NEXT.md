@@ -4,40 +4,36 @@
 
 ## Active phase
 
-- **Phase 1 — Spine / schemas / events**
+- **Phase 0 -> Phase 1 transition**
+- product and deployment canon is now in place; the next slices should finish packaging alignment before deeper implementation starts
 
 ## Next bounded slices
 
-### Slice 1 — Spine package bootstrap
+### Slice 1 — CTO deck outline
+Goal:
+- create a 6–8 slide outline for CTO / Head of Engineering conversations
+
+Done means:
+- problem, product, operating model, deployment, pilot, outputs, and next step are sequenced clearly
+- the outline is derived from the current canon rather than ad hoc pitch copy
+
+### Slice 2 — Landing copy rewrite
+Goal:
+- rewrite `docs/product/GOALRAIL_LANDING_COPY.md` for pilot-first, contract-centered motion
+
+Done means:
+- prompt-export framing is removed
+- CTA is aligned to pilot qualification / task review
+- public flow matches `GOALRAIL_DESIGN_DECISIONS.md` and `GOALRAIL_GTM_MODEL.md`
+
+### Slice 3 — Spine package bootstrap
 Goal:
 - create first implementation package for core domain types and events
 
 Done means:
 - IDs, enums, object skeletons, and event envelope compile
 - basic serialization / validation tests exist
-
-### Slice 2 — Work ledger and routing schemas
-Goal:
-- define exact shapes for `WorkLedgerView`, `TaskRiskAssessment`, and `TaskRoutingPolicy`
-
-Done means:
-- canonical vs derived boundaries stay explicit
-- risk and routing records are precise enough for code generation
-
-### Slice 3 — Intent output schemas
-Goal:
-- define exact `Goal Packet` and `Contract Seed` JSON schemas
-
-Done means:
-- intent output can be validated deterministically
-
-### Slice 4 — Runtime registry kernel note
-Goal:
-- define the minimum runtime registry and capability schema needed by Phase 4
-
-Done means:
-- runtime discovery, auth status, and capability fields are explicit
-- no provider-specific behavior leaks into the kernel schema
+- implementation starts from the updated canon rather than the older docs baseline
 
 ## Deferred until later
 
