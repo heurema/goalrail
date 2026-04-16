@@ -1,0 +1,70 @@
+# Goalrail Brand Layer Index
+
+> Отдельный слой документации внутри того же проекта.
+> Нужен, чтобы brand / mascot / character docs жили рядом с продуктом,
+> но не смешивались с product canon, architecture canon и ops docs.
+
+## Purpose
+
+Этот слой нужен для:
+- mascot / character system
+- brand carrier rules
+- visual identity drafts
+- voice / tone rules for characterized public content
+- future asset-system docs
+
+## Read in this order
+
+1. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+
+## Ownership boundary
+
+### Brand layer owns
+- mascot role
+- character traits
+- on-screen behavior
+- voice / dialogue rules for Punk
+- brand-carrier constraints
+- future mascot/asset-system rules
+
+### Brand layer does not own
+- product truth
+- operating model
+- pilot shape
+- landing copy as product copy source of truth
+- architecture language
+- GTM canon
+
+## Precedence rule
+
+Если возникает конфликт:
+
+1. concept canon wins
+2. product summary / message hierarchy wins
+3. public narrative / public language wins
+4. brand layer adapts
+
+То есть:
+- mascot усиливает public narrative
+- mascot не переписывает product definition
+- mascot не подменяет собой Goalrail как продукт
+
+## Working rule
+
+Если меняется:
+- роль Punk
+- character tone
+- mascot relationship to Goalrail / Goal on Rails / Specpunk
+
+то обновляется:
+- `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+- при необходимости `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
+- при необходимости `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
+
+## Current principle
+
+Внутри этого проекта:
+- **Goalrail** — продукт
+- **Goal on Rails** — public series / campaign line
+- **Specpunk** — sibling builder/runtime project
+- **Punk** — mascot / character layer
