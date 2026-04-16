@@ -1,7 +1,8 @@
 # Goalrail Docs Index
 
 > Единая точка входа в проект.
-> Сначала читаем бизнесовый канон, затем deployment и pilot-модель, затем product shape, затем архитектуру и только потом build / ops.
+> Сначала читаем бизнесовый канон, затем deployment и pilot-модель, затем market framing,
+> затем public narrative и внешний язык, затем product shape, архитектуру и только потом build / ops.
 
 ## Read in this order
 
@@ -20,31 +21,35 @@
 10. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
 11. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
 
-### 3. Product shape and external posture
-12. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-13. `docs/product/GOALRAIL_LANDING_COPY.md`
-14. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-15. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-16. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+### 3. Public narrative and external language
+12. `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
+13. `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
 
-### 4. Architecture canon
-17. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-18. `docs/PROJECT_SPINE_SCHEMA.md`
-19. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-20. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-21. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+### 4. Product shape and external posture
+14. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
+15. `docs/product/GOALRAIL_LANDING_COPY.md`
+16. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+17. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+18. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
-### 5. Delivery and build
-22. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-23. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-24. `docs/ops/STATUS.md`
-25. `docs/ops/NEXT.md`
-26. `docs/ops/DECISIONS.md`
-27. `docs/ops/COMPONENTS.yaml`
+### 5. Architecture canon
+19. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+20. `docs/PROJECT_SPINE_SCHEMA.md`
+21. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+22. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+23. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
 
-### 6. Research and source material
-28. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
-29. `design/reference_screens/`
+### 6. Delivery and build
+24. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+25. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+26. `docs/ops/STATUS.md`
+27. `docs/ops/NEXT.md`
+28. `docs/ops/DECISIONS.md`
+29. `docs/ops/COMPONENTS.yaml`
+
+### 7. Research and source material
+30. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
+31. `design/reference_screens/`
 
 ## Roles of the main docs
 
@@ -57,13 +62,17 @@
 - `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
 - `GOALRAIL_OFFER.md` — текущее sellable package: free qualification, paid pilot, outputs, non-goals и expansion path
 
-### Product summary
+### Product summary and market framing
 - `GOALRAIL_PRODUCT_BRIEF.md` — короткая executive-версия продукта
 - `GOALRAIL_ONE_PAGER.md` — краткая summary-версия для внутреннего и внешнего использования
 - `GOALRAIL_PAIN_STATEMENT.md` — pain framing и market case
 - `GOALRAIL_MESSAGE_HIERARCHY.md` — message stack и public wording
 
-### Product shape
+### Public narrative and external language
+- `GOALRAIL_PUBLIC_NARRATIVE.md` — relationship между Goalrail, Goal on Rails и Specpunk; business-first build-in-public frame; narrative laws
+- `GOALRAIL_PUBLIC_LANGUAGE.md` — translation layer между internal runtime terms и внешним business-facing wording; naming и phrase rules
+
+### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
 - `GOALRAIL_LANDING_COPY.md` — first landing / entry scene copy
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
@@ -89,21 +98,24 @@
 
 1. Concept canon
 2. Product summary and market framing
-3. Product shape
-4. Architecture canon
-5. Delivery and build
-6. Research / reference
-7. Chat context
+3. Public narrative and external language
+4. Product shape and external posture
+5. Architecture canon
+6. Delivery and build
+7. Research / reference
+8. Chat context
 
 ## Working rules
 
 1. Сначала обновляется concept canon.
-2. Затем при необходимости обновляются summary / GTM / landing docs.
-3. Затем обновляется architecture canon.
-4. Только после этого меняются roadmap, implementation и ops docs.
-5. Нельзя менять implementation scope без сверки с concept canon.
-6. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
-7. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
+2. Затем при необходимости обновляются summary / GTM docs.
+3. Если меняется public story, campaign framing или внешний vocabulary, обновляются `GOALRAIL_PUBLIC_NARRATIVE.md` и `GOALRAIL_PUBLIC_LANGUAGE.md`.
+4. Затем обновляются landing / design / product-shape docs.
+5. Затем обновляется architecture canon.
+6. Только после этого меняются roadmap, implementation и ops docs.
+7. Нельзя менять implementation scope без сверки с concept canon.
+8. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
+9. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
 
 ## Current top-level thesis
 
