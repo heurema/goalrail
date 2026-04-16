@@ -101,6 +101,12 @@ components:
     status: active_doc
     purpose: One-pager, pain statement, message hierarchy, and supporting positioning docs
 
+  - id: public_narrative_pack
+    name: Public Narrative Pack
+    layer: product
+    status: active_doc
+    purpose: Goalrail / Goal on Rails / Specpunk relationship, business-first build-in-public framing, and public language rules
+
   - id: market_boundary_pack
     name: Market and Boundary Pack
     layer: product
