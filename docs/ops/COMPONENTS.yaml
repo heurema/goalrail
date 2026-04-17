@@ -107,6 +107,18 @@ components:
     status: active_doc
     purpose: Goalrail / Goal on Rails / Specpunk relationship, business-first build-in-public framing, and public language rules
 
+  - id: brand_layer_pack
+    name: Brand Layer Pack
+    layer: brand
+    status: active_doc
+    purpose: Separate mascot / character / brand-carrier documentation layer inside the same project
+
+  - id: punk_character_system
+    name: Punk Character System
+    layer: brand
+    status: active_doc
+    purpose: Working character canon for Punk as mascot, on-screen carrier, and anti-drift builder persona
+
   - id: market_boundary_pack
     name: Market and Boundary Pack
     layer: product
