@@ -9,7 +9,9 @@
 Этот слой нужен для:
 - mascot / character system
 - brand carrier rules
+- short-form content grammar
 - visual identity drafts
+- title-card and thumbnail production defaults
 - voice / tone rules for characterized public content
 - future asset-system docs
 
@@ -18,6 +20,7 @@
 1. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
 2. `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
 3. `docs/brand/VISUAL_IDENTITY_V0.md`
+4. `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
 
 ## Ownership boundary
 
@@ -27,6 +30,7 @@
 - on-screen behavior
 - voice / dialogue rules for Punk
 - brand-carrier constraints
+- title-card / thumbnail template defaults
 - future mascot/asset-system rules
 
 ### Brand layer does not own
@@ -57,9 +61,14 @@
 - роль Punk
 - character tone
 - mascot relationship to Goalrail / Goal on Rails / Specpunk
+- short-form production defaults
+- title-card or thumbnail template rules
 
 то обновляется:
 - `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+- `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
+- `docs/brand/VISUAL_IDENTITY_V0.md`
+- `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
 - при необходимости `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
 - при необходимости `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
 
