@@ -141,6 +141,30 @@ Product truth определяется через:
 - переносить series line в legal / formal product identity
 - делать campaign phrase основной заменой product name в canonical docs
 
+### 7.5 Public disclaimer rule
+
+Если `Goal on Rails` используется prominently на:
+- landing page
+- campaign page
+- series page
+- channel/about page
+- sales-facing campaign material
+
+то допустимо и желательно добавлять короткий no-affiliation disclaimer.
+
+Default form:
+
+**“Goal on Rails” is a Goalrail campaign line and is not an affiliated product identity.**
+
+Если нужен более явный variant for public pages:
+
+**“Goal on Rails” is a Goalrail campaign line and is not affiliated with Ruby on Rails.**
+
+Rule:
+- disclaimer остаётся коротким
+- disclaimer не подменяет собой headline
+- disclaimer живёт в footer / about / note layer, а не в hero copy
+
 ## 8. Business-safe phrases
 
 ### Good default phrases
