@@ -2,7 +2,7 @@
 
 > Единая точка входа в проект.
 > Сначала читаем бизнесовый канон, затем deployment и pilot-модель, затем market framing,
-> затем public narrative и внешний язык, затем brand/maskot layer, затем product shape,
+> затем public narrative и внешний язык, затем brand/mascot layer, затем product shape,
 > архитектуру и только потом build / ops.
 
 ## Read in this order
@@ -29,32 +29,34 @@
 ### 4. Brand and mascot layer
 14. `docs/brand/INDEX.md`
 15. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+16. `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
+17. `docs/brand/VISUAL_IDENTITY_V0.md`
 
 ### 5. Product shape and external posture
-16. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-17. `docs/product/GOALRAIL_LANDING_COPY.md`
-18. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-19. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-20. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+18. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
+19. `docs/product/GOALRAIL_LANDING_COPY.md`
+20. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+21. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+22. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-21. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-22. `docs/PROJECT_SPINE_SCHEMA.md`
-23. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-24. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-25. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+23. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+24. `docs/PROJECT_SPINE_SCHEMA.md`
+25. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+26. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+27. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
 
 ### 7. Delivery and build
-26. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-27. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-28. `docs/ops/STATUS.md`
-29. `docs/ops/NEXT.md`
-30. `docs/ops/DECISIONS.md`
-31. `docs/ops/COMPONENTS.yaml`
+28. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+29. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+30. `docs/ops/STATUS.md`
+31. `docs/ops/NEXT.md`
+32. `docs/ops/DECISIONS.md`
+33. `docs/ops/COMPONENTS.yaml`
 
 ### 8. Research and source material
-32. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
-33. `design/reference_screens/`
+34. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
+35. `design/reference_screens/`
 
 ## Roles of the main docs
 
@@ -80,6 +82,8 @@
 ### Brand and mascot layer
 - `docs/brand/INDEX.md` — ownership boundary между brand layer и product docs
 - `docs/brand/PUNK_CHARACTER_SYSTEM.md` — working character canon for Punk as mascot / on-screen brand carrier
+- `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md` — working grammar for short videos, carousels, captions, subtitles and CTA structure
+- `docs/brand/VISUAL_IDENTITY_V0.md` — visual system draft with tonal modes, starter motifs, title-card and thumbnail rules
 
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
@@ -120,7 +124,7 @@
 1. Сначала обновляется concept canon.
 2. Затем при необходимости обновляются summary / GTM docs.
 3. Если меняется public story, campaign framing или внешний vocabulary, обновляются `GOALRAIL_PUBLIC_NARRATIVE.md` и `GOALRAIL_PUBLIC_LANGUAGE.md`.
-4. Если меняется mascot role, character tone или brand-carrier rules, обновляется brand layer.
+4. Если меняется mascot role, character tone, short-form grammar, visual draft или brand-carrier rules, обновляется brand layer.
 5. Затем обновляются landing / design / product-shape docs.
 6. Затем обновляется architecture canon.
 7. Только после этого меняются roadmap, implementation и ops docs.
