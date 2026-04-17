@@ -131,6 +131,12 @@ components:
     status: active_doc
     purpose: First visual system draft with tonal modes, motifs, palette direction, and starter title-card or thumbnail rules
 
+  - id: title_card_thumbnail_templates
+    name: Title Card and Thumbnail Templates
+    layer: brand
+    status: active_doc
+    purpose: Repeatable template system for title cards and thumbnails across two tonal modes with production defaults
+
   - id: market_boundary_pack
     name: Market and Boundary Pack
     layer: product
