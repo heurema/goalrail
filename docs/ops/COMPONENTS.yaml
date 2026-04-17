@@ -119,6 +119,18 @@ components:
     status: active_doc
     purpose: Working character canon for Punk as mascot, on-screen carrier, and anti-drift builder persona
 
+  - id: short_form_content_system
+    name: Short Form Content System
+    layer: brand
+    status: active_doc
+    purpose: Working grammar for short videos, carousels, captions, subtitles, CTA structure, and content-unit defaults
+
+  - id: visual_identity_v0
+    name: Visual Identity v0
+    layer: brand
+    status: active_doc
+    purpose: First visual system draft with tonal modes, motifs, palette direction, and starter title-card or thumbnail rules
+
   - id: market_boundary_pack
     name: Market and Boundary Pack
     layer: product
