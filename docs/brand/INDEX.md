@@ -13,6 +13,7 @@
 - visual identity drafts
 - title-card and thumbnail production defaults
 - mascot asset production rules
+- motion behavior rules
 - voice / tone rules for characterized public content
 - future asset-system docs
 
@@ -23,6 +24,7 @@
 3. `docs/brand/VISUAL_IDENTITY_V0.md`
 4. `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
 5. `docs/brand/MASCOT_ASSET_RULES.md`
+6. `docs/brand/MOTION_RULES_V0.md`
 
 ## Ownership boundary
 
@@ -34,6 +36,7 @@
 - brand-carrier constraints
 - title-card / thumbnail template defaults
 - mascot asset defaults and production-safe usage rules
+- motion behavior defaults
 - future mascot/asset-system rules
 
 ### Brand layer does not own
@@ -67,6 +70,7 @@
 - short-form production defaults
 - title-card or thumbnail template rules
 - mascot asset usage rules
+- motion behavior rules
 
 то обновляется:
 - `docs/brand/PUNK_CHARACTER_SYSTEM.md`
@@ -74,6 +78,7 @@
 - `docs/brand/VISUAL_IDENTITY_V0.md`
 - `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
 - `docs/brand/MASCOT_ASSET_RULES.md`
+- `docs/brand/MOTION_RULES_V0.md`
 - при необходимости `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
 - при необходимости `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
 
