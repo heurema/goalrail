@@ -137,6 +137,12 @@ components:
     status: active_doc
     purpose: Repeatable template system for title cards and thumbnails across two tonal modes with production defaults
 
+  - id: mascot_asset_rules
+    name: Mascot Asset Rules
+    layer: brand
+    status: active_doc
+    purpose: Production-safe mascot asset rules for framing, intensity, pose families, and product-first coexistence
+
   - id: market_boundary_pack
     name: Market and Boundary Pack
     layer: product
