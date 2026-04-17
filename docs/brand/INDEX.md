@@ -16,6 +16,8 @@
 ## Read in this order
 
 1. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+2. `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
+3. `docs/brand/VISUAL_IDENTITY_V0.md`
 
 ## Ownership boundary
 
