@@ -34,61 +34,62 @@ related_docs:
 5. `docs/product/GOALRAIL_GTM_MODEL.md`
 6. `docs/product/GOALRAIL_ICP.md`
 7. `docs/product/GOALRAIL_OFFER.md`
+8. `docs/product/GOALRAIL_PRICING_MODEL.md`
 
 ### 2. Product summary and market framing
-8. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
-9. `docs/product/GOALRAIL_ONE_PAGER.md`
-10. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
-11. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
+9. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
+10. `docs/product/GOALRAIL_ONE_PAGER.md`
+11. `docs/product/GOALRAIL_PAIN_STATEMENT.md`
+12. `docs/product/GOALRAIL_MESSAGE_HIERARCHY.md`
 
 ### 3. Public narrative and external language
-12. `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
-13. `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
+13. `docs/product/GOALRAIL_PUBLIC_NARRATIVE.md`
+14. `docs/product/GOALRAIL_PUBLIC_LANGUAGE.md`
 
 ### 4. Brand and mascot layer
-14. `docs/brand/INDEX.md`
-15. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
-16. `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
-17. `docs/brand/VISUAL_IDENTITY_V0.md`
-18. `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
-19. `docs/brand/MASCOT_ASSET_RULES.md`
-20. `docs/brand/MOTION_RULES_V0.md`
+15. `docs/brand/INDEX.md`
+16. `docs/brand/PUNK_CHARACTER_SYSTEM.md`
+17. `docs/brand/SHORT_FORM_CONTENT_SYSTEM.md`
+18. `docs/brand/VISUAL_IDENTITY_V0.md`
+19. `docs/brand/TITLE_CARD_AND_THUMBNAIL_TEMPLATES.md`
+20. `docs/brand/MASCOT_ASSET_RULES.md`
+21. `docs/brand/MOTION_RULES_V0.md`
 
 ### 5. Product shape and external posture
-21. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-22. `docs/product/GOALRAIL_LANDING_COPY.md`
-23. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-24. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-25. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+22. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
+23. `docs/product/GOALRAIL_LANDING_COPY.md`
+24. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+25. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+26. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-26. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-27. `docs/PROJECT_SPINE_SCHEMA.md`
-28. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-29. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-30. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+27. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+28. `docs/PROJECT_SPINE_SCHEMA.md`
+29. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+30. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+31. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
 
 ### 7. Governance and change control
-31. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-32. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-33. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+32. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+33. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+34. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
 
 ### 8. Delivery and build
-34. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-35. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-36. `docs/ops/STATUS.md`
-37. `docs/ops/NEXT.md`
-38. `docs/ops/DECISIONS.md`
-39. `docs/ops/COMPONENTS.yaml`
+35. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+36. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+37. `docs/ops/STATUS.md`
+38. `docs/ops/NEXT.md`
+39. `docs/ops/DECISIONS.md`
+40. `docs/ops/COMPONENTS.yaml`
 
 ### 9. Advisory research, reference material, and repo-tracked working surfaces
-40. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-41. `design/reference_screens/`
-42. `work/`
-43. `knowledge/`
-44. `public/`
-45. `flows/`
-46. `evals/`
+41. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+42. `design/reference_screens/`
+43. `work/`
+44. `knowledge/`
+45. `public/`
+46. `flows/`
+47. `evals/`
 
 ## Roles of the main docs
 
@@ -100,6 +101,7 @@ related_docs:
 - `GOALRAIL_GTM_MODEL.md` — как Goalrail продаётся, через какой motion заходит в компанию и какой CTA используется
 - `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
 - `GOALRAIL_OFFER.md` — текущее sellable package: free qualification, paid pilot, outputs, non-goals и expansion path
+- `GOALRAIL_PRICING_MODEL.md` — текущая pricing and packaging logic: USD anchor, pilot price bands, discount policy, support and expansion packaging
 
 ### Product summary and market framing
 - `GOALRAIL_PRODUCT_BRIEF.md` — короткая executive-версия продукта
