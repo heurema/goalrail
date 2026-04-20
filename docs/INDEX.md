@@ -73,23 +73,24 @@ related_docs:
 32. `docs/product/GOALRAIL_RESEARCH_GATE.md`
 33. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
 34. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+35. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery and build
-35. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-36. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-37. `docs/ops/STATUS.md`
-38. `docs/ops/NEXT.md`
-39. `docs/ops/DECISIONS.md`
-40. `docs/ops/COMPONENTS.yaml`
+36. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+37. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+38. `docs/ops/STATUS.md`
+39. `docs/ops/NEXT.md`
+40. `docs/ops/DECISIONS.md`
+41. `docs/ops/COMPONENTS.yaml`
 
 ### 9. Advisory research, reference material, and repo-tracked working surfaces
-41. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-42. `design/reference_screens/`
-43. `work/`
-44. `knowledge/`
-45. `public/`
-46. `flows/`
-47. `evals/`
+42. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+43. `design/reference_screens/`
+44. `work/`
+45. `knowledge/`
+46. `public/`
+47. `flows/`
+48. `evals/`
 
 ## Roles of the main docs
 
@@ -140,6 +141,7 @@ related_docs:
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
 - `GOALRAIL_RESEARCH_INTAKE.md` — как adjacent/external ideas классифицируются без roadmap sprawl
 - `GOALRAIL_DOC_GOVERNANCE.md` — truth model, metadata vocabulary, lifecycle rules и staged deterministic enforcement posture
+- `GOALRAIL_RULE_STACK.md` — rule precedence, dogfooding law, component/slice/PR hierarchy, and non-override behavior
 
 ### Delivery and build
 - `GOALRAIL_BUILD_ROADMAP.md` — очередность фаз и checkpoints
