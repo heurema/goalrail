@@ -1,3 +1,25 @@
+---
+id: goalrail_mvp_blueprint
+title: Goalrail MVP Blueprint
+kind: architecture_canon
+authority: canonical
+status: current
+owner: architecture
+truth_surfaces:
+  - mvp_architecture
+  - project_spine
+  - runtime_model
+  - verification_model
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
+  - docs/product/GOALRAIL_OPERATING_MODEL.md
+  - docs/PROJECT_SPINE_SCHEMA.md
+  - docs/product/GOALRAIL_BUILD_ROADMAP.md
+---
 # Goalrail MVP Blueprint
 
 > Рабочий blueprint первого продаваемого продукта.

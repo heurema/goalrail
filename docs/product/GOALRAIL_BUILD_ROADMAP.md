@@ -1,3 +1,22 @@
+---
+id: goalrail_build_roadmap
+title: Goalrail Build Roadmap
+kind: ops_plan
+authority: operational
+status: current
+owner: delivery
+truth_surfaces:
+  - build_sequence
+  - checkpoints
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_MVP_BLUEPRINT.md
+  - docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md
+  - docs/ops/STATUS.md
+---
 # Goalrail Build Roadmap
 
 > Phase roadmap with checkpoints and proof-oriented exits.

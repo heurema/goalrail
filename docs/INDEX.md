@@ -1,3 +1,22 @@
+---
+id: goalrail_docs_index
+title: Goalrail Docs Index
+kind: reference
+authority: reference
+status: current
+owner: docs-governance
+truth_surfaces:
+  - read_order
+  - source_priority_view
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
+  - docs/product/GOALRAIL_DOC_GOVERNANCE.md
+  - docs/ops/STATUS.md
+---
 # Goalrail Docs Index
 
 > Единая точка входа в проект.

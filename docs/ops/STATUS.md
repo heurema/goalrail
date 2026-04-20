@@ -1,3 +1,23 @@
+---
+id: goalrail_status
+title: Goalrail Status
+kind: ops_status
+authority: operational
+status: current
+owner: ops
+truth_surfaces:
+  - current_state
+  - implementation_status_summary
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/INDEX.md
+  - docs/product/GOALRAIL_BUILD_ROADMAP.md
+  - docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md
+  - docs/ops/COMPONENTS.yaml
+---
 # Goalrail Status
 
 Last updated: 2026-04-20

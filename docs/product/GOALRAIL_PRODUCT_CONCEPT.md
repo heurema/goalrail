@@ -1,3 +1,23 @@
+---
+id: goalrail_product_concept
+title: Goalrail Product Concept
+kind: product_canon
+authority: canonical
+status: current
+owner: product
+truth_surfaces:
+  - product_concept
+  - product_boundaries
+  - fixed_core
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_OPERATING_MODEL.md
+  - docs/product/GOALRAIL_PRODUCT_BRIEF.md
+  - docs/product/GOALRAIL_MVP_BLUEPRINT.md
+---
 # Goalrail Product Concept
 
 ## 1. Product thesis

@@ -1,6 +1,6 @@
 # Goalrail Docs Check
 
-This checker is the PR2 report-only docs-governance scaffold.
+This checker is the report-only docs-governance scaffold through PR3.
 
 ## Current guarantees
 
@@ -9,6 +9,7 @@ This checker is the PR2 report-only docs-governance scaffold.
 - no network calls
 - no semantic or LLM judge
 - no live metadata migration requirement
+- live scans can read and validate `docs/ops/COMPONENTS.yaml`
 - generated reports should not be committed
 
 ## Supported modes
@@ -45,7 +46,7 @@ python3 tools/docs-check/docs_check.py \
 
 Important:
 - live report-only scans do **not** return `1` just because findings exist
-- PR2 is not a hard gate
+- PR3 is still not a hard gate
 
 ## Current checks
 
@@ -55,16 +56,15 @@ Important:
 - lifecycle enum and review-after checks
 - authority checks for fixture docs
 - claims skeleton checks using fixture-local synthetic status inputs
+- live `docs/ops/COMPONENTS.yaml` shape, status enum, truth-owner paths, and implementation-path existence
 
 ## Current non-goals
 
 - no live hard enforcement
 - no CI integration
 - no external link checking
-- no dependency on live `docs/ops/COMPONENTS.yaml`
 - no semantic interpretation of prose
 
 ## Future direction
 
-- PR3: `COMPONENTS.yaml` status anchor + Batch 1 metadata migration
 - PR4: local/CI changed-files ratchet

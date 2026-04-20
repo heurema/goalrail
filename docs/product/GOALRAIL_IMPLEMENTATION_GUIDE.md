@@ -1,3 +1,22 @@
+---
+id: goalrail_implementation_guide
+title: Goalrail Implementation Guide
+kind: architecture_canon
+authority: operational
+status: current
+owner: architecture
+truth_surfaces:
+  - implementation_discipline
+  - bounded_slices
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_BUILD_ROADMAP.md
+  - docs/PROJECT_SPINE_SCHEMA.md
+  - docs/ops/STATUS.md
+---
 # Goalrail Implementation Guide
 
 > How to advance the project without scope drift.

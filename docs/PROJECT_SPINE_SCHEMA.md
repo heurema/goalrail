@@ -1,3 +1,23 @@
+---
+id: project_spine_schema_note
+title: Project Spine Schema Note
+kind: architecture_canon
+authority: canonical
+status: current
+owner: architecture
+truth_surfaces:
+  - project_spine_schema
+  - canonical_objects
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_MVP_BLUEPRINT.md
+  - docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md
+  - docs/adr/ADR-0001-runtime-neutral-cli-first.md
+  - docs/adr/ADR-0002-single-writer-and-advisory-panels.md
+---
 # Project Spine Schema Note
 
 > Compact schema note for the canonical Goalrail kernel.
