@@ -22,6 +22,8 @@ The project currently has:
 - project spine schema note
 - two kernel ADRs
 - ops rails
+- repo-tracked work / knowledge / public surfaces
+- planned flow / eval structure
 - reference screens
 - no implementation baseline yet
 
@@ -63,11 +65,21 @@ The project currently has:
 - execution parallelism and advisory parallelism are separated conceptually
 - kernel schema note and two boundary ADRs exist
 
+### Repo structure
+- the repo now mirrors `punk`-style planning boundaries
+- `work/` is reserved for goals and reports
+- `knowledge/` is reserved for advisory research and idea backlog
+- `public/` is reserved for public narrative drafts, receipts, and manual metrics
+- `flows/` and `evals/` exist as planned future structure, not executable product surfaces
+- `apps/`, `scripts/`, and `.github/` remain parked until bounded implementation slices activate them
+
 ## What is not real yet
 
 - no schema package
 - no runtime registry implementation
 - no runtime CLI
+- no executable flow specs yet
+- no runnable eval harness yet
 - no gate/proof implementation
 - no advisory panel implementation
 - no web UI
@@ -89,6 +101,7 @@ Current exit condition:
 
 Current packaging target:
 - ops docs are synchronized with the new concept / deployment canon
+- repo workspace boundaries mirror `punk`-style planning structure
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - next sales-pack slices are explicit and bounded
 

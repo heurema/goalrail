@@ -62,9 +62,14 @@
 38. `docs/ops/DECISIONS.md`
 39. `docs/ops/COMPONENTS.yaml`
 
-### 9. Advisory research and reference material
+### 9. Advisory research, reference material, and repo-tracked working surfaces
 40. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
 41. `design/reference_screens/`
+42. `work/`
+43. `knowledge/`
+44. `public/`
+45. `flows/`
+46. `evals/`
 
 ## Roles of the main docs
 
@@ -123,9 +128,14 @@
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
 
-### Advisory research and reference material
+### Advisory research, reference material, and repo-tracked working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `design/reference_screens/` — visual reference material without product-truth authority
+- `work/` — repo-tracked goals, reports, and bounded slice memory
+- `knowledge/` — advisory research and idea backlog; не источник канона без promotion
+- `public/` — public narrative drafts, receipts, and manual metrics
+- `flows/` — planned flow/spec boundary for future runtime semantics
+- `evals/` — planned eval/spec boundary for future verification semantics
 
 ## Source-of-truth priority
 
@@ -137,12 +147,12 @@
 6. Architecture canon
 7. Governance and change control
 8. Delivery and build
-9. Advisory research and reference material
+9. Advisory research, reference material, and repo-tracked working surfaces
 10. Chat context
 
 Notes:
 - Governance and change-control docs govern process, metadata, and enforcement posture; they do not override product canon.
-- Advisory research and reference material may inform changes, but canonical product and architecture docs still win.
+- Advisory research, reference material, and repo-tracked working surfaces may inform changes, but canonical product and architecture docs still win.
 
 ## Working rules
 
@@ -158,6 +168,7 @@ Notes:
 10. Нельзя менять implementation scope без сверки с concept canon.
 11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
+13. Repo-tracked planning surfaces (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 

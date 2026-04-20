@@ -155,6 +155,36 @@ components:
     status: active_doc
     purpose: Figma workflow, design decisions, and tooling guidance for public entry flow
 
+  - id: repo_work_surface
+    name: Repo Work Surface
+    layer: ops
+    status: active_doc
+    purpose: Repo-tracked goals, reports, and bounded slice memory under work/
+
+  - id: repo_knowledge_surface
+    name: Repo Knowledge Surface
+    layer: ops
+    status: active_doc
+    purpose: Advisory research notes and idea backlog under knowledge/
+
+  - id: repo_public_surface
+    name: Repo Public Surface
+    layer: product
+    status: active_doc
+    purpose: Public narrative drafts, publication receipts, and manual metrics under public/
+
+  - id: flow_specs_surface
+    name: Flow Specs Surface
+    layer: runtime
+    status: planned
+    purpose: Planned repository location for future flow and state-transition specs under flows/
+
+  - id: eval_specs_surface
+    name: Eval Specs Surface
+    layer: trust
+    status: planned
+    purpose: Planned repository location for future evaluation specs, cases, and suites under evals/
+
   - id: reference_screens_pack
     name: Reference Screens Pack
     layer: design

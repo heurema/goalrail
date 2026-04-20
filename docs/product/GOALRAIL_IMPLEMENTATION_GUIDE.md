@@ -24,6 +24,21 @@ Always work in this order:
 11. `docs/ops/DECISIONS.md`
 12. `docs/ops/COMPONENTS.yaml`
 
+## 2A. Repo workspace shape
+
+Use the repo with these boundaries:
+- `docs/product/` — canonical product truth
+- `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/` — kernel support truth
+- `docs/ops/` — current operating layer
+- `work/` — repo-tracked goals, reports, and bounded slice memory
+- `knowledge/` — advisory research and idea backlog
+- `public/` — public narrative drafts, receipts, and manual metrics
+- `flows/` — planned flow/spec boundary for future runtime semantics
+- `evals/` — planned eval/spec boundary for future verification semantics
+- `apps/`, `scripts/`, `.github/` — parked implementation surfaces until a bounded slice makes them real
+
+These boundaries mirror the repo discipline used in `punk` without implying that Goalrail already has a working runtime.
+
 ## 3. Core project laws
 
 1. One spine, two planes, one outcome.

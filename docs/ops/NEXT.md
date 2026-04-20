@@ -5,7 +5,9 @@
 ## Active phase
 
 - **Phase 0 -> Phase 1 transition**
-- product and deployment canon is now in place; the next slices should finish packaging alignment before deeper implementation starts
+- product and deployment canon is now in place
+- repo workspace now mirrors `punk`-style planning boundaries (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`)
+- the next slices should use those boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
 
