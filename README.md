@@ -1,82 +1,31 @@
 # Goalrail
 
-Goalrail is an intent-to-delivery layer for software teams.
+Goalrail is a productized operating layer for AI-assisted delivery.
 
 **Tagline:** от бизнес-цели до проверенного изменения в коде.
 
-## What this repository is
+## What it is
 
-This repository currently holds the canonical documentation baseline for Goalrail plus the repo-tracked planning surfaces that will later feed implementation:
+Goalrail helps software teams move from intent to a bounded, verified delivery change.
+It sits between planning and execution:
+- clarifies goals and constraints
+- shapes bounded delivery contracts
+- executes through existing developer runtimes
+- returns verification and proof, not just status
 
-- core product docs in `docs/product/`
-- kernel support docs in `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/`
-- operating docs in `docs/ops/`
-- work memory in `work/`
-- advisory research / idea storage in `knowledge/`
-- public narrative artifacts in `public/`
-- planned flow and eval boundaries in `flows/` and `evals/`
-- reference screens in `design/reference_screens/`
-- repo-local agent guidance in `AGENTS.md`
+## Current state
 
-It still does **not** contain a real implementation baseline yet.
+Goalrail is currently docs-first.
+The product canon, MVP shape, and operating model are documented.
+A public implementation baseline does not exist yet.
 
-## Current status
+## Read first
 
-- the product thesis is fixed
-- the MVP architecture is documented
-- the build roadmap is documented
-- the parallel execution model is documented
-- the project spine schema note and kernel ADRs are documented
-- the implementation workflow is documented
-- supplemental positioning / design docs from the final pack are merged
-- repo structure now mirrors `punk`-style planning boundaries (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`)
-- implementation will proceed through `punk` in bounded slices
+- `docs/INDEX.md`
+- `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
+- `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+- `docs/product/GOALRAIL_BUILD_ROADMAP.md`
 
-## Read in this order
+## Contact
 
-1. `docs/INDEX.md`
-2. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
-3. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-4. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-5. `docs/PROJECT_SPINE_SCHEMA.md`
-6. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-7. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-8. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-9. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-10. `docs/ops/STATUS.md`
-11. `docs/ops/NEXT.md`
-12. `docs/ops/DECISIONS.md`
-
-## Working rule
-
-- `docs/product/` core canon is the product source of truth
-- `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/` hold kernel support truth
-- `docs/ops/` is the working operating layer for the repo
-- `work/`, `knowledge/`, and `public/` are repo-tracked support planes and do not override canon
-- `flows/` and `evals/` are planned structure, not evidence of runtime implementation
-- `apps/`, `scripts/`, and `.github/` remain parked until bounded implementation slices make them real
-- changes should stay small, bounded, and reviewable
-
-## Repo map
-
-```text
-.
-├─ README.md
-├─ AGENTS.md
-├─ design/
-│  └─ reference_screens/
-├─ docs/
-│  ├─ INDEX.md
-│  ├─ PROJECT_SPINE_SCHEMA.md
-│  ├─ adr/
-│  ├─ ops/
-│  └─ product/
-├─ work/
-├─ knowledge/
-├─ public/
-├─ flows/
-├─ evals/
-├─ apps/
-├─ scripts/
-└─ .github/
-```
+- [hello@goalrail.dev](mailto:hello@goalrail.dev)
