@@ -77,7 +77,21 @@ Qualification остаётся бесплатным входным этапом.
 - one proof artifact
 - one readout with expansion recommendation
 
-## 6. Suggested pricing anchors (v0)
+## 6. Public pricing anchor
+
+### External anchor
+Для внешней коммуникации основной публичный якорь должен быть простым:
+
+**Managed pilot — from $5,000**
+
+Это стартовая публичная цена, которую можно безопасно использовать в deck, proposal, conversations и landing copy.
+
+### Why this anchor
+- keeps the commercial object simple
+- avoids over-explaining internal price bands too early
+- gives a stable reference point for small product teams and startups
+
+## 7. Suggested pricing anchors (v0)
 
 ### A. Design partner pilot
 Используется для первых proof-oriented cases, где для нас критичны скорость learning loop, feedback quality и case evidence.
@@ -91,9 +105,12 @@ Use when:
 - high learning value for Goalrail
 
 ### B. Standard managed pilot
-Основной коммерческий якорь после первых design-partner кейсов.
+Основной коммерческий формат после первых design-partner кейсов.
 
-**Recommended range:** **$5,000-$7,000**
+**Internal working range:** **$5,000-$7,000**
+
+External anchor:
+- **from $5,000**
 
 Use when:
 - standard 2-week pilot
@@ -112,7 +129,26 @@ Use when:
 - stricter policy/review depth
 - more setup / stabilization work
 
-## 7. Pricing modifiers
+## 8. Design partner label
+
+### What it means
+**Design partner** — это не отдельный продукт и не отдельный market segment.
+
+Это ранний коммерческий label для первых аккаунтов, где:
+- мы даём явно обозначенный pilot discount
+- клиент даёт быстрый доступ, плотный feedback loop и высокий learning value
+- кейс помогает стабилизировать offer, packaging и proof model
+
+### How to use it
+Design-partner mode можно использовать для первых proof-oriented клиентов, когда это стратегически оправдано.
+
+### How not to use it
+Не использовать design-partner discount:
+- чтобы спасать weak-fit аккаунт
+- чтобы скрывать неясный scope
+- вместо честного no-go
+
+## 9. Pricing modifiers
 
 These modifiers are additive over the base pilot where needed.
 
@@ -122,7 +158,7 @@ These modifiers are additive over the base pilot where needed.
 - onsite work: separate travel + premium
 - heavy custom process redesign: do not hide inside the pilot; re-scope explicitly
 
-## 8. Payment structure
+## 10. Payment structure
 
 Recommended default:
 
@@ -134,7 +170,7 @@ Why:
 - keeps client aligned to a real close milestone
 - matches a bounded proof-oriented engagement
 
-## 9. Discount policy
+## 11. Discount policy
 
 ### Allowed
 A design-partner discount is acceptable when at least one of the following is true:
@@ -148,7 +184,7 @@ Do not discount just to rescue a weak-fit account.
 
 If sponsor, repo readiness, or case quality are weak, prefer **no-go** over a cheap pilot.
 
-## 10. Support and post-pilot packaging
+## 12. Support and post-pilot packaging
 
 Support should not be bundled as vague unlimited help.
 
@@ -165,7 +201,7 @@ For expansion to additional repos/teams or more active weekly involvement.
 ### Rule
 Support is a separate commercial object after pilot close.
 
-## 11. Commercial sequencing
+## 13. Commercial sequencing
 
 After a positive demo conversation, the sequence should be:
 
@@ -178,7 +214,7 @@ After a positive demo conversation, the sequence should be:
 7. readout
 8. expand / stabilize-and-retry / stop
 
-## 12. Sales-safe framing
+## 14. Sales-safe framing
 
 Good framing:
 - pilot
@@ -195,16 +231,16 @@ Avoid leading with:
 - replace your stack
 - autonomous engineering promise
 
-## 13. Current recommendation
+## 15. Current recommendation
 
 For the current stage, the most practical pricing posture is:
-
 - **free qualification**
-- **design partner pilot at $3k-$4k when needed**
-- **standard pilot anchored at $5k-$7k**
+- **public pilot anchor from $5,000**
+- **design partner pilot at $3k-$4k when strategically justified**
+- **standard pilot internally anchored at $5k-$7k**
 - **USD as the primary pricing language**
 - **founder + DevOps delivery cell** for early managed pilots
 
-## 14. One-line summary
+## 16. One-line summary
 
-**Goalrail should currently sell a USD-anchored, founder-led managed pilot — not a platform subscription and not vague consulting.**
+**Goalrail should currently sell a USD-anchored, founder-led managed pilot — with a public starting point of $5,000 and a clearly bounded design-partner discount mode.**
