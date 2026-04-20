@@ -1,4 +1,5 @@
 .DS_Store
+.github-account
 node_modules/
 dist/
 .env
