@@ -1,0 +1,25 @@
+{
+  "checked_files": [
+    "input.md"
+  ],
+  "findings": [
+    {
+      "actual": "../private/note.md",
+      "check": "frontmatter",
+      "context": {},
+      "expected": "repo-relative path",
+      "id": "input.md:1:frontmatter.related_docs.path",
+      "line": 1,
+      "message": "Frontmatter field `related_docs` must use repo-relative paths.",
+      "path": "input.md",
+      "rule": "frontmatter.related_docs.path",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 1,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}

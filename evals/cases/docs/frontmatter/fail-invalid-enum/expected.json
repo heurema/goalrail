@@ -1,0 +1,36 @@
+{
+  "checked_files": [
+    "input.md"
+  ],
+  "findings": [
+    {
+      "actual": "product_doc",
+      "check": "frontmatter",
+      "context": {},
+      "expected": [
+        "adr",
+        "architecture_canon",
+        "brand_canon",
+        "derived_view",
+        "ops_plan",
+        "ops_status",
+        "product_canon",
+        "public_entry",
+        "reference",
+        "research_note"
+      ],
+      "id": "input.md:1:frontmatter.enum",
+      "line": 1,
+      "message": "Invalid value for frontmatter field `kind`.",
+      "path": "input.md",
+      "rule": "frontmatter.enum",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 1,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}
