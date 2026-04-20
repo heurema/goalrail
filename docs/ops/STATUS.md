@@ -1,6 +1,6 @@
 # Goalrail Status
 
-Last updated: 2026-04-15
+Last updated: 2026-04-20
 Status: planning / product canon and pilot frame active
 Owner: Vitaly
 
@@ -22,7 +22,7 @@ The project currently has:
 - project spine schema note
 - two kernel ADRs
 - ops rails
-- research source material and reference screens
+- reference screens
 - no implementation baseline yet
 
 ## What is real now

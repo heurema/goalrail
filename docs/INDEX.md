@@ -57,9 +57,8 @@
 35. `docs/ops/DECISIONS.md`
 36. `docs/ops/COMPONENTS.yaml`
 
-### 8. Research and source material
-37. `docs/research/AI_SDLC_RUST_PRODUCT_SUMMARY_SOURCE.md`
-38. `design/reference_screens/`
+### 8. Reference material
+37. `design/reference_screens/`
 
 ## Roles of the main docs
 
@@ -122,7 +121,7 @@
 5. Product shape and external posture
 6. Architecture canon
 7. Delivery and build
-8. Research / reference
+8. Reference material
 9. Chat context
 
 ## Working rules

@@ -19,7 +19,7 @@
 
 ## Core rules
 
-- Do not invent implemented runtime, services, crates, apps, or integrations that do not exist yet.
+- Do not invent implemented runtime, services, packages, apps, or integrations that do not exist yet.
 - Treat `docs/product/` as canonical product truth.
 - Treat `docs/ops/` as the working operating layer.
 - When real implementation starts, do it with `punk` as the repo delivery discipline.
@@ -32,4 +32,4 @@
 ## Current repository state
 
 This repository is currently a documentation-first planning repo.
-Empty directories in `apps/`, `crates/`, `scripts/`, and `.github/` are placeholders, not evidence of implementation.
+Empty directories in `apps/`, `scripts/`, and `.github/` are placeholders, not evidence of implementation.

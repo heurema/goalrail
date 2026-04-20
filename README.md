@@ -12,7 +12,6 @@ This repository currently holds the canonical documentation baseline for Goalrai
 - kernel support docs in `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/`
 - operating docs in `docs/ops/`
 - supporting GTM / positioning / design docs in `docs/product/`
-- research materials in `docs/research/`
 - reference screens in `design/reference_screens/`
 - repo-local agent guidance in `AGENTS.md`
 
@@ -48,7 +47,7 @@ It does **not** contain a real implementation baseline yet.
 
 - `docs/product/` core canon is the product source of truth
 - `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/` hold kernel support truth
-- supplemental docs in `docs/product/`, `docs/research/`, and `design/reference_screens/` support positioning/design work and do not override the canon
+- supplemental docs in `docs/product/` and `design/reference_screens/` support positioning/design work and do not override the canon
 - `docs/ops/` is the current working layer
 - implementation in this repo goes through `punk`
 - changes should stay small, bounded, and reviewable
@@ -66,10 +65,8 @@ It does **not** contain a real implementation baseline yet.
 │  ├─ PROJECT_SPINE_SCHEMA.md
 │  ├─ adr/
 │  ├─ ops/
-│  ├─ product/
-│  └─ research/
+│  └─ product/
 ├─ apps/
-├─ crates/
 ├─ scripts/
 └─ .github/
 ```

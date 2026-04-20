@@ -155,12 +155,6 @@ components:
     status: active_doc
     purpose: Figma workflow, design decisions, and tooling guidance for public entry flow
 
-  - id: research_source_pack
-    name: Research Source Pack
-    layer: research
-    status: active_doc
-    purpose: Background source material informing the Goalrail product direction
-
   - id: reference_screens_pack
     name: Reference Screens Pack
     layer: design
