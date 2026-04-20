@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goalrail Project"
+  short_description: "Goalrail repo canon and docs workflow"
+  default_prompt: "Use this skill when working inside the Goalrail repository. Start from docs/INDEX.md and live ops docs, then use the skill references only as routing and workflow guardrails."
