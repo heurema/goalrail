@@ -46,6 +46,15 @@
 - полная техническая интеграция до решения о pilot
 - broad consulting engagement
 
+### Diagnostic posture
+
+Отдельный paid diagnostic package пока **не включается**.
+
+Qualification остаётся бесплатным, чтобы:
+- снизить friction в founder-led motion
+- быстрее отсеивать no-fit cases
+- сохранять первый paid object максимально ясным: **the pilot itself**
+
 ## 4. Main offer — Paid pilot
 
 Это первый честный коммерческий продукт Goalrail.
@@ -82,6 +91,14 @@ Goalrail pilot проходит через один видимый контур:
 
 `incoming task -> working contract -> bounded execution -> verify -> proof`
 
+### Current delivery cell
+Ранний pilot по умолчанию продаётся как **founder-led delivery with founder + DevOps involvement**.
+
+Это означает:
+- founder ведёт qualification, framing, contract logic и readout
+- DevOps участвует в bootstrap, runtime/setup и delivery constraints where needed
+- это не staff augmentation и не open-ended embedded team model
+
 ## 6. What the client gets
 
 На выходе клиент получает:
@@ -114,6 +131,7 @@ Goalrail pilot проходит через один видимый контур:
 - internal product / platform teams
 - engineering studios
 - software teams inside larger businesses
+- small product teams and startups with one visible repo-level case
 
 ## 8. No-fit cases
 
@@ -133,6 +151,7 @@ Goalrail не должен заходить как pilot, если:
 - remote-first
 - bounded pilot scope
 - limited configuration over a fixed operating core
+- founder-led pilot with founder + DevOps delivery cell
 
 ### Optional later
 - guided deployment
@@ -161,7 +180,18 @@ Goalrail не должен заходить как:
 - full enterprise rollout before pilot proof
 - broad platform implementation across many teams at once
 
-## 11. Expansion path
+## 11. Current pricing rule
+
+Текущая pricing-логика должна быть:
+- **USD-anchored first**
+- qualification remains free
+- design-partner discount is allowed for the first proof-oriented accounts
+- основной коммерческий якорь — managed pilot, а не subscription
+
+Детальная ценовая рамка вынесена в:
+- `docs/product/GOALRAIL_PRICING_MODEL.md`
+
+## 12. Expansion path
 
 После pilot есть только три честных исхода:
 - **expand** — добавить второй repo, второй кейс или вторую команду
@@ -175,7 +205,7 @@ Goalrail не должен заходить как:
 - stronger review / policy profile
 - more stable deployment playbook
 
-## 12. What this offer is not
+## 13. What this offer is not
 
 Goalrail offer сейчас — это не:
 - self-serve SaaS page
@@ -190,7 +220,7 @@ Goalrail offer сейчас — это не:
 - bounded execution + proof service contour
 - controlled path from incoming task to inspectable result
 
-## 13. Current CTA recommendation
+## 14. Current CTA recommendation
 
 Правильные CTA для этого offer:
 - `Получить пилотный разбор`
@@ -198,6 +228,6 @@ Goalrail offer сейчас — это не:
 - `Пройти qualification`
 - `Запустить pilot`
 
-## 14. One-line summary
+## 15. One-line summary
 
 **Goalrail сейчас продаётся как managed, pilot-first operating layer: сначала fit check, потом paid pilot, затем expansion only after real proof.**
