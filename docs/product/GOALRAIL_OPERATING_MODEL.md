@@ -1,3 +1,23 @@
+---
+id: goalrail_operating_model
+title: Goalrail Operating Model
+kind: product_canon
+authority: canonical
+status: current
+owner: product
+truth_surfaces:
+  - operating_model
+  - contract_first_flow
+  - roles
+lifecycle: active-core
+review_after: 2026-07-19
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
+  - docs/product/GOALRAIL_MVP_BLUEPRINT.md
+  - docs/PROJECT_SPINE_SCHEMA.md
+---
 # Goalrail Operating Model
 
 ## 1. Purpose
