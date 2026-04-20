@@ -185,13 +185,25 @@ Goalrail не должен заходить как:
 Текущая pricing-логика должна быть:
 - **USD-anchored first**
 - qualification remains free
-- design-partner discount is allowed for the first proof-oriented accounts
+- public pilot anchor: **from $5,000**
+- design-partner discount mode is allowed for the first proof-oriented accounts
 - основной коммерческий якорь — managed pilot, а не subscription
 
 Детальная ценовая рамка вынесена в:
 - `docs/product/GOALRAIL_PRICING_MODEL.md`
 
-## 12. Expansion path
+## 12. Design partner mode
+
+Design partner — это не отдельный продукт.
+
+Это ранний коммерческий режим для первых клиентов, где Goalrail может:
+- дать явно обозначенный discount
+- получить быстрый feedback loop
+- использовать pilot как learning surface для packaging и proof model
+
+Этот режим не должен применяться к weak-fit accounts.
+
+## 13. Expansion path
 
 После pilot есть только три честных исхода:
 - **expand** — добавить второй repo, второй кейс или вторую команду
@@ -205,7 +217,7 @@ Goalrail не должен заходить как:
 - stronger review / policy profile
 - more stable deployment playbook
 
-## 13. What this offer is not
+## 14. What this offer is not
 
 Goalrail offer сейчас — это не:
 - self-serve SaaS page
@@ -220,7 +232,7 @@ Goalrail offer сейчас — это не:
 - bounded execution + proof service contour
 - controlled path from incoming task to inspectable result
 
-## 14. Current CTA recommendation
+## 15. Current CTA recommendation
 
 Правильные CTA для этого offer:
 - `Получить пилотный разбор`
@@ -228,6 +240,6 @@ Goalrail offer сейчас — это не:
 - `Пройти qualification`
 - `Запустить pilot`
 
-## 15. One-line summary
+## 16. One-line summary
 
 **Goalrail сейчас продаётся как managed, pilot-first operating layer: сначала fit check, потом paid pilot, затем expansion only after real proof.**
