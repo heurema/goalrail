@@ -4,7 +4,7 @@
 
 This document explains how Goalrail can learn from independent adjacent experiments such as Punk without creating product dependency, roadmap coupling, or source-of-truth confusion.
 
-It is advisory source material. It does not define Goalrail canon.
+It is advisory source material only. It does not define Goalrail canon.
 
 ## Source set reviewed
 
