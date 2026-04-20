@@ -8,6 +8,7 @@ from pathlib import Path
 from lib.checker import (
     CheckerConfigError,
     render_markdown_report,
+    run_changed_files_scan,
     run_fixture_self_test,
     run_root_scan,
     write_json_report,
@@ -19,7 +20,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--root", help="Repository root to scan in report-only mode")
     parser.add_argument("--fixtures", help="Fixture root to self-test")
     parser.add_argument("--self-test", action="store_true", help="Run fixture self-test mode")
-    parser.add_argument("--mode", default="report-only", choices=["report-only"], help="Checker mode")
+    parser.add_argument(
+        "--mode",
+        default="report-only",
+        choices=["report-only", "changed-files"],
+        help="Checker mode",
+    )
+    parser.add_argument(
+        "--changed-files-file",
+        help="Newline-separated repo-relative paths for changed-files mode",
+    )
     parser.add_argument("--report-json", help="Path to write the JSON report")
     parser.add_argument("--report-md", help="Path to write the Markdown report")
     return parser
@@ -37,8 +47,16 @@ def main() -> int:
         else:
             if not args.root:
                 raise CheckerConfigError("live scan requires --root")
-            report = run_root_scan(Path(args.root), mode=args.mode)
-            exit_code = 0
+            if args.mode == "changed-files":
+                if not args.changed_files_file:
+                    raise CheckerConfigError("--mode changed-files requires --changed-files-file")
+                report, exit_code = run_changed_files_scan(
+                    Path(args.root),
+                    Path(args.changed_files_file),
+                )
+            else:
+                report = run_root_scan(Path(args.root), mode=args.mode)
+                exit_code = 0
 
         if args.report_json:
             write_json_report(Path(args.report_json), report)
