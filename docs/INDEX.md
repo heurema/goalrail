@@ -57,8 +57,13 @@
 35. `docs/ops/DECISIONS.md`
 36. `docs/ops/COMPONENTS.yaml`
 
-### 8. Reference material
+### 8. Reference material and repo-tracked working surfaces
 37. `design/reference_screens/`
+38. `work/`
+39. `knowledge/`
+40. `public/`
+41. `flows/`
+42. `evals/`
 
 ## Roles of the main docs
 
@@ -112,6 +117,13 @@
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
 
+### Repo-tracked working surfaces
+- `work/` — repo-tracked goals, reports, and bounded slice memory
+- `knowledge/` — advisory research and idea backlog; не источник канона без promotion
+- `public/` — public narrative drafts, receipts, and manual metrics
+- `flows/` — planned flow/spec boundary for future runtime semantics
+- `evals/` — planned eval/spec boundary for future verification semantics
+
 ## Source-of-truth priority
 
 1. Concept canon
@@ -121,7 +133,7 @@
 5. Product shape and external posture
 6. Architecture canon
 7. Delivery and build
-8. Reference material
+8. Reference material and repo-tracked working surfaces
 9. Chat context
 
 ## Working rules
@@ -136,6 +148,7 @@
 8. Нельзя менять implementation scope без сверки с concept canon.
 9. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 10. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
+11. Repo-tracked planning surfaces (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 

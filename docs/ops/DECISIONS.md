@@ -146,3 +146,15 @@ Decision:
 - initial market entry is Russian-speaking
 - the early sales motion is founder-led and pilot-first
 - landing and outreach should be lead-capture and contract-centered, not prompt-tool centric
+
+## D-0017 — Goalrail adopts punk-style workspace boundaries
+Date: 2026-04-20
+Status: accepted
+
+Decision:
+- the planning repo uses explicit top-level support planes inspired by `punk`
+- `work/` tracks bounded goals and reports
+- `knowledge/` tracks advisory research and ideas
+- `public/` tracks public narrative drafts, receipts, and manual metrics
+- `flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
+- `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them

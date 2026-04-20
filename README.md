@@ -6,16 +6,19 @@ Goalrail is an intent-to-delivery layer for software teams.
 
 ## What this repository is
 
-This repository currently holds the canonical documentation baseline for Goalrail:
+This repository currently holds the canonical documentation baseline for Goalrail plus the repo-tracked planning surfaces that will later feed implementation:
 
 - core product docs in `docs/product/`
 - kernel support docs in `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/`
 - operating docs in `docs/ops/`
-- supporting GTM / positioning / design docs in `docs/product/`
+- work memory in `work/`
+- advisory research / idea storage in `knowledge/`
+- public narrative artifacts in `public/`
+- planned flow and eval boundaries in `flows/` and `evals/`
 - reference screens in `design/reference_screens/`
 - repo-local agent guidance in `AGENTS.md`
 
-It does **not** contain a real implementation baseline yet.
+It still does **not** contain a real implementation baseline yet.
 
 ## Current status
 
@@ -26,6 +29,7 @@ It does **not** contain a real implementation baseline yet.
 - the project spine schema note and kernel ADRs are documented
 - the implementation workflow is documented
 - supplemental positioning / design docs from the final pack are merged
+- repo structure now mirrors `punk`-style planning boundaries (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`)
 - implementation will proceed through `punk` in bounded slices
 
 ## Read in this order
@@ -47,9 +51,10 @@ It does **not** contain a real implementation baseline yet.
 
 - `docs/product/` core canon is the product source of truth
 - `docs/PROJECT_SPINE_SCHEMA.md` and `docs/adr/` hold kernel support truth
-- supplemental docs in `docs/product/` and `design/reference_screens/` support positioning/design work and do not override the canon
-- `docs/ops/` is the current working layer
-- implementation in this repo goes through `punk`
+- `docs/ops/` is the working operating layer for the repo
+- `work/`, `knowledge/`, and `public/` are repo-tracked support planes and do not override canon
+- `flows/` and `evals/` are planned structure, not evidence of runtime implementation
+- `apps/`, `scripts/`, and `.github/` remain parked until bounded implementation slices make them real
 - changes should stay small, bounded, and reviewable
 
 ## Repo map
@@ -66,6 +71,11 @@ It does **not** contain a real implementation baseline yet.
 │  ├─ adr/
 │  ├─ ops/
 │  └─ product/
+├─ work/
+├─ knowledge/
+├─ public/
+├─ flows/
+├─ evals/
 ├─ apps/
 ├─ scripts/
 └─ .github/
