@@ -5,88 +5,76 @@ status_anchor: true
 components:
   project_spine:
     name: Project Spine
-    status: docs_only
+    status: active_doc
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists; no compiling package yet.
   product_concept:
     name: Product Concept
     status: docs_only
     truth_owner: docs/product/GOALRAIL_PRODUCT_CONCEPT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical product thesis exists in docs only.
   contract_lifecycle:
     name: Contract Lifecycle
     status: docs_only
     truth_owner: docs/product/GOALRAIL_OPERATING_MODEL.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Contract-first operating flow is documented but not implemented.
   task_shaping:
     name: Task Shaping
     status: docs_only
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Task shaping model exists in canon only.
   runtime_registry:
     name: Runtime Registry
     status: planned
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Planned integration surface only.
   primary_runtime_adapter:
     name: Primary Runtime Adapter
     status: planned
     truth_owner: docs/adr/ADR-0001-runtime-neutral-cli-first.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: CLI-first adapter boundary exists as ADR; no adapter code yet.
   advisory_panel:
     name: Advisory Panel
     status: planned
     truth_owner: docs/adr/ADR-0002-single-writer-and-advisory-panels.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Advisory model exists in canon; no implementation yet.
   gate_verify:
     name: Gate Verify
     status: planned
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Verification contour is defined in docs only.
   proof_artifact:
     name: Proof Artifact
     status: planned
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Proof artifact is defined in docs only.
   web_surface:
     name: Web Surface
     status: planned
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Web surface is planned in the MVP blueprint only.
   cli_surface:
     name: CLI Surface
     status: planned
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: CLI surface is planned in the MVP blueprint only.
   tracker_sync:
     name: Tracker Sync
     status: planned
     truth_owner: docs/product/GOALRAIL_BUILD_ROADMAP.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Tracker sync is phased later and remains unimplemented.
   docs_governance:
     name: Docs Governance
     status: prototype
@@ -96,8 +84,6 @@ components:
       - schemas/docs/doc-impact.schema.json
       - schemas/docs/docs-check-report.schema.json
       - tools/docs-check/docs_check.py
-      - tools/docs-check/lib/checker.py
-      - tools/docs-check/lib/components.py
-      - evals/cases/docs
+      - evals/cases/docs/README.md
     public_claim_allowed: false
-    notes: Report-only checker, schemas, and fixtures exist; no hard gate or full migration yet.
+    notes: Report-only tooling exists.
