@@ -147,17 +147,8 @@ def run_root_scan(root: Path, mode: str = "report-only") -> dict[str, Any]:
 
     for markdown_file in iter_markdown_files(root, include_fixture_cases=False):
         rel_path = markdown_file.relative_to(root).as_posix()
-        text = markdown_file.read_text(encoding="utf-8")
         checked_files.append(rel_path)
-        parse_result = parse_frontmatter(text)
-
-        findings.extend(check_absolute_paths(text, rel_path, "absolute-paths"))
-        findings.extend(check_markdown_links(root, markdown_file.parent, text, rel_path))
-
-        if parse_result.data is not None:
-            findings.extend(validate_frontmatter(parse_result.data, rel_path))
-            findings.extend(check_lifecycle(parse_result.data, rel_path))
-            findings.extend(check_authority(parse_result.data, rel_path))
+        findings.extend(scan_markdown_file(root, markdown_file, rel_path))
 
     findings = sort_findings(findings)
     return build_report(
@@ -167,6 +158,42 @@ def run_root_scan(root: Path, mode: str = "report-only") -> dict[str, Any]:
         findings=findings,
         fixture_results=[],
     )
+
+
+def run_changed_files_scan(root: Path, changed_files_path: Path) -> tuple[dict[str, Any], int]:
+    root = root.resolve()
+    changed_files_path = changed_files_path.resolve()
+    findings: list[dict[str, Any]] = []
+    checked_files: list[str] = []
+
+    for rel_path in load_changed_files(changed_files_path):
+        pure_path = PurePosixPath(rel_path)
+        if not is_repo_relative_path(rel_path):
+            raise CheckerConfigError("changed-files entries must use repo-relative paths")
+
+        candidate = root / pure_path
+        if not candidate.exists() or candidate.is_dir():
+            continue
+
+        if pure_path == COMPONENTS_PATH:
+            checked_files.append(rel_path)
+            findings.extend(validate_components_file(root, candidate, rel_path))
+            continue
+
+        if supports_changed_markdown_scan(pure_path):
+            checked_files.append(rel_path)
+            findings.extend(scan_markdown_file(root, candidate, rel_path))
+
+    findings = sort_findings(findings)
+    report = build_report(
+        mode="changed-files",
+        root=root.as_posix(),
+        checked_files=checked_files,
+        findings=findings,
+        fixture_results=[],
+    )
+    exit_code = 1 if report["summary"]["hard_count"] > 0 else 0
+    return report, exit_code
 
 
 def run_fixture_self_test(fixtures_root: Path) -> tuple[dict[str, Any], int]:
@@ -215,6 +242,8 @@ def run_fixture_self_test(fixtures_root: Path) -> tuple[dict[str, Any], int]:
 def scan_fixture_case(case_dir: Path, category: str) -> dict[str, Any]:
     if category == "components":
         return scan_components_fixture_case(case_dir)
+    if category == "changed-files":
+        return scan_changed_files_fixture_case(case_dir)
 
     markdown_files = sorted(path for path in case_dir.rglob("*.md") if path.name != "expected.json")
     status_data = load_status(case_dir / "status.json")
@@ -290,6 +319,30 @@ def scan_components_fixture_case(case_dir: Path) -> dict[str, Any]:
         findings.extend(validate_components_file(case_dir, components_file, "COMPONENTS.yaml"))
 
     return build_case_scan_result(checked_files, sort_findings(findings))
+
+
+def scan_changed_files_fixture_case(case_dir: Path) -> dict[str, Any]:
+    changed_files_path = case_dir / "changed-files.txt"
+    if not changed_files_path.exists():
+        findings = [
+            make_finding(
+                severity="hard",
+                check="changed-files",
+                path="changed-files.txt",
+                line=1,
+                message="Missing changed-files.txt fixture input.",
+                rule="changed-files.fixture.missing-file",
+                expected="changed-files.txt present",
+                actual="missing",
+            )
+        ]
+        return build_case_scan_result([], findings)
+
+    report, _ = run_changed_files_scan(case_dir, changed_files_path)
+    return build_case_scan_result(
+        report["checked_files"],
+        report["findings"],
+    )
 
 
 def build_case_scan_result(checked_files: list[str], findings: list[dict[str, Any]]) -> dict[str, Any]:
@@ -631,6 +684,22 @@ def check_absolute_paths(text: str, rel_path: str, category: str) -> list[dict[s
                         context={"pattern": label, "category": category},
                     )
                 )
+    return findings
+
+
+def scan_markdown_file(root: Path, markdown_file: Path, rel_path: str) -> list[dict[str, Any]]:
+    text = markdown_file.read_text(encoding="utf-8")
+    parse_result = parse_frontmatter(text)
+    findings: list[dict[str, Any]] = []
+
+    findings.extend(check_absolute_paths(text, rel_path, "absolute-paths"))
+    findings.extend(check_markdown_links(root, markdown_file.parent, text, rel_path))
+
+    if parse_result.data is not None:
+        findings.extend(validate_frontmatter(parse_result.data, rel_path))
+        findings.extend(check_lifecycle(parse_result.data, rel_path))
+        findings.extend(check_authority(parse_result.data, rel_path))
+
     return findings
 
 
@@ -984,6 +1053,17 @@ def iter_markdown_files(root: Path, include_fixture_cases: bool) -> list[Path]:
             continue
         paths.append(path)
     return sorted(paths)
+
+
+def load_changed_files(path: Path) -> list[str]:
+    if not path.exists():
+        raise CheckerConfigError(f"changed-files list does not exist: {path}")
+    entries = [line.strip() for line in path.read_text(encoding="utf-8").splitlines()]
+    return [entry for entry in entries if entry and not entry.startswith("#")]
+
+
+def supports_changed_markdown_scan(path: PurePosixPath) -> bool:
+    return bool(path.parts) and path.parts[0] == "docs" and path.suffix.lower() == ".md"
 
 
 def build_report(

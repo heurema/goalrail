@@ -26,6 +26,24 @@ python3 tools/docs-check/docs_check.py \
   --report-md /tmp/goalrail-docs-check-report.md
 ```
 
+### Changed-files ratchet
+
+This mode checks only the supported changed files passed in a newline-separated repo-relative file list.
+
+- missing or deleted paths are ignored safely
+- unsupported paths such as tool or schema files are ignored by this mode
+- hard findings in changed supported files return `1`
+- warnings in changed files do not fail the run
+
+```bash
+python3 tools/docs-check/docs_check.py \
+  --root . \
+  --mode changed-files \
+  --changed-files-file /tmp/changed-doc-files.txt \
+  --report-json /tmp/goalrail-docs-check-report.json \
+  --report-md /tmp/goalrail-docs-check-report.md
+```
+
 ### Fixture self-test
 
 This mode validates the golden fixtures under `evals/cases/docs/` and exits with `1` when actual fixture output differs from `expected.json`.
@@ -41,12 +59,12 @@ python3 tools/docs-check/docs_check.py \
 ## Exit codes
 
 - `0` = checker completed successfully
-- `1` = fixture self-test mismatch, or a future explicit fail-on-hard mode
+- `1` = fixture self-test mismatch, or hard findings in changed-files mode
 - `2` = checker config or internal error
 
 Important:
 - live report-only scans do **not** return `1` just because findings exist
-- PR3 is still not a hard gate
+- repo-wide report-only scans are still not a hard gate
 
 ## Current checks
 
@@ -57,14 +75,17 @@ Important:
 - authority checks for fixture docs
 - claims skeleton checks using fixture-local synthetic status inputs
 - live `docs/ops/COMPONENTS.yaml` shape, status enum, truth-owner paths, and implementation-path existence
+- changed-files ratchet for supported changed docs only
 
 ## Current non-goals
 
 - no live hard enforcement
-- no CI integration
+- no repo-wide hard gate in CI
 - no external link checking
 - no semantic interpretation of prose
 
-## Future direction
+## CI posture
 
-- PR4: local/CI changed-files ratchet
+- pull requests may run fixture self-test plus changed-files mode only
+- legacy repo-wide violations remain report-only outside the changed file list
+- generated reports should stay in logs or temporary files, not committed into the repo
