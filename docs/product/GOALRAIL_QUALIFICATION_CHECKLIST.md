@@ -1,314 +1,270 @@
+---
+id: goalrail_qualification_checklist
+title: Goalrail Qualification Checklist
+kind: reference
+authority: operational
+status: draft
+owner: founder-sales
+truth_surfaces:
+  - qualification_checklist
+  - fit_check_template
+lifecycle: incubating
+review_after: 2026-07-20
+supersedes: []
+superseded_by: null
+related_docs:
+  - docs/product/GOALRAIL_ICP.md
+  - docs/product/GOALRAIL_OFFER.md
+  - docs/product/GOALRAIL_PILOT_MODEL.md
+  - docs/product/GOALRAIL_PRICING_MODEL.md
+---
 # Goalrail Qualification Checklist
 
-> Canonical checklist for early Goalrail qualification calls.
->
-> Purpose:
-> quickly determine whether a prospect is a fit for the standard Goalrail pilot model.
->
-> Read together with:
-> - `docs/product/GOALRAIL_ICP.md`
-> - `docs/product/GOALRAIL_OFFER.md`
-> - `docs/product/GOALRAIL_PILOT_MODEL.md`
-> - `docs/product/GOALRAIL_DEPLOYMENT_MODEL.md`
-> - `docs/product/GOALRAIL_EMAIL_SEQUENCE.md`
-
-## 1. Purpose
-
-Этот документ нужен для короткого qualification / fit-check разговора.
-
-Его задача:
-- не уходить в длинный аудит
-- быстро отсеивать no-fit cases
-- подтверждать, что у клиента есть нормальный pilot candidate
-- готовить переход к paid pilot
-
-Qualification call не должен превращаться в:
-- большой discovery project
-- process consulting session
-- architecture deep dive
-- product demo без решения о следующем шаге
-
-## 2. Qualification principle
-
-Главный вопрос qualification:
-
-**Есть ли у этой команды нормальный pilot-fit для стандартного Goalrail deployment?**
-
-Не:
-- “как идеально устроить весь их delivery process”
-
-А:
-- можно ли провести один реальный кейс через:
-  `incoming task -> working contract -> bounded execution -> verify -> proof`
-
-## 3. Recommended call shape
-
-### Duration
-- 20–25 minutes recommended
-- 30 minutes max by default
-
-### Participants
-Best case:
-- CTO / Head of Engineering / VP Engineering sponsor
-- tech lead or engineering owner
-
-Optional:
-- PM / product owner if the task flow discussion requires it
-
-## 4. Output of a good qualification call
-
-В конце разговора должен быть один из трёх исходов:
-
-1. **Go to pilot framing**
-2. **Need one missing condition before pilot**
-3. **No-fit for now**
-
-Нельзя заканчивать call состоянием:
-- “интересно, когда-нибудь вернёмся”
-- “надо ещё поговорить без следующего шага”
-
-## 5. Checklist sections
-
-### Section A — Team fit
-
-#### A1. Is there one real pilot team?
-- Да / Нет
-- Название или тип команды:
-- Размер команды:
-
-#### A2. Is the team in the best-fit range?
-Recommended:
-- 5–30 engineers
-
-Mark:
-- Best fit
-- Acceptable fit
-- Weak fit
-
-#### A3. Is there a real engineering owner for the pilot?
-- Да / Нет
-- Кто именно:
-
-### Section B — Sponsor fit
-
-#### B1. Is there a sponsor with decision authority?
-Recommended:
-- CTO
-- Head of Engineering
-- VP Engineering
-
-- Да / Нет
-- Кто именно:
-
-#### B2. Can this sponsor approve a bounded pilot?
-- Да / Нет
-- Неясно
-
-### Section C — Workflow fit
-
-#### C1. Does the company have a real delivery flow already?
-Check:
-- задачи реально приходят в команду
-- есть engineering execution loop
-- есть результат, который можно проверить
-
-Mark:
-- Yes, clear delivery flow
-- Partial / weak flow
-- No real flow
-
-#### C2. Is there visible ambiguity between task and result?
-Signals:
-- vague requests
-- weak scope definition
-- weak handoff between PM and dev
-- unclear review expectations
-- AI activity without strong proof
-
-Mark:
-- Strong pain
-- Moderate pain
-- Weak pain
-
-### Section D — Pilot case fit
-
-#### D1. Is there one real case for the pilot?
-- Да / Нет
-- Кейс:
-
-#### D2. Is the case bounded enough?
-Good pilot case should be:
-- real
-- valuable
-- not too broad
-- not too politically risky
-- possible to evaluate after 1 run
-
-Mark:
-- Good pilot case
-- Possible but needs narrowing
-- Bad pilot case
-
-#### D3. Is there one repo or one clear workflow path?
-- Да / Нет
-- Какой repo / path:
-
-### Section E — AI readiness fit
-
-#### E1. Does the team already use AI in development?
-Mark:
-- Yes, already using it
-- Not systematically, but interested
-- No, and no real urgency
-
-#### E2. Is there pressure to adopt AI without losing control?
-- Strong
-- Medium
-- Weak
-
-### Section F — Runtime and deployment fit
-
-#### F1. Can they support a bounded pilot deployment?
-Need at minimum:
-- one team
-- one repo or workflow path
-- one real case
-- readiness to try contract-first flow
-
-Mark:
-- Yes
-- With one missing condition
-- No
-
-#### F2. Is remote-first acceptable?
-- Yes
-- Maybe
-- No
-
-#### F3. Are there obvious blockers for Codex / Claude Code style runtime usage?
-- No blocker
-- Restricted but workable
-- Major blocker
-
-### Section G — Security / policy fit
-
-#### G1. Are there security restrictions that block even a bounded pilot?
-- No
-- Manageable
-- Severe blocker
-
-#### G2. If restricted, can a narrower profile still work?
-Examples:
-- single-vendor only
-- local-only later
-- limited scope exposure
-
-- Yes
-- Maybe
-- No
-
-## 6. Qualification scoring recommendation
-
-Use a simple three-level decision:
-
-### Green — Good fit
-Usually means:
-- sponsor exists
-- team exists
-- real case exists
-- repo/workflow path exists
-- pain is visible
-- bounded pilot is feasible
-
-### Yellow — Possible fit, but one missing condition
-Typical reasons:
-- no clear pilot case yet
-- sponsor not confirmed
-- scope too broad
-- security concerns need clarification
-
-### Red — No-fit for now
-Typical reasons:
-- no real team
-- no sponsor
-- no delivery flow
-- wants full autopilot, not bounded pilot
-- pilot impossible under current constraints
-
-## 7. Recommended closing decision
-
-### If Green
-Say:
-- there is a clear pilot fit
-- next step is pilot framing / paid pilot proposal
-
-### If Yellow
-Say:
-- fit is possible
-- one missing condition must be resolved first
-- define exactly what is missing
-
-### If Red
-Say:
-- Goalrail is probably not the right fit for a pilot right now
-- do not force the sale
-
-## 8. Recommended call script
-
-### Opening
-“Цель разговора — не сделать длинный аудит, а быстро понять, есть ли у вас нормальный pilot-fit для Goalrail.”
-
-### Middle
-“Нам важно понять четыре вещи: есть ли команда, sponsor, реальный кейс и возможность провести bounded workflow до proof.”
-
-### Closing
-“По итогам у нас должен быть один честный вывод: go to pilot, one missing condition, or no-fit for now.”
-
-## 9. What to capture in notes
-
-At minimum record:
-- company
-- participant names and roles
-- sponsor name
-- team name / size
-- candidate pilot case
-- repo / workflow path
-- main pain signal
-- blockers
-- final qualification verdict
-- next step
-
-## 10. Not a demo rule
-
-Qualification call should not become:
-- a broad product tour
-- a technical deep dive
-- a custom consulting session
-
-Only show as much product framing as needed to help the client understand:
-- what Goalrail is
-- how the pilot works
-- what would happen next
-
-## 11. Recommended next-step matrix
-
-### Outcome: Green
-Next step:
-- send pilot framing
-- send offer / deck if needed
-- propose paid pilot
-
-### Outcome: Yellow
-Next step:
-- request one missing input
-- clarify scope / sponsor / repo / security
-- do not jump into pilot yet
-
-### Outcome: Red
-Next step:
-- stop politely
-- optionally leave door open for later
-
-## 12. One-line summary
-
-**A qualification call is successful when it produces a clear pilot decision, not when it produces a long discussion.**
+> Draft checklist.
+> Использовать как рабочую основу для первого qualification / fit-check call.
+> Не считать финальным sales process до стабилизации первых pilot loops.
+
+## Purpose
+
+Этот документ нужен, чтобы быстро понять:
+- есть ли у клиента реальный fit для Goalrail pilot
+- есть ли у нас шанс получить bounded proof-oriented case
+- стоит ли двигаться в paid pilot или лучше честно сказать no-go
+
+## Decision rule
+
+Qualification не должен заканчиваться vague “давайте подумаем”.
+
+На выходе должен быть один из трёх результатов:
+- **go to pilot proposal**
+- **not now / come back later**
+- **no-fit**
+
+---
+
+## 1. Account basics
+
+- Company: [ ]
+- Team / function: [ ]
+- Main contact: [ ]
+- Role of main contact: [ ]
+- Date: [ ]
+- Notes: [ ]
+
+## 2. Sponsor check
+
+### Questions
+- Есть ли sponsor со стороны CTO / Head of Engineering / product/tech owner?
+- Кто сможет принимать решение по pilot?
+- Кто будет защищать pilot внутри команды?
+
+### Good signs
+- есть явный owner
+- sponsor понимает, зачем нужен pilot
+- sponsor готов дойти до decision after readout
+
+### Red flags
+- нет owner
+- “пусть команда сама посмотрит”
+- никто не может принять решение о запуске
+
+### Notes
+- Sponsor present: [yes / no / partial]
+- Sponsor role: [ ]
+- Confidence: [high / medium / low]
+
+## 3. Team fit
+
+### Questions
+- Есть ли реальная команда, а не один пользователь?
+- Какая структура: PM / analyst / tech lead / developers?
+- Размер команды?
+
+### Good signs
+- product team 5–30 engineers or small startup team with a real delivery loop
+- есть как минимум product/tech counterpart
+- команда реально делает delivery, а не только исследует идеи
+
+### Red flags
+- один человек без команды
+- нет delivery loop
+- неясно, кто будет работать с результатом pilot
+
+### Notes
+- Team size: [ ]
+- Team shape: [ ]
+- Fit: [high / medium / low]
+
+## 4. Problem / urgency check
+
+### Questions
+- В чём сейчас pain?
+- Почему это нужно решать сейчас?
+- Что не устраивает в текущем AI-assisted flow?
+
+### Good signs
+- ambiguity between task and implementation
+- weak visibility into result quality
+- AI is already being used, but without enough control
+- reviewability / proof gap is visible
+
+### Red flags
+- клиент просто “хочет попробовать AI” без реального процесса
+- pain слишком общий и не привязан к delivery
+- нет urgency
+
+### Notes
+- Main pain: [ ]
+- Urgency: [high / medium / low]
+- Is the pain pilot-testable: [yes / no]
+
+## 5. Pilot case quality
+
+### Questions
+- Есть ли **один реальный кейс**, а не абстрактный wish list?
+- Кейc достаточно важный для бизнеса?
+- Кейc bounded enough for 2-week pilot?
+
+### Good signs
+- один видимый case
+- понятный scope
+- кейс можно провести через task -> contract -> execution -> proof
+- результат можно проверить и показать
+
+### Red flags
+- хотят “внедрить AI в разработку вообще”
+- кейс слишком большой или слишком расплывчатый
+- нет понятного результата, который можно проверить
+
+### Notes
+- Candidate case: [ ]
+- Bounded enough: [yes / no / maybe]
+- Business visibility: [high / medium / low]
+
+## 6. Repo / workflow readiness
+
+### Questions
+- Есть ли один repo, на котором можно показать bounded result?
+- Есть ли доступ к этому repo?
+- Есть ли текущий task flow, который можно взять как baseline?
+
+### Good signs
+- один repo already identified
+- понятный task input path
+- есть baseline workflow and review path
+
+### Red flags
+- нет repo
+- нет доступа
+- нет реального workflow, только презентационная идея
+
+### Notes
+- Repo available: [yes / no]
+- Access complexity: [low / medium / high]
+- Workflow readiness: [high / medium / low]
+
+## 7. Security / environment constraints
+
+### Questions
+- Есть ли ограничения на vendor/runtime usage?
+- Есть ли ограничения на external AI tools?
+- Есть ли env/setup blockers для bounded pilot?
+
+### Good signs
+- ограничения известны заранее
+- можно выбрать допустимый runtime/profile
+- нет тяжёлого enterprise blocker before pilot
+
+### Red flags
+- security posture unclear
+- client expects pilot without giving constraints
+- restrictions make even one bounded case impossible
+
+### Notes
+- Constraints known: [yes / no]
+- Constraint level: [light / medium / heavy]
+- Pilot still feasible: [yes / no / maybe]
+
+## 8. Expectation check
+
+### Questions
+- Чего клиент ждёт от pilot?
+- Понимает ли он, что это не broad rollout?
+- Понимает ли он, что мы продаём pilot, а не full platform subscription?
+
+### Good signs
+- клиент понимает bounded scope
+- клиент готов к result = expand / retry / stop
+- клиент не ждёт полной замены стека
+
+### Red flags
+- “сделайте нам полную AI-трансформацию”
+- “замените Jira / IDE / команду”
+- ожидание бесконечного consulting engagement
+
+### Notes
+- Expectation fit: [high / medium / low]
+- Any dangerous expectations: [ ]
+
+## 9. Commercial fit
+
+### Questions
+- Готов ли клиент к paid pilot?
+- Понимает ли он формат `from $5,000` as the public anchor?
+- Есть ли основания для design-partner discount?
+
+### Good signs
+- клиент воспринимает pilot как платный bounded engagement
+- цена не вызывает концептуального сопротивления
+- design-partner mode нужен по стратегии, а не чтобы спасать weak-fit account
+
+### Red flags
+- готов только на free work
+- хочет неопределённый diagnostic before any payment
+- просит discount because there is no sponsor / no readiness / no scope
+
+### Notes
+- Commercial fit: [high / medium / low]
+- Pricing reaction: [ ]
+- Design partner candidate: [yes / no / maybe]
+
+## 10. Final qualification summary
+
+### Fit summary
+- Sponsor: [high / medium / low]
+- Team fit: [high / medium / low]
+- Pilot case quality: [high / medium / low]
+- Repo readiness: [high / medium / low]
+- Security feasibility: [high / medium / low]
+- Commercial fit: [high / medium / low]
+
+### Recommended verdict
+- [ ] go to pilot proposal
+- [ ] not now / come back later
+- [ ] no-fit
+
+### Why
+[short rationale]
+
+### If go
+- proposed pilot case: [ ]
+- proposed repo: [ ]
+- proposed commercial mode: [standard pilot / design partner pilot]
+- next action: [send proposal / book follow-up / gather access]
+
+### If not now
+- what must become true first: [ ]
+
+### If no-fit
+- main blocker: [ ]
+
+---
+
+## Internal founder note
+
+Say **no-go** when:
+- there is no sponsor
+- there is no bounded case
+- there is no repo or task flow to anchor the pilot
+- expectations are broad-rollout-first
+- discount request is trying to compensate for weak fit
