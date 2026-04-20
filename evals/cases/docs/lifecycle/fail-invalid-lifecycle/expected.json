@@ -1,0 +1,30 @@
+{
+  "checked_files": [
+    "input.md"
+  ],
+  "findings": [
+    {
+      "actual": "beta",
+      "check": "frontmatter",
+      "context": {},
+      "expected": [
+        "active-core",
+        "incubating",
+        "parked",
+        "retired"
+      ],
+      "id": "input.md:1:frontmatter.enum",
+      "line": 1,
+      "message": "Invalid value for frontmatter field `lifecycle`.",
+      "path": "input.md",
+      "rule": "frontmatter.enum",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 1,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}

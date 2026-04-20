@@ -1,0 +1,27 @@
+{
+  "checked_files": [
+    "README.md"
+  ],
+  "findings": [
+    {
+      "actual": [
+        "product-thesis"
+      ],
+      "check": "authority",
+      "context": {},
+      "expected": "non-canonical truth surfaces",
+      "id": "README.md:1:authority.public-entry-truth-surface",
+      "line": 1,
+      "message": "public_entry documents must not own canonical truth surfaces.",
+      "path": "README.md",
+      "rule": "authority.public-entry-truth-surface",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 1,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}

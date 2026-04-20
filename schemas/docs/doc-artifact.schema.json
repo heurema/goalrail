@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "goalrail/docs/doc-artifact.schema.json",
+  "title": "Goalrail Doc Artifact v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "kind",
+    "authority",
+    "status",
+    "owner",
+    "truth_surfaces",
+    "lifecycle",
+    "review_after",
+    "supersedes",
+    "superseded_by",
+    "related_docs"
+  ],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "kind": {
+      "type": "string",
+      "enum": [
+        "product_canon",
+        "architecture_canon",
+        "ops_status",
+        "ops_plan",
+        "adr",
+        "brand_canon",
+        "public_entry",
+        "research_note",
+        "derived_view",
+        "reference"
+      ]
+    },
+    "authority": {
+      "type": "string",
+      "enum": [
+        "canonical",
+        "operational",
+        "advisory",
+        "derived",
+        "public_entry",
+        "reference"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["current", "draft", "superseded", "retired", "reference"]
+    },
+    "owner": {"type": "string", "minLength": 1},
+    "truth_surfaces": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "lifecycle": {
+      "type": "string",
+      "enum": ["active-core", "incubating", "parked", "retired"]
+    },
+    "review_after": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "supersedes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "superseded_by": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "related_docs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

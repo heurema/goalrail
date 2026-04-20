@@ -1,0 +1,25 @@
+{
+  "checked_files": [
+    "input.md"
+  ],
+  "findings": [
+    {
+      "actual": "./missing.md",
+      "check": "links",
+      "context": {},
+      "expected": "existing repo-relative target",
+      "id": "input.md:1:links.broken-relative",
+      "line": 1,
+      "message": "Broken repo-relative link.",
+      "path": "input.md",
+      "rule": "links.broken-relative",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 1,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}

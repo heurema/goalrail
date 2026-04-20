@@ -1,0 +1,7 @@
+{
+  "runtime_integration": false,
+  "cli_command": false,
+  "proof_generation": false,
+  "tracker_sync": false,
+  "generic_runtime": false
+}
