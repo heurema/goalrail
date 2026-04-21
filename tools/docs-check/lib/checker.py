@@ -71,6 +71,7 @@ ABSOLUTE_PATH_PATTERNS = [
 ]
 LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+SELF_TEST_TODAY = date(2026, 4, 20)
 HARD_CLAIM_PATTERNS = [
     (re.compile(r"\bruntime is integrated\b", re.IGNORECASE), "runtime_integration"),
     (re.compile(r"\busers can run\b", re.IGNORECASE), "cli_command"),
@@ -134,8 +135,19 @@ class CheckerConfigError(RuntimeError):
     pass
 
 
-def run_root_scan(root: Path, mode: str = "report-only") -> dict[str, Any]:
+def resolve_today(value: str | None, *, self_test: bool) -> date:
+    if value is None:
+        return SELF_TEST_TODAY if self_test else date.today()
+
+    if not valid_review_after(value):
+        raise CheckerConfigError("--today must use YYYY-MM-DD")
+
+    return date.fromisoformat(value)
+
+
+def run_root_scan(root: Path, mode: str = "report-only", today: date | None = None) -> dict[str, Any]:
     root = root.resolve()
+    today = today or date.today()
     findings: list[dict[str, Any]] = []
     checked_files: list[str] = []
 
@@ -148,7 +160,7 @@ def run_root_scan(root: Path, mode: str = "report-only") -> dict[str, Any]:
     for markdown_file in iter_markdown_files(root, include_fixture_cases=False):
         rel_path = markdown_file.relative_to(root).as_posix()
         checked_files.append(rel_path)
-        findings.extend(scan_markdown_file(root, markdown_file, rel_path))
+        findings.extend(scan_markdown_file(root, markdown_file, rel_path, today=today))
 
     findings = sort_findings(findings)
     return build_report(
@@ -160,9 +172,14 @@ def run_root_scan(root: Path, mode: str = "report-only") -> dict[str, Any]:
     )
 
 
-def run_changed_files_scan(root: Path, changed_files_path: Path) -> tuple[dict[str, Any], int]:
+def run_changed_files_scan(
+    root: Path,
+    changed_files_path: Path,
+    today: date | None = None,
+) -> tuple[dict[str, Any], int]:
     root = root.resolve()
     changed_files_path = changed_files_path.resolve()
+    today = today or date.today()
     findings: list[dict[str, Any]] = []
     checked_files: list[str] = []
 
@@ -182,7 +199,7 @@ def run_changed_files_scan(root: Path, changed_files_path: Path) -> tuple[dict[s
 
         if supports_changed_markdown_scan(pure_path):
             checked_files.append(rel_path)
-            findings.extend(scan_markdown_file(root, candidate, rel_path))
+            findings.extend(scan_markdown_file(root, candidate, rel_path, today=today))
 
     findings = sort_findings(findings)
     report = build_report(
@@ -196,8 +213,12 @@ def run_changed_files_scan(root: Path, changed_files_path: Path) -> tuple[dict[s
     return report, exit_code
 
 
-def run_fixture_self_test(fixtures_root: Path) -> tuple[dict[str, Any], int]:
+def run_fixture_self_test(
+    fixtures_root: Path,
+    today: date | None = None,
+) -> tuple[dict[str, Any], int]:
     fixtures_root = fixtures_root.resolve()
+    today = today or SELF_TEST_TODAY
     fixture_results: list[dict[str, Any]] = []
     all_findings: list[dict[str, Any]] = []
     checked_files: list[str] = []
@@ -205,7 +226,7 @@ def run_fixture_self_test(fixtures_root: Path) -> tuple[dict[str, Any], int]:
     for expected_path in sorted(fixtures_root.rglob("expected.json")):
         case_dir = expected_path.parent
         category = case_dir.parent.name
-        actual = scan_fixture_case(case_dir, category)
+        actual = scan_fixture_case(case_dir, category, today=today)
         expected = json.loads(expected_path.read_text(encoding="utf-8"))
         passed = actual == expected
         fixture_results.append(
@@ -239,11 +260,11 @@ def run_fixture_self_test(fixtures_root: Path) -> tuple[dict[str, Any], int]:
     return report, exit_code
 
 
-def scan_fixture_case(case_dir: Path, category: str) -> dict[str, Any]:
+def scan_fixture_case(case_dir: Path, category: str, today: date) -> dict[str, Any]:
     if category == "components":
         return scan_components_fixture_case(case_dir)
     if category == "changed-files":
-        return scan_changed_files_fixture_case(case_dir)
+        return scan_changed_files_fixture_case(case_dir, today=today)
 
     markdown_files = sorted(path for path in case_dir.rglob("*.md") if path.name != "expected.json")
     status_data = load_status(case_dir / "status.json")
@@ -282,7 +303,7 @@ def scan_fixture_case(case_dir: Path, category: str) -> dict[str, Any]:
 
         findings.extend(validate_frontmatter(parse_result.data, rel_path))
         if category in {"lifecycle", "frontmatter"}:
-            findings.extend(check_lifecycle(parse_result.data, rel_path))
+            findings.extend(check_lifecycle(parse_result.data, rel_path, today=today))
         if category in {"authority", "frontmatter"}:
             findings.extend(check_authority(parse_result.data, rel_path))
         if category == "claims":
@@ -321,7 +342,7 @@ def scan_components_fixture_case(case_dir: Path) -> dict[str, Any]:
     return build_case_scan_result(checked_files, sort_findings(findings))
 
 
-def scan_changed_files_fixture_case(case_dir: Path) -> dict[str, Any]:
+def scan_changed_files_fixture_case(case_dir: Path, today: date) -> dict[str, Any]:
     changed_files_path = case_dir / "changed-files.txt"
     if not changed_files_path.exists():
         findings = [
@@ -338,7 +359,7 @@ def scan_changed_files_fixture_case(case_dir: Path) -> dict[str, Any]:
         ]
         return build_case_scan_result([], findings)
 
-    report, _ = run_changed_files_scan(case_dir, changed_files_path)
+    report, _ = run_changed_files_scan(case_dir, changed_files_path, today=today)
     return build_case_scan_result(
         report["checked_files"],
         report["findings"],
@@ -477,11 +498,12 @@ def validate_list_field(frontmatter: dict[str, Any], rel_path: str, field_name: 
     return findings
 
 
-def check_lifecycle(frontmatter: dict[str, Any], rel_path: str) -> list[dict[str, Any]]:
+def check_lifecycle(frontmatter: dict[str, Any], rel_path: str, today: date) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     review_after = frontmatter.get("review_after")
     if isinstance(review_after, str) and valid_review_after(review_after):
-        if review_after < date.today().isoformat():
+        today_iso = today.isoformat()
+        if review_after < today_iso:
             findings.append(
                 make_finding(
                     severity="warning",
@@ -490,7 +512,7 @@ def check_lifecycle(frontmatter: dict[str, Any], rel_path: str) -> list[dict[str
                     line=1,
                     message="review_after date is in the past.",
                     rule="lifecycle.review-after-expired",
-                    expected=f">= {date.today().isoformat()}",
+                    expected=f">= {today_iso}",
                     actual=review_after,
                 )
             )
@@ -687,7 +709,7 @@ def check_absolute_paths(text: str, rel_path: str, category: str) -> list[dict[s
     return findings
 
 
-def scan_markdown_file(root: Path, markdown_file: Path, rel_path: str) -> list[dict[str, Any]]:
+def scan_markdown_file(root: Path, markdown_file: Path, rel_path: str, today: date) -> list[dict[str, Any]]:
     text = markdown_file.read_text(encoding="utf-8")
     parse_result = parse_frontmatter(text)
     findings: list[dict[str, Any]] = []
@@ -697,7 +719,7 @@ def scan_markdown_file(root: Path, markdown_file: Path, rel_path: str) -> list[d
 
     if parse_result.data is not None:
         findings.extend(validate_frontmatter(parse_result.data, rel_path))
-        findings.extend(check_lifecycle(parse_result.data, rel_path))
+        findings.extend(check_lifecycle(parse_result.data, rel_path, today=today))
         findings.extend(check_authority(parse_result.data, rel_path))
 
     return findings
