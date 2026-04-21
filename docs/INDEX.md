@@ -75,22 +75,24 @@ related_docs:
 34. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
 35. `docs/product/GOALRAIL_RULE_STACK.md`
 
-### 8. Delivery and build
+### 8. Delivery, build, and pilot operations
 36. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
 37. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
 38. `docs/ops/STATUS.md`
 39. `docs/ops/NEXT.md`
 40. `docs/ops/DECISIONS.md`
 41. `docs/ops/COMPONENTS.yaml`
+42. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+43. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and repo-tracked working surfaces
-42. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-43. `design/reference_screens/`
-44. `work/`
-45. `knowledge/`
-46. `public/`
-47. `flows/`
-48. `evals/`
+44. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+45. `design/reference_screens/`
+46. `work/`
+47. `knowledge/`
+48. `public/`
+49. `flows/`
+50. `evals/`
 
 ## Roles of the main docs
 
@@ -102,7 +104,7 @@ related_docs:
 - `GOALRAIL_GTM_MODEL.md` — как Goalrail продаётся, через какой motion заходит в компанию и какой CTA используется
 - `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
 - `GOALRAIL_OFFER.md` — текущее sellable package: free qualification, paid pilot, outputs, non-goals и expansion path
-- `GOALRAIL_PRICING_MODEL.md` — текущая pricing and packaging logic: USD anchor, pilot price bands, discount policy, support and expansion packaging
+- `GOALRAIL_PRICING_MODEL.md` — текущая pricing and packaging logic: USD pilot anchor (`Managed pilot — from $5,000`), internal pilot ranges, design-partner discount mode, modifiers and post-pilot retainers
 
 ### Product summary and market framing
 - `GOALRAIL_PRODUCT_BRIEF.md` — короткая executive-версия продукта
@@ -143,13 +145,15 @@ related_docs:
 - `GOALRAIL_DOC_GOVERNANCE.md` — truth model, metadata vocabulary, lifecycle rules и staged deterministic enforcement posture
 - `GOALRAIL_RULE_STACK.md` — rule precedence, dogfooding law, component/slice/PR hierarchy, and non-override behavior
 
-### Delivery and build
+### Delivery, build, and pilot operations
 - `GOALRAIL_BUILD_ROADMAP.md` — очередность фаз и checkpoints
 - `GOALRAIL_IMPLEMENTATION_GUIDE.md` — правила bounded implementation
 - `STATUS.md` — текущее состояние
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
+- `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
 ### Advisory research, reference material, and repo-tracked working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
@@ -169,7 +173,7 @@ related_docs:
 5. Product shape and external posture
 6. Architecture canon
 7. Governance and change control
-8. Delivery and build
+8. Delivery, build, and pilot operations
 9. Advisory research, reference material, and repo-tracked working surfaces
 10. Chat context
 
