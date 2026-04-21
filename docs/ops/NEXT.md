@@ -11,6 +11,15 @@
 
 ## Next bounded slices
 
+### Preflight — Implementation guardrails v0
+Goal:
+- make future implementation PRs declare component, docs, status, scope, validation, and proof impact
+
+Done means:
+- PR template exists
+- `AGENTS.md` points agents and developers to the Rule Stack
+- existing NEXT slices remain intact and continue below after this preflight
+
 ### Slice 1 — CTO deck outline
 Goal:
 - create a 6–8 slide outline for CTO / Head of Engineering conversations
