@@ -8,6 +8,7 @@ from pathlib import Path
 from lib.checker import (
     CheckerConfigError,
     render_markdown_report,
+    resolve_today,
     run_changed_files_scan,
     run_fixture_self_test,
     run_root_scan,
@@ -30,6 +31,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--changed-files-file",
         help="Newline-separated repo-relative paths for changed-files mode",
     )
+    parser.add_argument(
+        "--today",
+        help="Override evaluation date for lifecycle checks (YYYY-MM-DD); self-test uses a fixed date when omitted",
+    )
     parser.add_argument("--report-json", help="Path to write the JSON report")
     parser.add_argument("--report-md", help="Path to write the Markdown report")
     return parser
@@ -40,10 +45,12 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        evaluation_today = resolve_today(args.today, self_test=args.self_test)
+
         if args.self_test:
             if not args.fixtures:
                 raise CheckerConfigError("--self-test requires --fixtures")
-            report, exit_code = run_fixture_self_test(Path(args.fixtures))
+            report, exit_code = run_fixture_self_test(Path(args.fixtures), today=evaluation_today)
         else:
             if not args.root:
                 raise CheckerConfigError("live scan requires --root")
@@ -53,9 +60,10 @@ def main() -> int:
                 report, exit_code = run_changed_files_scan(
                     Path(args.root),
                     Path(args.changed_files_file),
+                    today=evaluation_today,
                 )
             else:
-                report = run_root_scan(Path(args.root), mode=args.mode)
+                report = run_root_scan(Path(args.root), mode=args.mode, today=evaluation_today)
                 exit_code = 0
 
         if args.report_json:

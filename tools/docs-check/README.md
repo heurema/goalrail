@@ -17,6 +17,7 @@ This checker is the report-only docs-governance scaffold through PR3.
 ### Live report-only scan
 
 This mode scans the repository and always exits with `0` when the checker completes successfully, even if findings are present.
+It uses the real current date by default.
 
 ```bash
 python3 tools/docs-check/docs_check.py \
@@ -34,6 +35,7 @@ This mode checks only the supported changed files passed in a newline-separated 
 - unsupported paths such as tool or schema files are ignored by this mode
 - hard findings in changed supported files return `1`
 - warnings in changed files do not fail the run
+- it uses the real current date by default
 
 ```bash
 python3 tools/docs-check/docs_check.py \
@@ -47,6 +49,7 @@ python3 tools/docs-check/docs_check.py \
 ### Fixture self-test
 
 This mode validates the golden fixtures under `evals/cases/docs/` and exits with `1` when actual fixture output differs from `expected.json`.
+When `--today` is omitted, fixture self-test uses the frozen evaluation date `2026-04-20` so lifecycle fixtures stay deterministic as calendar time moves forward.
 
 ```bash
 python3 tools/docs-check/docs_check.py \
@@ -54,6 +57,15 @@ python3 tools/docs-check/docs_check.py \
   --self-test \
   --report-json /tmp/goalrail-docs-fixtures-report.json \
   --report-md /tmp/goalrail-docs-fixtures-report.md
+```
+
+Optional override:
+
+```bash
+python3 tools/docs-check/docs_check.py \
+  --fixtures evals/cases/docs \
+  --self-test \
+  --today 2026-04-21
 ```
 
 ## Exit codes
