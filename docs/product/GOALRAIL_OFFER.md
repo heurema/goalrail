@@ -15,6 +15,9 @@
 
 **Goalrail сейчас продаётся как free qualification + paid pilot для одной команды, одного репозитория и одного видимого task -> proof workflow.**
 
+Qualification остаётся бесплатным.
+Отдельный paid diagnostic package сейчас не активен.
+
 Это не годовая подписка “платформы целиком”.
 Это не bespoke consulting под каждого клиента.
 Это productized operating layer, который сначала доказывает value на одном bounded кейсе.
@@ -48,7 +51,7 @@
 
 ### Diagnostic posture
 
-Отдельный paid diagnostic package пока **не включается**.
+Отдельный paid diagnostic package пока **не запускается**.
 
 Qualification остаётся бесплатным, чтобы:
 - снизить friction в founder-led motion
@@ -65,6 +68,7 @@ Qualification остаётся бесплатным, чтобы:
 - 1 основной кейс
 - 2 недели как базовый срок
 - managed deployment mode
+- remote-first
 - lightweight proof required from day one
 
 ### Extended pilot shape
@@ -92,7 +96,7 @@ Goalrail pilot проходит через один видимый контур:
 `incoming task -> working contract -> bounded execution -> verify -> proof`
 
 ### Current delivery cell
-Ранний pilot по умолчанию продаётся как **founder-led delivery with founder + DevOps involvement**.
+Ранний pilot по умолчанию продаётся как **founder-led delivery with a founder + DevOps cell**.
 
 Это означает:
 - founder ведёт qualification, framing, contract logic и readout
@@ -167,8 +171,9 @@ Goalrail не должен заходить как:
 ## 10. Commercial posture
 
 ### Pricing posture
-- **free qualification / diagnostic**
-- **paid pilot**
+- **qualification stays free**
+- **paid diagnostic is not active yet**
+- **paid pilot is the main commercial object**
 
 ### Why this structure
 - qualification быстро убирает no-fit cases
@@ -184,8 +189,10 @@ Goalrail не должен заходить как:
 
 Текущая pricing-логика должна быть:
 - **USD-anchored first**
+- **public anchor: Managed pilot — from $5,000**
 - qualification remains free
-- design-partner discount is allowed for the first proof-oriented accounts
+- design partner is a discount mode for the same pilot offer, only when strategically justified
+- design partner is not used to rescue weak-fit accounts
 - основной коммерческий якорь — managed pilot, а не subscription
 
 Детальная ценовая рамка вынесена в:
@@ -230,4 +237,4 @@ Goalrail offer сейчас — это не:
 
 ## 15. One-line summary
 
-**Goalrail сейчас продаётся как managed, pilot-first operating layer: сначала fit check, потом paid pilot, затем expansion only after real proof.**
+**Goalrail сейчас продаётся как managed, pilot-first operating layer: qualification stays free, the paid object is the pilot, and expansion starts only after real proof.**

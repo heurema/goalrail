@@ -20,9 +20,9 @@ related_docs:
 ---
 # Goalrail Pilot Proposal Template
 
-> Draft template.
-> Использовать как рабочую основу для первых pilot proposals.
-> Не считать финальным commercial format до стабилизации offer и первых closed-loop pilots.
+> Draft operational template.
+> Использовать как рабочую основу для первых pilot proposals после qualification call.
+> Не считать каноническим commercial process или стабилизированным sales asset.
 
 ## Purpose
 
@@ -37,8 +37,9 @@ related_docs:
 
 1. Скопировать шаблон.
 2. Заполнить только конкретику по клиенту.
-3. Не добавлять широкие обещания вне pilot scope.
-4. Если нужен больший объём — не раздувать этот документ, а явно re-scope the pilot.
+3. Выбрать один режим: **standard pilot** или **design partner pilot**.
+4. Не добавлять широкие обещания вне pilot scope.
+5. Если нужен больший объём — не раздувать этот документ, а явно re-scope the pilot.
 
 ---
 
@@ -68,8 +69,23 @@ Goalrail предлагается как **pilot-first operating layer for AI-as
 - 1 repo
 - 1 основной кейс
 - 2-недельный managed pilot
+- remote-first delivery
+- founder + DevOps delivery cell
 
-## 3. Why this pilot
+## 3. Pilot mode
+
+**Selected mode:** [standard pilot / design partner pilot]
+
+### Standard pilot
+- базовый managed pilot
+- публичный anchor: **Managed pilot — from $5,000**
+
+### Design partner pilot
+- тот же managed pilot offer
+- не отдельный продукт
+- discounted mode only when access, feedback quality, and learning value are strategically strong
+
+## 4. Why this pilot
 
 Текущая проблема, которую pilot должен проверить:
 - [brief ambiguity / speed / reviewability / AI adoption pain]
@@ -79,7 +95,7 @@ Goalrail предлагается как **pilot-first operating layer for AI-as
 - можно ли провести bounded AI-assisted delivery без потери контроля
 - может ли команда получить inspectable proof по реальному кейсу
 
-## 4. Pilot scope
+## 5. Pilot scope
 
 ### Included
 - qualification confirmation
@@ -98,7 +114,7 @@ Goalrail предлагается как **pilot-first operating layer for AI-as
 - full redesign of client engineering process
 - broad multi-team deployment
 
-## 5. Proposed pilot case
+## 6. Proposed pilot case
 
 **Candidate case:** [one real task / use case]
 
@@ -111,7 +127,7 @@ Goalrail предлагается как **pilot-first operating layer for AI-as
 
 **Primary team:** [team / roles]
 
-## 6. Delivery model
+## 7. Delivery model
 
 ### Working model
 This pilot is delivered as a **founder-led managed pilot**.
@@ -122,11 +138,12 @@ This pilot is delivered as a **founder-led managed pilot**.
 
 ### Engagement format
 - remote-first
+- managed deployment
 - async working channel: [Telegram / Slack / email]
 - check-ins: [2x per week or similar]
 - one final readout session
 
-## 7. Pilot phases and timeline
+## 8. Pilot phases and timeline
 
 ### Week 0 / Pre-start
 - confirm case
@@ -147,7 +164,7 @@ This pilot is delivered as a **founder-led managed pilot**.
 - final readout
 - expansion / retry / stop recommendation
 
-## 8. Client inputs required
+## 9. Client inputs required
 
 Client is expected to provide:
 - one sponsor
@@ -157,7 +174,7 @@ Client is expected to provide:
 - realistic success criteria for the case
 - security and environment constraints upfront
 
-## 9. Deliverables
+## 10. Deliverables
 
 At pilot close the client receives:
 - configured pilot profile
@@ -169,7 +186,7 @@ At pilot close the client receives:
   - stabilize and retry
   - stop
 
-## 10. Success criteria
+## 11. Success criteria
 
 This pilot is considered successful if:
 1. one real task passes through the Goalrail flow
@@ -178,35 +195,44 @@ This pilot is considered successful if:
 4. the result ends with inspectable proof
 5. the team can make a grounded rollout decision
 
-## 11. Commercial terms
+**Client-specific success criteria:**
+- [business signal]
+- [delivery signal]
+- [proof / review signal]
+
+## 12. Commercial terms
 
 ### Pilot package
 **Managed pilot — from $5,000**
+
+### Quoted mode
+**Mode for this proposal:** [standard pilot / design partner pilot]
 
 ### This proposal
 **Quoted price:** [$X,XXX]
 
 ### Payment terms
 - 60% upfront
-- 40% on final readout / pilot close
+- 40% on final readout
 
 ### Notes
-- For early design-partner accounts, a discounted pilot may be offered explicitly.
+- Design partner mode is a discounted version of the same pilot offer, not a separate product line.
 - Additional repos, additional cases, or heavy policy constraints are re-scoped separately.
 
-## 12. Assumptions and exclusions
+## 13. Assumptions and exclusions
 
 ### Assumptions
 - client can provide required access on time
 - one real case is available during the pilot window
 - the team is willing to use a bounded pilot flow
+- major security constraints are surfaced before kickoff
 
 ### Exclusions
 - no guaranteed full rollout after pilot
 - no promise of org-wide transformation inside this engagement
-- no claim that Goalrail is already a finished platform product
+- no claim that Goalrail is already a fully implemented platform today
 
-## 13. Next step
+## 14. Next step
 
 If the client wants to proceed:
 1. confirm pilot case
@@ -215,6 +241,6 @@ If the client wants to proceed:
 4. approve proposal and commercial terms
 5. schedule kickoff
 
-## 14. One-line summary
+## 15. One-line summary
 
-**This proposal offers a bounded, founder-led Goalrail pilot for one team, one repo, and one visible task -> proof loop.**
+**This proposal offers a bounded Goalrail pilot for one team, one repo, one core case, and one visible task -> proof loop, delivered remote-first by a founder + DevOps cell.**
