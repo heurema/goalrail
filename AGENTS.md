@@ -29,6 +29,19 @@
 - Do not add framework sprawl or fake scaffolding.
 - When creating implementation later, keep scope explicit and bounded.
 
+## Goalrail implementation guardrails
+
+- Follow `docs/product/GOALRAIL_RULE_STACK.md`.
+- Product canon beats local notes and implementation assumptions.
+- No implementation without a component mapping in `docs/ops/COMPONENTS.yaml`.
+- No public surface without documentation.
+- Status must match reality.
+- Lower-level rules may narrow, never override.
+- Implementation PRs must fill `ComponentImpact` and `DocImpact` in the PR template.
+- If a change affects product concept, operating model, Project Spine, MVP scope, verification/proof semantics, or runtime boundaries, use the Research Gate / architecture docs before or with implementation.
+- Do not add runtime or product implementation outside the current bounded slice.
+- Do not make false implementation claims.
+
 ## Current repository state
 
 This repository is currently a documentation-first planning repo.
