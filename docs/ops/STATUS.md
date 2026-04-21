@@ -20,7 +20,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 Status: planning / product canon and pilot frame active
 Owner: Vitaly
 
@@ -87,7 +87,7 @@ The project currently has:
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
-- `work/` is reserved for goals and reports
+- `work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
 - `knowledge/` is reserved for advisory research and idea backlog
 - `public/` is reserved for public narrative drafts, receipts, and manual metrics
 - `flows/` and `evals/` exist as planned future structure, not executable product surfaces
