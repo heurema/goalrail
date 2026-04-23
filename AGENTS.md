@@ -27,6 +27,7 @@
 - Follow the current doc law: brief first, blueprint second, then roadmap/implementation rules.
 - Prefer small, reviewable changes.
 - Do not add framework sprawl or fake scaffolding.
+- When adding real implementation, create new code under `apps/` unless canon or ops docs explicitly assign a different bounded path.
 - When creating implementation later, keep scope explicit and bounded.
 
 ## Goalrail implementation guardrails
