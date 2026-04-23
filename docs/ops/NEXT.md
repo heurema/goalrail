@@ -7,6 +7,8 @@
 - **Phase 0 -> Phase 1 transition**
 - product and deployment canon is now in place
 - repo workspace now mirrors `punk`-style planning boundaries (`work/`, `knowledge/`, `publishing/`, `flows/`, `evals/`)
+- `apps/web/` now exists as the shared namespace for frontend resources
+- `apps/web/demo-change-packet` is the current change-packet demo prototype; future web work should follow `apps/web/<resource>`
 - the next slices should use those boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -53,3 +55,4 @@ Done means:
 - multi-runtime advisory implementation
 - external checks implementation
 - analytics / admin product
+- Goalrail-specific web product features beyond the current change-packet demo prototype

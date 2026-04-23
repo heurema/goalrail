@@ -1,0 +1,36 @@
+.shell {
+  min-height: 100vh;
+  padding: rem(32px);
+  background:
+    radial-gradient(circle at top left, rgba(67, 97, 238, 0.08), transparent 28%),
+    linear-gradient(180deg, #f8f9ff 0%, #ffffff 100%);
+}
+
+.card {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: rem(16px);
+  margin-top: rem(24px);
+}
+
+.metric {
+  padding: rem(16px);
+  border-radius: var(--mantine-radius-md);
+  background: rgba(67, 97, 238, 0.04);
+  border: 1px solid rgba(67, 97, 238, 0.1);
+}
+
+@media (max-width: $mantine-breakpoint-md) {
+  .shell {
+    padding: rem(20px);
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

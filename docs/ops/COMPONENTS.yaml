@@ -1,5 +1,5 @@
 schema_version: goalrail.components.v0
-updated_at: 2026-04-20
+updated_at: 2026-04-23
 authority: operational
 status_anchor: true
 components:
@@ -68,11 +68,15 @@ components:
     notes: Proof artifact is defined in docs only.
   web_surface:
     name: Web Surface
-    status: planned
+    status: prototype
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
-    implementation_paths: []
+    implementation_paths:
+      - package.json
+      - package-lock.json
+      - apps/web/README.md
+      - apps/web/demo-change-packet
     public_claim_allowed: false
-    notes: Web surface is planned in the MVP blueprint only.
+    notes: Shared web rules live under apps/web and the current React + Vite + Mantine change-packet walkthrough prototype lives under apps/web/demo-change-packet; the implementation was ported from an external Anthropic design handoff, but no Goalrail web product loop is implemented yet.
   cli_surface:
     name: CLI Surface
     status: planned

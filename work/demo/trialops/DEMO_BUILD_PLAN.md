@@ -78,7 +78,7 @@ Create the minimal monorepo skeleton in `heurema/goalrail-demo`.
 - workspace package setup
 - placeholder `README.md`
 - `apps/api/`
-- `apps/web/`
+- `apps/web/demo-change-packet/`
 - `packages/shared/`
 - `data/seed.json`
 - `demo/scenarios/*.yaml`

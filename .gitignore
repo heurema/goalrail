@@ -5,5 +5,10 @@ dist/
 .env
 .env.*
 coverage/
+*.tsbuildinfo
+.playwright-cli/
+output/
+**/__pycache__/
+work/demo/trialops/design-handoff/
 .idea/
 .vscode/

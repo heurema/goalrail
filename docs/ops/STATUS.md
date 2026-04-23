@@ -45,7 +45,8 @@ The project currently has:
 - repo-tracked work / knowledge / publishing surfaces
 - planned flow / eval structure
 - reference screens
-- no implementation baseline yet
+- shared web stack rules under `apps/web/`
+- a local change-packet demo prototype under `apps/web/demo-change-packet`
 
 ## What is real now
 
@@ -91,7 +92,9 @@ The project currently has:
 - `knowledge/` is reserved for advisory research and idea backlog
 - `publishing/` is reserved for public narrative drafts, receipts, and manual metrics
 - `flows/` and `evals/` exist as planned future structure, not executable product surfaces
-- `apps/`, `scripts/`, and `.github/` remain parked until bounded implementation slices activate them
+- `apps/web/` is now the shared namespace for frontend resources and stack rules
+- `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
+- `scripts/` and `.github/` remain parked until bounded implementation slices activate them
 
 ## What is not real yet
 
@@ -102,7 +105,7 @@ The project currently has:
 - no runnable eval harness yet
 - no gate/proof implementation
 - no advisory panel implementation
-- no web UI
+- no Goalrail web UI or goal-to-proof product loop yet
 - no tracker sync
 - no proof-producing demo
 - no CTO / Head of Engineering deck yet
@@ -123,6 +126,8 @@ Current packaging target:
 - ops docs are synchronized with the new concept / deployment canon
 - repo workspace boundaries mirror `punk`-style planning structure
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
+- `apps/web/demo-change-packet` provides a verified local frontend change-packet walkthrough prototype without changing product phase order
+- `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - next sales-pack slices are explicit and bounded
 
 ## Main current risks

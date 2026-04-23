@@ -1,6 +1,6 @@
 # Apps
 
-Parked application surfaces for future Goalrail implementation.
+Application surfaces for Goalrail implementation.
 
 Current product shape reserves three app-level surfaces:
 
@@ -8,5 +8,9 @@ Current product shape reserves three app-level surfaces:
 - CLI — delivery runtime
 - Integrations — repo, tracker, runtime settings
 
-This repository is still documentation-first.
-Do not treat `apps/` as evidence of a real implementation baseline yet.
+Current repo reality:
+
+- shared web rules live in `apps/web/`
+- runnable frontend apps live in `apps/web/<resource>`
+- `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
+- the demo is still a prototype and does not imply a finished Goalrail web product surface

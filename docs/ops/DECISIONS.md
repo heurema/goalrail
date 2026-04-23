@@ -159,3 +159,17 @@ Decision:
 - `publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
 - `flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
 - `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them
+
+## D-0018 — Initial web tooling baseline uses React, Vite, and Mantine packages from npm
+Date: 2026-04-23
+Status: accepted
+
+Decision:
+- runnable frontend resources live in `apps/web/<resource>`
+- `apps/web/` is the shared namespace and rules boundary for frontend resources, not a single runnable app
+- the current local web demo prototype lives in `apps/web/demo-change-packet`
+- the baseline uses React + Vite + Mantine with PostCSS and Vitest wired from the start
+- Mantine package versions are aligned to the local source checkout in `~/contrib/mantine`
+- direct file-linking to `~/contrib/mantine` is not the default because that checkout does not contain built package artifacts required by consumers
+- official Mantine MCP and Mantine skills are the preferred AI assistance layer for this stack
+- the current demo remains a prototype and must not be treated as proof of a finished Goalrail web product surface
