@@ -155,6 +155,7 @@ Decision:
 - the planning repo uses explicit top-level support planes inspired by `punk`
 - `work/` tracks bounded goals and reports
 - `knowledge/` tracks advisory research and ideas
-- `public/` tracks public narrative drafts, receipts, and manual metrics
+- `publishing/` tracks public narrative drafts, receipts, and manual metrics
+- `publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
 - `flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
 - `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them

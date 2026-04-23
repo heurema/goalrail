@@ -90,7 +90,7 @@ related_docs:
 45. `design/reference_screens/`
 46. `work/`
 47. `knowledge/`
-48. `public/`
+48. `publishing/`
 49. `flows/`
 50. `evals/`
 
@@ -160,7 +160,7 @@ related_docs:
 - `design/reference_screens/` — visual reference material without product-truth authority
 - `work/` — repo-tracked goals, reports, and bounded slice memory
 - `knowledge/` — advisory research and idea backlog; не источник канона без promotion
-- `public/` — public narrative drafts, receipts, and manual metrics
+- `publishing/` — public narrative drafts, receipts, and manual metrics
 - `flows/` — planned flow/spec boundary for future runtime semantics
 - `evals/` — planned eval/spec boundary for future verification semantics
 
@@ -195,7 +195,7 @@ Notes:
 10. Нельзя менять implementation scope без сверки с concept canon.
 11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
-13. Repo-tracked planning surfaces (`work/`, `knowledge/`, `public/`, `flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
+13. Repo-tracked planning surfaces (`work/`, `knowledge/`, `publishing/`, `flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 

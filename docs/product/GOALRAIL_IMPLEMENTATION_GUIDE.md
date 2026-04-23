@@ -51,7 +51,7 @@ Use the repo with these boundaries:
 - `docs/ops/` — current operating layer
 - `work/` — repo-tracked goals, reports, and bounded slice memory
 - `knowledge/` — advisory research and idea backlog
-- `public/` — public narrative drafts, receipts, and manual metrics
+- `publishing/` — public narrative drafts, receipts, and manual metrics
 - `flows/` — planned flow/spec boundary for future runtime semantics
 - `evals/` — planned eval/spec boundary for future verification semantics
 - `apps/`, `scripts/`, `.github/` — parked implementation surfaces until a bounded slice makes them real

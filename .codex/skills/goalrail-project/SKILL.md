@@ -72,7 +72,7 @@ rg -n "status|planned|implemented|docs_only|prototype" docs/ops
 ```
 
 ```bash
-rg -n "<topic-keyword>" docs knowledge work public
+rg -n "<topic-keyword>" docs knowledge work publishing
 ```
 
 ## Hard guards

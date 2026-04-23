@@ -20,7 +20,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-21
+Last updated: 2026-04-23
 Status: planning / product canon and pilot frame active
 Owner: Vitaly
 
@@ -42,7 +42,7 @@ The project currently has:
 - project spine schema note
 - two kernel ADRs
 - ops rails
-- repo-tracked work / knowledge / public surfaces
+- repo-tracked work / knowledge / publishing surfaces
 - planned flow / eval structure
 - reference screens
 - no implementation baseline yet
@@ -89,7 +89,7 @@ The project currently has:
 - the repo now mirrors `punk`-style planning boundaries
 - `work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
 - `knowledge/` is reserved for advisory research and idea backlog
-- `public/` is reserved for public narrative drafts, receipts, and manual metrics
+- `publishing/` is reserved for public narrative drafts, receipts, and manual metrics
 - `flows/` and `evals/` exist as planned future structure, not executable product surfaces
 - `apps/`, `scripts/`, and `.github/` remain parked until bounded implementation slices activate them
 
