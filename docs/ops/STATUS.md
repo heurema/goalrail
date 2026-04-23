@@ -47,6 +47,7 @@ The project currently has:
 - reference screens
 - shared web stack rules under `apps/web/`
 - a local change-packet demo prototype under `apps/web/demo-change-packet`
+- an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
 
 ## What is real now
 
@@ -94,7 +95,8 @@ The project currently has:
 - `flows/` and `evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
-- `scripts/` and `.github/` remain parked until bounded implementation slices activate them
+- `.github/` now contains real contributor/community health surfaces and the docs-check workflow
+- `scripts/` remains parked for future bounded implementation slices
 
 ## What is not real yet
 
@@ -110,6 +112,7 @@ The project currently has:
 - no proof-producing demo
 - no CTO / Head of Engineering deck yet
 - `GOALRAIL_LANDING_COPY.md` still reflects older prompt / handoff framing and needs rewrite under the new pilot-first motion
+- no DCO enforcement automation or asset provenance inventory yet
 
 ## Active checkpoint target
 
@@ -128,6 +131,7 @@ Current packaging target:
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` provides a verified local frontend change-packet walkthrough prototype without changing product phase order
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
+- repository community health and OSS baseline are explicit and inspectable
 - next sales-pack slices are explicit and bounded
 
 ## Main current risks
@@ -137,3 +141,4 @@ Current packaging target:
 3. runtime adapter model could drift into vendor-specific code
 4. execution parallelism and advisory parallelism could still leak into one implementation surface
 5. MVP scope could widen into a generic agent or tooling platform too early
+6. reference screenshots or brand assets could be relicensed accidentally without a provenance audit

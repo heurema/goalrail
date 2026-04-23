@@ -173,3 +173,14 @@ Decision:
 - direct file-linking to `~/contrib/mantine` is not the default because that checkout does not contain built package artifacts required by consumers
 - official Mantine MCP and Mantine skills are the preferred AI assistance layer for this stack
 - the current demo remains a prototype and must not be treated as proof of a finished Goalrail web product surface
+
+## D-0019 — Goalrail open-source baseline uses Apache-2.0, DCO, and trademark separation
+Date: 2026-04-23
+Status: accepted
+
+Decision:
+- the repository baseline is Apache License 2.0
+- inbound contributions use DCO signoff rather than CLA
+- trademark and brand rights stay separate from the code/documentation license
+- repository community health files live in root and `.github/` as real governance surfaces
+- public OSS posture must not imply that reference screenshots or third-party assets are relicensed automatically

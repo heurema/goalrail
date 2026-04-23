@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a bounded improvement that fits current Goalrail scope
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please ground proposals in the current docs-first canon and MVP boundaries.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: A short one-line proposal
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / opportunity
+      description: What user or repo problem does this solve?
+      placeholder: Describe the problem first, not the solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What would you like to see added or changed?
+      placeholder: Describe the bounded change
+    validations:
+      required: true
+
+  - type: textarea
+    id: fit
+    attributes:
+      label: Why this fits Goalrail now
+      description: Cite the current product / ops docs or explain why it stays within MVP boundaries
+      placeholder: Reference docs/INDEX.md, product docs, or ops docs
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Out of scope / non-goals
+      description: What this request should explicitly not become
+      placeholder: List boundaries to avoid silent scope expansion
+
+  - type: textarea
+    id: proof
+    attributes:
+      label: Supporting material
+      description: Related issues, examples, screenshots, references, or prototype notes

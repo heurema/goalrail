@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a defect, inconsistency, or broken behavior
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report.
+
+        Please keep the report bounded and concrete. English is preferred; Russian is also fine.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+      placeholder: A short one-line summary
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - docs
+        - repo governance / contribution flow
+        - tooling / scripts
+        - apps/web/demo-change-packet
+        - schemas / docs-check
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behavior
+      description: What happened?
+      placeholder: Describe the observed behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+      placeholder: Describe the expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Steps, commands, links, commits, screenshots, or other proof
+      placeholder: |
+        1. Go to ...
+        2. Run ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Logs, screenshots, relevant docs, branch, OS, shell, etc.

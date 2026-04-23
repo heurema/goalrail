@@ -29,3 +29,12 @@ A public implementation baseline does not exist yet.
 ## Contact
 
 - [hello@goalrail.dev](mailto:hello@goalrail.dev)
+
+## Open source and community
+
+- [LICENSE](LICENSE)
+- [CONTRIBUTING](CONTRIBUTING.md)
+- [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)
+- [SECURITY](SECURITY.md)
+- [SUPPORT](SUPPORT.md)
+- [TRADEMARKS](TRADEMARKS.md)
