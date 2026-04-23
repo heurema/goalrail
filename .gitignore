@@ -2,6 +2,7 @@
 .github-account
 node_modules/
 dist/
+**/.vite/
 .env
 .env.*
 coverage/
