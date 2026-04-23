@@ -1,8 +1,10 @@
 # Goalrail
 
+[Русский](README.ru.md)
+
 Goalrail is a productized operating layer for AI-assisted delivery.
 
-**Tagline:** от бизнес-цели до проверенного изменения в коде.
+**Tagline:** from business goal to verified code change.
 
 ## What it is
 
