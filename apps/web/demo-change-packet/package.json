@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@mantine/core": "9.1.0",
-    "@mantine/hooks": "9.1.0",
-    "@tabler/icons-react": "3.35.0",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },
