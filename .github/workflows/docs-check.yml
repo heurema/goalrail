@@ -2,14 +2,6 @@ name: docs-check
 
 on:
   pull_request:
-    paths:
-      - "docs/**/*.md"
-      - "docs/**/*.yaml"
-      - "docs/**/*.yml"
-      - "tools/docs-check/schemas/**"
-      - "tools/docs-check/fixtures/**"
-      - "tools/docs-check/**"
-      - ".github/workflows/docs-check.yml"
 
 jobs:
   docs-check:
@@ -28,7 +20,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Compute changed governance files
+      - name: Compute changed files
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -45,26 +37,17 @@ jobs:
           output_path = runner_temp / "goalrail-docs-changed-files.txt"
 
           result = subprocess.run(
-              ["git", "diff", "--name-only", base, head],
+              ["git", "diff", "--name-only", "--diff-filter=ACMRT", base, head],
               check=True,
               text=True,
               capture_output=True,
           )
           changed_files = [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
-          def is_relevant(path: str) -> bool:
-              return (
-                  (path.startswith("docs/") and (path.endswith(".md") or path.endswith(".yaml") or path.endswith(".yml")))
-                  or path.startswith("tools/docs-check/schemas/")
-                  or path.startswith("tools/docs-check/fixtures/")
-                  or path.startswith("tools/docs-check/")
-              )
+          output_path.write_text("".join(f"{path}\n" for path in changed_files), encoding="utf-8")
 
-          filtered = [path for path in changed_files if is_relevant(path)]
-          output_path.write_text("".join(f"{path}\n" for path in filtered), encoding="utf-8")
-
-          print(f"relevant_changed_files={len(filtered)}")
-          for path in filtered:
+          print(f"changed_files={len(changed_files)}")
+          for path in changed_files:
               print(path)
           PY
 

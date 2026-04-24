@@ -1,0 +1,45 @@
+{
+  "checked_files": [],
+  "findings": [
+    {
+      "actual": "prototype",
+      "check": "repo-structure",
+      "context": {},
+      "expected": [
+        ".codex",
+        ".github",
+        ".gitignore",
+        ".goalrail",
+        ".mcp.json",
+        ".punk",
+        "AGENTS.md",
+        "CODE_OF_CONDUCT.md",
+        "CONTRIBUTING.md",
+        "DCO.md",
+        "LICENSE",
+        "NOTICE",
+        "README.md",
+        "README.ru.md",
+        "SECURITY.md",
+        "SUPPORT.md",
+        "TRADEMARKS.md",
+        "apps",
+        "docs",
+        "scripts",
+        "tools"
+      ],
+      "id": "prototype/README.md:1:repo-structure.unregistered-root-path",
+      "line": 1,
+      "message": "Path uses an unregistered repository-root location.",
+      "path": "prototype/README.md",
+      "rule": "repo-structure.unregistered-root-path",
+      "severity": "hard"
+    }
+  ],
+  "summary": {
+    "files_checked": 0,
+    "hard_count": 1,
+    "info_count": 0,
+    "warning_count": 0
+  }
+}

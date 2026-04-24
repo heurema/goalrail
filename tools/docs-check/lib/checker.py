@@ -57,7 +57,47 @@ RULES_RUN = [
     "authority",
     "absolute-paths",
     "components",
+    "repo-structure",
 ]
+ALLOWED_TOP_LEVEL_PATHS = {
+    ".codex",
+    ".github",
+    ".gitignore",
+    ".goalrail",
+    ".mcp.json",
+    ".punk",
+    "AGENTS.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "DCO.md",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "README.ru.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "TRADEMARKS.md",
+    "apps",
+    "docs",
+    "scripts",
+    "tools",
+}
+FORBIDDEN_ROOT_PATHS = {
+    "bun.lockb",
+    "design",
+    "evals",
+    "flows",
+    "knowledge",
+    "node_modules",
+    "output",
+    "package-lock.json",
+    "package.json",
+    "pnpm-lock.yaml",
+    "publishing",
+    "schemas",
+    "work",
+    "yarn.lock",
+}
 EXCLUDED_DIR_NAMES = {
     ".git",
     ".jj",
@@ -199,6 +239,8 @@ def run_changed_files_scan(
         pure_path = PurePosixPath(rel_path)
         if not is_repo_relative_path(rel_path):
             raise CheckerConfigError("changed-files entries must use repo-relative paths")
+
+        findings.extend(check_repo_structure_path(rel_path))
 
         candidate = root / pure_path
         if not candidate.exists() or candidate.is_dir():
@@ -1098,6 +1140,43 @@ def load_changed_files(path: Path) -> list[str]:
 
 def supports_changed_markdown_scan(path: PurePosixPath) -> bool:
     return bool(path.parts) and path.parts[0] == "docs" and path.suffix.lower() == ".md"
+
+
+def check_repo_structure_path(rel_path: str) -> list[dict[str, Any]]:
+    pure_path = PurePosixPath(rel_path)
+    if not pure_path.parts:
+        return []
+
+    top_level = pure_path.parts[0]
+    if top_level in FORBIDDEN_ROOT_PATHS:
+        return [
+            make_finding(
+                severity="hard",
+                check="repo-structure",
+                path=rel_path,
+                line=1,
+                message="Path uses a forbidden repository-root location.",
+                rule="repo-structure.forbidden-root-path",
+                expected=sorted(ALLOWED_TOP_LEVEL_PATHS),
+                actual=top_level,
+            )
+        ]
+
+    if top_level not in ALLOWED_TOP_LEVEL_PATHS:
+        return [
+            make_finding(
+                severity="hard",
+                check="repo-structure",
+                path=rel_path,
+                line=1,
+                message="Path uses an unregistered repository-root location.",
+                rule="repo-structure.unregistered-root-path",
+                expected=sorted(ALLOWED_TOP_LEVEL_PATHS),
+                actual=top_level,
+            )
+        ]
+
+    return []
 
 
 def build_report(

@@ -82,17 +82,18 @@ related_docs:
 39. `docs/ops/NEXT.md`
 40. `docs/ops/DECISIONS.md`
 41. `docs/ops/COMPONENTS.yaml`
-42. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-43. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+42. `docs/ops/REPO_STRUCTURE.md`
+43. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+44. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-44. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-45. `docs/reference/design/reference_screens/`
-46. `.goalrail/work/`
-47. `.goalrail/knowledge/`
-48. `.punk/publishing/`
-49. `.goalrail/flows/`
-50. `.goalrail/evals/`
+45. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+46. `docs/reference/design/reference_screens/`
+47. `.goalrail/work/`
+48. `.goalrail/knowledge/`
+49. `.punk/publishing/`
+50. `.goalrail/flows/`
+51. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -152,6 +153,7 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 

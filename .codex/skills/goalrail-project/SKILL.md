@@ -24,6 +24,7 @@ Use this skill when you need to:
 - check whether a claim matches current repo truth
 - work with `tools/docs-check/`
 - interpret `docs/ops/COMPONENTS.yaml`
+- decide where new files or top-level paths belong using `docs/ops/REPO_STRUCTURE.md`
 - prepare or implement one bounded Goalrail slice
 
 ## Workflow
@@ -42,9 +43,10 @@ Use this skill when you need to:
    - `references/docs-workflow.md`
    - `references/implementation-slice.md`
 5. If the topic is new or not obvious in the skill references, trust `docs/INDEX.md` and search the repo docs directly.
-6. Keep scope bounded.
-7. If docs metadata, links, claims, or component status are touched, run the docs checker.
-8. Before claiming anything is implemented, verify both code reality and `docs/ops/COMPONENTS.yaml`.
+6. Before adding or moving files, check `docs/ops/REPO_STRUCTURE.md`.
+7. Keep scope bounded.
+8. If docs metadata, links, claims, component status, or repo structure are touched, run the docs checker.
+9. Before claiming anything is implemented, verify both code reality and `docs/ops/COMPONENTS.yaml`.
 
 ## Freshness model
 

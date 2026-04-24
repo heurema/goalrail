@@ -10,6 +10,7 @@
    - `GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
    - `GOALRAIL_IMPLEMENTATION_GUIDE.md`
 3. Then read `docs/ops/*`.
+4. Before adding or moving files, read `docs/ops/REPO_STRUCTURE.md`.
 
 ## Source-of-truth priority
 
@@ -27,6 +28,7 @@
 - Follow the current doc law: brief first, blueprint second, then roadmap/implementation rules.
 - Prefer small, reviewable changes.
 - Do not add framework sprawl or fake scaffolding.
+- Use `docs/ops/REPO_STRUCTURE.md` for where to add code, docs, tools, overlays, and new top-level paths.
 - When adding real implementation, create new code under `apps/` unless canon or ops docs explicitly assign a different bounded path.
 - When creating implementation later, keep scope explicit and bounded.
 
@@ -45,5 +47,5 @@
 
 ## Current repository state
 
-This repository is currently a documentation-first planning repo.
-Empty directories in `apps/`, `scripts/`, and `.github/` are placeholders, not evidence of implementation.
+This repository is currently documentation-first, with a local mocked demo under `apps/web/demo-change-packet/`.
+Placeholders in `apps/`, `scripts/`, and `.github/` are not evidence of implementation unless `docs/ops/COMPONENTS.yaml` and code reality agree.

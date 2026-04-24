@@ -10,6 +10,7 @@ This checker is the report-only docs-governance scaffold through PR3.
 - no semantic or LLM judge
 - no live metadata migration requirement
 - live scans can read and validate `docs/ops/COMPONENTS.yaml`
+- changed-files scans validate repository top-level placement for every passed path
 - generated reports should not be committed
 
 ## Supported modes
@@ -32,7 +33,8 @@ python3 tools/docs-check/docs_check.py \
 This mode checks only the supported changed files passed in a newline-separated repo-relative file list.
 
 - missing or deleted paths are ignored safely
-- unsupported paths such as tool or schema files are ignored by this mode
+- every passed path is checked against the registered top-level repository structure
+- unsupported content paths such as tool or schema files are ignored after the structure check
 - hard findings in changed supported files return `1`
 - warnings in changed files do not fail the run
 - it uses the real current date by default
@@ -88,6 +90,7 @@ Important:
 - claims skeleton checks using fixture-local synthetic status inputs
 - live `docs/ops/COMPONENTS.yaml` shape, status enum, truth-owner paths, and implementation-path existence
 - changed-files ratchet for supported changed docs only
+- changed-files repository structure check for unregistered or forbidden root locations
 
 ## Current non-goals
 
