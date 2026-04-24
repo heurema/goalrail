@@ -88,12 +88,13 @@ related_docs:
 
 ### 9. Advisory research, reference material, and overlay working surfaces
 45. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-46. `docs/reference/design/reference_screens/`
-47. `.goalrail/work/`
-48. `.goalrail/knowledge/`
-49. `.punk/publishing/`
-50. `.goalrail/flows/`
-51. `.goalrail/evals/`
+46. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+47. `docs/reference/design/reference_screens/`
+48. `.goalrail/work/`
+49. `.goalrail/knowledge/`
+50. `.punk/publishing/`
+51. `.goalrail/flows/`
+52. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -159,6 +160,7 @@ related_docs:
 
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
+- `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
