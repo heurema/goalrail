@@ -1,627 +1,1010 @@
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import './App.css';
 
-type StepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+type StepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+type RepoId = 'trialops-demo' | 'billing-api';
+type RepoFilter = RepoId | 'all';
+type ApprovalState = 'pending' | 'accepted' | 'rework' | 'blocked';
+type Tone = 'mauve' | 'amber' | 'pass' | 'block';
 
 interface Stage {
   id: string;
   name: string;
 }
 
-interface Clarification {
-  id: string;
-  qRefs: string[];
+interface RepoContext {
+  repo: RepoId;
+  bound: 'yes' | 'no';
+  init: string;
+  docsIndexed: number;
+  readiness: number;
+  checklist: Array<{ label: string; value: string; tone: Tone }>;
+  runtimePolicy: string;
+  runtimes: string[];
+}
+
+interface ClarificationCard {
   ref: string;
-  q: string;
-  opts: string[];
-  answer: number;
-}
-
-interface TaskSlice {
-  n: string;
-  title: string;
-  surface: string;
-  criteria: string[];
-  risk: string;
-  proof: string;
-}
-
-interface Receipt {
-  ts: string;
-  verdict: 'pass' | 'block';
-  label: 'PASS' | 'BLOCKED';
-  code: string;
-  mapTo: number;
-  renderText: () => ReactNode;
-}
-
-interface Criterion {
-  id: number;
-  name: string;
-  evLabel: string;
-}
-
-interface LedgerEvent {
-  ts: string;
-  kind: string;
+  question: string;
+  answer: string;
   note: string;
-  tag: string;
-  cls: 'amber' | 'mauve' | 'pass' | 'block';
 }
 
-interface InspectorRow {
-  q: string;
-  term: string;
-  prov: ReactNode;
+interface WorkItem {
+  id: string;
+  title: string;
+  lane: 'external runtime' | 'manual' | 'review/proof';
+  scope: string;
+  status: string;
+  proofObligation: string;
+}
+
+interface EvidenceItem {
+  label: string;
+  value: string;
+  tone: Tone;
+}
+
+interface VerificationRow {
+  criterion: string;
+  support: string;
+  outcome: string;
+}
+
+interface ContractRecord {
+  id: string;
+  title: string;
+  repo: RepoId;
+  owner: string;
+  scopeSurface: string;
+  summary: string;
+  defaultStep: StepIndex;
+  goal: string;
+  intakeNotes: string[];
+  inScope: string[];
+  outOfScope: string[];
+  acceptance: string[];
+  proofExpectations: string[];
+  policyNote: string;
+  clarifications: ClarificationCard[];
+  workItems: WorkItem[];
+  evidence: EvidenceItem[];
+  verification: VerificationRow[];
+  changed: string[];
+  unchanged: string[];
+  trust: string[];
+  howToVerify: string[];
+  activity: Record<number, Array<{ kind: string; note: string; tone: Tone }>>;
 }
 
 const STAGES: Stage[] = [
-  { id: 'request', name: 'Raw request' },
-  { id: 'clarify', name: 'Clarification' },
-  { id: 'contract', name: 'Working contract' },
-  { id: 'tasks', name: 'Bounded tasks' },
-  { id: 'execution', name: 'Execution evidence' },
+  { id: 'goal-intake', name: 'Goal intake' },
+  { id: 'clarification', name: 'Clarification' },
+  { id: 'working-contract', name: 'Working contract' },
+  { id: 'work-items', name: 'Work items' },
+  { id: 'execution-evidence', name: 'Execution evidence' },
   { id: 'verification', name: 'Verification' },
   { id: 'proof', name: 'Proof' },
-  { id: 'decision', name: 'Decision' },
+  { id: 'approval', name: 'Approval / Decision' },
 ];
 
-const STEP_TO_ACTIVE = [0, 1, 2, 3, 4, 5, 7] as const;
-const LIFECYCLE = ['Draft', 'Clarified', 'Contracted', 'Executed', 'Verified', 'Accepted'] as const;
-const STEP_TO_LIFE = [0, 0, 1, 2, 3, 4, 5] as const;
+const REPO_OPTIONS: Array<{ value: RepoFilter; label: string }> = [
+  { value: 'trialops-demo', label: 'trialops-demo' },
+  { value: 'billing-api', label: 'billing-api' },
+  { value: 'all', label: 'All repos' },
+];
 
-const CLARIFICATIONS: Clarification[] = [
-  {
-    id: 'review-scope',
-    qRefs: ['Q1'],
-    ref: 'manual review',
-    q: 'What triggers the manual review step?',
-    opts: ['Every trial request', 'Only requests above $10k ACV', 'Only requests from regulated regions'],
-    answer: 1,
-  },
-  {
-    id: 'owner-rule',
-    qRefs: ['Q2', 'Q3'],
-    ref: 'reviewer · owner',
-    q: 'Who can be assigned as owner?',
-    opts: ['Any workspace admin', 'Users with trial_reviewer role', 'Either admin or reviewer role'],
-    answer: 1,
-  },
-  {
-    id: 'reason-rule',
-    qRefs: ['Q4'],
-    ref: 'decision reason',
-    q: 'How is decision reason captured?',
-    opts: ['Free-text, optional', 'Free-text, required, min 20 chars', 'Fixed dropdown of reason codes'],
-    answer: 1,
-  },
-  {
-    id: 'status-model',
-    qRefs: ['Q5'],
-    ref: 'new status',
-    q: 'What is the new status model?',
-    opts: [
-      'Add pending_review between requested and approved',
-      'Add separate flag, keep current statuses',
-      'Replace approved with manual_review',
+const REPO_CONTEXTS: Record<RepoId, RepoContext> = {
+  'trialops-demo': {
+    repo: 'trialops-demo',
+    bound: 'yes',
+    init: 'complete',
+    docsIndexed: 12,
+    readiness: 72,
+    checklist: [
+      { label: 'Tests', value: 'detected', tone: 'pass' },
+      { label: 'CI', value: 'connected', tone: 'mauve' },
+      { label: 'AGENTS/rules', value: 'present', tone: 'pass' },
     ],
-    answer: 0,
+    runtimePolicy: 'local-only',
+    runtimes: ['Codex CLI', 'Claude Code', 'manual'],
   },
-  {
-    id: 'audit-req',
-    qRefs: ['Q6'],
-    ref: 'audit log',
-    q: 'What does the audit log capture?',
-    opts: ['Actor + timestamp', 'Actor + timestamp + reason + previous status', 'Full diff of the request record'],
-    answer: 1,
-  },
-];
-
-const TASKS: TaskSlice[] = [
-  {
-    n: 'T-01',
-    title: 'Status model',
-    surface: 'schema · db · request.status enum',
-    criteria: ['Manual review visible', 'Direct approval blocked'],
-    risk: 'medium · migration',
-    proof: 'transition matrix receipts',
-  },
-  {
-    n: 'T-02',
-    title: 'API validation',
-    surface: 'POST /requests/:id/decision',
-    criteria: ['Owner required', 'Reason required'],
-    risk: 'low',
-    proof: 'rejection receipts with error codes',
-  },
-  {
-    n: 'T-03',
-    title: 'Frontend controls',
-    surface: 'views · RequestDetail, ReviewDialog',
-    criteria: ['Manual review visible', 'Owner required'],
-    risk: 'low',
-    proof: 'component state receipts',
-  },
-  {
-    n: 'T-04',
-    title: 'Smoke / proof / docs',
-    surface: 'spec · audit + runbook',
-    criteria: ['Audit captures decision context'],
-    risk: 'low',
-    proof: 'audit event schema + sample payload',
-  },
-];
-
-const RECEIPTS: Receipt[] = [
-  {
-    ts: 'T+0.00s',
-    verdict: 'block',
-    label: 'BLOCKED',
-    code: 'direct_approval_forbidden',
-    mapTo: 0,
-    renderText: () => (
-      <>
-        Transition <span className="receipt-code">requested → approved</span> attempted without review
-      </>
-    ),
-  },
-  {
-    ts: 'T+0.12s',
-    verdict: 'pass',
-    label: 'PASS',
-    code: 'status.manual_review',
-    mapTo: 1,
-    renderText: () => (
-      <>
-        Transition <span className="receipt-code">requested → manual_review</span> accepted
-      </>
-    ),
-  },
-  {
-    ts: 'T+0.28s',
-    verdict: 'block',
-    label: 'BLOCKED',
-    code: 'owner_required',
-    mapTo: 2,
-    renderText: () => (
-      <>
-        Decision submitted without <span className="receipt-code">owner</span> field
-      </>
-    ),
-  },
-  {
-    ts: 'T+0.41s',
-    verdict: 'block',
-    label: 'BLOCKED',
-    code: 'reason_required',
-    mapTo: 3,
-    renderText: () => (
-      <>
-        Decision submitted without <span className="receipt-code">reason</span> field
-      </>
-    ),
-  },
-  {
-    ts: 'T+0.58s',
-    verdict: 'pass',
-    label: 'PASS',
-    code: 'audit.decision.emitted',
-    mapTo: 4,
-    renderText: () => (
-      <>
-        Audit event emitted with <span className="receipt-code">{'{actor, prev_status, reason, ts}'}</span>
-      </>
-    ),
-  },
-];
-
-const CRITERIA: Criterion[] = [
-  { id: 0, name: 'Direct approval blocked', evLabel: 'receipt · direct_approval_forbidden' },
-  { id: 1, name: 'Manual review visible', evLabel: 'receipt · status.manual_review' },
-  { id: 2, name: 'Owner required', evLabel: 'receipt · owner_required' },
-  { id: 3, name: 'Reason required', evLabel: 'receipt · reason_required' },
-  { id: 4, name: 'Audit captures decision context', evLabel: 'receipt · audit.decision.emitted' },
-];
-
-const BASE_EVENTS: LedgerEvent[] = [
-  {
-    ts: '09:42:08',
-    kind: 'request.received',
-    note: 'inbound change request · cto',
-    tag: 'INBOUND',
-    cls: 'mauve',
-  },
-  {
-    ts: '09:42:09',
-    kind: 'ambiguity.detected',
-    note: '6 undefined terms flagged in request body',
-    tag: 'AMBIG',
-    cls: 'amber',
-  },
-  {
-    ts: '09:42:10',
-    kind: 'clarification.queued',
-    note: '5 bounded clarifications prepared (q1–q6 → 5 decisions)',
-    tag: 'QUEUED',
-    cls: 'amber',
-  },
-];
-
-const STEP_EVENTS: Partial<Record<StepIndex, LedgerEvent[]>> = {
-  1: [
-    { ts: '09:43:02', kind: 'clarification.answered', note: 'review-scope → $10k ACV', tag: 'ANS', cls: 'mauve' },
-    {
-      ts: '09:43:18',
-      kind: 'clarification.answered',
-      note: 'owner-rule → trial_reviewer role',
-      tag: 'ANS',
-      cls: 'mauve',
-    },
-    {
-      ts: '09:43:34',
-      kind: 'clarification.answered',
-      note: 'reason-rule → required · min 20ch',
-      tag: 'ANS',
-      cls: 'mauve',
-    },
-    { ts: '09:43:48', kind: 'clarification.answered', note: 'status-model → pending_review', tag: 'ANS', cls: 'mauve' },
-    {
-      ts: '09:44:01',
-      kind: 'clarification.answered',
-      note: 'audit-req → actor+ts+reason+prev',
-      tag: 'ANS',
-      cls: 'mauve',
-    },
-  ],
-  2: [
-    { ts: '09:44:22', kind: 'contract.updated', note: 'Goal, in/out scope, criteria assembled', tag: 'CONTRACT', cls: 'mauve' },
-    { ts: '09:44:24', kind: 'contract.updated', note: 'Out of scope: bulk approval, SSO gating', tag: 'CONTRACT', cls: 'mauve' },
-  ],
-  3: [
-    { ts: '09:45:01', kind: 'contract.approved', note: 'Working contract locked', tag: 'OK', cls: 'pass' },
-    { ts: '09:45:02', kind: 'task.created', note: 'T-01 · Status model', tag: 'TASK', cls: 'mauve' },
-    { ts: '09:45:02', kind: 'task.created', note: 'T-02 · API validation', tag: 'TASK', cls: 'mauve' },
-    { ts: '09:45:02', kind: 'task.created', note: 'T-03 · Frontend controls', tag: 'TASK', cls: 'mauve' },
-    { ts: '09:45:02', kind: 'task.created', note: 'T-04 · Smoke · proof · docs', tag: 'TASK', cls: 'mauve' },
-  ],
-  4: [
-    { ts: '09:45:47', kind: 'evidence.attached', note: 'direct approval transition blocked', tag: 'BLOCK', cls: 'block' },
-    { ts: '09:45:59', kind: 'evidence.attached', note: 'manual_review transition accepted', tag: 'PASS', cls: 'pass' },
-    { ts: '09:46:15', kind: 'evidence.attached', note: 'owner_required error returned', tag: 'BLOCK', cls: 'block' },
-    { ts: '09:46:28', kind: 'evidence.attached', note: 'reason_required error returned', tag: 'BLOCK', cls: 'block' },
-    { ts: '09:46:45', kind: 'evidence.attached', note: 'audit event emitted · decision context', tag: 'PASS', cls: 'pass' },
-  ],
-  5: [
-    { ts: '09:47:02', kind: 'proof.verdict', note: 'criterion 1 · direct approval blocked', tag: 'PASS', cls: 'pass' },
-    { ts: '09:47:03', kind: 'proof.verdict', note: 'criterion 2 · manual review visible', tag: 'PASS', cls: 'pass' },
-    { ts: '09:47:04', kind: 'proof.verdict', note: 'criterion 3 · owner required', tag: 'PASS', cls: 'pass' },
-    { ts: '09:47:04', kind: 'proof.verdict', note: 'criterion 4 · reason required', tag: 'PASS', cls: 'pass' },
-    { ts: '09:47:05', kind: 'proof.verdict', note: 'criterion 5 · audit captures context', tag: 'PASS', cls: 'pass' },
-  ],
-  6: [{ ts: '09:47:30', kind: 'decision.unlocked', note: 'all criteria passed · 0 unresolved', tag: 'READY', cls: 'pass' }],
-};
-
-const CONTROL_MAP: Record<StepIndex, Array<{ label: string; action: 'back' | 'reset' }>> = {
-  0: [{ label: 'Reset packet', action: 'reset' }],
-  1: [
-    { label: 'Back', action: 'back' },
-    { label: 'Reset', action: 'reset' },
-  ],
-  2: [
-    { label: 'Back', action: 'back' },
-    { label: 'Reset', action: 'reset' },
-  ],
-  3: [
-    { label: 'Back', action: 'back' },
-    { label: 'Reset', action: 'reset' },
-  ],
-  4: [
-    { label: 'Back', action: 'back' },
-    { label: 'Reset', action: 'reset' },
-  ],
-  5: [
-    { label: 'Back', action: 'back' },
-    { label: 'Reset', action: 'reset' },
-  ],
-  6: [{ label: 'Replay state', action: 'reset' }],
-};
-
-const PRIMARY_CTA: Record<
-  StepIndex,
-  { label: string; title: string; sub: string; tone: 'ready' | 'pass'; disabled?: boolean }
-> = {
-  0: {
-    label: 'next · clarify',
-    title: 'Start clarification',
-    sub: 'Convert 6 flagged terms into 5 bounded decisions. Intent will resolve from 42% toward 96%.',
-    tone: 'ready',
-  },
-  1: {
-    label: 'next · contract',
-    title: 'Assemble working contract',
-    sub: 'Fold resolved clarifications into goal, in/out scope, acceptance, and proof expectations.',
-    tone: 'ready',
-  },
-  2: {
-    label: 'next · approve',
-    title: 'Approve contract v3',
-    sub: 'Freeze the contract and derive bounded task slices. Each slice will declare its own proof obligation.',
-    tone: 'ready',
-  },
-  3: {
-    label: 'next · replay',
-    title: 'Run execution replay',
-    sub: 'Replay the deterministic fixture run. Five receipts will be emitted and bound to contract clauses.',
-    tone: 'ready',
-  },
-  4: {
-    label: 'next · verify',
-    title: 'Verify against criteria',
-    sub: 'Pair each acceptance criterion with the single receipt that proves it. No verdict without evidence.',
-    tone: 'ready',
-  },
-  5: {
-    label: 'next · decide',
-    title: 'Open decision gate',
-    sub: 'All criteria passed. The gate is unlocked for accept, rework, or block — each action archives the packet.',
-    tone: 'pass',
-  },
-  6: {
-    label: 'packet complete',
-    title: 'Change packet accepted',
-    sub: 'Proof archive hash pinned · contract v3 frozen · decision recorded. Replay state to run the demo again.',
-    tone: 'pass',
-    disabled: true,
+  'billing-api': {
+    repo: 'billing-api',
+    bound: 'yes',
+    init: 'complete',
+    docsIndexed: 18,
+    readiness: 84,
+    checklist: [
+      { label: 'Tests', value: 'detected', tone: 'pass' },
+      { label: 'CI', value: 'connected', tone: 'pass' },
+      { label: 'AGENTS/rules', value: 'present', tone: 'pass' },
+    ],
+    runtimePolicy: 'local-only',
+    runtimes: ['Codex CLI', 'manual', 'read-only review lane'],
   },
 };
 
-const INSPECTOR_ROWS: InspectorRow[] = [
+const CONTRACTS: ContractRecord[] = [
   {
-    q: 'Q1',
-    term: 'manual review',
-    prov: (
-      <>
-        a <b>bounded state</b> between requested and approved — trigger rule unknown
-      </>
-    ),
+    id: 'C-0147',
+    title: 'Manual review gate',
+    repo: 'trialops-demo',
+    owner: 'Vitaly · product + delivery',
+    scopeSurface: 'demo shell · contract walkthrough',
+    summary: 'Add repo-aware contract detail and explicit human approval without expanding beyond the demo shell.',
+    defaultStep: 0,
+    goal:
+      'Introduce a bounded contract-first workspace view for the demo shell so one repo-scoped contract can move from intake to proof and explicit human approval without adding backend, routing, or real integrations.',
+    intakeNotes: [
+      'Repo is the context container; contract is the primary working object.',
+      'Change packet view stays human-facing and scoped to one selected contract.',
+      'Project context must stay separate from the contract pipeline.',
+    ],
+    inScope: [
+      'Repo selector with trialops-demo, billing-api, and All repos.',
+      'Contracts list with repo badges and one selected contract in detail.',
+      'Explicit working contract, work items, execution evidence, verification, proof, and approval stages.',
+      'Project context block for repo binding, readiness, policy, and runtimes.',
+    ],
+    outOfScope: [
+      'Backend, API calls, auth, routing, persistence, and server logic.',
+      'Real repo scanning, runtime execution, or proof generation.',
+      'A separate aggregate dashboard or chat-first workspace.',
+    ],
+    acceptance: [
+      'Selected repo filters the contracts list by default; All repos acts as overview mode only.',
+      'Selected contract detail always shows the repo that owns that contract.',
+      'Project readiness is visible outside the contract flow.',
+      'Final stage requires explicit human approval before Accepted.',
+    ],
+    proofExpectations: [
+      'Show which criteria are covered and which mock evidence supports each one.',
+      'State what changed and what did not change in the demo shell.',
+      'Keep the walkthrough inspectable without implying real execution.',
+    ],
+    policyNote:
+      'Inherited project context: repo rules are present, runtime policy is local-only, and this walkthrough stays fully mocked inside the demo shell.',
+    clarifications: [
+      {
+        ref: 'repo selector',
+        question: 'Which repo views must exist in the shell?',
+        answer: 'trialops-demo, billing-api, and All repos',
+        note: 'Default stays on trialops-demo; All repos is a secondary overview mode.',
+      },
+      {
+        ref: 'primary object',
+        question: 'What is the main working object?',
+        answer: 'Contract, not repo-agnostic change packets',
+        note: 'The detail view can still say Change packet view for the selected contract.',
+      },
+      {
+        ref: 'project context',
+        question: 'Where does repo binding / readiness live?',
+        answer: 'Outside the contract pipeline in a persistent side block',
+        note: 'Delivery readiness leaves the topbar and moves into repo context.',
+      },
+      {
+        ref: 'work items',
+        question: 'How should bounded tasks be reframed?',
+        answer: 'As Work items with lane, scope, status, and proof obligation',
+        note: 'At least one work item must be clearly manual-only.',
+      },
+      {
+        ref: 'human gate',
+        question: 'What must happen before final outcome?',
+        answer: 'Explicit human approval with approve, rework, or block actions',
+        note: 'Awaiting approval and Accepted stay visually distinct.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'WI-01',
+        title: 'Repo-aware shell framing',
+        lane: 'external runtime',
+        scope: 'src/App.tsx · topbar, left rail, selected contract detail',
+        status: 'Scoped',
+        proofObligation: 'Touched-surface note + center-panel contract state receipt',
+      },
+      {
+        id: 'WI-02',
+        title: 'Human approval copy check',
+        lane: 'manual',
+        scope: 'Approval wording and verification block',
+        status: 'Manual only',
+        proofObligation: 'Manual step marked done in the evidence pack',
+      },
+      {
+        id: 'WI-03',
+        title: 'Verification / proof reshaping',
+        lane: 'review/proof',
+        scope: 'Criteria coverage matrix + proof summary',
+        status: 'Queued',
+        proofObligation: 'Criteria-to-evidence coverage matrix',
+      },
+    ],
+    evidence: [
+      { label: 'Runtime used', value: 'Codex CLI in a local workspace outside Goalrail', tone: 'mauve' },
+      { label: 'Checkpoint synced', value: 'Contract C-0147 · packet v3 synced back into the mock shell', tone: 'pass' },
+      { label: 'Touched files / changed scope', value: 'src/App.tsx, src/App.css · demo shell only', tone: 'pass' },
+      { label: 'Receipts', value: 'Stage-state snapshots + criteria mapping receipts', tone: 'mauve' },
+      { label: 'Manual step marked done', value: 'Human approval wording reviewed by operator', tone: 'amber' },
+      { label: 'Artifact attached', value: 'Change summary packet · proof notes · replay instructions', tone: 'pass' },
+    ],
+    verification: [
+      {
+        criterion: 'Repo selector scopes contracts without creating a separate dashboard',
+        support: 'Repo filter state + selected-contract detail persists in center panel',
+        outcome: 'Covered',
+      },
+      {
+        criterion: 'Project-level readiness sits outside the contract spine',
+        support: 'Persistent Project context side block with readiness meter and checklist',
+        outcome: 'Covered',
+      },
+      {
+        criterion: 'Work items expose lane, scope, status, and proof obligation',
+        support: 'Three work item rows including a manual-only lane',
+        outcome: 'Covered',
+      },
+      {
+        criterion: 'Human approval is explicit before final decision',
+        support: 'Approval / Decision stage with Approve result, Request rework, and Block actions',
+        outcome: 'Covered',
+      },
+    ],
+    changed: [
+      'Repo selector and repo-aware contracts list were added to the shell.',
+      'One selected contract now owns the center detail and change packet view.',
+      'Project context moved out of the flow and now carries delivery readiness.',
+      'Approval / Decision now requires a visible human review step.',
+    ],
+    unchanged: [
+      'No backend, API calls, routing, auth, persistence, or server logic.',
+      'No real repo scan, runtime execution, or integration sync.',
+      'No visual redesign beyond bounded shell rewiring and copy changes.',
+    ],
+    trust: [
+      'All data stays in local mocked constants and UI state.',
+      'Execution evidence is framed as external runtime output, not as Goalrail-native execution.',
+      'Proof explains both changed scope and untouched scope to prevent scope drift.',
+      'Final outcome still waits for a human decision.',
+    ],
+    howToVerify: [
+      'Review the change summary in the selected contract view.',
+      'Inspect touched files listed in Execution evidence.',
+      'Replay the UI state through each stage of the walkthrough.',
+      'Confirm each acceptance criterion in the Verification and Proof stages.',
+    ],
+    activity: {
+      0: [
+        { kind: 'goal.intake', note: 'Contract seeded for trialops-demo', tone: 'mauve' },
+        { kind: 'repo.bound', note: 'Repo context pinned to trialops-demo', tone: 'pass' },
+      ],
+      1: [
+        { kind: 'clarification.answered', note: '5 bounded questions collapsed into contract inputs', tone: 'mauve' },
+      ],
+      2: [
+        { kind: 'contract.drafted', note: 'Goal, scope, criteria, and proof expectations assembled', tone: 'mauve' },
+      ],
+      3: [
+        { kind: 'work-items.ready', note: 'External runtime, manual, and review/proof lanes declared', tone: 'pass' },
+      ],
+      4: [
+        { kind: 'evidence.synced', note: 'External runtime receipts attached to the contract packet', tone: 'pass' },
+      ],
+      5: [
+        { kind: 'verification.covered', note: 'Criteria mapped to named evidence receipts', tone: 'pass' },
+      ],
+      6: [
+        { kind: 'proof.ready', note: 'Changed vs unchanged scope summarized for review', tone: 'pass' },
+      ],
+      7: [
+        { kind: 'approval.pending', note: 'Human decision required before Accepted', tone: 'amber' },
+      ],
+    },
   },
   {
-    q: 'Q2',
-    term: 'reviewer',
-    prov: (
-      <>
-        a <b>role</b> that can transition the request — exact role unknown
-      </>
-    ),
+    id: 'C-0148',
+    title: 'CSV export filters',
+    repo: 'trialops-demo',
+    owner: 'Masha · delivery lead',
+    scopeSurface: 'export modal · filter chip copy',
+    summary: 'Execution is in flight and proof lanes are still collecting receipts.',
+    defaultStep: 4,
+    goal: 'Make CSV export filters explicit in the demo shell without changing export transport or persistence.',
+    intakeNotes: ['Contract stays bound to trialops-demo.', 'Manual review is needed for export naming copy.'],
+    inScope: ['Filter chips', 'Selection summary', 'Export readiness note'],
+    outOfScope: ['Real CSV generation', 'Storage', 'Background jobs'],
+    acceptance: ['Selected filters are inspectable', 'Manual naming note is visible'],
+    proofExpectations: ['Receipt for changed scope', 'Manual copy check'],
+    policyNote: 'Inherited project context: local-only mock with no real export runtime.',
+    clarifications: [
+      {
+        ref: 'filters',
+        question: 'Which filters matter in the demo?',
+        answer: 'Owner, date range, and state',
+        note: 'Only the UI surface is in scope.',
+      },
+      {
+        ref: 'naming',
+        question: 'Who approves the export copy?',
+        answer: 'Manual reviewer',
+        note: 'Naming remains manual-only.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'WI-11',
+        title: 'Export filter shell',
+        lane: 'external runtime',
+        scope: 'Filter chip row + summary strip',
+        status: 'Executing',
+        proofObligation: 'Snapshot receipt',
+      },
+      {
+        id: 'WI-12',
+        title: 'Copy signoff',
+        lane: 'manual',
+        scope: 'Human-readable export label',
+        status: 'Manual only',
+        proofObligation: 'Operator signoff note',
+      },
+    ],
+    evidence: [
+      { label: 'Runtime used', value: 'Codex CLI', tone: 'mauve' },
+      { label: 'Checkpoint synced', value: 'Export filter state fixture', tone: 'pass' },
+    ],
+    verification: [
+      { criterion: 'Filters stay inspectable', support: 'UI filter summary', outcome: 'Partial' },
+    ],
+    changed: ['Filter framing in the shell'],
+    unchanged: ['No export backend'],
+    trust: ['Mock-only surface'],
+    howToVerify: ['Review filter summary'],
+    activity: {
+      0: [{ kind: 'goal.intake', note: 'CSV export filter request logged', tone: 'mauve' }],
+      4: [{ kind: 'execution.running', note: 'Receipts are still being attached', tone: 'amber' }],
+    },
   },
   {
-    q: 'Q3',
-    term: 'owner',
-    prov: (
-      <>
-        a <b>field</b> recorded on the decision — source of truth unclear
-      </>
-    ),
+    id: 'C-0151',
+    title: 'Pricing toggle cleanup',
+    repo: 'trialops-demo',
+    owner: 'Nika · product ops',
+    scopeSurface: 'pricing panel copy',
+    summary: 'Proof is ready and waiting for a human approval decision.',
+    defaultStep: 7,
+    goal: 'Clean up pricing toggle language in the demo shell and hold final release until human approval.',
+    intakeNotes: ['UI-only mock update.'],
+    inScope: ['Pricing panel copy'],
+    outOfScope: ['Billing logic'],
+    acceptance: ['Copy is inspectable'],
+    proofExpectations: ['Approval note'],
+    policyNote: 'Human approval stays required before acceptance.',
+    clarifications: [
+      {
+        ref: 'copy',
+        question: 'Who approves the wording?',
+        answer: 'Manual reviewer',
+        note: 'No auto-accept.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'WI-21',
+        title: 'Copy cleanup',
+        lane: 'manual',
+        scope: 'Pricing labels',
+        status: 'Awaiting approval',
+        proofObligation: 'Reviewer decision',
+      },
+    ],
+    evidence: [{ label: 'Artifact attached', value: 'Copy review note', tone: 'pass' }],
+    verification: [{ criterion: 'Copy changed only in scope', support: 'Review note', outcome: 'Covered' }],
+    changed: ['Pricing copy only'],
+    unchanged: ['Billing behavior'],
+    trust: ['Manual approval gate remains active'],
+    howToVerify: ['Read the copy diff'],
+    activity: {
+      0: [{ kind: 'goal.intake', note: 'Pricing copy request queued', tone: 'mauve' }],
+      7: [{ kind: 'approval.pending', note: 'Reviewer decision still open', tone: 'amber' }],
+    },
   },
   {
-    q: 'Q4',
-    term: 'decision reason',
-    prov: (
-      <>
-        a <b>rationale</b> attached to the decision — required vs optional undecided
-      </>
-    ),
+    id: 'C-0149',
+    title: 'Audit trail hardening',
+    repo: 'billing-api',
+    owner: 'Roma · platform',
+    scopeSurface: 'audit receipt framing',
+    summary: 'Proof packet is assembled and ready to inspect.',
+    defaultStep: 6,
+    goal: 'Surface audit-trail proof for a billing-api contract without implying real server writes.',
+    intakeNotes: ['Repo context is billing-api.'],
+    inScope: ['Audit proof summary', 'Receipt labels'],
+    outOfScope: ['Database writes'],
+    acceptance: ['Proof packet states what changed and what did not change'],
+    proofExpectations: ['Trust explanation'],
+    policyNote: 'Billing-api keeps the same local-only runtime policy in this demo.',
+    clarifications: [
+      {
+        ref: 'audit',
+        question: 'What must the proof show?',
+        answer: 'Changed scope, unchanged scope, and trust reasons',
+        note: 'No live audit stream exists in the demo.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'WI-31',
+        title: 'Audit proof summary',
+        lane: 'review/proof',
+        scope: 'Proof packet copy',
+        status: 'Proof ready',
+        proofObligation: 'Named trust reasons',
+      },
+    ],
+    evidence: [{ label: 'Receipts', value: 'Audit scope map + proof note', tone: 'pass' }],
+    verification: [{ criterion: 'Proof is inspectable', support: 'Proof summary', outcome: 'Covered' }],
+    changed: ['Audit proof framing'],
+    unchanged: ['No billing runtime'],
+    trust: ['Proof names unchanged scope'],
+    howToVerify: ['Inspect proof summary'],
+    activity: {
+      0: [{ kind: 'goal.intake', note: 'Audit hardening request logged', tone: 'mauve' }],
+      6: [{ kind: 'proof.ready', note: 'Proof packet is ready for inspection', tone: 'pass' }],
+    },
   },
   {
-    q: 'Q5',
-    term: 'new status',
-    prov: (
-      <>
-        an <b>enum edge</b> on request.status — name and position unknown
-      </>
-    ),
-  },
-  {
-    q: 'Q6',
-    term: 'audit log',
-    prov: (
-      <>
-        an <b>append-only record</b> of the decision — schema undefined
-      </>
-    ),
+    id: 'C-0150',
+    title: 'Lead sync cleanup',
+    repo: 'billing-api',
+    owner: 'Ira · growth ops',
+    scopeSurface: 'sync status labels',
+    summary: 'Contract is active and work items are bounded, but execution has not started.',
+    defaultStep: 3,
+    goal: 'Clarify and scope lead sync cleanup in the billing-api demo lane without building a sync integration.',
+    intakeNotes: ['Contract is still active.'],
+    inScope: ['Status labels', 'Human verification copy'],
+    outOfScope: ['Real CRM sync'],
+    acceptance: ['Status labels are clear'],
+    proofExpectations: ['Verification checklist'],
+    policyNote: 'No integration runtime exists in this demo.',
+    clarifications: [
+      {
+        ref: 'sync',
+        question: 'Is a real integration expected?',
+        answer: 'No, mock-only shell update',
+        note: 'Execution remains local-only.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'WI-41',
+        title: 'Scope cleanup',
+        lane: 'external runtime',
+        scope: 'Status label shell',
+        status: 'Active',
+        proofObligation: 'Touched scope summary',
+      },
+    ],
+    evidence: [{ label: 'Checkpoint synced', value: 'Task plan only', tone: 'amber' }],
+    verification: [{ criterion: 'Scope stays bounded', support: 'Task plan', outcome: 'Partial' }],
+    changed: ['Task plan only'],
+    unchanged: ['No CRM sync'],
+    trust: ['Contract scope is explicit'],
+    howToVerify: ['Inspect work items'],
+    activity: {
+      0: [{ kind: 'goal.intake', note: 'Lead sync cleanup request logged', tone: 'mauve' }],
+      3: [{ kind: 'work-items.ready', note: 'Execution lanes are prepared', tone: 'pass' }],
+    },
   },
 ];
 
-const ALL_CLARIFICATION_IDS = CLARIFICATIONS.map(({ id }) => id);
-const CLARIFICATION_ORDER = ['review-scope', 'owner-rule', 'reason-rule', 'status-model', 'audit-req'] as const;
+const INITIAL_STEPS = Object.fromEntries(CONTRACTS.map((contract) => [contract.id, contract.defaultStep])) as Record<string, StepIndex>;
+const INITIAL_APPROVALS = Object.fromEntries(
+  CONTRACTS.map((contract) => [contract.id, contract.defaultStep >= 7 ? 'pending' : 'pending']),
+) as Record<string, ApprovalState>;
+
+const CLARIFICATION_DELAYS = [240, 520, 820, 1120, 1400] as const;
+const EVIDENCE_DELAY = 220;
+const VERIFICATION_DELAY = 240;
 
 function cx(...tokens: Array<string | false | null | undefined>) {
   return tokens.filter(Boolean).join(' ');
 }
 
-function buildEvents(step: StepIndex) {
-  const events = [...BASE_EVENTS];
-
-  for (let index = 1; index <= step; index += 1) {
-    const stepEvents = STEP_EVENTS[index as StepIndex] ?? [];
-    events.push(...stepEvents);
-  }
-
-  return events;
+function getStatus(step: StepIndex, approval: ApprovalState) {
+  if (approval === 'accepted') return 'Accepted';
+  if (approval === 'blocked') return 'Blocked';
+  if (approval === 'rework') return 'Needs rework';
+  if (step >= 7) return 'Awaiting approval';
+  if (step >= 6) return 'Proof ready';
+  if (step >= 4) return 'Executing';
+  return 'Active';
 }
 
-function getReadiness(step: StepIndex, answeredCount: number, visibleReceipts: number, matrixFilled: number) {
-  const intentPercent =
-    step === 0
-      ? 42
-      : step === 1
-        ? 42 + Math.round((answeredCount / CLARIFICATIONS.length) * (96 - 42))
-        : step === 2
-          ? 96
-          : 100;
+function getStatusTone(status: string): Tone {
+  if (status === 'Accepted' || status === 'Proof ready') return 'pass';
+  if (status === 'Awaiting approval' || status === 'Needs rework') return 'amber';
+  if (status === 'Blocked') return 'block';
+  return 'mauve';
+}
 
-  const execPercent = [0, 22, 55, 74, 92, 100, 100][step];
-  const execLabel = ['Not ready', 'Gathering', 'Contract pending', 'Tasks scoped', 'Evidence flowing', 'Complete', 'Complete'][step];
-
-  const proofPercent =
-    step === 0
-      ? 0
-      : step === 1
-        ? 12
-        : step === 2
-          ? 35
-          : step === 3
-            ? 48
-            : step === 4
-              ? Math.round((visibleReceipts / RECEIPTS.length) * 72)
-              : step === 5
-                ? Math.round(72 + (matrixFilled / CRITERIA.length) * (95 - 72))
-                : 100;
-
-  const proofLabel =
-    step === 0
-      ? 'Not ready'
-      : step === 1
-        ? 'Pending'
-        : step === 2
-          ? 'Criteria drafted'
-          : step === 3
-            ? 'Awaiting evidence'
-            : step === 4
-              ? visibleReceipts > 0
-                ? `${visibleReceipts} of 5`
-                : 'Partial'
-              : step === 5
-                ? matrixFilled > 0
-                  ? `${matrixFilled} of 5 verified`
-                  : 'Partial'
-                : 'Complete';
+function getMeters(step: StepIndex, approval: ApprovalState) {
+  const contractPercent = [18, 42, 68, 76, 84, 90, 96, approval === 'accepted' ? 100 : 96][step];
+  const executionPercent = [0, 0, 16, 42, 76, 82, 86, 86][step];
+  const proofPercent = [0, 0, 10, 18, 42, 72, 90, approval === 'accepted' ? 100 : 92][step];
 
   return {
-    intentPercent,
-    intentLabel: `${intentPercent}%`,
-    execPercent,
-    execLabel,
-    proofPercent,
-    proofLabel,
+    contract: { percent: contractPercent, label: STAGES[Math.min(step, 2)].name },
+    execution: {
+      percent: executionPercent,
+      label: step < 4 ? 'Queued' : step < 6 ? 'Receipts synced' : 'Ready for review',
+    },
+    proof: {
+      percent: proofPercent,
+      label: approval === 'accepted' ? 'Accepted' : step >= 7 ? 'Awaiting approval' : step >= 6 ? 'Proof ready' : 'Drafting',
+    },
   };
 }
 
-function getInitialProgress(step: StepIndex) {
+function getStepSummary(step: StepIndex) {
+  return (
+    [
+      'Turn one repo-scoped request into a contract-first walkthrough.',
+      'Collapse open questions into bounded answers pinned to the contract.',
+      'Freeze the working contract before any work items claim progress.',
+      'Show lanes, scope, status, and proof obligation for each work item.',
+      'Execution evidence is collected from outside Goalrail and synced back in.',
+      'Verification maps criteria to evidence instead of generic status copy.',
+      'Proof says what changed, what did not change, and why to trust it.',
+      'Human approval decides the final outcome for the contract.',
+    ] as const
+  )[step];
+}
+
+function getActivity(contract: ContractRecord, step: StepIndex, approval: ApprovalState) {
+  const timeline = [
+    { ts: '09:42:08', kind: 'contract.selected', note: `${contract.id} pinned in center detail`, tone: 'mauve' as Tone },
+    { ts: '09:42:12', kind: 'repo.context', note: `Repo ${contract.repo} context loaded`, tone: 'pass' as Tone },
+  ];
+
+  for (let index = 0; index <= step; index += 1) {
+    const stageEvents = contract.activity[index] ?? [];
+    stageEvents.forEach((event, eventIndex) => {
+      timeline.push({
+        ts: `09:${43 + index}:${String(8 + eventIndex * 7).padStart(2, '0')}`,
+        kind: event.kind,
+        note: event.note,
+        tone: event.tone,
+      });
+    });
+  }
+
+  if (step >= 7) {
+    timeline.push({
+      ts: '09:50:12',
+      kind: 'decision.state',
+      note:
+        approval === 'accepted'
+          ? 'Human approval recorded · result accepted'
+          : approval === 'blocked'
+            ? 'Human reviewer blocked the packet'
+            : approval === 'rework'
+              ? 'Human reviewer requested rework'
+              : 'Awaiting human approval before final outcome',
+      tone: approval === 'accepted' ? 'pass' : approval === 'blocked' ? 'block' : 'amber',
+    });
+  }
+
+  return timeline;
+}
+
+function ListBlock({ title, items }: { title: string; items: string[] }) {
+  return (
+    <section className="detail-block">
+      <div className="detail-kicker">{title}</div>
+      <ul className="bullet-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function renderStageContent({
+  contract,
+  projectContext,
+  step,
+  approval,
+  visibleClarifications,
+  visibleEvidence,
+  visibleVerification,
+  onAdvance,
+  onDecision,
+}: {
+  contract: ContractRecord;
+  projectContext: RepoContext;
+  step: StepIndex;
+  approval: ApprovalState;
+  visibleClarifications: number;
+  visibleEvidence: number;
+  visibleVerification: number;
+  onAdvance: () => void;
+  onDecision: (decision: ApprovalState) => void;
+}) {
   if (step === 0) {
-    return { answeredIds: [] as string[], visibleReceipts: 0, matrixFilled: 0 };
+    return (
+      <div className="stage-content">
+        <div className="compat-line">Raw request · inbound</div>
+        <div className="detail-grid two-up">
+          <section className="detail-block">
+            <div className="detail-kicker">Goal intake</div>
+            <h2 className="stage-title">{contract.title}</h2>
+            <p className="detail-copy">{contract.goal}</p>
+            <ul className="bullet-list">
+              {contract.intakeNotes.map((note) => (
+                <li key={note}>{note}</li>
+              ))}
+            </ul>
+          </section>
+
+          <section className="detail-block">
+            <div className="detail-kicker">Request packet</div>
+            <dl className="key-grid compact-grid">
+              <div>
+                <dt>Repo</dt>
+                <dd>{contract.repo}</dd>
+              </div>
+              <div>
+                <dt>Contract</dt>
+                <dd>{contract.id}</dd>
+              </div>
+              <div>
+                <dt>Surface</dt>
+                <dd>{contract.scopeSurface}</dd>
+              </div>
+              <div>
+                <dt>Policy</dt>
+                <dd>{projectContext.runtimePolicy}</dd>
+              </div>
+            </dl>
+            <div className="panel-note">
+              Repo binding exists already, but it is <b>project context</b>, not a pipeline stage.
+            </div>
+          </section>
+        </div>
+      </div>
+    );
   }
 
   if (step === 1) {
-    return { answeredIds: [] as string[], visibleReceipts: 0, matrixFilled: 0 };
+    return (
+      <div className="stage-content">
+        <div className="compat-line">Clarification cards · {contract.clarifications.length} of {contract.clarifications.length}</div>
+        <div className="clarification-stack">
+          {contract.clarifications.map((card, index) => {
+            const pinned = index < visibleClarifications;
+
+            return (
+              <article key={`${contract.id}-${card.ref}`} className={cx('clarification-card', pinned && 'resolved')}>
+                <div className="clarification-head">
+                  <span>Q{index + 1}</span>
+                  <span>{card.ref}</span>
+                </div>
+                <div className="clarification-q">{card.question}</div>
+                <div className="clarification-a">{card.answer}</div>
+                <div className="clarification-note">{card.note}</div>
+                <div className={cx('clarification-foot', pinned && 'resolved')}>{pinned ? 'Answer pinned to contract' : 'Pending contract pin'}</div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    );
   }
 
-  if (step === 2 || step === 3) {
-    return { answeredIds: [...ALL_CLARIFICATION_IDS], visibleReceipts: 0, matrixFilled: 0 };
+  if (step === 2) {
+    return (
+      <div className="stage-content">
+        <div className="compat-line">Working contract · draft v3</div>
+        <section className="detail-block hero-block">
+          <div className="detail-kicker">Goal</div>
+          <p className="detail-copy">{contract.goal}</p>
+        </section>
+
+        <div className="detail-grid two-up">
+          <ListBlock title="In scope" items={contract.inScope} />
+          <ListBlock title="Out of scope" items={contract.outOfScope} />
+          <ListBlock title="Acceptance criteria" items={contract.acceptance} />
+          <ListBlock title="Proof expectations" items={contract.proofExpectations} />
+        </div>
+
+        <section className="detail-block">
+          <div className="detail-kicker">Inherited project context / policy note</div>
+          <p className="detail-copy">{contract.policyNote}</p>
+          <div className="inline-actions">
+            <button className="ghost-button" type="button" onClick={onAdvance}>
+              Freeze contract
+            </button>
+            <button className="primary-button small" type="button" onClick={onAdvance}>
+              Approve contract
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <div className="stage-content">
+        <div className="section-tagline">Work items</div>
+        <div className="work-item-list">
+          {contract.workItems.map((item) => (
+            <article key={item.id} className="work-item-card">
+              <div className="work-item-head">
+                <div>
+                  <div className="work-item-id">{item.id}</div>
+                  <div className="work-item-title">{item.title}</div>
+                </div>
+                <div className={cx('status-pill', getStatusTone(item.status))}>{item.status}</div>
+              </div>
+              <dl className="key-grid work-grid">
+                <div>
+                  <dt>Lane / type</dt>
+                  <dd>{item.lane}</dd>
+                </div>
+                <div>
+                  <dt>Scope / surface</dt>
+                  <dd>{item.scope}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{item.status}</dd>
+                </div>
+                <div>
+                  <dt>Proof obligation</dt>
+                  <dd>{item.proofObligation}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (step === 4) {
-    return { answeredIds: [...ALL_CLARIFICATION_IDS], visibleReceipts: 0, matrixFilled: 0 };
+    return (
+      <div className="stage-content">
+        <div className="section-tagline">Execution evidence</div>
+        <div className="panel-note strong-note">
+          Execution happened <b>outside Goalrail</b>. Goalrail records synced evidence for the selected contract, not a chat log.
+        </div>
+        <div className="evidence-grid">
+          {contract.evidence.slice(0, visibleEvidence).map((item) => (
+            <article key={`${contract.id}-${item.label}`} className="evidence-card">
+              <div className="detail-kicker">{item.label}</div>
+              <div className={cx('evidence-value', item.tone)}>{item.value}</div>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (step === 5) {
-    return { answeredIds: [...ALL_CLARIFICATION_IDS], visibleReceipts: RECEIPTS.length, matrixFilled: 0 };
+    return (
+      <div className="stage-content">
+        <div className="section-tagline">Verification</div>
+        <div className="verify-list">
+          {contract.verification.slice(0, visibleVerification).map((row) => (
+            <article key={`${contract.id}-${row.criterion}`} className="verify-row">
+              <div className="verify-main">
+                <div className="verify-criterion">{row.criterion}</div>
+                <div className="verify-support">{row.support}</div>
+              </div>
+              <div className="verify-side">
+                <div className="detail-kicker">Outcome</div>
+                <div className="status-pill pass">{row.outcome}</div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  return { answeredIds: [...ALL_CLARIFICATION_IDS], visibleReceipts: RECEIPTS.length, matrixFilled: CRITERIA.length };
+  if (step === 6) {
+    return (
+      <div className="stage-content">
+        <div className="section-tagline">Proof</div>
+        <div className="detail-grid two-up">
+          <ListBlock title="What changed" items={contract.changed} />
+          <ListBlock title="What did not change" items={contract.unchanged} />
+        </div>
+        <ListBlock title="Why this result is trustworthy" items={contract.trust} />
+      </div>
+    );
+  }
+
+  const approvalLabel =
+    approval === 'accepted'
+      ? 'Accepted'
+      : approval === 'blocked'
+        ? 'Blocked'
+        : approval === 'rework'
+          ? 'Needs rework'
+          : 'Awaiting approval';
+
+  return (
+    <div className="stage-content">
+      <div className="section-tagline">Approval / Decision</div>
+      <div className="approval-state-row">
+        <div className="detail-kicker">Decision state</div>
+        <div className={cx('status-pill', getStatusTone(approvalLabel))}>{approvalLabel}</div>
+      </div>
+
+      <div className="detail-grid two-up">
+        <ListBlock title="What changed" items={contract.changed} />
+        <ListBlock title="What did not change" items={contract.unchanged} />
+        <ListBlock title="How to verify" items={contract.howToVerify} />
+        <ListBlock title="Proof expectations" items={contract.proofExpectations} />
+      </div>
+
+      <section className="detail-block">
+        <div className="detail-kicker">Human approval action</div>
+        <div className="decision-actions">
+          <button className="primary-button" type="button" onClick={() => onDecision('accepted')}>
+            Approve result
+          </button>
+          <button className="ghost-button" type="button" onClick={() => onDecision('rework')}>
+            Request rework
+          </button>
+          <button className="ghost-button danger" type="button" onClick={() => onDecision('blocked')}>
+            Block
+          </button>
+        </div>
+      </section>
+    </div>
+  );
 }
 
 export default function App() {
-  const [step, setStep] = useState<StepIndex>(0);
-  const [answeredIds, setAnsweredIds] = useState<string[]>([]);
-  const [visibleReceipts, setVisibleReceipts] = useState(0);
-  const [matrixFilled, setMatrixFilled] = useState(0);
-  const ledgerBodyRef = useRef<HTMLDivElement | null>(null);
+  const [repoFilter, setRepoFilter] = useState<RepoFilter>('trialops-demo');
+  const [selectedContractId, setSelectedContractId] = useState('C-0147');
+  const [contractSteps, setContractSteps] = useState<Record<string, StepIndex>>(INITIAL_STEPS);
+  const [approvalStates, setApprovalStates] = useState<Record<string, ApprovalState>>(INITIAL_APPROVALS);
+  const [visibleClarifications, setVisibleClarifications] = useState(0);
+  const [visibleEvidence, setVisibleEvidence] = useState(0);
+  const [visibleVerification, setVisibleVerification] = useState(0);
+
+  const filteredContracts = useMemo(() => {
+    return repoFilter === 'all' ? CONTRACTS : CONTRACTS.filter((contract) => contract.repo === repoFilter);
+  }, [repoFilter]);
 
   useEffect(() => {
-    const progress = getInitialProgress(step);
-    setAnsweredIds(progress.answeredIds);
-    setVisibleReceipts(progress.visibleReceipts);
-    setMatrixFilled(progress.matrixFilled);
+    if (!filteredContracts.some((contract) => contract.id === selectedContractId)) {
+      setSelectedContractId(filteredContracts[0]?.id ?? CONTRACTS[0].id);
+    }
+  }, [filteredContracts, selectedContractId]);
 
-    const timeouts: number[] = [];
+  const selectedContract = useMemo(() => {
+    return CONTRACTS.find((contract) => contract.id === selectedContractId) ?? CONTRACTS[0];
+  }, [selectedContractId]);
 
+  const step = contractSteps[selectedContract.id] ?? selectedContract.defaultStep;
+  const approval = approvalStates[selectedContract.id] ?? 'pending';
+  const selectedStatus = getStatus(step, approval);
+  const projectContext = REPO_CONTEXTS[selectedContract.repo];
+  const meters = getMeters(step, approval);
+  const activity = useMemo(() => getActivity(selectedContract, step, approval), [selectedContract, step, approval]);
+
+  useEffect(() => {
     if (step === 1) {
-      CLARIFICATION_ORDER.forEach((id, index) => {
-        timeouts.push(
-          window.setTimeout(() => {
-            setAnsweredIds((current) => (current.includes(id) ? current : [...current, id]));
-          }, 350 + index * 280),
-        );
-      });
+      setVisibleClarifications(0);
+      const timers = CLARIFICATION_DELAYS.slice(0, selectedContract.clarifications.length).map((delay, index) =>
+        window.setTimeout(() => {
+          setVisibleClarifications(index + 1);
+        }, delay),
+      );
+
+      return () => {
+        timers.forEach((timer) => window.clearTimeout(timer));
+      };
     }
 
-    if (step === 4) {
-      for (let index = 1; index <= RECEIPTS.length; index += 1) {
-        timeouts.push(
-          window.setTimeout(() => {
-            setVisibleReceipts(index);
-          }, 260 + index * 360),
-        );
-      }
-    }
+    setVisibleClarifications(step > 1 ? selectedContract.clarifications.length : 0);
 
-    if (step === 5) {
-      for (let index = 1; index <= CRITERIA.length; index += 1) {
-        timeouts.push(
-          window.setTimeout(() => {
-            setMatrixFilled(index);
-          }, 220 + index * 280),
-        );
-      }
-    }
-
-    return () => {
-      timeouts.forEach((timeoutId) => window.clearTimeout(timeoutId));
-    };
-  }, [step]);
-
-  const answeredSet = useMemo(() => new Set(answeredIds), [answeredIds]);
-  const activeStageIndex = STEP_TO_ACTIVE[step];
-  const lifecycle = LIFECYCLE[STEP_TO_LIFE[step]];
-  const events = useMemo(() => buildEvents(step), [step]);
-  const readiness = getReadiness(step, answeredIds.length, visibleReceipts, matrixFilled);
+    return undefined;
+  }, [selectedContract, step]);
 
   useEffect(() => {
-    const ledgerBody = ledgerBodyRef.current;
+    if (step === 4) {
+      setVisibleEvidence(0);
+      const timers = selectedContract.evidence.map((_, index) =>
+        window.setTimeout(() => {
+          setVisibleEvidence(index + 1);
+        }, (index + 1) * EVIDENCE_DELAY),
+      );
 
-    if (ledgerBody) {
-      ledgerBody.scrollTop = ledgerBody.scrollHeight;
+      return () => {
+        timers.forEach((timer) => window.clearTimeout(timer));
+      };
     }
-  }, [events.length]);
 
-  const primaryCta = PRIMARY_CTA[step];
-  const spineSummary = getSpineSummary(step, answeredIds.length, visibleReceipts, matrixFilled);
-  const contractButtonsVisible = step === 2;
-  const lastEventIndex = events.length - 1;
+    setVisibleEvidence(step > 4 ? selectedContract.evidence.length : 0);
+
+    return undefined;
+  }, [selectedContract, step]);
+
+  useEffect(() => {
+    if (step === 5) {
+      setVisibleVerification(0);
+      const timers = selectedContract.verification.map((_, index) =>
+        window.setTimeout(() => {
+          setVisibleVerification(index + 1);
+        }, (index + 1) * VERIFICATION_DELAY),
+      );
+
+      return () => {
+        timers.forEach((timer) => window.clearTimeout(timer));
+      };
+    }
+
+    setVisibleVerification(step > 5 ? selectedContract.verification.length : 0);
+
+    return undefined;
+  }, [selectedContract, step]);
+
+  const setStepForSelected = (nextStep: StepIndex) => {
+    setContractSteps((current) => ({ ...current, [selectedContract.id]: nextStep }));
+  };
 
   const goNext = () => {
-    setStep((current) => (current < 6 ? ((current + 1) as StepIndex) : current));
+    if (step < 7) {
+      setStepForSelected((step + 1) as StepIndex);
+    }
   };
 
   const goBack = () => {
-    setStep((current) => (current > 0 ? ((current - 1) as StepIndex) : current));
-  };
-
-  const reset = () => {
-    setStep(0);
-  };
-
-  const controlAction = (action: 'back' | 'reset') => {
-    if (action === 'back') {
-      goBack();
-      return;
+    if (step > 0) {
+      setStepForSelected((step - 1) as StepIndex);
     }
-
-    reset();
   };
+
+  const resetSelected = () => {
+    setContractSteps((current) => ({ ...current, [selectedContract.id]: selectedContract.defaultStep }));
+    setApprovalStates((current) => ({ ...current, [selectedContract.id]: 'pending' }));
+  };
+
+  const handleDecision = (decision: ApprovalState) => {
+    setApprovalStates((current) => ({ ...current, [selectedContract.id]: decision }));
+    setStepForSelected(7);
+  };
+
+  const primaryActionLabel =
+    step === 0
+      ? 'Begin'
+      : step === 1
+        ? 'Begin contract'
+        : step === 2
+          ? 'Freeze contract'
+          : step === 3
+            ? 'Open execution evidence'
+            : step === 4
+              ? 'Open verification'
+              : step === 5
+                ? 'Open proof'
+                : step === 6
+                  ? 'Open approval'
+                  : approval === 'accepted'
+                    ? 'Replay state'
+                    : null;
 
   return (
     <div className="app-shell" data-step={step}>
@@ -637,861 +1020,327 @@ export default function App() {
           </div>
 
           <div className="meters">
-            <div className="meter amber" id="meter-intent">
+            <div className="meter amber">
               <div className="row">
-                <div className="label">Intent</div>
-                <div className="val">{readiness.intentLabel}</div>
+                <div className="label">Contract</div>
+                <div className="val">{meters.contract.label}</div>
               </div>
               <div className="bar">
-                <i style={{ width: `${readiness.intentPercent}%` }} />
+                <i style={{ width: `${meters.contract.percent}%` }} />
               </div>
             </div>
 
-            <div className="meter mauve" id="meter-exec">
+            <div className="meter mauve">
               <div className="row">
                 <div className="label">Execution</div>
-                <div className="val">{readiness.execLabel}</div>
+                <div className="val">{meters.execution.label}</div>
               </div>
               <div className="bar">
-                <i style={{ width: `${readiness.execPercent}%` }} />
+                <i style={{ width: `${meters.execution.percent}%` }} />
               </div>
             </div>
 
-            <div className="meter pass" id="meter-proof">
+            <div className="meter pass">
               <div className="row">
                 <div className="label">Proof</div>
-                <div className="val">{readiness.proofLabel}</div>
+                <div className="val">{meters.proof.label}</div>
               </div>
               <div className="bar">
-                <i style={{ width: `${readiness.proofPercent}%` }} />
+                <i style={{ width: `${meters.proof.percent}%` }} />
               </div>
             </div>
+          </div>
 
+          <div className="topbar-state">
             <div className="state-chip">
-              <span className="k">state</span>
-              <span className="v">{lifecycle.toLowerCase()}</span>
-              <span className="sep">·</span>
-              <span className="derive">at {STAGES[activeStageIndex].name.toLowerCase()}</span>
+              <span className="k">Repo</span>
+              <span className="v">{selectedContract.repo}</span>
+            </div>
+            <div className="state-chip">
+              <span className="k">Status</span>
+              <span className="v">{selectedStatus}</span>
             </div>
           </div>
         </header>
 
         <aside className="rail">
-          <div className="group-label">Workspace</div>
-          <div className="item active g-dot">
-            <i className="g" aria-hidden="true" />
-            Change packets <span className="count">1</span>
-          </div>
-          <div className="item g-line">
-            <i className="g" aria-hidden="true" />
-            Replay <span className="count">—</span>
-          </div>
-          <div className="item g-dot">
-            <i className="g" aria-hidden="true" />
-            Proof <span className="count">5</span>
-          </div>
-          <div className="item g-line">
-            <i className="g" aria-hidden="true" />
-            Demo case <span className="count">1</span>
+          <div className="group-label">Repo</div>
+          <div className="rail-section">
+            <label className="select-wrap">
+              <span className="select-label">Repo selector</span>
+              <select value={repoFilter} onChange={(event) => setRepoFilter(event.target.value as RepoFilter)}>
+                {REPO_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {repoFilter === 'all' ? (
+              <div className="rail-note">All repos is overview mode only. The center panel stays pinned to one selected contract.</div>
+            ) : (
+              <div className="rail-note">Default view stays repo-scoped. Contract detail always reflects the selected contract repo.</div>
+            )}
           </div>
 
-          <div className="group-2">
-            <div className="group-label reference-label">Reference</div>
-            <div className="item g-line">
-              <i className="g" aria-hidden="true" />
-              Contracts
-            </div>
-            <div className="item g-line">
-              <i className="g" aria-hidden="true" />
-              Evidence store
-            </div>
-            <div className="item g-line">
-              <i className="g" aria-hidden="true" />
-              Event ledger
-            </div>
+          <div className="group-label">Contracts</div>
+          <div className="contract-list" aria-label="Contracts">
+            {filteredContracts.map((contract) => {
+              const contractStep = contractSteps[contract.id] ?? contract.defaultStep;
+              const contractApproval = approvalStates[contract.id] ?? 'pending';
+              const status = getStatus(contractStep, contractApproval);
+
+              return (
+                <button
+                  key={contract.id}
+                  className={cx('contract-row', contract.id === selectedContract.id && 'active')}
+                  type="button"
+                  onClick={() => setSelectedContractId(contract.id)}
+                >
+                  <div className="contract-row-top">
+                    <span className="contract-id">{contract.id}</span>
+                    <span className={cx('status-pill', getStatusTone(status))}>{status}</span>
+                  </div>
+                  <div className="contract-title">{contract.title}</div>
+                  <div className="contract-summary">{contract.summary}</div>
+                  <div className="contract-row-meta">
+                    <span className="repo-badge">{contract.repo}</span>
+                    <span className="contract-owner">{contract.owner}</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
 
           <div className="case">
-            <div className="k">Demo case</div>
-            <div className="v">CP-0147 · trial-review</div>
-            <div className="sub">opened · cto · 14m ago</div>
+            <div className="k">Mode</div>
+            <div className="v">Contract-first demo shell</div>
+            <div className="sub">Local mocked state only · no backend · no routing</div>
           </div>
         </aside>
 
         <main className="canvas">
           <section className="spine">
             <div className="spine-head">
-              <div className="t">Change spine · cp-0147</div>
-              <div className="id">{lifecycle.toLowerCase()}</div>
+              <div>
+                <div className="t">Contract {selectedContract.id} · Change packet view</div>
+                <div className="id">Change spine · cp-{selectedContract.id.slice(2).toLowerCase()}</div>
+              </div>
+              <div className="tags">
+                <span className="tag mauve">{selectedContract.repo}</span>
+                <span className={cx('tag', getStatusTone(selectedStatus))}>{selectedStatus}</span>
+              </div>
             </div>
 
             <div className="body">
               {STAGES.map((stage, index) => {
-                const cls =
-                  index < activeStageIndex
-                    ? 'done'
-                    : index === activeStageIndex
-                      ? 'active'
-                      : index === 0 && step === 0
-                        ? 'ambig'
-                        : '';
-
-                const stageMeta = {
-                  0: step === 0 ? '6 terms flagged' : '',
-                  1: step === 1 ? `${answeredIds.length}/5 answered` : step > 1 ? '5/5 answered' : '',
-                  2: step >= 2 ? (step === 2 ? 'drafted' : 'approved') : '',
-                  3: step >= 3 ? '4 slices' : '',
-                  4: step >= 4 ? `${visibleReceipts}/5 receipts` : '',
-                  5: step >= 5 ? `${matrixFilled}/5 verified` : '',
-                  6: step >= 5 ? `${matrixFilled}/5 criteria` : '',
-                  7: step >= 6 ? 'unlocked' : '',
-                }[index] as string;
+                const stateClass = step > index ? 'done' : step === index ? 'active' : '';
 
                 return (
-                  <div key={stage.id} className={cx('stage', cls)}>
+                  <div key={stage.id} className={cx('stage', stateClass)}>
                     <div className="node" />
                     <div className="connector" />
                     <div className="name">{stage.name}</div>
-                    <div className="meta">{stageMeta}</div>
+                    <div className="meta">{step > index ? 'done' : step === index ? 'current' : 'queued'}</div>
                   </div>
                 );
               })}
             </div>
 
             <div className="active-summary">
-              <span className="marker">↓ active</span>
-              <span className="stage-name">{spineSummary.name}</span>
-              <span className="facts">
-                {spineSummary.facts.map((fact) => (
-                  <span key={fact.html} className={cx('f', fact.cls)} dangerouslySetInnerHTML={{ __html: fact.html }} />
-                ))}
-              </span>
+              <div className="marker">Active stage</div>
+              <div className="stage-name">{STAGES[step].name}</div>
+              <div className="facts">
+                <div className="f">
+                  Repo <b>{selectedContract.repo}</b>
+                </div>
+                <div className="f">
+                  Contract <b>{selectedContract.id}</b>
+                </div>
+                <div className="f pass">
+                  Status <b>{selectedStatus}</b>
+                </div>
+              </div>
             </div>
           </section>
 
           <section className="object">
-            {step === 0 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Raw request · inbound</div>
-                  <div className="tags">
-                    <span className="tag amber">6 ambiguities</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="request-meta">
-                    <span className="k">from</span>
-                    <span className="v">cto@goalrail</span>
-                    <span className="k request-meta-gap">received</span>
-                    <span className="v">09:42:08 UTC</span>
-                    <span className="k request-meta-gap">channel</span>
-                    <span className="v">email → intake</span>
-                  </div>
-
-                  <div className="request">
-                    Before a trial request can be approved, we need a <span className="amb">manual review<span className="qref">Q1</span></span>{' '}
-                    step. The <span className="amb">reviewer<span className="qref">Q2</span></span> must assign an{' '}
-                    <span className="amb">owner<span className="qref">Q3</span></span> and provide a{' '}
-                    <span className="amb">decision reason<span className="qref">Q4</span></span>. The dashboard should reflect the{' '}
-                    <span className="amb">new status<span className="qref">Q5</span></span>, and the{' '}
-                    <span className="amb">audit log<span className="qref">Q6</span></span> should show who made the decision.
-                  </div>
-
-                  <div className="amb-inspector">
-                    <div className="ai-head">
-                      <div className="t">Ambiguity inspector</div>
-                      <div className="c">6 terms · provisional readings · awaiting clarification</div>
-                    </div>
-
-                    {INSPECTOR_ROWS.map((row) => (
-                      <div key={row.q} className="ai-row">
-                        <span className="q">{row.q}</span>
-                        <span>
-                          <span className="term">{row.term}</span>
-                        </span>
-                        <span className="prov">{row.prov}</span>
-                        <span className="status">flagged</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {step === 1 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Clarification cards · 5 of 5</div>
-                  <div className="tags">
-                    <span className="tag mauve">bounded</span>
-                    <span className="tag">{answeredIds.length}/5 resolved</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="grid-cards">
-                    {CLARIFICATIONS.map((clarification) => {
-                      const resolved = answeredSet.has(clarification.id);
-
-                      return (
-                        <div key={clarification.id} className={cx('clar-card', resolved && 'answered')}>
-                          <div className="ref">{clarification.ref}</div>
-                          <div className="q">{clarification.q}</div>
-                          <div className="opts">
-                            {clarification.opts.map((option, optionIndex) => (
-                              <div key={option} className={cx('opt', resolved && optionIndex === clarification.answer && 'selected')}>
-                                <span className="radio" />
-                                <span>{option}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="bottom">
-                            <span>{resolved ? 'Answer pinned to contract' : 'Unresolved'}</span>
-                            <span>{resolved ? '✓' : '—'}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="object-note">
-                    Each answer pins an ambiguous term to a concrete contract clause. Readiness and the change packet on the
-                    right update as cards resolve.
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {step === 2 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Working contract · draft v3</div>
-                  <div className="tags">
-                    <span className="tag mauve">pending approval</span>
-                    <span className="tag">derived from 5 clarifications</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="contract">
-                    <div className="sec full">
-                      <h4>Goal</h4>
-                      <div className="goal-copy">
-                        Introduce a bounded <b>manual review</b> state for trial requests above <b>$10k ACV</b>, enforced at API
-                        and surfaced in UI, with auditable decisions including reason and prior status.
-                      </div>
-                    </div>
-
-                    <div className="sec">
-                      <h4>In scope</h4>
-                      <ul>
-                        <li>
-                          Add <code className="mono-code bright">pending_review</code> status between{' '}
-                          <code className="mono-code muted-tone">requested</code> and{' '}
-                          <code className="mono-code muted-tone">approved</code>
-                        </li>
-                        <li>
-                          API rejects decision without owner (<code className="mono-code muted-tone">trial_reviewer</code>) and
-                          reason (≥20ch)
-                        </li>
-                        <li>Dashboard exposes pending review queue + decision dialog</li>
-                        <li>Audit event captures actor, timestamp, reason, previous status</li>
-                      </ul>
-                    </div>
-
-                    <div className="sec out">
-                      <h4>Out of scope</h4>
-                      <ul>
-                        <li>
-                          <s>Bulk approval across multiple requests</s>
-                        </li>
-                        <li>
-                          <s>SSO / IdP gating of reviewer role</s>
-                        </li>
-                        <li>
-                          <s>Retroactive audit for already-approved trials</s>
-                        </li>
-                        <li>
-                          <s>Email / Slack notifications to reviewer</s>
-                        </li>
-                      </ul>
-                    </div>
-
-                    <div className="sec">
-                      <h4>Acceptance criteria</h4>
-                      <ul>
-                        <li>
-                          Direct <code className="mono-code muted-tone">requested → approved</code> transition is rejected
-                        </li>
-                        <li>Manual review state is visible in dashboard and API</li>
-                        <li>
-                          Owner field is required, bound to <code className="mono-code muted-tone">trial_reviewer</code> role
-                        </li>
-                        <li>Reason field is required, minimum 20 characters</li>
-                        <li>Audit event records full decision context</li>
-                      </ul>
-                    </div>
-
-                    <div className="sec">
-                      <h4>Proof expectations</h4>
-                      <ul>
-                        <li>Deterministic transition receipts for each enum edge</li>
-                        <li>API rejection receipts with stable error codes</li>
-                        <li>Sample audit payload conforming to emitted schema</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <div className="contract-foot">
-                    <div className="note">
-                      Approving will freeze the contract and emit <span className="contract-note-emphasis">contract.approved</span>.
-                    </div>
-                    {contractButtonsVisible ? (
-                      <div className="inline-controls">
-                        <button type="button" className="inline-ctrl" onClick={goBack}>
-                          Request change
-                        </button>
-                        <button type="button" className="inline-ctrl approve" onClick={goNext}>
-                          Approve contract ▸
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {step === 3 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Task slices · derived from contract</div>
-                  <div className="tags">
-                    <span className="tag mauve">4 bounded</span>
-                    <span className="tag">linked acceptance</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="tasks">
-                    {TASKS.map((task) => (
-                      <div key={task.n} className="task">
-                        <div className="row1">
-                          <div>
-                            <div className="num">{task.n}</div>
-                            <div className="title">{task.title}</div>
-                            <div className="surface">{task.surface}</div>
-                          </div>
-                          <span className="tag mauve task-tag">scoped</span>
-                        </div>
-
-                        <div className="grid-kv">
-                          <div className="k">Criteria</div>
-                          <div className="v">{task.criteria.join(' · ')}</div>
-                          <div className="k">Risk</div>
-                          <div className="v">{task.risk}</div>
-                          <div className="k">Proof</div>
-                          <div className="v">{task.proof}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="object-note">
-                    Slices are derived, not invented. Each maps to one or more acceptance criteria and declares its own proof
-                    obligation.
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {step === 4 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Execution replay · deterministic receipts</div>
-                  <div className="tags">
-                    <span className="tag mauve">{visibleReceipts}/5 receipts</span>
-                    <span className="tag">simulated</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="sim-label">
-                    <span className="pulse" />
-                    <span>Simulated deterministic demo run · no live runtime · receipts are fixtures derived from contract</span>
-                  </div>
-
-                  <div className="receipts">
-                    {RECEIPTS.slice(0, visibleReceipts).map((receipt) => (
-                      <div key={receipt.code} className="receipt">
-                        <span className="ts">{receipt.ts}</span>
-                        <span className="txt">
-                          {receipt.renderText()} <span className="receipt-meta">· {receipt.code}</span>
-                        </span>
-                        <span className={cx('verdict', receipt.verdict)}>{receipt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {visibleReceipts < RECEIPTS.length ? (
-                    <div className="streaming">streaming…</div>
-                  ) : (
-                    <div className="object-note">
-                      All five receipts captured. Verification pass runs them against acceptance criteria in the next step.
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : null}
-
-            {step === 5 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Proof matrix · acceptance vs evidence</div>
-                  <div className="tags">
-                    <span className="tag pass">{matrixFilled}/5 verified</span>
-                    <span className="tag">bound to contract v3</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <table className="matrix">
-                    <thead>
-                      <tr>
-                        <th className="w-40">Acceptance criterion</th>
-                        <th className="w-40">Evidence</th>
-                        <th className="w-20">Verdict</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {CRITERIA.map((criterion, index) => {
-                        const filled = index < matrixFilled;
-
-                        return (
-                          <tr key={criterion.id} className={filled ? '' : 'pending'}>
-                            <td>
-                              <span className={cx('check', !filled && 'pending-check')} />
-                              {criterion.name}
-                            </td>
-                            <td>
-                              <span className={cx('ev', !filled && 'pending')}>{filled ? criterion.evLabel : 'awaiting…'}</span>
-                            </td>
-                            <td>
-                              {filled ? <span className="chip pass">verified</span> : <span className="chip pending">pending</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-
-                  <div className="object-note">
-                    Each criterion is paired with the single receipt that proves it. No criterion is verified on opinion; every
-                    pass is backed by a deterministic receipt from the execution replay.
-                  </div>
-                </div>
-              </>
-            ) : null}
-
-            {step === 6 ? (
-              <>
-                <div className="obj-head">
-                  <div className="t">Decision gate · readiness 100%</div>
-                  <div className="tags">
-                    <span className="tag pass">5/5 verified</span>
-                    <span className="tag">0 unresolved</span>
-                    <span className="tag">contract v3 frozen</span>
-                  </div>
-                </div>
-
-                <div className="obj-body">
-                  <div className="decision">
-                    <div className="left">
-                      <h3>Why this decision is unlocked</h3>
-                      <ul>
-                        <li>All 5 acceptance criteria passed against evidence</li>
-                        <li>Each criterion bound to a deterministic receipt</li>
-                        <li>Out-of-scope items documented and acknowledged</li>
-                        <li>No unresolved clarifications, no open risks</li>
-                        <li>Contract v3 frozen · hash pinned to packet</li>
-                      </ul>
-                    </div>
-
-                    <div className="actions">
-                      <button type="button" className="btn primary">
-                        <span>Accept</span>
-                        <span className="sub">freeze packet · close change · archive proof</span>
-                      </button>
-                      <button type="button" className="btn mauve">
-                        <span>Rework</span>
-                        <span className="sub">return to clarification with annotations</span>
-                      </button>
-                      <button type="button" className="btn warn">
-                        <span>Block</span>
-                        <span className="sub">reject with blocking reason · notify requester</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="cta">
-                    <div>
-                      <div className="t">Run one real case through this packet.</div>
-                      <div className="s">Apply the decision kernel to your next live request — same spine, same proof rules.</div>
-                    </div>
-                    <div className="go">Open case ▸</div>
-                  </div>
-                </div>
-              </>
-            ) : null}
-          </section>
-
-          <section className={cx('primary-cta', primaryCta.tone, primaryCta.disabled && 'disabled')}>
-            <div className="body-copy">
-              <div className="lbl">{primaryCta.label}</div>
-              <div className="ttl">{primaryCta.title}</div>
-              <div className="sub">{primaryCta.sub}</div>
+            <div className="obj-head">
+              <div>
+                <div className="t">Selected contract</div>
+                <div className="object-title">{selectedContract.id} · {selectedContract.title}</div>
+              </div>
+              <div className="tags">
+                <span className="tag">{selectedContract.scopeSurface}</span>
+                <span className="tag">{selectedContract.owner}</span>
+              </div>
             </div>
-            <button type="button" className="go" disabled={primaryCta.disabled} onClick={goNext}>
-              {primaryCta.disabled ? 'Done' : 'Begin'} ▸<span className="kbd">↵</span>
-            </button>
+            <div className="obj-body">
+              {renderStageContent({
+                contract: selectedContract,
+                projectContext,
+                step,
+                approval,
+                visibleClarifications,
+                visibleEvidence,
+                visibleVerification,
+                onAdvance: goNext,
+                onDecision: handleDecision,
+              })}
+            </div>
           </section>
         </main>
 
-        <aside className="inspector">
-          <div className="insp-head">
-            <div className="id">CP-0147 · Change packet</div>
-            <div className="title">Manual review step for trial approval</div>
-            <div className="life">
-              <span className="k">derived state</span>
-              <span className="v">{lifecycle}</span>
-              <span className="derive">
-                · from spine at <b>{STAGES[activeStageIndex].name.toLowerCase()}</b> · intent {readiness.intentPercent}%
-              </span>
+        <aside className="sidepanel">
+          <section className="panel-card">
+            <div className="panel-head">
+              <div className="t">Project context</div>
+              <div className="id">Repo {projectContext.repo}</div>
             </div>
-          </div>
-
-          <div className="insp-body">
-            {getInspectorSections(step, answeredSet, visibleReceipts, matrixFilled).map((section) => (
-              <div key={section.key} className="insp-section">
-                <div className="hd">
-                  <div className="k">{section.label}</div>
-                  <div className="status-row">
-                    {section.count ? <div className="c">{section.count}</div> : null}
-                    <span className={cx('state', section.stateClass)}>{section.state}</span>
-                  </div>
-                </div>
-                <div className="content">{section.content}</div>
+            <dl className="key-grid">
+              <div>
+                <dt>Repo</dt>
+                <dd>{projectContext.repo}</dd>
               </div>
-            ))}
-          </div>
-        </aside>
+              <div>
+                <dt>Bound</dt>
+                <dd>{projectContext.bound}</dd>
+              </div>
+              <div>
+                <dt>Init</dt>
+                <dd>{projectContext.init}</dd>
+              </div>
+              <div>
+                <dt>Docs indexed</dt>
+                <dd>{projectContext.docsIndexed}</dd>
+              </div>
+            </dl>
 
-        <footer className="ledger">
-          <div className="ledger-head">
-            <div className="t">
-              <span className="latest-pulse" />Event ledger
+            <div className="readiness-block">
+              <div className="row">
+                <div className="label">Delivery readiness</div>
+                <div className="val">{projectContext.readiness}/100</div>
+              </div>
+              <div className="bar">
+                <i style={{ width: `${projectContext.readiness}%` }} />
+              </div>
             </div>
-            <div className="meta">
-              <b>{events.length}</b> events · append-only · seq=<b>0001</b> · cp=<b>cp-0147</b>
-            </div>
-            <div className="controls">
-              {CONTROL_MAP[step].map((control) => (
-                <button key={control.label} type="button" className="ctrl ghost" onClick={() => controlAction(control.action)}>
-                  {control.label}
-                </button>
+
+            <div className="checklist-block">
+              <div className="detail-kicker">Delivery readiness checklist</div>
+              {projectContext.checklist.map((item) => (
+                <div key={`${projectContext.repo}-${item.label}`} className="check-row">
+                  <span>{item.label}</span>
+                  <span className={cx('check-value', item.tone)}>{item.value}</span>
+                </div>
               ))}
             </div>
-          </div>
 
-          <div ref={ledgerBodyRef} className="ledger-body">
-            {events.map((event, index) => (
-              <div key={`${event.ts}-${event.kind}`} className={cx('evt', event.cls, index === lastEventIndex && 'latest')}>
-                <span className="ts">{event.ts}</span>
-                <span className="kind">{event.kind}</span>
-                <span className="note">{event.note}</span>
-                <span className="tag-s">{event.tag}</span>
+            <div className="detail-kicker">Runtime policy</div>
+            <div className="panel-copy">{projectContext.runtimePolicy}</div>
+            <div className="detail-kicker top-gap">Available runtimes</div>
+            <div className="chip-row">
+              {projectContext.runtimes.map((runtime) => (
+                <span key={runtime} className="tag">
+                  {runtime}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel-card">
+            <div className="panel-head">
+              <div className="t">Ambiguity inspector</div>
+              <div className="id">Resolved into contract inputs</div>
+            </div>
+            <div className="inspector-list">
+              {selectedContract.clarifications.map((card, index) => {
+                const resolved = step > 1 || index < visibleClarifications;
+                return (
+                  <div key={`${selectedContract.id}-inspector-${card.ref}`} className="inspector-row">
+                    <div>
+                      <div className="inspector-term">{card.ref}</div>
+                      <div className="inspector-note">{card.note}</div>
+                    </div>
+                    <div className={cx('status-pill', resolved ? 'pass' : 'amber')}>{resolved ? 'Resolved' : 'Open'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="panel-card compact-card">
+            <div className="panel-head">
+              <div className="t">Selection</div>
+              <div className="id">Current detail</div>
+            </div>
+            <dl className="key-grid compact-grid">
+              <div>
+                <dt>Contract</dt>
+                <dd>{selectedContract.id}</dd>
               </div>
-            ))}
-          </div>
-        </footer>
+              <div>
+                <dt>Repo</dt>
+                <dd>{selectedContract.repo}</dd>
+              </div>
+              <div>
+                <dt>Stage</dt>
+                <dd>{STAGES[step].name}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>{selectedStatus}</dd>
+              </div>
+            </dl>
+          </section>
+        </aside>
+
+        <section className="bottompanel">
+          <section className="panel-card activity-card">
+            <div className="panel-head">
+              <div className="t">Workspace activity</div>
+              <div className="id">No chat log · contract events only</div>
+            </div>
+            <div className="activity-list">
+              {activity.map((entry, index) => (
+                <div key={`${entry.ts}-${entry.kind}-${index}`} className="activity-row">
+                  <div className="activity-ts">{entry.ts}</div>
+                  <div className="activity-body">
+                    <div className="activity-kind">{entry.kind}</div>
+                    <div className="activity-note">{entry.note}</div>
+                  </div>
+                  <div className={cx('status-pill', entry.tone)}>{entry.tone === 'pass' ? 'pass' : entry.tone === 'block' ? 'block' : entry.tone === 'amber' ? 'review' : 'event'}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel-card control-card">
+            <div className="panel-head">
+              <div className="t">Stage controls</div>
+              <div className="id">Mock walkthrough only</div>
+            </div>
+            <div className="control-copy">{getStepSummary(step)}</div>
+            <div className="control-meta">
+              <span>Selected repo: {repoFilter === 'all' ? 'All repos' : repoFilter}</span>
+              <span>Detail repo: {selectedContract.repo}</span>
+            </div>
+            <div className="control-actions">
+              <button className="ghost-button" type="button" onClick={goBack} disabled={step === 0}>
+                Back
+              </button>
+              {primaryActionLabel ? (
+                <button className="primary-button" type="button" onClick={step === 7 ? resetSelected : goNext}>
+                  {primaryActionLabel}
+                </button>
+              ) : null}
+              <button className="ghost-button" type="button" onClick={resetSelected}>
+                Reset
+              </button>
+            </div>
+          </section>
+        </section>
       </div>
     </div>
   );
-}
-
-function getSpineSummary(step: StepIndex, answeredCount: number, visibleReceipts: number, matrixFilled: number) {
-  const summaries = [
-    {
-      name: STAGES[0].name,
-      facts: [
-        { cls: 'amber', html: '<b>6</b> terms flagged' },
-        { cls: '', html: '<b>0 / 5</b> clarifications resolved' },
-        { cls: '', html: 'contract <b>not assembled</b>' },
-      ],
-    },
-    {
-      name: STAGES[1].name,
-      facts: [
-        { cls: '', html: `<b>${answeredCount} / 5</b> answered` },
-        { cls: 'amber', html: `<b>${5 - answeredCount}</b> awaiting input` },
-        { cls: '', html: 'readiness rising with each answer' },
-      ],
-    },
-    {
-      name: STAGES[2].name,
-      facts: [
-        { cls: 'pass', html: '<b>5</b> clauses bound from clarifications' },
-        { cls: '', html: '<b>4</b> out-of-scope items declared' },
-        { cls: '', html: 'awaiting approval' },
-      ],
-    },
-    {
-      name: STAGES[3].name,
-      facts: [
-        { cls: 'pass', html: '<b>4</b> bounded slices derived' },
-        { cls: '', html: 'each slice linked to criteria' },
-        { cls: '', html: 'proof obligation declared per slice' },
-      ],
-    },
-    {
-      name: STAGES[4].name,
-      facts: [
-        { cls: '', html: `<b>${visibleReceipts} / 5</b> receipts captured` },
-        { cls: '', html: 'deterministic · no live runtime' },
-        { cls: '', html: 'receipts bound to contract clauses' },
-      ],
-    },
-    {
-      name: STAGES[5].name,
-      facts: [
-        { cls: 'pass', html: `<b>${matrixFilled} / 5</b> criteria verified` },
-        { cls: '', html: 'each verdict bound to one receipt' },
-        { cls: '', html: 'no verdict without evidence' },
-      ],
-    },
-    {
-      name: STAGES[7].name,
-      facts: [
-        { cls: 'pass', html: '<b>5 / 5</b> verified' },
-        { cls: 'pass', html: '<b>0</b> unresolved blockers' },
-        { cls: '', html: 'decision unlocked' },
-      ],
-    },
-  ] as const;
-
-  return summaries[step];
-}
-
-function getInspectorSections(step: StepIndex, answeredSet: Set<string>, visibleReceipts: number, matrixFilled: number) {
-  const intentContent =
-    step >= 1 ? (
-      <>
-        <div className="line"><span className="dot pass" /><span>manual review confirmed required</span></div>
-        <div className="line"><span className="dot pass" /><span>ownership rule confirmed</span></div>
-        <div className="line"><span className="dot pass" /><span>decision reason confirmed required</span></div>
-        <div className="line"><span className="dot pass" /><span>review-visible status confirmed</span></div>
-        <div className="line"><span className="dot pass" /><span>audit behavior confirmed</span></div>
-      </>
-    ) : (
-      <>
-        <div className="line"><span className="dot amber" /><span>manual review is implied</span></div>
-        <div className="line"><span className="dot amber" /><span>ownership rule appears required</span></div>
-        <div className="line"><span className="dot amber" /><span>decision reason appears required</span></div>
-        <div className="line"><span className="dot amber" /><span>a new review-visible status is implied</span></div>
-        <div className="line"><span className="dot amber" /><span>audit behavior is requested</span></div>
-      </>
-    );
-
-  const clarificationsContent =
-    step >= 1 ? (
-      <>
-        <div className="line">
-          <span className={cx('dot', answeredSet.has('review-scope') ? 'pass' : 'amber')} />
-          <span className="qn">q1</span>
-          <span>scope · {answeredSet.has('review-scope') ? 'trials above $10k ACV' : 'awaiting'}</span>
-        </div>
-        <div className="line">
-          <span className={cx('dot', answeredSet.has('owner-rule') ? 'pass' : 'amber')} />
-          <span className="qn">q2·q3</span>
-          <span>owner · {answeredSet.has('owner-rule') ? 'trial_reviewer role' : 'awaiting'}</span>
-        </div>
-        <div className="line">
-          <span className={cx('dot', answeredSet.has('reason-rule') ? 'pass' : 'amber')} />
-          <span className="qn">q4</span>
-          <span>reason · {answeredSet.has('reason-rule') ? 'required · ≥ 20ch' : 'awaiting'}</span>
-        </div>
-        <div className="line">
-          <span className={cx('dot', answeredSet.has('status-model') ? 'pass' : 'amber')} />
-          <span className="qn">q5</span>
-          <span>status · {answeredSet.has('status-model') ? 'add pending_review' : 'awaiting'}</span>
-        </div>
-        <div className="line">
-          <span className={cx('dot', answeredSet.has('audit-req') ? 'pass' : 'amber')} />
-          <span className="qn">q6</span>
-          <span>audit · {answeredSet.has('audit-req') ? 'actor+ts+reason+prev' : 'awaiting'}</span>
-        </div>
-      </>
-    ) : (
-      <>
-        <div className="line"><span className="dot hollow" /><span className="qn">q1</span><span>scope · awaiting</span></div>
-        <div className="line"><span className="dot hollow" /><span className="qn">q2·q3</span><span>owner · awaiting</span></div>
-        <div className="line"><span className="dot hollow" /><span className="qn">q4</span><span>reason · awaiting</span></div>
-        <div className="line"><span className="dot hollow" /><span className="qn">q5</span><span>status · awaiting</span></div>
-        <div className="line"><span className="dot hollow" /><span className="qn">q6</span><span>audit · awaiting</span></div>
-      </>
-    );
-
-  const contractContent =
-    step >= 2 ? (
-      <>
-        <div className="line"><span className="dot pass" /><span>Goal · bounded manual review</span></div>
-        <div className="line"><span className="dot pass" /><span>In scope · 4 clauses</span></div>
-        <div className="line"><span className="dot pass" /><span>Out of scope · 4 clauses</span></div>
-        <div className="line"><span className="dot pass" /><span>Acceptance · 5 criteria</span></div>
-        <div className="line"><span className="dot pass" /><span>Proof expectations · 3 items</span></div>
-      </>
-    ) : (
-      <div className="locked-row">
-        <span className="glyph">▫</span>
-        <span className="txt">locked · needs 5 clarifications resolved</span>
-        <span className="dep">after · clarify</span>
-      </div>
-    );
-
-  const tasksContent =
-    step >= 3 ? (
-      <>
-        {TASKS.map((task) => (
-          <div key={task.n} className="line">
-            <span className="dot pass" />
-            <span>
-              {task.n} · {task.title}
-            </span>
-          </div>
-        ))}
-      </>
-    ) : (
-      <div className="locked-row">
-        <span className="glyph">▫</span>
-        <span className="txt">locked · derived from approved contract</span>
-        <span className="dep">after · contract</span>
-      </div>
-    );
-
-  const evidenceContent =
-    step >= 4 && visibleReceipts > 0 ? (
-      <>
-        {RECEIPTS.slice(0, visibleReceipts).map((receipt) => (
-          <div key={receipt.code} className="line">
-            <span className={cx('dot', receipt.verdict === 'pass' ? 'pass' : 'block-dot')} />
-            <span>{receipt.code}</span>
-          </div>
-        ))}
-      </>
-    ) : (
-      <div className="locked-row">
-        <span className="glyph">▫</span>
-        <span className="txt">no receipts · waits execution replay</span>
-        <span className="dep">after · tasks</span>
-      </div>
-    );
-
-  const proofContent =
-    step >= 5 ? (
-      matrixFilled > 0 ? (
-        <>
-          {CRITERIA.slice(0, matrixFilled).map((criterion) => (
-            <div key={criterion.id} className="line">
-              <span className="dot pass" />
-              <span>{criterion.name}</span>
-            </div>
-          ))}
-        </>
-      ) : (
-        <div className="locked-row">
-          <span className="glyph">▫</span>
-          <span className="txt">awaiting verification pass</span>
-          <span className="dep">now</span>
-        </div>
-      )
-    ) : (
-      <div className="locked-row">
-        <span className="glyph">▫</span>
-        <span className="txt">locked · waits verification pass</span>
-        <span className="dep">after · evidence</span>
-      </div>
-    );
-
-  const decisionContent =
-    step >= 6 ? (
-      <>
-        <div className="line"><span className="dot pass" /><span>Accepted · contract v3 frozen</span></div>
-        <div className="line"><span className="dot pass" /><span>Proof archive hash pinned</span></div>
-      </>
-    ) : (
-      <div className="locked-row">
-        <span className="glyph">▫</span>
-        <span className="txt">gate closed · needs proof complete</span>
-        <span className="dep">after · proof</span>
-      </div>
-    );
-
-  return [
-    {
-      key: 'signals',
-      label: 'Observed signals',
-      count: null,
-      state: step >= 1 ? 'Confirmed' : 'Provisional',
-      stateClass: step >= 1 ? 'filled' : 'provisional',
-      content: intentContent,
-    },
-    {
-      key: 'clarifications',
-      label: 'Clarifications',
-      count: step >= 1 ? `${answeredSet.size}/5` : '0/5',
-      state: step >= 2 ? 'Filled' : step === 1 ? 'Partial' : 'Queued',
-      stateClass: step >= 2 ? 'filled' : 'partial',
-      content: clarificationsContent,
-    },
-    {
-      key: 'contract',
-      label: 'Contract',
-      count: step >= 2 ? 'v3' : null,
-      state: step >= 3 ? 'Filled' : step === 2 ? 'Partial' : 'Locked',
-      stateClass: step >= 3 ? 'filled' : step === 2 ? 'partial' : 'locked',
-      content: contractContent,
-    },
-    {
-      key: 'tasks',
-      label: 'Task slices',
-      count: step >= 3 ? '4' : null,
-      state: step >= 3 ? 'Filled' : 'Locked',
-      stateClass: step >= 3 ? 'filled' : 'locked',
-      content: tasksContent,
-    },
-    {
-      key: 'evidence',
-      label: 'Evidence',
-      count: step >= 4 ? `${visibleReceipts}/5` : null,
-      state: step >= 4 && visibleReceipts === RECEIPTS.length ? 'Filled' : step >= 4 ? 'Partial' : 'Locked',
-      stateClass: step >= 4 && visibleReceipts === RECEIPTS.length ? 'filled' : step >= 4 ? 'partial' : 'locked',
-      content: evidenceContent,
-    },
-    {
-      key: 'proof',
-      label: 'Proof',
-      count: step >= 5 ? `${matrixFilled}/5` : null,
-      state: step >= 5 && matrixFilled === CRITERIA.length ? 'Filled' : step >= 5 ? 'Partial' : 'Locked',
-      stateClass: step >= 5 && matrixFilled === CRITERIA.length ? 'filled' : step >= 5 ? 'partial' : 'locked',
-      content: proofContent,
-    },
-    {
-      key: 'decision',
-      label: 'Decision',
-      count: null,
-      state: step >= 6 ? 'Filled' : 'Locked',
-      stateClass: step >= 6 ? 'filled' : 'locked',
-      content: decisionContent,
-    },
-  ];
 }
