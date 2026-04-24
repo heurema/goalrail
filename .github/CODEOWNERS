@@ -5,10 +5,8 @@
 /tools/ @heurema
 /scripts/ @heurema
 /evals/ @heurema
-/flows/ @heurema
-/knowledge/ @heurema
-/publishing/ @heurema
-/work/ @heurema
+/.goalrail/ @heurema
+/.punk/ @heurema
 
 # Fallback
 * @heurema

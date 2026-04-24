@@ -8,7 +8,7 @@ Rules:
 - do not continue automatically to the next phase
 - after each phase: stabilize, verify, summarize, and stop
 - if a gate fails, simplify the current phase instead of expanding scope
-- Phase 0 stays in the current Goalrail planning repo under `work/demo/trialops`
+- Phase 0 stays in the current Goalrail planning repo under `.goalrail/work/demo/trialops`
 - Phase 1 and later happen in `heurema/goalrail-demo`
 
 ## Global constraints
@@ -47,7 +47,7 @@ Produce the planning pack without adding runtime code to the current Goalrail re
 - `DEMO_BUILD_PLAN.md`
 - `SCENARIO_LIBRARY.md`
 - `SELF_SERVE_DEMO_NOTES.md`
-- minimal docs sync for `work/demo/`
+- minimal docs sync for `.goalrail/work/demo/`
 
 ### Checks
 

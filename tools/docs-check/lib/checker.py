@@ -58,7 +58,19 @@ RULES_RUN = [
     "absolute-paths",
     "components",
 ]
-EXCLUDED_DIR_NAMES = {".git", ".jj", "__pycache__"}
+EXCLUDED_DIR_NAMES = {
+    ".git",
+    ".jj",
+    ".codex",
+    ".playwright-cli",
+    ".vite",
+    ".wrangler",
+    "__pycache__",
+    "coverage",
+    "dist",
+    "node_modules",
+    "output",
+}
 LIVE_SCAN_SKIP_PREFIXES = {
     PurePosixPath("evals/cases"),
 }

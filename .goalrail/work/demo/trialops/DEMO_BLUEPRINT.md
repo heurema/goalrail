@@ -35,7 +35,7 @@ The demo must not imply:
 ## Repo split
 
 Planning artifacts live here:
-- `work/demo/trialops` inside the current Goalrail planning repo
+- `.goalrail/work/demo/trialops` inside the current Goalrail planning repo
 
 Future executable sandbox lives later in a separate repo:
 - `heurema/goalrail-demo`

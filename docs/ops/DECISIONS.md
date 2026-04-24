@@ -147,17 +147,17 @@ Decision:
 - the early sales motion is founder-led and pilot-first
 - landing and outreach should be lead-capture and contract-centered, not prompt-tool centric
 
-## D-0017 — Goalrail adopts punk-style workspace boundaries
+## D-0017 — Goalrail adopts overlay workspace boundaries
 Date: 2026-04-20
 Status: accepted
 
 Decision:
-- the planning repo uses explicit top-level support planes inspired by `punk`
-- `work/` tracks bounded goals and reports
-- `knowledge/` tracks advisory research and ideas
-- `publishing/` tracks public narrative drafts, receipts, and manual metrics
-- `publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
-- `flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
+- the planning repo uses explicit overlay support planes instead of broad root-level artifact directories
+- `.goalrail/work/` tracks bounded goals, reports, and Goalrail delivery memory
+- `.goalrail/knowledge/` tracks Goalrail advisory research and ideas
+- `.punk/publishing/` tracks public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
+- `.punk/publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
+- `.goalrail/flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
 - `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them
 
 ## D-0018 — Initial web tooling baseline uses React, Vite, and Mantine packages from npm

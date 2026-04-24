@@ -42,7 +42,7 @@ The project currently has:
 - project spine schema note
 - two kernel ADRs
 - ops rails
-- repo-tracked work / knowledge / publishing surfaces
+- repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
@@ -89,10 +89,10 @@ The project currently has:
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
-- `work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
-- `knowledge/` is reserved for advisory research and idea backlog
-- `publishing/` is reserved for public narrative drafts, receipts, and manual metrics
-- `flows/` and `evals/` exist as planned future structure, not executable product surfaces
+- `.goalrail/work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
+- `.goalrail/knowledge/` is reserved for advisory research and idea backlog
+- `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
+- `.goalrail/flows/` and `evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
@@ -127,7 +127,7 @@ Current exit condition:
 
 Current packaging target:
 - ops docs are synchronized with the new concept / deployment canon
-- repo workspace boundaries mirror `punk`-style planning structure
+- repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` provides a verified local frontend change-packet walkthrough prototype without changing product phase order
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface

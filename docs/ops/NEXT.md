@@ -6,10 +6,10 @@
 
 - **Phase 0 -> Phase 1 transition**
 - product and deployment canon is now in place
-- repo workspace now mirrors `punk`-style planning boundaries (`work/`, `knowledge/`, `publishing/`, `flows/`, `evals/`)
+- repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/demo-change-packet` is the current change-packet demo prototype; future web work should follow `apps/web/<resource>`
-- the next slices should use those boundaries instead of adding ad hoc top-level storage
+- the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
 

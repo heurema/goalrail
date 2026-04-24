@@ -10,6 +10,6 @@ coverage/
 .playwright-cli/
 output/
 **/__pycache__/
-work/demo/trialops/design-handoff/
+.goalrail/work/demo/trialops/design-handoff/
 .idea/
 .vscode/

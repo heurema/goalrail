@@ -85,13 +85,13 @@ related_docs:
 42. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
 43. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
-### 9. Advisory research, reference material, and repo-tracked working surfaces
+### 9. Advisory research, reference material, and overlay working surfaces
 44. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
 45. `design/reference_screens/`
-46. `work/`
-47. `knowledge/`
-48. `publishing/`
-49. `flows/`
+46. `.goalrail/work/`
+47. `.goalrail/knowledge/`
+48. `.punk/publishing/`
+49. `.goalrail/flows/`
 50. `evals/`
 
 ## Roles of the main docs
@@ -155,13 +155,13 @@ related_docs:
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
-### Advisory research, reference material, and repo-tracked working surfaces
+### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `design/reference_screens/` — visual reference material without product-truth authority
-- `work/` — repo-tracked goals, reports, and bounded slice memory
-- `knowledge/` — advisory research and idea backlog; не источник канона без promotion
-- `publishing/` — public narrative drafts, receipts, and manual metrics
-- `flows/` — planned flow/spec boundary for future runtime semantics
+- `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
+- `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
+- `.punk/publishing/` — Punk-owned public narrative drafts, receipts, and manual metrics
+- `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
 - `evals/` — planned eval/spec boundary for future verification semantics
 
 ## Source-of-truth priority
@@ -174,12 +174,12 @@ related_docs:
 6. Architecture canon
 7. Governance and change control
 8. Delivery, build, and pilot operations
-9. Advisory research, reference material, and repo-tracked working surfaces
+9. Advisory research, reference material, and overlay working surfaces
 10. Chat context
 
 Notes:
 - Governance and change-control docs govern process, metadata, and enforcement posture; they do not override product canon.
-- Advisory research, reference material, and repo-tracked working surfaces may inform changes, but canonical product and architecture docs still win.
+- Advisory research, reference material, and overlay working surfaces may inform changes, but canonical product and architecture docs still win.
 
 ## Working rules
 
@@ -195,7 +195,7 @@ Notes:
 10. Нельзя менять implementation scope без сверки с concept canon.
 11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
-13. Repo-tracked planning surfaces (`work/`, `knowledge/`, `publishing/`, `flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
+13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing/`, `.goalrail/flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 
