@@ -215,6 +215,18 @@ code {
   background: var(--pass);
 }
 
+.bar.bar-pass > i {
+  background: var(--pass);
+}
+
+.bar.bar-amber > i {
+  background: var(--amber);
+}
+
+.bar.bar-block > i {
+  background: var(--block);
+}
+
 .topbar-state {
   display: flex;
   align-items: center;
@@ -274,6 +286,35 @@ code {
   padding: 0 18px 8px;
 }
 
+.surface-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.surface-switch {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms, background-color 160ms, color 160ms;
+}
+
+.surface-switch:hover {
+  border-color: var(--line-soft);
+  background: color-mix(in oklab, var(--panel) 66%, transparent);
+}
+
+.surface-switch.active {
+  border-color: color-mix(in oklab, var(--mauve) 48%, var(--line));
+  background: color-mix(in oklab, var(--mauve) 10%, var(--panel));
+  color: var(--ink);
+}
+
 .select-wrap {
   display: flex;
   flex-direction: column;
@@ -303,6 +344,28 @@ code {
   color: var(--mute);
   font-size: 11px;
   line-height: 1.45;
+}
+
+.repo-hint-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--mute);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.surface-context {
+  margin-top: 4px;
+}
+
+.surface-context-title {
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .contract-list {
@@ -711,6 +774,21 @@ code {
   gap: 16px;
 }
 
+.surface-canvas {
+  gap: 0;
+}
+
+.surface-object {
+  min-height: 100%;
+}
+
+.surface-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
 .compat-line,
 .section-tagline {
   font-family: var(--mono);
@@ -739,6 +817,106 @@ code {
 
 .detail-grid.two-up {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.repo-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.repo-readiness-card,
+.proof-feed-row {
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel-2) 84%, transparent);
+  text-align: left;
+}
+
+.repo-readiness-card {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 160ms, background-color 160ms, transform 160ms;
+}
+
+.repo-readiness-card:hover,
+.repo-readiness-card.active,
+.proof-feed-row:hover,
+.proof-feed-row.active {
+  border-color: color-mix(in oklab, var(--mauve) 45%, var(--line));
+  background: linear-gradient(180deg, color-mix(in oklab, var(--mauve) 7%, var(--panel-2)), var(--panel-2));
+}
+
+.repo-readiness-card:hover,
+.proof-feed-row:hover {
+  transform: translateY(-1px);
+}
+
+.repo-card-head,
+.proof-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repo-score {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.readiness-card-grid,
+.proof-meta-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.add-repository-card {
+  justify-content: space-between;
+  cursor: default;
+}
+
+.proof-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.proof-feed-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  cursor: pointer;
+  transition: border-color 160ms, background-color 160ms, transform 160ms;
+}
+
+.proof-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.proof-summary {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.filter-row {
+  margin-top: 2px;
+}
+
+.proof-archive-line {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
 }
 
 .detail-block {
@@ -1235,7 +1413,10 @@ code {
   .detail-grid.two-up,
   .evidence-grid,
   .work-grid,
-  .key-grid {
+  .key-grid,
+  .repo-card-grid,
+  .readiness-card-grid,
+  .proof-meta-grid {
     grid-template-columns: 1fr;
   }
 

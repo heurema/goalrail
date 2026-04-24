@@ -3,8 +3,10 @@ import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
-type RepoId = 'trialops-demo' | 'billing-api';
-type RepoFilter = RepoId | 'all';
+type ActiveSurface = 'contracts' | 'readiness' | 'proof';
+type RepoId = 'trialops-demo' | 'billing-api' | 'frontend-console';
+type ContractRepoId = 'trialops-demo' | 'billing-api';
+type RepoFilter = ContractRepoId | 'all';
 type ApprovalState = 'pending' | 'accepted' | 'rework' | 'blocked';
 type Tone = 'mauve' | 'amber' | 'pass' | 'block';
 
@@ -19,6 +21,12 @@ interface RepoContext {
   init: string;
   docsIndexed: number;
   readiness: number;
+  scanStatus: string;
+  testsStatus: string;
+  ciStatus: string;
+  ownersRulesStatus: string;
+  proofSurfaceStatus: string;
+  recommendedMode: string;
   checklist: Array<{ label: string; value: string; tone: Tone }>;
   runtimePolicy: string;
   runtimes: string[];
@@ -55,7 +63,7 @@ interface VerificationRow {
 interface ContractRecord {
   id: string;
   title: string;
-  repo: RepoId;
+  repo: ContractRepoId;
   owner: string;
   scopeSurface: string;
   summary: string;
@@ -78,6 +86,24 @@ interface ContractRecord {
   activity: Record<number, Array<{ kind: string; note: string; tone: Tone }>>;
 }
 
+interface ProofFeedItem {
+  id: string;
+  contractId: string;
+  repo: ContractRepoId;
+  proofStatus: string;
+  decisionStatus: string;
+  humanApproval: string;
+  linkedEvidence: string;
+  criteriaCoverage: string;
+  summary: string;
+  tone: Tone;
+  changed: string[];
+  unchanged: string[];
+  verified: string[];
+  decisionTrail: string[];
+  archiveLine: string;
+}
+
 const STAGES: Stage[] = [
   { id: 'goal-intake', name: 'Goal intake' },
   { id: 'clarification', name: 'Clarification' },
@@ -95,6 +121,8 @@ const REPO_OPTIONS: Array<{ value: RepoFilter; label: string }> = [
   { value: 'all', label: 'All repos' },
 ];
 
+const WORKSPACE_REPOS: RepoId[] = ['trialops-demo', 'billing-api', 'frontend-console'];
+
 const REPO_CONTEXTS: Record<RepoId, RepoContext> = {
   'trialops-demo': {
     repo: 'trialops-demo',
@@ -102,6 +130,12 @@ const REPO_CONTEXTS: Record<RepoId, RepoContext> = {
     init: 'complete',
     docsIndexed: 12,
     readiness: 72,
+    scanStatus: 'docs/context scan complete',
+    testsStatus: 'tests detected',
+    ciStatus: 'connected',
+    ownersRulesStatus: 'AGENTS/rules present',
+    proofSurfaceStatus: 'available',
+    recommendedMode: 'local-only bounded execution',
     checklist: [
       { label: 'Tests', value: 'detected', tone: 'pass' },
       { label: 'CI', value: 'connected', tone: 'mauve' },
@@ -114,15 +148,41 @@ const REPO_CONTEXTS: Record<RepoId, RepoContext> = {
     repo: 'billing-api',
     bound: 'yes',
     init: 'complete',
-    docsIndexed: 18,
-    readiness: 84,
+    docsIndexed: 7,
+    readiness: 58,
+    scanStatus: 'docs/context scan partial',
+    testsStatus: 'tests partial',
+    ciStatus: 'connected',
+    ownersRulesStatus: 'owners missing',
+    proofSurfaceStatus: 'available with signoff',
+    recommendedMode: 'human-signoff-required',
     checklist: [
-      { label: 'Tests', value: 'detected', tone: 'pass' },
+      { label: 'Tests', value: 'partial', tone: 'amber' },
       { label: 'CI', value: 'connected', tone: 'pass' },
-      { label: 'AGENTS/rules', value: 'present', tone: 'pass' },
+      { label: 'Owners/rules', value: 'missing', tone: 'amber' },
     ],
-    runtimePolicy: 'local-only',
+    runtimePolicy: 'human-signoff-required',
     runtimes: ['Codex CLI', 'manual', 'read-only review lane'],
+  },
+  'frontend-console': {
+    repo: 'frontend-console',
+    bound: 'no',
+    init: 'pending',
+    docsIndexed: 0,
+    readiness: 41,
+    scanStatus: 'context scan not started',
+    testsStatus: 'unknown',
+    ciStatus: 'unknown',
+    ownersRulesStatus: 'rules pending',
+    proofSurfaceStatus: 'not ready',
+    recommendedMode: 'setup required',
+    checklist: [
+      { label: 'Tests', value: 'unknown', tone: 'amber' },
+      { label: 'CI', value: 'unknown', tone: 'amber' },
+      { label: 'Owners/rules', value: 'pending', tone: 'amber' },
+    ],
+    runtimePolicy: 'setup required',
+    runtimes: ['manual setup', 'init required'],
   },
 };
 
@@ -502,6 +562,81 @@ const CONTRACTS: ContractRecord[] = [
   },
 ];
 
+const PROOF_FEED: ProofFeedItem[] = [
+  {
+    id: 'PF-0147',
+    contractId: 'C-0147',
+    repo: 'trialops-demo',
+    proofStatus: 'Awaiting approval',
+    decisionStatus: 'Gate ready',
+    humanApproval: 'Pending human approval',
+    linkedEvidence: '5 linked checks',
+    criteriaCoverage: '5/5 criteria covered',
+    summary: 'Repo-aware contract shell is ready for final operator decision.',
+    tone: 'amber',
+    changed: [
+      'Contracts list and selected change packet now stay repo-aware.',
+      'Project context remains outside the contract pipeline.',
+      'Approval action is explicit before final acceptance.',
+    ],
+    unchanged: ['No backend, routing, auth, persistence, or real integration work.', 'No repo binding moved into the contract spine.'],
+    verified: ['Acceptance criteria mapped to evidence receipts.', 'Touched scope stays limited to the demo shell.', 'Human approval remains pending.'],
+    decisionTrail: ['contract.drafted', 'evidence.synced', 'verification.covered', 'approval.pending'],
+    archiveLine: 'proof://mock/C-0147 · hash gr_pf_0147_a91c',
+  },
+  {
+    id: 'PF-0148',
+    contractId: 'C-0148',
+    repo: 'trialops-demo',
+    proofStatus: 'Evidence collecting',
+    decisionStatus: 'No verdict yet',
+    humanApproval: 'Not ready',
+    linkedEvidence: '2 linked checks',
+    criteriaCoverage: '2/5 criteria covered',
+    summary: 'CSV export filter surface has partial receipts and open manual copy review.',
+    tone: 'mauve',
+    changed: ['Filter chip framing is being inspected.', 'Selection summary receipt exists.'],
+    unchanged: ['No CSV generation, storage, or background jobs.'],
+    verified: ['Scope note exists.', 'Manual naming check is still open.'],
+    decisionTrail: ['contract.active', 'execution.running', 'evidence.partial'],
+    archiveLine: 'proof://mock/C-0148 · draft hash pending',
+  },
+  {
+    id: 'PF-0082',
+    contractId: 'C-0082',
+    repo: 'billing-api',
+    proofStatus: 'Accepted',
+    decisionStatus: 'Accepted',
+    humanApproval: 'Approved',
+    linkedEvidence: '6 linked checks',
+    criteriaCoverage: 'proof archived',
+    summary: 'Billing audit receipt copy was accepted and archived with unchanged runtime scope.',
+    tone: 'pass',
+    changed: ['Audit receipt wording and proof archive labels were tightened.'],
+    unchanged: ['No billing runtime, database, or payment behavior changed.'],
+    verified: ['Proof archive attached.', 'Scope and integrity checks passed.', 'Human approval recorded.'],
+    decisionTrail: ['verification.covered', 'proof.archived', 'decision.accepted'],
+    archiveLine: 'proof://mock/C-0082 · hash gr_pf_0082_f43b',
+  },
+  {
+    id: 'PF-0091',
+    contractId: 'C-0091',
+    repo: 'billing-api',
+    proofStatus: 'Blocked',
+    decisionStatus: 'Integrity failure',
+    humanApproval: 'Blocked by reviewer',
+    linkedEvidence: '3 linked checks',
+    criteriaCoverage: 'integrity failure',
+    summary: 'Lead sync status change was blocked because the evidence bundle did not match the declared scope.',
+    tone: 'block',
+    changed: ['Sync status labels were proposed for review.'],
+    unchanged: ['CRM sync and billing API behavior remain untouched.'],
+    verified: ['Integrity lane failed.', 'Reviewer blocked the packet.', 'Rework required before proof can archive.'],
+    decisionTrail: ['evidence.synced', 'integrity.failed', 'decision.blocked'],
+    archiveLine: 'proof://mock/C-0091 · blocked hash gr_pf_0091_b7d0',
+  },
+];
+
 const INITIAL_STEPS = Object.fromEntries(CONTRACTS.map((contract) => [contract.id, contract.defaultStep])) as Record<string, StepIndex>;
 const INITIAL_APPROVALS = Object.fromEntries(
   CONTRACTS.map((contract) => [contract.id, contract.defaultStep >= 7 ? 'pending' : 'pending']),
@@ -530,6 +665,12 @@ function getStatusTone(status: string): Tone {
   if (status === 'Awaiting approval' || status === 'Needs rework') return 'amber';
   if (status === 'Blocked') return 'block';
   return 'mauve';
+}
+
+function getReadinessTone(score: number): Tone {
+  if (score >= 70) return 'pass';
+  if (score >= 50) return 'amber';
+  return 'block';
 }
 
 function getMeters(step: StepIndex, approval: ApprovalState) {
@@ -874,9 +1015,381 @@ function renderStageContent({
   );
 }
 
+function DeliveryReadinessSurface({ selectedRepo, onSelectRepo }: { selectedRepo: RepoId; onSelectRepo: (repo: RepoId) => void }) {
+  return (
+    <main className="canvas surface-canvas">
+      <section className="object surface-object">
+        <div className="obj-head">
+          <div>
+            <div className="t">Delivery Readiness</div>
+            <div className="object-title">Repo-level setup and operating mode</div>
+          </div>
+          <div className="tags">
+            <span className="tag mauve">Workspace surface</span>
+            <span className="tag">Mock only</span>
+          </div>
+        </div>
+
+        <div className="obj-body">
+          <div className="surface-intro">
+            <div className="section-tagline">Delivery Readiness · repo/project-level readiness</div>
+            <p className="detail-copy">
+              This surface shows connected repositories, readiness signals, setup actions, and recommended operating mode. It is not a
+              contract pipeline stage.
+            </p>
+          </div>
+
+          <div className="repo-card-grid">
+            {WORKSPACE_REPOS.map((repo) => {
+              const context = REPO_CONTEXTS[repo];
+
+              return (
+                <button
+                  key={repo}
+                  className={cx('repo-readiness-card', selectedRepo === repo && 'active')}
+                  type="button"
+                  onClick={() => onSelectRepo(repo)}
+                >
+                  <div className="repo-card-head">
+                    <div>
+                      <div className="contract-id">{context.repo}</div>
+                      <div className="repo-score">{context.readiness}/100 readiness</div>
+                    </div>
+                    <span className={cx('status-pill', getReadinessTone(context.readiness))}>{context.init}</span>
+                  </div>
+
+                  <dl className="key-grid readiness-card-grid">
+                    <div>
+                      <dt>Docs/context scan</dt>
+                      <dd>{context.scanStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>Tests</dt>
+                      <dd>{context.testsStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>CI</dt>
+                      <dd>{context.ciStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>Owners/rules</dt>
+                      <dd>{context.ownersRulesStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>Proof surface</dt>
+                      <dd>{context.proofSurfaceStatus}</dd>
+                    </div>
+                    <div>
+                      <dt>Mode</dt>
+                      <dd>{context.recommendedMode}</dd>
+                    </div>
+                  </dl>
+                </button>
+              );
+            })}
+
+            <article className="repo-readiness-card add-repository-card">
+              <div className="repo-card-head">
+                <div>
+                  <div className="contract-id">Add repository</div>
+                  <div className="repo-score">Connect next repo</div>
+                </div>
+                <span className="status-pill mauve">Setup action</span>
+              </div>
+              <p className="detail-copy">Connect a repo, run init, scan context, and compute delivery readiness.</p>
+              <button className="ghost-button" type="button">
+                Add repository
+              </button>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function DeliveryReadinessInspector({ selectedRepo }: { selectedRepo: RepoId }) {
+  const context = REPO_CONTEXTS[selectedRepo];
+
+  return (
+    <aside className="sidepanel">
+      <section className="panel-card">
+        <div className="panel-head">
+          <div className="t">Selected repo detail</div>
+          <div className="id">{context.repo}</div>
+        </div>
+
+        <dl className="key-grid">
+          <div>
+            <dt>Readiness</dt>
+            <dd>{context.readiness}/100</dd>
+          </div>
+          <div>
+            <dt>Init</dt>
+            <dd>{context.init}</dd>
+          </div>
+          <div>
+            <dt>Docs indexed</dt>
+            <dd>{context.docsIndexed}</dd>
+          </div>
+          <div>
+            <dt>Recommended mode</dt>
+            <dd>{context.recommendedMode}</dd>
+          </div>
+        </dl>
+
+        <div className="readiness-block">
+          <div className="row">
+            <div className="label">Delivery readiness</div>
+            <div className="val">{context.readiness}/100</div>
+          </div>
+          <div className={cx('bar', `bar-${getReadinessTone(context.readiness)}`)}>
+            <i style={{ width: `${context.readiness}%` }} />
+          </div>
+        </div>
+
+        <div className="checklist-block">
+          <div className="detail-kicker">Readiness signals</div>
+          <div className="check-row">
+            <span>Docs/context scan</span>
+            <span className="check-value mauve">{context.scanStatus}</span>
+          </div>
+          {context.checklist.map((item) => (
+            <div key={`${context.repo}-${item.label}`} className="check-row">
+              <span>{item.label}</span>
+              <span className={cx('check-value', item.tone)}>{item.value}</span>
+            </div>
+          ))}
+          <div className="check-row">
+            <span>Proof surface</span>
+            <span className={cx('check-value', getReadinessTone(context.readiness))}>{context.proofSurfaceStatus}</span>
+          </div>
+        </div>
+
+        <div className="detail-kicker">Mock actions</div>
+        <div className="decision-actions">
+          <button className="ghost-button" type="button">
+            Analyze
+          </button>
+          <button className="ghost-button" type="button">
+            Run init
+          </button>
+          <button className="ghost-button" type="button">
+            Scan context
+          </button>
+        </div>
+      </section>
+
+      <section className="panel-card compact-card">
+        <div className="panel-head">
+          <div className="t">Surface boundary</div>
+          <div className="id">Setup/readiness only</div>
+        </div>
+        <p className="panel-copy">
+          Add repository belongs in Delivery Readiness. It does not open a real integration and it does not become a contract flow step.
+        </p>
+      </section>
+    </aside>
+  );
+}
+
+function DeliveryReadinessBottomPanel({ selectedRepo }: { selectedRepo: RepoId }) {
+  const context = REPO_CONTEXTS[selectedRepo];
+
+  return (
+    <section className="bottompanel">
+      <section className="panel-card activity-card">
+        <div className="panel-head">
+          <div className="t">Readiness activity</div>
+          <div className="id">Mock setup events</div>
+        </div>
+        <div className="activity-list">
+          {[
+            ['09:31:02', 'repo.selected', `${context.repo} selected for readiness detail`, 'mauve'],
+            ['09:31:12', 'context.scan', context.scanStatus, getReadinessTone(context.readiness)],
+            ['09:31:22', 'mode.recommended', context.recommendedMode, getReadinessTone(context.readiness)],
+          ].map(([ts, kind, note, tone]) => (
+            <div key={`${ts}-${kind}`} className="activity-row">
+              <div className="activity-ts">{ts}</div>
+              <div className="activity-body">
+                <div className="activity-kind">{kind}</div>
+                <div className="activity-note">{note}</div>
+              </div>
+              <div className={cx('status-pill', tone as Tone)}>{tone === 'pass' ? 'pass' : tone === 'block' ? 'setup' : 'review'}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel-card control-card">
+        <div className="panel-head">
+          <div className="t">Surface controls</div>
+          <div className="id">No real integrations</div>
+        </div>
+        <div className="control-copy">
+          Analyze, Run init, Scan context, and Add repository are mock setup actions. They do not call a backend or mutate persistent state.
+        </div>
+        <div className="control-meta">
+          <span>Selected repo: {context.repo}</span>
+          <span>Readiness: {context.readiness}/100</span>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function ProofFeedSurface({ selectedProofId, onSelectProof }: { selectedProofId: string; onSelectProof: (proofId: string) => void }) {
+  return (
+    <main className="canvas surface-canvas">
+      <section className="object surface-object">
+        <div className="obj-head">
+          <div>
+            <div className="t">Proof Feed</div>
+            <div className="object-title">Cross-contract evidence and decisions</div>
+          </div>
+          <div className="tags">
+            <span className="tag pass">All repos default</span>
+            <span className="tag">Not a chat log</span>
+          </div>
+        </div>
+
+        <div className="obj-body">
+          <div className="surface-intro">
+            <div className="section-tagline">Proof Feed · cross-contract, cross-repo overview</div>
+            <p className="detail-copy">
+              Default scope is all repos. Filters are static mock chips so the surface reads as workspace-level proof control.
+            </p>
+            <div className="chip-row filter-row">
+              <span className="tag pass">All repos</span>
+              <span className="tag">trialops-demo</span>
+              <span className="tag">billing-api</span>
+              <span className="tag">frontend-console</span>
+              <span className="tag amber">Awaiting approval</span>
+              <span className="tag pass">Accepted</span>
+              <span className="tag block">Blocked</span>
+            </div>
+          </div>
+
+          <div className="proof-feed-list">
+            {PROOF_FEED.map((item) => (
+              <button
+                key={item.id}
+                className={cx('proof-feed-row', selectedProofId === item.id && 'active')}
+                type="button"
+                onClick={() => onSelectProof(item.id)}
+              >
+                <div className="proof-row-head">
+                  <div className="proof-row-title">
+                    <span className="contract-id">{item.contractId}</span>
+                    <span className="repo-badge">{item.repo}</span>
+                  </div>
+                  <span className={cx('status-pill', item.tone)}>{item.proofStatus}</span>
+                </div>
+                <div className="proof-summary">{item.summary}</div>
+                <dl className="key-grid proof-meta-grid">
+                  <div>
+                    <dt>Decision</dt>
+                    <dd>{item.decisionStatus}</dd>
+                  </div>
+                  <div>
+                    <dt>Human approval</dt>
+                    <dd>{item.humanApproval}</dd>
+                  </div>
+                  <div>
+                    <dt>Evidence</dt>
+                    <dd>{item.linkedEvidence}</dd>
+                  </div>
+                  <div>
+                    <dt>Coverage</dt>
+                    <dd>{item.criteriaCoverage}</dd>
+                  </div>
+                </dl>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ProofFeedInspector({ selectedProof }: { selectedProof: ProofFeedItem }) {
+  return (
+    <aside className="sidepanel">
+      <section className="panel-card">
+        <div className="panel-head">
+          <div className="t">Selected proof detail</div>
+          <div className="id">{selectedProof.contractId} · {selectedProof.repo}</div>
+        </div>
+        <ListBlock title="What changed" items={selectedProof.changed} />
+        <ListBlock title="What did not change" items={selectedProof.unchanged} />
+        <ListBlock title="How verified" items={selectedProof.verified} />
+        <ListBlock title="Decision trail" items={selectedProof.decisionTrail} />
+        <div className="panel-note proof-archive-line">
+          <b>Proof archive / hash</b>
+          <br />
+          {selectedProof.archiveLine}
+        </div>
+      </section>
+
+      <section className="panel-card compact-card">
+        <div className="panel-head">
+          <div className="t">Feed scope</div>
+          <div className="id">All repos by default</div>
+        </div>
+        <p className="panel-copy">
+          This feed is a workspace-level overview across contracts and repos. It is not tied to the current repo selector.
+        </p>
+      </section>
+    </aside>
+  );
+}
+
+function ProofFeedBottomPanel({ selectedProof }: { selectedProof: ProofFeedItem }) {
+  return (
+    <section className="bottompanel">
+      <section className="panel-card activity-card">
+        <div className="panel-head">
+          <div className="t">Proof feed activity</div>
+          <div className="id">Evidence and decisions only</div>
+        </div>
+        <div className="activity-list">
+          {selectedProof.decisionTrail.map((entry, index) => (
+            <div key={`${selectedProof.id}-${entry}`} className="activity-row">
+              <div className="activity-ts">10:{String(12 + index).padStart(2, '0')}:04</div>
+              <div className="activity-body">
+                <div className="activity-kind">{entry}</div>
+                <div className="activity-note">{selectedProof.contractId} · {selectedProof.repo}</div>
+              </div>
+              <div className={cx('status-pill', selectedProof.tone)}>{selectedProof.tone === 'block' ? 'block' : selectedProof.tone === 'pass' ? 'pass' : 'event'}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel-card control-card">
+        <div className="panel-head">
+          <div className="t">Feed controls</div>
+          <div className="id">Static filters</div>
+        </div>
+        <div className="control-copy">
+          Filter chips are mock-only. The default feed intentionally stays cross-contract and cross-repo to demonstrate workspace-level proof control.
+        </div>
+        <div className="control-meta">
+          <span>Selected proof: {selectedProof.contractId}</span>
+          <span>Default scope: All repos</span>
+        </div>
+      </section>
+    </section>
+  );
+}
+
 export default function App() {
+  const [activeSurface, setActiveSurface] = useState<ActiveSurface>('contracts');
   const [repoFilter, setRepoFilter] = useState<RepoFilter>('trialops-demo');
   const [selectedContractId, setSelectedContractId] = useState('C-0147');
+  const [selectedReadinessRepo, setSelectedReadinessRepo] = useState<RepoId>('trialops-demo');
+  const [selectedProofId, setSelectedProofId] = useState(PROOF_FEED[0].id);
   const [contractSteps, setContractSteps] = useState<Record<string, StepIndex>>(INITIAL_STEPS);
   const [approvalStates, setApprovalStates] = useState<Record<string, ApprovalState>>(INITIAL_APPROVALS);
   const [visibleClarifications, setVisibleClarifications] = useState(0);
@@ -903,6 +1416,28 @@ export default function App() {
   const projectContext = REPO_CONTEXTS[selectedContract.repo];
   const meters = getMeters(step, approval);
   const activity = useMemo(() => getActivity(selectedContract, step, approval), [selectedContract, step, approval]);
+  const selectedProof = useMemo(() => PROOF_FEED.find((item) => item.id === selectedProofId) ?? PROOF_FEED[0], [selectedProofId]);
+  const averageReadiness = Math.round(WORKSPACE_REPOS.reduce((sum, repo) => sum + REPO_CONTEXTS[repo].readiness, 0) / WORKSPACE_REPOS.length);
+  const acceptedProofs = PROOF_FEED.filter((item) => item.proofStatus === 'Accepted').length;
+  const blockedProofs = PROOF_FEED.filter((item) => item.proofStatus === 'Blocked').length;
+  const topbarMeters =
+    activeSurface === 'contracts'
+      ? [
+          { tone: 'amber' as Tone, label: 'Contract', value: meters.contract.label, percent: meters.contract.percent },
+          { tone: 'mauve' as Tone, label: 'Execution', value: meters.execution.label, percent: meters.execution.percent },
+          { tone: 'pass' as Tone, label: 'Proof', value: meters.proof.label, percent: meters.proof.percent },
+        ]
+      : activeSurface === 'readiness'
+        ? [
+            { tone: 'mauve' as Tone, label: 'Workspace', value: `${WORKSPACE_REPOS.length} repos`, percent: 100 },
+            { tone: 'amber' as Tone, label: 'Readiness', value: `${averageReadiness}/100 avg`, percent: averageReadiness },
+            { tone: 'pass' as Tone, label: 'Setup', value: 'Mock actions only', percent: 72 },
+          ]
+        : [
+            { tone: 'mauve' as Tone, label: 'Proof feed', value: 'All repos', percent: 100 },
+            { tone: 'amber' as Tone, label: 'Awaiting', value: '2 active', percent: 50 },
+            { tone: 'pass' as Tone, label: 'Decisions', value: `${acceptedProofs} accepted · ${blockedProofs} blocked`, percent: 70 },
+          ];
 
   useEffect(() => {
     if (step === 1) {
@@ -1020,105 +1555,137 @@ export default function App() {
           </div>
 
           <div className="meters">
-            <div className="meter amber">
-              <div className="row">
-                <div className="label">Contract</div>
-                <div className="val">{meters.contract.label}</div>
+            {topbarMeters.map((meter) => (
+              <div key={meter.label} className={cx('meter', meter.tone)}>
+                <div className="row">
+                  <div className="label">{meter.label}</div>
+                  <div className="val">{meter.value}</div>
+                </div>
+                <div className="bar">
+                  <i style={{ width: `${meter.percent}%` }} />
+                </div>
               </div>
-              <div className="bar">
-                <i style={{ width: `${meters.contract.percent}%` }} />
-              </div>
-            </div>
-
-            <div className="meter mauve">
-              <div className="row">
-                <div className="label">Execution</div>
-                <div className="val">{meters.execution.label}</div>
-              </div>
-              <div className="bar">
-                <i style={{ width: `${meters.execution.percent}%` }} />
-              </div>
-            </div>
-
-            <div className="meter pass">
-              <div className="row">
-                <div className="label">Proof</div>
-                <div className="val">{meters.proof.label}</div>
-              </div>
-              <div className="bar">
-                <i style={{ width: `${meters.proof.percent}%` }} />
-              </div>
-            </div>
+            ))}
           </div>
 
           <div className="topbar-state">
             <div className="state-chip">
-              <span className="k">Repo</span>
-              <span className="v">{selectedContract.repo}</span>
+              <span className="k">Surface</span>
+              <span className="v">
+                {activeSurface === 'contracts' ? 'Contracts' : activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed'}
+              </span>
             </div>
             <div className="state-chip">
-              <span className="k">Status</span>
-              <span className="v">{selectedStatus}</span>
+              <span className="k">{activeSurface === 'contracts' ? 'Status' : activeSurface === 'readiness' ? 'Repo' : 'Scope'}</span>
+              <span className="v">
+                {activeSurface === 'contracts' ? selectedStatus : activeSurface === 'readiness' ? selectedReadinessRepo : 'All repos'}
+              </span>
             </div>
           </div>
         </header>
 
         <aside className="rail">
-          <div className="group-label">Repo</div>
-          <div className="rail-section">
-            <label className="select-wrap">
-              <span className="select-label">Repo selector</span>
-              <select value={repoFilter} onChange={(event) => setRepoFilter(event.target.value as RepoFilter)}>
-                {REPO_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {repoFilter === 'all' ? (
-              <div className="rail-note">All repos is overview mode only. The center panel stays pinned to one selected contract.</div>
-            ) : (
-              <div className="rail-note">Default view stays repo-scoped. Contract detail always reflects the selected contract repo.</div>
-            )}
+          <div className="group-label">Workspace</div>
+          <div className="surface-switcher" aria-label="Workspace surfaces">
+            <button
+              className={cx('surface-switch', activeSurface === 'contracts' && 'active')}
+              type="button"
+              onClick={() => setActiveSurface('contracts')}
+            >
+              Contracts
+            </button>
+            <button
+              className={cx('surface-switch', activeSurface === 'readiness' && 'active')}
+              type="button"
+              onClick={() => setActiveSurface('readiness')}
+            >
+              Delivery Readiness
+            </button>
+            <button
+              className={cx('surface-switch', activeSurface === 'proof' && 'active')}
+              type="button"
+              onClick={() => setActiveSurface('proof')}
+            >
+              Proof Feed
+            </button>
           </div>
 
-          <div className="group-label">Contracts</div>
-          <div className="contract-list" aria-label="Contracts">
-            {filteredContracts.map((contract) => {
-              const contractStep = contractSteps[contract.id] ?? contract.defaultStep;
-              const contractApproval = approvalStates[contract.id] ?? 'pending';
-              const status = getStatus(contractStep, contractApproval);
+          {activeSurface === 'contracts' ? (
+            <>
+              <div className="group-label">Repo</div>
+              <div className="rail-section">
+                <label className="select-wrap">
+                  <span className="select-label">Repo selector</span>
+                  <select value={repoFilter} onChange={(event) => setRepoFilter(event.target.value as RepoFilter)}>
+                    {REPO_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="repo-hint-list">
+                  <span>trialops-demo · 3 contracts</span>
+                  <span>billing-api · 2 contracts</span>
+                  <span>All repos available</span>
+                </div>
+                {repoFilter === 'all' ? (
+                  <div className="rail-note">All repos is overview mode only. The center panel stays pinned to one selected contract.</div>
+                ) : (
+                  <div className="rail-note">Default view stays repo-scoped. Contract detail always reflects the selected contract repo.</div>
+                )}
+              </div>
 
-              return (
-                <button
-                  key={contract.id}
-                  className={cx('contract-row', contract.id === selectedContract.id && 'active')}
-                  type="button"
-                  onClick={() => setSelectedContractId(contract.id)}
-                >
-                  <div className="contract-row-top">
-                    <span className="contract-id">{contract.id}</span>
-                    <span className={cx('status-pill', getStatusTone(status))}>{status}</span>
-                  </div>
-                  <div className="contract-title">{contract.title}</div>
-                  <div className="contract-summary">{contract.summary}</div>
-                  <div className="contract-row-meta">
-                    <span className="repo-badge">{contract.repo}</span>
-                    <span className="contract-owner">{contract.owner}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+              <div className="group-label">Contracts</div>
+              <div className="contract-list" aria-label="Contracts">
+                {filteredContracts.map((contract) => {
+                  const contractStep = contractSteps[contract.id] ?? contract.defaultStep;
+                  const contractApproval = approvalStates[contract.id] ?? 'pending';
+                  const status = getStatus(contractStep, contractApproval);
+
+                  return (
+                    <button
+                      key={contract.id}
+                      className={cx('contract-row', contract.id === selectedContract.id && 'active')}
+                      type="button"
+                      onClick={() => setSelectedContractId(contract.id)}
+                    >
+                      <div className="contract-row-top">
+                        <span className="contract-id">{contract.id}</span>
+                        <span className={cx('status-pill', getStatusTone(status))}>{status}</span>
+                      </div>
+                      <div className="contract-title">{contract.title}</div>
+                      <div className="contract-summary">{contract.summary}</div>
+                      <div className="contract-row-meta">
+                        <span className="repo-badge">{contract.repo}</span>
+                        <span className="contract-owner">{contract.owner}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="rail-section surface-context">
+              <div className="select-label">Current surface</div>
+              <div className="surface-context-title">{activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed'}</div>
+              <div className="rail-note">
+                {activeSurface === 'readiness'
+                  ? 'Repo cards and selected repo detail live here as setup/readiness, not contract flow.'
+                  : 'All repos proof overview stays independent from the contract repo selector.'}
+              </div>
+            </div>
+          )}
 
           <div className="case">
             <div className="k">Mode</div>
-            <div className="v">Contract-first demo shell</div>
+            <div className="v">Workspace surfaces demo</div>
             <div className="sub">Local mocked state only · no backend · no routing</div>
           </div>
         </aside>
 
+        {activeSurface === 'contracts' ? (
+          <>
         <main className="canvas">
           <section className="spine">
             <div className="spine-head">
@@ -1340,6 +1907,20 @@ export default function App() {
             </div>
           </section>
         </section>
+          </>
+        ) : activeSurface === 'readiness' ? (
+          <>
+            <DeliveryReadinessSurface selectedRepo={selectedReadinessRepo} onSelectRepo={setSelectedReadinessRepo} />
+            <DeliveryReadinessInspector selectedRepo={selectedReadinessRepo} />
+            <DeliveryReadinessBottomPanel selectedRepo={selectedReadinessRepo} />
+          </>
+        ) : (
+          <>
+            <ProofFeedSurface selectedProofId={selectedProof.id} onSelectProof={setSelectedProofId} />
+            <ProofFeedInspector selectedProof={selectedProof} />
+            <ProofFeedBottomPanel selectedProof={selectedProof} />
+          </>
+        )}
       </div>
     </div>
   );

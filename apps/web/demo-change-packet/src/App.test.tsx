@@ -41,4 +41,20 @@ describe('App', () => {
     expect(screen.getByText(/Working contract · draft v3/i)).toBeInTheDocument();
     expect(screen.getByText(/Introduce a bounded/i)).toBeInTheDocument();
   });
+
+  it('switches between workspace-level readiness and proof surfaces', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+
+    expect(screen.getByText(/Repo-level setup and operating mode/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/frontend-console/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /^Add repository$/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Proof Feed$/i }));
+
+    expect(screen.getByText(/Cross-contract evidence and decisions/i)).toBeInTheDocument();
+    expect(screen.getByText(/C-0082/i)).toBeInTheDocument();
+    expect(screen.getByText(/Proof archive \/ hash/i)).toBeInTheDocument();
+  });
 });
