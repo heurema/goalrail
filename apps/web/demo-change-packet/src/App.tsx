@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import './App.css';
 
@@ -102,6 +102,39 @@ interface ProofFeedItem {
   verified: string[];
   decisionTrail: string[];
   archiveLine: string;
+}
+
+interface MobileContractQueueItem {
+  id: string;
+  title: string;
+  status: string;
+  tone: Tone;
+  stage: string;
+  stageProgress: string;
+  policy: string;
+  humanDecision: string;
+  repo: ContractRepoId;
+  detail: {
+    changePacket: string;
+    evidence: string;
+    projectContext: string;
+    decisionTrail: string;
+  };
+}
+
+interface MobileRepoQueueItem {
+  repo: RepoId;
+  readiness: string;
+  status: string;
+  tone: Tone;
+}
+
+interface MobileProofQueueItem {
+  id: string;
+  contractId: string;
+  status: string;
+  coverage: string;
+  tone: Tone;
 }
 
 const STAGES: Stage[] = [
@@ -637,6 +670,73 @@ const PROOF_FEED: ProofFeedItem[] = [
   },
 ];
 
+const MOBILE_CONTRACT_QUEUE: MobileContractQueueItem[] = [
+  {
+    id: 'C-0147',
+    title: 'Manual review gate',
+    status: 'Active',
+    tone: 'mauve',
+    stage: 'Goal intake',
+    stageProgress: '1/7',
+    policy: 'local-only',
+    humanDecision: 'pending',
+    repo: 'trialops-demo',
+    detail: {
+      changePacket: 'Manual review gate is scoped for a local mocked demo update.',
+      evidence: 'Acceptance criteria and touched-scope receipts are queued.',
+      projectContext: 'trialops-demo has rules present and proof surface available.',
+      decisionTrail: 'Goal intake opened. Human decision remains pending.',
+    },
+  },
+  {
+    id: 'C-0148',
+    title: 'CSV export filters',
+    status: 'Executing',
+    tone: 'amber',
+    stage: 'Execution evidence',
+    stageProgress: '5/7',
+    policy: 'local-only',
+    humanDecision: 'not ready',
+    repo: 'trialops-demo',
+    detail: {
+      changePacket: 'Filter chip copy is being inspected in the mock shell.',
+      evidence: 'Two receipts exist; manual copy review is still open.',
+      projectContext: 'trialops-demo remains the selected repo context.',
+      decisionTrail: 'Execution running. Evidence collection is incomplete.',
+    },
+  },
+  {
+    id: 'C-0151',
+    title: 'Pricing toggle cleanup',
+    status: 'Approval',
+    tone: 'amber',
+    stage: 'Approval',
+    stageProgress: '7/7',
+    policy: 'local-only',
+    humanDecision: 'pending',
+    repo: 'trialops-demo',
+    detail: {
+      changePacket: 'Pricing copy cleanup is ready for human review.',
+      evidence: 'Copy review note is attached to the proof packet.',
+      projectContext: 'No billing behavior or integration is included.',
+      decisionTrail: 'Proof is ready. Final approval is not one-tap on mobile.',
+    },
+  },
+];
+
+const MOBILE_REPO_QUEUE: MobileRepoQueueItem[] = [
+  { repo: 'trialops-demo', readiness: '72/100', status: 'Ready', tone: 'pass' },
+  { repo: 'billing-api', readiness: '58/100', status: 'Partial', tone: 'amber' },
+  { repo: 'frontend-console', readiness: '41/100', status: 'Setup', tone: 'block' },
+];
+
+const MOBILE_PROOF_QUEUE: MobileProofQueueItem[] = [
+  { id: 'PF-0147', contractId: 'C-0147', status: 'Awaiting approval', coverage: '5/5', tone: 'amber' },
+  { id: 'PF-0148', contractId: 'C-0148', status: 'Evidence collecting', coverage: '2/5', tone: 'mauve' },
+  { id: 'PF-0082', contractId: 'C-0082', status: 'Accepted', coverage: 'archived', tone: 'pass' },
+  { id: 'PF-0091', contractId: 'C-0091', status: 'Blocked', coverage: 'integrity failure', tone: 'block' },
+];
+
 const INITIAL_STEPS = Object.fromEntries(CONTRACTS.map((contract) => [contract.id, contract.defaultStep])) as Record<string, StepIndex>;
 const INITIAL_APPROVALS = Object.fromEntries(
   CONTRACTS.map((contract) => [contract.id, contract.defaultStep >= 7 ? 'pending' : 'pending']),
@@ -779,6 +879,346 @@ function ListBlock({ title, items }: { title: string; items: string[] }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+function useMobileCompanionBreakpoint() {
+  const getMatches = () => (typeof window === 'undefined' ? false : window.matchMedia('(max-width: 899px)').matches);
+  const [isMobileCompanion, setIsMobileCompanion] = useState(getMatches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 899px)');
+    const handleChange = () => setIsMobileCompanion(mediaQuery.matches);
+
+    handleChange();
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
+  return isMobileCompanion;
+}
+
+function MobileStat({ label, value, tone = 'mauve' }: { label: string; value: string; tone?: Tone }) {
+  return (
+    <div className={cx('mobile-stat', tone)}>
+      <span>{label}</span>
+      <b>{value}</b>
+    </div>
+  );
+}
+
+function MobileDetailSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="mobile-detail" open>
+      <summary>{title}</summary>
+      <p>{children}</p>
+    </details>
+  );
+}
+
+function MobileContractsSurface({
+  selectedContract,
+  onSelectContract,
+}: {
+  selectedContract: MobileContractQueueItem;
+  onSelectContract: (contractId: string) => void;
+}) {
+  return (
+    <div className="mobile-surface" aria-label="Mobile contracts surface">
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Context summary</div>
+        <div className="mobile-stat-grid">
+          <MobileStat label="selected repo" value="trialops-demo" />
+          <MobileStat label="active contracts" value="3 active contracts" tone="pass" />
+          <MobileStat label="selected contract" value={selectedContract.id} />
+          <MobileStat label="status" value={selectedContract.status} tone={selectedContract.tone} />
+        </div>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-head">
+          <div>
+            <div className="mobile-card-kicker">Active Contracts queue</div>
+            <h2>Tap to inspect</h2>
+          </div>
+          <span className="status-pill mauve">mock</span>
+        </div>
+        <div className="mobile-queue">
+          {MOBILE_CONTRACT_QUEUE.map((contract) => (
+            <button
+              key={contract.id}
+              className={cx('mobile-queue-row', selectedContract.id === contract.id && 'active')}
+              type="button"
+              onClick={() => onSelectContract(contract.id)}
+            >
+              <span>{contract.id} · {contract.title} · {contract.status}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Selected Contract summary</div>
+        <h2>{selectedContract.title}</h2>
+        <dl className="mobile-facts">
+          <div>
+            <dt>repo</dt>
+            <dd>{selectedContract.repo}</dd>
+          </div>
+          <div>
+            <dt>current stage</dt>
+            <dd>{selectedContract.stage}</dd>
+          </div>
+          <div>
+            <dt>policy</dt>
+            <dd>{selectedContract.policy}</dd>
+          </div>
+          <div>
+            <dt>human decision</dt>
+            <dd>{selectedContract.humanDecision}</dd>
+          </div>
+        </dl>
+        <div className="mobile-stage-line">Stage: {selectedContract.stage} · {selectedContract.stageProgress}</div>
+      </section>
+
+      <section className="mobile-card mobile-detail-stack">
+        <MobileDetailSection title="Change packet">{selectedContract.detail.changePacket}</MobileDetailSection>
+        <MobileDetailSection title="Evidence">{selectedContract.detail.evidence}</MobileDetailSection>
+        <MobileDetailSection title="Project context">{selectedContract.detail.projectContext}</MobileDetailSection>
+        <MobileDetailSection title="Decision trail">{selectedContract.detail.decisionTrail}</MobileDetailSection>
+      </section>
+    </div>
+  );
+}
+
+function MobileReadinessSurface({ selectedRepo, onSelectRepo }: { selectedRepo: RepoId; onSelectRepo: (repo: RepoId) => void }) {
+  const context = REPO_CONTEXTS[selectedRepo];
+
+  return (
+    <div className="mobile-surface" aria-label="Mobile readiness surface">
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Readiness summary</div>
+        <div className="mobile-stat-grid">
+          <MobileStat label="repositories" value="3 repos" />
+          <MobileStat label="average" value="57/100 avg" tone="amber" />
+          <MobileStat label="setup" value="1 setup required" tone="block" />
+        </div>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-head">
+          <div>
+            <div className="mobile-card-kicker">Repository queue</div>
+            <h2>Repo readiness</h2>
+          </div>
+          <span className="status-pill mauve">review</span>
+        </div>
+        <div className="mobile-queue">
+          {MOBILE_REPO_QUEUE.map((repo) => (
+            <button
+              key={repo.repo}
+              className={cx('mobile-queue-row', selectedRepo === repo.repo && 'active')}
+              type="button"
+              onClick={() => onSelectRepo(repo.repo)}
+            >
+              <span>{repo.repo} · {repo.readiness} · {repo.status}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Selected repo detail</div>
+        <h2>{context.repo}</h2>
+        <dl className="mobile-facts">
+          <div>
+            <dt>readiness</dt>
+            <dd>{context.readiness}/100</dd>
+          </div>
+          <div>
+            <dt>init</dt>
+            <dd>{context.init}</dd>
+          </div>
+          <div>
+            <dt>docs indexed</dt>
+            <dd>{context.docsIndexed}</dd>
+          </div>
+          <div>
+            <dt>tests</dt>
+            <dd>{getCompactReadinessSignal(context.testsStatus)}</dd>
+          </div>
+          <div>
+            <dt>CI</dt>
+            <dd>{context.ciStatus}</dd>
+          </div>
+          <div>
+            <dt>AGENTS/rules</dt>
+            <dd>{context.ownersRulesStatus.replace('AGENTS/rules ', '')}</dd>
+          </div>
+          <div>
+            <dt>proof surface</dt>
+            <dd>{context.proofSurfaceStatus}</dd>
+          </div>
+          <div>
+            <dt>recommended mode</dt>
+            <dd>{context.recommendedMode}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Actions</div>
+        <div className="mobile-action-row">
+          <button className="primary-button mobile-safe-button" type="button">
+            Analyze
+          </button>
+          <button className="ghost-button mobile-safe-button" type="button">
+            Scan context
+          </button>
+          <button className="ghost-button mobile-safe-button secondary" type="button">
+            Add repository
+          </button>
+        </div>
+        <p className="mobile-action-note">Desktop setup recommended. Mock-only buttons do not connect or mutate repos.</p>
+      </section>
+    </div>
+  );
+}
+
+function MobileProofSurface({
+  selectedProof,
+  onSelectProof,
+}: {
+  selectedProof: ProofFeedItem;
+  onSelectProof: (proofId: string) => void;
+}) {
+  const proofDecisionReady = selectedProof.contractId === 'C-0147' && selectedProof.criteriaCoverage.startsWith('5/5');
+  const archivedProof = selectedProof.proofStatus === 'Accepted';
+  const decisionRestriction = archivedProof ? 'Read-only archived proof' : 'Criteria coverage incomplete';
+
+  return (
+    <div className="mobile-surface" aria-label="Mobile proof surface">
+      <section className="mobile-card">
+        <div className="mobile-card-head">
+          <div>
+            <div className="mobile-card-kicker">Proof queue</div>
+            <h2>Decision review</h2>
+          </div>
+          <span className="status-pill amber">safe review</span>
+        </div>
+        <div className="mobile-queue">
+          {MOBILE_PROOF_QUEUE.map((proof) => (
+            <button
+              key={proof.id}
+              className={cx('mobile-queue-row', selectedProof.id === proof.id && 'active')}
+              type="button"
+              onClick={() => onSelectProof(proof.id)}
+            >
+              <span>{proof.contractId} · {proof.status} · {proof.coverage}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="mobile-card">
+        <div className="mobile-card-kicker">Selected proof summary</div>
+        <h2>{selectedProof.contractId}</h2>
+        <dl className="mobile-facts">
+          <div>
+            <dt>contract id</dt>
+            <dd>{selectedProof.contractId}</dd>
+          </div>
+          <div>
+            <dt>repo</dt>
+            <dd>{selectedProof.repo}</dd>
+          </div>
+          <div>
+            <dt>proof status</dt>
+            <dd>{selectedProof.proofStatus}</dd>
+          </div>
+          <div>
+            <dt>criteria coverage</dt>
+            <dd>{selectedProof.criteriaCoverage}</dd>
+          </div>
+          <div>
+            <dt>human approval</dt>
+            <dd>{selectedProof.contractId === 'C-0147' ? 'Pending' : selectedProof.humanApproval}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="mobile-card mobile-detail-stack">
+        <MobileDetailSection title="What changed">{selectedProof.changed[0]}</MobileDetailSection>
+        <MobileDetailSection title="How verified">{selectedProof.verified[0]}</MobileDetailSection>
+        <MobileDetailSection title="Evidence receipts">{selectedProof.linkedEvidence}</MobileDetailSection>
+        <MobileDetailSection title="Decision trail">{selectedProof.decisionTrail.slice(0, 3).join(' · ')}</MobileDetailSection>
+        <MobileDetailSection title="Proof archive / hash">{selectedProof.archiveLine}</MobileDetailSection>
+      </section>
+
+      <section className="mobile-card mobile-decision-card">
+        <div className="mobile-card-kicker">Decision action</div>
+        {proofDecisionReady ? (
+          <>
+            <button className="primary-button mobile-safe-button" type="button">
+              Review decision
+            </button>
+            <p className="mobile-action-note">Safe review only. Final approval is not available as a one-tap mobile action.</p>
+          </>
+        ) : (
+          <>
+            <span className="status-pill amber">Decision unavailable</span>
+            <p className="mobile-action-note">{decisionRestriction}</p>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function MobileCompanionPreview() {
+  const [mobileSurface, setMobileSurface] = useState<ActiveSurface>('proof');
+  const [selectedMobileContractId, setSelectedMobileContractId] = useState('C-0147');
+  const [selectedMobileRepo, setSelectedMobileRepo] = useState<RepoId>('trialops-demo');
+  const [selectedMobileProofId, setSelectedMobileProofId] = useState('PF-0147');
+
+  const selectedMobileContract = MOBILE_CONTRACT_QUEUE.find((contract) => contract.id === selectedMobileContractId) ?? MOBILE_CONTRACT_QUEUE[0];
+  const selectedMobileProof = PROOF_FEED.find((proof) => proof.id === selectedMobileProofId) ?? PROOF_FEED[0];
+
+  return (
+    <main className="mobile-companion">
+      <section className="mobile-hero">
+        <div className="mobile-brand">Goalrail</div>
+        <h1>Goalrail Mobile Companion</h1>
+        <p>Focused review mode for contracts, readiness, and proof decisions.</p>
+        <span>Open on desktop for the full operator console.</span>
+      </section>
+
+      <nav className="mobile-segmented" aria-label="Mobile companion surfaces">
+        <button className={cx(mobileSurface === 'contracts' && 'active')} type="button" onClick={() => setMobileSurface('contracts')}>
+          Contracts
+        </button>
+        <button className={cx(mobileSurface === 'readiness' && 'active')} type="button" onClick={() => setMobileSurface('readiness')}>
+          Readiness
+        </button>
+        <button className={cx(mobileSurface === 'proof' && 'active')} type="button" onClick={() => setMobileSurface('proof')}>
+          Proof
+        </button>
+      </nav>
+
+      {mobileSurface === 'contracts' ? (
+        <MobileContractsSurface selectedContract={selectedMobileContract} onSelectContract={setSelectedMobileContractId} />
+      ) : mobileSurface === 'readiness' ? (
+        <MobileReadinessSurface selectedRepo={selectedMobileRepo} onSelectRepo={setSelectedMobileRepo} />
+      ) : (
+        <MobileProofSurface selectedProof={selectedMobileProof} onSelectProof={setSelectedMobileProofId} />
+      )}
+    </main>
   );
 }
 
@@ -1407,7 +1847,7 @@ function ProofFeedBottomPanel({ selectedProof }: { selectedProof: ProofFeedItem 
   );
 }
 
-export default function App() {
+function DesktopConsole() {
   const [activeSurface, setActiveSurface] = useState<ActiveSurface>('contracts');
   const [repoFilter, setRepoFilter] = useState<RepoFilter>('trialops-demo');
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
@@ -2061,4 +2501,10 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+export default function App() {
+  const isMobileCompanion = useMobileCompanionBreakpoint();
+
+  return isMobileCompanion ? <MobileCompanionPreview /> : <DesktopConsole />;
 }

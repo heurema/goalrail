@@ -4,9 +4,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { render } from '../test-utils';
 
+function mockMatchMedia(matches: boolean) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    mockMatchMedia(false);
   });
 
   afterEach(() => {
@@ -71,5 +88,29 @@ describe('App', () => {
     expect(screen.getByText(/Cross-contract evidence and decisions/i)).toBeInTheDocument();
     expect(screen.getAllByText(/C-0082/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Proof archive \/ hash/i)).toBeInTheDocument();
+  });
+
+  it('shows the mobile companion instead of the desktop console below the breakpoint', () => {
+    mockMatchMedia(true);
+
+    render(<App />);
+
+    expect(screen.getByText(/Goalrail Mobile Companion/i)).toBeInTheDocument();
+    expect(screen.getByText(/Focused review mode for contracts, readiness, and proof decisions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Ambiguity inspector/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Change spine · cp-0147/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Proof$/i })).toHaveClass('active');
+    expect(screen.getByText(/C-0147 · Awaiting approval · 5\/5/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Review decision/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Contracts$/i }));
+    expect(screen.getByText(/Goal intake · 1\/7/i)).toBeInTheDocument();
+    expect(screen.getByText(/C-0148 · CSV export filters · Executing/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Readiness$/i }));
+    expect(screen.getByText(/3 repos/i)).toBeInTheDocument();
+    expect(screen.getByText(/57\/100 avg/i)).toBeInTheDocument();
+    expect(screen.getByText(/trialops-demo · 72\/100 · Ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/Desktop setup recommended/i)).toBeInTheDocument();
   });
 });
