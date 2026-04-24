@@ -45,16 +45,31 @@ describe('App', () => {
   it('switches between workspace-level readiness and proof surfaces', () => {
     render(<App />);
 
+    expect(screen.getByText(/Active contracts/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Search contracts/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^trialops-demo$/i }));
+    expect(screen.getByRole('listbox', { name: /Repo selector/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /All repos/i })).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
 
+    expect(screen.queryByText(/Active contracts/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Search contracts/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Repositories/i).length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText(/Search repos/i)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /Repo readiness shelf/i })).toBeInTheDocument();
     expect(screen.getByText(/Repo-level setup and operating mode/i)).toBeInTheDocument();
     expect(screen.getAllByText(/frontend-console/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /^Add repository$/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Proof Feed$/i }));
 
+    expect(screen.queryByText(/Active contracts/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Proof queue/i).length).toBeGreaterThan(0);
+    expect(screen.getByPlaceholderText(/Search proofs/i)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /Proof queue shelf/i })).toBeInTheDocument();
     expect(screen.getByText(/Cross-contract evidence and decisions/i)).toBeInTheDocument();
-    expect(screen.getByText(/C-0082/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/C-0082/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Proof archive \/ hash/i)).toBeInTheDocument();
   });
 });

@@ -673,6 +673,32 @@ function getReadinessTone(score: number): Tone {
   return 'block';
 }
 
+function getCompactOwner(owner: string) {
+  return owner.split('·')[0]?.trim() ?? owner;
+}
+
+function getShelfStatus(status: string) {
+  if (status === 'Awaiting approval') return 'Approval';
+  if (status === 'Needs rework') return 'Rework';
+  if (status === 'Proof ready') return 'Proof';
+  return status;
+}
+
+function getCompactReadinessSignal(value: string) {
+  return value
+    .replace(/^docs\/context scan /, '')
+    .replace(/^context scan /, '')
+    .replace(/ not started$/, ' not started');
+}
+
+function matchesQuery(values: string[], query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) return true;
+
+  return values.some((value) => value.toLowerCase().includes(normalizedQuery));
+}
+
 function getMeters(step: StepIndex, approval: ApprovalState) {
   const contractPercent = [18, 42, 68, 76, 84, 90, 96, approval === 'accepted' ? 100 : 96][step];
   const executionPercent = [0, 0, 16, 42, 76, 82, 86, 86][step];
@@ -1152,7 +1178,7 @@ function DeliveryReadinessInspector({ selectedRepo }: { selectedRepo: RepoId }) 
           <div className="detail-kicker">Readiness signals</div>
           <div className="check-row">
             <span>Docs/context scan</span>
-            <span className="check-value mauve">{context.scanStatus}</span>
+            <span className="check-value mauve">{getCompactReadinessSignal(context.scanStatus)}</span>
           </div>
           {context.checklist.map((item) => (
             <div key={`${context.repo}-${item.label}`} className="check-row">
@@ -1257,16 +1283,13 @@ function ProofFeedSurface({ selectedProofId, onSelectProof }: { selectedProofId:
           <div className="surface-intro">
             <div className="section-tagline">Proof Feed · cross-contract, cross-repo overview</div>
             <p className="detail-copy">
-              Default scope is all repos. Filters are static mock chips so the surface reads as workspace-level proof control.
+              Default scope is all repos. Repo scope chips are static mock controls so the surface reads as workspace-level proof control.
             </p>
             <div className="chip-row filter-row">
               <span className="tag pass">All repos</span>
               <span className="tag">trialops-demo</span>
               <span className="tag">billing-api</span>
               <span className="tag">frontend-console</span>
-              <span className="tag amber">Awaiting approval</span>
-              <span className="tag pass">Accepted</span>
-              <span className="tag block">Blocked</span>
             </div>
           </div>
 
@@ -1316,15 +1339,15 @@ function ProofFeedSurface({ selectedProofId, onSelectProof }: { selectedProofId:
 function ProofFeedInspector({ selectedProof }: { selectedProof: ProofFeedItem }) {
   return (
     <aside className="sidepanel">
-      <section className="panel-card">
+      <section className="panel-card proof-detail-card">
         <div className="panel-head">
           <div className="t">Selected proof detail</div>
           <div className="id">{selectedProof.contractId} · {selectedProof.repo}</div>
         </div>
-        <ListBlock title="What changed" items={selectedProof.changed} />
-        <ListBlock title="What did not change" items={selectedProof.unchanged} />
-        <ListBlock title="How verified" items={selectedProof.verified} />
-        <ListBlock title="Decision trail" items={selectedProof.decisionTrail} />
+        <ListBlock title="What changed" items={selectedProof.changed.slice(0, 2)} />
+        <ListBlock title="What did not change" items={selectedProof.unchanged.slice(0, 2)} />
+        <ListBlock title="How verified" items={selectedProof.verified.slice(0, 2)} />
+        <ListBlock title="Decision trail" items={selectedProof.decisionTrail.slice(0, 2)} />
         <div className="panel-note proof-archive-line">
           <b>Proof archive / hash</b>
           <br />
@@ -1370,10 +1393,10 @@ function ProofFeedBottomPanel({ selectedProof }: { selectedProof: ProofFeedItem 
       <section className="panel-card control-card">
         <div className="panel-head">
           <div className="t">Feed controls</div>
-          <div className="id">Static filters</div>
+          <div className="id">Static scope</div>
         </div>
         <div className="control-copy">
-          Filter chips are mock-only. The default feed intentionally stays cross-contract and cross-repo to demonstrate workspace-level proof control.
+          Repo scope chips are mock-only. Status triage lives in the left Proof Queue so the feed stays cross-contract and cross-repo.
         </div>
         <div className="control-meta">
           <span>Selected proof: {selectedProof.contractId}</span>
@@ -1387,6 +1410,10 @@ function ProofFeedBottomPanel({ selectedProof }: { selectedProof: ProofFeedItem 
 export default function App() {
   const [activeSurface, setActiveSurface] = useState<ActiveSurface>('contracts');
   const [repoFilter, setRepoFilter] = useState<RepoFilter>('trialops-demo');
+  const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
+  const [contractSearch, setContractSearch] = useState('');
+  const [repoSearch, setRepoSearch] = useState('');
+  const [proofSearch, setProofSearch] = useState('');
   const [selectedContractId, setSelectedContractId] = useState('C-0147');
   const [selectedReadinessRepo, setSelectedReadinessRepo] = useState<RepoId>('trialops-demo');
   const [selectedProofId, setSelectedProofId] = useState(PROOF_FEED[0].id);
@@ -1396,15 +1423,34 @@ export default function App() {
   const [visibleEvidence, setVisibleEvidence] = useState(0);
   const [visibleVerification, setVisibleVerification] = useState(0);
 
-  const filteredContracts = useMemo(() => {
+  const repoScopedContracts = useMemo(() => {
     return repoFilter === 'all' ? CONTRACTS : CONTRACTS.filter((contract) => contract.repo === repoFilter);
   }, [repoFilter]);
 
+  const visibleContracts = useMemo(() => {
+    return repoScopedContracts.filter((contract) =>
+      matchesQuery([contract.id, contract.title, contract.repo, contract.owner, contract.summary, getStatus(contractSteps[contract.id] ?? contract.defaultStep, approvalStates[contract.id] ?? 'pending')], contractSearch),
+    );
+  }, [approvalStates, contractSearch, contractSteps, repoScopedContracts]);
+
+  const visibleRepos = useMemo(() => {
+    return WORKSPACE_REPOS.filter((repo) => {
+      const context = REPO_CONTEXTS[repo];
+      return matchesQuery([context.repo, context.init, context.scanStatus, context.testsStatus, context.ciStatus, context.ownersRulesStatus, context.recommendedMode], repoSearch);
+    });
+  }, [repoSearch]);
+
+  const visibleProofs = useMemo(() => {
+    return PROOF_FEED.filter((item) =>
+      matchesQuery([item.contractId, item.repo, item.proofStatus, item.decisionStatus, item.humanApproval, item.criteriaCoverage, item.summary], proofSearch),
+    );
+  }, [proofSearch]);
+
   useEffect(() => {
-    if (!filteredContracts.some((contract) => contract.id === selectedContractId)) {
-      setSelectedContractId(filteredContracts[0]?.id ?? CONTRACTS[0].id);
+    if (!repoScopedContracts.some((contract) => contract.id === selectedContractId)) {
+      setSelectedContractId(repoScopedContracts[0]?.id ?? CONTRACTS[0].id);
     }
-  }, [filteredContracts, selectedContractId]);
+  }, [repoScopedContracts, selectedContractId]);
 
   const selectedContract = useMemo(() => {
     return CONTRACTS.find((contract) => contract.id === selectedContractId) ?? CONTRACTS[0];
@@ -1522,6 +1568,13 @@ export default function App() {
     setStepForSelected(7);
   };
 
+  const selectedRepoOption = REPO_OPTIONS.find((option) => option.value === repoFilter) ?? REPO_OPTIONS[0];
+
+  const handleRepoFilterSelect = (nextRepoFilter: RepoFilter) => {
+    setRepoFilter(nextRepoFilter);
+    setRepoSelectorOpen(false);
+  };
+
   const primaryActionLabel =
     step === 0
       ? 'Begin'
@@ -1540,6 +1593,10 @@ export default function App() {
                   : approval === 'accepted'
                     ? 'Replay state'
                     : null;
+
+  const activeSurfaceLabel = activeSurface === 'contracts' ? 'Contracts' : activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed';
+  const topbarStateLabel = activeSurface === 'contracts' ? 'Status' : activeSurface === 'readiness' ? 'Repo' : 'Scope';
+  const topbarStateValue = activeSurface === 'contracts' ? selectedStatus : activeSurface === 'readiness' ? selectedReadinessRepo : 'All repos';
 
   return (
     <div className="app-shell" data-step={step}>
@@ -1571,111 +1628,207 @@ export default function App() {
           <div className="topbar-state">
             <div className="state-chip">
               <span className="k">Surface</span>
-              <span className="v">
-                {activeSurface === 'contracts' ? 'Contracts' : activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed'}
+              <span className="v" title={activeSurfaceLabel}>
+                {activeSurfaceLabel}
               </span>
             </div>
             <div className="state-chip">
-              <span className="k">{activeSurface === 'contracts' ? 'Status' : activeSurface === 'readiness' ? 'Repo' : 'Scope'}</span>
-              <span className="v">
-                {activeSurface === 'contracts' ? selectedStatus : activeSurface === 'readiness' ? selectedReadinessRepo : 'All repos'}
+              <span className="k">{topbarStateLabel}</span>
+              <span className="v" title={topbarStateValue}>
+                {topbarStateValue}
               </span>
             </div>
           </div>
         </header>
 
         <aside className="rail">
-          <div className="group-label">Workspace</div>
-          <div className="surface-switcher" aria-label="Workspace surfaces">
-            <button
-              className={cx('surface-switch', activeSurface === 'contracts' && 'active')}
-              type="button"
-              onClick={() => setActiveSurface('contracts')}
-            >
-              Contracts
-            </button>
-            <button
-              className={cx('surface-switch', activeSurface === 'readiness' && 'active')}
-              type="button"
-              onClick={() => setActiveSurface('readiness')}
-            >
-              Delivery Readiness
-            </button>
-            <button
-              className={cx('surface-switch', activeSurface === 'proof' && 'active')}
-              type="button"
-              onClick={() => setActiveSurface('proof')}
-            >
-              Proof Feed
-            </button>
-          </div>
-
-          {activeSurface === 'contracts' ? (
-            <>
-              <div className="group-label">Repo</div>
-              <div className="rail-section">
-                <label className="select-wrap">
-                  <span className="select-label">Repo selector</span>
-                  <select value={repoFilter} onChange={(event) => setRepoFilter(event.target.value as RepoFilter)}>
-                    {REPO_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="repo-hint-list">
-                  <span>trialops-demo · 3 contracts</span>
-                  <span>billing-api · 2 contracts</span>
-                  <span>All repos available</span>
-                </div>
-                {repoFilter === 'all' ? (
-                  <div className="rail-note">All repos is overview mode only. The center panel stays pinned to one selected contract.</div>
-                ) : (
-                  <div className="rail-note">Default view stays repo-scoped. Contract detail always reflects the selected contract repo.</div>
-                )}
-              </div>
-
-              <div className="group-label">Contracts</div>
-              <div className="contract-list" aria-label="Contracts">
-                {filteredContracts.map((contract) => {
-                  const contractStep = contractSteps[contract.id] ?? contract.defaultStep;
-                  const contractApproval = approvalStates[contract.id] ?? 'pending';
-                  const status = getStatus(contractStep, contractApproval);
-
-                  return (
-                    <button
-                      key={contract.id}
-                      className={cx('contract-row', contract.id === selectedContract.id && 'active')}
-                      type="button"
-                      onClick={() => setSelectedContractId(contract.id)}
-                    >
-                      <div className="contract-row-top">
-                        <span className="contract-id">{contract.id}</span>
-                        <span className={cx('status-pill', getStatusTone(status))}>{status}</span>
-                      </div>
-                      <div className="contract-title">{contract.title}</div>
-                      <div className="contract-summary">{contract.summary}</div>
-                      <div className="contract-row-meta">
-                        <span className="repo-badge">{contract.repo}</span>
-                        <span className="contract-owner">{contract.owner}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="rail-section surface-context">
-              <div className="select-label">Current surface</div>
-              <div className="surface-context-title">{activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed'}</div>
-              <div className="rail-note">
-                {activeSurface === 'readiness'
-                  ? 'Repo cards and selected repo detail live here as setup/readiness, not contract flow.'
-                  : 'All repos proof overview stays independent from the contract repo selector.'}
-              </div>
+          <div className="rail-main">
+            <div className="group-label">Workspace</div>
+            <div className="surface-switcher" aria-label="Workspace surfaces">
+              <button
+                className={cx('surface-switch', activeSurface === 'contracts' && 'active')}
+                type="button"
+                onClick={() => setActiveSurface('contracts')}
+              >
+                Contracts
+              </button>
+              <button
+                className={cx('surface-switch', activeSurface === 'readiness' && 'active')}
+                type="button"
+                onClick={() => setActiveSurface('readiness')}
+              >
+                Delivery Readiness
+              </button>
+              <button
+                className={cx('surface-switch', activeSurface === 'proof' && 'active')}
+                type="button"
+                onClick={() => setActiveSurface('proof')}
+              >
+                Proof Feed
+              </button>
             </div>
-          )}
+
+            <div className="group-label">Surface context</div>
+            <div className="rail-section surface-context">
+              <div className="surface-context-title">
+                {activeSurface === 'contracts' ? 'Contracts' : activeSurface === 'readiness' ? 'Delivery Readiness' : 'Proof Feed'}
+              </div>
+              <div className="rail-note">
+                {activeSurface === 'contracts'
+                  ? repoFilter === 'all'
+                    ? 'All-repo active work'
+                    : 'Repo-scoped active work'
+                  : activeSurface === 'readiness'
+                    ? 'Repo-level setup'
+                    : 'Cross-repo evidence'}
+              </div>
+
+              {activeSurface === 'contracts' ? (
+                <div className="surface-control">
+                  <div className="select-wrap">
+                    <span className="select-label">Repo selector</span>
+                    <div className="repo-select">
+                      <button
+                        className={cx('repo-select-trigger', repoSelectorOpen && 'open')}
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded={repoSelectorOpen}
+                        onClick={() => setRepoSelectorOpen((open) => !open)}
+                      >
+                        <span>{selectedRepoOption.label}</span>
+                        <i aria-hidden="true" />
+                      </button>
+                      {repoSelectorOpen ? (
+                        <div className="repo-select-menu" role="listbox" aria-label="Repo selector">
+                          {REPO_OPTIONS.map((option) => (
+                            <button
+                              key={option.value}
+                              className={cx('repo-select-option', option.value === repoFilter && 'active')}
+                              type="button"
+                              role="option"
+                              aria-selected={option.value === repoFilter}
+                              onClick={() => handleRepoFilterSelect(option.value)}
+                            >
+                              <span>{option.label}</span>
+                              <b>{option.value === 'all' ? 'all' : CONTRACTS.filter((contract) => contract.repo === option.value).length}</b>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="repo-hint-list">
+                    <span>trialops-demo · 3 contracts</span>
+                    <span>billing-api · 2 contracts</span>
+                    <span>All repos available</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {activeSurface === 'contracts' ? (
+              <>
+                <div className="group-label">Active contracts</div>
+                <div className="shelf-tools" aria-label="Contract shelf tools">
+                  <input aria-label="Search contracts" placeholder="Search contracts" value={contractSearch} onChange={(event) => setContractSearch(event.target.value)} />
+                  <div className="filter-chip-row" aria-label="Contract filters">
+                    <span>Active</span>
+                    <span>Executing</span>
+                    <span>Approval</span>
+                  </div>
+                </div>
+                <div className="contract-list" aria-label="Active contracts">
+                  {visibleContracts.map((contract) => {
+                    const contractStep = contractSteps[contract.id] ?? contract.defaultStep;
+                    const contractApproval = approvalStates[contract.id] ?? 'pending';
+                    const status = getStatus(contractStep, contractApproval);
+                    const isSelected = contract.id === selectedContract.id;
+
+                    return (
+                      <button
+                        key={contract.id}
+                        className={cx('contract-row', isSelected && 'active', !isSelected && 'compact')}
+                        type="button"
+                        onClick={() => setSelectedContractId(contract.id)}
+                      >
+                        <div className="contract-row-top">
+                          <span className="contract-id">{contract.id}</span>
+                          <span className={cx('status-pill', getStatusTone(status))}>{getShelfStatus(status)}</span>
+                        </div>
+                        <div className="contract-title">{contract.title}</div>
+                        {isSelected ? <div className="contract-summary">{contract.summary}</div> : null}
+                        <div className="contract-row-meta">
+                          {isSelected ? (
+                            <>
+                              <span className="repo-badge">{contract.repo}</span>
+                              <span className="contract-owner">{contract.owner}</span>
+                            </>
+                          ) : (
+                            <span className="contract-compact-meta">
+                              {contract.repo} · {getCompactOwner(contract.owner)}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {visibleContracts.length === 0 ? <div className="rail-empty">No contracts match</div> : null}
+                </div>
+              </>
+            ) : activeSurface === 'readiness' ? (
+              <>
+                <div className="group-label">Repositories</div>
+                <div className="shelf-tools" aria-label="Repository shelf tools">
+                  <input aria-label="Search repos" placeholder="Search repos" value={repoSearch} onChange={(event) => setRepoSearch(event.target.value)} />
+                  <div className="filter-chip-row" aria-label="Repository filters">
+                    <span>Ready</span>
+                    <span>Partial</span>
+                    <span>Setup</span>
+                  </div>
+                </div>
+                <div className="surface-mini-list" role="group" aria-label="Repo readiness shelf">
+                  {visibleRepos.map((repo) => (
+                    <button
+                      key={repo}
+                      className={cx('surface-mini-row', selectedReadinessRepo === repo && 'active')}
+                      type="button"
+                      onClick={() => setSelectedReadinessRepo(repo)}
+                    >
+                      <span>{repo}</span>
+                      <b>{REPO_CONTEXTS[repo].readiness}/100</b>
+                    </button>
+                  ))}
+                  {visibleRepos.length === 0 ? <div className="rail-empty">No repos match</div> : null}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="group-label">Proof queue</div>
+                <div className="shelf-tools" aria-label="Proof shelf tools">
+                  <input aria-label="Search proofs" placeholder="Search proofs" value={proofSearch} onChange={(event) => setProofSearch(event.target.value)} />
+                  <div className="filter-chip-row" aria-label="Proof filters">
+                    <span>Awaiting</span>
+                    <span>Accepted</span>
+                    <span>Blocked</span>
+                  </div>
+                </div>
+                <div className="surface-mini-list" role="group" aria-label="Proof queue shelf">
+                  {visibleProofs.map((item) => (
+                    <button
+                      key={item.id}
+                      className={cx('surface-mini-row', selectedProof.id === item.id && 'active')}
+                      type="button"
+                      onClick={() => setSelectedProofId(item.id)}
+                    >
+                      <span>{item.contractId}</span>
+                      <b>{item.proofStatus}</b>
+                    </button>
+                  ))}
+                  {visibleProofs.length === 0 ? <div className="rail-empty">No proofs match</div> : null}
+                </div>
+              </>
+            )}
+          </div>
 
           <div className="case">
             <div className="k">Mode</div>
@@ -1813,52 +1966,36 @@ export default function App() {
                 </span>
               ))}
             </div>
+
+            <div className="selection-strip">
+              <span>{selectedContract.id}</span>
+              <span>{STAGES[step].name}</span>
+              <span>{selectedStatus}</span>
+            </div>
           </section>
 
-          <section className="panel-card">
+          <section className="panel-card inspector-card">
             <div className="panel-head">
               <div className="t">Ambiguity inspector</div>
-              <div className="id">Resolved into contract inputs</div>
+              <div className="id">Top inputs · {selectedContract.clarifications.length} total</div>
             </div>
             <div className="inspector-list">
-              {selectedContract.clarifications.map((card, index) => {
+              {selectedContract.clarifications.slice(0, 3).map((card, index) => {
                 const resolved = step > 1 || index < visibleClarifications;
                 return (
                   <div key={`${selectedContract.id}-inspector-${card.ref}`} className="inspector-row">
                     <div>
                       <div className="inspector-term">{card.ref}</div>
-                      <div className="inspector-note">{card.note}</div>
+                      <div className="inspector-note">{card.answer}</div>
                     </div>
                     <div className={cx('status-pill', resolved ? 'pass' : 'amber')}>{resolved ? 'Resolved' : 'Open'}</div>
                   </div>
                 );
               })}
             </div>
-          </section>
-
-          <section className="panel-card compact-card">
-            <div className="panel-head">
-              <div className="t">Selection</div>
-              <div className="id">Current detail</div>
-            </div>
-            <dl className="key-grid compact-grid">
-              <div>
-                <dt>Contract</dt>
-                <dd>{selectedContract.id}</dd>
-              </div>
-              <div>
-                <dt>Repo</dt>
-                <dd>{selectedContract.repo}</dd>
-              </div>
-              <div>
-                <dt>Stage</dt>
-                <dd>{STAGES[step].name}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>{selectedStatus}</dd>
-              </div>
-            </dl>
+            {selectedContract.clarifications.length > 3 ? (
+              <div className="inspector-foot">{selectedContract.clarifications.length - 3} more inputs remain in the contract detail.</div>
+            ) : null}
           </section>
         </aside>
 
