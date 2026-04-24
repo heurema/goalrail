@@ -157,7 +157,7 @@ Decision:
 - `.goalrail/knowledge/` tracks Goalrail advisory research and ideas
 - `.punk/publishing/` tracks public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
 - `.punk/publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
-- `.goalrail/flows/` and `evals/` are reserved as planned spec boundaries for future runtime and verification work
+- `.goalrail/flows/` and `.goalrail/evals/` are reserved as planned spec boundaries for future runtime and verification work
 - `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them
 
 ## D-0018 — Initial web tooling baseline uses React, Vite, and Mantine packages from npm

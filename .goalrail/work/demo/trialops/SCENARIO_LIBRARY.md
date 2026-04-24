@@ -142,7 +142,7 @@ High-value enterprise trial requests require stricter review before approval, in
 - policy discussion is explicit
 - contract captures stricter review expectations
 - proof artifacts show why the stronger review path exists
-- initial version can remain docs/proof only before runtime implementation
+- initial version can remain as proof documentation only before runtime implementation
 
 ### Demo risk
 

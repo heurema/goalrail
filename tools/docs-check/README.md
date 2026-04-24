@@ -48,12 +48,12 @@ python3 tools/docs-check/docs_check.py \
 
 ### Fixture self-test
 
-This mode validates the golden fixtures under `evals/cases/docs/` and exits with `1` when actual fixture output differs from `expected.json`.
+This mode validates the golden fixtures under `tools/docs-check/fixtures/` and exits with `1` when actual fixture output differs from `expected.json`.
 When `--today` is omitted, fixture self-test uses the frozen evaluation date `2026-04-20` so lifecycle fixtures stay deterministic as calendar time moves forward.
 
 ```bash
 python3 tools/docs-check/docs_check.py \
-  --fixtures evals/cases/docs \
+  --fixtures tools/docs-check/fixtures \
   --self-test \
   --report-json /tmp/goalrail-docs-fixtures-report.json \
   --report-md /tmp/goalrail-docs-fixtures-report.md
@@ -63,7 +63,7 @@ Optional override:
 
 ```bash
 python3 tools/docs-check/docs_check.py \
-  --fixtures evals/cases/docs \
+  --fixtures tools/docs-check/fixtures \
   --self-test \
   --today 2026-04-21
 ```

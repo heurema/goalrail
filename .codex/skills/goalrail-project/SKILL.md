@@ -112,7 +112,7 @@ When docs or metadata are touched, use these commands as needed:
 
 ```bash
 python3 tools/docs-check/docs_check.py \
-  --fixtures evals/cases/docs \
+  --fixtures tools/docs-check/fixtures \
   --self-test \
   --report-json /tmp/goalrail-docs-fixtures-report.json \
   --report-md /tmp/goalrail-docs-fixtures-report.md

@@ -1,0 +1,14 @@
+{
+  "name": "@goalrail/web-workspace",
+  "private": true,
+  "packageManager": "npm@11.13.0",
+  "workspaces": [
+    "*"
+  ],
+  "scripts": {
+    "demo-change-packet:dev": "npm run dev --workspace @goalrail/demo-change-packet-web",
+    "demo-change-packet:build": "npm run build --workspace @goalrail/demo-change-packet-web",
+    "demo-change-packet:test": "npm run test --workspace @goalrail/demo-change-packet-web",
+    "demo-change-packet:typecheck": "npm run typecheck --workspace @goalrail/demo-change-packet-web"
+  }
+}

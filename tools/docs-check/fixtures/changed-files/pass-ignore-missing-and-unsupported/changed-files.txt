@@ -1,4 +1,4 @@
 README.md
 docs/missing.md
 tools/docs-check/docs_check.py
-schemas/docs/doc-artifact.schema.json
+tools/docs-check/schemas/doc-artifact.schema.json

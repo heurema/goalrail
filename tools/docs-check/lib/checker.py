@@ -72,7 +72,7 @@ EXCLUDED_DIR_NAMES = {
     "output",
 }
 LIVE_SCAN_SKIP_PREFIXES = {
-    PurePosixPath("evals/cases"),
+    PurePosixPath("tools/docs-check/fixtures"),
 }
 COMPONENTS_PATH = PurePosixPath("docs/ops/COMPONENTS.yaml")
 EXTERNAL_LINK_PREFIXES = ("http://", "https://", "mailto:", "app://")

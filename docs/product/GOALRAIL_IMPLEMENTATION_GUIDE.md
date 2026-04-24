@@ -53,7 +53,7 @@ Use the repo with these boundaries:
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog
 - `.punk/publishing/` — Punk-owned public narrative drafts, receipts, and manual metrics
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
-- `evals/` — planned eval/spec boundary for future verification semantics
+- `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `apps/`, `scripts/`, `.github/` — parked implementation surfaces until a bounded slice makes them real
 
 These boundaries mirror the repo discipline used in `punk` without implying that Goalrail already has a working runtime.

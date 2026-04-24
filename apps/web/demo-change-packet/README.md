@@ -18,13 +18,13 @@ Primary source file used for the implementation:
 
 ## Commands
 
-From repo root:
+From `apps/web`:
 
 ```bash
-npm run web:demo-change-packet:dev
-npm run web:demo-change-packet:build
-npm run web:demo-change-packet:test
-npm run web:demo-change-packet:typecheck
+npm run demo-change-packet:dev
+npm run demo-change-packet:build
+npm run demo-change-packet:test
+npm run demo-change-packet:typecheck
 ```
 
 ## Notes

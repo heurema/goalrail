@@ -84,7 +84,7 @@ Use fixture self-test when checker logic, schemas, or fixtures change:
 
 ```bash
 python3 tools/docs-check/docs_check.py \
-  --fixtures evals/cases/docs \
+  --fixtures tools/docs-check/fixtures \
   --self-test \
   --report-json /tmp/goalrail-docs-fixtures-report.json \
   --report-md /tmp/goalrail-docs-fixtures-report.md

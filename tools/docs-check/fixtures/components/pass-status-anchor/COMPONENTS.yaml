@@ -80,10 +80,10 @@ components:
     status: prototype
     truth_owner: docs/product/GOALRAIL_DOC_GOVERNANCE.md
     implementation_paths:
-      - schemas/docs/doc-artifact.schema.json
-      - schemas/docs/doc-impact.schema.json
-      - schemas/docs/docs-check-report.schema.json
+      - tools/docs-check/schemas/doc-artifact.schema.json
+      - tools/docs-check/schemas/doc-impact.schema.json
+      - tools/docs-check/schemas/docs-check-report.schema.json
       - tools/docs-check/docs_check.py
-      - evals/cases/docs/README.md
+      - tools/docs-check/fixtures/README.md
     public_claim_allowed: false
     notes: Report-only tooling exists.

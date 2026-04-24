@@ -87,12 +87,12 @@ related_docs:
 
 ### 9. Advisory research, reference material, and overlay working surfaces
 44. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-45. `design/reference_screens/`
+45. `docs/reference/design/reference_screens/`
 46. `.goalrail/work/`
 47. `.goalrail/knowledge/`
 48. `.punk/publishing/`
 49. `.goalrail/flows/`
-50. `evals/`
+50. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -157,12 +157,12 @@ related_docs:
 
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
-- `design/reference_screens/` — visual reference material without product-truth authority
+- `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
 - `.punk/publishing/` — Punk-owned public narrative drafts, receipts, and manual metrics
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
-- `evals/` — planned eval/spec boundary for future verification semantics
+- `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 
 ## Source-of-truth priority
 
@@ -195,7 +195,7 @@ Notes:
 10. Нельзя менять implementation scope без сверки с concept canon.
 11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
-13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing/`, `.goalrail/flows/`, `evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
+13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing/`, `.goalrail/flows/`, `.goalrail/evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 

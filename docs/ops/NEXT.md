@@ -44,7 +44,7 @@ Goal:
 - classify reference screens, mascot/brand assets, and any third-party materials before broader public OSS reuse
 
 Done means:
-- `design/reference_screens/` usage and licensing status are documented
+- `docs/reference/design/reference_screens/` usage and licensing status are documented
 - any exclusions or attribution needs are explicit
 - repo-level OSS policy stays aligned with actual asset rights
 

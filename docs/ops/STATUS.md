@@ -92,7 +92,7 @@ The project currently has:
 - `.goalrail/work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
 - `.goalrail/knowledge/` is reserved for advisory research and idea backlog
 - `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
-- `.goalrail/flows/` and `evals/` exist as planned future structure, not executable product surfaces
+- `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow

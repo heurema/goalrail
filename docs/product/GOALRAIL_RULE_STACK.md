@@ -187,7 +187,7 @@ A slice contract should include:
 - out of scope
 - validation commands
 - proof expectations
-- docs/status impact
+- documentation/status impact
 
 Non-normative sketch for later PRs:
 
@@ -203,7 +203,7 @@ Proof: ...
 Docs/status impact: ...
 ```
 
-This PR does not create `docs/ops/contracts/`.
+This PR does not create a contracts directory.
 
 ## PR impact declarations
 

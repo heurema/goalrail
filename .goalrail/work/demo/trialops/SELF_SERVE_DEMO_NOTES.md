@@ -48,12 +48,15 @@ Do not build now:
 - real customer data import
 - security-sensitive execution model for anonymous users
 
-## Future repo contract
+## Future asset contract
 
-Future executable sandbox repo:
-- `heurema/goalrail-demo`
+Current local demo surface:
+- `apps/web/demo-change-packet`
 
-Planned asset layout:
+Current planning pack:
+- `.goalrail/work/demo/trialops`
+
+Planned asset layout, if a future bounded slice creates dedicated replay artifacts:
 
 ```text
 demo/
@@ -74,12 +77,12 @@ demo/
 ```
 
 Rule:
-- the current Goalrail repo defines these contracts only
-- the separate demo repo implements them later
+- the current Goalrail repo owns both the planning pack and the local demo surface
+- new replay/runtime artifact paths must be created only by a bounded implementation slice
 
 ## Scenario manifest contract
 
-Every future `demo/scenarios/*.yaml` file should include:
+Every future scenario manifest should include:
 
 - `id`
 - `title`

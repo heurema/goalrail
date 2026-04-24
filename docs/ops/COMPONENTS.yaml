@@ -71,8 +71,8 @@ components:
     status: prototype
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
     implementation_paths:
-      - package.json
-      - package-lock.json
+      - apps/web/package.json
+      - apps/web/package-lock.json
       - apps/web/README.md
       - apps/web/demo-change-packet
     public_claim_allowed: false
@@ -96,13 +96,13 @@ components:
     status: prototype
     truth_owner: docs/product/GOALRAIL_DOC_GOVERNANCE.md
     implementation_paths:
-      - schemas/docs/doc-artifact.schema.json
-      - schemas/docs/doc-impact.schema.json
-      - schemas/docs/docs-check-report.schema.json
+      - tools/docs-check/schemas/doc-artifact.schema.json
+      - tools/docs-check/schemas/doc-impact.schema.json
+      - tools/docs-check/schemas/docs-check-report.schema.json
       - tools/docs-check/docs_check.py
       - tools/docs-check/lib/checker.py
       - tools/docs-check/lib/components.py
-      - evals/cases/docs
+      - tools/docs-check/fixtures
     public_claim_allowed: false
     notes: Report-only checker, schemas, and fixtures exist; no hard gate or full migration yet.
   repository_governance:

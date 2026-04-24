@@ -9,7 +9,7 @@ Rules:
 - after each phase: stabilize, verify, summarize, and stop
 - if a gate fails, simplify the current phase instead of expanding scope
 - Phase 0 stays in the current Goalrail planning repo under `.goalrail/work/demo/trialops`
-- Phase 1 and later happen in `heurema/goalrail-demo`
+- Phase 1 and later happen in the current repo under `apps/web/demo-change-packet` unless a future bounded slice explicitly activates more paths
 
 ## Global constraints
 
@@ -24,11 +24,12 @@ Always preserve:
 - no auth / payments / cloud / microservices
 - no public self-serve AI execution
 
-Future command contract for `heurema/goalrail-demo`:
+Current demo command contract from `apps/web`:
 - `npm install`
-- `npm run dev`
-- `npm run reset`
-- `npm run smoke`
+- `npm run demo-change-packet:dev`
+- `npm run demo-change-packet:test`
+- `npm run demo-change-packet:build`
+- `npm run demo-change-packet:typecheck`
 
 Rollback / simplification rule:
 - if a phase gate is not met, revert to the smallest slice that preserves startup/reset/smoke reliability
@@ -67,35 +68,34 @@ Phase 0 passes when:
 - the repo split is explicit
 - self-serve replay is planned, not implemented
 
-## Phase 1 — Demo repo skeleton
+## Phase 1 — Current demo surface baseline
 
 ### Goal
 
-Create the minimal monorepo skeleton in `heurema/goalrail-demo`.
+Use the current local demo surface under `apps/web/demo-change-packet` as the executable demo baseline.
 
 ### Deliverables
 
-- workspace package setup
-- placeholder `README.md`
-- `apps/api/`
+- `apps/web/package.json`
+- `apps/web/package-lock.json`
 - `apps/web/demo-change-packet/`
-- `packages/shared/`
-- `data/seed.json`
-- `demo/scenarios/*.yaml`
-- minimal `reset` and `smoke` scripts
+- `apps/web/demo-change-packet/README.md`
+- demo test/build/typecheck commands
+- no backend/API path until a future bounded slice activates it
 
 ### Checks
 
-- `npm install`
-- `npm run reset`
-- `npm run smoke`
+- `npm install` from `apps/web`
+- `npm run demo-change-packet:test`
+- `npm run demo-change-packet:build`
+- `npm run demo-change-packet:typecheck`
 
 ### Gate
 
 Phase 1 passes when:
-- the repo installs cleanly
-- reset and smoke commands exist
-- scenario manifests exist
+- the web workspace installs cleanly
+- test/build/typecheck commands pass
+- the demo remains bounded to `apps/web/demo-change-packet`
 - no unnecessary runtime complexity was introduced
 
 ## Phase 2 — Minimal backend
@@ -163,12 +163,8 @@ Prepare the main Goalrail proof flow before implementing the workflow change.
 
 ### Deliverables
 
-- `demo/proof-packs/workflow-change/business-request.md`
-- `demo/proof-packs/workflow-change/contract-draft.md`
-- `demo/proof-packs/workflow-change/task-plan.md`
-- `demo/proof-packs/workflow-change/proof-template.md`
-- `docs/demo/DEMO_SHOW_SCRIPT.md`
-- `docs/demo/DEMO_DRY_RUN_CHECKLIST.md`
+- proof-pack and presenter artifacts under `.goalrail/work/demo/trialops` until a bounded implementation slice creates a dedicated artifact path
+- current UI demo behavior stays under `apps/web/demo-change-packet`
 
 ### Checks
 
@@ -199,8 +195,8 @@ Implement the main business change in the sandbox.
 
 ### Checks
 
-- `npm run reset`
-- `npm run smoke`
+- `npm run demo-change-packet:test` from `apps/web`
+- `npm run demo-change-packet:build` from `apps/web`
 - manual UI walk-through of the main scenario
 - proof pack update to match actual behavior
 

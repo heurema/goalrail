@@ -5,7 +5,7 @@
 Define a reliable live-demo shape for Goalrail that demonstrates the operating model on one believable business case without pretending that Goalrail is already a finished platform.
 
 This Phase 0 blueprint is planning-only.
-No runtime, app code, or executable sandbox lives in this repository.
+The current local demo surface lives in this repository under `apps/web/demo-change-packet`.
 
 ## Audience
 
@@ -16,7 +16,7 @@ Primary audience:
 
 Secondary audience:
 - internal presenter running a live demo
-- future implementation agent building the sandbox in `heurema/goalrail-demo`
+- future implementation agent extending the local demo surface in `apps/web/demo-change-packet`
 
 ## Positioning guardrails
 
@@ -32,17 +32,17 @@ The demo must not imply:
 - autonomous live coding for arbitrary user prompts
 - production-ready platform scope
 
-## Repo split
+## Repo layout
 
 Planning artifacts live here:
-- `.goalrail/work/demo/trialops` inside the current Goalrail planning repo
+- `.goalrail/work/demo/trialops`
 
-Future executable sandbox lives later in a separate repo:
-- `heurema/goalrail-demo`
+Current local demo surface lives here:
+- `apps/web/demo-change-packet`
 
 Rule:
-- this repo stores planning, scenario definitions, and replay-readiness notes only
-- backend/frontend/demo runtime implementation starts only in the separate demo repo
+- this repo stores both the planning pack and the current bounded demo surface
+- new runtime/backend expansion still needs a separate bounded slice and component mapping before code is added
 
 ## Demo domain
 
@@ -94,7 +94,7 @@ Canonical narrative:
 
 ## What to show live
 
-Show live in the future executable sandbox:
+Show live in the current local demo surface:
 - trial request list
 - trial request detail
 - dashboard counters
@@ -136,7 +136,7 @@ Do not show:
 
 ## Reliability requirements
 
-Future sandbox implementation must preserve:
+Future demo implementation must preserve:
 - one command to start
 - one command to reset
 - one command to run smoke checks
@@ -153,7 +153,7 @@ Presenter fallback rule:
 ## Phase 0 exit
 
 Phase 0 is complete when:
-- another agent can implement Phase 1 in `heurema/goalrail-demo` without inventing demo posture or repo split
+- another agent can extend `apps/web/demo-change-packet` without inventing demo posture or repo split
 - the primary scenario is fixed
 - future scenario cards are defined but not implemented
 - replay-readiness requirements are explicit
