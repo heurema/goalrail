@@ -102,6 +102,30 @@ Goalrail не должен строиться как:
 - bespoke consulting per customer
 - all-in-one DevOps suite
 
+### Execution ownership boundary
+
+Goalrail does not own the internal execution method.
+
+A bounded task may be executed by a human, provider-native coding agent,
+CLI runtime, local runtime, user-configured agent setup, or hybrid workflow.
+
+Goalrail owns the contract-to-proof contour around that execution:
+
+- working contract
+- bounded task packet
+- risk / policy expectations
+- runtime receipt requirements
+- verification lanes
+- gate decision
+- proof artifact
+- feedback and learning
+
+Execution setup is user-owned and runtime-owned.
+Verification, decision, and proof are Goalrail-owned.
+
+Goalrail must not become a prompt optimizer, AI IDE, provider setup manager, or
+model-behavior cage.
+
 ## 7. Two planes
 
 ### Plane A — Intent / Planning

@@ -102,6 +102,17 @@ Contract режется на bounded задачи.
 - execution packet должен быть понятен и inspectable
 - advisory review может существовать отдельно, но не заменяет primary execution lineage
 
+Goalrail does not prescribe the internal execution setup.
+
+The runtime operator may use any approved human, agentic, CLI, local,
+provider-native, or hybrid workflow. Goalrail provides the bounded task packet
+and expects a receipt plus artifacts. The execution method remains outside
+Goalrail's core authority unless policy explicitly restricts it.
+
+Goalrail standardizes the handoff and the evidence returned from execution, not
+the private prompts, skills, model settings, or provider-specific workflow used
+to perform the work.
+
 Результат: run artifacts.
 
 ### Stage 6 — Verify

@@ -73,18 +73,19 @@ Thin settings surface for:
 1. One spine, two planes, one outcome.
 2. Approved contract is immutable.
 3. Runtime may execute; gate decides; proof preserves.
-4. Append-only events + materialized views.
-5. Canonical objects and derived views stay explicit.
-6. Runtime capabilities are wrapped behind adapters.
-7. CLI / subscription-backed runtimes are first-class integration targets.
-8. One Contract = 1 RepoBinding.
-9. Task scope must be a subset of contract scope.
-10. Final verdict is written only by gate.
-11. Parallelism is explicit and scheduler-controlled.
-12. One task, one run, one workspace lineage.
-13. One writable run uses one primary writer runtime.
-14. One task may use many advisory runtimes.
-15. Sensitive policy may override risk-based fan-out.
+4. Execution setup is user-owned; verification and proof are Goalrail-owned.
+5. Append-only events + materialized views.
+6. Canonical objects and derived views stay explicit.
+7. Runtime capabilities are wrapped behind adapters.
+8. CLI / subscription-backed runtimes are first-class integration targets.
+9. One Contract = 1 RepoBinding.
+10. Task scope must be a subset of contract scope.
+11. Final verdict is written only by gate.
+12. Parallelism is explicit and scheduler-controlled.
+13. One task, one run, one workspace lineage.
+14. One writable run uses one primary writer runtime.
+15. One task may use many advisory runtimes.
+16. Sensitive policy may override risk-based fan-out.
 
 ## 3. Layer map
 
@@ -245,6 +246,13 @@ Derived views:
 ## 5. Runtime model
 
 Goalrail is runtime-neutral.
+
+Runtime adapters must stay execution-neutral.
+
+They may pass bounded task packets, launch or register runs, collect receipts,
+capture artifacts, and report runtime capabilities. They must not encode
+provider-specific prompt doctrine, manage user skills, or make the kernel depend
+on one provider's agent configuration model.
 
 Rules:
 - CLI / subscription-backed developer runtimes are the default integration model

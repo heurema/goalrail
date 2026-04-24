@@ -44,6 +44,10 @@
 - If a change affects product concept, operating model, Project Spine, MVP scope, verification/proof semantics, or runtime boundaries, use the Research Gate / architecture docs before or with implementation.
 - Do not add runtime or product implementation outside the current bounded slice.
 - Do not make false implementation claims.
+- Do not introduce provider-specific execution doctrine into Goalrail core.
+- Treat user/runtime execution setup as external to the kernel.
+- Goalrail standardizes contract, bounded task packet, receipts, verification, gate decision, proof, and feedback — not private prompts, skills, or model settings.
+- Prefer outcome verification over executor prescription.
 
 ## Current repository state
 

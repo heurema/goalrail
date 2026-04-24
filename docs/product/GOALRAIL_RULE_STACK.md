@@ -116,6 +116,29 @@ Examples:
 | `GR-L0-010` | **Research before core changes.** Changes to core laws, Project Spine, verification/proof semantics, runtime boundaries, or MVP scope require the Research Gate. |
 | `GR-L0-011` | **Adjacent experiments are advisory only.** Punk and other adjacent projects can inspire mechanisms, but they do not define Goalrail truth. |
 | `GR-L0-012` | **One source of truth per surface.** A surface must have a declared truth owner; derived views and summaries must not become second sources of truth. |
+| `GR-L0-013` | **Execution-neutral outcome verification.** Goalrail does not prescribe the executor; it standardizes the contract, boundary, receipt, verification, decision, proof, and feedback around the submitted outcome. |
+
+### GR-L0-013 — Execution-neutral outcome verification
+
+Goalrail does not make delivery reliable by prescribing how humans or agents
+must internally execute work.
+
+Goalrail makes delivery reliable by standardizing:
+
+- contract
+- bounded task packet
+- execution receipt
+- verification
+- gate decision
+- proof
+- feedback
+
+The execution setup belongs to the user and selected runtime.
+The acceptance contour belongs to Goalrail.
+
+Lower-level rules may restrict dangerous actions, sensitive exposure, runtime
+choice, or policy violations, but they must not turn Goalrail into a
+provider-specific prompt, skill, model, IDE, or runtime-configuration manager.
 
 ## Product canon layer
 

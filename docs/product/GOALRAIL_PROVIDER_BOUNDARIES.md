@@ -25,6 +25,14 @@ Goalrail should be:
 
 **Build less. Wrap more. Remove aggressively.**
 
+Goalrail should wrap execution, not own execution.
+
+Provider-native coding agents, user skills, custom prompts, IDE workflows, and
+local runtimes remain outside the product kernel. Goalrail may observe declared
+runtime identity, capabilities, receipts, artifacts, and verification results,
+but it should not become the place where provider-specific execution behavior is
+centrally prescribed.
+
 ### Build
 Build only the layers that remain under-served by provider-native tools:
 - shared working contract

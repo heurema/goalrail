@@ -127,6 +127,12 @@ Supporting relations:
 - baseline snapshot refs
 - runtime-originated `RecoveryRecord`
 
+Run receipts should capture execution evidence without requiring Goalrail to own
+or persist private runtime configuration by default. Full prompts, skills,
+chain-of-thought, or provider settings are not canonical product truth unless
+explicitly included as user-submitted artifacts for a specific proof or audit
+need.
+
 ### Advisory layer writes
 - `AdvisoryPanel`
 - `ConsensusRecord`
