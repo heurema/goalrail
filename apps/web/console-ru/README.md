@@ -5,7 +5,7 @@ Russian Goalrail console shell.
 Target subdomain: `console.goalrail.ru`.
 
 Current scope:
-- left navigation with three empty product surfaces: Контракты, Готовность проекта, Подтверждения
+- left navigation with three empty product surfaces: Контракты, Оценка готовности, Проверка результата
 - no data, API calls, backend integration, auth, routing, persistence, or CLI/server status
 - visual shell only, based on the existing change-packet demo design language
 
