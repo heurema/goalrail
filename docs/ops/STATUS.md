@@ -20,7 +20,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intake/goal prototypes exist
 Owner: Vitaly
 
@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- seven kernel/CLI/server/domain boundary ADRs
+- eight kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -81,6 +81,9 @@ The project currently has:
 - frozen verification inputs and baseline-aware verification are explicit
 - canonical objects vs derived views are explicit
 - roadmap-to-research-to-punk loop is explicit
+- runner and repository checkout boundary is documented in ADR-0008
+- repository checkout and check execution must happen behind runners, not inside the API server
+- customer-hosted runners are first-class in the architecture model
 
 ### Delivery model
 - roadmap phases defined
@@ -88,7 +91,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and seven boundary ADRs exist
+- kernel schema note and eight boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -110,6 +113,7 @@ The project currently has:
 - Goal promotion stores `Goal` only as non-executable normalized intent and appends in-memory `goal.created` and `intake.promoted_to_goal` events
 - Goal readiness updates `Goal` state only as an in-memory deterministic prototype, returns reason codes, and appends in-memory readiness transition events
 - the `ClarificationRequest` boundary is documented in ADR-0007, but no clarification implementation exists yet
+- the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -125,6 +129,9 @@ The project currently has:
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
+- no organization/user/provider connection/repository catalog schema implementation yet
+- no runner registration, runner assignment, checkout request, checkout receipt, or worker implementation yet
+- no repository clone/readiness implementation in either hosted or customer-hosted runner mode yet
 - no executable flow specs yet
 - no runnable eval harness yet
 - no gate/proof implementation; `proof show` only renders provided local JSON, and the server does not create decisions or proof
@@ -155,11 +162,11 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, and deterministic Goal readiness prototypes; it creates `IntakeRecord` and non-executable `Goal` only, updates Goal readiness state only, and does not claim durable storage, clarification objects, contract composition, work item creation, gate, proof, repo readiness, auth, or workers
+- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, and deterministic Goal readiness prototypes; it creates `IntakeRecord` and non-executable `Goal` only, updates Goal readiness state only, and does not claim durable storage, clarification objects, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
-- next sales-pack slices are explicit and bounded
+- next sales-pack, provider-boundary, and runner-boundary slices are explicit and bounded
 
 ## Main current risks
 
@@ -168,4 +175,6 @@ Current packaging target:
 3. runtime adapter model could drift into vendor-specific code
 4. execution parallelism and advisory parallelism could still leak into one implementation surface
 5. MVP scope could widen into a generic agent or tooling platform too early
-6. reference screenshots or brand assets could be relicensed accidentally without a provenance audit
+6. repository checkout could leak into the API server instead of staying behind runner boundaries
+7. customer-hosted runner support could be treated as a late enterprise add-on instead of a first-class architecture mode
+8. reference screenshots or brand assets could be relicensed accidentally without a provenance audit
