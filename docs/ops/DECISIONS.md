@@ -276,3 +276,19 @@ Rationale:
 - preserves the product chain from raw intake to normalized intent before clarification and contract composition
 - prevents raw intake from collapsing directly into contract or execution scope
 - gives the next server implementation slice a bounded target without expanding into contract/gate/proof work
+
+## D-0028 — Goal readiness precedes clarification and contract
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- a created `Goal` may be evaluated into `needs_clarification`, `ready_for_contract_seed`, or `rejected`
+- readiness is a server-owned Goal state transition in the intent plane
+- readiness does not create `ClarificationRequest`, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`
+- the first readiness behavior should be deterministic and inspectable, not LLM-driven
+- readiness events should record the Goal state transition and reason codes
+
+Rationale:
+- keeps Goal as normalized intent while defining the next bounded server step
+- prevents contract generation from being triggered before missing information is assessed
+- separates readiness decisions from a later clarification question/answer lifecycle

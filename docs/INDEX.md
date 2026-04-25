@@ -71,33 +71,34 @@ related_docs:
 32. `docs/adr/ADR-0003-go-cli-layout.md`
 33. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
 34. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+35. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
 
 ### 7. Governance and change control
-35. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-36. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-37. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-38. `docs/product/GOALRAIL_RULE_STACK.md`
+36. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+37. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+38. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+39. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-39. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-40. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-41. `docs/ops/STATUS.md`
-42. `docs/ops/NEXT.md`
-43. `docs/ops/DECISIONS.md`
-44. `docs/ops/COMPONENTS.yaml`
-45. `docs/ops/REPO_STRUCTURE.md`
-46. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-47. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+40. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+41. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+42. `docs/ops/STATUS.md`
+43. `docs/ops/NEXT.md`
+44. `docs/ops/DECISIONS.md`
+45. `docs/ops/COMPONENTS.yaml`
+46. `docs/ops/REPO_STRUCTURE.md`
+47. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+48. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-48. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-49. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-50. `docs/reference/design/reference_screens/`
-51. `.goalrail/work/`
-52. `.goalrail/knowledge/`
-53. `.punk/publishing/`
-54. `.goalrail/flows/`
-55. `.goalrail/evals/`
+49. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+50. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+51. `docs/reference/design/reference_screens/`
+52. `.goalrail/work/`
+53. `.goalrail/knowledge/`
+54. `.punk/publishing/`
+55. `.goalrail/flows/`
+56. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -146,6 +147,7 @@ related_docs:
 - `ADR-0003` — Go CLI layout and canonical binary boundary
 - `ADR-0004` — Go server boundary and selected stack
 - `ADR-0005` — IntakeRecord to Goal promotion boundary
+- `ADR-0006` — Goal clarification readiness boundary
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries

@@ -67,10 +67,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. Goal clarification readiness boundary
-   - define the smallest server-owned boundary for deciding whether a Goal needs clarification
+1. Goal clarification readiness prototype
+   - implement the deterministic server-owned readiness check for Goal state transitions
    - keep Goal as non-executable normalized intent
-   - do not create contracts or work items in this slice
+   - do not create clarification objects, contracts, or work items in this slice
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
