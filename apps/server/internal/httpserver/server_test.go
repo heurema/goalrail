@@ -121,23 +121,31 @@ func doJSON(t *testing.T, handler http.Handler, method string, path string, body
 	}
 }
 
-func newRouter(livez http.Handler, readyz http.Handler, versionHandler http.Handler, intakeHandler *httpserver.IntakeHandler) http.Handler {
+func newRouter(
+	livez http.Handler,
+	readyz http.Handler,
+	versionHandler http.Handler,
+	intakeHandler *httpserver.IntakeHandler,
+	goalHandler *httpserver.GoalHandler,
+) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
-		Livez:        livez,
-		Readyz:       readyz,
-		Version:      versionHandler,
-		IntakeSubmit: http.HandlerFunc(intakeHandler.Submit),
-		IntakeGet:    http.HandlerFunc(intakeHandler.Get),
+		Livez:         livez,
+		Readyz:        readyz,
+		Version:       versionHandler,
+		IntakeSubmit:  http.HandlerFunc(intakeHandler.Submit),
+		IntakeGet:     http.HandlerFunc(intakeHandler.Get),
+		IntakePromote: http.HandlerFunc(goalHandler.PromoteFromIntake),
 	})
 }
 
-func baseHandlers(intakeHandler *httpserver.IntakeHandler) http.Handler {
+func baseHandlers(intakeHandler *httpserver.IntakeHandler, goalHandler *httpserver.GoalHandler) http.Handler {
 	healthHandler := health.NewHandler()
 	return newRouter(
 		http.HandlerFunc(healthHandler.Livez),
 		http.HandlerFunc(healthHandler.Readyz),
 		version.NewHandler(),
 		intakeHandler,
+		goalHandler,
 	)
 }
 

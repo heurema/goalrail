@@ -54,6 +54,7 @@ Use it together with:
 | Server-only internal packages | `apps/server/internal/` |
 | Server DTOs and domain value types | `apps/server/internal/spine/` |
 | Server intake service logic | `apps/server/internal/intake/` |
+| Server Goal promotion service logic | `apps/server/internal/goal/` |
 | Server in-memory stores and event logs | `apps/server/internal/store/` and `apps/server/internal/eventlog/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |

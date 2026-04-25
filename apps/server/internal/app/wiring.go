@@ -5,6 +5,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/config"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
+	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
@@ -16,16 +17,20 @@ func newHTTPServer(cfg config.Config) *http.Server {
 	healthHandler := health.NewHandler()
 	versionHandler := version.NewHandler()
 	intakeStore := store.NewIntakeStore()
+	goalStore := store.NewGoalStore()
 	events := eventlog.NewEventLog()
 	intakeService := intake.NewService(intakeStore, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
+	goalService := goal.NewService(intakeStore, goalStore, events, goal.SystemClock{}, goal.UUIDGenerator{})
+	goalHandler := httpserver.NewGoalHandler(goalService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
-		Livez:        http.HandlerFunc(healthHandler.Livez),
-		Readyz:       http.HandlerFunc(healthHandler.Readyz),
-		Version:      versionHandler,
-		IntakeSubmit: http.HandlerFunc(intakeHandler.Submit),
-		IntakeGet:    http.HandlerFunc(intakeHandler.Get),
+		Livez:         http.HandlerFunc(healthHandler.Livez),
+		Readyz:        http.HandlerFunc(healthHandler.Readyz),
+		Version:       versionHandler,
+		IntakeSubmit:  http.HandlerFunc(intakeHandler.Submit),
+		IntakeGet:     http.HandlerFunc(intakeHandler.Get),
+		IntakePromote: http.HandlerFunc(goalHandler.PromoteFromIntake),
 	})
 
 	return httpserver.NewServer(cfg.Addr, router)

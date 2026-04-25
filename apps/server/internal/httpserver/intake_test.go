@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
+	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
@@ -32,9 +33,11 @@ const validIntakeJSON = `{
 }`
 
 type testServerDeps struct {
-	router http.Handler
-	store  *store.IntakeStore
-	events *eventlog.EventLog
+	router    http.Handler
+	intakes   *store.IntakeStore
+	goals     *store.GoalStore
+	events    *eventlog.EventLog
+	idFactory *sequenceIDs
 }
 
 func TestPostIntakeReturnsAccepted(t *testing.T) {
@@ -201,7 +204,7 @@ func TestPostIntakeDefaultsIntentOwnerToRequestAuthor(t *testing.T) {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusAccepted)
 	}
 
-	record, ok, err := server.store.Get(context.Background(), "intake-1")
+	record, ok, err := server.intakes.Get(context.Background(), "intake-1")
 	if err != nil {
 		t.Fatalf("store.Get() error = %v", err)
 	}
@@ -213,18 +216,144 @@ func TestPostIntakeDefaultsIntentOwnerToRequestAuthor(t *testing.T) {
 	}
 }
 
+func TestPostPromoteIntakeReturnsCreatedGoal(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake/"+intakeID+"/promote", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusCreated)
+	}
+
+	var body map[string]json.RawMessage
+	decodeJSON(t, response.body, &body)
+	for _, forbiddenField := range []string{"contract_id", "work_item_id", "proof_id"} {
+		if _, ok := body[forbiddenField]; ok {
+			t.Fatalf("response includes forbidden field %q", forbiddenField)
+		}
+	}
+
+	var created spine.Goal
+	decodeJSON(t, response.body, &created)
+	if created.State != spine.GoalStateCreated {
+		t.Fatalf("state = %q, want %q", created.State, spine.GoalStateCreated)
+	}
+	if created.IntakeID != spine.IntakeID(intakeID) {
+		t.Fatalf("intake_id = %q, want %q", created.IntakeID, intakeID)
+	}
+	if created.Summary != "Current code duplicates filter logic. Preserve current behavior." {
+		t.Fatalf("summary = %q, want intake body", created.Summary)
+	}
+	if !reflect.DeepEqual(created.RequestAuthor, created.IntentOwner) {
+		t.Fatalf("IntentOwner = %#v, want RequestAuthor %#v", created.IntentOwner, created.RequestAuthor)
+	}
+	if len(created.SourceRefs) != 1 {
+		t.Fatalf("source_refs length = %d, want 1", len(created.SourceRefs))
+	}
+	if created.SourceRefs[0] != (spine.SourceRef{Kind: "intake", ID: intakeID}) {
+		t.Fatalf("source_refs[0] = %#v, want intake ref", created.SourceRefs[0])
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("promoted goal not stored")
+	}
+	if stored.ID != created.ID {
+		t.Fatalf("stored goal id = %q, want %q", stored.ID, created.ID)
+	}
+}
+
+func TestPostPromoteUnknownIntakeReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake/missing/promote", "")
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
+func TestPostPromoteIntakeTwiceReturnsConflict(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/intake/"+intakeID+"/promote", "")
+	if first.code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d", first.code, http.StatusCreated)
+	}
+
+	second := doJSON(t, server.router, http.MethodPost, "/v1/intake/"+intakeID+"/promote", "")
+	if second.code != http.StatusConflict {
+		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, second.body, &body)
+	if body.Error.Code != "already_promoted" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "already_promoted")
+	}
+
+	events := server.events.Events()
+	if len(events) != 3 {
+		t.Fatalf("events length = %d, want 3", len(events))
+	}
+}
+
+func TestPostPromoteIntakeUsesTitleAsSummaryWhenBodyIsEmpty(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, `{
+  "repo_binding_id": "repo_demo_1",
+  "source": {"kind": "codex_skill"},
+  "title": "Refactor CSV export filters",
+  "request_author": {"kind": "user", "id": "dev_1"}
+}`)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake/"+intakeID+"/promote", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusCreated)
+	}
+
+	var created spine.Goal
+	decodeJSON(t, response.body, &created)
+	if created.Summary != created.Title {
+		t.Fatalf("summary = %q, want title %q", created.Summary, created.Title)
+	}
+}
+
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
 
 	intakeStore := store.NewIntakeStore()
+	goalStore := store.NewGoalStore()
 	events := eventlog.NewEventLog()
-	service := intake.NewService(intakeStore, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	ids := &sequenceIDs{}
+	service := intake.NewService(intakeStore, events, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
+	goalService := goal.NewService(intakeStore, goalStore, events, fixedClock{now: testTime()}, ids)
+	goalHandler := httpserver.NewGoalHandler(goalService)
 
 	return testServerDeps{
-		router: baseHandlers(intakeHandler),
-		store:  intakeStore,
-		events: events,
+		router:    baseHandlers(intakeHandler, goalHandler),
+		intakes:   intakeStore,
+		goals:     goalStore,
+		events:    events,
+		idFactory: ids,
 	}
 }
 
@@ -238,6 +367,7 @@ func (c fixedClock) Now() time.Time {
 
 type sequenceIDs struct {
 	intake int
+	goal   int
 	event  int
 }
 
@@ -249,6 +379,11 @@ func (g *sequenceIDs) NewIntakeID() (spine.IntakeID, error) {
 func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 	g.event++
 	return spine.EventID(fmt.Sprintf("event-%d", g.event)), nil
+}
+
+func (g *sequenceIDs) NewGoalID() (spine.GoalID, error) {
+	g.goal++
+	return spine.GoalID(fmt.Sprintf("goal-%d", g.goal)), nil
 }
 
 func testTime() time.Time {
@@ -264,4 +399,19 @@ func decodeRawJSON(t *testing.T, input json.RawMessage, target any) {
 	if err := json.Unmarshal(input, target); err != nil {
 		t.Fatalf("decode raw JSON %q: %v", string(input), err)
 	}
+}
+
+func createIntake(t *testing.T, server testServerDeps, body string) string {
+	t.Helper()
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake", body)
+	if response.code != http.StatusAccepted {
+		t.Fatalf("POST /v1/intake status = %d, want %d: %s", response.code, http.StatusAccepted, response.body)
+	}
+
+	var accepted struct {
+		IntakeID string `json:"intake_id"`
+	}
+	decodeJSON(t, response.body, &accepted)
+	return accepted.IntakeID
 }

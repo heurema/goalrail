@@ -9,7 +9,7 @@ components:
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
+    notes: Canonical schema note exists. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake and Goal DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
   product_concept:
     name: Product Concept
     status: docs_only
@@ -116,12 +116,13 @@ components:
       - apps/server/internal/httpserver
       - apps/server/internal/spine
       - apps/server/internal/intake
+      - apps/server/internal/goal
       - apps/server/internal/store
       - apps/server/internal/eventlog
       - apps/server/internal/health
       - apps/server/internal/version
     public_claim_allowed: false
-    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus an in-memory source-neutral intake API prototype. Intake creates IntakeRecord only and appends an in-memory intake.received event. There is no durable storage, no contract/work item creation, no gate/proof, no repo readiness, no auth, and no workers.
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake and Goal promotion prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only. Events remain in-memory, including intake.received, goal.created, and intake.promoted_to_goal. There is no durable storage, no clarification engine, no contract/work item creation, no gate/proof, no repo readiness, no auth, and no workers.
   tracker_sync:
     name: Tracker Sync
     status: planned
