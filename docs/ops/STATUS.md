@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- four kernel/CLI/server boundary ADRs
+- five kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -88,7 +88,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and four boundary ADRs exist
+- kernel schema note and five boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries

@@ -260,3 +260,19 @@ Rationale:
 - keeps CLI and server Go policy aligned
 - avoids minimum-version drift between Goalrail Go apps
 - matches the project preference for modern Go idioms and current standard-library capabilities
+
+## D-0027 — Intake promotes to Goal before contract or work
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- a received `IntakeRecord` may be promoted into a server-owned `Goal`
+- `Goal` is normalized intent, not an approved contract and not executable work
+- Goal promotion must not create `ContractDraft`, `ApprovedContract`, `WorkItem`, `Task`, `GateDecision`, or `Proof`
+- Goal promotion writes explicit events such as `goal.created` and `intake.promoted_to_goal`
+- CLI, skills, web resources, and integrations remain adapters; they do not own Goal truth
+
+Rationale:
+- preserves the product chain from raw intake to normalized intent before clarification and contract composition
+- prevents raw intake from collapsing directly into contract or execution scope
+- gives the next server implementation slice a bounded target without expanding into contract/gate/proof work

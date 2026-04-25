@@ -67,8 +67,8 @@ Done means:
 
 ### Server follow-up slices
 
-1. IntakeRecord -> Goal promotion boundary
-   - define the smallest server-owned promotion path from received intake to Goal
+1. IntakeRecord -> Goal promotion prototype
+   - implement the smallest server-owned promotion path from received intake to Goal
    - keep raw intake separate from executable work
    - do not create contracts or work items in this slice
 2. CLI-to-server intake submit integration
