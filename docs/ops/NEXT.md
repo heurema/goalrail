@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints only; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints and an in-memory source-neutral intake API prototype; future server work should stay bounded and avoid fake canonical state claims
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -67,10 +67,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. Source-neutral intake API boundary
-   - add `POST /v1/intake` and `GET /v1/intake/{id}`
-   - use in-memory `IntakeStore` and in-memory `EventLog`
-   - emit an `intake.received` event
+1. IntakeRecord -> Goal promotion boundary
+   - define the smallest server-owned promotion path from received intake to Goal
+   - keep raw intake separate from executable work
+   - do not create contracts or work items in this slice
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner

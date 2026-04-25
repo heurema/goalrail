@@ -95,9 +95,17 @@ type routeResponse struct {
 func getJSON(t *testing.T, path string) routeResponse {
 	t.Helper()
 
-	handler := testRouter()
+	return doJSON(t, testServer(t).router, http.MethodGet, path, "")
+}
+
+func doJSON(t *testing.T, handler http.Handler, method string, path string, body string) routeResponse {
+	t.Helper()
+
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, path, nil)
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
 
 	handler.ServeHTTP(recorder, request)
 
@@ -113,13 +121,24 @@ func getJSON(t *testing.T, path string) routeResponse {
 	}
 }
 
-func testRouter() http.Handler {
-	healthHandler := health.NewHandler()
+func newRouter(livez http.Handler, readyz http.Handler, versionHandler http.Handler, intakeHandler *httpserver.IntakeHandler) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
-		Livez:   http.HandlerFunc(healthHandler.Livez),
-		Readyz:  http.HandlerFunc(healthHandler.Readyz),
-		Version: version.NewHandler(),
+		Livez:        livez,
+		Readyz:       readyz,
+		Version:      versionHandler,
+		IntakeSubmit: http.HandlerFunc(intakeHandler.Submit),
+		IntakeGet:    http.HandlerFunc(intakeHandler.Get),
 	})
+}
+
+func baseHandlers(intakeHandler *httpserver.IntakeHandler) http.Handler {
+	healthHandler := health.NewHandler()
+	return newRouter(
+		http.HandlerFunc(healthHandler.Livez),
+		http.HandlerFunc(healthHandler.Readyz),
+		version.NewHandler(),
+		intakeHandler,
+	)
 }
 
 func decodeJSON(t *testing.T, input string, target any) {

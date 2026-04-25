@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-25
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server bootstraps exist
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intake prototype exist
 Owner: Vitaly
 
 ## Current state
@@ -50,7 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a minimal Go server bootstrap under `apps/server`
+- a Go server bootstrap under `apps/server` with an in-memory source-neutral intake API prototype
 
 ## What is real now
 
@@ -88,7 +88,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and three boundary ADRs exist
+- kernel schema note and four boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -105,19 +105,21 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints are limited to `GET /livez`, `GET /readyz`, and `GET /version`
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, and `GET /v1/intake/{id}`
+- the source-neutral intake API stores `IntakeRecord` only as an in-memory prototype and appends an in-memory `intake.received` event
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
 ## What is not real yet
 
-- no schema package
+- no standalone Project Spine schema package beyond CLI/server-local DTO subsets
 - no runtime registry implementation
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
-- no server-owned canonical domain implementation yet
-- no server intake endpoint yet
+- no server-owned canonical domain implementation beyond the in-memory `IntakeRecord` prototype yet
 - no durable server storage or event log persistence yet
+- no server-side clarification, Goal promotion, or contract composition yet
+- no server-created Goal, Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no executable flow specs yet
@@ -150,7 +152,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap with health/version endpoints only; it does not claim intake, durable storage, contract composition, gate, proof, repo readiness, auth, or workers
+- `apps/server` provides a verified Go server bootstrap plus an in-memory source-neutral intake API prototype; it creates `IntakeRecord` only and does not claim durable storage, Goal promotion, contract composition, work item creation, gate, proof, repo readiness, auth, or workers
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
