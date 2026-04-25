@@ -292,3 +292,20 @@ Rationale:
 - keeps Goal as normalized intent while defining the next bounded server step
 - prevents contract generation from being triggered before missing information is assessed
 - separates readiness decisions from a later clarification question/answer lifecycle
+
+## D-0029 — Clarification requests preserve server-owned answer truth
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- a Goal in `needs_clarification` may create a server-owned `ClarificationRequest`
+- `ClarificationRequest` groups missing-information questions for a target actor or role
+- `ClarificationAnswer` is canonical evidence of submitted answers and is not approval
+- answers may update Goal intent-plane hints through a server-owned transition, but they must not make Goal the only place answer content lives
+- clarification does not create contract seed, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`
+- CLI, skills, web resources, and integrations may transport clarification questions and answers, but they do not own canonical clarification truth
+
+Rationale:
+- preserves an audit trail for missing information before contract generation
+- keeps clarification separate from approval and executable work
+- gives the next server implementation slice a bounded target without expanding into contract/gate/proof work

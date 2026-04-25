@@ -67,8 +67,9 @@ Done means:
 
 ### Server follow-up slices
 
-1. ClarificationRequest boundary design
-   - define the smallest Goal -> clarification question/answer boundary
+1. ClarificationRequest prototype
+   - create the smallest in-memory Goal -> ClarificationRequest(open) prototype from readiness reason codes
+   - do not implement ClarificationAnswer, answer application, or automatic readiness re-check in this slice
    - keep `ready_for_contract_seed` distinct from `ContractDraft`
    - do not implement contract seed, contract draft, work items, gate, or proof
 2. CLI-to-server intake submit integration
