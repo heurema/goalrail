@@ -13,3 +13,4 @@ output/
 .goalrail/work/demo/trialops/design-handoff/
 .idea/
 .vscode/
+.playwright-mcp/

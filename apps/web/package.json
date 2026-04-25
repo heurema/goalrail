@@ -9,6 +9,10 @@
     "demo-change-packet:dev": "npm run dev --workspace @goalrail/demo-change-packet-web",
     "demo-change-packet:build": "npm run build --workspace @goalrail/demo-change-packet-web",
     "demo-change-packet:test": "npm run test --workspace @goalrail/demo-change-packet-web",
-    "demo-change-packet:typecheck": "npm run typecheck --workspace @goalrail/demo-change-packet-web"
+    "demo-change-packet:typecheck": "npm run typecheck --workspace @goalrail/demo-change-packet-web",
+    "pilot-intake-ru:dev": "npm run dev --workspace @goalrail/pilot-intake-ru-web",
+    "pilot-intake-ru:build": "npm run build --workspace @goalrail/pilot-intake-ru-web",
+    "pilot-intake-ru:test": "npm run test --workspace @goalrail/pilot-intake-ru-web",
+    "pilot-intake-ru:typecheck": "npm run typecheck --workspace @goalrail/pilot-intake-ru-web"
   }
 }

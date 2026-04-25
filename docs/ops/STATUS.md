@@ -47,6 +47,7 @@ The project currently has:
 - reference screens
 - shared web stack rules under `apps/web/`
 - a local change-packet demo prototype under `apps/web/demo-change-packet`
+- a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
 
 ## What is real now
@@ -95,6 +96,7 @@ The project currently has:
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
+- `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -108,6 +110,7 @@ The project currently has:
 - no gate/proof implementation
 - no advisory panel implementation
 - no Goalrail web UI or goal-to-proof product loop yet
+- no production landing deployment or backend lead-capture integration yet
 - no tracker sync
 - no proof-producing demo
 - no CTO / Head of Engineering deck yet
@@ -130,6 +133,7 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` provides a verified local frontend change-packet walkthrough prototype without changing product phase order
+- `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
 - next sales-pack slices are explicit and bounded

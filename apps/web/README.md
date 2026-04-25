@@ -34,6 +34,7 @@ Rule:
 - React uses official docs only
 - Mantine uses official MCP plus official skills
 
-## Current resource
+## Current resources
 
 - `apps/web/demo-change-packet` is the current change-packet demo prototype
+- `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype
