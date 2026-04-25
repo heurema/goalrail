@@ -46,7 +46,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- a local change-packet demo prototype under `apps/web/demo-change-packet`
+- local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
 
@@ -95,7 +95,8 @@ The project currently has:
 - `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
-- `apps/web/demo-change-packet` is the current local React + Vite + Mantine change-packet demo prototype
+- `apps/web/demo-change-packet` is the current local React + Vite + Mantine EN change-packet demo prototype
+- `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, intended for a separate domain rather than in-app i18n
 - `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -132,7 +133,7 @@ Current packaging target:
 - ops docs are synchronized with the new concept / deployment canon
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
-- `apps/web/demo-change-packet` provides a verified local frontend change-packet walkthrough prototype without changing product phase order
+- `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified local frontend change-packet walkthrough prototypes without changing product phase order
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

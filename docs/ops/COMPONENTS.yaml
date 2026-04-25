@@ -75,9 +75,10 @@ components:
       - apps/web/package-lock.json
       - apps/web/README.md
       - apps/web/demo-change-packet
+      - apps/web/demo-change-packet-ru
       - apps/web/pilot-intake-ru
     public_claim_allowed: false
-    notes: Shared web rules live under apps/web; the current React + Vite + Mantine prototypes are the change-packet walkthrough under apps/web/demo-change-packet and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
+    notes: Shared web rules live under apps/web. Current React + Vite + Mantine prototypes are the EN change-packet walkthrough under apps/web/demo-change-packet, the separate RU change-packet copy under apps/web/demo-change-packet-ru, and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
   cli_surface:
     name: CLI Surface
     status: planned

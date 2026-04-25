@@ -47,7 +47,7 @@ Use it together with:
 | --- | --- |
 | New app, frontend, demo, or service code | `apps/<area>/...` |
 | Web workspace package files | `apps/web/` |
-| Demo change-packet web app | `apps/web/demo-change-packet/` |
+| Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |
 | Product canon | `docs/product/` |
 | Operational status, next steps, decisions, component map | `docs/ops/` |
 | Repository structure guidance | `docs/ops/REPO_STRUCTURE.md` |

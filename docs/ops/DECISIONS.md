@@ -167,7 +167,7 @@ Status: accepted
 Decision:
 - runnable frontend resources live in `apps/web/<resource>`
 - `apps/web/` is the shared namespace and rules boundary for frontend resources, not a single runnable app
-- the current local web demo prototype lives in `apps/web/demo-change-packet`
+- the original local web demo prototype lives in `apps/web/demo-change-packet`; localized copies can be added as separate web resources when explicitly needed
 - the baseline uses React + Vite + Mantine with PostCSS and Vitest wired from the start
 - Mantine package versions are aligned to the local source checkout in `~/contrib/mantine`
 - direct file-linking to `~/contrib/mantine` is not the default because that checkout does not contain built package artifacts required by consumers
@@ -184,3 +184,12 @@ Decision:
 - trademark and brand rights stay separate from the code/documentation license
 - repository community health files live in root and `.github/` as real governance surfaces
 - public OSS posture must not imply that reference screenshots or third-party assets are relicensed automatically
+
+## D-0020 — RU demo is a separate web resource
+Date: 2026-04-24
+Status: accepted
+
+Decision:
+- the RU change-packet demo lives in `apps/web/demo-change-packet-ru`
+- it is a copied and localized workspace, not in-app i18n inside `apps/web/demo-change-packet`
+- EN and RU demos are intended to be deployed as independent demo surfaces on separate domains

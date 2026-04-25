@@ -36,5 +36,6 @@ Rule:
 
 ## Current resources
 
-- `apps/web/demo-change-packet` is the current change-packet demo prototype
+- `apps/web/demo-change-packet` is the current EN change-packet demo prototype
+- `apps/web/demo-change-packet-ru` is a separate RU copy intended for an independent demo domain, not an in-app translation layer
 - `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype

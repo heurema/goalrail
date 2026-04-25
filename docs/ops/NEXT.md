@@ -8,7 +8,7 @@
 - product and deployment canon is now in place
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
-- `apps/web/demo-change-packet` is the current change-packet demo prototype; future web work should follow `apps/web/<resource>`
+- `apps/web/demo-change-packet` is the current EN change-packet demo prototype; `apps/web/demo-change-packet-ru` is a separate RU copy for a separate domain; future web work should follow `apps/web/<resource>`
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -48,6 +48,15 @@ Done means:
 - any exclusions or attribution needs are explicit
 - repo-level OSS policy stays aligned with actual asset rights
 
+### Slice 5 — RU demo domain wiring
+Goal:
+- wire the separate RU demo workspace into the external deployment/infra domain setup
+
+Done means:
+- EN and RU demos deploy from separate app paths
+- each demo has its own independent domain
+- deployment docs or infra receipts state which domain points to which workspace
+
 ## Deferred until later
 
 - hosted execution
@@ -55,4 +64,4 @@ Done means:
 - multi-runtime advisory implementation
 - external checks implementation
 - analytics / admin product
-- Goalrail-specific web product features beyond the current change-packet demo prototype
+- Goalrail-specific web product features beyond the current change-packet demo prototypes

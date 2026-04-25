@@ -6,6 +6,7 @@ dist/
 .env
 .env.*
 coverage/
+test-results/
 *.tsbuildinfo
 .playwright-cli/
 output/
