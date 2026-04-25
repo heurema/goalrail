@@ -11,6 +11,7 @@
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, and Goal readiness prototypes; future server work should stay bounded and avoid fake canonical state claims
+- ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -50,6 +51,17 @@ Done means:
 - any exclusions or attribution needs are explicit
 - repo-level OSS policy stays aligned with actual asset rights
 
+### Architecture follow-up slices
+
+1. Organization / user / provider connection boundary
+   - define Goalrail `Organization`, `User`, memberships, provider-neutral connections, repository catalog, repository enrollment, and RepoBinding ownership
+   - make GitHub the first implementation target without making GitHub App concepts part of the core domain model
+   - keep GitLab, Bitbucket, self-managed Git, and custom Git paths representable as later provider adapters
+2. Runner checkout prototype boundary
+   - define the smallest runner registration, assignment, checkout request, and checkout receipt shape
+   - support `goalrail_hosted_runner` and `customer_hosted_runner` as first-class modes
+   - do not implement repository writes, persistent mirrors, gate, proof, or provider-specific clone credentials in this slice
+
 ### CLI follow-up slices
 
 1. Server-side repo key provisioning API/client
@@ -81,9 +93,11 @@ Done means:
 
 ## Deferred until later
 
-- hosted execution
+- hosted execution implementation beyond bounded runner prototypes
 - tracker integrations
 - multi-runtime advisory implementation
 - external checks implementation
 - analytics / console product features
 - Goalrail-specific web product features beyond the current change-packet demo prototypes
+- persistent repository mirrors
+- repository write operations such as branch creation, commits, or pull requests
