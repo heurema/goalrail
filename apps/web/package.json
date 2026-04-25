@@ -6,6 +6,10 @@
     "*"
   ],
   "scripts": {
+    "admin:dev": "npm run dev --workspace @goalrail/admin-web",
+    "admin:build": "npm run build --workspace @goalrail/admin-web",
+    "admin:test": "npm run test --workspace @goalrail/admin-web",
+    "admin:typecheck": "npm run typecheck --workspace @goalrail/admin-web",
     "demo-change-packet:dev": "npm run dev --workspace @goalrail/demo-change-packet-web",
     "demo-change-packet:build": "npm run build --workspace @goalrail/demo-change-packet-web",
     "demo-change-packet:test": "npm run test --workspace @goalrail/demo-change-packet-web",

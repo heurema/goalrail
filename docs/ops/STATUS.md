@@ -20,7 +20,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-23
+Last updated: 2026-04-25
 Status: planning / product canon and pilot frame active
 Owner: Vitaly
 
@@ -46,6 +46,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
+- empty real admin shell under `apps/web/admin`
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -95,6 +96,7 @@ The project currently has:
 - `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
+- `apps/web/admin` is the empty real admin shell with three left-nav surfaces: Contracts, Delivery Readiness, and Proof
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, intended for a separate domain rather than in-app i18n
 - `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
@@ -110,7 +112,7 @@ The project currently has:
 - no runnable eval harness yet
 - no gate/proof implementation
 - no advisory panel implementation
-- no Goalrail web UI or goal-to-proof product loop yet
+- no data-backed Goalrail web UI or goal-to-proof product loop yet
 - no production landing deployment or backend lead-capture integration yet
 - no tracker sync
 - no proof-producing demo
@@ -134,6 +136,7 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified local frontend change-packet walkthrough prototypes without changing product phase order
+- `apps/web/admin` provides a verified empty admin shell only; it does not claim backend, CLI, server, auth, data, or product-loop implementation
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

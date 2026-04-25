@@ -1,0 +1,179 @@
+:root {
+  --bg: #0e0b08;
+  --bg-2: #100d0a;
+  --panel: #17120e;
+  --panel-2: #1d1712;
+  --border: #2d241c;
+  --border-soft: #211a15;
+  --text: #e5ddce;
+  --text-2: #a39888;
+  --text-3: #665c4f;
+  --violet: #9e86b0;
+  --violet-soft: #3a3044;
+  --font-ui: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+button {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--violet) 76%, transparent);
+  outline-offset: 3px;
+}
+
+.adminShell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, color-mix(in srgb, var(--violet) 7%, transparent), transparent 34%),
+    var(--bg);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 100vh;
+  padding: 22px 14px;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-2) 96%, black);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0 8px;
+}
+
+.brandMark {
+  display: grid;
+  gap: 4px;
+  width: 20px;
+}
+
+.brandMark span {
+  display: block;
+  width: 18px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+.brandMark span:nth-child(2) {
+  background: var(--violet);
+}
+
+.brandText {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.surfaceNav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.surfaceButton {
+  width: 100%;
+  min-height: 39px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1.25;
+  text-align: left;
+  text-transform: uppercase;
+  transition: border-color 160ms, background-color 160ms, color 160ms;
+}
+
+.surfaceButton:hover {
+  border-color: var(--border-soft);
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  color: var(--text);
+}
+
+.surfaceButton.active {
+  border-color: color-mix(in srgb, var(--violet) 48%, var(--border));
+  background: color-mix(in srgb, var(--violet-soft) 42%, var(--panel));
+  color: var(--text);
+}
+
+.emptySurface {
+  min-width: 0;
+  min-height: 100vh;
+  border-left: 1px solid color-mix(in srgb, white 2%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--panel-2) 40%, transparent), transparent 34%),
+    var(--bg);
+}
+
+@media (max-width: 720px) {
+  .adminShell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    min-height: auto;
+    gap: 16px;
+    padding: 16px 12px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .surfaceNav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .surfaceButton {
+    min-height: 44px;
+    padding: 9px 8px;
+    font-size: 9px;
+    text-align: center;
+  }
+
+  .emptySurface {
+    min-height: calc(100vh - 128px);
+    border-left: 0;
+  }
+}
