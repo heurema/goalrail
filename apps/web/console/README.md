@@ -1,6 +1,6 @@
-# Goalrail Admin Web
+# Goalrail Console Web
 
-Real Goalrail admin shell.
+Real Goalrail console shell.
 
 Target subdomain: `console.goalrail.dev`.
 
@@ -11,4 +11,4 @@ Current scope:
 
 Delivery rule:
 - CLI and server functionality should become real first
-- admin cards and detail views should appear only after the underlying functionality exists
+- console cards and detail views should appear only after the underlying functionality exists

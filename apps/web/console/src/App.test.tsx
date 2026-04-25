@@ -5,7 +5,7 @@ import App from './App';
 import { render } from '../test-utils';
 
 describe('App', () => {
-  it('renders only the three empty admin surfaces in the left navigation', () => {
+  it('renders only the three empty console surfaces in the left navigation', () => {
     render(<App />);
 
     const navigation = screen.getByRole('navigation', { name: /product surfaces/i });

@@ -46,7 +46,7 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
-.adminShell {
+.consoleShell {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100vh;
@@ -146,7 +146,7 @@ button:focus-visible {
 }
 
 @media (max-width: 720px) {
-  .adminShell {
+  .consoleShell {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }

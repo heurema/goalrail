@@ -46,7 +46,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- empty real admin shell under `apps/web/admin`
+- empty real console shells under `apps/web/console` and `apps/web/console-ru`
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -96,9 +96,10 @@ The project currently has:
 - `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
-- `apps/web/admin` is the empty real admin shell with three left-nav surfaces: Contracts, Delivery Readiness, and Proof
+- `apps/web/console` is the empty real console shell with three left-nav surfaces: Contracts, Delivery Readiness, and Proof
 - `apps/web/demo-change-packet` is the current local React + Vite + Mantine EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, intended for a separate domain rather than in-app i18n
+- `apps/web/console-ru` is the separate Russian console shell for `console.goalrail.ru` with the same empty-surface boundary
 - `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -136,7 +137,7 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified local frontend change-packet walkthrough prototypes without changing product phase order
-- `apps/web/admin` provides a verified empty admin shell only; it does not claim backend, CLI, server, auth, data, or product-loop implementation
+- `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, CLI, server, auth, data, or product-loop implementation
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

@@ -36,7 +36,8 @@ Rule:
 
 ## Current resources
 
-- `apps/web/admin` is the empty real admin shell for `console.goalrail.dev`
+- `apps/web/console` is the empty real console shell for `console.goalrail.dev`
+- `apps/web/console-ru` is the separate Russian console shell for `console.goalrail.ru`
 - `apps/web/demo-change-packet` is the current EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is a separate RU copy intended for an independent demo domain, not an in-app translation layer
 - `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype

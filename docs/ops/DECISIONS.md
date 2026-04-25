@@ -194,12 +194,22 @@ Decision:
 - it is a copied and localized workspace, not in-app i18n inside `apps/web/demo-change-packet`
 - EN and RU demos are intended to be deployed as independent demo surfaces on separate domains
 
-## D-0021 — Real admin shell is separate from demo surfaces
+## D-0021 — Real console shell is separate from demo surfaces
 Date: 2026-04-25
 Status: accepted
 
 Decision:
-- the real admin shell lives in `apps/web/admin`
+- the real console shell lives in `apps/web/console`
 - the target subdomain is `console.goalrail.dev`
-- the first admin version is intentionally empty except for three left-nav surfaces: Contracts, Delivery Readiness, and Proof
-- admin visualization follows real CLI/server functionality; UI cards must not imply backend, CLI, server, auth, data, or product-loop implementation before those layers exist
+- the first console version is intentionally empty except for three left-nav surfaces: Contracts, Delivery Readiness, and Proof
+- console visualization follows real CLI/server functionality; UI cards must not imply backend, CLI, server, auth, data, or product-loop implementation before those layers exist
+
+## D-0022 — RU console is a separate web resource
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- the RU console shell lives in `apps/web/console-ru`
+- the target subdomain is `console.goalrail.ru`
+- it is a copied and localized workspace, not in-app i18n inside `apps/web/console`
+- the first RU console version mirrors the same empty-surface boundary with Russian labels: Контракты, Готовность доставки, Доказательства

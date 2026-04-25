@@ -1,5 +1,5 @@
 {
-  "name": "@goalrail/admin-web",
+  "name": "@goalrail/console-web",
   "private": true,
   "type": "module",
   "scripts": {

@@ -10,19 +10,19 @@ interface SurfaceItem {
 }
 
 const SURFACES: SurfaceItem[] = [
-  { id: 'contracts', label: 'Contracts' },
-  { id: 'delivery-readiness', label: 'Delivery Readiness' },
-  { id: 'proof', label: 'Proof' },
+  { id: 'contracts', label: 'Контракты' },
+  { id: 'delivery-readiness', label: 'Готовность доставки' },
+  { id: 'proof', label: 'Доказательства' },
 ];
 
 function App() {
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
-  const activeLabel = SURFACES.find((surface) => surface.id === activeSurface)?.label ?? 'Contracts';
+  const activeLabel = SURFACES.find((surface) => surface.id === activeSurface)?.label ?? 'Контракты';
 
   return (
-    <main className="adminShell" data-deployment-target="console.goalrail.dev">
-      <aside className="sidebar" aria-label="Goalrail admin navigation">
-        <div className="brand" aria-label="Goalrail admin">
+    <main className="consoleShell" data-deployment-target="console.goalrail.ru">
+      <aside className="sidebar" aria-label="Навигация консоли Goalrail">
+        <div className="brand" aria-label="Консоль Goalrail">
           <span className="brandMark" aria-hidden="true">
             <span />
             <span />
@@ -31,7 +31,7 @@ function App() {
           <span className="brandText">Goalrail</span>
         </div>
 
-        <nav className="surfaceNav" aria-label="Product surfaces">
+        <nav className="surfaceNav" aria-label="Разделы продукта">
           {SURFACES.map((surface) => (
             <button
               aria-current={activeSurface === surface.id ? 'page' : undefined}
@@ -46,7 +46,7 @@ function App() {
         </nav>
       </aside>
 
-      <section className="emptySurface" aria-label={`${activeLabel} surface empty`} />
+      <section className="emptySurface" aria-label={`${activeLabel}: пустой раздел`} />
     </main>
   );
 }

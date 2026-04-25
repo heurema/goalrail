@@ -8,7 +8,7 @@
 - product and deployment canon is now in place
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
-- `apps/web/admin` now exists as the empty real admin shell for `console.goalrail.dev`; future cards and detail views should wait until the CLI/server functionality exists
+- `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` is the current EN change-packet demo prototype; `apps/web/demo-change-packet-ru` is a separate RU copy for a separate domain; future web work should follow `apps/web/<resource>`
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
@@ -64,5 +64,5 @@ Done means:
 - tracker integrations
 - multi-runtime advisory implementation
 - external checks implementation
-- analytics / admin product
+- analytics / console product features
 - Goalrail-specific web product features beyond the current change-packet demo prototypes

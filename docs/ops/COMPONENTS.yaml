@@ -74,12 +74,13 @@ components:
       - apps/web/package.json
       - apps/web/package-lock.json
       - apps/web/README.md
-      - apps/web/admin
+      - apps/web/console
+      - apps/web/console-ru
       - apps/web/demo-change-packet
       - apps/web/demo-change-packet-ru
       - apps/web/pilot-intake-ru
     public_claim_allowed: false
-    notes: Shared web rules live under apps/web. The empty real admin shell lives under apps/web/admin for console.goalrail.dev with three navigation-only surfaces and no data-backed product functionality. Current React + Vite + Mantine prototypes are the EN change-packet walkthrough under apps/web/demo-change-packet, the separate RU change-packet copy under apps/web/demo-change-packet-ru, and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
+    notes: Shared web rules live under apps/web. The empty real console shells live under apps/web/console for console.goalrail.dev and apps/web/console-ru for console.goalrail.ru with three navigation-only surfaces and no data-backed product functionality. Current React + Vite + Mantine prototypes are the EN change-packet walkthrough under apps/web/demo-change-packet, the separate RU change-packet copy under apps/web/demo-change-packet-ru, and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
   cli_surface:
     name: CLI Surface
     status: planned
