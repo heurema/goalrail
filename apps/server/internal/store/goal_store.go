@@ -64,6 +64,19 @@ func (s *GoalStore) GetByIntakeID(_ context.Context, id spine.IntakeID) (spine.G
 	return cloneGoal(created), true, nil
 }
 
+func (s *GoalStore) UpdateState(_ context.Context, id spine.GoalID, state spine.GoalState) (spine.Goal, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updated, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	updated.State = state
+	s.goals[id] = cloneGoal(updated)
+	return cloneGoal(updated), true, nil
+}
+
 func cloneGoal(created spine.Goal) spine.Goal {
 	if created.SourceRefs != nil {
 		created.SourceRefs = append([]spine.SourceRef(nil), created.SourceRefs...)

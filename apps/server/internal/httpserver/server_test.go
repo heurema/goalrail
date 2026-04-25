@@ -135,6 +135,7 @@ func newRouter(
 		IntakeSubmit:  http.HandlerFunc(intakeHandler.Submit),
 		IntakeGet:     http.HandlerFunc(intakeHandler.Get),
 		IntakePromote: http.HandlerFunc(goalHandler.PromoteFromIntake),
+		GoalReadiness: http.HandlerFunc(goalHandler.CheckReadiness),
 	})
 }
 

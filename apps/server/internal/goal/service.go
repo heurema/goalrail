@@ -13,16 +13,22 @@ import (
 )
 
 const (
-	EventTypeGoalCreated    = "goal.created"
-	EventTypeIntakePromoted = "intake.promoted_to_goal"
-	EntityTypeGoal          = "Goal"
-	EntityTypeIntake        = "IntakeRecord"
-	SourceRefKindIntake     = "intake"
+	EventTypeGoalCreated                    = "goal.created"
+	EventTypeGoalReadinessChecked           = "goal.readiness_checked"
+	EventTypeGoalMarkedNeedsClarification   = "goal.marked_needs_clarification"
+	EventTypeGoalMarkedReadyForContractSeed = "goal.marked_ready_for_contract_seed"
+	EventTypeGoalRejected                   = "goal.rejected"
+	EventTypeIntakePromoted                 = "intake.promoted_to_goal"
+	EntityTypeGoal                          = "Goal"
+	EntityTypeIntake                        = "IntakeRecord"
+	SourceRefKindIntake                     = "intake"
 )
 
 var (
 	ErrIntakeNotFound     = errors.New("intake record not found")
+	ErrGoalNotFound       = errors.New("goal not found")
 	ErrInvalidIntakeState = errors.New("intake record state is not promotable")
+	ErrInvalidGoalState   = errors.New("goal state is not readiness-checkable")
 	ErrAlreadyPromoted    = errors.New("intake record already promoted to goal")
 )
 
@@ -46,6 +52,7 @@ type GoalStore interface {
 	Create(context.Context, spine.Goal) error
 	Get(context.Context, spine.GoalID) (spine.Goal, bool, error)
 	GetByIntakeID(context.Context, spine.IntakeID) (spine.Goal, bool, error)
+	UpdateState(context.Context, spine.GoalID, spine.GoalState) (spine.Goal, bool, error)
 }
 
 type EventLog interface {
@@ -146,6 +153,89 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 	return created, nil
 }
 
+func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spine.GoalReadinessResult, spine.Goal, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, err
+	}
+
+	current, ok, err := s.Goals.Get(ctx, goalID)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("get goal: %w", err)
+	}
+	if !ok {
+		return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
+	}
+	if !isReadinessCheckable(current.State) {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("%w: %s", ErrInvalidGoalState, current.State)
+	}
+
+	now := s.Clock.Now().UTC()
+	result := evaluateReadiness(current, now)
+	updated, ok, err := s.Goals.UpdateState(ctx, current.ID, result.State)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state: %w", err)
+	}
+	if !ok {
+		return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
+	}
+
+	readinessChecked, err := s.goalReadinessCheckedEvent(result, current.State, updated.State, now)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, err
+	}
+	transition, err := s.goalReadinessTransitionEvent(result, current.State, updated.State, now)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, err
+	}
+
+	if err := s.Events.Append(ctx, readinessChecked); err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("append goal readiness checked event: %w", err)
+	}
+	if err := s.Events.Append(ctx, transition); err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("append goal readiness transition event: %w", err)
+	}
+
+	return result, updated, nil
+}
+
+func isReadinessCheckable(state spine.GoalState) bool {
+	return state == spine.GoalStateCreated ||
+		state == spine.GoalStateNeedsClarification ||
+		state == spine.GoalStateReadyForContractSeed
+}
+
+func evaluateReadiness(goal spine.Goal, checkedAt time.Time) spine.GoalReadinessResult {
+	var reasons []spine.GoalReadinessReasonCode
+	if strings.TrimSpace(goal.Summary) == "" {
+		reasons = append(reasons, spine.GoalReadinessReasonMissingGoalSummary)
+	}
+	if strings.TrimSpace(goal.IntentOwner.Kind) == "" || strings.TrimSpace(goal.IntentOwner.ID) == "" {
+		reasons = append(reasons, spine.GoalReadinessReasonMissingIntentOwner)
+	}
+	if strings.TrimSpace(goal.ScopeHint) == "" {
+		reasons = append(reasons, spine.GoalReadinessReasonMissingScopeHint)
+	}
+	if strings.TrimSpace(goal.AcceptanceHint) == "" {
+		reasons = append(reasons, spine.GoalReadinessReasonMissingAcceptanceHint)
+	}
+
+	result := spine.GoalReadinessResult{
+		GoalID:      goal.ID,
+		State:       spine.GoalStateNeedsClarification,
+		Ready:       false,
+		ReasonCodes: reasons,
+		Message:     "goal needs clarification before contract seed",
+		CheckedAt:   checkedAt,
+	}
+	if len(reasons) == 0 {
+		result.State = spine.GoalStateReadyForContractSeed
+		result.Ready = true
+		result.ReasonCodes = []spine.GoalReadinessReasonCode{}
+		result.Message = "goal is ready for contract seed"
+	}
+	return result
+}
+
 func goalSummary(record spine.IntakeRecord) string {
 	if strings.TrimSpace(record.Body) != "" {
 		return record.Body
@@ -214,9 +304,83 @@ func (s *Service) intakePromotedEvent(intakeID spine.IntakeID, goalID spine.Goal
 	}, nil
 }
 
+func (s *Service) goalReadinessCheckedEvent(result spine.GoalReadinessResult, previousState spine.GoalState, newState spine.GoalState, timestamp time.Time) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new goal readiness checked event id: %w", err)
+	}
+
+	payload, err := json.Marshal(goalReadinessPayload{
+		Result:        result,
+		PreviousState: previousState,
+		NewState:      newState,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal goal readiness checked event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       EventTypeGoalReadinessChecked,
+		EntityType: EntityTypeGoal,
+		EntityID:   string(result.GoalID),
+		Timestamp:  timestamp,
+		Payload:    payload,
+	}, nil
+}
+
+func (s *Service) goalReadinessTransitionEvent(result spine.GoalReadinessResult, previousState spine.GoalState, newState spine.GoalState, timestamp time.Time) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new goal readiness transition event id: %w", err)
+	}
+
+	eventType, err := transitionEventType(newState)
+	if err != nil {
+		return spine.Event{}, err
+	}
+
+	payload, err := json.Marshal(goalReadinessPayload{
+		Result:        result,
+		PreviousState: previousState,
+		NewState:      newState,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal goal readiness transition event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       eventType,
+		EntityType: EntityTypeGoal,
+		EntityID:   string(result.GoalID),
+		Timestamp:  timestamp,
+		Payload:    payload,
+	}, nil
+}
+
+func transitionEventType(state spine.GoalState) (string, error) {
+	switch state {
+	case spine.GoalStateNeedsClarification:
+		return EventTypeGoalMarkedNeedsClarification, nil
+	case spine.GoalStateReadyForContractSeed:
+		return EventTypeGoalMarkedReadyForContractSeed, nil
+	case spine.GoalStateRejected:
+		return EventTypeGoalRejected, nil
+	default:
+		return "", fmt.Errorf("unsupported readiness transition state: %s", state)
+	}
+}
+
 type intakePromotedPayload struct {
 	IntakeID spine.IntakeID `json:"intake_id"`
 	GoalID   spine.GoalID   `json:"goal_id"`
+}
+
+type goalReadinessPayload struct {
+	Result        spine.GoalReadinessResult `json:"result"`
+	PreviousState spine.GoalState           `json:"previous_state"`
+	NewState      spine.GoalState           `json:"new_state"`
 }
 
 func (s *Service) validateDependencies() error {

@@ -122,7 +122,7 @@ components:
       - apps/server/internal/health
       - apps/server/internal/version
     public_claim_allowed: false
-    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake and Goal promotion prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only. Events remain in-memory, including intake.received, goal.created, and intake.promoted_to_goal. There is no durable storage, no clarification engine, no contract/work item creation, no gate/proof, no repo readiness, no auth, and no workers.
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake, Goal promotion, and deterministic Goal readiness prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only; Goal readiness updates Goal state only with fixed reason codes. Events remain in-memory, including intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, and readiness transition events. There is no durable storage, no clarification object model, no contract/work item creation, no gate/proof, no repo readiness, no auth, and no workers.
   tracker_sync:
     name: Tracker Sync
     status: planned

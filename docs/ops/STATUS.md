@@ -50,7 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with in-memory source-neutral intake and Goal promotion prototypes
+- a Go server bootstrap under `apps/server` with in-memory source-neutral intake, Goal promotion, and Goal readiness prototypes
 
 ## What is real now
 
@@ -105,9 +105,10 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, and `POST /v1/intake/{id}/promote`
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, and `POST /v1/goals/{id}/readiness`
 - the source-neutral intake API stores `IntakeRecord` only as an in-memory prototype and appends an in-memory `intake.received` event
 - Goal promotion stores `Goal` only as non-executable normalized intent and appends in-memory `goal.created` and `intake.promoted_to_goal` events
+- Goal readiness updates `Goal` state only as an in-memory deterministic prototype, returns reason codes, and appends in-memory readiness transition events
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -119,7 +120,7 @@ The project currently has:
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord` and `Goal` prototypes yet
 - no durable server storage or event log persistence yet
-- no server-side Goal clarification readiness implementation, clarification request, or contract composition yet
+- no server-side `ClarificationRequest`, clarification answer flow, or contract composition yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
@@ -153,7 +154,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake and Goal promotion prototypes; it creates `IntakeRecord` and non-executable `Goal` only and does not claim durable storage, clarification, contract composition, work item creation, gate, proof, repo readiness, auth, or workers
+- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, and deterministic Goal readiness prototypes; it creates `IntakeRecord` and non-executable `Goal` only, updates Goal readiness state only, and does not claim durable storage, clarification objects, contract composition, work item creation, gate, proof, repo readiness, auth, or workers
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

@@ -12,6 +12,7 @@ type RouteHandlers struct {
 	IntakeSubmit  http.Handler
 	IntakeGet     http.Handler
 	IntakePromote http.Handler
+	GoalReadiness http.Handler
 }
 
 // NewRouter builds the server router.
@@ -24,6 +25,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/intake", mustHandler("intake submit", handlers.IntakeSubmit))
 	mux.Handle("GET /v1/intake/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intake/{id}/promote", mustHandler("intake promote", handlers.IntakePromote))
+	mux.Handle("POST /v1/goals/{id}/readiness", mustHandler("goal readiness", handlers.GoalReadiness))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "not_found", "not found")
 	})

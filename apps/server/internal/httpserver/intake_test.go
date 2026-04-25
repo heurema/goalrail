@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -336,6 +337,108 @@ func TestPostPromoteIntakeUsesTitleAsSummaryWhenBodyIsEmpty(t *testing.T) {
 	}
 }
 
+func TestPostGoalReadinessReturnsNeedsClarificationForPromotedGoal(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusOK)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var body struct {
+		Readiness spine.GoalReadinessResult `json:"readiness"`
+		Goal      spine.Goal                `json:"goal"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Readiness.GoalID != created.ID {
+		t.Fatalf("readiness goal id = %q, want %q", body.Readiness.GoalID, created.ID)
+	}
+	if body.Readiness.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("readiness state = %q, want %q", body.Readiness.State, spine.GoalStateNeedsClarification)
+	}
+	if body.Readiness.Ready {
+		t.Fatal("readiness ready = true, want false")
+	}
+	if !hasReadinessReason(body.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingScopeHint) {
+		t.Fatalf("reason codes = %#v, want %q", body.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingScopeHint)
+	}
+	if !hasReadinessReason(body.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingAcceptanceHint) {
+		t.Fatalf("reason codes = %#v, want %q", body.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingAcceptanceHint)
+	}
+	if body.Goal.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("goal state = %q, want %q", body.Goal.State, spine.GoalStateNeedsClarification)
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if stored.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("stored goal state = %q, want %q", stored.State, spine.GoalStateNeedsClarification)
+	}
+}
+
+func TestPostGoalReadinessCanRepeatForPromotedGoal(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if first.code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d", first.code, http.StatusOK)
+	}
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if second.code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d", second.code, http.StatusOK)
+	}
+
+	var body struct {
+		Readiness spine.GoalReadinessResult `json:"readiness"`
+		Goal      spine.Goal                `json:"goal"`
+	}
+	decodeJSON(t, second.body, &body)
+	if body.Readiness.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("second readiness state = %q, want %q", body.Readiness.State, spine.GoalStateNeedsClarification)
+	}
+	if body.Goal.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("second goal state = %q, want %q", body.Goal.State, spine.GoalStateNeedsClarification)
+	}
+
+	events := server.events.Events()
+	if len(events) != 7 {
+		t.Fatalf("events length = %d, want 7", len(events))
+	}
+}
+
+func TestPostGoalReadinessUnknownGoalReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/readiness", "")
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
 
@@ -414,4 +517,26 @@ func createIntake(t *testing.T, server testServerDeps, body string) string {
 	}
 	decodeJSON(t, response.body, &accepted)
 	return accepted.IntakeID
+}
+
+func promoteIntake(t *testing.T, server testServerDeps, intakeID string) spine.Goal {
+	t.Helper()
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake/"+intakeID+"/promote", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("POST /v1/intake/{id}/promote status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+
+	var created spine.Goal
+	decodeJSON(t, response.body, &created)
+	return created
+}
+
+func hasReadinessReason(reasons []spine.GoalReadinessReasonCode, want spine.GoalReadinessReasonCode) bool {
+	for _, reason := range reasons {
+		if reason == want {
+			return true
+		}
+	}
+	return false
 }
