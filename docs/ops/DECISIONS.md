@@ -309,3 +309,20 @@ Rationale:
 - preserves an audit trail for missing information before contract generation
 - keeps clarification separate from approval and executable work
 - gives the next server implementation slice a bounded target without expanding into contract/gate/proof work
+
+## D-0030 — Repository checkout and checks run behind runner boundary
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- repository checkout, workspace preparation, code inspection, and check execution belong behind a dedicated runner boundary
+- the Goalrail API server owns canonical state, scheduling decisions, task packets, run records, event append, and proof input references, but must not clone repositories or run checks in-process
+- Goalrail supports both `goalrail_hosted_runner` and `customer_hosted_runner` deployment modes
+- customer-hosted runners are first-class for security-sensitive teams, self-managed VCS, private networks, and customers that do not allow repository contents to leave their environment
+- runners produce receipts and artifacts; final decision remains gate-owned
+- persistent full-repository mirrors and repository write access are out of scope for the MVP runner boundary
+
+Rationale:
+- keeps the server as source-of-truth owner without turning it into a hidden CI or DevOps platform
+- lets early managed pilots use hosted runners where allowed while preserving a path for customer-owned repository access
+- supports stronger security posture before GitHub, GitLab, Bitbucket, or custom Git connectors are implemented
