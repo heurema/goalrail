@@ -9,7 +9,7 @@ components:
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists; no compiling package yet.
+    notes: Canonical schema note exists. The CLI now has a local internal DTO subset under apps/cli/internal/spine, but there is still no standalone Project Spine package, persistence layer, or production state store.
   product_concept:
     name: Product Concept
     status: docs_only
@@ -83,11 +83,27 @@ components:
     notes: Shared web rules live under apps/web. The empty real console shells live under apps/web/console for console.goalrail.dev and apps/web/console-ru for console.goalrail.ru with three navigation-only surfaces and no data-backed product functionality. Current React + Vite + Mantine prototypes are the EN change-packet walkthrough under apps/web/demo-change-packet deployed at demo.goalrail.dev, the separate RU change-packet copy under apps/web/demo-change-packet-ru deployed at demo.goalrail.ru, and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
   cli_surface:
     name: CLI Surface
-    status: planned
+    status: prototype
     truth_owner: docs/product/GOALRAIL_MVP_BLUEPRINT.md
-    implementation_paths: []
+    implementation_paths:
+      - apps/cli/go.mod
+      - apps/cli/cmd/goalrail
+      - apps/cli/internal/app
+      - apps/cli/internal/clienv
+      - apps/cli/internal/cli
+      - apps/cli/internal/exitcode
+      - apps/cli/internal/spine
+      - apps/cli/internal/term
+      - apps/cli/internal/initcmd
+      - apps/cli/internal/readiness
+      - apps/cli/internal/readinesscmd
+      - apps/cli/internal/contract
+      - apps/cli/internal/contractcmd
+      - apps/cli/internal/proof
+      - apps/cli/internal/proofcmd
+      - apps/cli/testdata
     public_claim_allowed: false
-    notes: CLI surface is planned in the MVP blueprint only.
+    notes: First stdlib-only Go CLI bootstrap exists with canonical binary goalrail. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, no production repo auth or deploy-key provisioning, no hosted execution, no real gate, and no proof generation.
   tracker_sync:
     name: Tracker Sync
     status: planned

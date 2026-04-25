@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-25
-Status: planning / product canon and pilot frame active
+Status: planning / product canon and pilot frame active; first local Go CLI bootstrap exists
 Owner: Vitaly
 
 ## Current state
@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- two kernel ADRs
+- three kernel/CLI boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -87,7 +87,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and two boundary ADRs exist
+- kernel schema note and three boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -101,6 +101,8 @@ The project currently has:
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, deployed through standalone infra at `demo.goalrail.ru` rather than in-app i18n
 - `apps/web/console-ru` is the separate Russian console shell for `console.goalrail.ru` with the same empty-surface boundary
 - `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
+- `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
+- local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -108,10 +110,13 @@ The project currently has:
 
 - no schema package
 - no runtime registry implementation
-- no runtime CLI
+- no production runtime CLI beyond the local/demo `apps/cli` command foundation
+- no server integration for the CLI
+- no production repo authorization or deploy-key provisioning in the CLI
+- no real RepoBinding state sync
 - no executable flow specs yet
 - no runnable eval harness yet
-- no gate/proof implementation
+- no gate/proof implementation; `proof show` only renders provided local JSON
 - no advisory panel implementation
 - no data-backed Goalrail web UI or goal-to-proof product loop yet
 - no production landing deployment or backend lead-capture integration yet
@@ -137,7 +142,8 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
-- `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, CLI, server, auth, data, or product-loop implementation
+- `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
+- `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

@@ -31,7 +31,7 @@ Use it together with:
 
 | Path | Role | Add here when |
 | --- | --- | --- |
-| `apps/` | Product and demo application code | You add real implementation, prototypes, or app workspaces |
+| `apps/` | Product and demo application code | You add real implementation, prototypes, CLIs, or app workspaces |
 | `docs/` | Product canon, ops docs, brand docs, research, and references | You add durable project documentation or promoted reference material |
 | `tools/` | Repository tooling, checks, schemas, and fixtures | You add automation that validates or maintains the repo |
 | `scripts/` | Thin maintenance commands and wrappers | You add helper commands that do not imply a Goalrail runtime exists |
@@ -45,7 +45,10 @@ Use it together with:
 
 | Need | Put it in |
 | --- | --- |
-| New app, frontend, demo, or service code | `apps/<area>/...` |
+| New app, frontend, demo, CLI, or service code | `apps/<area>/...` |
+| Go CLI module | `apps/cli/` |
+| Canonical CLI binary entrypoint | `apps/cli/cmd/goalrail/` |
+| CLI-only internal packages and DTOs | `apps/cli/internal/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |

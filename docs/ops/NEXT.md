@@ -49,6 +49,21 @@ Done means:
 - any exclusions or attribution needs are explicit
 - repo-level OSS policy stays aligned with actual asset rights
 
+### CLI follow-up slices
+
+1. Server-side repo key provisioning API/client
+   - define the smallest server-owned provisioning boundary for repo access
+   - keep production private-key generation and storage outside the local CLI
+2. Real RepoBinding state sync
+   - connect `goalrail init` output to server-backed RepoBinding state
+   - keep local draft output until server state exists
+3. Contract draft/approval flow integration
+   - connect `goalrail contract validate` to real contract draft and approval state
+   - preserve field-level validation findings
+4. Proof retrieval from server
+   - add `proof show` support for fetching stored proof by ID when server proof state exists
+   - do not generate final gate verdicts in the CLI
+
 ## Deferred until later
 
 - hosted execution

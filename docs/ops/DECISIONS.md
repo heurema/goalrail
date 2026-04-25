@@ -224,3 +224,13 @@ Decision:
 - the RU demo is a separate deployment and domain, not a locale switch inside the EN demo
 - the `goalrail.ru` DNS record is manually managed outside the infra repo; Kubernetes uses HTTP-01 TLS for this domain
 
+## D-0024 — Go CLI canonical binary and layout
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- the Go CLI implementation lives under `apps/cli` as a separate module
+- the canonical binary name is `goalrail` via `apps/cli/cmd/goalrail`
+- `gr` may be introduced later as an optional alias
+- `gls`, `glr`, and `gor` are not canonical CLI names
+- the first CLI slice is a local/demo bootstrap only and does not implement server integration, production repo auth, hosted execution, gate logic, or proof generation

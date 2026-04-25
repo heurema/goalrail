@@ -1,0 +1,13 @@
+{
+  "id": "ctr_demo_1",
+  "repo_binding_id": "repo_demo_1",
+  "goal": "Improve checkout error copy",
+  "business_context": "Reduce support confusion in the checkout flow.",
+  "in_scope": ["checkout error message"],
+  "out_of_scope": ["payment provider integration"],
+  "constraints": ["no backend behavior changes"],
+  "acceptance_criteria": ["error copy is updated", "existing tests pass"],
+  "expected_checks": ["go test ./..."],
+  "proof_expectations": ["show changed copy and test result"],
+  "state": "approved"
+}

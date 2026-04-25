@@ -68,33 +68,34 @@ related_docs:
 29. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
 30. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
 31. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+32. `docs/adr/ADR-0003-go-cli-layout.md`
 
 ### 7. Governance and change control
-32. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-33. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-34. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-35. `docs/product/GOALRAIL_RULE_STACK.md`
+33. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+34. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+35. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+36. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-36. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-37. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-38. `docs/ops/STATUS.md`
-39. `docs/ops/NEXT.md`
-40. `docs/ops/DECISIONS.md`
-41. `docs/ops/COMPONENTS.yaml`
-42. `docs/ops/REPO_STRUCTURE.md`
-43. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-44. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+37. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+38. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+39. `docs/ops/STATUS.md`
+40. `docs/ops/NEXT.md`
+41. `docs/ops/DECISIONS.md`
+42. `docs/ops/COMPONENTS.yaml`
+43. `docs/ops/REPO_STRUCTURE.md`
+44. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+45. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-45. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-46. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-47. `docs/reference/design/reference_screens/`
-48. `.goalrail/work/`
-49. `.goalrail/knowledge/`
-50. `.punk/publishing/`
-51. `.goalrail/flows/`
-52. `.goalrail/evals/`
+46. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+47. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+48. `docs/reference/design/reference_screens/`
+49. `.goalrail/work/`
+50. `.goalrail/knowledge/`
+51. `.punk/publishing/`
+52. `.goalrail/flows/`
+53. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -140,6 +141,7 @@ related_docs:
 - `GOALRAIL_PARALLEL_EXECUTION_MODEL.md` — writable execution vs advisory parallelism
 - `ADR-0001` — runtime-neutral CLI-first boundary
 - `ADR-0002` — single-writer and advisory-panels boundary
+- `ADR-0003` — Go CLI layout and canonical binary boundary
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
