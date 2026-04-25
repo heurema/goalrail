@@ -11,8 +11,8 @@ interface SurfaceItem {
 
 const SURFACES: SurfaceItem[] = [
   { id: 'contracts', label: 'Контракты' },
-  { id: 'delivery-readiness', label: 'Готовность доставки' },
-  { id: 'proof', label: 'Доказательства' },
+  { id: 'delivery-readiness', label: 'Готовность проекта' },
+  { id: 'proof', label: 'Подтверждения' },
 ];
 
 function App() {

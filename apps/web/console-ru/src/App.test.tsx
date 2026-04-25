@@ -14,8 +14,8 @@ describe('App', () => {
     expect(navigation).toBeInTheDocument();
     expect(buttons).toHaveLength(3);
     expect(screen.getByRole('button', { name: /^Контракты$/i })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: /^Готовность доставки$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Доказательства$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Готовность проекта$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Подтверждения$/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/контракты: пустой раздел/i)).toBeInTheDocument();
     expect(screen.queryByText(/trialops-demo|C-0147|readiness score|proof queue/i)).not.toBeInTheDocument();
   });
@@ -23,14 +23,14 @@ describe('App', () => {
   it('switches the active empty Russian surface without rendering data', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Готовность доставки$/i }));
-    expect(screen.getByRole('button', { name: /^Готовность доставки$/i })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByLabelText(/готовность доставки: пустой раздел/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Готовность проекта$/i }));
+    expect(screen.getByRole('button', { name: /^Готовность проекта$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByLabelText(/готовность проекта: пустой раздел/i)).toBeInTheDocument();
     expect(screen.queryByText(/add repository|connected|score|status/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Доказательства$/i }));
-    expect(screen.getByRole('button', { name: /^Доказательства$/i })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByLabelText(/доказательства: пустой раздел/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Подтверждения$/i }));
+    expect(screen.getByRole('button', { name: /^Подтверждения$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByLabelText(/подтверждения: пустой раздел/i)).toBeInTheDocument();
     expect(screen.queryByText(/archive|decision|evidence/i)).not.toBeInTheDocument();
   });
 });

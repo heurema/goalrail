@@ -212,4 +212,4 @@ Decision:
 - the RU console shell lives in `apps/web/console-ru`
 - the target subdomain is `console.goalrail.ru`
 - it is a copied and localized workspace, not in-app i18n inside `apps/web/console`
-- the first RU console version mirrors the same empty-surface boundary with Russian labels: Контракты, Готовность доставки, Доказательства
+- the first RU console version mirrors the same empty-surface boundary with Russian labels: Контракты, Готовность проекта, Подтверждения
