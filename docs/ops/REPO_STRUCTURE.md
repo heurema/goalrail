@@ -49,6 +49,9 @@ Use it together with:
 | Go CLI module | `apps/cli/` |
 | Canonical CLI binary entrypoint | `apps/cli/cmd/goalrail/` |
 | CLI-only internal packages and DTOs | `apps/cli/internal/` |
+| Go server module | `apps/server/` |
+| Canonical server binary entrypoint | `apps/server/cmd/goalrail-server/` |
+| Server-only internal packages | `apps/server/internal/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |

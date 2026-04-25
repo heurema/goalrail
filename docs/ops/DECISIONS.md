@@ -234,3 +234,15 @@ Decision:
 - `gr` may be introduced later as an optional alias
 - `gls`, `glr`, and `gor` are not canonical CLI names
 - the first CLI slice is a local/demo bootstrap only and does not implement server integration, production repo auth, hosted execution, gate logic, or proof generation
+
+## D-0025 — Go server canonical boundary and stack
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- the Go server implementation lives under `apps/server` as a separate module
+- the canonical server binary name is `goalrail-server` via `apps/server/cmd/goalrail-server`
+- the server is the future owner of canonical Goalrail state, while CLI, skills, web resources, and integrations remain adapters/helpers
+- the first server stack is stdlib-first: `net/http`, `encoding/json`, `log/slog`, manual wiring, stdlib tests, plus `github.com/caarlos0/env/v11` for environment config
+- the first server slice exposes only `/livez`, `/readyz`, and `/version`
+- source-neutral intake is the next meaningful server domain, but this slice has no intake endpoint, database, event log persistence, contract composer, gate, or proof implementation

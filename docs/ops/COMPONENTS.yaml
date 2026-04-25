@@ -104,6 +104,20 @@ components:
       - apps/cli/testdata
     public_claim_allowed: false
     notes: First stdlib-only Go CLI bootstrap exists with canonical binary goalrail. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, no production repo auth or deploy-key provisioning, no hosted execution, no real gate, and no proof generation.
+  server_surface:
+    name: Server Surface
+    status: prototype
+    truth_owner: docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md
+    implementation_paths:
+      - apps/server/go.mod
+      - apps/server/cmd/goalrail-server
+      - apps/server/internal/app
+      - apps/server/internal/config
+      - apps/server/internal/httpserver
+      - apps/server/internal/health
+      - apps/server/internal/version
+    public_claim_allowed: false
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version only and has no intake, no database, no event log persistence, no contract composer, no gate/proof, no repo readiness, no auth, and no workers.
   tracker_sync:
     name: Tracker Sync
     status: planned

@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-25
-Status: planning / product canon and pilot frame active; first local Go CLI bootstrap exists
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server bootstraps exist
 Owner: Vitaly
 
 ## Current state
@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- three kernel/CLI boundary ADRs
+- four kernel/CLI/server boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -50,6 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
+- a minimal Go server bootstrap under `apps/server`
 
 ## What is real now
 
@@ -103,6 +104,8 @@ The project currently has:
 - `apps/web/pilot-intake-ru` is the current local React + Vite + Mantine RU pilot-intake landing prototype
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
+- `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
+- server endpoints are limited to `GET /livez`, `GET /readyz`, and `GET /version`
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -112,11 +115,14 @@ The project currently has:
 - no runtime registry implementation
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
+- no server-owned canonical domain implementation yet
+- no server intake endpoint yet
+- no durable server storage or event log persistence yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no executable flow specs yet
 - no runnable eval harness yet
-- no gate/proof implementation; `proof show` only renders provided local JSON
+- no gate/proof implementation; `proof show` only renders provided local JSON, and the server does not create decisions or proof
 - no advisory panel implementation
 - no data-backed Goalrail web UI or goal-to-proof product loop yet
 - no production landing deployment or backend lead-capture integration yet
@@ -144,6 +150,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
+- `apps/server` provides a verified Go server bootstrap with health/version endpoints only; it does not claim intake, durable storage, contract composition, gate, proof, repo readiness, auth, or workers
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
