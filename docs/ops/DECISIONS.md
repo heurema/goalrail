@@ -330,3 +330,20 @@ Rationale:
 - keeps the server as source-of-truth owner without turning it into a hidden CI or DevOps platform
 - lets early managed pilots use hosted runners where allowed while preserving a path for customer-owned repository access
 - supports stronger security posture before GitHub, GitLab, Bitbucket, or custom Git connectors are implemented
+
+## D-0031 — First runner prototype is hosted read-only checkout
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- first runnable runner prototype starts with `goalrail_hosted_runner`
+- first prototype uses a Goalrail-operated hosted runner pool
+- hosted runner workers use pull-based / poll-based job leasing from the API server
+- first prototype performs read-only ephemeral checkout and returns a checkout receipt
+- customer-hosted runner remains first-class in the architecture model, but is deferred from the first implementation slice
+- first prototype does not implement repository writes, persistent mirrors, arbitrary command execution, customer-hosted runner installer/registration/auth, gate, or proof
+
+Rationale:
+- keeps the first implementation small and testable
+- proves the runner boundary without building a full hosted execution platform
+- preserves future customer-hosted runner path without blocking MVP progress

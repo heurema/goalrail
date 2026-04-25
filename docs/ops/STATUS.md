@@ -86,6 +86,9 @@ The project currently has:
 - customer-hosted runners are first-class in the architecture model
 - ADR-0008 separates VCS discovery, repository binding, and checkout access
 - customer-hosted runners may operate without Goalrail cloud-side clone access
+- ADR-0008 documents the first runner prototype direction as hosted-only read-only ephemeral checkout
+- hosted runner workers are expected to use pull-based / poll-based job leasing
+- customer-hosted runner remains documented but unimplemented
 
 ### Delivery model
 - roadmap phases defined
@@ -137,8 +140,13 @@ The project currently has:
 - no manual-declared repository registration
 - no runner-reported repository metadata flow
 - no runner registration, runner assignment, checkout request, checkout receipt, or worker implementation yet
+- no hosted runner pool implementation yet
+- no checkout job implementation yet
+- no customer-hosted runner installer/registration/auth yet
 - no checkout receipt trust or attestation implementation yet
 - no repository clone/readiness implementation in either hosted or customer-hosted runner mode yet
+- no persistent mirrors
+- no repository writes
 - no executable flow specs yet
 - no runnable eval harness yet
 - no gate/proof implementation; `proof show` only renders provided local JSON, and the server does not create decisions or proof

@@ -60,10 +60,14 @@ Done means:
    - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
    - avoid introducing `RepositoryEnrollment` as a mandatory v0 object unless policy needs it
 2. Runner checkout prototype boundary
-   - define the smallest runner registration, assignment, checkout request, and checkout receipt shape
-   - support `goalrail_hosted_runner` and `customer_hosted_runner` as first-class modes
-   - produce a checkout receipt with minimum evidence fields such as runner, job, commit, workspace, artifact hashes, and timestamp
-   - do not implement repository writes, persistent mirrors, gate, proof, or provider-specific clone credentials in this slice
+   - start with `goalrail_hosted_runner` only as a Goalrail-operated hosted runner pool
+   - use pull-based / poll-based job leasing from the API server
+   - perform read-only ephemeral checkout and produce a checkout receipt with minimum evidence fields
+   - do not implement customer-hosted runner installer/registration/auth, persistent mirrors, repository writes, arbitrary command execution, gate, or proof
+3. Customer-hosted runner protocol boundary
+   - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
+   - keep clone access inside customer infrastructure and return bounded artifacts only
+   - leave optional attestation or receipt signatures for a later trust-hardening slice
 
 ### CLI follow-up slices
 

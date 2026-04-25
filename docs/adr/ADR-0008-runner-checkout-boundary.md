@@ -262,9 +262,15 @@ A minimum conceptual checkout or check receipt may include:
 - `runner_id`
 - `runner_mode`
 - `job_id`
+- `run_id`
+- `repo_binding_id`
+- `ref`
 - `commit_sha`
 - `workspace_ref`
 - `artifact_hashes`
+- `checkout_started_at`
+- `checkout_finished_at`
+- `workspace_cleaned`
 - `receipt_created_at`
 - optional later: `receipt_signature`
 
@@ -272,6 +278,54 @@ Gate should be able to see who performed the check, where it ran, which commit i
 covered, and which artifact hashes are attached. A runner still does not write
 the final verdict. Signed receipts and stronger attestation can come later and
 are not required for the next code slice.
+
+## First runner prototype sequencing
+
+The first runnable runner prototype should start with `goalrail_hosted_runner`.
+This means a Goalrail-operated hosted runner pool, not a broad hosted execution
+platform.
+
+Workers in the hosted runner pool should use a pull-based or poll-based lease
+protocol with the API server. The API server should not push jobs into inbound
+runner servers, and hosted runners should not require inbound callbacks from the
+API server.
+
+Customer-hosted runners remain first-class in the architecture model, but are
+deferred from the first implementation slice. Customer-hosted runner
+registration, installer, auth handshake, attestation, and customer-owned
+credential flow are later slices.
+
+The first hosted runner prototype should be read-only and intentionally narrow:
+
+- perform ephemeral checkout only
+- return a checkout receipt only
+- not run arbitrary customer commands
+- not create branches, commits, or pull requests
+- not create Proof
+- not write Gate decisions
+- not implement persistent mirrors
+- not implement customer-hosted runner registration, installer, or auth
+
+Conceptual first hosted runner flow:
+
+1. API server creates a bounded `CheckoutJob`.
+2. `CheckoutJob` references a `Run` and `RepoBinding`.
+3. Hosted runner worker starts as part of the hosted runner pool.
+4. Hosted runner worker identifies itself with runner id, token, and config.
+5. Hosted runner worker polls the API server for a job.
+6. API server leases one bounded `CheckoutJob` to the runner.
+7. API / provider layer provides checkout instruction.
+8. A future GitHub path may use a short-lived GitHub App installation token.
+9. Runner performs read-only ephemeral clone of the selected repository and ref.
+10. Runner resolves `commit_sha`.
+11. Runner may confirm path scope exists.
+12. Runner records checkout metadata and submits a checkout receipt.
+13. Runner cleans workspace.
+14. Gate may later consume the receipt as evidence, but runner does not write the
+    final decision.
+
+This section is conceptual for this ADR. It is not implemented in this PR and is
+not required in this docs-only PR.
 
 ## Revocation posture
 
@@ -337,6 +391,7 @@ This ADR does not implement or define final details for:
 - runner binary packaging
 - hosted runner infrastructure
 - customer-hosted runner installer
+- arbitrary customer command execution
 - repository write access
 - branch creation
 - commit creation
@@ -356,21 +411,23 @@ self-managed Git, and custom Git should remain representable later.
 A later runner prototype should be its own slice and should start with the
 smallest safe behavior:
 
-- server records a conceptual runner mode
+- first implementation target is `goalrail_hosted_runner`
+- hosted runner workers use pull-based / poll-based job leasing
 - server creates a bounded checkout request
-- runner performs an ephemeral read-only checkout or accepts a customer-mounted
-  workspace
+- hosted runner performs an ephemeral read-only checkout
 - runner returns a deterministic checkout receipt with minimum evidence fields
 - no repository writes
+- no arbitrary customer command execution
+- no customer-hosted runner installer, registration, or auth in the first slice
 - no gate decision
 - no proof generation
 - no persistent mirror
 
 ## Open questions
 
-1. Should the first runner prototype be Goalrail-hosted, customer-hosted, or both
-   with a mock transport?
-2. What is the minimum runner authentication handshake?
+1. What is the minimum hosted runner leasing handshake?
+2. What is the minimum customer-hosted runner authentication handshake for a later
+   slice?
 3. Should runner assignment be stored as a canonical object before durable
    storage exists?
 4. Which artifact shape should represent a checkout receipt?
