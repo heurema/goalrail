@@ -246,3 +246,17 @@ Decision:
 - the first server stack is stdlib-first: `net/http`, `encoding/json`, `log/slog`, manual wiring, stdlib tests, plus `github.com/caarlos0/env/v11` for environment config
 - the first server slice exposes only `/livez`, `/readyz`, and `/version`
 - source-neutral intake is the next meaningful server domain, but this slice has no intake endpoint, database, event log persistence, contract composer, gate, or proof implementation
+
+## D-0026 — Goalrail Go apps use the latest stable Go line
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- new Goalrail Go modules use the latest stable Go major/minor line by default
+- current Goalrail Go apps should stay aligned unless compatibility constraints require otherwise
+- patch-level toolchain pinning is not required in `go.mod` by default
+
+Rationale:
+- keeps CLI and server Go policy aligned
+- avoids minimum-version drift between Goalrail Go apps
+- matches the project preference for modern Go idioms and current standard-library capabilities
