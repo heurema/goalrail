@@ -319,6 +319,10 @@ Decision:
 - the Goalrail API server owns canonical state, scheduling decisions, task packets, run records, event append, and proof input references, but must not clone repositories or run checks in-process
 - Goalrail supports both `goalrail_hosted_runner` and `customer_hosted_runner` deployment modes
 - customer-hosted runners are first-class for security-sensitive teams, self-managed VCS, private networks, and customers that do not allow repository contents to leave their environment
+- customer-hosted runners may operate without Goalrail cloud-side VCS connection or clone credential
+- VCS provider discovery, repository records, repo bindings, and checkout permission are separate concerns
+- `RepoBinding` identifies which repository a Project works with, but does not itself authorize checkout
+- checkout authority is determined by runner mode, policy, and checkout access mode
 - runners produce receipts and artifacts; final decision remains gate-owned
 - persistent full-repository mirrors and repository write access are out of scope for the MVP runner boundary
 

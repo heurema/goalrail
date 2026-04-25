@@ -51,7 +51,7 @@ components:
     truth_owner: docs/adr/ADR-0008-runner-checkout-boundary.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. Goalrail-hosted and customer-hosted runner modes are documented. No runner code exists yet.
+    notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. It keeps VCS discovery, repo binding, and checkout access separate; customer-hosted runners may operate without Goalrail cloud-side clone access. No runner code exists yet.
   advisory_panel:
     name: Advisory Panel
     status: planned

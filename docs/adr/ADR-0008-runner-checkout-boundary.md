@@ -65,6 +65,11 @@ Goalrail supports two runner deployment modes:
 The runner boundary is part of the Delivery Runtime layer, not the Intent Plane,
 not the Gate, and not the API server.
 
+Provider-side repository discovery is not required for `customer_hosted_runner`
+mode. Goalrail may operate on a repository through a customer-hosted runner even
+when Goalrail cloud has no VCS provider connection, clone credential, or ability
+to see repository contents.
+
 ## Boundary rules
 
 1. The API server does not clone repositories in-process.
@@ -82,6 +87,70 @@ not the Gate, and not the API server.
 9. Repository write access is out of scope for the first runner boundary.
 10. Provider-specific credential handling must stay behind provider and runner
     adapters, not inside the kernel.
+11. VCS provider discovery, repository binding, and checkout permission are
+    separate concerns.
+12. `VcsConnection` is not a checkout credential.
+13. `RepositoryRecord` is not repository access.
+14. `RepoBinding` identifies which repository a Project works with; it does not
+    itself authorize checkout.
+
+Shorthand: `VcsConnection != CheckoutCredential`, `RepositoryRecord !=
+RepoAccess`, and `RepoBinding != permission to clone`.
+
+## Repository source modes
+
+Future implementation may model repository source using conceptual source modes.
+These names are conceptual for this ADR and are not required for the next code
+slice.
+
+### `provider_discovered`
+
+The repository was found through a VCS adapter such as GitHub, GitLab, Bitbucket,
+or a custom Git provider. For example, a GitHub App installation may sync
+selected repository metadata into Goalrail.
+
+### `manual_declared`
+
+An owner or admin manually declares a repository record for a Goalrail Project.
+Goalrail cloud may have no provider-side access. This path is useful for
+self-managed Git, private networks, early pilots, and security-sensitive setups.
+
+### `runner_reported`
+
+A customer-hosted runner reports bounded metadata about a local workspace or
+repository. Goalrail receives minimal metadata, receipt references, and artifact
+references, not unrestricted repository contents.
+
+## Checkout access modes
+
+Checkout authority is determined by runner mode, policy, access mode, and the
+checkout instruction for a bounded run. `VcsConnection`, `RepositoryRecord`, and
+`RepoBinding` may support discovery, catalog, and project mapping, but they do
+not by themselves grant clone permission.
+
+Future implementation may model checkout access using conceptual modes:
+
+### `provider_token_checkout`
+
+A runner receives a short-lived provider credential. For example, a
+Goalrail-hosted GitHub flow may use a GitHub App installation token scoped to the
+selected repository and permissions. This is valid only when organization policy
+allows Goalrail-hosted checkout.
+
+### `customer_runner_checkout`
+
+A customer-hosted runner has repository access inside customer infrastructure.
+Goalrail cloud is not required to have a VCS provider connection or clone
+credential.
+
+### `customer_mounted_workspace`
+
+A customer-hosted runner receives an already prepared workspace. For example, CI
+may perform checkout before the runner collects receipt and check results.
+
+### `metadata_only`
+
+The repository is used only as catalog or binding metadata. No checkout happens.
 
 ## Runner responsibilities
 
@@ -176,6 +245,41 @@ Goalrail should avoid storing long-lived repository credentials whenever a
 short-lived token, customer-hosted credential, or delegated checkout can satisfy
 the job.
 
+## Artifact minimization
+
+A customer-hosted runner should not automatically upload unrestricted repository
+contents to Goalrail. Future policy may limit returned artifacts to metadata
+only, redacted logs, selected check outputs, selected files, patch or diff
+summaries, or a full verification bundle only when explicitly allowed.
+
+## Receipt trust and minimum evidence
+
+Runner receipts and artifacts are evidence inputs for Gate. Gate must understand
+the source and trust posture of that evidence before writing a final decision.
+
+A minimum conceptual checkout or check receipt may include:
+
+- `runner_id`
+- `runner_mode`
+- `job_id`
+- `commit_sha`
+- `workspace_ref`
+- `artifact_hashes`
+- `receipt_created_at`
+- optional later: `receipt_signature`
+
+Gate should be able to see who performed the check, where it ran, which commit it
+covered, and which artifact hashes are attached. A runner still does not write
+the final verdict. Signed receipts and stronger attestation can come later and
+are not required for the next code slice.
+
+## Revocation posture
+
+If repository access is revoked, new checkout or run assignment should be blocked
+or require reconnect / reapproval. Existing immutable proof artifacts remain
+historical evidence. Future repository and runner state should be able to reflect
+`revoked` or `needs_reconnect` status without mutating past proof.
+
 ## Events
 
 Possible future events:
@@ -224,7 +328,9 @@ Rejected. Runners produce receipts and artifacts. Gate writes the final decision
 This ADR does not implement or define final details for:
 
 - GitHub, GitLab, Bitbucket, or custom Git connector implementation
-- organization/user/provider connection schema
+- organization/user/VCS connection schema
+- `RepositoryRecord.source_kind`
+- `RepoBinding.access_mode`
 - durable storage
 - job queue
 - runner authentication protocol
@@ -240,9 +346,12 @@ This ADR does not implement or define final details for:
 
 ## Implementation implications
 
-The next bounded work should document organization, user, provider connection,
-repository catalog, and RepoBinding boundaries before building real GitHub
-integration.
+The next bounded work should document Organization, User, Membership,
+`VcsConnection`, `RepositoryRecord`, `RepositoryRecord.source_kind`,
+`RepoBinding`, and `RepoBinding.access_mode` boundaries before building real
+GitHub integration. GitHub can be the first implementation target without making
+GitHub App concepts part of the core domain model. GitLab, Bitbucket,
+self-managed Git, and custom Git should remain representable later.
 
 A later runner prototype should be its own slice and should start with the
 smallest safe behavior:
@@ -251,7 +360,7 @@ smallest safe behavior:
 - server creates a bounded checkout request
 - runner performs an ephemeral read-only checkout or accepts a customer-mounted
   workspace
-- runner returns a deterministic checkout receipt
+- runner returns a deterministic checkout receipt with minimum evidence fields
 - no repository writes
 - no gate decision
 - no proof generation
@@ -269,3 +378,5 @@ smallest safe behavior:
    repository contents?
 6. Should runner policy live with organization policy, project policy, or
    RepoBinding policy first?
+7. Should manually declared repositories require a separate approval object later,
+   or can `RepoBinding.access_mode` and policy cover v0?

@@ -84,6 +84,8 @@ The project currently has:
 - runner and repository checkout boundary is documented in ADR-0008
 - repository checkout and check execution must happen behind runners, not inside the API server
 - customer-hosted runners are first-class in the architecture model
+- ADR-0008 separates VCS discovery, repository binding, and checkout access
+- customer-hosted runners may operate without Goalrail cloud-side clone access
 
 ### Delivery model
 - roadmap phases defined
@@ -129,8 +131,13 @@ The project currently has:
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
-- no organization/user/provider connection/repository catalog schema implementation yet
+- no organization/user/VCS connection/repository catalog schema implementation yet
+- no `RepositoryRecord.source_kind` implementation
+- no `RepoBinding.access_mode` implementation
+- no manual-declared repository registration
+- no runner-reported repository metadata flow
 - no runner registration, runner assignment, checkout request, checkout receipt, or worker implementation yet
+- no checkout receipt trust or attestation implementation yet
 - no repository clone/readiness implementation in either hosted or customer-hosted runner mode yet
 - no executable flow specs yet
 - no runnable eval harness yet
@@ -166,7 +173,7 @@ Current packaging target:
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
-- next sales-pack, provider-boundary, and runner-boundary slices are explicit and bounded
+- next sales-pack, VCS-boundary, and runner-boundary slices are explicit and bounded
 
 ## Main current risks
 

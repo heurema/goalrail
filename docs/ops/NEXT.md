@@ -53,13 +53,16 @@ Done means:
 
 ### Architecture follow-up slices
 
-1. Organization / user / provider connection boundary
-   - define Goalrail `Organization`, `User`, memberships, provider-neutral connections, repository catalog, repository enrollment, and RepoBinding ownership
+1. Organization / user / VCS connection boundary
+   - define Goalrail `Organization`, `User`, `Membership`, `VcsConnection`, `RepositoryRecord`, `RepositoryRecord.source_kind`, `RepoBinding`, and `RepoBinding.access_mode`
    - make GitHub the first implementation target without making GitHub App concepts part of the core domain model
-   - keep GitLab, Bitbucket, self-managed Git, and custom Git paths representable as later provider adapters
+   - keep GitLab, Bitbucket, self-managed Git, and custom Git paths representable as later VCS adapters
+   - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
+   - avoid introducing `RepositoryEnrollment` as a mandatory v0 object unless policy needs it
 2. Runner checkout prototype boundary
    - define the smallest runner registration, assignment, checkout request, and checkout receipt shape
    - support `goalrail_hosted_runner` and `customer_hosted_runner` as first-class modes
+   - produce a checkout receipt with minimum evidence fields such as runner, job, commit, workspace, artifact hashes, and timestamp
    - do not implement repository writes, persistent mirrors, gate, proof, or provider-specific clone credentials in this slice
 
 ### CLI follow-up slices
