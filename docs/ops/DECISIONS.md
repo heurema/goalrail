@@ -213,3 +213,14 @@ Decision:
 - the target subdomain is `console.goalrail.ru`
 - it is a copied and localized workspace, not in-app i18n inside `apps/web/console`
 - the first RU console version mirrors the same empty-surface boundary with Russian labels: Контракты, Оценка готовности, Проверка результата
+
+## D-0023 — RU demo deploys on a separate domain
+Date: 2026-04-25
+Status: accepted
+
+Decision:
+- the EN change-packet demo remains deployed from `apps/web/demo-change-packet` at `demo.goalrail.dev`
+- the RU change-packet demo deploys from `apps/web/demo-change-packet-ru` at `demo.goalrail.ru`
+- the RU demo is a separate deployment and domain, not a locale switch inside the EN demo
+- the `goalrail.ru` DNS record is manually managed outside the infra repo; Kubernetes uses HTTP-01 TLS for this domain
+
