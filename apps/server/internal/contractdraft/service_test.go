@@ -503,6 +503,15 @@ func TestServiceAppendsContractDraftUpdatedEvent(t *testing.T) {
 	if event.EntityID != string(updated.ID) {
 		t.Fatalf("entity id = %q, want %q", event.EntityID, updated.ID)
 	}
+	if event.OrganizationID != updated.OrganizationID {
+		t.Fatalf("organization_id = %q, want %q", event.OrganizationID, updated.OrganizationID)
+	}
+	if event.ProjectID != updated.ProjectID {
+		t.Fatalf("project_id = %q, want %q", event.ProjectID, updated.ProjectID)
+	}
+	if event.RepoBindingID != updated.RepoBindingID {
+		t.Fatalf("repo_binding_id = %q, want %q", event.RepoBindingID, updated.RepoBindingID)
+	}
 
 	var payload struct {
 		ContractDraftID spine.ContractDraftID `json:"contract_draft_id"`

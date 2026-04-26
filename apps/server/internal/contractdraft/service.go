@@ -607,13 +607,15 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 	}
 
 	return spine.Event{
-		ID:            eventID,
-		Type:          EventTypeContractDraftUpdated,
-		EntityType:    EntityTypeContractDraft,
-		EntityID:      string(updated.ID),
-		RepoBindingID: updated.RepoBindingID,
-		Timestamp:     updatedAt,
-		Payload:       payload,
+		ID:             eventID,
+		Type:           EventTypeContractDraftUpdated,
+		EntityType:     EntityTypeContractDraft,
+		EntityID:       string(updated.ID),
+		OrganizationID: updated.OrganizationID,
+		ProjectID:      updated.ProjectID,
+		RepoBindingID:  updated.RepoBindingID,
+		Timestamp:      updatedAt,
+		Payload:        payload,
 	}, nil
 }
 
