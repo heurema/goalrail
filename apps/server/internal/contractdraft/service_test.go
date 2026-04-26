@@ -325,6 +325,37 @@ func TestServiceUpdatesEditableDraftFields(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateAllowsEmptyCoreDraftArrays(t *testing.T) {
+	service, seeds, _, _ := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, err := service.Update(context.Background(), created.ID, updateRequest(t, `{
+		"proposed_scope": [],
+		"proposed_acceptance_criteria": [],
+		"proposed_proof_expectations": []
+	}`))
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	if updated.ProposedScope == nil || len(updated.ProposedScope) != 0 {
+		t.Fatalf("proposed_scope = %#v, want explicit empty slice", updated.ProposedScope)
+	}
+	if updated.ProposedAcceptanceCriteria == nil || len(updated.ProposedAcceptanceCriteria) != 0 {
+		t.Fatalf("proposed_acceptance_criteria = %#v, want explicit empty slice", updated.ProposedAcceptanceCriteria)
+	}
+	if updated.ProposedProofExpectations == nil || len(updated.ProposedProofExpectations) != 0 {
+		t.Fatalf("proposed_proof_expectations = %#v, want explicit empty slice", updated.ProposedProofExpectations)
+	}
+}
+
 func TestServiceRejectsNonEditableUpdateField(t *testing.T) {
 	service, seeds, _, events := draftService(t)
 	seed := validDraftableSeed()

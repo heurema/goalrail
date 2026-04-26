@@ -497,16 +497,13 @@ func decodeStringChange(field string, raw json.RawMessage) (string, error) {
 	return value, nil
 }
 
-func decodeStringSliceChange(field string, raw json.RawMessage, requireNonEmpty bool) ([]string, error) {
+func decodeStringSliceChange(field string, raw json.RawMessage, _ bool) ([]string, error) {
 	var value []string
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, &ValidationError{Field: "changes." + field, Message: "must be an array of strings"}
 	}
 	if value == nil {
 		value = []string{}
-	}
-	if requireNonEmpty && len(value) == 0 {
-		return nil, &ValidationError{Field: "changes." + field, Message: "must include at least one item"}
 	}
 	return cloneStrings(value), nil
 }
