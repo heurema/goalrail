@@ -9,7 +9,21 @@ components:
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, ClarificationRequest, and ClarificationAnswer DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
+    notes: Canonical schema note exists. The MVP uses direct RepoBinding before RepositoryRecord, and RepoBinding stores the repo reference directly. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, ClarificationRequest, and ClarificationAnswer DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
+  organization_context:
+    name: Organization Context
+    status: docs_only
+    truth_owner: docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: User/Organization/Membership/Project/RepoBinding MVP boundary is documented; no implementation yet.
+  server_persistence:
+    name: Server Persistence
+    status: planned
+    truth_owner: docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: pgx + Squirrel + goose selected; no implementation yet.
   product_concept:
     name: Product Concept
     status: docs_only

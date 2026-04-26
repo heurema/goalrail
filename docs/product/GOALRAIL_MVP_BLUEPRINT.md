@@ -68,6 +68,10 @@ Thin settings surface for:
 - sync status
 - future external checks
 
+Repo binding is initially manual or dev-seeded. GitHub/GitLab/Bitbucket
+integration comes later and is not required for the first server persistence
+slice.
+
 ## 2. Architectural principles
 
 1. One spine, two planes, one outcome.
@@ -86,11 +90,16 @@ Thin settings surface for:
 14. One writable run uses one primary writer runtime.
 15. One task may use many advisory runtimes.
 16. Sensitive policy may override risk-based fan-out.
+17. API server owns canonical state, but does not clone repositories or run
+    checks in-process.
 
 ## 3. Layer map
 
 ### Layer 1 — Spine / State Truth
 Canonical objects:
+- User
+- Organization
+- OrganizationMembership
 - Project
 - RepoBinding
 - Goal
@@ -121,6 +130,17 @@ Storage:
 - object storage for artifacts
 - append-only event log
 - materialized views for current-state projections
+
+Initial Project / repo context:
+- Goalrail Organization is an internal SaaS tenant/workspace, not a GitHub
+  Organization, GitLab Group, or Bitbucket Workspace
+- Project is a delivery container inside an Organization
+- Project is not a repository
+- RepoBinding stores the repository reference directly in the MVP
+- RepositoryRecord is deferred until repository catalog, repo-level policy, or
+  independent provider sync is needed
+- VcsConnection is a future provider connection layer, not required for the
+  first code slice
 
 ### Layer 2 — Intent Plane
 Produces:
@@ -215,7 +235,8 @@ Responsibilities:
 ## 4. Canonical object chain
 
 ```text
-Project
+Organization
+  -> Project
   -> RepoBinding
   -> Goal
   -> Contract
@@ -338,3 +359,6 @@ The first sellable MVP must support:
 - unrestricted multi-agent autonomy
 - opaque internal memory platform
 - API-first vendor orchestration as the default path
+- full SaaS onboarding/auth as the first persistence slice
+- GitHub/GitLab/Bitbucket implementation before manual/dev-seeded RepoBinding
+- repository checkout in the API server

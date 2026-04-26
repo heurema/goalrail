@@ -13,6 +13,7 @@
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, Goal readiness, ClarificationRequest, and ClarificationAnswer recording prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
+- ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -54,12 +55,12 @@ Done means:
 
 ### Architecture follow-up slices
 
-1. Organization / user / VCS connection boundary
-   - define Goalrail `Organization`, `User`, `Membership`, `VcsConnection`, `RepositoryRecord`, `RepositoryRecord.source_kind`, `RepoBinding`, and `RepoBinding.access_mode`
-   - make GitHub the first implementation target without making GitHub App concepts part of the core domain model
-   - keep GitLab, Bitbucket, self-managed Git, and custom Git paths representable as later VCS adapters
+1. Organization / project / repo binding persistence boundary
+   - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, future `VcsConnection`, and `RepoBinding.access_mode`
+   - direct `RepoBinding` stores repository reference in the MVP
+   - `RepositoryRecord` and `RepositoryEnrollment` are deferred
+   - manual/dev-seeded RepoBinding comes before GitHub integration
    - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
-   - avoid introducing `RepositoryEnrollment` as a mandatory v0 object unless policy needs it
 2. Runner checkout prototype boundary
    - start with `goalrail_hosted_runner` only as a Goalrail-operated hosted runner pool
    - use pull-based / poll-based job leasing from the API server
@@ -87,16 +88,23 @@ Done means:
 
 ### Server follow-up slices
 
-1. Answer application to Goal hints boundary design
+1. Server persistence foundation and dev seed
+   - add pgx/goose/Squirrel dependencies
+   - add one editable init migration
+   - add tables for User/Organization/Membership/Project/RepoBinding
+   - add idempotent dev seed
+   - no CRUD endpoints, no auth, no UI, no GitHub, no runner
+2. Intake project/repo binding validation
+   - add `project_id` to intake context
+   - validate repo_binding belongs to project and organization
+   - keep intake non-executable
+3. Answer application to Goal hints boundary design
    - define the explicit server-owned transition from recorded ClarificationAnswer evidence to Goal intent-plane hints
    - keep answer application separate from answer recording and from automatic readiness re-check
    - do not create contract seed / contract draft / work items / gate / proof
-2. CLI-to-server intake submit integration
+4. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
-3. Durable state research/decision
-   - decide the smallest Postgres event table path before durable persistence
-   - do not add Postgres until the decision and slice are explicit
 
 ## Deferred until later
 
