@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
+	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
@@ -43,6 +44,7 @@ type testServerDeps struct {
 	clarifications *store.ClarificationStore
 	answers        *store.ClarificationAnswerStore
 	contractSeeds  *store.ContractSeedStore
+	contractDrafts *store.ContractDraftStore
 	events         *eventlog.EventLog
 	idFactory      *sequenceIDs
 }
@@ -1239,6 +1241,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	clarificationStore := store.NewClarificationStore()
 	answerStore := store.NewClarificationAnswerStore()
 	contractSeedStore := store.NewContractSeedStore()
+	contractDraftStore := store.NewContractDraftStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
@@ -1249,14 +1252,17 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 	contractSeedService := contractseed.NewService(goalStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
+	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
+	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
 
 	return testServerDeps{
-		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler),
+		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler, contractDraftHandler),
 		intakes:        intakeStore,
 		goals:          goalStore,
 		clarifications: clarificationStore,
 		answers:        answerStore,
 		contractSeeds:  contractSeedStore,
+		contractDrafts: contractDraftStore,
 		events:         events,
 		idFactory:      ids,
 	}
@@ -1298,6 +1304,7 @@ type sequenceIDs struct {
 	question      int
 	answer        int
 	contractSeed  int
+	contractDraft int
 	event         int
 }
 
@@ -1334,6 +1341,11 @@ func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, e
 func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {
 	g.contractSeed++
 	return spine.ContractSeedID(fmt.Sprintf("contract-seed-%d", g.contractSeed)), nil
+}
+
+func (g *sequenceIDs) NewContractDraftID() (spine.ContractDraftID, error) {
+	g.contractDraft++
+	return spine.ContractDraftID(fmt.Sprintf("contract-draft-%d", g.contractDraft)), nil
 }
 
 func testTime() time.Time {

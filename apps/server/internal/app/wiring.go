@@ -8,6 +8,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
+	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
@@ -37,6 +38,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	clarificationStore := store.NewClarificationStore()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
 	contractSeedStore := store.NewContractSeedStore()
+	contractDraftStore := store.NewContractDraftStore()
 	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
@@ -61,6 +63,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 	contractSeedService := contractseed.NewService(goals, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
+	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
+	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     http.HandlerFunc(healthHandler.Livez),
@@ -72,6 +76,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
 		GoalContractSeed:          http.HandlerFunc(contractSeedHandler.Create),
+		ContractSeedDraft:         http.HandlerFunc(contractDraftHandler.Create),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

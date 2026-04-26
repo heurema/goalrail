@@ -2,7 +2,8 @@
 
 This server is still an early prototype. Existing intake, Goal readiness, and
 event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
-Clarification request, answer, and ContractSeed state remain in-memory.
+Clarification request, answer, ContractSeed, and ContractDraft state remain
+in-memory.
 
 ## Local Postgres foundation
 
@@ -69,8 +70,16 @@ the Goal `ready_for_contract_seed`, create a seed snapshot:
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seed
 ```
 
-This flow still does not create executable work, contract drafts, gate
+Then create a draft from the seed:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/contract-seeds/{contract_seed_id}/contract-draft
+```
+
+This flow still does not create executable work, approved Contract, gate
 decisions, proof, runner jobs, or VCS integration. Clarification request,
-answer, and ContractSeed state is still prototype/in-memory. ContractSeed
-creation does not create `ContractDraft`, `WorkItem`, approved Contract,
-`GateDecision`, `Proof`, or executable work.
+answer, ContractSeed, and ContractDraft state is still prototype/in-memory.
+ContractSeed creation does not create `ContractDraft`, `WorkItem`, approved
+Contract, `GateDecision`, `Proof`, or executable work. ContractDraft creation
+does not approve Contract, create `WorkItem`, write `GateDecision`, or create
+`Proof`.
