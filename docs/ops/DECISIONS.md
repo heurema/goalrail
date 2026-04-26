@@ -565,3 +565,23 @@ Rationale:
 - creates an auditable handoff point between draft review/update and later approval
 - keeps completeness checks separate from approval authority
 - prevents draft readiness from becoming executable work or gate/proof semantics
+
+## D-0044 — ApprovedContract is a separate approval snapshot
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- approval is an explicit server-owned boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`
+- `ApprovedContract` is a canonical approved snapshot, not just a draft state change
+- `approved_by` is the approval actor and must be recorded; it is not inferred from `marked_by`
+- recommended v0 behavior is to not mutate `ContractDraft` during approval
+- repeated approval should return `409 already_approved`
+- approval writes `contract.approved`
+- approval does not create `WorkItem`, plan tasks, start execution, write `GateDecision`, or create `Proof`
+- WorkItem planning remains a later explicit boundary after approved Contract
+- this boundary does not introduce storage or migration requirements by itself
+
+Rationale:
+- separates draft history from approved contract truth
+- keeps approval distinct from execution planning and delivery verification
+- prevents approval from becoming gate/proof or task creation semantics

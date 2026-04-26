@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- sixteen kernel/CLI/server/domain boundary ADRs
+- seventeen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -109,6 +109,9 @@ The project currently has:
   server-owned state transition with completeness checks and `marked_by` audit
   identity, before approval, approved Contract, work item, execution, gate, or
   proof
+- ADR-0017 documents `ApprovedContract` as a separate server-owned approval
+  snapshot from `ContractDraft(ready_for_approval)`, before work item planning,
+  execution, gate, or proof
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -122,7 +125,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and sixteen boundary ADRs exist
+- kernel schema note and seventeen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -165,6 +168,7 @@ The project currently has:
 - the `ContractDraft` boundary is documented in ADR-0014 and implemented as a Postgres-backed draft creation boundary when DB is configured; it does not create approved Contract, `WorkItem`, `GateDecision`, or `Proof`
 - the `ContractDraft` review/update boundary is documented in ADR-0015 and implemented as a draft-only update boundary; it does not introduce `ready_for_approval`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
 - the `ContractDraft ready_for_approval` boundary is documented in ADR-0016 and implemented as an explicit `draft -> ready_for_approval` state transition with completeness checks and `marked_by` audit identity; it is not approval, approved Contract, `WorkItem`, execution, `GateDecision`, or `Proof`
+- the Contract approval boundary is documented in ADR-0017 as `ContractDraft(ready_for_approval) -> ApprovedContract`; no implementation exists yet, and approval must not create `WorkItem`, start execution, write `GateDecision`, or create `Proof`
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
