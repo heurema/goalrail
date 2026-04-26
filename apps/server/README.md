@@ -23,8 +23,9 @@ Apply the idempotent dev seed:
 go run ./cmd/goalrail-server seed dev
 ```
 
-The dev seed writes one deterministic user, organization, owner membership,
-project, and repo binding. It is not auth, onboarding, or production data.
+The dev seed writes one deterministic UUIDv7 user, organization, owner
+membership, project, and repo binding. It is not auth, onboarding, or
+production data.
 
 ## Dev intake flow
 
@@ -40,12 +41,12 @@ Submit intake with the seeded Project and RepoBinding context:
 curl -sS http://localhost:8080/v1/intake \
   -H 'Content-Type: application/json' \
   -d '{
-    "project_id": "prj_dev_default",
-    "repo_binding_id": "rpb_dev_default",
+    "project_id": "018f0000-0000-7000-8000-000000000003",
+    "repo_binding_id": "018f0000-0000-7000-8000-000000000004",
     "source": {"kind": "manual"},
     "title": "Improve billing error handling",
     "body": "We need clearer error behavior around failed invoice payment.",
-    "request_author": {"kind": "user", "id": "usr_dev_owner"}
+    "request_author": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
   }'
 ```
 

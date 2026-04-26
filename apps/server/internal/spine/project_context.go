@@ -1,6 +1,11 @@
 package spine
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type UserID string
 
@@ -61,19 +66,21 @@ type OrganizationMembership struct {
 }
 
 type Project struct {
-	ID             ProjectID      `json:"id"`
-	OrganizationID OrganizationID `json:"organization_id"`
-	Slug           string         `json:"slug"`
-	DisplayName    string         `json:"display_name"`
-	State          EntityState    `json:"state"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID              ProjectID      `json:"id"`
+	OrganizationID  OrganizationID `json:"organization_id"`
+	CreatedByUserID UserID         `json:"created_by_user_id"`
+	Slug            string         `json:"slug"`
+	DisplayName     string         `json:"display_name"`
+	State           EntityState    `json:"state"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
 }
 
 type RepoBinding struct {
 	ID                   RepoBindingID         `json:"id"`
 	OrganizationID       OrganizationID        `json:"organization_id"`
 	ProjectID            ProjectID             `json:"project_id"`
+	CreatedByUserID      UserID                `json:"created_by_user_id"`
 	VcsConnectionID      string                `json:"vcs_connection_id,omitempty"`
 	Provider             string                `json:"provider"`
 	RepositoryExternalID string                `json:"repository_external_id,omitempty"`
@@ -91,4 +98,52 @@ type ResolvedRepoBindingContext struct {
 	OrganizationID OrganizationID `json:"organization_id"`
 	ProjectID      ProjectID      `json:"project_id"`
 	RepoBindingID  RepoBindingID  `json:"repo_binding_id"`
+}
+
+func NewUserID() (UserID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return UserID(id), nil
+}
+
+func NewOrganizationID() (OrganizationID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return OrganizationID(id), nil
+}
+
+func NewOrganizationMembershipID() (OrganizationMembershipID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return OrganizationMembershipID(id), nil
+}
+
+func NewProjectID() (ProjectID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return ProjectID(id), nil
+}
+
+func NewRepoBindingID() (RepoBindingID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return RepoBindingID(id), nil
+}
+
+func newUUIDv7() (string, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", fmt.Errorf("new uuidv7: %w", err)
+	}
+	return id.String(), nil
 }

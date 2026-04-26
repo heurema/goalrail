@@ -37,14 +37,14 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	if event.EntityID != string(record.ID) {
 		t.Fatalf("entity id = %q, want %q", event.EntityID, record.ID)
 	}
-	if event.OrganizationID != "org_dev_default" {
-		t.Fatalf("event organization_id = %q, want org_dev_default", event.OrganizationID)
+	if event.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("event organization_id = %q, want 018f0000-0000-7000-8000-000000000002", event.OrganizationID)
 	}
-	if event.ProjectID != "prj_dev_default" {
-		t.Fatalf("event project_id = %q, want prj_dev_default", event.ProjectID)
+	if event.ProjectID != "018f0000-0000-7000-8000-000000000003" {
+		t.Fatalf("event project_id = %q, want 018f0000-0000-7000-8000-000000000003", event.ProjectID)
 	}
-	if event.RepoBindingID != "rpb_dev_default" {
-		t.Fatalf("event repo_binding_id = %q, want rpb_dev_default", event.RepoBindingID)
+	if event.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("event repo_binding_id = %q, want 018f0000-0000-7000-8000-000000000004", event.RepoBindingID)
 	}
 	if event.ID != "event-1" {
 		t.Fatalf("event id = %q, want %q", event.ID, "event-1")
@@ -63,14 +63,14 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	if payload.CanonicalContractCreated {
 		t.Fatal("payload CanonicalContractCreated = true, want false")
 	}
-	if payload.OrganizationID != "org_dev_default" {
-		t.Fatalf("payload organization_id = %q, want org_dev_default", payload.OrganizationID)
+	if payload.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("payload organization_id = %q, want 018f0000-0000-7000-8000-000000000002", payload.OrganizationID)
 	}
-	if payload.ProjectID != "prj_dev_default" {
-		t.Fatalf("payload project_id = %q, want prj_dev_default", payload.ProjectID)
+	if payload.ProjectID != "018f0000-0000-7000-8000-000000000003" {
+		t.Fatalf("payload project_id = %q, want 018f0000-0000-7000-8000-000000000003", payload.ProjectID)
 	}
-	if payload.RepoBindingID != "rpb_dev_default" {
-		t.Fatalf("payload repo_binding_id = %q, want rpb_dev_default", payload.RepoBindingID)
+	if payload.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("payload repo_binding_id = %q, want 018f0000-0000-7000-8000-000000000004", payload.RepoBindingID)
 	}
 }
 
@@ -110,9 +110,9 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 	events := eventlog.NewEventLog()
 	resolver := fakeProjectContextResolver{
 		resolved: spine.ResolvedRepoBindingContext{
-			OrganizationID: "org_dev_default",
-			ProjectID:      "prj_other",
-			RepoBindingID:  "rpb_dev_default",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000006",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		},
 		ok: true,
 	}
@@ -146,8 +146,8 @@ func TestServiceSubmitRejectsUnavailableProjectContext(t *testing.T) {
 
 func validSubmission() spine.IntakeSubmission {
 	return spine.IntakeSubmission{
-		ProjectID:     "prj_dev_default",
-		RepoBindingID: "rpb_dev_default",
+		ProjectID:     "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID: "018f0000-0000-7000-8000-000000000004",
 		Source: spine.IntakeSource{
 			Kind:       "codex_skill",
 			ExternalID: "local-session-1",
@@ -156,7 +156,7 @@ func validSubmission() spine.IntakeSubmission {
 		Body:  "Current code duplicates filter logic. Preserve current behavior.",
 		RequestAuthor: spine.ActorRef{
 			Kind:        "user",
-			ID:          "dev_1",
+			ID:          "018f0000-0000-7000-8000-000000000001",
 			DisplayName: "Developer",
 		},
 	}
@@ -165,9 +165,9 @@ func validSubmission() spine.IntakeSubmission {
 func validProjectContextResolver() fakeProjectContextResolver {
 	return fakeProjectContextResolver{
 		resolved: spine.ResolvedRepoBindingContext{
-			OrganizationID: "org_dev_default",
-			ProjectID:      "prj_dev_default",
-			RepoBindingID:  "rpb_dev_default",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		},
 		ok: true,
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
@@ -32,11 +33,38 @@ func TestRunDevUsesDeterministicProjectContextRecords(t *testing.T) {
 	if got, want := store.repoBinding.ID, DevRepoBindingID; got != want {
 		t.Fatalf("repo binding ID = %q, want %q", got, want)
 	}
+	for name, id := range map[string]string{
+		"user":                    string(DevUserID),
+		"organization":            string(DevOrganizationID),
+		"organization_membership": string(DevOrganizationMembershipID),
+		"project":                 string(DevProjectID),
+		"repo_binding":            string(DevRepoBindingID),
+	} {
+		assertUUIDv7(t, name, id)
+	}
+	if got, want := store.project.CreatedByUserID, DevUserID; got != want {
+		t.Fatalf("project created_by_user_id = %q, want %q", got, want)
+	}
+	if got, want := store.repoBinding.CreatedByUserID, DevUserID; got != want {
+		t.Fatalf("repo binding created_by_user_id = %q, want %q", got, want)
+	}
 	if got, want := store.repoBinding.AccessMode, spine.RepoBindingAccessModeMetadataOnly; got != want {
 		t.Fatalf("repo binding access mode = %q, want %q", got, want)
 	}
 	if got, want := store.calls, []string{"user", "organization", "membership", "project", "repo_binding"}; !equalStrings(got, want) {
 		t.Fatalf("calls = %v, want %v", got, want)
+	}
+}
+
+func assertUUIDv7(t *testing.T, name string, value string) {
+	t.Helper()
+
+	id, err := uuid.Parse(value)
+	if err != nil {
+		t.Fatalf("%s ID parse UUID: %v", name, err)
+	}
+	if id.Version() != 7 {
+		t.Fatalf("%s ID version = %d, want 7", name, id.Version())
 	}
 }
 

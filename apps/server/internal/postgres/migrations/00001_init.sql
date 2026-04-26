@@ -1,6 +1,6 @@
 -- +goose Up
 CREATE TABLE users (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY,
     display_name TEXT NOT NULL,
     email TEXT NOT NULL DEFAULT '',
     state TEXT NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE users (
 );
 
 CREATE TABLE organizations (
-    id TEXT PRIMARY KEY,
+    id UUID PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
     display_name TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -18,9 +18,9 @@ CREATE TABLE organizations (
 );
 
 CREATE TABLE organization_memberships (
-    id TEXT PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role TEXT NOT NULL,
     state TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
@@ -32,8 +32,9 @@ CREATE TABLE organization_memberships (
 );
 
 CREATE TABLE projects (
-    id TEXT PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
     slug TEXT NOT NULL,
     display_name TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -43,9 +44,10 @@ CREATE TABLE projects (
 );
 
 CREATE TABLE repo_bindings (
-    id TEXT PRIMARY KEY,
-    organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
     vcs_connection_id TEXT NOT NULL DEFAULT '',
     provider TEXT NOT NULL,
     repository_external_id TEXT NOT NULL DEFAULT '',

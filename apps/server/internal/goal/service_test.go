@@ -491,20 +491,20 @@ func TestServiceCheckReadinessReturnsErrorWhenSecondEventAppendFails(t *testing.
 func validIntakeRecord() spine.IntakeRecord {
 	return spine.IntakeRecord{
 		ID:             "intake-1",
-		OrganizationID: "org_dev_default",
-		ProjectID:      "prj_dev_default",
-		RepoBindingID:  "rpb_dev_default",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		Source:         spine.IntakeSource{Kind: "codex_skill"},
 		Title:          "Refactor CSV export filters",
 		Body:           "Current code duplicates filter logic. Preserve current behavior.",
 		RequestAuthor: spine.ActorRef{
 			Kind:        "user",
-			ID:          "dev_1",
+			ID:          "018f0000-0000-7000-8000-000000000001",
 			DisplayName: "Developer",
 		},
 		IntentOwner: spine.ActorRef{
 			Kind:        "user",
-			ID:          "dev_1",
+			ID:          "018f0000-0000-7000-8000-000000000001",
 			DisplayName: "Developer",
 		},
 		State:                    spine.IntakeStateReceived,
@@ -517,9 +517,9 @@ func validGoal() spine.Goal {
 	return spine.Goal{
 		ID:             "goal-1",
 		IntakeID:       "intake-1",
-		OrganizationID: "org_dev_default",
-		ProjectID:      "prj_dev_default",
-		RepoBindingID:  "rpb_dev_default",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		Title:          "Refactor CSV export filters",
 		Summary:        "Current code duplicates filter logic. Preserve current behavior.",
 		ScopeHint:      "Refactor duplicate filter logic",
@@ -527,8 +527,8 @@ func validGoal() spine.Goal {
 		SourceRefs: []spine.SourceRef{
 			{Kind: goal.SourceRefKindIntake, ID: "intake-1"},
 		},
-		RequestAuthor: spine.ActorRef{Kind: "user", ID: "dev_1"},
-		IntentOwner:   spine.ActorRef{Kind: "user", ID: "dev_1"},
+		RequestAuthor: spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		IntentOwner:   spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
 		State:         spine.GoalStateCreated,
 		CreatedAt:     testTime(),
 	}

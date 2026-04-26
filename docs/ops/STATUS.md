@@ -124,8 +124,8 @@ The project currently has:
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
-- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, and `repo_bindings`
-- the dev seed creates `usr_dev_owner`, `org_dev_default`, owner membership, `prj_dev_default`, and `rpb_dev_default`
+- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, and `repo_bindings` with UUID persisted ID columns
+- the dev seed creates deterministic UUIDv7 IDs: `018f0000-0000-7000-8000-000000000001`, `018f0000-0000-7000-8000-000000000002`, `018f0000-0000-7000-8000-000000000005`, `018f0000-0000-7000-8000-000000000003`, and `018f0000-0000-7000-8000-000000000004`
 - the project-context store builds runtime SQL with Squirrel and executes upserts and repo-binding context lookups through pgx/pgxpool
 - the source-neutral intake API now requires `project_id` and `repo_binding_id`, validates the repo binding against the persisted Project / RepoBinding context when DB is configured, derives `organization_id`, stores `IntakeRecord` only as an in-memory prototype, and appends an in-memory `intake.received` event with context fields
 - Goal promotion stores `Goal` only as non-executable normalized intent, carries `organization_id`, `project_id`, and `repo_binding_id` from the IntakeRecord, and appends in-memory `goal.created` and `intake.promoted_to_goal` events with context fields

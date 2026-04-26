@@ -20,7 +20,7 @@ components:
       - apps/server/internal/seed
       - apps/server/internal/postgres/migrations/00001_init.sql
     public_claim_allowed: false
-    notes: User/Organization/Membership/Project/RepoBinding MVP boundary now has server-local types, an init migration, a Squirrel-backed upsert store, a Squirrel-backed RepoBinding context lookup, deterministic dev seed, and intake validation wiring that derives organization context for IntakeRecord and Goal. It does not implement auth, onboarding, CRUD endpoints, VcsConnection, RepositoryRecord, or provider integration.
+    notes: User/Organization/Membership/Project/RepoBinding MVP boundary now has server-local types, a UUID-backed init migration, a Squirrel-backed upsert store, a Squirrel-backed RepoBinding context lookup, deterministic UUIDv7 dev seed, and intake validation wiring that derives organization context for IntakeRecord and Goal. It does not implement auth, onboarding, CRUD endpoints, VcsConnection, RepositoryRecord, or provider integration.
   server_persistence:
     name: Server Persistence
     status: prototype
@@ -35,7 +35,7 @@ components:
       - apps/server/internal/store/project_context_store.go
       - apps/server/internal/seed
     public_claim_allowed: false
-    notes: pgx + Squirrel + goose foundation exists for the project-context tables and dev seed. Runtime SQL in the project-context store is built through Squirrel and executed through pgx/pgxpool. Goose migrations are raw SQL. Intake uses Postgres only to validate Project / RepoBinding context and derive organization_id; IntakeRecord, Goal, clarification, and event log storage remain in-memory prototypes.
+    notes: pgx + Squirrel + goose foundation exists for the project-context tables and deterministic UUIDv7 dev seed. Runtime SQL in the project-context store is built through Squirrel and executed through pgx/pgxpool. Goose migrations are raw SQL. Intake uses Postgres only to validate Project / RepoBinding context and derive organization_id; IntakeRecord, Goal, clarification, and event log storage remain in-memory prototypes.
   product_concept:
     name: Product Concept
     status: docs_only

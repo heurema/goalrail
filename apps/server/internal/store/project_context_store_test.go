@@ -20,9 +20,10 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 	now := time.Date(2026, 4, 26, 10, 0, 0, 0, time.UTC)
 
 	err := store.UpsertRepoBinding(ctx, spine.RepoBinding{
-		ID:                 "rpb_dev_default",
-		OrganizationID:     "org_dev_default",
-		ProjectID:          "prj_dev_default",
+		ID:                 "018f0000-0000-7000-8000-000000000004",
+		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
+		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		CreatedByUserID:    "018f0000-0000-7000-8000-000000000001",
 		Provider:           "custom_git",
 		RepositoryFullName: "heurema/goalrail",
 		RepositoryURL:      "https://example.invalid/heurema/goalrail.git",
@@ -50,7 +51,7 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 	if !strings.Contains(call.sql, "$1") {
 		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
 	}
-	if got, want := len(call.args), 14; got != want {
+	if got, want := len(call.args), 15; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
 }
@@ -59,26 +60,26 @@ func TestProjectContextStoreResolvesRepoBindingContext(t *testing.T) {
 	ctx := context.Background()
 	query := &recordingProjectContextQuerier{
 		row: fakeProjectContextRow{
-			values: []any{"org_dev_default", "prj_dev_default", "rpb_dev_default"},
+			values: []any{"018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000000004"},
 		},
 	}
 	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
 
-	resolved, ok, err := store.ResolveRepoBinding(ctx, "rpb_dev_default")
+	resolved, ok, err := store.ResolveRepoBinding(ctx, "018f0000-0000-7000-8000-000000000004")
 	if err != nil {
 		t.Fatalf("ResolveRepoBinding() error = %v", err)
 	}
 	if !ok {
 		t.Fatal("ResolveRepoBinding() ok = false, want true")
 	}
-	if resolved.OrganizationID != "org_dev_default" {
-		t.Fatalf("organization_id = %q, want org_dev_default", resolved.OrganizationID)
+	if resolved.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("organization_id = %q, want 018f0000-0000-7000-8000-000000000002", resolved.OrganizationID)
 	}
-	if resolved.ProjectID != "prj_dev_default" {
-		t.Fatalf("project_id = %q, want prj_dev_default", resolved.ProjectID)
+	if resolved.ProjectID != "018f0000-0000-7000-8000-000000000003" {
+		t.Fatalf("project_id = %q, want 018f0000-0000-7000-8000-000000000003", resolved.ProjectID)
 	}
-	if resolved.RepoBindingID != "rpb_dev_default" {
-		t.Fatalf("repo_binding_id = %q, want rpb_dev_default", resolved.RepoBindingID)
+	if resolved.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("repo_binding_id = %q, want 018f0000-0000-7000-8000-000000000004", resolved.RepoBindingID)
 	}
 	if len(query.calls) != 1 {
 		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
@@ -100,7 +101,7 @@ func TestProjectContextStoreResolveRepoBindingReturnsNotFound(t *testing.T) {
 	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{err: pgx.ErrNoRows}}
 	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
 
-	_, ok, err := store.ResolveRepoBinding(ctx, "missing")
+	_, ok, err := store.ResolveRepoBinding(ctx, "018f0000-0000-7000-8000-000000000099")
 	if err != nil {
 		t.Fatalf("ResolveRepoBinding() error = %v", err)
 	}
@@ -153,6 +154,12 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 	}
 	for i := range dest {
 		switch target := dest[i].(type) {
+		case *string:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("uuid value is not string")
+			}
+			*target = value
 		case *spine.OrganizationID:
 			value, ok := r.values[i].(string)
 			if !ok {

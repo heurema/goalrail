@@ -212,8 +212,14 @@ func ValidateSubmission(submission spine.IntakeSubmission) error {
 	if strings.TrimSpace(string(submission.ProjectID)) == "" {
 		return &ValidationError{Field: "project_id", Message: "is required"}
 	}
+	if err := validateUUIDv7("project_id", string(submission.ProjectID)); err != nil {
+		return err
+	}
 	if strings.TrimSpace(string(submission.RepoBindingID)) == "" {
 		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if err := validateUUIDv7("repo_binding_id", string(submission.RepoBindingID)); err != nil {
+		return err
 	}
 	if strings.TrimSpace(submission.Source.Kind) == "" {
 		return &ValidationError{Field: "source.kind", Message: "is required"}
@@ -226,6 +232,17 @@ func ValidateSubmission(submission spine.IntakeSubmission) error {
 	}
 	if strings.TrimSpace(submission.RequestAuthor.ID) == "" {
 		return &ValidationError{Field: "request_author.id", Message: "is required"}
+	}
+	return nil
+}
+
+func validateUUIDv7(field string, value string) error {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return &ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: field, Message: "must be a UUIDv7"}
 	}
 	return nil
 }

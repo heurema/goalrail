@@ -192,11 +192,11 @@ Seed must be:
 
 The first dev seed should create deterministic records:
 
-- `usr_dev_owner`
-- `org_dev_default`
+- dev owner user `018f0000-0000-7000-8000-000000000001`
+- dev organization `018f0000-0000-7000-8000-000000000002`
 - owner membership
-- `prj_dev_default`
-- `rpb_dev_default`
+- dev project `018f0000-0000-7000-8000-000000000003`
+- dev repo binding `018f0000-0000-7000-8000-000000000004`
 
 Seed should be run through a later command or tool, for example
 `goalrail-server seed dev` or a dedicated dev tool.
