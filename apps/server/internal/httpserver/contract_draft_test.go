@@ -301,6 +301,32 @@ func TestPostContractDraftUpdatesReturnsUpdatedDraft(t *testing.T) {
 	}
 }
 
+func TestPostContractDraftUpdatesAllowsEmptyCoreDraftArrays(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+		"proposed_scope": [],
+		"proposed_acceptance_criteria": [],
+		"proposed_proof_expectations": []
+	}`))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var updated spine.ContractDraft
+	decodeJSON(t, response.body, &updated)
+	if updated.ProposedScope == nil || len(updated.ProposedScope) != 0 {
+		t.Fatalf("proposed_scope = %#v, want explicit empty slice", updated.ProposedScope)
+	}
+	if updated.ProposedAcceptanceCriteria == nil || len(updated.ProposedAcceptanceCriteria) != 0 {
+		t.Fatalf("proposed_acceptance_criteria = %#v, want explicit empty slice", updated.ProposedAcceptanceCriteria)
+	}
+	if updated.ProposedProofExpectations == nil || len(updated.ProposedProofExpectations) != 0 {
+		t.Fatalf("proposed_proof_expectations = %#v, want explicit empty slice", updated.ProposedProofExpectations)
+	}
+}
+
 func TestPostContractDraftUpdatesUnknownDraftReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
