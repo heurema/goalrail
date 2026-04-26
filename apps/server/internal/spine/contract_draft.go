@@ -1,6 +1,9 @@
 package spine
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type ContractDraftID string
 
@@ -27,4 +30,9 @@ type ContractDraft struct {
 	SourceRefs                 []SourceRef        `json:"source_refs"`
 	State                      ContractDraftState `json:"state"`
 	CreatedAt                  time.Time          `json:"created_at"`
+}
+
+type ContractDraftUpdateRequest struct {
+	UpdatedBy ActorRef                   `json:"updated_by"`
+	Changes   map[string]json.RawMessage `json:"changes"`
 }

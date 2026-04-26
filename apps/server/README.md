@@ -79,9 +79,26 @@ Then create a draft from the seed:
 curl -sS -X POST http://localhost:8080/v1/contract-seeds/{contract_seed_id}/contract-draft
 ```
 
+Then update proposed draft fields explicitly:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/updates \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "updated_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"},
+    "changes": {
+      "proposed_scope": ["Reviewed proposed scope"],
+      "proposed_acceptance_criteria": ["Reviewed proposed acceptance criteria"]
+    }
+  }'
+```
+
 This flow still does not create executable work, approved Contract, gate
 decisions, proof, runner jobs, or VCS integration. Clarification request and
 answer state is still prototype/in-memory. ContractSeed creation does not
 create `ContractDraft`, `WorkItem`, approved Contract, `GateDecision`, `Proof`,
 or executable work. ContractDraft creation does not approve Contract, create
-`WorkItem`, write `GateDecision`, or create `Proof`.
+`WorkItem`, write `GateDecision`, or create `Proof`. ContractDraft updates
+modify proposed fields only, keep `ContractDraft.state` as `draft`, treat
+`updated_by` as audit identity only, and do not introduce `ready_for_approval`,
+approval, `WorkItem`, `GateDecision`, or `Proof`.

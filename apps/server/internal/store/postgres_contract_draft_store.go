@@ -180,6 +180,71 @@ func (s *PostgresContractDraftStore) GetByContractSeedID(ctx context.Context, id
 	return s.getOne(ctx, "get contract draft by contract seed id", squirrel.Eq{"contract_seed_id": seedID})
 }
 
+func (s *PostgresContractDraftStore) Update(ctx context.Context, updated spine.ContractDraft) error {
+	id, err := uuidValue(updated.ID, "contract draft id")
+	if err != nil {
+		return err
+	}
+	proposedScope, err := json.Marshal(nonNilStrings(updated.ProposedScope))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed scope: %w", err)
+	}
+	proposedNonGoals, err := json.Marshal(nonNilStrings(updated.ProposedNonGoals))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed non-goals: %w", err)
+	}
+	proposedConstraints, err := json.Marshal(nonNilStrings(updated.ProposedConstraints))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed constraints: %w", err)
+	}
+	proposedAcceptanceCriteria, err := json.Marshal(nonNilStrings(updated.ProposedAcceptanceCriteria))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed acceptance criteria: %w", err)
+	}
+	proposedExpectedChecks, err := json.Marshal(nonNilStrings(updated.ProposedExpectedChecks))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed expected checks: %w", err)
+	}
+	proposedProofExpectations, err := json.Marshal(nonNilStrings(updated.ProposedProofExpectations))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft proposed proof expectations: %w", err)
+	}
+	riskHints, err := json.Marshal(nonNilStrings(updated.RiskHints))
+	if err != nil {
+		return fmt.Errorf("marshal contract draft risk hints: %w", err)
+	}
+
+	stmt := s.psql.
+		Update("contract_drafts").
+		Set("title", updated.Title).
+		Set("intent_summary", updated.IntentSummary).
+		Set("proposed_scope", proposedScope).
+		Set("proposed_non_goals", proposedNonGoals).
+		Set("proposed_constraints", proposedConstraints).
+		Set("proposed_acceptance_criteria", proposedAcceptanceCriteria).
+		Set("proposed_expected_checks", proposedExpectedChecks).
+		Set("proposed_proof_expectations", proposedProofExpectations).
+		Set("risk_hints", riskHints).
+		Set("updated_at", time.Now().UTC()).
+		Where(squirrel.Eq{"id": id})
+
+	if s.exec == nil {
+		return fmt.Errorf("update contract draft executor is nil")
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return fmt.Errorf("update contract draft SQL: %w", err)
+	}
+	result, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return fmt.Errorf("update contract draft: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrContractDraftNotFound
+	}
+	return nil
+}
+
 func (s *PostgresContractDraftStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.ContractDraft, bool, error) {
 	stmt := s.psql.
 		Select(contractDraftColumns()...).

@@ -234,6 +234,255 @@ func TestPostContractSeedContractDraftFullFlow(t *testing.T) {
 	assertNoForbiddenEventTypes(t, server.events.Events())
 }
 
+func TestPostContractDraftUpdatesReturnsUpdatedDraft(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+		"title": "Reviewed draft title",
+		"intent_summary": "Reviewed summary",
+		"proposed_scope": ["Reviewed scope"],
+		"proposed_acceptance_criteria": ["Reviewed acceptance"],
+		"proposed_non_goals": [],
+		"proposed_constraints": ["No schema changes"],
+		"proposed_expected_checks": ["go test ./..."],
+		"proposed_proof_expectations": ["Attach test output"],
+		"risk_hints": ["Low risk"]
+	}`))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, forbiddenField := range []string{"\"approved_contract_id\"", "\"work_item_id\"", "\"proof_id\"", "\"gate_decision_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var updated spine.ContractDraft
+	decodeJSON(t, response.body, &updated)
+	if updated.State != spine.ContractDraftStateDraft {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ContractDraftStateDraft)
+	}
+	if updated.Title != "Reviewed draft title" {
+		t.Fatalf("title = %q, want reviewed title", updated.Title)
+	}
+	if updated.IntentSummary != "Reviewed summary" {
+		t.Fatalf("intent_summary = %q, want reviewed summary", updated.IntentSummary)
+	}
+	if !reflect.DeepEqual(updated.ProposedScope, []string{"Reviewed scope"}) {
+		t.Fatalf("proposed_scope = %#v", updated.ProposedScope)
+	}
+	if !reflect.DeepEqual(updated.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
+		t.Fatalf("proposed_acceptance_criteria = %#v", updated.ProposedAcceptanceCriteria)
+	}
+	if !reflect.DeepEqual(updated.ProposedNonGoals, []string{}) {
+		t.Fatalf("proposed_non_goals = %#v, want empty slice", updated.ProposedNonGoals)
+	}
+	if !reflect.DeepEqual(updated.ProposedConstraints, []string{"No schema changes"}) {
+		t.Fatalf("proposed_constraints = %#v", updated.ProposedConstraints)
+	}
+	if !reflect.DeepEqual(updated.ProposedExpectedChecks, []string{"go test ./..."}) {
+		t.Fatalf("proposed_expected_checks = %#v", updated.ProposedExpectedChecks)
+	}
+	if !reflect.DeepEqual(updated.ProposedProofExpectations, []string{"Attach test output"}) {
+		t.Fatalf("proposed_proof_expectations = %#v", updated.ProposedProofExpectations)
+	}
+	if !reflect.DeepEqual(updated.RiskHints, []string{"Low risk"}) {
+		t.Fatalf("risk_hints = %#v", updated.RiskHints)
+	}
+	if updated.ContractSeedID != draft.ContractSeedID || updated.GoalID != draft.GoalID || updated.RepoBindingID != draft.RepoBindingID {
+		t.Fatalf("identity fields changed: got %#v, want unchanged from %#v", updated, draft)
+	}
+	if !reflect.DeepEqual(updated.SourceRefs, draft.SourceRefs) {
+		t.Fatalf("source_refs = %#v, want unchanged %#v", updated.SourceRefs, draft.SourceRefs)
+	}
+	if updated.CreatedAt != draft.CreatedAt {
+		t.Fatalf("created_at = %s, want %s", updated.CreatedAt, draft.CreatedAt)
+	}
+}
+
+func TestPostContractDraftUpdatesUnknownDraftReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/updates", updateDraftJSON(`{"title": "Reviewed"}`))
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want not_found", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftUpdatesRejectsDraftNotDraft(t *testing.T) {
+	server := testServer(t)
+	draft := validHTTPContractDraft()
+	draft.State = "ready_for_approval"
+	if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
+		t.Fatalf("contractDrafts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"title": "Reviewed"}`))
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftUpdatesValidatesUpdatedBy(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing_updated_by", body: `{"changes":{"title":"Reviewed"}}`},
+		{name: "missing_kind", body: `{"updated_by":{"id":"dev_1"},"changes":{"title":"Reviewed"}}`},
+		{name: "missing_id", body: `{"updated_by":{"kind":"user"},"changes":{"title":"Reviewed"}}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			draft := createContractDraft(t, server)
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", tt.body)
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "validation_failed" {
+				t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+			}
+		})
+	}
+}
+
+func TestPostContractDraftUpdatesRejectsEmptyChanges(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{}`))
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "validation_failed" {
+		t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftUpdatesRejectsUnknownFieldInChanges(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"unexpected": "value"}`))
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unknown_field" {
+		t.Fatalf("error code = %q, want unknown_field", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftUpdatesRejectsNonEditableFieldInChanges(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"state": "ready_for_approval"}`))
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "non_editable_field" {
+		t.Fatalf("error code = %q, want non_editable_field", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftUpdatesAppendsEventOnly(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"proposed_scope": ["Reviewed scope"]}`))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftUpdated); got != 1 {
+		t.Fatalf("contract_draft.updated events = %d, want 1", got)
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
+func TestPostContractDraftUpdatesFullFlow(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+		"proposed_scope": ["Reviewed scope"],
+		"proposed_acceptance_criteria": ["Reviewed acceptance"]
+	}`))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var updated spine.ContractDraft
+	decodeJSON(t, response.body, &updated)
+	if updated.State != spine.ContractDraftStateDraft {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ContractDraftStateDraft)
+	}
+	if !reflect.DeepEqual(updated.ProposedScope, []string{"Reviewed scope"}) {
+		t.Fatalf("proposed_scope = %#v", updated.ProposedScope)
+	}
+	if !reflect.DeepEqual(updated.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
+		t.Fatalf("proposed_acceptance_criteria = %#v", updated.ProposedAcceptanceCriteria)
+	}
+	for _, forbiddenField := range []string{"\"approved_contract_id\"", "\"work_item_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
 func createContractSeed(t *testing.T, server testServerDeps) spine.ContractSeed {
 	t.Helper()
 
@@ -246,6 +495,31 @@ func createContractSeed(t *testing.T, server testServerDeps) spine.ContractSeed 
 	var seed spine.ContractSeed
 	decodeJSON(t, response.body, &seed)
 	return seed
+}
+
+func createContractDraft(t *testing.T, server testServerDeps) spine.ContractDraft {
+	t.Helper()
+
+	seed := createContractSeed(t, server)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("contract draft status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+
+	var draft spine.ContractDraft
+	decodeJSON(t, response.body, &draft)
+	return draft
+}
+
+func updateDraftJSON(changes string) string {
+	return `{
+		"updated_by": {
+			"kind": "user",
+			"id": "dev_1",
+			"display_name": "Developer"
+		},
+		"changes": ` + changes + `
+	}`
 }
 
 func validHTTPContractSeed() spine.ContractSeed {
@@ -263,6 +537,31 @@ func validHTTPContractSeed() spine.ContractSeed {
 			{Kind: "intake", ID: "intake-1"},
 		},
 		State:     spine.ContractSeedStateCreated,
+		CreatedAt: testTime(),
+	}
+}
+
+func validHTTPContractDraft() spine.ContractDraft {
+	return spine.ContractDraft{
+		ID:                         "contract-draft-1",
+		ContractSeedID:             "contract-seed-1",
+		GoalID:                     "goal-1",
+		RepoBindingID:              "018f0000-0000-7000-8000-000000000004",
+		Title:                      "Refactor CSV export filters",
+		IntentSummary:              "Current code duplicates filter logic.",
+		ProposedScope:              []string{"Refactor duplicate CSV export filter logic"},
+		ProposedNonGoals:           []string{},
+		ProposedConstraints:        []string{},
+		ProposedAcceptanceCriteria: []string{"Existing CSV export behavior is preserved"},
+		ProposedExpectedChecks:     []string{},
+		ProposedProofExpectations:  []string{contractdraft.DefaultProofExpectation},
+		RiskHints:                  []string{},
+		SourceRefs: []spine.SourceRef{
+			{Kind: "contract_seed", ID: "contract-seed-1"},
+			{Kind: "goal", ID: "goal-1"},
+			{Kind: "intake", ID: "intake-1"},
+		},
+		State:     spine.ContractDraftStateDraft,
 		CreatedAt: testTime(),
 	}
 }

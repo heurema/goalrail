@@ -11,6 +11,7 @@ import (
 var (
 	ErrContractDraftAlreadyExists  = errors.New("contract draft already exists")
 	ErrContractDraftAlreadyDrafted = errors.New("contract seed already drafted")
+	ErrContractDraftNotFound       = errors.New("contract draft not found")
 )
 
 type ContractDraftStore struct {
@@ -39,6 +40,26 @@ func (s *ContractDraftStore) Create(_ context.Context, created spine.ContractDra
 
 	s.drafts[created.ID] = cloneContractDraft(created)
 	s.bySeed[created.ContractSeedID] = created.ID
+	return nil
+}
+
+func (s *ContractDraftStore) Update(_ context.Context, updated spine.ContractDraft) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, exists := s.drafts[updated.ID]
+	if !exists {
+		return ErrContractDraftNotFound
+	}
+
+	updated.ContractSeedID = existing.ContractSeedID
+	updated.GoalID = existing.GoalID
+	updated.RepoBindingID = existing.RepoBindingID
+	updated.SourceRefs = append([]spine.SourceRef(nil), existing.SourceRefs...)
+	updated.State = existing.State
+	updated.CreatedAt = existing.CreatedAt
+
+	s.drafts[updated.ID] = cloneContractDraft(updated)
 	return nil
 }
 

@@ -11,6 +11,7 @@ import (
 
 type ContractDraftService interface {
 	Create(context.Context, spine.ContractSeedID) (spine.ContractDraft, error)
+	Update(context.Context, spine.ContractDraftID, spine.ContractDraftUpdateRequest) (spine.ContractDraft, error)
 }
 
 type ContractDraftHandler struct {
@@ -31,15 +32,41 @@ func (h *ContractDraftHandler) Create(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, http.StatusCreated, created)
 }
 
+func (h *ContractDraftHandler) Update(w http.ResponseWriter, r *http.Request) {
+	var input spine.ContractDraftUpdateRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		return
+	}
+
+	updated, err := h.service.Update(r.Context(), spine.ContractDraftID(r.PathValue("id")), input)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, updated)
+}
+
 func (h *ContractDraftHandler) respondServiceError(w http.ResponseWriter, err error) {
 	var validationErr *contractdraft.ValidationError
+	var unknownFieldErr *contractdraft.UnknownFieldError
+	var nonEditableFieldErr *contractdraft.NonEditableFieldError
 	switch {
 	case errors.As(err, &validationErr):
 		RespondError(w, http.StatusBadRequest, "validation_failed", validationErr.Error())
+	case errors.As(err, &unknownFieldErr):
+		RespondError(w, http.StatusBadRequest, "unknown_field", unknownFieldErr.Error())
+	case errors.As(err, &nonEditableFieldErr):
+		RespondError(w, http.StatusBadRequest, "non_editable_field", nonEditableFieldErr.Error())
 	case errors.Is(err, contractdraft.ErrContractSeedNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "contract seed not found")
+	case errors.Is(err, contractdraft.ErrContractDraftNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "contract draft not found")
 	case errors.Is(err, contractdraft.ErrInvalidSeedState):
 		RespondError(w, http.StatusConflict, "invalid_state", "contract seed is not ready for contract draft")
+	case errors.Is(err, contractdraft.ErrInvalidDraftState):
+		RespondError(w, http.StatusConflict, "invalid_state", "contract draft is not updateable")
 	case errors.Is(err, contractdraft.ErrAlreadyDrafted):
 		RespondError(w, http.StatusConflict, "already_drafted", "contract seed already has contract draft")
 	default:

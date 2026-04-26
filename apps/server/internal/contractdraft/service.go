@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -14,15 +15,18 @@ import (
 
 const (
 	EventTypeContractDraftCreated = "contract_draft.created"
+	EventTypeContractDraftUpdated = "contract_draft.updated"
 	EntityTypeContractDraft       = "ContractDraft"
 	SourceRefKindContractSeed     = "contract_seed"
 	DefaultProofExpectation       = "Provide evidence that acceptance criteria were checked."
 )
 
 var (
-	ErrContractSeedNotFound = errors.New("contract seed not found")
-	ErrInvalidSeedState     = errors.New("contract seed state is not draftable")
-	ErrAlreadyDrafted       = errors.New("contract seed already has contract draft")
+	ErrContractSeedNotFound  = errors.New("contract seed not found")
+	ErrContractDraftNotFound = errors.New("contract draft not found")
+	ErrInvalidSeedState      = errors.New("contract seed state is not draftable")
+	ErrInvalidDraftState     = errors.New("contract draft state is not updateable")
+	ErrAlreadyDrafted        = errors.New("contract seed already has contract draft")
 )
 
 type ValidationError struct {
@@ -37,12 +41,29 @@ func (e *ValidationError) Error() string {
 	return e.Field + ": " + e.Message
 }
 
+type UnknownFieldError struct {
+	Field string
+}
+
+func (e *UnknownFieldError) Error() string {
+	return "unknown field: " + e.Field
+}
+
+type NonEditableFieldError struct {
+	Field string
+}
+
+func (e *NonEditableFieldError) Error() string {
+	return "non-editable field: " + e.Field
+}
+
 type SeedReader interface {
 	Get(context.Context, spine.ContractSeedID) (spine.ContractSeed, bool, error)
 }
 
 type Store interface {
 	Create(context.Context, spine.ContractDraft) error
+	Update(context.Context, spine.ContractDraft) error
 	Get(context.Context, spine.ContractDraftID) (spine.ContractDraft, bool, error)
 	GetByContractSeedID(context.Context, spine.ContractSeedID) (spine.ContractDraft, bool, error)
 }
@@ -53,6 +74,10 @@ type EventLog interface {
 
 type transactionalDraftStore interface {
 	CreateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
+}
+
+type transactionalDraftUpdateStore interface {
+	UpdateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
 }
 
 type Clock interface {
@@ -162,6 +187,218 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	return created, nil
 }
 
+func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, input spine.ContractDraftUpdateRequest) (spine.ContractDraft, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.ContractDraft{}, err
+	}
+
+	draft, ok, err := s.Drafts.Get(ctx, draftID)
+	if err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("get contract draft: %w", err)
+	}
+	if !ok {
+		return spine.ContractDraft{}, ErrContractDraftNotFound
+	}
+	if draft.State != spine.ContractDraftStateDraft {
+		return spine.ContractDraft{}, fmt.Errorf("%w: %s", ErrInvalidDraftState, draft.State)
+	}
+	if err := validateUpdatedBy(input.UpdatedBy); err != nil {
+		return spine.ContractDraft{}, err
+	}
+	if len(input.Changes) == 0 {
+		return spine.ContractDraft{}, &ValidationError{Field: "changes", Message: "must include at least one editable field"}
+	}
+
+	updated := draft
+	previousValues := make(map[string]any, len(input.Changes))
+	newValues := make(map[string]any, len(input.Changes))
+	changedFields := make([]string, 0, len(input.Changes))
+	for field, raw := range input.Changes {
+		if isNonEditableField(field) {
+			return spine.ContractDraft{}, &NonEditableFieldError{Field: field}
+		}
+		if !isEditableField(field) {
+			return spine.ContractDraft{}, &UnknownFieldError{Field: field}
+		}
+		if isJSONNull(raw) {
+			return spine.ContractDraft{}, &ValidationError{Field: "changes." + field, Message: "must not be null"}
+		}
+
+		switch field {
+		case "title":
+			value, err := decodeStringChange(field, raw)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = draft.Title
+			newValues[field] = value
+			updated.Title = value
+		case "intent_summary":
+			value, err := decodeStringChange(field, raw)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = draft.IntentSummary
+			newValues[field] = value
+			updated.IntentSummary = value
+		case "proposed_scope":
+			value, err := decodeStringSliceChange(field, raw, true)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedScope)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedScope = value
+		case "proposed_non_goals":
+			value, err := decodeStringSliceChange(field, raw, false)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedNonGoals)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedNonGoals = value
+		case "proposed_constraints":
+			value, err := decodeStringSliceChange(field, raw, false)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedConstraints)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedConstraints = value
+		case "proposed_acceptance_criteria":
+			value, err := decodeStringSliceChange(field, raw, true)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedAcceptanceCriteria)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedAcceptanceCriteria = value
+		case "proposed_expected_checks":
+			value, err := decodeStringSliceChange(field, raw, false)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedExpectedChecks)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedExpectedChecks = value
+		case "proposed_proof_expectations":
+			value, err := decodeStringSliceChange(field, raw, true)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.ProposedProofExpectations)
+			newValues[field] = cloneStrings(value)
+			updated.ProposedProofExpectations = value
+		case "risk_hints":
+			value, err := decodeStringSliceChange(field, raw, false)
+			if err != nil {
+				return spine.ContractDraft{}, err
+			}
+			previousValues[field] = cloneStrings(draft.RiskHints)
+			newValues[field] = cloneStrings(value)
+			updated.RiskHints = value
+		}
+		changedFields = append(changedFields, field)
+	}
+	sort.Strings(changedFields)
+	updated.State = spine.ContractDraftStateDraft
+
+	now := s.Clock.Now().UTC()
+	event, err := s.contractDraftUpdatedEvent(updated, changedFields, input.UpdatedBy, previousValues, newValues, now)
+	if err != nil {
+		return spine.ContractDraft{}, err
+	}
+	if txDrafts, ok := s.Drafts.(transactionalDraftUpdateStore); ok {
+		if err := txDrafts.UpdateWithEvent(ctx, updated, event); err != nil {
+			return spine.ContractDraft{}, fmt.Errorf("update contract draft with event: %w", err)
+		}
+		return updated, nil
+	}
+	if err := s.Drafts.Update(ctx, updated); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("update contract draft: %w", err)
+	}
+	if err := s.Events.Append(ctx, event); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("append contract draft updated event: %w", err)
+	}
+
+	return updated, nil
+}
+
+func validateUpdatedBy(updatedBy spine.ActorRef) error {
+	if strings.TrimSpace(updatedBy.Kind) == "" {
+		return &ValidationError{Field: "updated_by.kind", Message: "is required"}
+	}
+	if strings.TrimSpace(updatedBy.ID) == "" {
+		return &ValidationError{Field: "updated_by.id", Message: "is required"}
+	}
+	return nil
+}
+
+func isEditableField(field string) bool {
+	switch field {
+	case "title",
+		"intent_summary",
+		"proposed_scope",
+		"proposed_non_goals",
+		"proposed_constraints",
+		"proposed_acceptance_criteria",
+		"proposed_expected_checks",
+		"proposed_proof_expectations",
+		"risk_hints":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNonEditableField(field string) bool {
+	switch field {
+	case "id",
+		"contract_seed_id",
+		"goal_id",
+		"repo_binding_id",
+		"source_refs",
+		"created_at",
+		"state":
+		return true
+	default:
+		return false
+	}
+}
+
+func isJSONNull(raw json.RawMessage) bool {
+	return strings.TrimSpace(string(raw)) == "null"
+}
+
+func decodeStringChange(field string, raw json.RawMessage) (string, error) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", &ValidationError{Field: "changes." + field, Message: "must be a string"}
+	}
+	return value, nil
+}
+
+func decodeStringSliceChange(field string, raw json.RawMessage, requireNonEmpty bool) ([]string, error) {
+	var value []string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, &ValidationError{Field: "changes." + field, Message: "must be an array of strings"}
+	}
+	if value == nil {
+		value = []string{}
+	}
+	if requireNonEmpty && len(value) == 0 {
+		return nil, &ValidationError{Field: "changes." + field, Message: "must include at least one item"}
+	}
+	return cloneStrings(value), nil
+}
+
+func cloneStrings(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	return append([]string{}, values...)
+}
+
 func validateSeedForDraft(seed spine.ContractSeed) error {
 	if strings.TrimSpace(string(seed.GoalID)) == "" {
 		return &ValidationError{Field: "goal_id", Message: "is required"}
@@ -223,6 +460,44 @@ func (s *Service) contractDraftCreatedEvent(created spine.ContractDraft) (spine.
 		RepoBindingID:  created.RepoBindingID,
 		Timestamp:      created.CreatedAt,
 		Payload:        payload,
+	}, nil
+}
+
+type contractDraftUpdatedPayload struct {
+	ContractDraftID spine.ContractDraftID `json:"contract_draft_id"`
+	ChangedFields   []string              `json:"changed_fields"`
+	UpdatedBy       spine.ActorRef        `json:"updated_by"`
+	PreviousValues  map[string]any        `json:"previous_values"`
+	NewValues       map[string]any        `json:"new_values"`
+	UpdatedAt       time.Time             `json:"updated_at"`
+}
+
+func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changedFields []string, updatedBy spine.ActorRef, previousValues map[string]any, newValues map[string]any, updatedAt time.Time) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new contract draft updated event id: %w", err)
+	}
+
+	payload, err := json.Marshal(contractDraftUpdatedPayload{
+		ContractDraftID: updated.ID,
+		ChangedFields:   append([]string{}, changedFields...),
+		UpdatedBy:       updatedBy,
+		PreviousValues:  previousValues,
+		NewValues:       newValues,
+		UpdatedAt:       updatedAt,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal contract draft updated event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:            eventID,
+		Type:          EventTypeContractDraftUpdated,
+		EntityType:    EntityTypeContractDraft,
+		EntityID:      string(updated.ID),
+		RepoBindingID: updated.RepoBindingID,
+		Timestamp:     updatedAt,
+		Payload:       payload,
 	}, nil
 }
 

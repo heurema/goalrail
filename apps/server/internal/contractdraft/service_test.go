@@ -255,6 +255,268 @@ func TestServiceDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
 	assertNoForbiddenEvents(t, events.Events())
 }
 
+func TestServiceUpdatesEditableDraftFields(t *testing.T) {
+	service, seeds, _, events := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, err := service.Update(context.Background(), created.ID, updateRequest(t, `{
+		"title": "Reviewed draft title",
+		"intent_summary": "Reviewed summary",
+		"proposed_scope": ["Reviewed scope"],
+		"proposed_acceptance_criteria": ["Reviewed acceptance"],
+		"proposed_non_goals": [],
+		"proposed_constraints": ["No schema changes"],
+		"proposed_expected_checks": ["go test ./..."],
+		"proposed_proof_expectations": ["Attach test output"],
+		"risk_hints": ["Low risk"]
+	}`))
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	if updated.State != spine.ContractDraftStateDraft {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ContractDraftStateDraft)
+	}
+	if updated.Title != "Reviewed draft title" {
+		t.Fatalf("title = %q, want reviewed title", updated.Title)
+	}
+	if updated.IntentSummary != "Reviewed summary" {
+		t.Fatalf("intent_summary = %q, want reviewed summary", updated.IntentSummary)
+	}
+	if !reflect.DeepEqual(updated.ProposedScope, []string{"Reviewed scope"}) {
+		t.Fatalf("proposed_scope = %#v", updated.ProposedScope)
+	}
+	if !reflect.DeepEqual(updated.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
+		t.Fatalf("proposed_acceptance_criteria = %#v", updated.ProposedAcceptanceCriteria)
+	}
+	if !reflect.DeepEqual(updated.ProposedNonGoals, []string{}) {
+		t.Fatalf("proposed_non_goals = %#v, want empty slice", updated.ProposedNonGoals)
+	}
+	if !reflect.DeepEqual(updated.ProposedConstraints, []string{"No schema changes"}) {
+		t.Fatalf("proposed_constraints = %#v", updated.ProposedConstraints)
+	}
+	if !reflect.DeepEqual(updated.ProposedExpectedChecks, []string{"go test ./..."}) {
+		t.Fatalf("proposed_expected_checks = %#v", updated.ProposedExpectedChecks)
+	}
+	if !reflect.DeepEqual(updated.ProposedProofExpectations, []string{"Attach test output"}) {
+		t.Fatalf("proposed_proof_expectations = %#v", updated.ProposedProofExpectations)
+	}
+	if !reflect.DeepEqual(updated.RiskHints, []string{"Low risk"}) {
+		t.Fatalf("risk_hints = %#v", updated.RiskHints)
+	}
+	if updated.ContractSeedID != created.ContractSeedID || updated.GoalID != created.GoalID || updated.RepoBindingID != created.RepoBindingID {
+		t.Fatalf("identity fields changed: got %#v, want seed/goal/repo unchanged from %#v", updated, created)
+	}
+	if !reflect.DeepEqual(updated.SourceRefs, created.SourceRefs) {
+		t.Fatalf("source_refs = %#v, want unchanged %#v", updated.SourceRefs, created.SourceRefs)
+	}
+	if updated.CreatedAt != created.CreatedAt {
+		t.Fatalf("created_at = %s, want %s", updated.CreatedAt, created.CreatedAt)
+	}
+	if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftUpdated); got != 1 {
+		t.Fatalf("contract_draft.updated events = %d, want 1", got)
+	}
+}
+
+func TestServiceRejectsNonEditableUpdateField(t *testing.T) {
+	service, seeds, _, events := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	_, err = service.Update(context.Background(), created.ID, updateRequest(t, `{"state": "ready_for_approval"}`))
+	var nonEditableErr *contractdraft.NonEditableFieldError
+	if !errors.As(err, &nonEditableErr) {
+		t.Fatalf("Update() error = %v, want NonEditableFieldError", err)
+	}
+	if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftUpdated); got != 0 {
+		t.Fatalf("contract_draft.updated events = %d, want 0", got)
+	}
+}
+
+func TestServiceRejectsUnknownUpdateField(t *testing.T) {
+	service, seeds, _, _ := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	_, err = service.Update(context.Background(), created.ID, updateRequest(t, `{"unknown": "value"}`))
+	var unknownErr *contractdraft.UnknownFieldError
+	if !errors.As(err, &unknownErr) {
+		t.Fatalf("Update() error = %v, want UnknownFieldError", err)
+	}
+}
+
+func TestServiceRejectsMissingUpdatedBy(t *testing.T) {
+	service, seeds, _, _ := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		updatedBy spine.ActorRef
+		field     string
+	}{
+		{name: "missing_kind", updatedBy: spine.ActorRef{ID: "dev_1"}, field: "updated_by.kind"},
+		{name: "missing_id", updatedBy: spine.ActorRef{Kind: "user"}, field: "updated_by.id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := updateRequest(t, `{"title": "Reviewed"}`)
+			input.UpdatedBy = tt.updatedBy
+
+			_, err := service.Update(context.Background(), created.ID, input)
+			var validationErr *contractdraft.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("Update() error = %v, want ValidationError", err)
+			}
+			if validationErr.Field != tt.field {
+				t.Fatalf("validation field = %q, want %q", validationErr.Field, tt.field)
+			}
+		})
+	}
+}
+
+func TestServiceRejectsEmptyUpdateChanges(t *testing.T) {
+	service, seeds, _, _ := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	_, err = service.Update(context.Background(), created.ID, spine.ContractDraftUpdateRequest{
+		UpdatedBy: spine.ActorRef{Kind: "user", ID: "dev_1"},
+		Changes:   map[string]json.RawMessage{},
+	})
+	var validationErr *contractdraft.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Update() error = %v, want ValidationError", err)
+	}
+	if validationErr.Field != "changes" {
+		t.Fatalf("validation field = %q, want changes", validationErr.Field)
+	}
+}
+
+func TestServiceRejectsUpdateWhenDraftNotDraft(t *testing.T) {
+	service, _, drafts, _ := draftService(t)
+	created := validStoredDraft()
+	created.State = "ready_for_approval"
+	if err := drafts.Create(context.Background(), created); err != nil {
+		t.Fatalf("drafts.Create() error = %v", err)
+	}
+
+	_, err := service.Update(context.Background(), created.ID, updateRequest(t, `{"title": "Reviewed"}`))
+	if !errors.Is(err, contractdraft.ErrInvalidDraftState) {
+		t.Fatalf("Update() error = %v, want ErrInvalidDraftState", err)
+	}
+}
+
+func TestServiceAppendsContractDraftUpdatedEvent(t *testing.T) {
+	service, seeds, _, events := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, err := service.Update(context.Background(), created.ID, updateRequest(t, `{
+		"proposed_acceptance_criteria": ["Reviewed acceptance"],
+		"proposed_scope": ["Reviewed scope"]
+	}`))
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	appended := events.Events()
+	if got := countEventType(appended, contractdraft.EventTypeContractDraftUpdated); got != 1 {
+		t.Fatalf("contract_draft.updated events = %d, want 1", got)
+	}
+	event := appended[len(appended)-1]
+	if event.Type != contractdraft.EventTypeContractDraftUpdated {
+		t.Fatalf("event type = %q, want %q", event.Type, contractdraft.EventTypeContractDraftUpdated)
+	}
+	if event.EntityType != contractdraft.EntityTypeContractDraft {
+		t.Fatalf("entity type = %q, want %q", event.EntityType, contractdraft.EntityTypeContractDraft)
+	}
+	if event.EntityID != string(updated.ID) {
+		t.Fatalf("entity id = %q, want %q", event.EntityID, updated.ID)
+	}
+
+	var payload struct {
+		ContractDraftID spine.ContractDraftID `json:"contract_draft_id"`
+		ChangedFields   []string              `json:"changed_fields"`
+		UpdatedBy       spine.ActorRef        `json:"updated_by"`
+		PreviousValues  map[string]any        `json:"previous_values"`
+		NewValues       map[string]any        `json:"new_values"`
+		UpdatedAt       time.Time             `json:"updated_at"`
+	}
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal contract_draft.updated payload: %v", err)
+	}
+	if payload.ContractDraftID != updated.ID {
+		t.Fatalf("payload contract_draft_id = %q, want %q", payload.ContractDraftID, updated.ID)
+	}
+	if !reflect.DeepEqual(payload.ChangedFields, []string{"proposed_acceptance_criteria", "proposed_scope"}) {
+		t.Fatalf("changed_fields = %#v", payload.ChangedFields)
+	}
+	if payload.UpdatedBy.Kind != "user" || payload.UpdatedBy.ID != "dev_1" {
+		t.Fatalf("updated_by = %#v, want audit user", payload.UpdatedBy)
+	}
+	if _, ok := payload.PreviousValues["proposed_scope"]; !ok {
+		t.Fatalf("previous_values missing proposed_scope: %#v", payload.PreviousValues)
+	}
+	if _, ok := payload.NewValues["proposed_scope"]; !ok {
+		t.Fatalf("new_values missing proposed_scope: %#v", payload.NewValues)
+	}
+}
+
+func TestServiceUpdateDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
+	service, seeds, _, events := draftService(t)
+	seed := validDraftableSeed()
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := service.Update(context.Background(), created.ID, updateRequest(t, `{"title": "Reviewed"}`)); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	assertNoForbiddenEvents(t, events.Events())
+}
+
 func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStore, *store.ContractDraftStore, *eventlog.EventLog) {
 	t.Helper()
 
@@ -263,6 +525,44 @@ func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStor
 	events := eventlog.NewEventLog()
 	service := contractdraft.NewService(seeds, drafts, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, seeds, drafts, events
+}
+
+func updateRequest(t *testing.T, changesJSON string) spine.ContractDraftUpdateRequest {
+	t.Helper()
+
+	var changes map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(changesJSON), &changes); err != nil {
+		t.Fatalf("unmarshal update changes: %v", err)
+	}
+	return spine.ContractDraftUpdateRequest{
+		UpdatedBy: spine.ActorRef{Kind: "user", ID: "dev_1", DisplayName: "Developer"},
+		Changes:   changes,
+	}
+}
+
+func validStoredDraft() spine.ContractDraft {
+	return spine.ContractDraft{
+		ID:                         "contract-draft-1",
+		ContractSeedID:             "contract-seed-1",
+		GoalID:                     "goal-1",
+		RepoBindingID:              "repo-binding-1",
+		Title:                      "Refactor CSV export filters",
+		IntentSummary:              "Current code duplicates filter logic.",
+		ProposedScope:              []string{"Refactor duplicate filter logic"},
+		ProposedNonGoals:           []string{},
+		ProposedConstraints:        []string{},
+		ProposedAcceptanceCriteria: []string{"Existing CSV export behavior is preserved"},
+		ProposedExpectedChecks:     []string{},
+		ProposedProofExpectations:  []string{"Provide evidence that acceptance criteria were checked."},
+		RiskHints:                  []string{},
+		SourceRefs: []spine.SourceRef{
+			{Kind: "contract_seed", ID: "contract-seed-1"},
+			{Kind: "goal", ID: "goal-1"},
+			{Kind: "intake", ID: "intake-1"},
+		},
+		State:     spine.ContractDraftStateDraft,
+		CreatedAt: testTime(),
+	}
 }
 
 func validDraftableSeed() spine.ContractSeed {
@@ -310,6 +610,16 @@ func assertNoForbiddenEvents(t *testing.T, events []spine.Event) {
 			t.Fatalf("forbidden event type appended: %s", event.Type)
 		}
 	}
+}
+
+func countEventType(events []spine.Event, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
 }
 
 type fixedClock struct {

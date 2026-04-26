@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ContractSeed creation, ContractDraft creation, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and in-memory ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ContractSeed creation, ContractDraft creation/update, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and in-memory ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
@@ -18,7 +18,7 @@
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
 - ADR-0013 now defines the `ContractSeed` boundary, and the server persists `ContractSeed(created)` in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
 - ADR-0014 now defines the `ContractDraft` boundary, and the server persists `ContractDraft(draft)` creation in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
-- ADR-0015 now defines the `ContractDraft` review/update boundary; future update work must keep state `draft` and keep `ready_for_approval` and approval as later boundaries
+- ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; `ready_for_approval` and approval remain later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -93,10 +93,9 @@ Done means:
 
 ### Server follow-up slices
 
-1. ContractDraft review/update prototype
-   - update proposed draft fields through explicit server-owned update transition
-   - append `contract_draft.updated` events with `updated_by` and changed fields
-   - keep `ContractDraft.state = draft` and preserve `ready_for_approval` as a later boundary
+1. ContractDraft ready_for_approval boundary design
+   - define how a reviewed draft may be explicitly marked ready for approval
+   - keep approval and approved Contract as later boundaries unless the ADR says otherwise
    - do not create approved Contract, work items, execution, gate, or proof
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists

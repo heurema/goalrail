@@ -55,6 +55,72 @@ func TestContractDraftStorePreventsDuplicateDraftForSeed(t *testing.T) {
 	}
 }
 
+func TestContractDraftStoreUpdatePreservesIdentityAndSourceFields(t *testing.T) {
+	draftStore := store.NewContractDraftStore()
+	created := validContractDraft()
+	if err := draftStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated := created
+	updated.ContractSeedID = "different-seed"
+	updated.GoalID = "different-goal"
+	updated.RepoBindingID = "different-repo-binding"
+	updated.SourceRefs = []spine.SourceRef{{Kind: "forbidden", ID: "source"}}
+	updated.State = "ready_for_approval"
+	updated.CreatedAt = created.CreatedAt.Add(time.Hour)
+	updated.Title = "Reviewed title"
+	updated.ProposedScope = []string{"Reviewed scope"}
+	updated.ProposedNonGoals = []string{}
+
+	if err := draftStore.Update(context.Background(), updated); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	got, ok, err := draftStore.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	if got.ContractSeedID != created.ContractSeedID {
+		t.Fatalf("contract_seed_id = %q, want %q", got.ContractSeedID, created.ContractSeedID)
+	}
+	if got.GoalID != created.GoalID {
+		t.Fatalf("goal_id = %q, want %q", got.GoalID, created.GoalID)
+	}
+	if got.RepoBindingID != created.RepoBindingID {
+		t.Fatalf("repo_binding_id = %q, want %q", got.RepoBindingID, created.RepoBindingID)
+	}
+	if !reflect.DeepEqual(got.SourceRefs, created.SourceRefs) {
+		t.Fatalf("source_refs = %#v, want %#v", got.SourceRefs, created.SourceRefs)
+	}
+	if got.State != created.State {
+		t.Fatalf("state = %q, want %q", got.State, created.State)
+	}
+	if got.CreatedAt != created.CreatedAt {
+		t.Fatalf("created_at = %s, want %s", got.CreatedAt, created.CreatedAt)
+	}
+	if got.Title != "Reviewed title" {
+		t.Fatalf("title = %q, want reviewed title", got.Title)
+	}
+	if !reflect.DeepEqual(got.ProposedScope, []string{"Reviewed scope"}) {
+		t.Fatalf("proposed_scope = %#v, want reviewed scope", got.ProposedScope)
+	}
+	if !reflect.DeepEqual(got.ProposedNonGoals, []string{}) {
+		t.Fatalf("proposed_non_goals = %#v, want empty slice", got.ProposedNonGoals)
+	}
+}
+
+func TestContractDraftStoreUpdateUnknownDraft(t *testing.T) {
+	draftStore := store.NewContractDraftStore()
+
+	if err := draftStore.Update(context.Background(), validContractDraft()); err != store.ErrContractDraftNotFound {
+		t.Fatalf("Update() error = %v, want %v", err, store.ErrContractDraftNotFound)
+	}
+}
+
 func validContractDraft() spine.ContractDraft {
 	return spine.ContractDraft{
 		ID:                         "contract-draft-1",
