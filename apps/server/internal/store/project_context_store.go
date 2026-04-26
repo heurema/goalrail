@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	squirrel "github.com/Masterminds/squirrel"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -15,23 +16,33 @@ type ProjectContextExecer interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
+type ProjectContextQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 type ProjectContextStore struct {
-	exec ProjectContextExecer
-	psql squirrel.StatementBuilderType
+	exec  ProjectContextExecer
+	query ProjectContextQuerier
+	psql  squirrel.StatementBuilderType
 }
 
 func NewProjectContextStore(pool *pgxpool.Pool) *ProjectContextStore {
-	return newProjectContextStore(pool)
+	return newProjectContextStore(pool, pool)
 }
 
 func NewProjectContextStoreWithExecutor(exec ProjectContextExecer) *ProjectContextStore {
-	return newProjectContextStore(exec)
+	return newProjectContextStore(exec, nil)
 }
 
-func newProjectContextStore(exec ProjectContextExecer) *ProjectContextStore {
+func NewProjectContextStoreWithExecutorAndQuerier(exec ProjectContextExecer, query ProjectContextQuerier) *ProjectContextStore {
+	return newProjectContextStore(exec, query)
+}
+
+func newProjectContextStore(exec ProjectContextExecer, query ProjectContextQuerier) *ProjectContextStore {
 	return &ProjectContextStore{
-		exec: exec,
-		psql: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
+		exec:  exec,
+		query: query,
+		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 	}
 }
 
@@ -113,6 +124,36 @@ func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spi
 		Suffix("ON CONFLICT (id) DO UPDATE SET provider = EXCLUDED.provider, repository_external_id = EXCLUDED.repository_external_id, repository_full_name = EXCLUDED.repository_full_name, repository_url = EXCLUDED.repository_url, default_branch = EXCLUDED.default_branch, path_scope = EXCLUDED.path_scope, access_mode = EXCLUDED.access_mode, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
 
 	return s.execSQL(ctx, "upsert repo binding", stmt)
+}
+
+func (s *ProjectContextStore) ResolveRepoBinding(ctx context.Context, repoBindingID spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error) {
+	if s.query == nil {
+		return spine.ResolvedRepoBindingContext{}, false, fmt.Errorf("project context query executor is nil")
+	}
+
+	stmt := s.psql.
+		Select("organization_id", "project_id", "id").
+		From("repo_bindings").
+		Where(squirrel.Eq{"id": repoBindingID})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.ResolvedRepoBindingContext{}, false, fmt.Errorf("resolve repo binding SQL: %w", err)
+	}
+
+	var resolved spine.ResolvedRepoBindingContext
+	if err := s.query.QueryRow(ctx, sqlText, args...).Scan(
+		&resolved.OrganizationID,
+		&resolved.ProjectID,
+		&resolved.RepoBindingID,
+	); err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.ResolvedRepoBindingContext{}, false, nil
+		}
+		return spine.ResolvedRepoBindingContext{}, false, fmt.Errorf("resolve repo binding: %w", err)
+	}
+
+	return resolved, true, nil
 }
 
 func (s *ProjectContextStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {

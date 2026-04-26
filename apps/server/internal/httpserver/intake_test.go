@@ -20,7 +20,8 @@ import (
 )
 
 const validIntakeJSON = `{
-  "repo_binding_id": "repo_demo_1",
+  "project_id": "prj_dev_default",
+  "repo_binding_id": "rpb_dev_default",
   "source": {
     "kind": "codex_skill",
     "external_id": "local-session-1"
@@ -60,6 +61,21 @@ func TestPostIntakeReturnsAccepted(t *testing.T) {
 	if canonicalContractCreated {
 		t.Fatal("canonical_contract_created = true, want false")
 	}
+	var organizationID string
+	decodeRawJSON(t, body["organization_id"], &organizationID)
+	if organizationID != "org_dev_default" {
+		t.Fatalf("organization_id = %q, want org_dev_default", organizationID)
+	}
+	var projectID string
+	decodeRawJSON(t, body["project_id"], &projectID)
+	if projectID != "prj_dev_default" {
+		t.Fatalf("project_id = %q, want prj_dev_default", projectID)
+	}
+	var repoBindingID string
+	decodeRawJSON(t, body["repo_binding_id"], &repoBindingID)
+	if repoBindingID != "rpb_dev_default" {
+		t.Fatalf("repo_binding_id = %q, want rpb_dev_default", repoBindingID)
+	}
 
 	for _, forbiddenField := range []string{"goal_id", "contract_id", "work_item_id"} {
 		if _, ok := body[forbiddenField]; ok {
@@ -71,6 +87,70 @@ func TestPostIntakeReturnsAccepted(t *testing.T) {
 	decodeRawJSON(t, body["state"], &state)
 	if state != "received" {
 		t.Fatalf("state = %q, want %q", state, "received")
+	}
+}
+
+func TestPostIntakeRejectsUnknownRepoBinding(t *testing.T) {
+	server := testServerWithResolver(t, fakeProjectContextResolver{ok: false})
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake", validIntakeJSON)
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusBadRequest)
+	}
+
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "validation_failed" {
+		t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+	}
+	if !strings.Contains(body.Error.Message, "repo_binding_id") {
+		t.Fatalf("error message = %q, want repo_binding_id", body.Error.Message)
+	}
+	if got := len(server.events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
+}
+
+func TestPostIntakeRejectsRepoBindingForDifferentProject(t *testing.T) {
+	server := testServerWithResolver(t, fakeProjectContextResolver{
+		resolved: spine.ResolvedRepoBindingContext{
+			OrganizationID: "org_dev_default",
+			ProjectID:      "prj_other",
+			RepoBindingID:  "rpb_dev_default",
+		},
+		ok: true,
+	})
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake", validIntakeJSON)
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusBadRequest)
+	}
+	if got := len(server.events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
+}
+
+func TestPostIntakeReturnsConfigurationErrorWhenProjectContextUnavailable(t *testing.T) {
+	server := testServerWithResolver(t, nil)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intake", validIntakeJSON)
+	if response.code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusServiceUnavailable)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "project_context_unavailable" {
+		t.Fatalf("error code = %q, want project_context_unavailable", body.Error.Code)
 	}
 }
 
@@ -104,8 +184,14 @@ func TestGetIntakeReturnsStoredRecord(t *testing.T) {
 	if record.CanonicalContractCreated {
 		t.Fatal("CanonicalContractCreated = true, want false")
 	}
-	if record.RepoBindingID != "repo_demo_1" {
-		t.Fatalf("RepoBindingID = %q, want %q", record.RepoBindingID, "repo_demo_1")
+	if record.OrganizationID != "org_dev_default" {
+		t.Fatalf("OrganizationID = %q, want %q", record.OrganizationID, "org_dev_default")
+	}
+	if record.ProjectID != "prj_dev_default" {
+		t.Fatalf("ProjectID = %q, want %q", record.ProjectID, "prj_dev_default")
+	}
+	if record.RepoBindingID != "rpb_dev_default" {
+		t.Fatalf("RepoBindingID = %q, want %q", record.RepoBindingID, "rpb_dev_default")
 	}
 	if !reflect.DeepEqual(record.IntentOwner, record.RequestAuthor) {
 		t.Fatalf("IntentOwner = %#v, want RequestAuthor %#v", record.IntentOwner, record.RequestAuthor)
@@ -137,24 +223,28 @@ func TestPostIntakeValidation(t *testing.T) {
 		body string
 	}{
 		{
+			name: "missing project_id",
+			body: `{"repo_binding_id":"rpb_dev_default","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user","id":"dev_1"}}`,
+		},
+		{
 			name: "missing repo_binding_id",
-			body: `{"source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user","id":"dev_1"}}`,
+			body: `{"project_id":"prj_dev_default","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user","id":"dev_1"}}`,
 		},
 		{
 			name: "missing source kind",
-			body: `{"repo_binding_id":"repo_demo_1","source":{},"title":"Title","request_author":{"kind":"user","id":"dev_1"}}`,
+			body: `{"project_id":"prj_dev_default","repo_binding_id":"rpb_dev_default","source":{},"title":"Title","request_author":{"kind":"user","id":"dev_1"}}`,
 		},
 		{
 			name: "missing title and body",
-			body: `{"repo_binding_id":"repo_demo_1","source":{"kind":"codex_skill"},"request_author":{"kind":"user","id":"dev_1"}}`,
+			body: `{"project_id":"prj_dev_default","repo_binding_id":"rpb_dev_default","source":{"kind":"codex_skill"},"request_author":{"kind":"user","id":"dev_1"}}`,
 		},
 		{
 			name: "missing request_author kind",
-			body: `{"repo_binding_id":"repo_demo_1","source":{"kind":"codex_skill"},"title":"Title","request_author":{"id":"dev_1"}}`,
+			body: `{"project_id":"prj_dev_default","repo_binding_id":"rpb_dev_default","source":{"kind":"codex_skill"},"title":"Title","request_author":{"id":"dev_1"}}`,
 		},
 		{
 			name: "missing request_author id",
-			body: `{"repo_binding_id":"repo_demo_1","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user"}}`,
+			body: `{"project_id":"prj_dev_default","repo_binding_id":"rpb_dev_default","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user"}}`,
 		},
 	}
 
@@ -182,7 +272,7 @@ func TestPostIntakeValidation(t *testing.T) {
 
 func TestPostIntakeRejectsUnknownJSONField(t *testing.T) {
 	server := testServer(t)
-	body := `{"repo_binding_id":"repo_demo_1","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user","id":"dev_1"},"unexpected":true}`
+	body := `{"project_id":"prj_dev_default","repo_binding_id":"rpb_dev_default","source":{"kind":"codex_skill"},"title":"Title","request_author":{"kind":"user","id":"dev_1"},"unexpected":true}`
 
 	response := doJSON(t, server.router, http.MethodPost, "/v1/intake", body)
 	if response.code != http.StatusBadRequest {
@@ -244,6 +334,15 @@ func TestPostPromoteIntakeReturnsCreatedGoal(t *testing.T) {
 	}
 	if created.IntakeID != spine.IntakeID(intakeID) {
 		t.Fatalf("intake_id = %q, want %q", created.IntakeID, intakeID)
+	}
+	if created.OrganizationID != "org_dev_default" {
+		t.Fatalf("organization_id = %q, want org_dev_default", created.OrganizationID)
+	}
+	if created.ProjectID != "prj_dev_default" {
+		t.Fatalf("project_id = %q, want prj_dev_default", created.ProjectID)
+	}
+	if created.RepoBindingID != "rpb_dev_default" {
+		t.Fatalf("repo_binding_id = %q, want rpb_dev_default", created.RepoBindingID)
 	}
 	if created.Summary != "Current code duplicates filter logic. Preserve current behavior." {
 		t.Fatalf("summary = %q, want intake body", created.Summary)
@@ -322,7 +421,8 @@ func TestPostPromoteIntakeTwiceReturnsConflict(t *testing.T) {
 func TestPostPromoteIntakeUsesTitleAsSummaryWhenBodyIsEmpty(t *testing.T) {
 	server := testServer(t)
 	intakeID := createIntake(t, server, `{
-  "repo_binding_id": "repo_demo_1",
+  "project_id": "prj_dev_default",
+  "repo_binding_id": "rpb_dev_default",
   "source": {"kind": "codex_skill"},
   "title": "Refactor CSV export filters",
   "request_author": {"kind": "user", "id": "dev_1"}
@@ -529,11 +629,13 @@ func TestPostGoalClarificationRequestsRejectsGoalNotNeedsClarification(t *testin
 func TestPostGoalClarificationRequestsRejectsMissingReadinessReasons(t *testing.T) {
 	server := testServer(t)
 	created := spine.Goal{
-		ID:            "goal-without-reasons",
-		IntakeID:      "intake-without-reasons",
-		RepoBindingID: "repo_demo_1",
-		Title:         "Refactor CSV export filters",
-		Summary:       "Current code duplicates filter logic. Preserve current behavior.",
+		ID:             "goal-without-reasons",
+		IntakeID:       "intake-without-reasons",
+		OrganizationID: "org_dev_default",
+		ProjectID:      "prj_dev_default",
+		RepoBindingID:  "rpb_dev_default",
+		Title:          "Refactor CSV export filters",
+		Summary:        "Current code duplicates filter logic. Preserve current behavior.",
 		SourceRefs: []spine.SourceRef{
 			{Kind: "intake", ID: "intake-without-reasons"},
 		},
@@ -982,6 +1084,11 @@ func TestPostClarificationAnswersApplyRejectsRawTextIntentOwner(t *testing.T) {
 
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
+	return testServerWithResolver(t, validProjectContextResolver())
+}
+
+func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver) testServerDeps {
+	t.Helper()
 
 	intakeStore := store.NewIntakeStore()
 	goalStore := store.NewGoalStore()
@@ -989,7 +1096,7 @@ func testServer(t *testing.T) testServerDeps {
 	answerStore := store.NewClarificationAnswerStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
-	service := intake.NewService(intakeStore, events, fixedClock{now: testTime()}, ids)
+	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
 	goalService := goal.NewService(intakeStore, goalStore, events, fixedClock{now: testTime()}, ids)
 	goalHandler := httpserver.NewGoalHandler(goalService)
@@ -1005,6 +1112,27 @@ func testServer(t *testing.T) testServerDeps {
 		events:         events,
 		idFactory:      ids,
 	}
+}
+
+func validProjectContextResolver() fakeProjectContextResolver {
+	return fakeProjectContextResolver{
+		resolved: spine.ResolvedRepoBindingContext{
+			OrganizationID: "org_dev_default",
+			ProjectID:      "prj_dev_default",
+			RepoBindingID:  "rpb_dev_default",
+		},
+		ok: true,
+	}
+}
+
+type fakeProjectContextResolver struct {
+	resolved spine.ResolvedRepoBindingContext
+	ok       bool
+	err      error
+}
+
+func (r fakeProjectContextResolver) ResolveRepoBinding(context.Context, spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error) {
+	return r.resolved, r.ok, r.err
 }
 
 type fixedClock struct {

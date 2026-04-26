@@ -1,7 +1,10 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
@@ -10,11 +13,12 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
+	"github.com/heurema/goalrail/apps/server/internal/postgres"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 )
 
-func newHTTPServer(cfg config.Config) *http.Server {
+func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	healthHandler := health.NewHandler()
 	versionHandler := version.NewHandler()
 	intakeStore := store.NewIntakeStore()
@@ -22,7 +26,19 @@ func newHTTPServer(cfg config.Config) *http.Server {
 	clarificationStore := store.NewClarificationStore()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
 	events := eventlog.NewEventLog()
-	intakeService := intake.NewService(intakeStore, events, intake.SystemClock{}, intake.UUIDGenerator{})
+
+	var projectContext intake.ProjectContextResolver
+	cleanup := func() {}
+	if strings.TrimSpace(cfg.DatabaseDSN) != "" {
+		pool, err := postgres.OpenPool(ctx, cfg.DatabaseDSN)
+		if err != nil {
+			return nil, nil, fmt.Errorf("open project context db: %w", err)
+		}
+		projectContext = store.NewProjectContextStore(pool)
+		cleanup = pool.Close
+	}
+
+	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
 	goalService := goal.NewService(intakeStore, goalStore, events, goal.SystemClock{}, goal.UUIDGenerator{})
 	goalHandler := httpserver.NewGoalHandler(goalService)
@@ -42,5 +58,5 @@ func newHTTPServer(cfg config.Config) *http.Server {
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
 
-	return httpserver.NewServer(cfg.Addr, router)
+	return httpserver.NewServer(cfg.Addr, router), cleanup, nil
 }

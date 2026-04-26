@@ -2,10 +2,12 @@ package store
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
@@ -14,7 +16,7 @@ import (
 func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *testing.T) {
 	ctx := context.Background()
 	exec := &recordingProjectContextExecer{}
-	store := newProjectContextStore(exec)
+	store := NewProjectContextStoreWithExecutor(exec)
 	now := time.Date(2026, 4, 26, 10, 0, 0, 0, time.UTC)
 
 	err := store.UpsertRepoBinding(ctx, spine.RepoBinding{
@@ -53,6 +55,60 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 	}
 }
 
+func TestProjectContextStoreResolvesRepoBindingContext(t *testing.T) {
+	ctx := context.Background()
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{"org_dev_default", "prj_dev_default", "rpb_dev_default"},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	resolved, ok, err := store.ResolveRepoBinding(ctx, "rpb_dev_default")
+	if err != nil {
+		t.Fatalf("ResolveRepoBinding() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("ResolveRepoBinding() ok = false, want true")
+	}
+	if resolved.OrganizationID != "org_dev_default" {
+		t.Fatalf("organization_id = %q, want org_dev_default", resolved.OrganizationID)
+	}
+	if resolved.ProjectID != "prj_dev_default" {
+		t.Fatalf("project_id = %q, want prj_dev_default", resolved.ProjectID)
+	}
+	if resolved.RepoBindingID != "rpb_dev_default" {
+		t.Fatalf("repo_binding_id = %q, want rpb_dev_default", resolved.RepoBindingID)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM repo_bindings") {
+		t.Fatalf("SQL = %q, want repo_bindings select", call.sql)
+	}
+	if !strings.Contains(call.sql, "$1") {
+		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
+	}
+	if got, want := len(call.args), 1; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreResolveRepoBindingReturnsNotFound(t *testing.T) {
+	ctx := context.Background()
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{err: pgx.ErrNoRows}}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	_, ok, err := store.ResolveRepoBinding(ctx, "missing")
+	if err != nil {
+		t.Fatalf("ResolveRepoBinding() error = %v", err)
+	}
+	if ok {
+		t.Fatal("ResolveRepoBinding() ok = true, want false")
+	}
+}
+
 type recordingProjectContextExecer struct {
 	calls []recordedExecCall
 }
@@ -68,4 +124,56 @@ func (r *recordingProjectContextExecer) Exec(_ context.Context, sql string, args
 		args: append([]any(nil), args...),
 	})
 	return pgconn.NewCommandTag("INSERT 0 1"), nil
+}
+
+type recordingProjectContextQuerier struct {
+	calls []recordedExecCall
+	row   pgx.Row
+}
+
+func (r *recordingProjectContextQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+	r.calls = append(r.calls, recordedExecCall{
+		sql:  sql,
+		args: append([]any(nil), args...),
+	})
+	return r.row
+}
+
+type fakeProjectContextRow struct {
+	values []any
+	err    error
+}
+
+func (r fakeProjectContextRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	if len(dest) != len(r.values) {
+		return errors.New("unexpected scan destination count")
+	}
+	for i := range dest {
+		switch target := dest[i].(type) {
+		case *spine.OrganizationID:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("organization id value is not string")
+			}
+			*target = spine.OrganizationID(value)
+		case *spine.ProjectID:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("project id value is not string")
+			}
+			*target = spine.ProjectID(value)
+		case *spine.RepoBindingID:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("repo binding id value is not string")
+			}
+			*target = spine.RepoBindingID(value)
+		default:
+			return errors.New("unexpected scan target")
+		}
+	}
+	return nil
 }

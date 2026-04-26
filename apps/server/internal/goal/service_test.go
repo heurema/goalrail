@@ -55,6 +55,21 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 	if goalPayload.State != spine.GoalStateCreated {
 		t.Fatalf("payload goal state = %q, want %q", goalPayload.State, spine.GoalStateCreated)
 	}
+	if goalPayload.OrganizationID != intakeRecord.OrganizationID {
+		t.Fatalf("payload organization_id = %q, want %q", goalPayload.OrganizationID, intakeRecord.OrganizationID)
+	}
+	if goalPayload.ProjectID != intakeRecord.ProjectID {
+		t.Fatalf("payload project_id = %q, want %q", goalPayload.ProjectID, intakeRecord.ProjectID)
+	}
+	if goalPayload.RepoBindingID != intakeRecord.RepoBindingID {
+		t.Fatalf("payload repo_binding_id = %q, want %q", goalPayload.RepoBindingID, intakeRecord.RepoBindingID)
+	}
+	if goalCreated.OrganizationID != intakeRecord.OrganizationID {
+		t.Fatalf("event organization_id = %q, want %q", goalCreated.OrganizationID, intakeRecord.OrganizationID)
+	}
+	if goalCreated.ProjectID != intakeRecord.ProjectID {
+		t.Fatalf("event project_id = %q, want %q", goalCreated.ProjectID, intakeRecord.ProjectID)
+	}
 
 	intakePromoted := appended[1]
 	if intakePromoted.Type != goal.EventTypeIntakePromoted {
@@ -90,6 +105,15 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 	}
 	if stored.ID != created.ID {
 		t.Fatalf("stored goal id = %q, want %q", stored.ID, created.ID)
+	}
+	if stored.OrganizationID != intakeRecord.OrganizationID {
+		t.Fatalf("stored organization_id = %q, want %q", stored.OrganizationID, intakeRecord.OrganizationID)
+	}
+	if stored.ProjectID != intakeRecord.ProjectID {
+		t.Fatalf("stored project_id = %q, want %q", stored.ProjectID, intakeRecord.ProjectID)
+	}
+	if stored.RepoBindingID != intakeRecord.RepoBindingID {
+		t.Fatalf("stored repo_binding_id = %q, want %q", stored.RepoBindingID, intakeRecord.RepoBindingID)
 	}
 }
 
@@ -466,11 +490,13 @@ func TestServiceCheckReadinessReturnsErrorWhenSecondEventAppendFails(t *testing.
 
 func validIntakeRecord() spine.IntakeRecord {
 	return spine.IntakeRecord{
-		ID:            "intake-1",
-		RepoBindingID: "repo_demo_1",
-		Source:        spine.IntakeSource{Kind: "codex_skill"},
-		Title:         "Refactor CSV export filters",
-		Body:          "Current code duplicates filter logic. Preserve current behavior.",
+		ID:             "intake-1",
+		OrganizationID: "org_dev_default",
+		ProjectID:      "prj_dev_default",
+		RepoBindingID:  "rpb_dev_default",
+		Source:         spine.IntakeSource{Kind: "codex_skill"},
+		Title:          "Refactor CSV export filters",
+		Body:           "Current code duplicates filter logic. Preserve current behavior.",
 		RequestAuthor: spine.ActorRef{
 			Kind:        "user",
 			ID:          "dev_1",
@@ -491,7 +517,9 @@ func validGoal() spine.Goal {
 	return spine.Goal{
 		ID:             "goal-1",
 		IntakeID:       "intake-1",
-		RepoBindingID:  "repo_demo_1",
+		OrganizationID: "org_dev_default",
+		ProjectID:      "prj_dev_default",
+		RepoBindingID:  "rpb_dev_default",
 		Title:          "Refactor CSV export filters",
 		Summary:        "Current code duplicates filter logic. Preserve current behavior.",
 		ScopeHint:      "Refactor duplicate filter logic",

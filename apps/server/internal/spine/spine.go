@@ -28,6 +28,7 @@ type ActorRef struct {
 }
 
 type IntakeSubmission struct {
+	ProjectID     ProjectID     `json:"project_id"`
 	RepoBindingID RepoBindingID `json:"repo_binding_id"`
 	Source        IntakeSource  `json:"source"`
 	Title         string        `json:"title"`
@@ -37,23 +38,28 @@ type IntakeSubmission struct {
 }
 
 type IntakeRecord struct {
-	ID                       IntakeID      `json:"id"`
-	RepoBindingID            RepoBindingID `json:"repo_binding_id"`
-	Source                   IntakeSource  `json:"source"`
-	Title                    string        `json:"title"`
-	Body                     string        `json:"body"`
-	RequestAuthor            ActorRef      `json:"request_author"`
-	IntentOwner              ActorRef      `json:"intent_owner"`
-	State                    IntakeState   `json:"state"`
-	CanonicalContractCreated bool          `json:"canonical_contract_created"`
-	CreatedAt                time.Time     `json:"created_at"`
+	ID                       IntakeID       `json:"id"`
+	OrganizationID           OrganizationID `json:"organization_id"`
+	ProjectID                ProjectID      `json:"project_id"`
+	RepoBindingID            RepoBindingID  `json:"repo_binding_id"`
+	Source                   IntakeSource   `json:"source"`
+	Title                    string         `json:"title"`
+	Body                     string         `json:"body"`
+	RequestAuthor            ActorRef       `json:"request_author"`
+	IntentOwner              ActorRef       `json:"intent_owner"`
+	State                    IntakeState    `json:"state"`
+	CanonicalContractCreated bool           `json:"canonical_contract_created"`
+	CreatedAt                time.Time      `json:"created_at"`
 }
 
 type Event struct {
-	ID         EventID         `json:"id"`
-	Type       string          `json:"type"`
-	EntityType string          `json:"entity_type"`
-	EntityID   string          `json:"entity_id"`
-	Timestamp  time.Time       `json:"timestamp"`
-	Payload    json.RawMessage `json:"payload"`
+	ID             EventID         `json:"id"`
+	Type           string          `json:"type"`
+	EntityType     string          `json:"entity_type"`
+	EntityID       string          `json:"entity_id"`
+	OrganizationID OrganizationID  `json:"organization_id,omitempty"`
+	ProjectID      ProjectID       `json:"project_id,omitempty"`
+	RepoBindingID  RepoBindingID   `json:"repo_binding_id,omitempty"`
+	Timestamp      time.Time       `json:"timestamp"`
+	Payload        json.RawMessage `json:"payload"`
 }

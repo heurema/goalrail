@@ -86,3 +86,9 @@ type RepoBinding struct {
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
 }
+
+type ResolvedRepoBindingContext struct {
+	OrganizationID OrganizationID `json:"organization_id"`
+	ProjectID      ProjectID      `json:"project_id"`
+	RepoBindingID  RepoBindingID  `json:"repo_binding_id"`
+}

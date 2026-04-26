@@ -29,6 +29,9 @@ func NewIntakeHandler(service IntakeService) *IntakeHandler {
 
 type intakeAcceptedResponse struct {
 	IntakeID                 string            `json:"intake_id"`
+	OrganizationID           string            `json:"organization_id"`
+	ProjectID                string            `json:"project_id"`
+	RepoBindingID            string            `json:"repo_binding_id"`
 	State                    spine.IntakeState `json:"state"`
 	CanonicalContractCreated bool              `json:"canonical_contract_created"`
 	Next                     string            `json:"next"`
@@ -49,6 +52,9 @@ func (h *IntakeHandler) Submit(w http.ResponseWriter, r *http.Request) {
 
 	RespondJSON(w, http.StatusAccepted, intakeAcceptedResponse{
 		IntakeID:                 string(record.ID),
+		OrganizationID:           string(record.OrganizationID),
+		ProjectID:                string(record.ProjectID),
+		RepoBindingID:            string(record.RepoBindingID),
 		State:                    record.State,
 		CanonicalContractCreated: record.CanonicalContractCreated,
 		Next:                     intakeNextMessage,
@@ -73,6 +79,8 @@ func (h *IntakeHandler) respondServiceError(w http.ResponseWriter, err error) {
 		RespondError(w, http.StatusBadRequest, "validation_failed", validationErr.Error())
 	case errors.Is(err, intake.ErrNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "intake record not found")
+	case errors.Is(err, intake.ErrProjectContextUnavailable):
+		RespondError(w, http.StatusServiceUnavailable, "project_context_unavailable", "project context validation is not configured")
 	default:
 		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 	}

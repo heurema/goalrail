@@ -22,7 +22,12 @@ func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		logger = slog.Default()
 	}
 
-	server := newHTTPServer(cfg)
+	server, cleanup, err := newHTTPServer(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("build http server: %w", err)
+	}
+	defer cleanup()
+
 	serverErrors := make(chan error, 1)
 
 	go func() {
