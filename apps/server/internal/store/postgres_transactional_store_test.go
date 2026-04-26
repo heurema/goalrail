@@ -15,14 +15,26 @@ import (
 func TestPostgresTransactionalIntakeStoreRollsBackWhenEventAppendFails(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{failExecCall: 2}
+	db := &recordingPostgresDB{}
+	transactor := &recordingPostgresTransactor{tx: tx}
 	store := newPostgresTransactionalIntakeStore(
-		NewPostgresIntakeStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, &recordingProjectContextQuerier{}),
-		&recordingPostgresTransactor{tx: tx},
+		NewPostgresIntakeStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		transactor,
 	)
 
 	err := store.CreateWithEvent(ctx, validPostgresIntakeRecord(), validPostgresEvent("intake.received", "IntakeRecord", "018f0000-0000-7000-8000-000000000101"))
 	if err == nil {
 		t.Fatal("CreateWithEvent() error = nil, want failure")
+	}
+	if got, want := len(transactor.isoLevels), 1; got != want {
+		t.Fatalf("transaction count = %d, want %d", got, want)
+	}
+	if transactor.isoLevels[0] != pgx.ReadCommitted {
+		t.Fatalf("transaction isolation = %s, want %s", transactor.isoLevels[0], pgx.ReadCommitted)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
 	}
 	if tx.commitCalls != 0 {
 		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
@@ -44,8 +56,10 @@ func TestPostgresTransactionalIntakeStoreRollsBackWhenEventAppendFails(t *testin
 func TestPostgresTransactionalGoalStoreRollsBackWhenPromotionEventAppendFails(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{failExecCall: 3}
+	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalGoalStore(
-		NewPostgresGoalStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, &recordingProjectContextQuerier{}),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
 
@@ -61,6 +75,9 @@ func TestPostgresTransactionalGoalStoreRollsBackWhenPromotionEventAppendFails(t 
 	}
 	if tx.rollbackCalls != 1 {
 		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
 	}
 	if got, want := len(tx.execCalls), 3; got != want {
 		t.Fatalf("Exec calls = %d, want %d", got, want)
@@ -79,8 +96,10 @@ func TestPostgresTransactionalGoalStoreRollsBackWhenReadinessEventAppendFails(t 
 		failExecCall: 2,
 		row:          fakeProjectContextRow{values: validGoalRowValues()},
 	}
+	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalGoalStore(
-		NewPostgresGoalStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, &recordingProjectContextQuerier{}),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
 
@@ -106,6 +125,9 @@ func TestPostgresTransactionalGoalStoreRollsBackWhenReadinessEventAppendFails(t 
 	if tx.rollbackCalls != 1 {
 		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
 	}
+	if got := len(db.fallbackExecCalls) + len(db.fallbackQueryRowCalls); got != 0 {
+		t.Fatalf("fallback DB calls = %d, want 0", got)
+	}
 	if got, want := len(tx.queryRowCalls), 1; got != want {
 		t.Fatalf("QueryRow calls = %d, want %d", got, want)
 	}
@@ -120,8 +142,10 @@ func TestPostgresTransactionalGoalStoreRollsBackWhenReadinessEventAppendFails(t 
 func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{}
+	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalGoalStore(
-		NewPostgresGoalStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, &recordingProjectContextQuerier{}),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
 
@@ -136,6 +160,44 @@ func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) 
 	}
 	if tx.rollbackCalls != 0 {
 		t.Fatalf("Rollback calls = %d, want 0", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
+	}
+}
+
+func TestWithPostgresTxReusesExistingTransactionFromContext(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{}
+	txCtx := contextWithPostgresTx(ctx, tx)
+
+	called := false
+	err := withPostgresTx(txCtx, nil, pgx.TxOptions{IsoLevel: pgx.Serializable}, func(ctx context.Context) error {
+		called = true
+		fromContext, ok := postgresTxFromContext(ctx)
+		if !ok {
+			t.Fatal("postgres tx missing from context")
+		}
+		if fromContext != tx {
+			t.Fatal("postgres tx from context was replaced")
+		}
+		_, err := fromContext.Exec(ctx, "select 1")
+		return err
+	})
+	if err != nil {
+		t.Fatalf("withPostgresTx() error = %v", err)
+	}
+	if !called {
+		t.Fatal("transaction callback was not called")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 0 {
+		t.Fatalf("Rollback calls = %d, want 0", tx.rollbackCalls)
+	}
+	if got, want := len(tx.execCalls), 1; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
 	}
 }
 
@@ -157,14 +219,72 @@ type recordingPostgresTransactor struct {
 	tx         *recordingPostgresTx
 	beginCalls int
 	beginErr   error
+	isoLevels  []pgx.TxIsoLevel
 }
 
-func (t *recordingPostgresTransactor) BeginTx(context.Context) (postgresTx, error) {
-	t.beginCalls++
-	if t.beginErr != nil {
-		return nil, t.beginErr
+func (t *recordingPostgresTransactor) ExecReadCommitted(ctx context.Context, fn postgresTxFunc) error {
+	return t.WithTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
+}
+
+func (t *recordingPostgresTransactor) WithTx(ctx context.Context, opts pgx.TxOptions, fn postgresTxFunc) error {
+	if _, ok := postgresTxFromContext(ctx); ok {
+		return fn(ctx)
 	}
-	return t.tx, nil
+	t.beginCalls++
+	t.isoLevels = append(t.isoLevels, opts.IsoLevel)
+	if t.beginErr != nil {
+		return t.beginErr
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			_ = t.tx.Rollback(ctx)
+		}
+	}()
+
+	if err := fn(contextWithPostgresTx(ctx, t.tx)); err != nil {
+		return err
+	}
+	if err := t.tx.Commit(ctx); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+type recordingPostgresDB struct {
+	fallbackExecCalls     []recordedExecCall
+	fallbackQueryRowCalls []recordedExecCall
+}
+
+func (db *recordingPostgresDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	if tx, ok := postgresTxFromContext(ctx); ok {
+		return tx.Exec(ctx, sql, args...)
+	}
+	db.fallbackExecCalls = append(db.fallbackExecCalls, recordedExecCall{
+		sql:  sql,
+		args: append([]any(nil), args...),
+	})
+	return pgconn.NewCommandTag("INSERT 0 1"), nil
+}
+
+func (db *recordingPostgresDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	if tx, ok := postgresTxFromContext(ctx); ok {
+		return tx.Query(ctx, sql, args...)
+	}
+	return nil, errors.New("unexpected fallback query")
+}
+
+func (db *recordingPostgresDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if tx, ok := postgresTxFromContext(ctx); ok {
+		return tx.QueryRow(ctx, sql, args...)
+	}
+	db.fallbackQueryRowCalls = append(db.fallbackQueryRowCalls, recordedExecCall{
+		sql:  sql,
+		args: append([]any(nil), args...),
+	})
+	return fakeProjectContextRow{err: pgx.ErrNoRows}
 }
 
 type recordingPostgresTx struct {
