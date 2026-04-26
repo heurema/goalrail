@@ -241,6 +241,45 @@ func TestPostgresTransactionalContractDraftStoreRollsBackUpdateWhenEventAppendFa
 	}
 }
 
+func TestPostgresTransactionalContractDraftStoreRollsBackMarkReadyForApprovalWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{failExecCall: 2}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalContractDraftStore(
+		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	draft := validPostgresContractDraft()
+	draft.State = spine.ContractDraftStateReadyForApproval
+	err := store.MarkReadyForApprovalWithEvent(ctx, draft, validPostgresEvent("contract_draft.marked_ready_for_approval", "ContractDraft", "018f0000-0000-7000-8000-000000000501"))
+	if err == nil {
+		t.Fatal("MarkReadyForApprovalWithEvent() error = nil, want failure")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "UPDATE contract_drafts") {
+		t.Fatalf("first SQL = %q, want contract draft update", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "state =") {
+		t.Fatalf("first SQL = %q, want state update", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
 func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{}

@@ -10,6 +10,7 @@ type ContractDraftID string
 type ContractDraftState string
 
 const ContractDraftStateDraft ContractDraftState = "draft"
+const ContractDraftStateReadyForApproval ContractDraftState = "ready_for_approval"
 
 type ContractDraft struct {
 	ID                         ContractDraftID    `json:"id"`
@@ -35,4 +36,8 @@ type ContractDraft struct {
 type ContractDraftUpdateRequest struct {
 	UpdatedBy ActorRef                   `json:"updated_by"`
 	Changes   map[string]json.RawMessage `json:"changes"`
+}
+
+type ContractDraftReadyForApprovalRequest struct {
+	MarkedBy ActorRef `json:"marked_by"`
 }

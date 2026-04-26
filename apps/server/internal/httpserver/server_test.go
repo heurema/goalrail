@@ -143,6 +143,7 @@ func newRouter(
 		GoalContractSeed:          http.HandlerFunc(contractSeedHandler.Create),
 		ContractSeedDraft:         http.HandlerFunc(contractDraftHandler.Create),
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
+		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

@@ -245,6 +245,35 @@ func (s *PostgresContractDraftStore) Update(ctx context.Context, updated spine.C
 	return nil
 }
 
+func (s *PostgresContractDraftStore) MarkReadyForApproval(ctx context.Context, updated spine.ContractDraft) error {
+	id, err := uuidValue(updated.ID, "contract draft id")
+	if err != nil {
+		return err
+	}
+
+	stmt := s.psql.
+		Update("contract_drafts").
+		Set("state", updated.State).
+		Set("updated_at", time.Now().UTC()).
+		Where(squirrel.Eq{"id": id})
+
+	if s.exec == nil {
+		return fmt.Errorf("mark contract draft ready for approval executor is nil")
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return fmt.Errorf("mark contract draft ready for approval SQL: %w", err)
+	}
+	result, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return fmt.Errorf("mark contract draft ready for approval: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrContractDraftNotFound
+	}
+	return nil
+}
+
 func (s *PostgresContractDraftStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.ContractDraft, bool, error) {
 	stmt := s.psql.
 		Select(contractDraftColumns()...).

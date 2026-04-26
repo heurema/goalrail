@@ -483,6 +483,240 @@ func TestPostContractDraftUpdatesFullFlow(t *testing.T) {
 	assertNoForbiddenEventTypes(t, server.events.Events())
 }
 
+func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+	beforeStored, ok, err := server.contractDrafts.Get(context.Background(), draft.ID)
+	if err != nil {
+		t.Fatalf("contractDrafts.Get() before ready error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored draft before ready not found")
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, forbiddenField := range []string{"\"approved_contract_id\"", "\"work_item_id\"", "\"proof_id\"", "\"gate_decision_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var updated spine.ContractDraft
+	decodeJSON(t, response.body, &updated)
+	if updated.State != spine.ContractDraftStateReadyForApproval {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ContractDraftStateReadyForApproval)
+	}
+	expected := draft
+	expected.State = spine.ContractDraftStateReadyForApproval
+	if !reflect.DeepEqual(updated, expected) {
+		t.Fatalf("updated draft = %#v, want only state changed %#v", updated, expected)
+	}
+
+	stored, ok, err := server.contractDrafts.Get(context.Background(), draft.ID)
+	if err != nil {
+		t.Fatalf("contractDrafts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored draft not found")
+	}
+	expectedStored := beforeStored
+	expectedStored.State = spine.ContractDraftStateReadyForApproval
+	if !reflect.DeepEqual(stored, expectedStored) {
+		t.Fatalf("stored draft = %#v, want %#v", stored, expectedStored)
+	}
+}
+
+func TestPostContractDraftReadyForApprovalUnknownDraftReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/ready-for-approval", readyForApprovalJSON())
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want not_found", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftReadyForApprovalRejectsDraftNotDraft(t *testing.T) {
+	server := testServer(t)
+	draft := validHTTPContractDraft()
+	draft.State = spine.ContractDraftStateReadyForApproval
+	if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
+		t.Fatalf("contractDrafts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+}
+
+func TestPostContractDraftReadyForApprovalValidatesMarkedBy(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing_marked_by", body: `{}`},
+		{name: "missing_kind", body: `{"marked_by":{"id":"dev_1"}}`},
+		{name: "missing_id", body: `{"marked_by":{"kind":"user"}}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			draft := createContractDraft(t, server)
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", tt.body)
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "validation_failed" {
+				t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+			}
+		})
+	}
+}
+
+func TestPostContractDraftReadyForApprovalRejectsIncompleteDraft(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*spine.ContractDraft)
+		reason string
+	}{
+		{name: "missing_proposed_scope", mutate: func(draft *spine.ContractDraft) { draft.ProposedScope = nil }, reason: contractdraft.ReasonMissingProposedScope},
+		{name: "missing_proposed_acceptance_criteria", mutate: func(draft *spine.ContractDraft) { draft.ProposedAcceptanceCriteria = []string{} }, reason: contractdraft.ReasonMissingProposedAcceptanceCriteria},
+		{name: "missing_proposed_proof_expectations", mutate: func(draft *spine.ContractDraft) { draft.ProposedProofExpectations = []string{" "} }, reason: contractdraft.ReasonMissingProposedProofExpectations},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			draft := validHTTPContractDraft()
+			draft.ID = spine.ContractDraftID("contract-draft-" + tt.name)
+			draft.ContractSeedID = spine.ContractSeedID("contract-seed-" + tt.name)
+			tt.mutate(&draft)
+			if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
+				t.Fatalf("contractDrafts.Create() error = %v", err)
+			}
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+
+			var body struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "validation_failed" {
+				t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+			}
+			if !strings.Contains(body.Error.Message, tt.reason) {
+				t.Fatalf("error message = %q, want reason %q", body.Error.Message, tt.reason)
+			}
+		})
+	}
+}
+
+func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftMarkedReadyForApproval); got != 1 {
+		t.Fatalf("contract_draft.marked_ready_for_approval events = %d, want 1", got)
+	}
+	event := server.events.Events()[len(server.events.Events())-1]
+	var payload struct {
+		MarkedBy      spine.ActorRef           `json:"marked_by"`
+		PreviousState spine.ContractDraftState `json:"previous_state"`
+		NewState      spine.ContractDraftState `json:"new_state"`
+	}
+	decodeJSON(t, string(event.Payload), &payload)
+	if payload.MarkedBy.Kind != "user" || payload.MarkedBy.ID != "dev_1" {
+		t.Fatalf("marked_by = %#v, want audit user", payload.MarkedBy)
+	}
+	if payload.PreviousState != spine.ContractDraftStateDraft || payload.NewState != spine.ContractDraftStateReadyForApproval {
+		t.Fatalf("states = %q -> %q, want draft -> ready_for_approval", payload.PreviousState, payload.NewState)
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
+func TestPostContractDraftReadyForApprovalFullFlow(t *testing.T) {
+	server := testServer(t)
+	draft := createContractDraft(t, server)
+
+	update := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+		"proposed_scope": ["Reviewed scope"],
+		"proposed_acceptance_criteria": ["Reviewed acceptance"],
+		"proposed_proof_expectations": ["Attach reviewed proof expectations"]
+	}`))
+	if update.code != http.StatusOK {
+		t.Fatalf("update status = %d, want %d: %s", update.code, http.StatusOK, update.body)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	if response.code != http.StatusOK {
+		t.Fatalf("ready status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var updated spine.ContractDraft
+	decodeJSON(t, response.body, &updated)
+	if updated.State != spine.ContractDraftStateReadyForApproval {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ContractDraftStateReadyForApproval)
+	}
+	if !reflect.DeepEqual(updated.ProposedScope, []string{"Reviewed scope"}) {
+		t.Fatalf("proposed_scope = %#v", updated.ProposedScope)
+	}
+	if !reflect.DeepEqual(updated.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
+		t.Fatalf("proposed_acceptance_criteria = %#v", updated.ProposedAcceptanceCriteria)
+	}
+	if !reflect.DeepEqual(updated.ProposedProofExpectations, []string{"Attach reviewed proof expectations"}) {
+		t.Fatalf("proposed_proof_expectations = %#v", updated.ProposedProofExpectations)
+	}
+	for _, forbiddenField := range []string{"\"approved_contract_id\"", "\"work_item_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
 func createContractSeed(t *testing.T, server testServerDeps) spine.ContractSeed {
 	t.Helper()
 
@@ -519,6 +753,16 @@ func updateDraftJSON(changes string) string {
 			"display_name": "Developer"
 		},
 		"changes": ` + changes + `
+	}`
+}
+
+func readyForApprovalJSON() string {
+	return `{
+		"marked_by": {
+			"kind": "user",
+			"id": "dev_1",
+			"display_name": "Developer"
+		}
 	}`
 }
 

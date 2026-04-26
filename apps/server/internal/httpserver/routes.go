@@ -17,6 +17,7 @@ type RouteHandlers struct {
 	GoalContractSeed          http.Handler
 	ContractSeedDraft         http.Handler
 	ContractDraftUpdates      http.Handler
+	ContractDraftReady        http.Handler
 	ClarificationAnswers      http.Handler
 	ClarificationAnswerApply  http.Handler
 }
@@ -36,6 +37,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/goals/{id}/contract-seed", mustHandler("goal contract seed", handlers.GoalContractSeed))
 	mux.Handle("POST /v1/contract-seeds/{id}/contract-draft", mustHandler("contract seed draft", handlers.ContractSeedDraft))
 	mux.Handle("POST /v1/contract-drafts/{id}/updates", mustHandler("contract draft updates", handlers.ContractDraftUpdates))
+	mux.Handle("POST /v1/contract-drafts/{id}/ready-for-approval", mustHandler("contract draft ready for approval", handlers.ContractDraftReady))
 	mux.Handle("POST /v1/clarification-requests/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/clarification-answers/{id}/apply", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

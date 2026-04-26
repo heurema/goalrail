@@ -121,6 +121,56 @@ func TestContractDraftStoreUpdateUnknownDraft(t *testing.T) {
 	}
 }
 
+func TestContractDraftStoreMarkReadyForApprovalPreservesIdentitySourceAndProposedFields(t *testing.T) {
+	draftStore := store.NewContractDraftStore()
+	created := validContractDraft()
+	if err := draftStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated := created
+	updated.ContractSeedID = "different-seed"
+	updated.GoalID = "different-goal"
+	updated.RepoBindingID = "different-repo-binding"
+	updated.Title = "Forbidden title mutation"
+	updated.IntentSummary = "Forbidden summary mutation"
+	updated.ProposedScope = []string{"Forbidden scope mutation"}
+	updated.ProposedAcceptanceCriteria = []string{"Forbidden acceptance mutation"}
+	updated.ProposedProofExpectations = []string{"Forbidden proof mutation"}
+	updated.SourceRefs = []spine.SourceRef{{Kind: "forbidden", ID: "source"}}
+	updated.CreatedAt = created.CreatedAt.Add(time.Hour)
+	updated.State = spine.ContractDraftStateReadyForApproval
+
+	if err := draftStore.MarkReadyForApproval(context.Background(), updated); err != nil {
+		t.Fatalf("MarkReadyForApproval() error = %v", err)
+	}
+
+	got, ok, err := draftStore.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	if got.State != spine.ContractDraftStateReadyForApproval {
+		t.Fatalf("state = %q, want %q", got.State, spine.ContractDraftStateReadyForApproval)
+	}
+
+	expected := created
+	expected.State = spine.ContractDraftStateReadyForApproval
+	if !reflect.DeepEqual(got, expected) {
+		t.Fatalf("stored draft = %#v, want identity/source/proposed unchanged %#v", got, expected)
+	}
+}
+
+func TestContractDraftStoreMarkReadyForApprovalUnknownDraft(t *testing.T) {
+	draftStore := store.NewContractDraftStore()
+
+	if err := draftStore.MarkReadyForApproval(context.Background(), validContractDraft()); err != store.ErrContractDraftNotFound {
+		t.Fatalf("MarkReadyForApproval() error = %v, want %v", err, store.ErrContractDraftNotFound)
+	}
+}
+
 func validContractDraft() spine.ContractDraft {
 	return spine.ContractDraft{
 		ID:                         "contract-draft-1",

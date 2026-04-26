@@ -14,11 +14,20 @@ import (
 )
 
 const (
-	EventTypeContractDraftCreated = "contract_draft.created"
-	EventTypeContractDraftUpdated = "contract_draft.updated"
-	EntityTypeContractDraft       = "ContractDraft"
-	SourceRefKindContractSeed     = "contract_seed"
-	DefaultProofExpectation       = "Provide evidence that acceptance criteria were checked."
+	EventTypeContractDraftCreated                = "contract_draft.created"
+	EventTypeContractDraftUpdated                = "contract_draft.updated"
+	EventTypeContractDraftMarkedReadyForApproval = "contract_draft.marked_ready_for_approval"
+	EntityTypeContractDraft                      = "ContractDraft"
+	SourceRefKindContractSeed                    = "contract_seed"
+	DefaultProofExpectation                      = "Provide evidence that acceptance criteria were checked."
+	ReasonMissingTitle                           = "missing_title"
+	ReasonMissingIntentSummary                   = "missing_intent_summary"
+	ReasonMissingRepoBindingID                   = "missing_repo_binding_id"
+	ReasonMissingContractSeedID                  = "missing_contract_seed_id"
+	ReasonMissingGoalID                          = "missing_goal_id"
+	ReasonMissingProposedScope                   = "missing_proposed_scope"
+	ReasonMissingProposedAcceptanceCriteria      = "missing_proposed_acceptance_criteria"
+	ReasonMissingProposedProofExpectations       = "missing_proposed_proof_expectations"
 )
 
 var (
@@ -57,6 +66,17 @@ func (e *NonEditableFieldError) Error() string {
 	return "non-editable field: " + e.Field
 }
 
+type CompletenessError struct {
+	ReasonCodes []string
+}
+
+func (e *CompletenessError) Error() string {
+	if len(e.ReasonCodes) == 0 {
+		return "readiness checks failed"
+	}
+	return "readiness checks failed: " + strings.Join(e.ReasonCodes, ",")
+}
+
 type SeedReader interface {
 	Get(context.Context, spine.ContractSeedID) (spine.ContractSeed, bool, error)
 }
@@ -64,6 +84,7 @@ type SeedReader interface {
 type Store interface {
 	Create(context.Context, spine.ContractDraft) error
 	Update(context.Context, spine.ContractDraft) error
+	MarkReadyForApproval(context.Context, spine.ContractDraft) error
 	Get(context.Context, spine.ContractDraftID) (spine.ContractDraft, bool, error)
 	GetByContractSeedID(context.Context, spine.ContractSeedID) (spine.ContractDraft, bool, error)
 }
@@ -78,6 +99,10 @@ type transactionalDraftStore interface {
 
 type transactionalDraftUpdateStore interface {
 	UpdateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
+}
+
+type transactionalDraftReadyStore interface {
+	MarkReadyForApprovalWithEvent(context.Context, spine.ContractDraft, spine.Event) error
 }
 
 type Clock interface {
@@ -324,14 +349,108 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 	return updated, nil
 }
 
-func validateUpdatedBy(updatedBy spine.ActorRef) error {
-	if strings.TrimSpace(updatedBy.Kind) == "" {
-		return &ValidationError{Field: "updated_by.kind", Message: "is required"}
+func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.ContractDraftID, input spine.ContractDraftReadyForApprovalRequest) (spine.ContractDraft, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.ContractDraft{}, err
 	}
-	if strings.TrimSpace(updatedBy.ID) == "" {
-		return &ValidationError{Field: "updated_by.id", Message: "is required"}
+
+	draft, ok, err := s.Drafts.Get(ctx, draftID)
+	if err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("get contract draft: %w", err)
+	}
+	if !ok {
+		return spine.ContractDraft{}, ErrContractDraftNotFound
+	}
+	if draft.State != spine.ContractDraftStateDraft {
+		return spine.ContractDraft{}, fmt.Errorf("%w: %s", ErrInvalidDraftState, draft.State)
+	}
+	if err := validateMarkedBy(input.MarkedBy); err != nil {
+		return spine.ContractDraft{}, err
+	}
+	reasonCodes := readinessReasonCodes(draft)
+	if len(reasonCodes) > 0 {
+		return spine.ContractDraft{}, &CompletenessError{ReasonCodes: reasonCodes}
+	}
+
+	updated := draft
+	updated.State = spine.ContractDraftStateReadyForApproval
+
+	now := s.Clock.Now().UTC()
+	event, err := s.contractDraftMarkedReadyForApprovalEvent(updated, input.MarkedBy, []string{}, now)
+	if err != nil {
+		return spine.ContractDraft{}, err
+	}
+	if txDrafts, ok := s.Drafts.(transactionalDraftReadyStore); ok {
+		if err := txDrafts.MarkReadyForApprovalWithEvent(ctx, updated, event); err != nil {
+			return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval with event: %w", err)
+		}
+		return updated, nil
+	}
+	if err := s.Drafts.MarkReadyForApproval(ctx, updated); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval: %w", err)
+	}
+	if err := s.Events.Append(ctx, event); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("append contract draft marked ready for approval event: %w", err)
+	}
+
+	return updated, nil
+}
+
+func validateUpdatedBy(updatedBy spine.ActorRef) error {
+	return validateActor("updated_by", updatedBy)
+}
+
+func validateMarkedBy(markedBy spine.ActorRef) error {
+	return validateActor("marked_by", markedBy)
+}
+
+func validateActor(field string, actor spine.ActorRef) error {
+	if strings.TrimSpace(actor.Kind) == "" {
+		return &ValidationError{Field: field + ".kind", Message: "is required"}
+	}
+	if strings.TrimSpace(actor.ID) == "" {
+		return &ValidationError{Field: field + ".id", Message: "is required"}
 	}
 	return nil
+}
+
+func readinessReasonCodes(draft spine.ContractDraft) []string {
+	var reasonCodes []string
+	if strings.TrimSpace(draft.Title) == "" {
+		reasonCodes = append(reasonCodes, ReasonMissingTitle)
+	}
+	if strings.TrimSpace(draft.IntentSummary) == "" {
+		reasonCodes = append(reasonCodes, ReasonMissingIntentSummary)
+	}
+	if strings.TrimSpace(string(draft.RepoBindingID)) == "" {
+		reasonCodes = append(reasonCodes, ReasonMissingRepoBindingID)
+	}
+	if strings.TrimSpace(string(draft.ContractSeedID)) == "" {
+		reasonCodes = append(reasonCodes, ReasonMissingContractSeedID)
+	}
+	if strings.TrimSpace(string(draft.GoalID)) == "" {
+		reasonCodes = append(reasonCodes, ReasonMissingGoalID)
+	}
+	if len(nonBlankStrings(draft.ProposedScope)) == 0 {
+		reasonCodes = append(reasonCodes, ReasonMissingProposedScope)
+	}
+	if len(nonBlankStrings(draft.ProposedAcceptanceCriteria)) == 0 {
+		reasonCodes = append(reasonCodes, ReasonMissingProposedAcceptanceCriteria)
+	}
+	if len(nonBlankStrings(draft.ProposedProofExpectations)) == 0 {
+		reasonCodes = append(reasonCodes, ReasonMissingProposedProofExpectations)
+	}
+	return reasonCodes
+}
+
+func nonBlankStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func isEditableField(field string) bool {
@@ -498,6 +617,46 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 		RepoBindingID: updated.RepoBindingID,
 		Timestamp:     updatedAt,
 		Payload:       payload,
+	}, nil
+}
+
+type contractDraftMarkedReadyForApprovalPayload struct {
+	ContractDraftID spine.ContractDraftID    `json:"contract_draft_id"`
+	MarkedBy        spine.ActorRef           `json:"marked_by"`
+	ReasonCodes     []string                 `json:"reason_codes"`
+	PreviousState   spine.ContractDraftState `json:"previous_state"`
+	NewState        spine.ContractDraftState `json:"new_state"`
+	MarkedAt        time.Time                `json:"marked_at"`
+}
+
+func (s *Service) contractDraftMarkedReadyForApprovalEvent(updated spine.ContractDraft, markedBy spine.ActorRef, reasonCodes []string, markedAt time.Time) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new contract draft marked ready for approval event id: %w", err)
+	}
+
+	payload, err := json.Marshal(contractDraftMarkedReadyForApprovalPayload{
+		ContractDraftID: updated.ID,
+		MarkedBy:        markedBy,
+		ReasonCodes:     append([]string{}, reasonCodes...),
+		PreviousState:   spine.ContractDraftStateDraft,
+		NewState:        spine.ContractDraftStateReadyForApproval,
+		MarkedAt:        markedAt,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal contract draft marked ready for approval event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:             eventID,
+		Type:           EventTypeContractDraftMarkedReadyForApproval,
+		EntityType:     EntityTypeContractDraft,
+		EntityID:       string(updated.ID),
+		OrganizationID: updated.OrganizationID,
+		ProjectID:      updated.ProjectID,
+		RepoBindingID:  updated.RepoBindingID,
+		Timestamp:      markedAt,
+		Payload:        payload,
 	}, nil
 }
 

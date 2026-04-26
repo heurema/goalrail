@@ -63,6 +63,20 @@ func (s *ContractDraftStore) Update(_ context.Context, updated spine.ContractDra
 	return nil
 }
 
+func (s *ContractDraftStore) MarkReadyForApproval(_ context.Context, updated spine.ContractDraft) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, exists := s.drafts[updated.ID]
+	if !exists {
+		return ErrContractDraftNotFound
+	}
+
+	existing.State = spine.ContractDraftStateReadyForApproval
+	s.drafts[updated.ID] = cloneContractDraft(existing)
+	return nil
+}
+
 func (s *ContractDraftStore) Get(_ context.Context, id spine.ContractDraftID) (spine.ContractDraft, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

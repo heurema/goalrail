@@ -298,6 +298,54 @@ func TestPostgresContractDraftStoreUpdateBuildsDurableUpdate(t *testing.T) {
 	assertJSONBytesEqual(t, call.args[5], `["Reviewed persisted acceptance"]`)
 }
 
+func TestPostgresContractDraftStoreMarkReadyForApprovalBuildsStateOnlyUpdate(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresContractDraftStoreWithExecutorAndQuerier(exec, nil)
+
+	updated := validPostgresContractDraft()
+	updated.State = spine.ContractDraftStateReadyForApproval
+
+	if err := store.MarkReadyForApproval(ctx, updated); err != nil {
+		t.Fatalf("MarkReadyForApproval() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "UPDATE contract_drafts") {
+		t.Fatalf("SQL = %q, want contract_drafts update", call.sql)
+	}
+	if !strings.Contains(call.sql, "state =") {
+		t.Fatalf("SQL = %q, want state update", call.sql)
+	}
+	if !strings.Contains(call.sql, "updated_at =") {
+		t.Fatalf("SQL = %q, want updated_at update", call.sql)
+	}
+	if !strings.Contains(call.sql, "WHERE id =") {
+		t.Fatalf("SQL = %q, want id lookup", call.sql)
+	}
+	if strings.Contains(call.sql, "title =") ||
+		strings.Contains(call.sql, "intent_summary =") ||
+		strings.Contains(call.sql, "contract_seed_id =") ||
+		strings.Contains(call.sql, "goal_id =") ||
+		strings.Contains(call.sql, "repo_binding_id =") ||
+		strings.Contains(call.sql, "source_refs =") ||
+		strings.Contains(call.sql, "created_at =") ||
+		strings.Contains(call.sql, "proposed_scope =") ||
+		strings.Contains(call.sql, "proposed_acceptance_criteria =") ||
+		strings.Contains(call.sql, "proposed_proof_expectations =") {
+		t.Fatalf("SQL = %q, should update state only", call.sql)
+	}
+	if got, want := len(call.args), 3; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	if call.args[0] != spine.ContractDraftStateReadyForApproval {
+		t.Fatalf("state arg = %#v, want ready_for_approval", call.args[0])
+	}
+}
+
 func TestPostgresContractDraftStoreGetByContractSeedIDScansPersistedDraft(t *testing.T) {
 	ctx := context.Background()
 	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validContractDraftRowValues()}}
