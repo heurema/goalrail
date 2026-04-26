@@ -16,7 +16,8 @@
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints and the server has an in-memory prototype; future answer work must keep readiness re-check separate
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
-- ADR-0013 now defines the `ContractSeed` boundary, and the server has an in-memory `ContractSeed(created)` prototype; future contract work must keep `ContractDraft`, approval, work item, gate, and proof as later boundaries
+- ADR-0013 now defines the `ContractSeed` boundary, and the server has an in-memory `ContractSeed(created)` prototype; future contract work must keep approval, work item, gate, and proof as later boundaries
+- ADR-0014 now defines the `ContractDraft` boundary as `ContractSeed(created)` -> `ContractDraft(draft)`; no `ContractDraft` implementation exists yet
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -91,9 +92,9 @@ Done means:
 
 ### Server follow-up slices
 
-1. ContractDraft boundary design
-   - define the first boundary after `ContractSeed(created)`
-   - keep `ContractDraft` separate from approval, work items, execution, gate, and proof
+1. ContractDraft creation prototype
+   - create `ContractDraft(draft)` explicitly from `ContractSeed(created)`
+   - keep `ContractDraft` separate from approved Contract, approval, work items, execution, gate, and proof
    - do not make ContractSeed creation draft or approve contract artifacts implicitly
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
