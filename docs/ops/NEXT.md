@@ -10,11 +10,11 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness, ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, intake/goal EventLog persistence, and in-memory ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
-- ADR-0011 now defines answer application to Goal hints and the server has an in-memory prototype; future answer work must keep readiness re-check separate
+- ADR-0011 now defines answer application to Goal hints and the server still keeps clarification request/answer state in-memory; future answer work must keep readiness re-check separate
 - ADR-0012 now defines explicit readiness re-check after applied answers; future readiness work should reuse the existing readiness endpoint without creating contract seed
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
@@ -98,9 +98,10 @@ Done means:
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
-3. Intake / Goal persistence boundary
-   - define the smallest durable persistence slice for IntakeRecord and Goal after context validation
-   - preserve current non-executable semantics and avoid contract, runner, gate, or proof expansion
+3. Durable clarification boundary
+   - define the smallest durable persistence slice for ClarificationRequest and ClarificationAnswer after intake/Goal persistence
+   - preserve current server-owned answer evidence semantics
+   - do not create contract seed, work items, gate, proof, runner, or VCS integration
 
 ## Deferred until later
 

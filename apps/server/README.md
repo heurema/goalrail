@@ -1,7 +1,8 @@
 # Goalrail Server
 
 This server is still an early prototype. Existing intake, Goal readiness, and
-clarification flows remain in-memory.
+event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
+Clarification request and answer state remains in-memory.
 
 ## Local Postgres foundation
 
@@ -57,6 +58,10 @@ curl -sS -X POST http://localhost:8080/v1/intake/{intake_id}/promote
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
-Intake and Goal state remain in-memory prototypes. Project/RepoBinding
-validation uses Postgres only to derive `organization_id` from the seeded
-context, and intake still does not create executable work.
+With Postgres configured, `IntakeRecord`, `Goal`, and intake/goal events are
+durable and survive server restarts. Project/RepoBinding validation uses
+Postgres to derive `organization_id` from the seeded context.
+
+This flow still does not create executable work, contract drafts, gate
+decisions, proof, runner jobs, or VCS integration. Clarification request and
+answer state is still prototype/in-memory.

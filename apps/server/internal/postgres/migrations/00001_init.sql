@@ -74,7 +74,106 @@ CREATE UNIQUE INDEX repo_bindings_one_active_per_project_idx
     ON repo_bindings(project_id)
     WHERE state = 'active';
 
+CREATE TABLE intake_records (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    source JSONB NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    request_author JSONB NOT NULL,
+    intent_owner JSONB NOT NULL,
+    state TEXT NOT NULL,
+    canonical_contract_created BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX intake_records_organization_created_at_idx
+    ON intake_records(organization_id, created_at);
+
+CREATE INDEX intake_records_project_created_at_idx
+    ON intake_records(project_id, created_at);
+
+CREATE INDEX intake_records_repo_binding_created_at_idx
+    ON intake_records(repo_binding_id, created_at);
+
+CREATE TABLE goals (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    intake_id UUID NOT NULL REFERENCES intake_records(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    scope_hint TEXT NOT NULL DEFAULT '',
+    acceptance_hint TEXT NOT NULL DEFAULT '',
+    source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    request_author JSONB NOT NULL,
+    intent_owner JSONB NOT NULL,
+    state TEXT NOT NULL,
+    last_readiness_reason_codes JSONB NOT NULL DEFAULT '[]'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT goals_intake_id_unique UNIQUE (intake_id)
+);
+
+CREATE INDEX goals_organization_created_at_idx
+    ON goals(organization_id, created_at);
+
+CREATE INDEX goals_project_created_at_idx
+    ON goals(project_id, created_at);
+
+CREATE INDEX goals_repo_binding_created_at_idx
+    ON goals(repo_binding_id, created_at);
+
+CREATE INDEX goals_intake_id_idx
+    ON goals(intake_id);
+
+CREATE TABLE events (
+    id UUID PRIMARY KEY,
+    event_sequence BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
+    type TEXT NOT NULL,
+    organization_id UUID NULL REFERENCES organizations(id) ON DELETE SET NULL,
+    project_id UUID NULL REFERENCES projects(id) ON DELETE SET NULL,
+    repo_binding_id UUID NULL REFERENCES repo_bindings(id) ON DELETE SET NULL,
+    entity_type TEXT NOT NULL,
+    entity_id UUID NOT NULL,
+    occurred_at TIMESTAMPTZ NOT NULL,
+    payload JSONB NOT NULL,
+    artifact_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    causation_id UUID NULL,
+    correlation_id UUID NULL
+);
+
+CREATE INDEX events_organization_sequence_idx
+    ON events(organization_id, event_sequence);
+
+CREATE INDEX events_project_sequence_idx
+    ON events(project_id, event_sequence);
+
+CREATE INDEX events_entity_sequence_idx
+    ON events(entity_type, entity_id, event_sequence);
+
+CREATE INDEX events_type_sequence_idx
+    ON events(type, event_sequence);
+
 -- +goose Down
+DROP INDEX IF EXISTS events_type_sequence_idx;
+DROP INDEX IF EXISTS events_entity_sequence_idx;
+DROP INDEX IF EXISTS events_project_sequence_idx;
+DROP INDEX IF EXISTS events_organization_sequence_idx;
+DROP TABLE IF EXISTS events;
+DROP INDEX IF EXISTS goals_intake_id_idx;
+DROP INDEX IF EXISTS goals_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS goals_project_created_at_idx;
+DROP INDEX IF EXISTS goals_organization_created_at_idx;
+DROP TABLE IF EXISTS goals;
+DROP INDEX IF EXISTS intake_records_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS intake_records_project_created_at_idx;
+DROP INDEX IF EXISTS intake_records_organization_created_at_idx;
+DROP TABLE IF EXISTS intake_records;
 DROP INDEX IF EXISTS repo_bindings_one_active_per_project_idx;
 DROP INDEX IF EXISTS repo_bindings_project_id_idx;
 DROP TABLE IF EXISTS repo_bindings;

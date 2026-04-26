@@ -160,6 +160,48 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 				return errors.New("uuid value is not string")
 			}
 			*target = value
+		case *[]byte:
+			value, ok := r.values[i].([]byte)
+			if !ok {
+				return errors.New("json value is not bytes")
+			}
+			*target = append([]byte(nil), value...)
+		case *bool:
+			value, ok := r.values[i].(bool)
+			if !ok {
+				return errors.New("bool value is not bool")
+			}
+			*target = value
+		case *time.Time:
+			value, ok := r.values[i].(time.Time)
+			if !ok {
+				return errors.New("time value is not time")
+			}
+			*target = value
+		case *spine.IntakeID:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("intake id value is not string")
+			}
+			*target = spine.IntakeID(value)
+		case *spine.IntakeState:
+			value, ok := r.values[i].(spine.IntakeState)
+			if !ok {
+				return errors.New("intake state value is not intake state")
+			}
+			*target = value
+		case *spine.GoalID:
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("goal id value is not string")
+			}
+			*target = spine.GoalID(value)
+		case *spine.GoalState:
+			value, ok := r.values[i].(spine.GoalState)
+			if !ok {
+				return errors.New("goal state value is not goal state")
+			}
+			*target = value
 		case *spine.OrganizationID:
 			value, ok := r.values[i].(string)
 			if !ok {

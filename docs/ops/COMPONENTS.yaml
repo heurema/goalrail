@@ -9,7 +9,7 @@ components:
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists. The MVP uses direct RepoBinding before RepositoryRecord, and RepoBinding stores the repo reference directly. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, ClarificationRequest, and ClarificationAnswer DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
+    notes: Canonical schema note exists. The MVP uses direct RepoBinding before RepositoryRecord, and RepoBinding stores the repo reference directly. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, ClarificationRequest, and ClarificationAnswer DTO/value types under apps/server/internal/spine. The server has a bounded durable IntakeRecord / Goal / EventLog slice, but there is still no standalone Project Spine package or production state store.
   organization_context:
     name: Organization Context
     status: prototype
@@ -33,9 +33,12 @@ components:
       - apps/server/internal/config
       - apps/server/internal/postgres
       - apps/server/internal/store/project_context_store.go
+      - apps/server/internal/store/postgres_intake_store.go
+      - apps/server/internal/store/postgres_goal_store.go
+      - apps/server/internal/store/postgres_event_log.go
       - apps/server/internal/seed
     public_claim_allowed: false
-    notes: pgx + Squirrel + goose foundation exists for the project-context tables and deterministic UUIDv7 dev seed. Runtime SQL in the project-context store is built through Squirrel and executed through pgx/pgxpool. Goose migrations are raw SQL. Intake uses Postgres only to validate Project / RepoBinding context and derive organization_id; IntakeRecord, Goal, clarification, and event log storage remain in-memory prototypes.
+    notes: pgx + Squirrel + goose foundation exists for the project-context tables, IntakeRecord, Goal, and intake/goal EventLog persistence, plus deterministic UUIDv7 dev seed. Runtime SQL in the stores is built through Squirrel and executed through pgx/pgxpool. Goose migrations are raw SQL. Intake uses Postgres to validate Project / RepoBinding context, derive organization_id, persist IntakeRecord, persist promoted Goal state, and append durable audit events. Clarification request/answer storage remains in-memory.
   product_concept:
     name: Product Concept
     status: docs_only
@@ -159,7 +162,7 @@ components:
       - apps/server/internal/health
       - apps/server/internal/version
     public_claim_allowed: false
-    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake with Project / RepoBinding validation, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, ClarificationAnswer recording, and answer application prototypes. A first Postgres foundation exists for the Organization / Project / RepoBinding context, with migrations, dev seed, and context lookup. Intake creates IntakeRecord only after repo binding context resolves and carries organization_id, project_id, and repo_binding_id; Goal promotion creates non-executable Goal only and preserves that context; Goal readiness updates Goal state only with fixed reason codes. ClarificationRequest creation creates an open request only from stored readiness reason codes; ClarificationAnswer recording stores answer evidence only and transitions the request to answered; answer application updates Goal intent-plane hints only and rejects raw-text goal.intent_owner mapping. Intake, Goal, clarification, answer application, and events remain in-memory. In-memory events include intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, readiness transition events, clarification.requested, clarification.answer_recorded, clarification.request_answered, clarification.answer_applied_to_goal, and goal.hints_updated. There is no durable storage for intake/Goal/clarification/answer application/event log flows, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, no workers, and no repository checkout.
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus Postgres-backed source-neutral intake with Project / RepoBinding validation, Goal promotion, deterministic Goal readiness state, and intake/goal EventLog persistence when DB is configured. A Postgres foundation exists for the Organization / Project / RepoBinding context, with migrations, dev seed, and context lookup. Intake creates durable IntakeRecord only after repo binding context resolves and carries organization_id, project_id, and repo_binding_id; Goal promotion creates durable non-executable Goal only and preserves that context; Goal readiness updates persisted Goal state only with fixed reason codes. Durable events include intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, and readiness transition events. ClarificationRequest creation creates an open request only from stored readiness reason codes; ClarificationAnswer recording stores answer evidence only and transitions the request to answered; answer application updates Goal intent-plane hints only and rejects raw-text goal.intent_owner mapping. Clarification request/answer state remains in-memory. There is no durable clarification storage, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, no workers, and no repository checkout.
   tracker_sync:
     name: Tracker Sync
     status: planned

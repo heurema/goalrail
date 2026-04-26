@@ -14,18 +14,28 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/postgres"
+	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 )
 
+type goalStore interface {
+	goal.GoalStore
+	clarification.GoalReader
+}
+
+type eventAppender interface {
+	Append(context.Context, spine.Event) error
+}
+
 func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	healthHandler := health.NewHandler()
 	versionHandler := version.NewHandler()
-	intakeStore := store.NewIntakeStore()
-	goalStore := store.NewGoalStore()
+	var intakeStore intake.Store = store.NewIntakeStore()
+	var goals goalStore = store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
-	events := eventlog.NewEventLog()
+	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
 	cleanup := func() {}
@@ -35,14 +45,17 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 			return nil, nil, fmt.Errorf("open project context db: %w", err)
 		}
 		projectContext = store.NewProjectContextStore(pool)
+		intakeStore = store.NewPostgresIntakeStore(pool)
+		goals = store.NewPostgresGoalStore(pool)
+		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}
 
 	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
-	goalService := goal.NewService(intakeStore, goalStore, events, goal.SystemClock{}, goal.UUIDGenerator{})
+	goalService := goal.NewService(intakeStore, goals, events, goal.SystemClock{}, goal.UUIDGenerator{})
 	goalHandler := httpserver.NewGoalHandler(goalService)
-	clarificationService := clarification.NewService(goalStore, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
+	clarificationService := clarification.NewService(goals, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{

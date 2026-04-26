@@ -434,3 +434,22 @@ Rationale:
 - keeps answer application, readiness, and contract seed as separate auditable transitions
 - prevents hidden transition chains from turning clarified intent into contract or executable work
 - gives the next implementation slice a bounded target using the existing readiness endpoint
+
+## D-0037 — Intake, Goal, and EventLog persist in Postgres
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- IntakeRecord, Goal, and EventLog move from in-memory stores to Postgres-backed stores
+- events table is durable audit trail v0, not queue/event bus/outbox
+- event IDs use UUIDv7
+- events include internal `event_sequence` for DB-local ordering
+- payload and artifact refs use jsonb
+- clarification persistence is deferred
+- v0 event append remains synchronous, with shared transaction wrappers deferred
+- current HTTP behavior is preserved without adding new list/search endpoints
+
+Rationale:
+- makes current core flow survive server restarts
+- keeps persistence layer bounded before contract/gate/proof
+- avoids introducing async infrastructure too early
