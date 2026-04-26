@@ -55,6 +55,33 @@ func TestClarificationStorePreventsDuplicateOpenRequestForGoal(t *testing.T) {
 	}
 }
 
+func TestClarificationStoreUpdateStateRemovesOpenRequestIndex(t *testing.T) {
+	clarificationStore := store.NewClarificationStore()
+	created := validClarificationRequest()
+	if err := clarificationStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, ok, err := clarificationStore.UpdateState(context.Background(), created.ID, spine.ClarificationRequestStateAnswered)
+	if err != nil {
+		t.Fatalf("UpdateState() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdateState() ok = false, want true")
+	}
+	if updated.State != spine.ClarificationRequestStateAnswered {
+		t.Fatalf("state = %q, want %q", updated.State, spine.ClarificationRequestStateAnswered)
+	}
+
+	_, ok, err = clarificationStore.GetOpenByGoalID(context.Background(), created.GoalID)
+	if err != nil {
+		t.Fatalf("GetOpenByGoalID() error = %v", err)
+	}
+	if ok {
+		t.Fatal("GetOpenByGoalID() ok = true, want false")
+	}
+}
+
 func validClarificationRequest() spine.ClarificationRequest {
 	actor := spine.ActorRef{Kind: "user", ID: "dev_1"}
 	return spine.ClarificationRequest{

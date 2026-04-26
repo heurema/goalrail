@@ -15,7 +15,7 @@ import (
 )
 
 func TestServiceCreateRequestCreatesOpenRequest(t *testing.T) {
-	service, goals, _, _ := requestService(t)
+	service, goals, _, _, _ := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint, spine.GoalReadinessReasonMissingAcceptanceHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -83,7 +83,7 @@ func TestServiceCreateRequestQuestionMappings(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, goals, _, _ := requestService(t)
+			service, goals, _, _, _ := requestService(t)
 			createdGoal := validGoal(tt.reason)
 			createdGoal.ID = spine.GoalID(fmt.Sprintf("goal-%d", i+1))
 			createdGoal.IntakeID = spine.IntakeID(fmt.Sprintf("intake-%d", i+1))
@@ -116,7 +116,7 @@ func TestServiceCreateRequestQuestionMappings(t *testing.T) {
 }
 
 func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
-	service, goals, _, events := requestService(t)
+	service, goals, _, _, events := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -151,7 +151,7 @@ func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
 }
 
 func TestServiceCreateRequestRejectsDuplicateOpenRequest(t *testing.T) {
-	service, goals, _, events := requestService(t)
+	service, goals, _, _, events := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -170,7 +170,7 @@ func TestServiceCreateRequestRejectsDuplicateOpenRequest(t *testing.T) {
 }
 
 func TestServiceCreateRequestRejectsInvalidGoalState(t *testing.T) {
-	service, goals, _, _ := requestService(t)
+	service, goals, _, _, _ := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	createdGoal.State = spine.GoalStateCreated
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
@@ -184,7 +184,7 @@ func TestServiceCreateRequestRejectsInvalidGoalState(t *testing.T) {
 }
 
 func TestServiceCreateRequestRejectsUnknownGoal(t *testing.T) {
-	service, _, _, _ := requestService(t)
+	service, _, _, _, _ := requestService(t)
 
 	_, err := service.CreateRequest(context.Background(), "missing")
 	if !errors.Is(err, clarification.ErrGoalNotFound) {
@@ -193,7 +193,7 @@ func TestServiceCreateRequestRejectsUnknownGoal(t *testing.T) {
 }
 
 func TestServiceCreateRequestRejectsMissingReadinessReasons(t *testing.T) {
-	service, goals, _, events := requestService(t)
+	service, goals, _, _, events := requestService(t)
 	createdGoal := validGoal()
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -209,7 +209,7 @@ func TestServiceCreateRequestRejectsMissingReadinessReasons(t *testing.T) {
 }
 
 func TestServiceCreateRequestRejectsPolicyRejectedReason(t *testing.T) {
-	service, goals, _, events := requestService(t)
+	service, goals, _, _, events := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonPolicyRejected)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -224,14 +224,199 @@ func TestServiceCreateRequestRejectsPolicyRejectedReason(t *testing.T) {
 	}
 }
 
-func requestService(t *testing.T) (*clarification.Service, *store.GoalStore, *store.ClarificationStore, *eventlog.EventLog) {
+func TestServiceRecordAnswerRecordsAnswerAndMarksRequestAnswered(t *testing.T) {
+	service, goals, requests, answers, _ := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint, spine.GoalReadinessReasonMissingAcceptanceHint)
+
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	if recorded.State != spine.ClarificationAnswerStateRecorded {
+		t.Fatalf("answer state = %q, want %q", recorded.State, spine.ClarificationAnswerStateRecorded)
+	}
+	if recorded.RequestID != request.ID {
+		t.Fatalf("request_id = %q, want %q", recorded.RequestID, request.ID)
+	}
+	if recorded.GoalID != request.GoalID {
+		t.Fatalf("goal_id = %q, want %q", recorded.GoalID, request.GoalID)
+	}
+
+	storedAnswer, ok, err := answers.Get(context.Background(), recorded.ID)
+	if err != nil {
+		t.Fatalf("answers.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored answer not found")
+	}
+	if storedAnswer.ID != recorded.ID {
+		t.Fatalf("stored answer id = %q, want %q", storedAnswer.ID, recorded.ID)
+	}
+
+	storedRequest, ok, err := requests.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("requests.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored request not found")
+	}
+	if storedRequest.State != spine.ClarificationRequestStateAnswered {
+		t.Fatalf("request state = %q, want %q", storedRequest.State, spine.ClarificationRequestStateAnswered)
+	}
+}
+
+func TestServiceRecordAnswerAppendsAnswerEvents(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	appended := events.Events()
+	if len(appended) != 3 {
+		t.Fatalf("events length = %d, want 3", len(appended))
+	}
+	if appended[1].Type != clarification.EventTypeClarificationAnswerRecorded {
+		t.Fatalf("event[1] type = %q, want %q", appended[1].Type, clarification.EventTypeClarificationAnswerRecorded)
+	}
+	if appended[1].EntityType != clarification.EntityTypeClarificationAnswer {
+		t.Fatalf("event[1] entity type = %q, want %q", appended[1].EntityType, clarification.EntityTypeClarificationAnswer)
+	}
+	if appended[1].EntityID != string(recorded.ID) {
+		t.Fatalf("event[1] entity id = %q, want %q", appended[1].EntityID, recorded.ID)
+	}
+	if appended[2].Type != clarification.EventTypeClarificationRequestAnswered {
+		t.Fatalf("event[2] type = %q, want %q", appended[2].Type, clarification.EventTypeClarificationRequestAnswered)
+	}
+	if appended[2].EntityType != clarification.EntityTypeClarificationRequest {
+		t.Fatalf("event[2] entity type = %q, want %q", appended[2].EntityType, clarification.EntityTypeClarificationRequest)
+	}
+	if appended[2].EntityID != string(request.ID) {
+		t.Fatalf("event[2] entity id = %q, want %q", appended[2].EntityID, request.ID)
+	}
+
+	var answerPayload spine.ClarificationAnswer
+	if err := json.Unmarshal(appended[1].Payload, &answerPayload); err != nil {
+		t.Fatalf("unmarshal answer payload: %v", err)
+	}
+	if answerPayload.ID != recorded.ID {
+		t.Fatalf("answer payload id = %q, want %q", answerPayload.ID, recorded.ID)
+	}
+
+	var requestPayload struct {
+		RequestID     spine.ClarificationRequestID    `json:"request_id"`
+		AnswerID      spine.ClarificationAnswerID     `json:"answer_id"`
+		PreviousState spine.ClarificationRequestState `json:"previous_state"`
+		NewState      spine.ClarificationRequestState `json:"new_state"`
+	}
+	if err := json.Unmarshal(appended[2].Payload, &requestPayload); err != nil {
+		t.Fatalf("unmarshal request answered payload: %v", err)
+	}
+	if requestPayload.RequestID != request.ID {
+		t.Fatalf("request payload request_id = %q, want %q", requestPayload.RequestID, request.ID)
+	}
+	if requestPayload.AnswerID != recorded.ID {
+		t.Fatalf("request payload answer_id = %q, want %q", requestPayload.AnswerID, recorded.ID)
+	}
+	if requestPayload.PreviousState != spine.ClarificationRequestStateOpen {
+		t.Fatalf("request payload previous_state = %q, want %q", requestPayload.PreviousState, spine.ClarificationRequestStateOpen)
+	}
+	if requestPayload.NewState != spine.ClarificationRequestStateAnswered {
+		t.Fatalf("request payload new_state = %q, want %q", requestPayload.NewState, spine.ClarificationRequestStateAnswered)
+	}
+}
+
+func TestServiceRecordAnswerRejectsRepeatedAnswer(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	input := answerSubmission(request)
+
+	if _, err := service.RecordAnswer(context.Background(), request.ID, input); err != nil {
+		t.Fatalf("first RecordAnswer() error = %v", err)
+	}
+	_, err := service.RecordAnswer(context.Background(), request.ID, input)
+	if !errors.Is(err, clarification.ErrAlreadyAnswered) {
+		t.Fatalf("second RecordAnswer() error = %v, want ErrAlreadyAnswered", err)
+	}
+	if got := len(events.Events()); got != 3 {
+		t.Fatalf("events length = %d, want 3", got)
+	}
+}
+
+func TestServiceRecordAnswerValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(spine.ClarificationRequest, *spine.ClarificationAnswerSubmission)
+	}{
+		{
+			name: "missing submitted_by kind",
+			edit: func(_ spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.SubmittedBy.Kind = ""
+			},
+		},
+		{
+			name: "missing submitted_by id",
+			edit: func(_ spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.SubmittedBy.ID = ""
+			},
+		},
+		{
+			name: "missing answers",
+			edit: func(_ spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.Answers = nil
+			},
+		},
+		{
+			name: "unknown question_id",
+			edit: func(_ spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.Answers[0].QuestionID = "unknown"
+			},
+		},
+		{
+			name: "duplicate question_id",
+			edit: func(request spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.Answers = []spine.ClarificationAnswerItem{
+					{QuestionID: request.Questions[0].ID, Value: "Scope"},
+					{QuestionID: request.Questions[0].ID, Value: "Duplicate"},
+				}
+			},
+		},
+		{
+			name: "missing answer for one question",
+			edit: func(_ spine.ClarificationRequest, input *spine.ClarificationAnswerSubmission) {
+				input.Answers = input.Answers[:1]
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, goals, _, _, _ := requestService(t)
+			request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint, spine.GoalReadinessReasonMissingAcceptanceHint)
+			input := answerSubmission(request)
+			tt.edit(request, &input)
+
+			_, err := service.RecordAnswer(context.Background(), request.ID, input)
+			var validationErr *clarification.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("RecordAnswer() error = %v, want ValidationError", err)
+			}
+		})
+	}
+}
+
+func requestService(t *testing.T) (*clarification.Service, *store.GoalStore, *store.ClarificationStore, *store.ClarificationAnswerStore, *eventlog.EventLog) {
 	t.Helper()
 
 	goals := store.NewGoalStore()
 	clarifications := store.NewClarificationStore()
+	answers := store.NewClarificationAnswerStore()
 	events := eventlog.NewEventLog()
-	service := clarification.NewService(goals, clarifications, events, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, goals, clarifications, events
+	service := clarification.NewService(goals, clarifications, answers, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, goals, clarifications, answers, events
 }
 
 func validGoal(reasons ...spine.GoalReadinessReasonCode) spine.Goal {
@@ -263,6 +448,7 @@ func (c fixedClock) Now() time.Time {
 type sequenceIDs struct {
 	clarification int
 	question      int
+	answer        int
 	event         int
 }
 
@@ -276,6 +462,11 @@ func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionI
 	return spine.ClarificationQuestionID(fmt.Sprintf("question-%d", g.question)), nil
 }
 
+func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
+	g.answer++
+	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
+}
+
 func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 	g.event++
 	return spine.EventID(fmt.Sprintf("event-%d", g.event)), nil
@@ -283,4 +474,32 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+}
+
+func createRequest(t *testing.T, service *clarification.Service, goals *store.GoalStore, reasons ...spine.GoalReadinessReasonCode) spine.ClarificationRequest {
+	t.Helper()
+
+	createdGoal := validGoal(reasons...)
+	if err := goals.Create(context.Background(), createdGoal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+	request, err := service.CreateRequest(context.Background(), createdGoal.ID)
+	if err != nil {
+		t.Fatalf("CreateRequest() error = %v", err)
+	}
+	return request
+}
+
+func answerSubmission(request spine.ClarificationRequest) spine.ClarificationAnswerSubmission {
+	answers := make([]spine.ClarificationAnswerItem, 0, len(request.Questions))
+	for i, question := range request.Questions {
+		answers = append(answers, spine.ClarificationAnswerItem{
+			QuestionID: question.ID,
+			Value:      fmt.Sprintf("Answer %d", i+1),
+		})
+	}
+	return spine.ClarificationAnswerSubmission{
+		Answers:     answers,
+		SubmittedBy: spine.ActorRef{Kind: "user", ID: "dev_1"},
+	}
 }

@@ -11,6 +11,7 @@ import (
 
 type ClarificationService interface {
 	CreateRequest(context.Context, spine.GoalID) (spine.ClarificationRequest, error)
+	RecordAnswer(context.Context, spine.ClarificationRequestID, spine.ClarificationAnswerSubmission) (spine.ClarificationAnswer, error)
 }
 
 type ClarificationHandler struct {
@@ -31,14 +32,39 @@ func (h *ClarificationHandler) CreateRequest(w http.ResponseWriter, r *http.Requ
 	RespondJSON(w, http.StatusCreated, created)
 }
 
+func (h *ClarificationHandler) RecordAnswer(w http.ResponseWriter, r *http.Request) {
+	var submission spine.ClarificationAnswerSubmission
+	if err := decodeStrictJSON(r.Body, &submission); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		return
+	}
+
+	recorded, err := h.service.RecordAnswer(r.Context(), spine.ClarificationRequestID(r.PathValue("id")), submission)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusCreated, recorded)
+}
+
 func (h *ClarificationHandler) respondServiceError(w http.ResponseWriter, err error) {
+	var validationErr *clarification.ValidationError
 	switch {
+	case errors.As(err, &validationErr):
+		RespondError(w, http.StatusBadRequest, "validation_failed", validationErr.Error())
 	case errors.Is(err, clarification.ErrGoalNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "goal not found")
+	case errors.Is(err, clarification.ErrRequestNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "clarification request not found")
 	case errors.Is(err, clarification.ErrInvalidGoalState):
 		RespondError(w, http.StatusConflict, "invalid_state", "goal must need clarification")
+	case errors.Is(err, clarification.ErrInvalidRequestState):
+		RespondError(w, http.StatusConflict, "invalid_state", "clarification request is not open")
 	case errors.Is(err, clarification.ErrAlreadyOpen):
 		RespondError(w, http.StatusConflict, "already_open", "clarification request already open")
+	case errors.Is(err, clarification.ErrAlreadyAnswered):
+		RespondError(w, http.StatusConflict, "already_answered", "clarification request already answered")
 	case errors.Is(err, clarification.ErrMissingReadinessReasons):
 		RespondError(w, http.StatusConflict, "missing_readiness_reasons", "goal has no stored readiness reason codes")
 	case errors.Is(err, clarification.ErrNoClarificationQuestions):

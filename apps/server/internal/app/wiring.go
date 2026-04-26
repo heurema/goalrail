@@ -20,12 +20,13 @@ func newHTTPServer(cfg config.Config) *http.Server {
 	intakeStore := store.NewIntakeStore()
 	goalStore := store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
+	clarificationAnswerStore := store.NewClarificationAnswerStore()
 	events := eventlog.NewEventLog()
 	intakeService := intake.NewService(intakeStore, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
 	goalService := goal.NewService(intakeStore, goalStore, events, goal.SystemClock{}, goal.UUIDGenerator{})
 	goalHandler := httpserver.NewGoalHandler(goalService)
-	clarificationService := clarification.NewService(goalStore, clarificationStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
+	clarificationService := clarification.NewService(goalStore, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
@@ -37,6 +38,7 @@ func newHTTPServer(cfg config.Config) *http.Server {
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
+		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 	})
 
 	return httpserver.NewServer(cfg.Addr, router)

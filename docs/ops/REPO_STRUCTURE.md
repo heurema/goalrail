@@ -55,7 +55,7 @@ Use it together with:
 | Server DTOs and domain value types | `apps/server/internal/spine/` |
 | Server intake service logic | `apps/server/internal/intake/` |
 | Server Goal promotion and readiness service logic | `apps/server/internal/goal/` |
-| Server clarification request service logic | `apps/server/internal/clarification/` |
+| Server clarification request and answer service logic | `apps/server/internal/clarification/` |
 | Server in-memory stores and event logs | `apps/server/internal/store/` and `apps/server/internal/eventlog/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |

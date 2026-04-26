@@ -138,6 +138,7 @@ func newRouter(
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
+		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 	})
 }
 

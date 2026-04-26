@@ -9,7 +9,7 @@ components:
     truth_owner: docs/PROJECT_SPINE_SCHEMA.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: Canonical schema note exists. The MVP uses direct RepoBinding before RepositoryRecord, and RepoBinding stores the repo reference directly. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, and ClarificationRequest DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
+    notes: Canonical schema note exists. The MVP uses direct RepoBinding before RepositoryRecord, and RepoBinding stores the repo reference directly. The CLI has a local internal DTO subset under apps/cli/internal/spine, and the server now has local intake, Goal, ClarificationRequest, and ClarificationAnswer DTO/value types under apps/server/internal/spine. There is still no standalone Project Spine package, durable persistence layer, or production state store.
   organization_context:
     name: Organization Context
     status: docs_only
@@ -144,7 +144,7 @@ components:
       - apps/server/internal/health
       - apps/server/internal/version
     public_claim_allowed: false
-    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, and ClarificationRequest creation prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only; Goal readiness updates Goal state only with fixed reason codes; ClarificationRequest creation creates an open request only from stored readiness reason codes. Events remain in-memory, including intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, readiness transition events, and clarification.requested. There is no durable storage, no ClarificationAnswer or answer flow, no Goal hint update flow, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, no workers, and no repository checkout.
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, and ClarificationAnswer recording prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only; Goal readiness updates Goal state only with fixed reason codes; ClarificationRequest creation creates an open request only from stored readiness reason codes; ClarificationAnswer recording stores answer evidence only and transitions the request to answered. Events remain in-memory, including intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, readiness transition events, clarification.requested, clarification.answer_recorded, and clarification.request_answered. There is no durable storage, no answer application, no Goal hint update flow, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, no workers, and no repository checkout.
   tracker_sync:
     name: Tracker Sync
     status: planned

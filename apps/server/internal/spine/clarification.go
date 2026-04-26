@@ -8,7 +8,18 @@ type ClarificationQuestionID string
 
 type ClarificationRequestState string
 
-const ClarificationRequestStateOpen ClarificationRequestState = "open"
+const (
+	ClarificationRequestStateOpen       ClarificationRequestState = "open"
+	ClarificationRequestStateAnswered   ClarificationRequestState = "answered"
+	ClarificationRequestStateCancelled  ClarificationRequestState = "cancelled"
+	ClarificationRequestStateSuperseded ClarificationRequestState = "superseded"
+)
+
+type ClarificationAnswerID string
+
+type ClarificationAnswerState string
+
+const ClarificationAnswerStateRecorded ClarificationAnswerState = "recorded"
 
 type ClarificationAnswerType string
 
@@ -59,4 +70,24 @@ type ClarificationTarget struct {
 	Role             ClarificationTargetRole `json:"role"`
 	ActorRef         *ActorRef               `json:"actor_ref,omitempty"`
 	PreferredSurface string                  `json:"preferred_surface,omitempty"`
+}
+
+type ClarificationAnswer struct {
+	ID          ClarificationAnswerID     `json:"id"`
+	RequestID   ClarificationRequestID    `json:"request_id"`
+	GoalID      GoalID                    `json:"goal_id"`
+	Answers     []ClarificationAnswerItem `json:"answers"`
+	SubmittedBy ActorRef                  `json:"submitted_by"`
+	State       ClarificationAnswerState  `json:"state"`
+	CreatedAt   time.Time                 `json:"created_at"`
+}
+
+type ClarificationAnswerItem struct {
+	QuestionID ClarificationQuestionID `json:"question_id"`
+	Value      string                  `json:"value"`
+}
+
+type ClarificationAnswerSubmission struct {
+	Answers     []ClarificationAnswerItem `json:"answers"`
+	SubmittedBy ActorRef                  `json:"submitted_by"`
 }
