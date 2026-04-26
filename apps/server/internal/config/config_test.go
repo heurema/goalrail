@@ -11,6 +11,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	unsetEnv(t, "GOALRAIL_SERVER_ADDR")
 	unsetEnv(t, "GOALRAIL_LOG_LEVEL")
+	unsetEnv(t, "GOALRAIL_DATABASE_DSN")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -22,6 +23,9 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" {
 		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+	if cfg.DatabaseDSN != "" {
+		t.Fatalf("DatabaseDSN = %q, want empty", cfg.DatabaseDSN)
 	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)
@@ -36,6 +40,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("GOALRAIL_SERVER_ADDR", "127.0.0.1:9090")
 	t.Setenv("GOALRAIL_LOG_LEVEL", "debug")
+	t.Setenv("GOALRAIL_DATABASE_DSN", "postgres://goalrail:goalrail@localhost:5432/goalrail?sslmode=disable")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -47,6 +52,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.LogLevel != "debug" {
 		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "debug")
+	}
+	if cfg.DatabaseDSN != "postgres://goalrail:goalrail@localhost:5432/goalrail?sslmode=disable" {
+		t.Fatalf("DatabaseDSN = %q, want configured DSN", cfg.DatabaseDSN)
 	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)

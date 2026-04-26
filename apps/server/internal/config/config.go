@@ -10,8 +10,9 @@ import (
 
 // Config contains typed environment configuration for goalrail-server.
 type Config struct {
-	Addr     string `env:"GOALRAIL_SERVER_ADDR" envDefault:":8080"`
-	LogLevel string `env:"GOALRAIL_LOG_LEVEL" envDefault:"info"`
+	Addr        string `env:"GOALRAIL_SERVER_ADDR" envDefault:":8080"`
+	LogLevel    string `env:"GOALRAIL_LOG_LEVEL" envDefault:"info"`
+	DatabaseDSN string `env:"GOALRAIL_DATABASE_DSN"`
 }
 
 // Load parses server configuration from environment variables.

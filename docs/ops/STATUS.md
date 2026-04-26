@@ -118,6 +118,13 @@ The project currently has:
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
 - server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarification-requests`, and `POST /v1/clarification-requests/{id}/answers`
+- `apps/server` now has a first Postgres persistence foundation for the Organization / Project / RepoBinding context
+- server config accepts `GOALRAIL_DATABASE_DSN`
+- `goalrail-server migrate up` applies the editable pre-production init migration
+- `goalrail-server seed dev` applies the idempotent dev seed
+- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, and `repo_bindings`
+- the dev seed creates `usr_dev_owner`, `org_dev_default`, owner membership, `prj_dev_default`, and `rpb_dev_default`
+- the project-context store builds runtime SQL with Squirrel and executes through pgx/pgxpool
 - the source-neutral intake API stores `IntakeRecord` only as an in-memory prototype and appends an in-memory `intake.received` event
 - Goal promotion stores `Goal` only as non-executable normalized intent and appends in-memory `goal.created` and `intake.promoted_to_goal` events
 - Goal readiness updates `Goal` state only as an in-memory deterministic prototype, returns reason codes, and appends in-memory readiness transition events
@@ -125,7 +132,7 @@ The project currently has:
 - ClarificationAnswer recording stores canonical answer evidence only as an in-memory prototype, requires all questions answered, transitions the request from `open` to `answered`, and appends in-memory `clarification.answer_recorded` and `clarification.request_answered` events
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; answer application remains unimplemented
-- the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, but no persistence implementation exists yet
+- the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -136,11 +143,8 @@ The project currently has:
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, `ClarificationRequest`, and `ClarificationAnswer` prototypes yet
-- no durable server storage or event log persistence yet
-- no Postgres persistence implementation yet
-- no migrations yet
-- no DB seed yet
-- no User/Organization/Membership/Project/RepoBinding server implementation yet
+- no durable server storage for intake, Goal, clarification, or event log persistence yet
+- no Postgres integration into the existing intake/goal/clarification flow yet
 - no answer application, Goal hint update flow, automatic readiness re-check, or contract composition yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
