@@ -128,6 +128,7 @@ func newRouter(
 	intakeHandler *httpserver.IntakeHandler,
 	goalHandler *httpserver.GoalHandler,
 	clarificationHandler *httpserver.ClarificationHandler,
+	contractSeedHandler *httpserver.ContractSeedHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     livez,
@@ -138,6 +139,7 @@ func newRouter(
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
+		GoalContractSeed:          http.HandlerFunc(contractSeedHandler.Create),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
@@ -147,6 +149,7 @@ func baseHandlers(
 	intakeHandler *httpserver.IntakeHandler,
 	goalHandler *httpserver.GoalHandler,
 	clarificationHandler *httpserver.ClarificationHandler,
+	contractSeedHandler *httpserver.ContractSeedHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
 	return newRouter(
@@ -156,6 +159,7 @@ func baseHandlers(
 		intakeHandler,
 		goalHandler,
 		clarificationHandler,
+		contractSeedHandler,
 	)
 }
 

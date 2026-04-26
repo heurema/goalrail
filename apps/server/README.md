@@ -2,7 +2,7 @@
 
 This server is still an early prototype. Existing intake, Goal readiness, and
 event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
-Clarification request and answer state remains in-memory.
+Clarification request, answer, and ContractSeed state remain in-memory.
 
 ## Local Postgres foundation
 
@@ -62,6 +62,15 @@ With Postgres configured, `IntakeRecord`, `Goal`, and intake/goal events are
 durable and survive server restarts. Project/RepoBinding validation uses
 Postgres to derive `organization_id` from the seeded context.
 
+After clarification answers are applied and an explicit readiness re-check marks
+the Goal `ready_for_contract_seed`, create a seed snapshot:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seed
+```
+
 This flow still does not create executable work, contract drafts, gate
-decisions, proof, runner jobs, or VCS integration. Clarification request and
-answer state is still prototype/in-memory.
+decisions, proof, runner jobs, or VCS integration. Clarification request,
+answer, and ContractSeed state is still prototype/in-memory. ContractSeed
+creation does not create `ContractDraft`, `WorkItem`, approved Contract,
+`GateDecision`, `Proof`, or executable work.

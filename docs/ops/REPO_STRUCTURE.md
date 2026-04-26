@@ -56,6 +56,7 @@ Use it together with:
 | Server intake service logic | `apps/server/internal/intake/` |
 | Server Goal promotion and readiness service logic | `apps/server/internal/goal/` |
 | Server clarification request and answer service logic | `apps/server/internal/clarification/` |
+| Server ContractSeed creation service logic | `apps/server/internal/contractseed/` |
 | Server in-memory stores and event logs | `apps/server/internal/store/` and `apps/server/internal/eventlog/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
+	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
@@ -41,6 +42,7 @@ type testServerDeps struct {
 	goals          *store.GoalStore
 	clarifications *store.ClarificationStore
 	answers        *store.ClarificationAnswerStore
+	contractSeeds  *store.ContractSeedStore
 	events         *eventlog.EventLog
 	idFactory      *sequenceIDs
 }
@@ -916,6 +918,136 @@ func TestPostClarificationAnswersApplyReturnsUpdatedGoal(t *testing.T) {
 	}
 }
 
+func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContractSeed(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if initialReadiness.code != http.StatusOK {
+		t.Fatalf("initial readiness status = %d, want %d: %s", initialReadiness.code, http.StatusOK, initialReadiness.body)
+	}
+
+	var initialReadinessBody struct {
+		Readiness spine.GoalReadinessResult `json:"readiness"`
+		Goal      spine.Goal                `json:"goal"`
+	}
+	decodeJSON(t, initialReadiness.body, &initialReadinessBody)
+	if initialReadinessBody.Readiness.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("initial readiness state = %q, want %q", initialReadinessBody.Readiness.State, spine.GoalStateNeedsClarification)
+	}
+	if !hasReadinessReason(initialReadinessBody.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingScopeHint) {
+		t.Fatalf("initial readiness reasons = %#v, want %q", initialReadinessBody.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingScopeHint)
+	}
+	if !hasReadinessReason(initialReadinessBody.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingAcceptanceHint) {
+		t.Fatalf("initial readiness reasons = %#v, want %q", initialReadinessBody.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingAcceptanceHint)
+	}
+
+	clarificationResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if clarificationResponse.code != http.StatusCreated {
+		t.Fatalf("clarification request status = %d, want %d: %s", clarificationResponse.code, http.StatusCreated, clarificationResponse.body)
+	}
+
+	var request spine.ClarificationRequest
+	decodeJSON(t, clarificationResponse.body, &request)
+	answerResponse := doJSON(
+		t,
+		server.router,
+		http.MethodPost,
+		"/v1/clarification-requests/"+string(request.ID)+"/answers",
+		answerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
+			spine.ClarificationMapsToGoalScopeHint:      "Refactor duplicate CSV export filter logic",
+			spine.ClarificationMapsToGoalAcceptanceHint: "Existing CSV export behavior is preserved",
+		}),
+	)
+	if answerResponse.code != http.StatusCreated {
+		t.Fatalf("clarification answer status = %d, want %d: %s", answerResponse.code, http.StatusCreated, answerResponse.body)
+	}
+
+	var answer spine.ClarificationAnswer
+	decodeJSON(t, answerResponse.body, &answer)
+	readinessChecksBeforeApply := countEventType(server.events.Events(), goal.EventTypeGoalReadinessChecked)
+
+	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	if applyResponse.code != http.StatusOK {
+		t.Fatalf("apply status = %d, want %d: %s", applyResponse.code, http.StatusOK, applyResponse.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"contract_seed_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(applyResponse.body, forbiddenField) {
+			t.Fatalf("apply response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var applyBody struct {
+		Goal spine.Goal `json:"goal"`
+	}
+	decodeJSON(t, applyResponse.body, &applyBody)
+	if applyBody.Goal.ScopeHint != "Refactor duplicate CSV export filter logic" {
+		t.Fatalf("scope_hint = %q, want applied value", applyBody.Goal.ScopeHint)
+	}
+	if applyBody.Goal.AcceptanceHint != "Existing CSV export behavior is preserved" {
+		t.Fatalf("acceptance_hint = %q, want applied value", applyBody.Goal.AcceptanceHint)
+	}
+	if applyBody.Goal.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("goal state after apply = %q, want %q before explicit re-check", applyBody.Goal.State, spine.GoalStateNeedsClarification)
+	}
+	if got := countEventType(server.events.Events(), goal.EventTypeGoalReadinessChecked); got != readinessChecksBeforeApply {
+		t.Fatalf("readiness checks after apply = %d, want unchanged %d", got, readinessChecksBeforeApply)
+	}
+	if got := countEventType(server.events.Events(), goal.EventTypeGoalMarkedReadyForContractSeed); got != 0 {
+		t.Fatalf("ready_for_contract_seed events after apply = %d, want 0 before explicit re-check", got)
+	}
+
+	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if recheckResponse.code != http.StatusOK {
+		t.Fatalf("explicit re-check status = %d, want %d: %s", recheckResponse.code, http.StatusOK, recheckResponse.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"contract_seed_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(recheckResponse.body, forbiddenField) {
+			t.Fatalf("re-check response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var recheckBody struct {
+		Readiness spine.GoalReadinessResult `json:"readiness"`
+		Goal      spine.Goal                `json:"goal"`
+	}
+	decodeJSON(t, recheckResponse.body, &recheckBody)
+	if recheckBody.Readiness.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("re-check readiness state = %q, want %q", recheckBody.Readiness.State, spine.GoalStateReadyForContractSeed)
+	}
+	if !recheckBody.Readiness.Ready {
+		t.Fatal("re-check Ready = false, want true")
+	}
+	if len(recheckBody.Readiness.ReasonCodes) != 0 {
+		t.Fatalf("re-check reason codes = %#v, want empty", recheckBody.Readiness.ReasonCodes)
+	}
+	if recheckBody.Goal.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("re-check goal state = %q, want %q", recheckBody.Goal.State, spine.GoalStateReadyForContractSeed)
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if stored.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("stored state = %q, want %q", stored.State, spine.GoalStateReadyForContractSeed)
+	}
+	if len(stored.LastReadinessReasonCodes) != 0 {
+		t.Fatalf("stored readiness reason codes = %#v, want empty", stored.LastReadinessReasonCodes)
+	}
+	if got := countEventType(server.events.Events(), goal.EventTypeGoalReadinessChecked); got != readinessChecksBeforeApply+1 {
+		t.Fatalf("readiness checks after explicit re-check = %d, want %d", got, readinessChecksBeforeApply+1)
+	}
+	if got := countEventType(server.events.Events(), goal.EventTypeGoalMarkedReadyForContractSeed); got != 1 {
+		t.Fatalf("ready_for_contract_seed events after explicit re-check = %d, want 1", got)
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
 func TestPostClarificationAnswersApplyUnknownAnswerReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
@@ -1106,6 +1238,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalStore := store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	answerStore := store.NewClarificationAnswerStore()
+	contractSeedStore := store.NewContractSeedStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
@@ -1114,13 +1247,16 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
+	contractSeedService := contractseed.NewService(goalStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
+	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 
 	return testServerDeps{
-		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler),
+		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler),
 		intakes:        intakeStore,
 		goals:          goalStore,
 		clarifications: clarificationStore,
 		answers:        answerStore,
+		contractSeeds:  contractSeedStore,
 		events:         events,
 		idFactory:      ids,
 	}
@@ -1161,6 +1297,7 @@ type sequenceIDs struct {
 	clarification int
 	question      int
 	answer        int
+	contractSeed  int
 	event         int
 }
 
@@ -1192,6 +1329,11 @@ func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionI
 func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
 	g.answer++
 	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
+}
+
+func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {
+	g.contractSeed++
+	return spine.ContractSeedID(fmt.Sprintf("contract-seed-%d", g.contractSeed)), nil
 }
 
 func testTime() time.Time {
@@ -1362,4 +1504,34 @@ func hasClarificationQuestion(questions []spine.ClarificationQuestion, want spin
 		}
 	}
 	return false
+}
+
+func countEventType(events []spine.Event, eventType string) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == eventType {
+			count++
+		}
+	}
+	return count
+}
+
+func assertNoForbiddenEventTypes(t *testing.T, events []spine.Event) {
+	t.Helper()
+
+	forbidden := map[string]bool{
+		"contract.seed_created":  true,
+		"contract.draft_created": true,
+		"contract.approved":      true,
+		"contract.created":       true,
+		"work_item.created":      true,
+		"run.started":            true,
+		"gate.decision_written":  true,
+		"proof.created":          true,
+	}
+	for _, event := range events {
+		if forbidden[event.Type] {
+			t.Fatalf("forbidden event type appended: %s", event.Type)
+		}
+	}
 }
