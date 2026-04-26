@@ -17,6 +17,7 @@ related_docs:
   - docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md
   - docs/adr/ADR-0001-runtime-neutral-cli-first.md
   - docs/adr/ADR-0002-single-writer-and-advisory-panels.md
+  - docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md
 ---
 # Project Spine Schema Note
 
@@ -34,6 +35,7 @@ Read together with:
 - `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
 - `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
 - `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+- `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
 
 ## 2. Canonical vs derived
 
@@ -48,10 +50,37 @@ They must never become hidden sources of truth.
 
 ## 3. Canonical objects
 
+### MVP SaaS / project context
+
+The MVP server foundation includes a minimal SaaS/project context before full
+VCS integration:
+
+- `User`
+- `Organization`
+- `OrganizationMembership`
+- `Project`
+- `RepoBinding`
+
+`User` and `OrganizationMembership` provide access and ownership context.
+Goalrail `Organization` is an internal SaaS tenant/workspace, not a GitHub
+Organization, GitLab Group, or Bitbucket Workspace.
+
+`Project` is a delivery container inside an `Organization`. `Project` is not a
+repository.
+
+For the MVP, `RepoBinding` stores the repository reference directly. A separate
+`RepositoryRecord` is deferred until Goalrail needs repository catalog,
+multi-project repository reuse, repo-level policy, or independent provider sync.
+
+### Spine objects
+
 | Object | Purpose | Authoritative writer |
 |---|---|---|
-| `Project` | top-level delivery container | system / setup flow |
-| `RepoBinding` | binds one contract path to one repo | contract shaping |
+| `User` | Goalrail user identity context; seed user is enough for early dev | system / setup flow |
+| `Organization` | internal SaaS tenant/workspace | system / setup flow |
+| `OrganizationMembership` | connects a User to an Organization with a role | system / setup flow |
+| `Project` | delivery container inside an Organization; not a repository | system / setup flow |
+| `RepoBinding` | project-to-repository reference stored directly in MVP | setup flow / contract shaping |
 | `Goal` | normalized business request | intent plane |
 | `Constraint` | explicit hard limits or requirements | intent plane |
 | `GlossaryTerm` | shared domain vocabulary | intent plane |
@@ -83,7 +112,8 @@ They must never become hidden sources of truth.
 Canonical chain:
 
 ```text
-Project
+Organization
+  -> Project
   -> RepoBinding
   -> Goal
   -> Contract
@@ -97,6 +127,10 @@ Project
 ```
 
 Supporting relations:
+- `User -> OrganizationMembership -> Organization`
+- `Organization -> Project[]`
+- `Project -> RepoBinding[]`
+- one MVP Project should have at most one active primary `RepoBinding`
 - `Goal -> Constraint[]`
 - `Goal -> GlossaryTerm[]`
 - `Task -> AdvisoryPanel[]`
@@ -196,6 +230,9 @@ Rules:
 3. advisory panels are separate from task execution groups
 4. gate reads frozen verification inputs
 5. canonical truth stays separate from derived views
+6. `Project` is not a repository
+7. `RepoBinding` identifies the repository a Project works with, but does not
+   grant checkout permission
 
 ## 10. Out of scope for this note
 

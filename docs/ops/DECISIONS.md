@@ -364,3 +364,39 @@ Rationale:
 - preserves an auditable answer record before any derived Goal update
 - keeps clarification answer storage separate from contract and work creation
 - gives the next implementation slice a bounded target without hidden state transitions
+
+## D-0033 — MVP uses direct RepoBinding before RepositoryRecord
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- MVP uses `User`, `Organization`, `OrganizationMembership`, `Project`, and
+  `RepoBinding`
+- `RepoBinding` stores repository reference directly
+- `RepositoryRecord` and `RepositoryEnrollment` are deferred
+- `VcsConnection` remains a future provider layer
+- manual `RepoBinding` is enough before GitHub integration
+
+Rationale:
+- reduces entity count for the first server MVP
+- avoids building a repository catalog before the product contour needs it
+- keeps GitHub/GitLab/Bitbucket integration optional later
+
+## D-0034 — Server persistence uses pgx, Squirrel, and goose
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- `pgx/v5` is used for PostgreSQL execution, pool, and transactions
+- Squirrel is used for runtime SQL statement construction in Go code
+- Squirrel is not used as executor
+- `goose` is used for migrations
+- `sqlc` is not used
+- ORM is not used
+- before production, one editable init migration is allowed
+- dev seed is separate from migrations and writes to Postgres
+
+Rationale:
+- keeps persistence native and explicit
+- avoids ORM and generated-code overhead
+- keeps migration history clean before production

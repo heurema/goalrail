@@ -75,33 +75,34 @@ related_docs:
 36. `docs/adr/ADR-0007-clarification-request-boundary.md`
 37. `docs/adr/ADR-0008-runner-checkout-boundary.md`
 38. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+39. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
 
 ### 7. Governance and change control
-39. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-40. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-41. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-42. `docs/product/GOALRAIL_RULE_STACK.md`
+40. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+41. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+42. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+43. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-43. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-44. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-45. `docs/ops/STATUS.md`
-46. `docs/ops/NEXT.md`
-47. `docs/ops/DECISIONS.md`
-48. `docs/ops/COMPONENTS.yaml`
-49. `docs/ops/REPO_STRUCTURE.md`
-50. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-51. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+44. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+45. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+46. `docs/ops/STATUS.md`
+47. `docs/ops/NEXT.md`
+48. `docs/ops/DECISIONS.md`
+49. `docs/ops/COMPONENTS.yaml`
+50. `docs/ops/REPO_STRUCTURE.md`
+51. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+52. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-52. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-53. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-54. `docs/reference/design/reference_screens/`
-55. `.goalrail/work/`
-56. `.goalrail/knowledge/`
-57. `.punk/publishing/`
-58. `.goalrail/flows/`
-59. `.goalrail/evals/`
+53. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+54. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+55. `docs/reference/design/reference_screens/`
+56. `.goalrail/work/`
+57. `.goalrail/knowledge/`
+58. `.punk/publishing/`
+59. `.goalrail/flows/`
+60. `.goalrail/evals/`
 
 ## Roles of the main docs
 
@@ -154,6 +155,7 @@ related_docs:
 - `ADR-0007` — Clarification request boundary
 - `ADR-0008` — Runner and repository checkout boundary
 - `ADR-0009` — Clarification answer boundary
+- `ADR-0010` — Organization, project, repo binding, and persistence bootstrap boundary
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries

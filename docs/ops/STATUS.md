@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- nine kernel/CLI/server/domain boundary ADRs
+- ten kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -89,6 +89,10 @@ The project currently has:
 - ADR-0008 documents the first runner prototype direction as hosted-only read-only ephemeral checkout
 - hosted runner workers are expected to use pull-based / poll-based job leasing
 - customer-hosted runner remains documented but unimplemented
+- ADR-0010 documents the MVP Organization / Project / RepoBinding and
+  persistence bootstrap boundary
+- MVP will use direct `RepoBinding` before `RepositoryRecord`
+- persistence direction is pgx + Squirrel + goose, with no `sqlc` and no ORM
 
 ### Delivery model
 - roadmap phases defined
@@ -96,7 +100,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and nine boundary ADRs exist
+- kernel schema note and ten boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -120,6 +124,7 @@ The project currently has:
 - ClarificationRequest creation stores an open request only as an in-memory prototype, generates deterministic questions from Goal readiness reason codes, and appends an in-memory `clarification.requested` event
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009, but no answer implementation exists yet
+- the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, but no persistence implementation exists yet
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
 
@@ -131,13 +136,20 @@ The project currently has:
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, and `ClarificationRequest` prototypes yet
 - no durable server storage or event log persistence yet
+- no Postgres persistence implementation yet
+- no migrations yet
+- no DB seed yet
+- no User/Organization/Membership/Project/RepoBinding server implementation yet
 - no server-side `ClarificationAnswer` implementation, answer application, Goal hint update flow, automatic readiness re-check, or contract composition yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no organization/user/VCS connection/repository catalog schema implementation yet
+- no `VcsConnection` implementation yet
+- no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
 - no `RepoBinding.access_mode` implementation
+- no CRUD onboarding endpoints yet
 - no manual-declared repository registration
 - no runner-reported repository metadata flow
 - no runner registration, runner assignment, checkout request, checkout receipt, or worker implementation yet
