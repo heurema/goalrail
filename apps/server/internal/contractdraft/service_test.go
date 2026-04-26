@@ -39,6 +39,12 @@ func TestServiceCreatesContractDraftFromSeed(t *testing.T) {
 	if created.RepoBindingID != seed.RepoBindingID {
 		t.Fatalf("repo_binding_id = %q, want %q", created.RepoBindingID, seed.RepoBindingID)
 	}
+	if created.OrganizationID != seed.OrganizationID {
+		t.Fatalf("organization_id = %q, want %q", created.OrganizationID, seed.OrganizationID)
+	}
+	if created.ProjectID != seed.ProjectID {
+		t.Fatalf("project_id = %q, want %q", created.ProjectID, seed.ProjectID)
+	}
 	if created.Title != seed.Title {
 		t.Fatalf("title = %q, want %q", created.Title, seed.Title)
 	}
@@ -113,6 +119,12 @@ func TestServiceAppendsContractDraftCreatedEvent(t *testing.T) {
 	}
 	if event.EntityID != string(created.ID) {
 		t.Fatalf("entity id = %q, want %q", event.EntityID, created.ID)
+	}
+	if event.OrganizationID != seed.OrganizationID {
+		t.Fatalf("organization_id = %q, want %q", event.OrganizationID, seed.OrganizationID)
+	}
+	if event.ProjectID != seed.ProjectID {
+		t.Fatalf("project_id = %q, want %q", event.ProjectID, seed.ProjectID)
 	}
 	if event.RepoBindingID != seed.RepoBindingID {
 		t.Fatalf("repo_binding_id = %q, want %q", event.RepoBindingID, seed.RepoBindingID)
@@ -256,6 +268,8 @@ func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStor
 func validDraftableSeed() spine.ContractSeed {
 	return spine.ContractSeed{
 		ID:             "contract-seed-1",
+		OrganizationID: "organization-1",
+		ProjectID:      "project-1",
 		GoalID:         "goal-1",
 		RepoBindingID:  "repo-binding-1",
 		Title:          "Refactor CSV export filters",

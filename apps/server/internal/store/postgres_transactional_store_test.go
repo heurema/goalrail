@@ -139,6 +139,74 @@ func TestPostgresTransactionalGoalStoreRollsBackWhenReadinessEventAppendFails(t 
 	}
 }
 
+func TestPostgresTransactionalContractSeedStoreRollsBackWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{failExecCall: 2}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalContractSeedStore(
+		NewPostgresContractSeedStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	err := store.CreateWithEvent(ctx, validPostgresContractSeed(), validPostgresEvent("contract_seed.created", "ContractSeed", "018f0000-0000-7000-8000-000000000401"))
+	if err == nil {
+		t.Fatal("CreateWithEvent() error = nil, want failure")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "INSERT INTO contract_seeds") {
+		t.Fatalf("first SQL = %q, want contract seed insert", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
+func TestPostgresTransactionalContractDraftStoreRollsBackWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{failExecCall: 2}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalContractDraftStore(
+		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	err := store.CreateWithEvent(ctx, validPostgresContractDraft(), validPostgresEvent("contract_draft.created", "ContractDraft", "018f0000-0000-7000-8000-000000000501"))
+	if err == nil {
+		t.Fatal("CreateWithEvent() error = nil, want failure")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "INSERT INTO contract_drafts") {
+		t.Fatalf("first SQL = %q, want contract draft insert", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
 func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{}

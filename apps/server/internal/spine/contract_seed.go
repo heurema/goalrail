@@ -10,6 +10,8 @@ const ContractSeedStateCreated ContractSeedState = "created"
 
 type ContractSeed struct {
 	ID             ContractSeedID    `json:"id"`
+	OrganizationID OrganizationID    `json:"-"`
+	ProjectID      ProjectID         `json:"-"`
 	GoalID         GoalID            `json:"goal_id"`
 	RepoBindingID  RepoBindingID     `json:"repo_binding_id"`
 	Title          string            `json:"title"`

@@ -37,8 +37,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var goals goalStore = store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
-	contractSeedStore := store.NewContractSeedStore()
-	contractDraftStore := store.NewContractDraftStore()
+	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
+	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
 	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
@@ -51,6 +51,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		projectContext = store.NewProjectContextStore(pool)
 		intakeStore = store.NewPostgresTransactionalIntakeStore(pool)
 		goals = store.NewPostgresTransactionalGoalStore(pool)
+		contractSeedStore = store.NewPostgresTransactionalContractSeedStore(pool)
+		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
 		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}

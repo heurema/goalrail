@@ -526,3 +526,23 @@ Rationale:
 - prevents canonical records without corresponding audit events
 - hardens durable core flow before broader contract/gate/proof work
 - keeps persistence simple and synchronous
+
+## D-0042 — ContractSeed and ContractDraft persist in Postgres
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- ContractSeed and ContractDraft creation move from in-memory-only stores to
+  Postgres-backed stores when `GOALRAIL_DATABASE_DSN` is configured
+- in-memory fallback remains available when DB is not configured
+- `contract_seed.created` and `contract_draft.created` append to the durable
+  EventLog
+- ContractSeed create plus event append and ContractDraft create plus event
+  append run in one Postgres transaction
+- approval, work items, runner, gate, and proof remain later boundaries
+
+Rationale:
+- makes the contract bridge and draft creation state survive server restarts
+- keeps seed and draft creation auditable without introducing queue, outbox,
+  event bus, sqlc, or ORM
+- preserves the boundary that draft state is not approved or executable work

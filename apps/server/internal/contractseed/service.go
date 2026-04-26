@@ -50,6 +50,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type transactionalSeedStore interface {
+	CreateWithEvent(context.Context, spine.ContractSeed, spine.Event) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -108,6 +112,8 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	now := s.Clock.Now().UTC()
 	created := spine.ContractSeed{
 		ID:             seedID,
+		OrganizationID: goal.OrganizationID,
+		ProjectID:      goal.ProjectID,
 		GoalID:         goal.ID,
 		RepoBindingID:  goal.RepoBindingID,
 		Title:          goal.Title,
@@ -123,6 +129,17 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	event, err := s.contractSeedCreatedEvent(created, goal)
 	if err != nil {
 		return spine.ContractSeed{}, err
+	}
+	if txSeeds, ok := s.Seeds.(transactionalSeedStore); ok {
+		if err := txSeeds.CreateWithEvent(ctx, created, event); err != nil {
+			if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
+				return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.ContractSeed{}, ErrAlreadySeeded
+			}
+			return spine.ContractSeed{}, fmt.Errorf("create contract seed with event: %w", err)
+		}
+		return created, nil
 	}
 	if err := s.Seeds.Create(ctx, created); err != nil {
 		if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
