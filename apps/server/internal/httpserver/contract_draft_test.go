@@ -687,13 +687,29 @@ func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
 	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftMarkedReadyForApproval); got != 1 {
 		t.Fatalf("contract_draft.marked_ready_for_approval events = %d, want 1", got)
 	}
+	stored, ok, err := server.contractDrafts.Get(context.Background(), draft.ID)
+	if err != nil {
+		t.Fatalf("contractDrafts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contractDrafts.Get() ok = false, want true")
+	}
 	event := server.events.Events()[len(server.events.Events())-1]
+	if event.OrganizationID != stored.OrganizationID || event.ProjectID != stored.ProjectID || event.RepoBindingID != stored.RepoBindingID {
+		t.Fatalf("event context = %q/%q/%q, want stored draft context %q/%q/%q", event.OrganizationID, event.ProjectID, event.RepoBindingID, stored.OrganizationID, stored.ProjectID, stored.RepoBindingID)
+	}
 	var payload struct {
-		MarkedBy      spine.ActorRef           `json:"marked_by"`
-		PreviousState spine.ContractDraftState `json:"previous_state"`
-		NewState      spine.ContractDraftState `json:"new_state"`
+		ContractDraftID spine.ContractDraftID    `json:"contract_draft_id"`
+		ContractSeedID  spine.ContractSeedID     `json:"contract_seed_id"`
+		GoalID          spine.GoalID             `json:"goal_id"`
+		MarkedBy        spine.ActorRef           `json:"marked_by"`
+		PreviousState   spine.ContractDraftState `json:"previous_state"`
+		NewState        spine.ContractDraftState `json:"new_state"`
 	}
 	decodeJSON(t, string(event.Payload), &payload)
+	if payload.ContractDraftID != draft.ID || payload.ContractSeedID != draft.ContractSeedID || payload.GoalID != draft.GoalID {
+		t.Fatalf("payload identity = %q/%q/%q, want draft identity %q/%q/%q", payload.ContractDraftID, payload.ContractSeedID, payload.GoalID, draft.ID, draft.ContractSeedID, draft.GoalID)
+	}
 	if payload.MarkedBy.Kind != "user" || payload.MarkedBy.ID != "dev_1" {
 		t.Fatalf("marked_by = %#v, want audit user", payload.MarkedBy)
 	}

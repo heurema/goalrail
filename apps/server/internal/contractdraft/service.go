@@ -607,18 +607,22 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 	}
 
 	return spine.Event{
-		ID:            eventID,
-		Type:          EventTypeContractDraftUpdated,
-		EntityType:    EntityTypeContractDraft,
-		EntityID:      string(updated.ID),
-		RepoBindingID: updated.RepoBindingID,
-		Timestamp:     updatedAt,
-		Payload:       payload,
+		ID:             eventID,
+		Type:           EventTypeContractDraftUpdated,
+		EntityType:     EntityTypeContractDraft,
+		EntityID:       string(updated.ID),
+		OrganizationID: updated.OrganizationID,
+		ProjectID:      updated.ProjectID,
+		RepoBindingID:  updated.RepoBindingID,
+		Timestamp:      updatedAt,
+		Payload:        payload,
 	}, nil
 }
 
 type contractDraftMarkedReadyForApprovalPayload struct {
 	ContractDraftID spine.ContractDraftID    `json:"contract_draft_id"`
+	ContractSeedID  spine.ContractSeedID     `json:"contract_seed_id"`
+	GoalID          spine.GoalID             `json:"goal_id"`
 	MarkedBy        spine.ActorRef           `json:"marked_by"`
 	ReasonCodes     []string                 `json:"reason_codes"`
 	PreviousState   spine.ContractDraftState `json:"previous_state"`
@@ -634,6 +638,8 @@ func (s *Service) contractDraftMarkedReadyForApprovalEvent(updated spine.Contrac
 
 	payload, err := json.Marshal(contractDraftMarkedReadyForApprovalPayload{
 		ContractDraftID: updated.ID,
+		ContractSeedID:  updated.ContractSeedID,
+		GoalID:          updated.GoalID,
 		MarkedBy:        markedBy,
 		ReasonCodes:     append([]string{}, reasonCodes...),
 		PreviousState:   spine.ContractDraftStateDraft,
