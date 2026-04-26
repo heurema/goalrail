@@ -15,7 +15,7 @@
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints and the server has an in-memory prototype; future answer work must keep readiness re-check separate
-- ADR-0012 now defines explicit readiness re-check after applied answers; future readiness work should reuse the existing readiness endpoint without creating contract seed
+- ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -90,11 +90,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. Explicit Goal readiness re-check after applied answers prototype
-   - reuse `POST /v1/goals/{id}/readiness` as the explicit re-check
-   - verify a Goal can move to `ready_for_contract_seed` after applied hints
-   - keep re-check separate from answer application and from contract seed creation
-   - do not create contract draft / work items / gate / proof
+1. ContractSeed boundary design
+   - define the first boundary after `ready_for_contract_seed`
+   - keep ContractSeed separate from `ContractDraft`, work items, gate, and proof
+   - do not make readiness re-check create contract artifacts implicitly
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
