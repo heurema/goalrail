@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-26
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed prototypes exist
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft prototypes exist
 Owner: Vitaly
 
 ## Current state
@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- fourteen kernel/CLI/server/domain boundary ADRs
+- fifteen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -102,6 +102,9 @@ The project currently has:
 - ADR-0014 documents `ContractDraft(draft)` as an explicit server-owned draft
   boundary from `ContractSeed(created)`, before approval, work item, gate, or
   proof
+- ADR-0015 documents `ContractDraft` review/update as an explicit server-owned
+  draft-only boundary for proposed fields, before `ready_for_approval`, approval,
+  work item, gate, or proof
 
 ### Delivery model
 - roadmap phases defined
@@ -109,7 +112,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and fourteen boundary ADRs exist
+- kernel schema note and fifteen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -147,6 +150,7 @@ The project currently has:
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as an in-memory snapshot prototype only; it does not create `ContractDraft`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
 - the `ContractDraft` boundary is documented in ADR-0014 and implemented as an in-memory draft prototype only; it does not create approved Contract, `WorkItem`, `GateDecision`, or `Proof`
+- the `ContractDraft` review/update boundary is documented in ADR-0015, but no update implementation exists yet
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices

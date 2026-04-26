@@ -490,3 +490,22 @@ Rationale:
 - makes current core flow survive server restarts
 - keeps persistence layer bounded before contract/gate/proof
 - avoids introducing async infrastructure too early
+
+## D-0040 — ContractDraft review/update stays draft-only
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- `ContractDraft` may be reviewed and updated only through explicit server-owned transitions
+- updates affect proposed draft fields only and keep `ContractDraft.state = draft`
+- editable fields are `title`, `intent_summary`, `proposed_scope`, `proposed_non_goals`, `proposed_constraints`, `proposed_acceptance_criteria`, `proposed_expected_checks`, `proposed_proof_expectations`, and `risk_hints`
+- identity/source fields, `source_refs`, `created_at`, and `state` are not editable in this boundary
+- updates must write `contract_draft.updated` events with changed fields, `updated_by`, old/new values where safe, and timestamp
+- updates do not approve `ContractDraft`, create approved Contract, create `WorkItem`, start execution, write `GateDecision`, or create `Proof`
+- `ready_for_approval` remains a later boundary
+- this boundary does not modify ADR-0010 persistence or introduce new durable storage requirements
+
+Rationale:
+- allows human review/editing of proposed draft terms before approval
+- preserves auditability of draft changes without collapsing update into approval
+- keeps work item, execution, gate, and proof boundaries downstream of approved Contract

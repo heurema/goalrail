@@ -18,6 +18,7 @@
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
 - ADR-0013 now defines the `ContractSeed` boundary, and the server has an in-memory `ContractSeed(created)` prototype; future contract work must keep approval, work item, gate, and proof as later boundaries
 - ADR-0014 now defines the `ContractDraft` boundary, and the server has an in-memory `ContractDraft(draft)` prototype; future contract work must keep approval, work item, gate, and proof as later boundaries
+- ADR-0015 now defines the `ContractDraft` review/update boundary; future update work must keep state `draft` and keep `ready_for_approval` and approval as later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -92,11 +93,11 @@ Done means:
 
 ### Server follow-up slices
 
-1. ContractDraft review/update boundary design
-   - define how proposed draft terms can be reviewed or edited before approval
-   - keep review/update separate from approved Contract, work items, execution, gate, and proof
-   - preserve audit trail for changes to proposed scope, non-goals, acceptance criteria, checks, and proof expectations
-   - do not make ContractSeed creation draft or approve contract artifacts implicitly
+1. ContractDraft review/update prototype
+   - update proposed draft fields through explicit server-owned update transition
+   - append `contract_draft.updated` events with `updated_by` and changed fields
+   - keep `ContractDraft.state = draft` and preserve `ready_for_approval` as a later boundary
+   - do not create approved Contract, work items, execution, gate, or proof
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
