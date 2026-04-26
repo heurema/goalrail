@@ -130,6 +130,7 @@ func newRouter(
 	clarificationHandler *httpserver.ClarificationHandler,
 	contractSeedHandler *httpserver.ContractSeedHandler,
 	contractDraftHandler *httpserver.ContractDraftHandler,
+	approvedContractHandler *httpserver.ApprovedContractHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     livez,
@@ -144,6 +145,7 @@ func newRouter(
 		ContractSeedDraft:         http.HandlerFunc(contractDraftHandler.Create),
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
 		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
+		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
@@ -155,6 +157,7 @@ func baseHandlers(
 	clarificationHandler *httpserver.ClarificationHandler,
 	contractSeedHandler *httpserver.ContractSeedHandler,
 	contractDraftHandler *httpserver.ContractDraftHandler,
+	approvedContractHandler *httpserver.ApprovedContractHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
 	return newRouter(
@@ -166,6 +169,7 @@ func baseHandlers(
 		clarificationHandler,
 		contractSeedHandler,
 		contractDraftHandler,
+		approvedContractHandler,
 	)
 }
 
