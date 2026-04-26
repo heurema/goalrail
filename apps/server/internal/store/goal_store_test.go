@@ -125,6 +125,49 @@ func TestGoalStoreUpdateReadinessStoresReasonCodes(t *testing.T) {
 	}
 }
 
+func TestGoalStoreUpdateHints(t *testing.T) {
+	goalStore := store.NewGoalStore()
+	created := validGoal()
+	if err := goalStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	summary := "Updated summary"
+	scopeHint := "Updated scope hint"
+	acceptanceHint := "Updated acceptance hint"
+	updated, ok, err := goalStore.UpdateHints(context.Background(), created.ID, spine.GoalHintUpdate{
+		Summary:        &summary,
+		ScopeHint:      &scopeHint,
+		AcceptanceHint: &acceptanceHint,
+	})
+	if err != nil {
+		t.Fatalf("UpdateHints() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdateHints() ok = false, want true")
+	}
+	if updated.Summary != summary {
+		t.Fatalf("summary = %q, want %q", updated.Summary, summary)
+	}
+	if updated.ScopeHint != scopeHint {
+		t.Fatalf("scope_hint = %q, want %q", updated.ScopeHint, scopeHint)
+	}
+	if updated.AcceptanceHint != acceptanceHint {
+		t.Fatalf("acceptance_hint = %q, want %q", updated.AcceptanceHint, acceptanceHint)
+	}
+
+	stored, ok, err := goalStore.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	if stored.Summary != summary {
+		t.Fatalf("stored summary = %q, want %q", stored.Summary, summary)
+	}
+}
+
 func validGoal() spine.Goal {
 	return spine.Goal{
 		ID:             "goal-1",

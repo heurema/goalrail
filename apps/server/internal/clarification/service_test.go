@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -408,6 +409,195 @@ func TestServiceRecordAnswerValidation(t *testing.T) {
 	}
 }
 
+func TestServiceApplyAnswerUpdatesGoalHints(t *testing.T) {
+	service, goals, _, _, _ := requestService(t)
+	request := createRequest(t, service, goals,
+		spine.GoalReadinessReasonMissingGoalSummary,
+		spine.GoalReadinessReasonMissingScopeHint,
+		spine.GoalReadinessReasonMissingAcceptanceHint,
+	)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmissionWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalSummary:        "Updated summary",
+		spine.ClarificationMapsToGoalScopeHint:      "Updated scope hint",
+		spine.ClarificationMapsToGoalAcceptanceHint: "Updated acceptance hint",
+	}))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	application, updatedGoal, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if err != nil {
+		t.Fatalf("ApplyAnswer() error = %v", err)
+	}
+
+	if application.AnswerID != recorded.ID {
+		t.Fatalf("application answer_id = %q, want %q", application.AnswerID, recorded.ID)
+	}
+	if application.GoalID != recorded.GoalID {
+		t.Fatalf("application goal_id = %q, want %q", application.GoalID, recorded.GoalID)
+	}
+	if len(application.AppliedMappings) != 3 {
+		t.Fatalf("applied mappings length = %d, want 3", len(application.AppliedMappings))
+	}
+	if updatedGoal.Summary != "Updated summary" {
+		t.Fatalf("summary = %q, want updated summary", updatedGoal.Summary)
+	}
+	if updatedGoal.ScopeHint != "Updated scope hint" {
+		t.Fatalf("scope_hint = %q, want updated scope hint", updatedGoal.ScopeHint)
+	}
+	if updatedGoal.AcceptanceHint != "Updated acceptance hint" {
+		t.Fatalf("acceptance_hint = %q, want updated acceptance hint", updatedGoal.AcceptanceHint)
+	}
+
+	storedGoal, ok, err := goals.Get(context.Background(), updatedGoal.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if storedGoal.ScopeHint != "Updated scope hint" {
+		t.Fatalf("stored scope_hint = %q, want updated scope hint", storedGoal.ScopeHint)
+	}
+}
+
+func TestServiceApplyAnswerAppendsApplicationEvents(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmissionWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalScopeHint: "Updated scope hint",
+	}))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	application, _, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if err != nil {
+		t.Fatalf("ApplyAnswer() error = %v", err)
+	}
+
+	appended := events.Events()
+	if len(appended) != 5 {
+		t.Fatalf("events length = %d, want 5", len(appended))
+	}
+	if appended[3].Type != clarification.EventTypeClarificationAnswerApplied {
+		t.Fatalf("event[3] type = %q, want %q", appended[3].Type, clarification.EventTypeClarificationAnswerApplied)
+	}
+	if appended[3].EntityType != clarification.EntityTypeClarificationAnswer {
+		t.Fatalf("event[3] entity type = %q, want %q", appended[3].EntityType, clarification.EntityTypeClarificationAnswer)
+	}
+	if appended[3].EntityID != string(recorded.ID) {
+		t.Fatalf("event[3] entity id = %q, want %q", appended[3].EntityID, recorded.ID)
+	}
+	if appended[4].Type != clarification.EventTypeGoalHintsUpdated {
+		t.Fatalf("event[4] type = %q, want %q", appended[4].Type, clarification.EventTypeGoalHintsUpdated)
+	}
+	if appended[4].EntityType != clarification.EntityTypeGoal {
+		t.Fatalf("event[4] entity type = %q, want %q", appended[4].EntityType, clarification.EntityTypeGoal)
+	}
+	if appended[4].EntityID != string(recorded.GoalID) {
+		t.Fatalf("event[4] entity id = %q, want %q", appended[4].EntityID, recorded.GoalID)
+	}
+
+	var payload spine.ClarificationAnswerApplicationResult
+	if err := json.Unmarshal(appended[3].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal application payload: %v", err)
+	}
+	if payload.AnswerID != application.AnswerID {
+		t.Fatalf("payload answer_id = %q, want %q", payload.AnswerID, application.AnswerID)
+	}
+}
+
+func TestServiceApplyAnswerRejectsRepeatedApplication(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	if _, _, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest()); err != nil {
+		t.Fatalf("first ApplyAnswer() error = %v", err)
+	}
+	_, _, err = service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if !errors.Is(err, clarification.ErrAlreadyApplied) {
+		t.Fatalf("second ApplyAnswer() error = %v, want ErrAlreadyApplied", err)
+	}
+	if got := len(events.Events()); got != 5 {
+		t.Fatalf("events length = %d, want 5", got)
+	}
+}
+
+func TestServiceApplyAnswerRejectsUnsupportedIntentOwnerMapping(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingIntentOwner)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmissionWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalIntentOwner: "dev_2",
+	}))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	_, _, err = service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if !errors.Is(err, clarification.ErrUnsupportedMapping) {
+		t.Fatalf("ApplyAnswer() error = %v, want ErrUnsupportedMapping", err)
+	}
+	if got := len(events.Events()); got != 3 {
+		t.Fatalf("events length = %d, want 3", got)
+	}
+}
+
+func TestServiceApplyAnswerDoesNotChangeAnswerEvidence(t *testing.T) {
+	service, goals, _, answers, _ := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+	before, ok, err := answers.Get(context.Background(), recorded.ID)
+	if err != nil {
+		t.Fatalf("answers.Get() before error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored answer not found before apply")
+	}
+
+	if _, _, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest()); err != nil {
+		t.Fatalf("ApplyAnswer() error = %v", err)
+	}
+
+	after, ok, err := answers.Get(context.Background(), recorded.ID)
+	if err != nil {
+		t.Fatalf("answers.Get() after error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored answer not found after apply")
+	}
+	if !reflect.DeepEqual(after, before) {
+		t.Fatalf("answer after apply = %#v, want unchanged %#v", after, before)
+	}
+}
+
+func TestServiceApplyAnswerDoesNotAppendReadinessOrContractEvents(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	if _, _, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest()); err != nil {
+		t.Fatalf("ApplyAnswer() error = %v", err)
+	}
+
+	for _, event := range events.Events() {
+		switch event.Type {
+		case "goal.readiness_recheck_requested", "contract.seed_created", "contract.created", "work_item.created", "gate.decision_written", "proof.created":
+			t.Fatalf("unexpected event type %q", event.Type)
+		}
+	}
+}
+
 func requestService(t *testing.T) (*clarification.Service, *store.GoalStore, *store.ClarificationStore, *store.ClarificationAnswerStore, *eventlog.EventLog) {
 	t.Helper()
 
@@ -491,15 +681,31 @@ func createRequest(t *testing.T, service *clarification.Service, goals *store.Go
 }
 
 func answerSubmission(request spine.ClarificationRequest) spine.ClarificationAnswerSubmission {
+	return answerSubmissionWithValues(request, nil)
+}
+
+func answerSubmissionWithValues(request spine.ClarificationRequest, values map[spine.ClarificationMapsTo]string) spine.ClarificationAnswerSubmission {
 	answers := make([]spine.ClarificationAnswerItem, 0, len(request.Questions))
 	for i, question := range request.Questions {
+		value := fmt.Sprintf("Answer %d", i+1)
+		if values != nil {
+			if mapped, ok := values[question.MapsTo]; ok {
+				value = mapped
+			}
+		}
 		answers = append(answers, spine.ClarificationAnswerItem{
 			QuestionID: question.ID,
-			Value:      fmt.Sprintf("Answer %d", i+1),
+			Value:      value,
 		})
 	}
 	return spine.ClarificationAnswerSubmission{
 		Answers:     answers,
 		SubmittedBy: spine.ActorRef{Kind: "user", ID: "dev_1"},
+	}
+}
+
+func applyRequest() spine.ClarificationAnswerApplicationRequest {
+	return spine.ClarificationAnswerApplicationRequest{
+		AppliedBy: spine.ActorRef{Kind: "user", ID: "dev_1"},
 	}
 }

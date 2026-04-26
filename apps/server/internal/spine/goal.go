@@ -52,3 +52,10 @@ type GoalReadinessResult struct {
 	Message     string                    `json:"message"`
 	CheckedAt   time.Time                 `json:"checked_at"`
 }
+
+type GoalHintUpdate struct {
+	Summary        *string
+	ScopeHint      *string
+	AcceptanceHint *string
+	IntentOwner    *ActorRef
+}

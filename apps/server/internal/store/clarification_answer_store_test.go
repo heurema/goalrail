@@ -55,6 +55,30 @@ func TestClarificationAnswerStorePreventsDuplicateAnswerForRequest(t *testing.T)
 	}
 }
 
+func TestClarificationAnswerStorePreventsDuplicateApplication(t *testing.T) {
+	answerStore := store.NewClarificationAnswerStore()
+	created := validClarificationAnswer()
+	if err := answerStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	marked, err := answerStore.MarkApplied(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("first MarkApplied() error = %v", err)
+	}
+	if !marked {
+		t.Fatal("first MarkApplied() marked = false, want true")
+	}
+
+	marked, err = answerStore.MarkApplied(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("second MarkApplied() error = %v", err)
+	}
+	if marked {
+		t.Fatal("second MarkApplied() marked = true, want false")
+	}
+}
+
 func validClarificationAnswer() spine.ClarificationAnswer {
 	return spine.ClarificationAnswer{
 		ID:        "answer-1",

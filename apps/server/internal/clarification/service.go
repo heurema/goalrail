@@ -16,8 +16,11 @@ const (
 	EventTypeClarificationRequested       = "clarification.requested"
 	EventTypeClarificationAnswerRecorded  = "clarification.answer_recorded"
 	EventTypeClarificationRequestAnswered = "clarification.request_answered"
+	EventTypeClarificationAnswerApplied   = "clarification.answer_applied_to_goal"
+	EventTypeGoalHintsUpdated             = "goal.hints_updated"
 	EntityTypeClarificationRequest        = "ClarificationRequest"
 	EntityTypeClarificationAnswer         = "ClarificationAnswer"
+	EntityTypeGoal                        = "Goal"
 )
 
 var (
@@ -26,7 +29,12 @@ var (
 	ErrAlreadyOpen              = errors.New("clarification request already open")
 	ErrRequestNotFound          = errors.New("clarification request not found")
 	ErrInvalidRequestState      = errors.New("clarification request state is not answerable")
+	ErrRequestNotAnswered       = errors.New("clarification request is not answered")
+	ErrAnswerNotFound           = errors.New("clarification answer not found")
+	ErrInvalidAnswerState       = errors.New("clarification answer state is not applicable")
 	ErrAlreadyAnswered          = errors.New("clarification request already answered")
+	ErrAlreadyApplied           = errors.New("clarification answer already applied")
+	ErrUnsupportedMapping       = errors.New("unsupported clarification answer mapping")
 	ErrMissingReadinessReasons  = errors.New("goal has no stored readiness reason codes")
 	ErrNoClarificationQuestions = errors.New("no clarification questions available")
 	ErrPolicyRejected           = errors.New("policy rejected goals cannot create clarification request")
@@ -46,6 +54,7 @@ func (e *ValidationError) Error() string {
 
 type GoalReader interface {
 	Get(context.Context, spine.GoalID) (spine.Goal, bool, error)
+	UpdateHints(context.Context, spine.GoalID, spine.GoalHintUpdate) (spine.Goal, bool, error)
 }
 
 type Store interface {
@@ -57,7 +66,9 @@ type Store interface {
 
 type AnswerStore interface {
 	Create(context.Context, spine.ClarificationAnswer) error
+	Get(context.Context, spine.ClarificationAnswerID) (spine.ClarificationAnswer, bool, error)
 	GetByRequestID(context.Context, spine.ClarificationRequestID) (spine.ClarificationAnswer, bool, error)
+	MarkApplied(context.Context, spine.ClarificationAnswerID) (bool, error)
 }
 
 type EventLog interface {
@@ -222,6 +233,95 @@ func (s *Service) RecordAnswer(ctx context.Context, requestID spine.Clarificatio
 	return recorded, nil
 }
 
+func (s *Service) ApplyAnswer(ctx context.Context, answerID spine.ClarificationAnswerID, input spine.ClarificationAnswerApplicationRequest) (spine.ClarificationAnswerApplicationResult, spine.Goal, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+	}
+	if strings.TrimSpace(input.AppliedBy.Kind) == "" {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, &ValidationError{Field: "applied_by.kind", Message: "is required"}
+	}
+	if strings.TrimSpace(input.AppliedBy.ID) == "" {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, &ValidationError{Field: "applied_by.id", Message: "is required"}
+	}
+
+	answer, ok, err := s.Answers.Get(ctx, answerID)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("get clarification answer: %w", err)
+	}
+	if !ok {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAnswerNotFound
+	}
+	if answer.State != spine.ClarificationAnswerStateRecorded {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("%w: %s", ErrInvalidAnswerState, answer.State)
+	}
+
+	request, ok, err := s.Store.Get(ctx, answer.RequestID)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("get clarification request: %w", err)
+	}
+	if !ok {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrRequestNotFound
+	}
+	if request.State != spine.ClarificationRequestStateAnswered {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("%w: %s", ErrRequestNotAnswered, request.State)
+	}
+
+	goal, ok, err := s.Goals.Get(ctx, answer.GoalID)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("get goal: %w", err)
+	}
+	if !ok {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
+	}
+
+	update, mappings, err := applicationUpdate(goal, request, answer)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+	}
+
+	marked, err := s.Answers.MarkApplied(ctx, answer.ID)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("mark clarification answer applied: %w", err)
+	}
+	if !marked {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAlreadyApplied
+	}
+
+	updatedGoal, ok, err := s.Goals.UpdateHints(ctx, goal.ID, update)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("update goal hints: %w", err)
+	}
+	if !ok {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
+	}
+
+	appliedAt := s.Clock.Now().UTC()
+	result := spine.ClarificationAnswerApplicationResult{
+		AnswerID:        answer.ID,
+		GoalID:          goal.ID,
+		AppliedBy:       input.AppliedBy,
+		AppliedMappings: mappings,
+		AppliedAt:       appliedAt,
+	}
+
+	answerApplied, err := s.clarificationAnswerAppliedEvent(result)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+	}
+	goalHintsUpdated, err := s.goalHintsUpdatedEvent(result)
+	if err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+	}
+	if err := s.Events.Append(ctx, answerApplied); err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("append clarification answer applied event: %w", err)
+	}
+	if err := s.Events.Append(ctx, goalHintsUpdated); err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("append goal hints updated event: %w", err)
+	}
+
+	return result, updatedGoal, nil
+}
+
 func (s *Service) questionsForReasons(reasons []spine.GoalReadinessReasonCode) ([]spine.ClarificationQuestion, error) {
 	if len(reasons) == 0 {
 		return nil, ErrMissingReadinessReasons
@@ -293,6 +393,53 @@ func validateAnswerSubmission(request spine.ClarificationRequest, input spine.Cl
 		}
 	}
 	return nil
+}
+
+func applicationUpdate(goal spine.Goal, request spine.ClarificationRequest, answer spine.ClarificationAnswer) (spine.GoalHintUpdate, []spine.ClarificationAnswerAppliedMapping, error) {
+	questions := make(map[spine.ClarificationQuestionID]spine.ClarificationQuestion, len(request.Questions))
+	for _, question := range request.Questions {
+		questions[question.ID] = question
+	}
+
+	var update spine.GoalHintUpdate
+	mappings := make([]spine.ClarificationAnswerAppliedMapping, 0, len(answer.Answers))
+	for _, item := range answer.Answers {
+		question, ok := questions[item.QuestionID]
+		if !ok {
+			return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.question_id", Message: "unknown question_id"}
+		}
+		value := strings.TrimSpace(item.Value)
+		if value == "" {
+			return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.value", Message: "mapped value is required"}
+		}
+
+		mapping := spine.ClarificationAnswerAppliedMapping{
+			QuestionID: item.QuestionID,
+			MapsTo:     question.MapsTo,
+			NewValue:   value,
+		}
+		switch question.MapsTo {
+		case spine.ClarificationMapsToGoalSummary:
+			mapping.OldValue = goal.Summary
+			update.Summary = stringPtr(value)
+		case spine.ClarificationMapsToGoalScopeHint:
+			mapping.OldValue = goal.ScopeHint
+			update.ScopeHint = stringPtr(value)
+		case spine.ClarificationMapsToGoalAcceptanceHint:
+			mapping.OldValue = goal.AcceptanceHint
+			update.AcceptanceHint = stringPtr(value)
+		case spine.ClarificationMapsToGoalIntentOwner:
+			return spine.GoalHintUpdate{}, nil, fmt.Errorf("%w: %s requires actor-shaped value", ErrUnsupportedMapping, question.MapsTo)
+		default:
+			return spine.GoalHintUpdate{}, nil, fmt.Errorf("%w: %s", ErrUnsupportedMapping, question.MapsTo)
+		}
+		mappings = append(mappings, mapping)
+	}
+	if len(mappings) == 0 {
+		return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers", Message: "at least one applicable answer is required"}
+	}
+
+	return update, mappings, nil
 }
 
 func questionSpec(reason spine.GoalReadinessReasonCode) (clarificationQuestionSpec, bool) {
@@ -416,11 +563,67 @@ func (s *Service) clarificationRequestAnsweredEvent(requestID spine.Clarificatio
 	}, nil
 }
 
+func (s *Service) clarificationAnswerAppliedEvent(result spine.ClarificationAnswerApplicationResult) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new clarification answer applied event id: %w", err)
+	}
+
+	payload, err := json.Marshal(result)
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal clarification answer applied event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       EventTypeClarificationAnswerApplied,
+		EntityType: EntityTypeClarificationAnswer,
+		EntityID:   string(result.AnswerID),
+		Timestamp:  result.AppliedAt,
+		Payload:    payload,
+	}, nil
+}
+
+func (s *Service) goalHintsUpdatedEvent(result spine.ClarificationAnswerApplicationResult) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new goal hints updated event id: %w", err)
+	}
+
+	payload, err := json.Marshal(goalHintsUpdatedPayload{
+		AnswerID:        result.AnswerID,
+		GoalID:          result.GoalID,
+		AppliedBy:       result.AppliedBy,
+		AppliedMappings: result.AppliedMappings,
+		AppliedAt:       result.AppliedAt,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal goal hints updated event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       EventTypeGoalHintsUpdated,
+		EntityType: EntityTypeGoal,
+		EntityID:   string(result.GoalID),
+		Timestamp:  result.AppliedAt,
+		Payload:    payload,
+	}, nil
+}
+
 type clarificationRequestAnsweredPayload struct {
 	RequestID     spine.ClarificationRequestID    `json:"request_id"`
 	AnswerID      spine.ClarificationAnswerID     `json:"answer_id"`
 	PreviousState spine.ClarificationRequestState `json:"previous_state"`
 	NewState      spine.ClarificationRequestState `json:"new_state"`
+}
+
+type goalHintsUpdatedPayload struct {
+	AnswerID        spine.ClarificationAnswerID               `json:"answer_id"`
+	GoalID          spine.GoalID                              `json:"goal_id"`
+	AppliedBy       spine.ActorRef                            `json:"applied_by"`
+	AppliedMappings []spine.ClarificationAnswerAppliedMapping `json:"applied_mappings"`
+	AppliedAt       time.Time                                 `json:"applied_at"`
 }
 
 func (s *Service) validateDependencies() error {
@@ -457,6 +660,10 @@ func cloneAnswerItems(answers []spine.ClarificationAnswerItem) []spine.Clarifica
 		return nil
 	}
 	return append([]spine.ClarificationAnswerItem(nil), answers...)
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 type clarificationQuestionSpec struct {

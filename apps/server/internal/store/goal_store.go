@@ -82,6 +82,30 @@ func (s *GoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state sp
 	return cloneGoal(updated), true, nil
 }
 
+func (s *GoalStore) UpdateHints(_ context.Context, id spine.GoalID, update spine.GoalHintUpdate) (spine.Goal, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updated, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	if update.Summary != nil {
+		updated.Summary = *update.Summary
+	}
+	if update.ScopeHint != nil {
+		updated.ScopeHint = *update.ScopeHint
+	}
+	if update.AcceptanceHint != nil {
+		updated.AcceptanceHint = *update.AcceptanceHint
+	}
+	if update.IntentOwner != nil {
+		updated.IntentOwner = *update.IntentOwner
+	}
+	s.goals[id] = cloneGoal(updated)
+	return cloneGoal(updated), true, nil
+}
+
 func cloneGoal(created spine.Goal) spine.Goal {
 	if created.SourceRefs != nil {
 		created.SourceRefs = append([]spine.SourceRef(nil), created.SourceRefs...)

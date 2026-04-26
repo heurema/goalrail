@@ -39,6 +39,7 @@ func newHTTPServer(cfg config.Config) *http.Server {
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
+		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
 
 	return httpserver.NewServer(cfg.Addr, router)

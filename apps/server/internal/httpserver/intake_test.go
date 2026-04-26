@@ -758,6 +758,228 @@ func TestPostClarificationRequestAnswersValidation(t *testing.T) {
 	}
 }
 
+func TestPostClarificationAnswersApplyReturnsUpdatedGoal(t *testing.T) {
+	server := testServer(t)
+	answer := createClarificationAnswerForReasons(t, server, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalScopeHint:      "Updated scope hint",
+		spine.ClarificationMapsToGoalAcceptanceHint: "Updated acceptance hint",
+	}, spine.GoalReadinessReasonMissingScopeHint, spine.GoalReadinessReasonMissingAcceptanceHint)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var body struct {
+		Application spine.ClarificationAnswerApplicationResult `json:"application"`
+		Goal        spine.Goal                                 `json:"goal"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Application.AnswerID != answer.ID {
+		t.Fatalf("application answer_id = %q, want %q", body.Application.AnswerID, answer.ID)
+	}
+	if body.Goal.ScopeHint != "Updated scope hint" {
+		t.Fatalf("scope_hint = %q, want updated scope hint", body.Goal.ScopeHint)
+	}
+	if body.Goal.AcceptanceHint != "Updated acceptance hint" {
+		t.Fatalf("acceptance_hint = %q, want updated acceptance hint", body.Goal.AcceptanceHint)
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), body.Goal.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if stored.ScopeHint != "Updated scope hint" {
+		t.Fatalf("stored scope_hint = %q, want updated scope hint", stored.ScopeHint)
+	}
+}
+
+func TestPostClarificationAnswersApplyUnknownAnswerReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/missing/apply", applyRequestJSON())
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
+func TestPostClarificationAnswersApplyValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "missing applied_by",
+			body: `{}`,
+		},
+		{
+			name: "missing applied_by kind",
+			body: `{"applied_by":{"id":"dev_1"}}`,
+		},
+		{
+			name: "missing applied_by id",
+			body: `{"applied_by":{"kind":"user"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			answer := createClarificationAnswerForReasons(t, server, map[spine.ClarificationMapsTo]string{
+				spine.ClarificationMapsToGoalScopeHint: "Updated scope hint",
+			}, spine.GoalReadinessReasonMissingScopeHint)
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", tt.body)
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "validation_failed" {
+				t.Fatalf("error code = %q, want %q", body.Error.Code, "validation_failed")
+			}
+		})
+	}
+}
+
+func TestPostClarificationAnswersApplyRejectsRepeatedApplication(t *testing.T) {
+	server := testServer(t)
+	answer := createClarificationAnswerForReasons(t, server, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalScopeHint: "Updated scope hint",
+	}, spine.GoalReadinessReasonMissingScopeHint)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	if first.code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusOK, first.body)
+	}
+	second := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	if second.code != http.StatusConflict {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, second.body, &body)
+	if body.Error.Code != "already_applied" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "already_applied")
+	}
+}
+
+func TestPostClarificationAnswersApplyUpdatesAllowedMappings(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason spine.GoalReadinessReasonCode
+		mapsTo spine.ClarificationMapsTo
+		value  string
+		assert func(t *testing.T, goal spine.Goal, value string)
+	}{
+		{
+			name:   "summary",
+			reason: spine.GoalReadinessReasonMissingGoalSummary,
+			mapsTo: spine.ClarificationMapsToGoalSummary,
+			value:  "Updated summary",
+			assert: func(t *testing.T, goal spine.Goal, value string) {
+				t.Helper()
+				if goal.Summary != value {
+					t.Fatalf("summary = %q, want %q", goal.Summary, value)
+				}
+			},
+		},
+		{
+			name:   "scope hint",
+			reason: spine.GoalReadinessReasonMissingScopeHint,
+			mapsTo: spine.ClarificationMapsToGoalScopeHint,
+			value:  "Updated scope hint",
+			assert: func(t *testing.T, goal spine.Goal, value string) {
+				t.Helper()
+				if goal.ScopeHint != value {
+					t.Fatalf("scope_hint = %q, want %q", goal.ScopeHint, value)
+				}
+			},
+		},
+		{
+			name:   "acceptance hint",
+			reason: spine.GoalReadinessReasonMissingAcceptanceHint,
+			mapsTo: spine.ClarificationMapsToGoalAcceptanceHint,
+			value:  "Updated acceptance hint",
+			assert: func(t *testing.T, goal spine.Goal, value string) {
+				t.Helper()
+				if goal.AcceptanceHint != value {
+					t.Fatalf("acceptance_hint = %q, want %q", goal.AcceptanceHint, value)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			answer := createClarificationAnswerForReasons(t, server, map[spine.ClarificationMapsTo]string{
+				tt.mapsTo: tt.value,
+			}, tt.reason)
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+			if response.code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+			}
+
+			var body struct {
+				Goal spine.Goal `json:"goal"`
+			}
+			decodeJSON(t, response.body, &body)
+			tt.assert(t, body.Goal, tt.value)
+		})
+	}
+}
+
+func TestPostClarificationAnswersApplyRejectsRawTextIntentOwner(t *testing.T) {
+	server := testServer(t)
+	answer := createClarificationAnswerForReasons(t, server, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalIntentOwner: "dev_2",
+	}, spine.GoalReadinessReasonMissingIntentOwner)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unsupported_mapping" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "unsupported_mapping")
+	}
+}
+
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
 
@@ -906,12 +1128,80 @@ func createClarificationRequest(t *testing.T, server testServerDeps) spine.Clari
 	return request
 }
 
+func createClarificationRequestForReasons(t *testing.T, server testServerDeps, reasons ...spine.GoalReadinessReasonCode) spine.ClarificationRequest {
+	t.Helper()
+
+	created := spine.Goal{
+		ID:            "direct-goal-1",
+		IntakeID:      "direct-intake-1",
+		RepoBindingID: "repo_demo_1",
+		Title:         "Direct goal",
+		Summary:       "Original summary",
+		SourceRefs: []spine.SourceRef{
+			{Kind: "test", ID: "direct-intake-1"},
+		},
+		RequestAuthor:            spine.ActorRef{Kind: "user", ID: "dev_1"},
+		IntentOwner:              spine.ActorRef{Kind: "user", ID: "dev_1"},
+		State:                    spine.GoalStateNeedsClarification,
+		LastReadinessReasonCodes: append([]spine.GoalReadinessReasonCode(nil), reasons...),
+		CreatedAt:                testTime(),
+	}
+	for _, reason := range reasons {
+		if reason == spine.GoalReadinessReasonMissingGoalSummary {
+			created.Summary = ""
+		}
+		if reason == spine.GoalReadinessReasonMissingIntentOwner {
+			created.IntentOwner = spine.ActorRef{}
+		}
+	}
+	if err := server.goals.Create(context.Background(), created); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("POST /v1/goals/{id}/clarification-requests status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+
+	var request spine.ClarificationRequest
+	decodeJSON(t, response.body, &request)
+	return request
+}
+
+func createClarificationAnswerForReasons(t *testing.T, server testServerDeps, values map[spine.ClarificationMapsTo]string, reasons ...spine.GoalReadinessReasonCode) spine.ClarificationAnswer {
+	t.Helper()
+
+	request := createClarificationRequestForReasons(t, server, reasons...)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", answerSubmissionJSONWithValues(request, values))
+	if response.code != http.StatusCreated {
+		t.Fatalf("POST /v1/clarification-requests/{id}/answers status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+
+	var answer spine.ClarificationAnswer
+	decodeJSON(t, response.body, &answer)
+	return answer
+}
+
 func answerSubmissionJSON(request spine.ClarificationRequest) string {
+	return answerSubmissionJSONWithValues(request, nil)
+}
+
+func answerSubmissionJSONWithValues(request spine.ClarificationRequest, values map[spine.ClarificationMapsTo]string) string {
 	answers := make([]string, 0, len(request.Questions))
 	for i, question := range request.Questions {
-		answers = append(answers, fmt.Sprintf(`{"question_id":%q,"value":"Answer %d"}`, question.ID, i+1))
+		value := fmt.Sprintf("Answer %d", i+1)
+		if values != nil {
+			if mapped, ok := values[question.MapsTo]; ok {
+				value = mapped
+			}
+		}
+		answers = append(answers, fmt.Sprintf(`{"question_id":%q,"value":%q}`, question.ID, value))
 	}
 	return fmt.Sprintf(`{"submitted_by":{"kind":"user","id":"dev_1"},"answers":[%s]}`, strings.Join(answers, ","))
+}
+
+func applyRequestJSON() string {
+	return `{"applied_by":{"kind":"user","id":"dev_1","display_name":"Developer"}}`
 }
 
 func hasReadinessReason(reasons []spine.GoalReadinessReasonCode, want spine.GoalReadinessReasonCode) bool {

@@ -91,3 +91,22 @@ type ClarificationAnswerSubmission struct {
 	Answers     []ClarificationAnswerItem `json:"answers"`
 	SubmittedBy ActorRef                  `json:"submitted_by"`
 }
+
+type ClarificationAnswerApplicationRequest struct {
+	AppliedBy ActorRef `json:"applied_by"`
+}
+
+type ClarificationAnswerAppliedMapping struct {
+	QuestionID ClarificationQuestionID `json:"question_id"`
+	MapsTo     ClarificationMapsTo     `json:"maps_to"`
+	OldValue   string                  `json:"old_value,omitempty"`
+	NewValue   string                  `json:"new_value"`
+}
+
+type ClarificationAnswerApplicationResult struct {
+	AnswerID        ClarificationAnswerID               `json:"answer_id"`
+	GoalID          GoalID                              `json:"goal_id"`
+	AppliedBy       ActorRef                            `json:"applied_by"`
+	AppliedMappings []ClarificationAnswerAppliedMapping `json:"applied_mappings"`
+	AppliedAt       time.Time                           `json:"applied_at"`
+}

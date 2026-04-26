@@ -17,12 +17,14 @@ type ClarificationAnswerStore struct {
 	mu        sync.RWMutex
 	answers   map[spine.ClarificationAnswerID]spine.ClarificationAnswer
 	byRequest map[spine.ClarificationRequestID]spine.ClarificationAnswerID
+	applied   map[spine.ClarificationAnswerID]bool
 }
 
 func NewClarificationAnswerStore() *ClarificationAnswerStore {
 	return &ClarificationAnswerStore{
 		answers:   make(map[spine.ClarificationAnswerID]spine.ClarificationAnswer),
 		byRequest: make(map[spine.ClarificationRequestID]spine.ClarificationAnswerID),
+		applied:   make(map[spine.ClarificationAnswerID]bool),
 	}
 }
 
@@ -66,6 +68,17 @@ func (s *ClarificationAnswerStore) GetByRequestID(_ context.Context, requestID s
 		return spine.ClarificationAnswer{}, false, nil
 	}
 	return cloneClarificationAnswer(answer), true, nil
+}
+
+func (s *ClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.applied[id] {
+		return false, nil
+	}
+	s.applied[id] = true
+	return true, nil
 }
 
 func cloneClarificationAnswer(answer spine.ClarificationAnswer) spine.ClarificationAnswer {
