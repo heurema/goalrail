@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twelve kernel/CLI/server/domain boundary ADRs
+- thirteen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -97,6 +97,8 @@ The project currently has:
   transition with no readiness re-check, contract seed, work item, gate, or proof
 - ADR-0012 documents explicit readiness re-check after applied answers as a
   separate server-owned transition before any contract seed boundary
+- ADR-0013 documents `ContractSeed` as an explicit server-owned canonical
+  bridge from `Goal(ready_for_contract_seed)` to future contract drafting
 
 ### Delivery model
 - roadmap phases defined
@@ -104,7 +106,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twelve boundary ADRs exist
+- kernel schema note and thirteen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -138,6 +140,7 @@ The project currently has:
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011 and implemented as an in-memory prototype only
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
+- the `ContractSeed` boundary is documented in ADR-0013 as an explicit server-owned snapshot from `Goal(ready_for_contract_seed)` for future contract drafting, but no `ContractSeed` implementation exists yet
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -150,8 +153,8 @@ The project currently has:
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, `ClarificationRequest`, and `ClarificationAnswer` prototypes yet
 - no durable server storage for intake, Goal, clarification, answer application, or event log persistence yet; Postgres is only used to validate and derive Project / RepoBinding context for intake
-- no automatic readiness re-check after answer application, no contract composition, and no contract seed yet
-- no server-created Contract, WorkItem, GateDecision, or Proof yet
+- no automatic readiness re-check after answer application, no contract composition, and no `ContractSeed` implementation yet
+- no server-created `ContractSeed`, Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet

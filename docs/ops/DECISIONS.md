@@ -434,3 +434,21 @@ Rationale:
 - keeps answer application, readiness, and contract seed as separate auditable transitions
 - prevents hidden transition chains from turning clarified intent into contract or executable work
 - gives the next implementation slice a bounded target using the existing readiness endpoint
+
+## D-0037 — ContractSeed is explicit canonical bridge before drafting
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- `ContractSeed` may be created only from a Goal whose state is `ready_for_contract_seed`
+- seed creation is an explicit server-owned transition, not an automatic side effect of readiness re-check
+- `ContractSeed` is canonical state and a snapshot of readiness-checked Goal intent for future contract drafting
+- `ContractSeed` is not `ContractDraft`, not an approved contract, not executable work, and not approval
+- `ContractSeed` must not create `WorkItem`, `GateDecision`, or `Proof`
+- repeated seed creation should return `409 already_seeded` in v0
+- this boundary does not modify ADR-0010 persistence or introduce new durable storage requirements
+
+Rationale:
+- preserves a clear bridge between intent-plane readiness and contract drafting
+- avoids hidden transition chains from readiness to contract artifacts or executable work
+- gives the next implementation slice a bounded target before `ContractDraft` generation
