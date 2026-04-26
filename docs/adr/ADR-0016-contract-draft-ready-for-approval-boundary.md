@@ -30,9 +30,9 @@ This boundary remains before approved Contract, approval policy, `WorkItem`,
 execution, `GateDecision`, and `Proof`.
 
 ADR-0010 defines the Organization / Project / RepoBinding / Postgres persistence
-foundation. Current implementation can store `ContractDraft` in memory or in
-Postgres-backed mode using the existing table, but this ADR defines a domain
-boundary and does not add storage or migration requirements.
+foundation. The implementation stores `ContractDraft` in memory or in
+Postgres-backed mode using the existing `contract_drafts` table. No new table is
+introduced for this boundary.
 
 ## Decision
 
@@ -42,6 +42,10 @@ The server may transition `ContractDraft` from `draft` to
 The transition is explicit, server-owned, and evented. CLI, skills, web
 resources, and integrations may request or display the transition, but they do
 not own canonical `ready_for_approval` truth.
+
+The request must include a `marked_by` actor reference. The draft must exist,
+must currently be `draft`, and must pass minimum completeness checks before the
+state changes.
 
 The transition requires minimum draft completeness checks before the state can
 change.
@@ -125,8 +129,9 @@ Recommended event:
 Event payload should include:
 
 - `contract_draft_id`
+- `contract_seed_id`
+- `goal_id`
 - `marked_by`
-- `readiness_checks`
 - `previous_state=draft`
 - `new_state=ready_for_approval`
 - `marked_at`
@@ -251,8 +256,6 @@ field edits must go through the draft update boundary.
 
 This ADR does not define or implement:
 
-- code implementation
-- endpoint finalization as public API canon
 - approved Contract
 - contract approval
 - approval policy
@@ -264,25 +267,21 @@ This ADR does not define or implement:
 - verification bundle
 - `GateDecision`
 - `Proof`
-- durable storage changes
-- Postgres migration
 - LLM review or rewrite
 - CLI integration
 - web UI
 
 ## Implementation implications
 
-A later implementation slice may add:
+The implementation slice uses:
 
-- endpoint candidate: `POST /v1/contract-drafts/{id}/ready-for-approval`
-- alternative endpoint candidate:
-  `POST /v1/contract-drafts/{id}/mark-ready-for-approval`
+- endpoint: `POST /v1/contract-drafts/{id}/ready-for-approval`
 - service method to validate completeness
 - `draft -> ready_for_approval` state transition
 - required `marked_by` actor
 - event: `contract_draft.marked_ready_for_approval`
-
-Endpoint choice is not final product API canon.
+- the existing `contract_drafts` table with its state check allowing `draft` and
+  `ready_for_approval`
 
 The immediate implementation slice must not:
 
@@ -292,24 +291,18 @@ The immediate implementation slice must not:
 - start execution
 - write `GateDecision` or `Proof`
 - modify ADR-0010 persistence scope
-- add migrations unless a later storage decision requires them
 
 ## Open questions
 
-- Which endpoint shape should v0 use?
 - Should `ready_for_approval` require `proposed_non_goals`?
 - Should `ready_for_approval` require `proposed_expected_checks`?
 - Should `ready_for_approval` require `risk_hints`?
-- Should edits after `ready_for_approval` be blocked, or require an explicit
-  revert-to-draft / supersede boundary?
 - Should readiness checks be stored as event payload only or a separate
   projection?
 
 Recommended initial direction:
 
-- use `POST /v1/contract-drafts/{id}/ready-for-approval` for v0.
 - keep `proposed_non_goals` optional in v0.
 - keep `proposed_expected_checks` optional in v0.
 - keep `risk_hints` optional in v0.
-- require future revert/update boundary before edits after `ready_for_approval`.
 - store readiness checks in the event payload.

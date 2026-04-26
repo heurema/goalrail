@@ -180,7 +180,7 @@ CREATE TABLE contract_drafts (
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT contract_drafts_contract_seed_id_unique UNIQUE (contract_seed_id),
-    CONSTRAINT contract_drafts_state_check CHECK (state IN ('draft'))
+    CONSTRAINT contract_drafts_state_check CHECK (state IN ('draft', 'ready_for_approval'))
 );
 
 CREATE INDEX contract_drafts_organization_created_at_idx

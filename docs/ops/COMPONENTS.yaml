@@ -61,7 +61,7 @@ components:
       - apps/server/internal/store/postgres_contract_draft_store.go
       - apps/server/internal/postgres/migrations/00001_init.sql
     public_claim_allowed: false
-    notes: ContractSeed creation plus ContractDraft creation, review/update, and ready_for_approval are implemented as bounded server prototypes, backed by Postgres when DB is configured and in-memory otherwise. They append contract_seed.created, contract_draft.created, contract_draft.updated, and contract_draft.marked_ready_for_approval events; in the Postgres path, the canonical write plus event append share one transaction. ready_for_approval is not approval. Approved Contract, contract approval, WorkItem, runner, gate, and proof remain unimplemented.
+    notes: ContractSeed creation plus ContractDraft creation, review/update, and ready_for_approval are implemented as bounded server prototypes, backed by Postgres when DB is configured and in-memory otherwise. The editable init migration allows ContractDraft states draft and ready_for_approval. They append contract_seed.created, contract_draft.created, contract_draft.updated, and contract_draft.marked_ready_for_approval events; in the Postgres path, the canonical write plus event append share one transaction. ready_for_approval is not approval. Approved Contract, contract approval, WorkItem, runner, gate, and proof remain unimplemented.
   task_shaping:
     name: Task Shaping
     status: docs_only

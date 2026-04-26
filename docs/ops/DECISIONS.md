@@ -559,7 +559,7 @@ Decision:
 - the transition writes `contract_draft.marked_ready_for_approval`
 - the transition must not mutate proposed fields; proposed-field edits stay in the ContractDraft update boundary
 - the transition does not approve a Contract, create approved Contract, create `WorkItem`, start execution, write `GateDecision`, or create `Proof`
-- no new storage or migration requirement is introduced by this decision
+- no new table is introduced; the pre-production init migration allows `draft` and `ready_for_approval` in the existing `contract_drafts.state` check
 
 Rationale:
 - creates an auditable handoff point between draft review/update and later approval
