@@ -72,6 +72,32 @@ func (s *ClarificationStore) GetOpenByGoalID(_ context.Context, goalID spine.Goa
 	return cloneClarificationRequest(request), true, nil
 }
 
+func (s *ClarificationStore) UpdateState(_ context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	updated, ok := s.requests[id]
+	if !ok {
+		return spine.ClarificationRequest{}, false, nil
+	}
+	if state == spine.ClarificationRequestStateOpen {
+		if openID, exists := s.openByGoal[updated.GoalID]; exists && openID != id {
+			return spine.ClarificationRequest{}, true, ErrClarificationRequestAlreadyOpen
+		}
+	}
+
+	if updated.State == spine.ClarificationRequestStateOpen && state != spine.ClarificationRequestStateOpen {
+		delete(s.openByGoal, updated.GoalID)
+	}
+	updated.State = state
+	s.requests[id] = cloneClarificationRequest(updated)
+	if state == spine.ClarificationRequestStateOpen {
+		s.openByGoal[updated.GoalID] = id
+	}
+
+	return cloneClarificationRequest(updated), true, nil
+}
+
 func cloneClarificationRequest(request spine.ClarificationRequest) spine.ClarificationRequest {
 	if request.ReasonCodes != nil {
 		request.ReasonCodes = append([]spine.GoalReadinessReasonCode(nil), request.ReasonCodes...)

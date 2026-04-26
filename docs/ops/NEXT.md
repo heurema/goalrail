@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, Goal readiness, and ClarificationRequest prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, Goal readiness, ClarificationRequest, and ClarificationAnswer recording prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
@@ -87,11 +87,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. ClarificationAnswer recording prototype
-   - record canonical answers for open ClarificationRequests
-   - require all request questions answered in the first implementation slice
-   - transition request from `open` to `answered`
-   - do not apply answers to Goal hints, trigger readiness re-check, or create contract seed / contract draft / work items / gate / proof
+1. Answer application to Goal hints boundary design
+   - define the explicit server-owned transition from recorded ClarificationAnswer evidence to Goal intent-plane hints
+   - keep answer application separate from answer recording and from automatic readiness re-check
+   - do not create contract seed / contract draft / work items / gate / proof
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner

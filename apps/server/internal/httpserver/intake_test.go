@@ -39,6 +39,7 @@ type testServerDeps struct {
 	intakes        *store.IntakeStore
 	goals          *store.GoalStore
 	clarifications *store.ClarificationStore
+	answers        *store.ClarificationAnswerStore
 	events         *eventlog.EventLog
 	idFactory      *sequenceIDs
 }
@@ -585,19 +586,192 @@ func TestPostGoalClarificationRequestsRejectsDuplicateOpenRequest(t *testing.T) 
 	}
 }
 
+func TestPostClarificationRequestAnswersReturnsRecordedAnswer(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequest(t, server)
+	body := answerSubmissionJSON(request)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var answer spine.ClarificationAnswer
+	decodeJSON(t, response.body, &answer)
+	if answer.State != spine.ClarificationAnswerStateRecorded {
+		t.Fatalf("state = %q, want %q", answer.State, spine.ClarificationAnswerStateRecorded)
+	}
+	if answer.RequestID != request.ID {
+		t.Fatalf("request_id = %q, want %q", answer.RequestID, request.ID)
+	}
+	if answer.GoalID != request.GoalID {
+		t.Fatalf("goal_id = %q, want %q", answer.GoalID, request.GoalID)
+	}
+	if len(answer.Answers) != len(request.Questions) {
+		t.Fatalf("answers length = %d, want %d", len(answer.Answers), len(request.Questions))
+	}
+
+	storedAnswer, ok, err := server.answers.Get(context.Background(), answer.ID)
+	if err != nil {
+		t.Fatalf("answers.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored clarification answer not found")
+	}
+	if storedAnswer.ID != answer.ID {
+		t.Fatalf("stored answer id = %q, want %q", storedAnswer.ID, answer.ID)
+	}
+
+	storedRequest, ok, err := server.clarifications.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("clarifications.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored clarification request not found")
+	}
+	if storedRequest.State != spine.ClarificationRequestStateAnswered {
+		t.Fatalf("request state = %q, want %q", storedRequest.State, spine.ClarificationRequestStateAnswered)
+	}
+}
+
+func TestPostClarificationRequestAnswersUnknownRequestReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/missing/answers", `{
+  "submitted_by": {"kind": "user", "id": "dev_1"},
+  "answers": [{"question_id": "question-1", "value": "Scope"}]
+}`)
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
+func TestPostClarificationRequestAnswersRejectsAlreadyAnsweredRequest(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequest(t, server)
+	body := answerSubmissionJSON(request)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	if first.code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
+	}
+	second := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	if second.code != http.StatusConflict {
+		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
+	}
+
+	var responseBody struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, second.body, &responseBody)
+	if responseBody.Error.Code != "already_answered" {
+		t.Fatalf("error code = %q, want %q", responseBody.Error.Code, "already_answered")
+	}
+}
+
+func TestPostClarificationRequestAnswersValidation(t *testing.T) {
+	tests := []struct {
+		name string
+		body func(spine.ClarificationRequest) string
+	}{
+		{
+			name: "missing submitted_by",
+			body: func(request spine.ClarificationRequest) string {
+				return fmt.Sprintf(`{"answers":[{"question_id":%q,"value":"Scope"}]}`, request.Questions[0].ID)
+			},
+		},
+		{
+			name: "missing submitted_by kind",
+			body: func(request spine.ClarificationRequest) string {
+				return fmt.Sprintf(`{"submitted_by":{"id":"dev_1"},"answers":[{"question_id":%q,"value":"Scope"}]}`, request.Questions[0].ID)
+			},
+		},
+		{
+			name: "missing submitted_by id",
+			body: func(request spine.ClarificationRequest) string {
+				return fmt.Sprintf(`{"submitted_by":{"kind":"user"},"answers":[{"question_id":%q,"value":"Scope"}]}`, request.Questions[0].ID)
+			},
+		},
+		{
+			name: "missing answers",
+			body: func(spine.ClarificationRequest) string {
+				return `{"submitted_by":{"kind":"user","id":"dev_1"}}`
+			},
+		},
+		{
+			name: "unknown question_id",
+			body: func(spine.ClarificationRequest) string {
+				return `{"submitted_by":{"kind":"user","id":"dev_1"},"answers":[{"question_id":"unknown","value":"Scope"}]}`
+			},
+		},
+		{
+			name: "duplicate question_id",
+			body: func(request spine.ClarificationRequest) string {
+				return fmt.Sprintf(`{"submitted_by":{"kind":"user","id":"dev_1"},"answers":[{"question_id":%q,"value":"Scope"},{"question_id":%q,"value":"Duplicate"}]}`, request.Questions[0].ID, request.Questions[0].ID)
+			},
+		},
+		{
+			name: "missing answer for one question",
+			body: func(request spine.ClarificationRequest) string {
+				return fmt.Sprintf(`{"submitted_by":{"kind":"user","id":"dev_1"},"answers":[{"question_id":%q,"value":"Scope"}]}`, request.Questions[0].ID)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			request := createClarificationRequest(t, server)
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", tt.body(request))
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "validation_failed" {
+				t.Fatalf("error code = %q, want %q", body.Error.Code, "validation_failed")
+			}
+		})
+	}
+}
+
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
 
 	intakeStore := store.NewIntakeStore()
 	goalStore := store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
+	answerStore := store.NewClarificationAnswerStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, events, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
 	goalService := goal.NewService(intakeStore, goalStore, events, fixedClock{now: testTime()}, ids)
 	goalHandler := httpserver.NewGoalHandler(goalService)
-	clarificationService := clarification.NewService(goalStore, clarificationStore, events, fixedClock{now: testTime()}, ids)
+	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 
 	return testServerDeps{
@@ -605,6 +779,7 @@ func testServer(t *testing.T) testServerDeps {
 		intakes:        intakeStore,
 		goals:          goalStore,
 		clarifications: clarificationStore,
+		answers:        answerStore,
 		events:         events,
 		idFactory:      ids,
 	}
@@ -623,6 +798,7 @@ type sequenceIDs struct {
 	goal          int
 	clarification int
 	question      int
+	answer        int
 	event         int
 }
 
@@ -649,6 +825,11 @@ func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID,
 func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionID, error) {
 	g.question++
 	return spine.ClarificationQuestionID(fmt.Sprintf("question-%d", g.question)), nil
+}
+
+func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
+	g.answer++
+	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
 }
 
 func testTime() time.Time {
@@ -709,6 +890,28 @@ func createClarificationReadyGoal(t *testing.T, server testServerDeps) spine.Goa
 	}
 	decodeJSON(t, response.body, &body)
 	return body.Goal
+}
+
+func createClarificationRequest(t *testing.T, server testServerDeps) spine.ClarificationRequest {
+	t.Helper()
+
+	created := createClarificationReadyGoal(t, server)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("POST /v1/goals/{id}/clarification-requests status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+
+	var request spine.ClarificationRequest
+	decodeJSON(t, response.body, &request)
+	return request
+}
+
+func answerSubmissionJSON(request spine.ClarificationRequest) string {
+	answers := make([]string, 0, len(request.Questions))
+	for i, question := range request.Questions {
+		answers = append(answers, fmt.Sprintf(`{"question_id":%q,"value":"Answer %d"}`, question.ID, i+1))
+	}
+	return fmt.Sprintf(`{"submitted_by":{"kind":"user","id":"dev_1"},"answers":[%s]}`, strings.Join(answers, ","))
 }
 
 func hasReadinessReason(reasons []spine.GoalReadinessReasonCode, want spine.GoalReadinessReasonCode) bool {

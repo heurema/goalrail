@@ -13,18 +13,36 @@ import (
 )
 
 const (
-	EventTypeClarificationRequested = "clarification.requested"
-	EntityTypeClarificationRequest  = "ClarificationRequest"
+	EventTypeClarificationRequested       = "clarification.requested"
+	EventTypeClarificationAnswerRecorded  = "clarification.answer_recorded"
+	EventTypeClarificationRequestAnswered = "clarification.request_answered"
+	EntityTypeClarificationRequest        = "ClarificationRequest"
+	EntityTypeClarificationAnswer         = "ClarificationAnswer"
 )
 
 var (
 	ErrGoalNotFound             = errors.New("goal not found")
 	ErrInvalidGoalState         = errors.New("goal state is not clarification-requestable")
 	ErrAlreadyOpen              = errors.New("clarification request already open")
+	ErrRequestNotFound          = errors.New("clarification request not found")
+	ErrInvalidRequestState      = errors.New("clarification request state is not answerable")
+	ErrAlreadyAnswered          = errors.New("clarification request already answered")
 	ErrMissingReadinessReasons  = errors.New("goal has no stored readiness reason codes")
 	ErrNoClarificationQuestions = errors.New("no clarification questions available")
 	ErrPolicyRejected           = errors.New("policy rejected goals cannot create clarification request")
 )
+
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	if e.Field == "" {
+		return e.Message
+	}
+	return e.Field + ": " + e.Message
+}
 
 type GoalReader interface {
 	Get(context.Context, spine.GoalID) (spine.Goal, bool, error)
@@ -32,7 +50,14 @@ type GoalReader interface {
 
 type Store interface {
 	Create(context.Context, spine.ClarificationRequest) error
+	Get(context.Context, spine.ClarificationRequestID) (spine.ClarificationRequest, bool, error)
 	GetOpenByGoalID(context.Context, spine.GoalID) (spine.ClarificationRequest, bool, error)
+	UpdateState(context.Context, spine.ClarificationRequestID, spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error)
+}
+
+type AnswerStore interface {
+	Create(context.Context, spine.ClarificationAnswer) error
+	GetByRequestID(context.Context, spine.ClarificationRequestID) (spine.ClarificationAnswer, bool, error)
 }
 
 type EventLog interface {
@@ -46,24 +71,27 @@ type Clock interface {
 type IDGenerator interface {
 	NewClarificationRequestID() (spine.ClarificationRequestID, error)
 	NewClarificationQuestionID() (spine.ClarificationQuestionID, error)
+	NewClarificationAnswerID() (spine.ClarificationAnswerID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
-	Goals  GoalReader
-	Store  Store
-	Events EventLog
-	Clock  Clock
-	IDs    IDGenerator
+	Goals   GoalReader
+	Store   Store
+	Answers AnswerStore
+	Events  EventLog
+	Clock   Clock
+	IDs     IDGenerator
 }
 
-func NewService(goals GoalReader, store Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(goals GoalReader, store Store, answers AnswerStore, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		Goals:  goals,
-		Store:  store,
-		Events: events,
-		Clock:  clock,
-		IDs:    ids,
+		Goals:   goals,
+		Store:   store,
+		Answers: answers,
+		Events:  events,
+		Clock:   clock,
+		IDs:     ids,
 	}
 }
 
@@ -124,6 +152,76 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 	return created, nil
 }
 
+func (s *Service) RecordAnswer(ctx context.Context, requestID spine.ClarificationRequestID, input spine.ClarificationAnswerSubmission) (spine.ClarificationAnswer, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.ClarificationAnswer{}, err
+	}
+
+	request, ok, err := s.Store.Get(ctx, requestID)
+	if err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("get clarification request: %w", err)
+	}
+	if !ok {
+		return spine.ClarificationAnswer{}, ErrRequestNotFound
+	}
+	if request.State == spine.ClarificationRequestStateAnswered {
+		return spine.ClarificationAnswer{}, ErrAlreadyAnswered
+	}
+	if request.State != spine.ClarificationRequestStateOpen {
+		return spine.ClarificationAnswer{}, fmt.Errorf("%w: %s", ErrInvalidRequestState, request.State)
+	}
+	if _, ok, err := s.Answers.GetByRequestID(ctx, request.ID); err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("get clarification answer by request id: %w", err)
+	} else if ok {
+		return spine.ClarificationAnswer{}, ErrAlreadyAnswered
+	}
+
+	if err := validateAnswerSubmission(request, input); err != nil {
+		return spine.ClarificationAnswer{}, err
+	}
+
+	answerID, err := s.IDs.NewClarificationAnswerID()
+	if err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("new clarification answer id: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	recorded := spine.ClarificationAnswer{
+		ID:          answerID,
+		RequestID:   request.ID,
+		GoalID:      request.GoalID,
+		Answers:     cloneAnswerItems(input.Answers),
+		SubmittedBy: input.SubmittedBy,
+		State:       spine.ClarificationAnswerStateRecorded,
+		CreatedAt:   now,
+	}
+
+	answerRecorded, err := s.clarificationAnswerRecordedEvent(recorded)
+	if err != nil {
+		return spine.ClarificationAnswer{}, err
+	}
+	requestAnswered, err := s.clarificationRequestAnsweredEvent(request.ID, recorded.ID, request.State, spine.ClarificationRequestStateAnswered, now)
+	if err != nil {
+		return spine.ClarificationAnswer{}, err
+	}
+
+	if err := s.Answers.Create(ctx, recorded); err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("create clarification answer: %w", err)
+	}
+	if _, ok, err := s.Store.UpdateState(ctx, request.ID, spine.ClarificationRequestStateAnswered); err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("update clarification request state: %w", err)
+	} else if !ok {
+		return spine.ClarificationAnswer{}, ErrRequestNotFound
+	}
+	if err := s.Events.Append(ctx, answerRecorded); err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("append clarification answer recorded event: %w", err)
+	}
+	if err := s.Events.Append(ctx, requestAnswered); err != nil {
+		return spine.ClarificationAnswer{}, fmt.Errorf("append clarification request answered event: %w", err)
+	}
+
+	return recorded, nil
+}
+
 func (s *Service) questionsForReasons(reasons []spine.GoalReadinessReasonCode) ([]spine.ClarificationQuestion, error) {
 	if len(reasons) == 0 {
 		return nil, ErrMissingReadinessReasons
@@ -160,6 +258,41 @@ func (s *Service) questionsForReasons(reasons []spine.GoalReadinessReasonCode) (
 		return nil, ErrNoClarificationQuestions
 	}
 	return questions, nil
+}
+
+func validateAnswerSubmission(request spine.ClarificationRequest, input spine.ClarificationAnswerSubmission) error {
+	if strings.TrimSpace(input.SubmittedBy.Kind) == "" {
+		return &ValidationError{Field: "submitted_by.kind", Message: "is required"}
+	}
+	if strings.TrimSpace(input.SubmittedBy.ID) == "" {
+		return &ValidationError{Field: "submitted_by.id", Message: "is required"}
+	}
+	if len(input.Answers) == 0 {
+		return &ValidationError{Field: "answers", Message: "at least one answer is required"}
+	}
+
+	questions := make(map[spine.ClarificationQuestionID]bool, len(request.Questions))
+	for _, question := range request.Questions {
+		questions[question.ID] = true
+	}
+
+	answered := make(map[spine.ClarificationQuestionID]bool, len(input.Answers))
+	for _, answer := range input.Answers {
+		if !questions[answer.QuestionID] {
+			return &ValidationError{Field: "answers.question_id", Message: "unknown question_id"}
+		}
+		if answered[answer.QuestionID] {
+			return &ValidationError{Field: "answers.question_id", Message: "duplicate question_id"}
+		}
+		answered[answer.QuestionID] = true
+	}
+
+	for _, question := range request.Questions {
+		if !answered[question.ID] {
+			return &ValidationError{Field: "answers", Message: "all request questions must be answered"}
+		}
+	}
+	return nil
 }
 
 func questionSpec(reason spine.GoalReadinessReasonCode) (clarificationQuestionSpec, bool) {
@@ -236,12 +369,69 @@ func (s *Service) clarificationRequestedEvent(created spine.ClarificationRequest
 	}, nil
 }
 
+func (s *Service) clarificationAnswerRecordedEvent(recorded spine.ClarificationAnswer) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new clarification answer recorded event id: %w", err)
+	}
+
+	payload, err := json.Marshal(recorded)
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal clarification answer recorded event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       EventTypeClarificationAnswerRecorded,
+		EntityType: EntityTypeClarificationAnswer,
+		EntityID:   string(recorded.ID),
+		Timestamp:  recorded.CreatedAt,
+		Payload:    payload,
+	}, nil
+}
+
+func (s *Service) clarificationRequestAnsweredEvent(requestID spine.ClarificationRequestID, answerID spine.ClarificationAnswerID, previousState spine.ClarificationRequestState, newState spine.ClarificationRequestState, timestamp time.Time) (spine.Event, error) {
+	eventID, err := s.IDs.NewEventID()
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("new clarification request answered event id: %w", err)
+	}
+
+	payload, err := json.Marshal(clarificationRequestAnsweredPayload{
+		RequestID:     requestID,
+		AnswerID:      answerID,
+		PreviousState: previousState,
+		NewState:      newState,
+	})
+	if err != nil {
+		return spine.Event{}, fmt.Errorf("marshal clarification request answered event payload: %w", err)
+	}
+
+	return spine.Event{
+		ID:         eventID,
+		Type:       EventTypeClarificationRequestAnswered,
+		EntityType: EntityTypeClarificationRequest,
+		EntityID:   string(requestID),
+		Timestamp:  timestamp,
+		Payload:    payload,
+	}, nil
+}
+
+type clarificationRequestAnsweredPayload struct {
+	RequestID     spine.ClarificationRequestID    `json:"request_id"`
+	AnswerID      spine.ClarificationAnswerID     `json:"answer_id"`
+	PreviousState spine.ClarificationRequestState `json:"previous_state"`
+	NewState      spine.ClarificationRequestState `json:"new_state"`
+}
+
 func (s *Service) validateDependencies() error {
 	if s.Goals == nil {
 		return errors.New("clarification service goal reader is nil")
 	}
 	if s.Store == nil {
 		return errors.New("clarification service store is nil")
+	}
+	if s.Answers == nil {
+		return errors.New("clarification service answer store is nil")
 	}
 	if s.Events == nil {
 		return errors.New("clarification service event log is nil")
@@ -260,6 +450,13 @@ func cloneReasonCodes(reasons []spine.GoalReadinessReasonCode) []spine.GoalReadi
 		return nil
 	}
 	return append([]spine.GoalReadinessReasonCode(nil), reasons...)
+}
+
+func cloneAnswerItems(answers []spine.ClarificationAnswerItem) []spine.ClarificationAnswerItem {
+	if answers == nil {
+		return nil
+	}
+	return append([]spine.ClarificationAnswerItem(nil), answers...)
 }
 
 type clarificationQuestionSpec struct {
@@ -290,6 +487,14 @@ func (UUIDGenerator) NewClarificationQuestionID() (spine.ClarificationQuestionID
 		return "", err
 	}
 	return spine.ClarificationQuestionID(id.String()), nil
+}
+
+func (UUIDGenerator) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.ClarificationAnswerID(id.String()), nil
 }
 
 func (UUIDGenerator) NewEventID() (spine.EventID, error) {
