@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- fifteen kernel/CLI/server/domain boundary ADRs
+- sixteen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -105,6 +105,10 @@ The project currently has:
 - ADR-0015 documents `ContractDraft` review/update as an explicit server-owned
   draft-only boundary for proposed fields, before `ready_for_approval`, approval,
   work item, gate, or proof
+- ADR-0016 documents `ContractDraft(ready_for_approval)` as an explicit
+  server-owned state transition with completeness checks and `marked_by` audit
+  identity, before approval, approved Contract, work item, execution, gate, or
+  proof
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -118,7 +122,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and fifteen boundary ADRs exist
+- kernel schema note and sixteen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -159,6 +163,7 @@ The project currently has:
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed snapshot when DB is configured; it does not create `ContractDraft`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
 - the `ContractDraft` boundary is documented in ADR-0014 and implemented as a Postgres-backed draft creation boundary when DB is configured; it does not create approved Contract, `WorkItem`, `GateDecision`, or `Proof`
 - the `ContractDraft` review/update boundary is documented in ADR-0015 and implemented as a draft-only update boundary; it does not introduce `ready_for_approval`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
+- the `ContractDraft ready_for_approval` boundary is documented in ADR-0016 as a future explicit state transition only; no implementation exists yet, and it is not approval, approved Contract, `WorkItem`, execution, `GateDecision`, or `Proof`
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -169,10 +174,10 @@ The project currently has:
 - no runtime registry implementation
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
-- no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` / `ContractSeed` / `ContractDraft creation` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` prototypes yet
+- no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` / `ContractSeed` / `ContractDraft creation/update` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` prototypes yet
 - no durable server storage for clarification request/answer state yet
 - no automatic readiness re-check after answer application
-- no `ready_for_approval`, approved Contract, contract approval, WorkItem, GateDecision, or Proof yet
+- no `ready_for_approval` implementation, approved Contract, contract approval, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet
@@ -221,7 +226,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, ContractSeed creation, ContractDraft creation/update, EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory clarification request/answer prototypes when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, `ContractSeed(created)`, and `ContractDraft(draft)` only, updates Goal readiness state, request answered state, Goal intent-plane hints, and ContractDraft proposed fields only, and does not claim durable clarification storage, automatic readiness re-check, `ready_for_approval`, approved Contract, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, ContractSeed creation, ContractDraft creation/update, EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory clarification request/answer prototypes when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, `ContractSeed(created)`, and `ContractDraft(draft)` only, updates Goal readiness state, request answered state, Goal intent-plane hints, and ContractDraft proposed fields only, and does not claim durable clarification storage, automatic readiness re-check, `ready_for_approval` implementation, approved Contract, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

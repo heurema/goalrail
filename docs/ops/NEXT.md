@@ -18,7 +18,8 @@
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
 - ADR-0013 now defines the `ContractSeed` boundary, and the server persists `ContractSeed(created)` in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
 - ADR-0014 now defines the `ContractDraft` boundary, and the server persists `ContractDraft(draft)` creation in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
-- ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; `ready_for_approval` and approval remain later boundaries
+- ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; approval remains a later boundary
+- ADR-0016 now defines the `ContractDraft ready_for_approval` boundary as an explicit state transition with completeness checks and `marked_by` audit identity; no implementation exists yet, and approval, work item, gate, and proof remain later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -93,9 +94,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. ContractDraft ready_for_approval boundary design
-   - define how a reviewed draft may be explicitly marked ready for approval
-   - keep approval and approved Contract as later boundaries unless the ADR says otherwise
+1. ContractDraft ready_for_approval implementation
+   - implement only `ContractDraft(draft) -> ContractDraft(ready_for_approval)`
+   - require completeness checks and `marked_by` audit identity from ADR-0016
+   - keep approval and approved Contract as later boundaries
    - do not create approved Contract, work items, execution, gate, or proof
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists

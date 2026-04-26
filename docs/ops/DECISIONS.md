@@ -546,3 +546,22 @@ Rationale:
 - keeps seed and draft creation auditable without introducing queue, outbox,
   event bus, sqlc, or ORM
 - preserves the boundary that draft state is not approved or executable work
+
+## D-0043 — ContractDraft ready_for_approval is a pre-approval state
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- `ContractDraft` may transition explicitly from `draft` to `ready_for_approval`
+- `ready_for_approval` is a `ContractDraft` state, not approved Contract
+- the transition requires minimum completeness checks for title, intent summary, proposed scope, proposed acceptance criteria, proposed proof expectations, repo binding, contract seed, and Goal linkage
+- the transition records `marked_by` as audit identity only, not approval authority
+- the transition writes `contract_draft.marked_ready_for_approval`
+- the transition must not mutate proposed fields; proposed-field edits stay in the ContractDraft update boundary
+- the transition does not approve a Contract, create approved Contract, create `WorkItem`, start execution, write `GateDecision`, or create `Proof`
+- no new storage or migration requirement is introduced by this decision
+
+Rationale:
+- creates an auditable handoff point between draft review/update and later approval
+- keeps completeness checks separate from approval authority
+- prevents draft readiness from becoming executable work or gate/proof semantics
