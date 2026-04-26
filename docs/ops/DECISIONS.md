@@ -347,3 +347,20 @@ Rationale:
 - keeps the first implementation small and testable
 - proves the runner boundary without building a full hosted execution platform
 - preserves future customer-hosted runner path without blocking MVP progress
+
+
+## D-0032 — Clarification answers record evidence before application
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- an open `ClarificationRequest` may record a server-owned `ClarificationAnswer`
+- `ClarificationAnswer` is canonical evidence, not approval and not executable work
+- answer recording does not update Goal hints, trigger readiness re-check, or create contract seed, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`
+- a request may transition from `open` to `answered` after successful answer recording
+- answer application to Goal hints and Goal readiness re-check are later explicit server-owned transitions
+
+Rationale:
+- preserves an auditable answer record before any derived Goal update
+- keeps clarification answer storage separate from contract and work creation
+- gives the next implementation slice a bounded target without hidden state transitions
