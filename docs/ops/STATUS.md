@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- ten kernel/CLI/server/domain boundary ADRs
+- eleven kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -93,6 +93,8 @@ The project currently has:
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
 - persistence direction is pgx + Squirrel + goose, with no `sqlc` and no ORM
+- ADR-0011 documents answer application to Goal hints as a server-owned
+  transition with no readiness re-check, contract seed, work item, gate, or proof
 
 ### Delivery model
 - roadmap phases defined
@@ -100,7 +102,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and ten boundary ADRs exist
+- kernel schema note and eleven boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -124,7 +126,7 @@ The project currently has:
 - ClarificationRequest creation stores an open request only as an in-memory prototype, generates deterministic questions from Goal readiness reason codes, and appends an in-memory `clarification.requested` event
 - ClarificationAnswer recording stores canonical answer evidence only as an in-memory prototype, requires all questions answered, transitions the request from `open` to `answered`, and appends in-memory `clarification.answer_recorded` and `clarification.request_answered` events
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
-- the `ClarificationAnswer` boundary is documented in ADR-0009; answer application remains unimplemented
+- the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, but answer application remains unimplemented
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, but no persistence implementation exists yet
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -141,7 +143,7 @@ The project currently has:
 - no migrations yet
 - no DB seed yet
 - no User/Organization/Membership/Project/RepoBinding server implementation yet
-- no answer application, Goal hint update flow, automatic readiness re-check, or contract composition yet
+- no answer application implementation, Goal hint update flow, automatic readiness re-check, or contract composition yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync

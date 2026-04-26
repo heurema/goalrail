@@ -400,3 +400,20 @@ Rationale:
 - keeps persistence native and explicit
 - avoids ORM and generated-code overhead
 - keeps migration history clean before production
+
+## D-0035 — Answer application updates Goal hints only
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- a recorded `ClarificationAnswer` may be applied to Goal intent-plane hints through a server-owned transition
+- answer application updates only allowed Goal mappings: `goal.summary`, `goal.intent_owner`, `goal.scope_hint`, and `goal.acceptance_hint`
+- answer application preserves `ClarificationAnswer` as canonical evidence and must not make Goal hints the only answer record
+- answer application does not trigger readiness re-check, create contract seed, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`, approve anything, or make work executable
+- v0 application should be deterministic, require `applied_by`, reject unsupported mappings, and return `409 already_applied` on repeated application
+- v0 must not map arbitrary raw text into `goal.intent_owner`; it should require an explicit actor-shaped value or defer that mapping
+
+Rationale:
+- keeps answer evidence, hint mutation, readiness, and contract generation as separate inspectable transitions
+- prevents hidden transition chains from turning clarification into contract or executable work
+- gives the next implementation slice a bounded target without introducing readiness or contract semantics

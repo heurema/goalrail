@@ -14,6 +14,7 @@
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
+- ADR-0011 now defines answer application to Goal hints; future answer work must keep readiness re-check separate
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -98,10 +99,11 @@ Done means:
    - add `project_id` to intake context
    - validate repo_binding belongs to project and organization
    - keep intake non-executable
-3. Answer application to Goal hints boundary design
-   - define the explicit server-owned transition from recorded ClarificationAnswer evidence to Goal intent-plane hints
-   - keep answer application separate from answer recording and from automatic readiness re-check
-   - do not create contract seed / contract draft / work items / gate / proof
+3. Answer application to Goal hints prototype
+   - implement explicit server-owned application from recorded ClarificationAnswer evidence to Goal intent-plane hints
+   - append answer application / goal hints updated events
+   - guard duplicate application with `409 already_applied`
+   - do not trigger readiness re-check or create contract seed / contract draft / work items / gate / proof
 4. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
