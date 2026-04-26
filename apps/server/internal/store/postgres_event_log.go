@@ -29,7 +29,8 @@ type PostgresEventLog struct {
 }
 
 func NewPostgresEventLog(pool *pgxpool.Pool) *PostgresEventLog {
-	return NewPostgresEventLogWithExecutorAndQuerier(pool, pool)
+	db := newPostgresDB(pool)
+	return NewPostgresEventLogWithExecutorAndQuerier(db, db)
 }
 
 func NewPostgresEventLogWithExecutorAndQuerier(exec EventLogExecer, query EventLogQuerier) *PostgresEventLog {

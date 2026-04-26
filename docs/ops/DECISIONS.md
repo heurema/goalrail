@@ -483,7 +483,7 @@ Decision:
 - payload and artifact refs use jsonb
 - clarification persistence is deferred
 - ContractSeed persistence is deferred
-- v0 event append remains synchronous, with shared transaction wrappers deferred
+- v0 event append remains synchronous; shared transaction wrappers are addressed by D-0041
 - current HTTP behavior is preserved without adding new list/search endpoints
 
 Rationale:
@@ -509,3 +509,20 @@ Rationale:
 - allows human review/editing of proposed draft terms before approval
 - preserves auditability of draft changes without collapsing update into approval
 - keeps work item, execution, gate, and proof boundaries downstream of approved Contract
+
+## D-0041 — Canonical writes and event appends share Postgres transactions
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- Postgres-backed intake create and `intake.received` event append run in one transaction
+- Goal promotion and its `goal.created` / `intake.promoted_to_goal` events run in one transaction
+- Goal readiness update and readiness events run in one transaction
+- events remain synchronous durable audit trail v0, not queue/event bus/outbox
+- Postgres store execution uses a private transaction context convention so ordinary store methods use the active transaction when present
+- no generic Unit of Work framework is introduced
+
+Rationale:
+- prevents canonical records without corresponding audit events
+- hardens durable core flow before broader contract/gate/proof work
+- keeps persistence simple and synchronous

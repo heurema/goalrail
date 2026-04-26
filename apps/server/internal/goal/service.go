@@ -59,6 +59,11 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type transactionalGoalStore interface {
+	CreateWithEvents(context.Context, spine.Goal, []spine.Event) error
+	UpdateReadinessWithEvents(context.Context, spine.GoalID, spine.GoalState, []spine.GoalReadinessReasonCode, []spine.Event) (spine.Goal, bool, error)
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -142,6 +147,13 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 		return spine.Goal{}, err
 	}
 
+	if txGoals, ok := s.Goals.(transactionalGoalStore); ok {
+		if err := txGoals.CreateWithEvents(ctx, created, []spine.Event{goalCreated, intakePromoted}); err != nil {
+			return spine.Goal{}, fmt.Errorf("create goal with events: %w", err)
+		}
+		return created, nil
+	}
+
 	if err := s.Goals.Create(ctx, created); err != nil {
 		return spine.Goal{}, fmt.Errorf("create goal: %w", err)
 	}
@@ -173,21 +185,32 @@ func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spin
 
 	now := s.Clock.Now().UTC()
 	result := evaluateReadiness(current, now)
+	readinessChecked, err := s.goalReadinessCheckedEvent(result, current.State, result.State, now)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, err
+	}
+	transition, err := s.goalReadinessTransitionEvent(result, current.State, result.State, now)
+	if err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, err
+	}
+
+	if txGoals, ok := s.Goals.(transactionalGoalStore); ok {
+		updated, ok, err := txGoals.UpdateReadinessWithEvents(ctx, current.ID, result.State, result.ReasonCodes, []spine.Event{readinessChecked, transition})
+		if err != nil {
+			return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state with events: %w", err)
+		}
+		if !ok {
+			return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
+		}
+		return result, updated, nil
+	}
+
 	updated, ok, err := s.Goals.UpdateReadiness(ctx, current.ID, result.State, result.ReasonCodes)
 	if err != nil {
 		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state: %w", err)
 	}
 	if !ok {
 		return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
-	}
-
-	readinessChecked, err := s.goalReadinessCheckedEvent(result, current.State, updated.State, now)
-	if err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, err
-	}
-	transition, err := s.goalReadinessTransitionEvent(result, current.State, updated.State, now)
-	if err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, err
 	}
 
 	if err := s.Events.Append(ctx, readinessChecked); err != nil {

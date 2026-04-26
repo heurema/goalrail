@@ -30,7 +30,8 @@ type PostgresGoalStore struct {
 }
 
 func NewPostgresGoalStore(pool *pgxpool.Pool) *PostgresGoalStore {
-	return NewPostgresGoalStoreWithExecutorAndQuerier(pool, pool)
+	db := newPostgresDB(pool)
+	return NewPostgresGoalStoreWithExecutorAndQuerier(db, db)
 }
 
 func NewPostgresGoalStoreWithExecutorAndQuerier(exec GoalExecer, query GoalQuerier) *PostgresGoalStore {

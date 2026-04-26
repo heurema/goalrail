@@ -61,7 +61,9 @@ curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 
 With Postgres configured, `IntakeRecord`, `Goal`, and intake/goal events are
 durable and survive server restarts. Project/RepoBinding validation uses
-Postgres to derive `organization_id` from the seeded context.
+Postgres to derive `organization_id` from the seeded context. Intake creation,
+Goal promotion, and Goal readiness writes share a transaction with their
+expected event appends.
 
 After clarification answers are applied and an explicit readiness re-check marks
 the Goal `ready_for_contract_seed`, create a seed snapshot:

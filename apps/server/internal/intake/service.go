@@ -46,6 +46,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type transactionalStore interface {
+	CreateWithEvent(context.Context, spine.IntakeRecord, spine.Event) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -111,13 +115,19 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 		CreatedAt:                now,
 	}
 
-	if err := s.Store.Create(ctx, record); err != nil {
-		return spine.IntakeRecord{}, fmt.Errorf("create intake record: %w", err)
-	}
-
 	event, err := s.receivedEvent(record, now)
 	if err != nil {
 		return spine.IntakeRecord{}, err
+	}
+	if txStore, ok := s.Store.(transactionalStore); ok {
+		if err := txStore.CreateWithEvent(ctx, record, event); err != nil {
+			return spine.IntakeRecord{}, fmt.Errorf("create intake record with event: %w", err)
+		}
+		return record, nil
+	}
+
+	if err := s.Store.Create(ctx, record); err != nil {
+		return spine.IntakeRecord{}, fmt.Errorf("create intake record: %w", err)
 	}
 	if err := s.Events.Append(ctx, event); err != nil {
 		return spine.IntakeRecord{}, fmt.Errorf("append intake event: %w", err)

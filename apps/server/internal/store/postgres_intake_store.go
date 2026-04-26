@@ -29,7 +29,8 @@ type PostgresIntakeStore struct {
 }
 
 func NewPostgresIntakeStore(pool *pgxpool.Pool) *PostgresIntakeStore {
-	return NewPostgresIntakeStoreWithExecutorAndQuerier(pool, pool)
+	db := newPostgresDB(pool)
+	return NewPostgresIntakeStoreWithExecutorAndQuerier(db, db)
 }
 
 func NewPostgresIntakeStoreWithExecutorAndQuerier(exec IntakeExecer, query IntakeQuerier) *PostgresIntakeStore {
