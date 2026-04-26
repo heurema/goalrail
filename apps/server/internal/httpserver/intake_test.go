@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
+	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
@@ -41,6 +42,7 @@ type testServerDeps struct {
 	goals          *store.GoalStore
 	clarifications *store.ClarificationStore
 	answers        *store.ClarificationAnswerStore
+	contractSeeds  *store.ContractSeedStore
 	events         *eventlog.EventLog
 	idFactory      *sequenceIDs
 }
@@ -1236,6 +1238,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalStore := store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	answerStore := store.NewClarificationAnswerStore()
+	contractSeedStore := store.NewContractSeedStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
@@ -1244,13 +1247,16 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
+	contractSeedService := contractseed.NewService(goalStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
+	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 
 	return testServerDeps{
-		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler),
+		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler),
 		intakes:        intakeStore,
 		goals:          goalStore,
 		clarifications: clarificationStore,
 		answers:        answerStore,
+		contractSeeds:  contractSeedStore,
 		events:         events,
 		idFactory:      ids,
 	}
@@ -1291,6 +1297,7 @@ type sequenceIDs struct {
 	clarification int
 	question      int
 	answer        int
+	contractSeed  int
 	event         int
 }
 
@@ -1322,6 +1329,11 @@ func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionI
 func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
 	g.answer++
 	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
+}
+
+func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {
+	g.contractSeed++
+	return spine.ContractSeedID(fmt.Sprintf("contract-seed-%d", g.contractSeed)), nil
 }
 
 func testTime() time.Time {
@@ -1508,11 +1520,14 @@ func assertNoForbiddenEventTypes(t *testing.T, events []spine.Event) {
 	t.Helper()
 
 	forbidden := map[string]bool{
-		"contract.seed_created": true,
-		"contract.created":      true,
-		"work_item.created":     true,
-		"gate.decision_written": true,
-		"proof.created":         true,
+		"contract.seed_created":  true,
+		"contract.draft_created": true,
+		"contract.approved":      true,
+		"contract.created":       true,
+		"work_item.created":      true,
+		"run.started":            true,
+		"gate.decision_written":  true,
+		"proof.created":          true,
 	}
 	for _, event := range events {
 		if forbidden[event.Type] {

@@ -1,7 +1,7 @@
 # Goalrail Server
 
-This server is still an early prototype. Existing intake, Goal readiness, and
-clarification flows remain in-memory.
+This server is still an early prototype. Existing intake, Goal readiness,
+clarification, answer application, and ContractSeed flows remain in-memory.
 
 ## Local Postgres foundation
 
@@ -57,6 +57,14 @@ curl -sS -X POST http://localhost:8080/v1/intake/{intake_id}/promote
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
+After clarification answers are applied and an explicit readiness re-check marks
+the Goal `ready_for_contract_seed`, create a seed snapshot:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seed
+```
+
 Intake and Goal state remain in-memory prototypes. Project/RepoBinding
 validation uses Postgres only to derive `organization_id` from the seeded
-context, and intake still does not create executable work.
+context. ContractSeed creation does not create `ContractDraft`, `WorkItem`,
+approved Contract, `GateDecision`, `Proof`, or executable work.

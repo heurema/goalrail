@@ -10,13 +10,13 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness, ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness, ClarificationRequest, ClarificationAnswer recording, answer application, explicit re-check, and ContractSeed creation prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints and the server has an in-memory prototype; future answer work must keep readiness re-check separate
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
-- ADR-0013 now defines the `ContractSeed` boundary; future contract work must create a seed explicitly before any `ContractDraft`, approval, work item, gate, or proof boundary
+- ADR-0013 now defines the `ContractSeed` boundary, and the server has an in-memory `ContractSeed(created)` prototype; future contract work must keep `ContractDraft`, approval, work item, gate, and proof as later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -91,11 +91,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. ContractSeed creation prototype
-   - create `ContractSeed(created)` only from `Goal(ready_for_contract_seed)`
-   - keep ContractSeed separate from `ContractDraft`, approval, work items, gate, and proof
-   - use an in-memory prototype unless a later persistence slice says otherwise
-   - do not make readiness re-check create contract artifacts implicitly
+1. ContractDraft boundary design
+   - define the first boundary after `ContractSeed(created)`
+   - keep `ContractDraft` separate from approval, work items, execution, gate, and proof
+   - do not make ContractSeed creation draft or approve contract artifacts implicitly
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
