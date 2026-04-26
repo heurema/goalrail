@@ -64,7 +64,11 @@ func (s *GoalStore) GetByIntakeID(_ context.Context, id spine.IntakeID) (spine.G
 	return cloneGoal(created), true, nil
 }
 
-func (s *GoalStore) UpdateState(_ context.Context, id spine.GoalID, state spine.GoalState) (spine.Goal, bool, error) {
+func (s *GoalStore) UpdateState(ctx context.Context, id spine.GoalID, state spine.GoalState) (spine.Goal, bool, error) {
+	return s.UpdateReadiness(ctx, id, state, nil)
+}
+
+func (s *GoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -73,6 +77,7 @@ func (s *GoalStore) UpdateState(_ context.Context, id spine.GoalID, state spine.
 		return spine.Goal{}, false, nil
 	}
 	updated.State = state
+	updated.LastReadinessReasonCodes = cloneReadinessReasonCodes(reasonCodes)
 	s.goals[id] = cloneGoal(updated)
 	return cloneGoal(updated), true, nil
 }
@@ -81,5 +86,15 @@ func cloneGoal(created spine.Goal) spine.Goal {
 	if created.SourceRefs != nil {
 		created.SourceRefs = append([]spine.SourceRef(nil), created.SourceRefs...)
 	}
+	if created.LastReadinessReasonCodes != nil {
+		created.LastReadinessReasonCodes = cloneReadinessReasonCodes(created.LastReadinessReasonCodes)
+	}
 	return created
+}
+
+func cloneReadinessReasonCodes(reasonCodes []spine.GoalReadinessReasonCode) []spine.GoalReadinessReasonCode {
+	if reasonCodes == nil {
+		return nil
+	}
+	return append([]spine.GoalReadinessReasonCode(nil), reasonCodes...)
 }

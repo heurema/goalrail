@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
@@ -34,11 +35,12 @@ const validIntakeJSON = `{
 }`
 
 type testServerDeps struct {
-	router    http.Handler
-	intakes   *store.IntakeStore
-	goals     *store.GoalStore
-	events    *eventlog.EventLog
-	idFactory *sequenceIDs
+	router         http.Handler
+	intakes        *store.IntakeStore
+	goals          *store.GoalStore
+	clarifications *store.ClarificationStore
+	events         *eventlog.EventLog
+	idFactory      *sequenceIDs
 }
 
 func TestPostIntakeReturnsAccepted(t *testing.T) {
@@ -439,24 +441,172 @@ func TestPostGoalReadinessUnknownGoalReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestPostGoalClarificationRequestsReturnsOpenRequest(t *testing.T) {
+	server := testServer(t)
+	created := createClarificationReadyGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var request spine.ClarificationRequest
+	decodeJSON(t, response.body, &request)
+	if request.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("state = %q, want %q", request.State, spine.ClarificationRequestStateOpen)
+	}
+	if request.GoalID != created.ID {
+		t.Fatalf("goal_id = %q, want %q", request.GoalID, created.ID)
+	}
+	if !hasClarificationQuestion(request.Questions, spine.ClarificationMapsToGoalScopeHint) {
+		t.Fatalf("questions = %#v, want scope_hint question", request.Questions)
+	}
+	if !hasClarificationQuestion(request.Questions, spine.ClarificationMapsToGoalAcceptanceHint) {
+		t.Fatalf("questions = %#v, want acceptance_hint question", request.Questions)
+	}
+	if request.Target.Role != spine.ClarificationTargetRoleIntentOwner {
+		t.Fatalf("target role = %q, want %q", request.Target.Role, spine.ClarificationTargetRoleIntentOwner)
+	}
+
+	stored, ok, err := server.clarifications.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("clarifications.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored clarification request not found")
+	}
+	if stored.ID != request.ID {
+		t.Fatalf("stored request id = %q, want %q", stored.ID, request.ID)
+	}
+}
+
+func TestPostGoalClarificationRequestsUnknownGoalReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/clarification-requests", "")
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
+func TestPostGoalClarificationRequestsRejectsGoalNotNeedsClarification(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusConflict)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "invalid_state")
+	}
+}
+
+func TestPostGoalClarificationRequestsRejectsMissingReadinessReasons(t *testing.T) {
+	server := testServer(t)
+	created := spine.Goal{
+		ID:            "goal-without-reasons",
+		IntakeID:      "intake-without-reasons",
+		RepoBindingID: "repo_demo_1",
+		Title:         "Refactor CSV export filters",
+		Summary:       "Current code duplicates filter logic. Preserve current behavior.",
+		SourceRefs: []spine.SourceRef{
+			{Kind: "intake", ID: "intake-without-reasons"},
+		},
+		RequestAuthor: spine.ActorRef{Kind: "user", ID: "dev_1"},
+		IntentOwner:   spine.ActorRef{Kind: "user", ID: "dev_1"},
+		State:         spine.GoalStateNeedsClarification,
+		CreatedAt:     testTime(),
+	}
+	if err := server.goals.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", response.code, http.StatusConflict)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "missing_readiness_reasons" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "missing_readiness_reasons")
+	}
+}
+
+func TestPostGoalClarificationRequestsRejectsDuplicateOpenRequest(t *testing.T) {
+	server := testServer(t)
+	created := createClarificationReadyGoal(t, server)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if first.code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
+	}
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	if second.code != http.StatusConflict {
+		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, second.body, &body)
+	if body.Error.Code != "already_open" {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, "already_open")
+	}
+}
+
 func testServer(t *testing.T) testServerDeps {
 	t.Helper()
 
 	intakeStore := store.NewIntakeStore()
 	goalStore := store.NewGoalStore()
+	clarificationStore := store.NewClarificationStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, events, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
 	goalService := goal.NewService(intakeStore, goalStore, events, fixedClock{now: testTime()}, ids)
 	goalHandler := httpserver.NewGoalHandler(goalService)
+	clarificationService := clarification.NewService(goalStore, clarificationStore, events, fixedClock{now: testTime()}, ids)
+	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 
 	return testServerDeps{
-		router:    baseHandlers(intakeHandler, goalHandler),
-		intakes:   intakeStore,
-		goals:     goalStore,
-		events:    events,
-		idFactory: ids,
+		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler),
+		intakes:        intakeStore,
+		goals:          goalStore,
+		clarifications: clarificationStore,
+		events:         events,
+		idFactory:      ids,
 	}
 }
 
@@ -469,9 +619,11 @@ func (c fixedClock) Now() time.Time {
 }
 
 type sequenceIDs struct {
-	intake int
-	goal   int
-	event  int
+	intake        int
+	goal          int
+	clarification int
+	question      int
+	event         int
 }
 
 func (g *sequenceIDs) NewIntakeID() (spine.IntakeID, error) {
@@ -487,6 +639,16 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 func (g *sequenceIDs) NewGoalID() (spine.GoalID, error) {
 	g.goal++
 	return spine.GoalID(fmt.Sprintf("goal-%d", g.goal)), nil
+}
+
+func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {
+	g.clarification++
+	return spine.ClarificationRequestID(fmt.Sprintf("clarification-%d", g.clarification)), nil
+}
+
+func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionID, error) {
+	g.question++
+	return spine.ClarificationQuestionID(fmt.Sprintf("question-%d", g.question)), nil
 }
 
 func testTime() time.Time {
@@ -532,9 +694,35 @@ func promoteIntake(t *testing.T, server testServerDeps, intakeID string) spine.G
 	return created
 }
 
+func createClarificationReadyGoal(t *testing.T, server testServerDeps) spine.Goal {
+	t.Helper()
+
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("POST /v1/goals/{id}/readiness status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var body struct {
+		Goal spine.Goal `json:"goal"`
+	}
+	decodeJSON(t, response.body, &body)
+	return body.Goal
+}
+
 func hasReadinessReason(reasons []spine.GoalReadinessReasonCode, want spine.GoalReadinessReasonCode) bool {
 	for _, reason := range reasons {
 		if reason == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasClarificationQuestion(questions []spine.ClarificationQuestion, want spine.ClarificationMapsTo) bool {
+	for _, question := range questions {
+		if question.MapsTo == want {
 			return true
 		}
 	}

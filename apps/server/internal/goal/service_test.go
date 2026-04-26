@@ -283,6 +283,9 @@ func TestServiceCheckReadinessReportsMissingFields(t *testing.T) {
 			if !hasReason(result.ReasonCodes, tt.want) {
 				t.Fatalf("reason codes = %#v, want %q", result.ReasonCodes, tt.want)
 			}
+			if !hasReason(updated.LastReadinessReasonCodes, tt.want) {
+				t.Fatalf("updated last readiness reasons = %#v, want %q", updated.LastReadinessReasonCodes, tt.want)
+			}
 		})
 	}
 }
@@ -320,6 +323,9 @@ func TestServiceCheckReadinessMarksGoalReadyForContractSeed(t *testing.T) {
 	}
 	if stored.State != spine.GoalStateReadyForContractSeed {
 		t.Fatalf("stored state = %q, want %q", stored.State, spine.GoalStateReadyForContractSeed)
+	}
+	if len(stored.LastReadinessReasonCodes) != 0 {
+		t.Fatalf("stored reasons = %#v, want empty", stored.LastReadinessReasonCodes)
 	}
 
 	appended := events.Events()
@@ -368,6 +374,9 @@ func TestServiceCheckReadinessMarksGoalNeedsClarification(t *testing.T) {
 	}
 	if updated.State != spine.GoalStateNeedsClarification {
 		t.Fatalf("updated state = %q, want %q", updated.State, spine.GoalStateNeedsClarification)
+	}
+	if !hasReason(updated.LastReadinessReasonCodes, spine.GoalReadinessReasonMissingScopeHint) {
+		t.Fatalf("updated last readiness reasons = %#v, want %q", updated.LastReadinessReasonCodes, spine.GoalReadinessReasonMissingScopeHint)
 	}
 
 	appended := events.Events()
@@ -572,6 +581,10 @@ func (s failingGoalStore) UpdateState(context.Context, spine.GoalID, spine.GoalS
 	return spine.Goal{}, false, s.err
 }
 
+func (s failingGoalStore) UpdateReadiness(context.Context, spine.GoalID, spine.GoalState, []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+	return spine.Goal{}, false, s.err
+}
+
 type recordingGoalStore struct {
 	created spine.Goal
 }
@@ -600,6 +613,15 @@ func (s *recordingGoalStore) UpdateState(_ context.Context, id spine.GoalID, sta
 		return spine.Goal{}, false, nil
 	}
 	s.created.State = state
+	return s.created, true, nil
+}
+
+func (s *recordingGoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+	if s.created.ID != id {
+		return spine.Goal{}, false, nil
+	}
+	s.created.State = state
+	s.created.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), reasonCodes...)
 	return s.created, true, nil
 }
 

@@ -52,7 +52,7 @@ type GoalStore interface {
 	Create(context.Context, spine.Goal) error
 	Get(context.Context, spine.GoalID) (spine.Goal, bool, error)
 	GetByIntakeID(context.Context, spine.IntakeID) (spine.Goal, bool, error)
-	UpdateState(context.Context, spine.GoalID, spine.GoalState) (spine.Goal, bool, error)
+	UpdateReadiness(context.Context, spine.GoalID, spine.GoalState, []spine.GoalReadinessReasonCode) (spine.Goal, bool, error)
 }
 
 type EventLog interface {
@@ -171,7 +171,7 @@ func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spin
 
 	now := s.Clock.Now().UTC()
 	result := evaluateReadiness(current, now)
-	updated, ok, err := s.Goals.UpdateState(ctx, current.ID, result.State)
+	updated, ok, err := s.Goals.UpdateReadiness(ctx, current.ID, result.State, result.ReasonCodes)
 	if err != nil {
 		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state: %w", err)
 	}
