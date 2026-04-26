@@ -172,7 +172,7 @@ func validGoal() spine.Goal {
 	return spine.Goal{
 		ID:             "goal-1",
 		IntakeID:       "intake-1",
-		RepoBindingID:  "repo_demo_1",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		Title:          "Refactor CSV export filters",
 		Summary:        "Current code duplicates filter logic. Preserve current behavior.",
 		ScopeHint:      "Refactor duplicate filter logic",
@@ -180,8 +180,8 @@ func validGoal() spine.Goal {
 		SourceRefs: []spine.SourceRef{
 			{Kind: "intake", ID: "intake-1"},
 		},
-		RequestAuthor: spine.ActorRef{Kind: "user", ID: "dev_1"},
-		IntentOwner:   spine.ActorRef{Kind: "user", ID: "dev_1"},
+		RequestAuthor: spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		IntentOwner:   spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
 		State:         spine.GoalStateCreated,
 		CreatedAt:     time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC),
 	}

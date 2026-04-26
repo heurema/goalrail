@@ -13,18 +13,18 @@ func TestIntakeStoreCreateAndGet(t *testing.T) {
 	intakeStore := store.NewIntakeStore()
 	record := spine.IntakeRecord{
 		ID:            "intake-1",
-		RepoBindingID: "repo_demo_1",
+		RepoBindingID: "018f0000-0000-7000-8000-000000000004",
 		Source: spine.IntakeSource{
 			Kind: "codex_skill",
 		},
 		Title: "Refactor CSV export filters",
 		RequestAuthor: spine.ActorRef{
 			Kind: "user",
-			ID:   "dev_1",
+			ID:   "018f0000-0000-7000-8000-000000000001",
 		},
 		IntentOwner: spine.ActorRef{
 			Kind: "user",
-			ID:   "dev_1",
+			ID:   "018f0000-0000-7000-8000-000000000001",
 		},
 		State:                    spine.IntakeStateReceived,
 		CanonicalContractCreated: false,

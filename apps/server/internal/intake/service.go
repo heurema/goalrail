@@ -19,6 +19,8 @@ const (
 
 var ErrNotFound = errors.New("intake record not found")
 
+var ErrProjectContextUnavailable = errors.New("project context resolver unavailable")
+
 type ValidationError struct {
 	Field   string
 	Message string
@@ -36,6 +38,10 @@ type Store interface {
 	Get(context.Context, spine.IntakeID) (spine.IntakeRecord, bool, error)
 }
 
+type ProjectContextResolver interface {
+	ResolveRepoBinding(context.Context, spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error)
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
@@ -50,18 +56,20 @@ type IDGenerator interface {
 }
 
 type Service struct {
-	Store  Store
-	Events EventLog
-	Clock  Clock
-	IDs    IDGenerator
+	Store          Store
+	ProjectContext ProjectContextResolver
+	Events         EventLog
+	Clock          Clock
+	IDs            IDGenerator
 }
 
-func NewService(store Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(store Store, projectContext ProjectContextResolver, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		Store:  store,
-		Events: events,
-		Clock:  clock,
-		IDs:    ids,
+		Store:          store,
+		ProjectContext: projectContext,
+		Events:         events,
+		Clock:          clock,
+		IDs:            ids,
 	}
 }
 
@@ -70,6 +78,10 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 		return spine.IntakeRecord{}, err
 	}
 	if err := s.validateDependencies(); err != nil {
+		return spine.IntakeRecord{}, err
+	}
+	resolved, err := s.resolveProjectContext(ctx, submission)
+	if err != nil {
 		return spine.IntakeRecord{}, err
 	}
 
@@ -86,6 +98,8 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 
 	record := spine.IntakeRecord{
 		ID:                       intakeID,
+		OrganizationID:           resolved.OrganizationID,
+		ProjectID:                resolved.ProjectID,
 		RepoBindingID:            submission.RepoBindingID,
 		Source:                   submission.Source,
 		Title:                    submission.Title,
@@ -127,6 +141,33 @@ func (s *Service) Get(ctx context.Context, id spine.IntakeID) (spine.IntakeRecor
 	return record, nil
 }
 
+func (s *Service) resolveProjectContext(ctx context.Context, submission spine.IntakeSubmission) (spine.ResolvedRepoBindingContext, error) {
+	if s.ProjectContext == nil {
+		return spine.ResolvedRepoBindingContext{}, ErrProjectContextUnavailable
+	}
+
+	resolved, ok, err := s.ProjectContext.ResolveRepoBinding(ctx, submission.RepoBindingID)
+	if err != nil {
+		return spine.ResolvedRepoBindingContext{}, fmt.Errorf("resolve repo binding context: %w", err)
+	}
+	if !ok {
+		return spine.ResolvedRepoBindingContext{}, &ValidationError{Field: "repo_binding_id", Message: "does not exist"}
+	}
+	if resolved.ProjectID != submission.ProjectID {
+		return spine.ResolvedRepoBindingContext{}, &ValidationError{Field: "repo_binding_id", Message: "does not belong to project_id"}
+	}
+	if strings.TrimSpace(string(resolved.OrganizationID)) == "" {
+		return spine.ResolvedRepoBindingContext{}, &ValidationError{Field: "organization_id", Message: "resolved context is required"}
+	}
+	if strings.TrimSpace(string(resolved.RepoBindingID)) == "" {
+		return spine.ResolvedRepoBindingContext{}, &ValidationError{Field: "repo_binding_id", Message: "resolved context is required"}
+	}
+	if resolved.RepoBindingID != submission.RepoBindingID {
+		return spine.ResolvedRepoBindingContext{}, &ValidationError{Field: "repo_binding_id", Message: "resolved context does not match request"}
+	}
+	return resolved, nil
+}
+
 func (s *Service) receivedEvent(record spine.IntakeRecord, timestamp time.Time) (spine.Event, error) {
 	eventID, err := s.IDs.NewEventID()
 	if err != nil {
@@ -139,12 +180,15 @@ func (s *Service) receivedEvent(record spine.IntakeRecord, timestamp time.Time) 
 	}
 
 	return spine.Event{
-		ID:         eventID,
-		Type:       EventTypeReceived,
-		EntityType: EntityTypeIntake,
-		EntityID:   string(record.ID),
-		Timestamp:  timestamp,
-		Payload:    payload,
+		ID:             eventID,
+		Type:           EventTypeReceived,
+		EntityType:     EntityTypeIntake,
+		EntityID:       string(record.ID),
+		OrganizationID: record.OrganizationID,
+		ProjectID:      record.ProjectID,
+		RepoBindingID:  record.RepoBindingID,
+		Timestamp:      timestamp,
+		Payload:        payload,
 	}, nil
 }
 
@@ -165,8 +209,17 @@ func (s *Service) validateDependencies() error {
 }
 
 func ValidateSubmission(submission spine.IntakeSubmission) error {
+	if strings.TrimSpace(string(submission.ProjectID)) == "" {
+		return &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	if err := validateUUIDv7("project_id", string(submission.ProjectID)); err != nil {
+		return err
+	}
 	if strings.TrimSpace(string(submission.RepoBindingID)) == "" {
 		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if err := validateUUIDv7("repo_binding_id", string(submission.RepoBindingID)); err != nil {
+		return err
 	}
 	if strings.TrimSpace(submission.Source.Kind) == "" {
 		return &ValidationError{Field: "source.kind", Message: "is required"}
@@ -179,6 +232,17 @@ func ValidateSubmission(submission spine.IntakeSubmission) error {
 	}
 	if strings.TrimSpace(submission.RequestAuthor.ID) == "" {
 		return &ValidationError{Field: "request_author.id", Message: "is required"}
+	}
+	return nil
+}
+
+func validateUUIDv7(field string, value string) error {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return &ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: field, Message: "must be a UUIDv7"}
 	}
 	return nil
 }

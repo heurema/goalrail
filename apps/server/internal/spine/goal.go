@@ -31,6 +31,8 @@ type SourceRef struct {
 type Goal struct {
 	ID                       GoalID                    `json:"id"`
 	IntakeID                 IntakeID                  `json:"intake_id"`
+	OrganizationID           OrganizationID            `json:"organization_id"`
+	ProjectID                ProjectID                 `json:"project_id"`
 	RepoBindingID            RepoBindingID             `json:"repo_binding_id"`
 	Title                    string                    `json:"title"`
 	Summary                  string                    `json:"summary"`
@@ -45,12 +47,15 @@ type Goal struct {
 }
 
 type GoalReadinessResult struct {
-	GoalID      GoalID                    `json:"goal_id"`
-	State       GoalState                 `json:"state"`
-	Ready       bool                      `json:"ready"`
-	ReasonCodes []GoalReadinessReasonCode `json:"reason_codes"`
-	Message     string                    `json:"message"`
-	CheckedAt   time.Time                 `json:"checked_at"`
+	GoalID         GoalID                    `json:"goal_id"`
+	OrganizationID OrganizationID            `json:"organization_id,omitempty"`
+	ProjectID      ProjectID                 `json:"project_id,omitempty"`
+	RepoBindingID  RepoBindingID             `json:"repo_binding_id,omitempty"`
+	State          GoalState                 `json:"state"`
+	Ready          bool                      `json:"ready"`
+	ReasonCodes    []GoalReadinessReasonCode `json:"reason_codes"`
+	Message        string                    `json:"message"`
+	CheckedAt      time.Time                 `json:"checked_at"`
 }
 
 type GoalHintUpdate struct {

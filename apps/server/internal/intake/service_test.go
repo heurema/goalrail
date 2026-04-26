@@ -3,6 +3,7 @@ package intake_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 
 func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	events := eventlog.NewEventLog()
-	service := intake.NewService(store.NewIntakeStore(), events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(store.NewIntakeStore(), validProjectContextResolver(), events, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	record, err := service.Submit(context.Background(), validSubmission())
 	if err != nil {
@@ -36,6 +37,15 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	if event.EntityID != string(record.ID) {
 		t.Fatalf("entity id = %q, want %q", event.EntityID, record.ID)
 	}
+	if event.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("event organization_id = %q, want 018f0000-0000-7000-8000-000000000002", event.OrganizationID)
+	}
+	if event.ProjectID != "018f0000-0000-7000-8000-000000000003" {
+		t.Fatalf("event project_id = %q, want 018f0000-0000-7000-8000-000000000003", event.ProjectID)
+	}
+	if event.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("event repo_binding_id = %q, want 018f0000-0000-7000-8000-000000000004", event.RepoBindingID)
+	}
 	if event.ID != "event-1" {
 		t.Fatalf("event id = %q, want %q", event.ID, "event-1")
 	}
@@ -53,11 +63,91 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	if payload.CanonicalContractCreated {
 		t.Fatal("payload CanonicalContractCreated = true, want false")
 	}
+	if payload.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("payload organization_id = %q, want 018f0000-0000-7000-8000-000000000002", payload.OrganizationID)
+	}
+	if payload.ProjectID != "018f0000-0000-7000-8000-000000000003" {
+		t.Fatalf("payload project_id = %q, want 018f0000-0000-7000-8000-000000000003", payload.ProjectID)
+	}
+	if payload.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("payload repo_binding_id = %q, want 018f0000-0000-7000-8000-000000000004", payload.RepoBindingID)
+	}
+}
+
+func TestValidateSubmissionRejectsMissingProjectID(t *testing.T) {
+	submission := validSubmission()
+	submission.ProjectID = ""
+
+	err := intake.ValidateSubmission(submission)
+	var validationErr *intake.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("ValidateSubmission() error = %v, want ValidationError", err)
+	}
+	if validationErr.Field != "project_id" {
+		t.Fatalf("validation field = %q, want project_id", validationErr.Field)
+	}
+}
+
+func TestServiceSubmitRejectsUnknownRepoBinding(t *testing.T) {
+	events := eventlog.NewEventLog()
+	resolver := fakeProjectContextResolver{ok: false}
+	service := intake.NewService(store.NewIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+
+	_, err := service.Submit(context.Background(), validSubmission())
+	var validationErr *intake.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Submit() error = %v, want ValidationError", err)
+	}
+	if validationErr.Field != "repo_binding_id" {
+		t.Fatalf("validation field = %q, want repo_binding_id", validationErr.Field)
+	}
+	if got := len(events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
+}
+
+func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
+	events := eventlog.NewEventLog()
+	resolver := fakeProjectContextResolver{
+		resolved: spine.ResolvedRepoBindingContext{
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000006",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		},
+		ok: true,
+	}
+	service := intake.NewService(store.NewIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+
+	_, err := service.Submit(context.Background(), validSubmission())
+	var validationErr *intake.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("Submit() error = %v, want ValidationError", err)
+	}
+	if validationErr.Field != "repo_binding_id" {
+		t.Fatalf("validation field = %q, want repo_binding_id", validationErr.Field)
+	}
+	if got := len(events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
+}
+
+func TestServiceSubmitRejectsUnavailableProjectContext(t *testing.T) {
+	events := eventlog.NewEventLog()
+	service := intake.NewService(store.NewIntakeStore(), nil, events, fixedClock{now: testTime()}, &sequenceIDs{})
+
+	_, err := service.Submit(context.Background(), validSubmission())
+	if !errors.Is(err, intake.ErrProjectContextUnavailable) {
+		t.Fatalf("Submit() error = %v, want ErrProjectContextUnavailable", err)
+	}
+	if got := len(events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
 }
 
 func validSubmission() spine.IntakeSubmission {
 	return spine.IntakeSubmission{
-		RepoBindingID: "repo_demo_1",
+		ProjectID:     "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID: "018f0000-0000-7000-8000-000000000004",
 		Source: spine.IntakeSource{
 			Kind:       "codex_skill",
 			ExternalID: "local-session-1",
@@ -66,10 +156,31 @@ func validSubmission() spine.IntakeSubmission {
 		Body:  "Current code duplicates filter logic. Preserve current behavior.",
 		RequestAuthor: spine.ActorRef{
 			Kind:        "user",
-			ID:          "dev_1",
+			ID:          "018f0000-0000-7000-8000-000000000001",
 			DisplayName: "Developer",
 		},
 	}
+}
+
+func validProjectContextResolver() fakeProjectContextResolver {
+	return fakeProjectContextResolver{
+		resolved: spine.ResolvedRepoBindingContext{
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		},
+		ok: true,
+	}
+}
+
+type fakeProjectContextResolver struct {
+	resolved spine.ResolvedRepoBindingContext
+	ok       bool
+	err      error
+}
+
+func (r fakeProjectContextResolver) ResolveRepoBinding(context.Context, spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error) {
+	return r.resolved, r.ok, r.err
 }
 
 type fixedClock struct {

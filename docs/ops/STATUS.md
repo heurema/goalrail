@@ -124,11 +124,11 @@ The project currently has:
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
-- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, and `repo_bindings`
-- the dev seed creates `usr_dev_owner`, `org_dev_default`, owner membership, `prj_dev_default`, and `rpb_dev_default`
-- the project-context store builds runtime SQL with Squirrel and executes through pgx/pgxpool
-- the source-neutral intake API stores `IntakeRecord` only as an in-memory prototype and appends an in-memory `intake.received` event
-- Goal promotion stores `Goal` only as non-executable normalized intent and appends in-memory `goal.created` and `intake.promoted_to_goal` events
+- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, and `repo_bindings` with UUID persisted ID columns
+- the dev seed creates deterministic UUIDv7 IDs: `018f0000-0000-7000-8000-000000000001`, `018f0000-0000-7000-8000-000000000002`, `018f0000-0000-7000-8000-000000000005`, `018f0000-0000-7000-8000-000000000003`, and `018f0000-0000-7000-8000-000000000004`
+- the project-context store builds runtime SQL with Squirrel and executes upserts and repo-binding context lookups through pgx/pgxpool
+- the source-neutral intake API now requires `project_id` and `repo_binding_id`, validates the repo binding against the persisted Project / RepoBinding context when DB is configured, derives `organization_id`, stores `IntakeRecord` only as an in-memory prototype, and appends an in-memory `intake.received` event with context fields
+- Goal promotion stores `Goal` only as non-executable normalized intent, carries `organization_id`, `project_id`, and `repo_binding_id` from the IntakeRecord, and appends in-memory `goal.created` and `intake.promoted_to_goal` events with context fields
 - Goal readiness updates `Goal` state only as an in-memory deterministic prototype, returns reason codes, and appends in-memory readiness transition events
 - ClarificationRequest creation stores an open request only as an in-memory prototype, generates deterministic questions from Goal readiness reason codes, and appends an in-memory `clarification.requested` event
 - ClarificationAnswer recording stores canonical answer evidence only as an in-memory prototype, requires all questions answered, transitions the request from `open` to `answered`, and appends in-memory `clarification.answer_recorded` and `clarification.request_answered` events
@@ -146,8 +146,7 @@ The project currently has:
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, `ClarificationRequest`, and `ClarificationAnswer` prototypes yet
-- no durable server storage for intake, Goal, clarification, answer application, or event log persistence yet
-- no Postgres integration into the existing intake/goal/clarification/answer application flow yet
+- no durable server storage for intake, Goal, clarification, answer application, or event log persistence yet; Postgres is only used to validate and derive Project / RepoBinding context for intake
 - no automatic readiness re-check after answer application, contract composition, or contract seed yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
@@ -198,7 +197,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, ClarificationAnswer recording, and answer application prototypes; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, and recorded `ClarificationAnswer` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable storage for those flows, automatic readiness re-check, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, ClarificationAnswer recording, and answer application prototypes; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, and recorded `ClarificationAnswer` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable storage for those flows, automatic readiness re-check, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

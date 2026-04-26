@@ -117,11 +117,13 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 	}
 
 	created := spine.Goal{
-		ID:            goalID,
-		IntakeID:      record.ID,
-		RepoBindingID: record.RepoBindingID,
-		Title:         record.Title,
-		Summary:       goalSummary(record),
+		ID:             goalID,
+		IntakeID:       record.ID,
+		OrganizationID: record.OrganizationID,
+		ProjectID:      record.ProjectID,
+		RepoBindingID:  record.RepoBindingID,
+		Title:          record.Title,
+		Summary:        goalSummary(record),
 		SourceRefs: []spine.SourceRef{
 			{Kind: SourceRefKindIntake, ID: string(record.ID)},
 		},
@@ -135,7 +137,7 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 	if err != nil {
 		return spine.Goal{}, err
 	}
-	intakePromoted, err := s.intakePromotedEvent(record.ID, created.ID, now)
+	intakePromoted, err := s.intakePromotedEvent(record, created.ID, now)
 	if err != nil {
 		return spine.Goal{}, err
 	}
@@ -220,12 +222,15 @@ func evaluateReadiness(goal spine.Goal, checkedAt time.Time) spine.GoalReadiness
 	}
 
 	result := spine.GoalReadinessResult{
-		GoalID:      goal.ID,
-		State:       spine.GoalStateNeedsClarification,
-		Ready:       false,
-		ReasonCodes: reasons,
-		Message:     "goal needs clarification before contract seed",
-		CheckedAt:   checkedAt,
+		GoalID:         goal.ID,
+		OrganizationID: goal.OrganizationID,
+		ProjectID:      goal.ProjectID,
+		RepoBindingID:  goal.RepoBindingID,
+		State:          spine.GoalStateNeedsClarification,
+		Ready:          false,
+		ReasonCodes:    reasons,
+		Message:        "goal needs clarification before contract seed",
+		CheckedAt:      checkedAt,
 	}
 	if len(reasons) == 0 {
 		result.State = spine.GoalStateReadyForContractSeed
@@ -244,6 +249,12 @@ func goalSummary(record spine.IntakeRecord) string {
 }
 
 func ValidateIntakeForPromotion(record spine.IntakeRecord) error {
+	if strings.TrimSpace(string(record.OrganizationID)) == "" {
+		return &ValidationError{Field: "organization_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(record.ProjectID)) == "" {
+		return &ValidationError{Field: "project_id", Message: "is required"}
+	}
 	if strings.TrimSpace(string(record.RepoBindingID)) == "" {
 		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
 	}
@@ -271,23 +282,26 @@ func (s *Service) goalCreatedEvent(created spine.Goal, timestamp time.Time) (spi
 	}
 
 	return spine.Event{
-		ID:         eventID,
-		Type:       EventTypeGoalCreated,
-		EntityType: EntityTypeGoal,
-		EntityID:   string(created.ID),
-		Timestamp:  timestamp,
-		Payload:    payload,
+		ID:             eventID,
+		Type:           EventTypeGoalCreated,
+		EntityType:     EntityTypeGoal,
+		EntityID:       string(created.ID),
+		OrganizationID: created.OrganizationID,
+		ProjectID:      created.ProjectID,
+		RepoBindingID:  created.RepoBindingID,
+		Timestamp:      timestamp,
+		Payload:        payload,
 	}, nil
 }
 
-func (s *Service) intakePromotedEvent(intakeID spine.IntakeID, goalID spine.GoalID, timestamp time.Time) (spine.Event, error) {
+func (s *Service) intakePromotedEvent(record spine.IntakeRecord, goalID spine.GoalID, timestamp time.Time) (spine.Event, error) {
 	eventID, err := s.IDs.NewEventID()
 	if err != nil {
 		return spine.Event{}, fmt.Errorf("new intake promoted event id: %w", err)
 	}
 
 	payload, err := json.Marshal(intakePromotedPayload{
-		IntakeID: intakeID,
+		IntakeID: record.ID,
 		GoalID:   goalID,
 	})
 	if err != nil {
@@ -295,12 +309,15 @@ func (s *Service) intakePromotedEvent(intakeID spine.IntakeID, goalID spine.Goal
 	}
 
 	return spine.Event{
-		ID:         eventID,
-		Type:       EventTypeIntakePromoted,
-		EntityType: EntityTypeIntake,
-		EntityID:   string(intakeID),
-		Timestamp:  timestamp,
-		Payload:    payload,
+		ID:             eventID,
+		Type:           EventTypeIntakePromoted,
+		EntityType:     EntityTypeIntake,
+		EntityID:       string(record.ID),
+		OrganizationID: record.OrganizationID,
+		ProjectID:      record.ProjectID,
+		RepoBindingID:  record.RepoBindingID,
+		Timestamp:      timestamp,
+		Payload:        payload,
 	}, nil
 }
 
@@ -320,12 +337,15 @@ func (s *Service) goalReadinessCheckedEvent(result spine.GoalReadinessResult, pr
 	}
 
 	return spine.Event{
-		ID:         eventID,
-		Type:       EventTypeGoalReadinessChecked,
-		EntityType: EntityTypeGoal,
-		EntityID:   string(result.GoalID),
-		Timestamp:  timestamp,
-		Payload:    payload,
+		ID:             eventID,
+		Type:           EventTypeGoalReadinessChecked,
+		EntityType:     EntityTypeGoal,
+		EntityID:       string(result.GoalID),
+		OrganizationID: result.OrganizationID,
+		ProjectID:      result.ProjectID,
+		RepoBindingID:  result.RepoBindingID,
+		Timestamp:      timestamp,
+		Payload:        payload,
 	}, nil
 }
 
@@ -350,12 +370,15 @@ func (s *Service) goalReadinessTransitionEvent(result spine.GoalReadinessResult,
 	}
 
 	return spine.Event{
-		ID:         eventID,
-		Type:       eventType,
-		EntityType: EntityTypeGoal,
-		EntityID:   string(result.GoalID),
-		Timestamp:  timestamp,
-		Payload:    payload,
+		ID:             eventID,
+		Type:           eventType,
+		EntityType:     EntityTypeGoal,
+		EntityID:       string(result.GoalID),
+		OrganizationID: result.OrganizationID,
+		ProjectID:      result.ProjectID,
+		RepoBindingID:  result.RepoBindingID,
+		Timestamp:      timestamp,
+		Payload:        payload,
 	}, nil
 }
 

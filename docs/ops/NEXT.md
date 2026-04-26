@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, Goal readiness, ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness, ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
@@ -89,17 +89,16 @@ Done means:
 
 ### Server follow-up slices
 
-1. Intake project/repo binding validation
-   - add `project_id` to intake context
-   - validate repo_binding belongs to project and organization
-   - keep intake non-executable
-2. Explicit Goal readiness re-check after applied answers boundary design
+1. Explicit Goal readiness re-check after applied answers boundary design
    - define how an applied answer updates readiness evaluation without hidden transitions
    - keep re-check separate from answer application and from contract seed creation
    - do not create contract draft / work items / gate / proof
-3. CLI-to-server intake submit integration
+2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
+3. Intake / Goal persistence boundary
+   - define the smallest durable persistence slice for IntakeRecord and Goal after context validation
+   - preserve current non-executable semantics and avoid contract, runner, gate, or proof expansion
 
 ## Deferred until later
 

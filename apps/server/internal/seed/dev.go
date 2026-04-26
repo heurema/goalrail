@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	DevUserID                   spine.UserID                   = "usr_dev_owner"
-	DevOrganizationID           spine.OrganizationID           = "org_dev_default"
-	DevOrganizationMembershipID spine.OrganizationMembershipID = "omem_dev_owner"
-	DevProjectID                spine.ProjectID                = "prj_dev_default"
-	DevRepoBindingID            spine.RepoBindingID            = "rpb_dev_default"
+	DevUserID                   spine.UserID                   = "018f0000-0000-7000-8000-000000000001"
+	DevOrganizationID           spine.OrganizationID           = "018f0000-0000-7000-8000-000000000002"
+	DevProjectID                spine.ProjectID                = "018f0000-0000-7000-8000-000000000003"
+	DevRepoBindingID            spine.RepoBindingID            = "018f0000-0000-7000-8000-000000000004"
+	DevOrganizationMembershipID spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000005"
 )
 
 type ProjectContextStore interface {
@@ -67,13 +67,14 @@ func RunDev(ctx context.Context, projectContext ProjectContextStore, now time.Ti
 	}
 
 	project := spine.Project{
-		ID:             DevProjectID,
-		OrganizationID: DevOrganizationID,
-		Slug:           "dev-default",
-		DisplayName:    "Goalrail Dev Project",
-		State:          spine.EntityStateActive,
-		CreatedAt:      createdAt,
-		UpdatedAt:      createdAt,
+		ID:              DevProjectID,
+		OrganizationID:  DevOrganizationID,
+		CreatedByUserID: DevUserID,
+		Slug:            "dev-default",
+		DisplayName:     "Goalrail Dev Project",
+		State:           spine.EntityStateActive,
+		CreatedAt:       createdAt,
+		UpdatedAt:       createdAt,
 	}
 	if err := projectContext.UpsertProject(ctx, project); err != nil {
 		return err
@@ -83,6 +84,7 @@ func RunDev(ctx context.Context, projectContext ProjectContextStore, now time.Ti
 		ID:                 DevRepoBindingID,
 		OrganizationID:     DevOrganizationID,
 		ProjectID:          DevProjectID,
+		CreatedByUserID:    DevUserID,
 		Provider:           "custom_git",
 		RepositoryFullName: "heurema/goalrail",
 		RepositoryURL:      "https://example.invalid/heurema/goalrail.git",
