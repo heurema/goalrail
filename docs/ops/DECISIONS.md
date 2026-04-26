@@ -417,3 +417,20 @@ Rationale:
 - keeps answer evidence, hint mutation, readiness, and contract generation as separate inspectable transitions
 - prevents hidden transition chains from turning clarification into contract or executable work
 - gives the next implementation slice a bounded target without introducing readiness or contract semantics
+
+## D-0036 — Readiness re-check after applied answers stays explicit
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- after answer application updates Goal intent-plane hints, readiness re-check remains an explicit server-owned transition
+- the recommended prototype direction is to reuse `POST /v1/goals/{id}/readiness` for the explicit re-check
+- readiness re-check may move Goal to `needs_clarification`, `ready_for_contract_seed`, or `rejected`
+- `ready_for_contract_seed` is Goal state only and does not create contract seed, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`
+- answer application must not automatically call readiness re-check
+- this boundary does not modify ADR-0010 persistence or introduce new durable storage requirements
+
+Rationale:
+- keeps answer application, readiness, and contract seed as separate auditable transitions
+- prevents hidden transition chains from turning clarified intent into contract or executable work
+- gives the next implementation slice a bounded target using the existing readiness endpoint

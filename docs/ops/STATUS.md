@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- eleven kernel/CLI/server/domain boundary ADRs
+- twelve kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -95,6 +95,8 @@ The project currently has:
 - persistence direction is pgx + Squirrel + goose, with no `sqlc` and no ORM
 - ADR-0011 documents answer application to Goal hints as a server-owned
   transition with no readiness re-check, contract seed, work item, gate, or proof
+- ADR-0012 documents explicit readiness re-check after applied answers as a
+  separate server-owned transition before any contract seed boundary
 
 ### Delivery model
 - roadmap phases defined
@@ -102,7 +104,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and eleven boundary ADRs exist
+- kernel schema note and twelve boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -135,6 +137,7 @@ The project currently has:
 - answer application updates Goal intent-plane hints only as an in-memory prototype, rejects unsupported raw-text `goal.intent_owner` mapping, guards repeated application with `409 already_applied`, and appends in-memory `clarification.answer_applied_to_goal` and `goal.hints_updated` events
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011 and implemented as an in-memory prototype only
+- the explicit readiness re-check after applied answers boundary is documented in ADR-0012, but no new re-check implementation slice exists yet
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -147,7 +150,7 @@ The project currently has:
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, `ClarificationRequest`, and `ClarificationAnswer` prototypes yet
 - no durable server storage for intake, Goal, clarification, answer application, or event log persistence yet; Postgres is only used to validate and derive Project / RepoBinding context for intake
-- no automatic readiness re-check after answer application, contract composition, or contract seed yet
+- no automatic readiness re-check after answer application, no verified re-check-after-applied-answers implementation slice, no contract composition, and no contract seed yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
@@ -197,7 +200,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, ClarificationAnswer recording, and answer application prototypes; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, and recorded `ClarificationAnswer` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable storage for those flows, automatic readiness re-check, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness, ClarificationRequest creation, ClarificationAnswer recording, and answer application prototypes; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, and recorded `ClarificationAnswer` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable storage for those flows, automatic readiness re-check, a verified re-check-after-applied-answers implementation, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
