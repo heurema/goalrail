@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-26
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed prototypes exist
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft prototypes exist
 Owner: Vitaly
 
 ## Current state
@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- fourteen kernel/CLI/server/domain boundary ADRs
+- fifteen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -50,7 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, intake/goal EventLog persistence, and transactional canonical write + event append hardening when DB is configured, plus in-memory ClarificationRequest, ClarificationAnswer recording, answer application, explicit re-check-after-applied-answers, and ContractSeed creation prototypes
+- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, intake/goal EventLog persistence, and transactional canonical write + event append hardening when DB is configured, plus in-memory ClarificationRequest, ClarificationAnswer recording, answer application, explicit re-check-after-applied-answers, ContractSeed creation, and ContractDraft creation prototypes
 
 ## What is real now
 
@@ -102,7 +102,10 @@ The project currently has:
 - ADR-0014 documents `ContractDraft(draft)` as an explicit server-owned draft
   boundary from `ContractSeed(created)`, before approval, work item, gate, or
   proof
-- D-0040 documents transactional Postgres-backed intake create, Goal promotion,
+- ADR-0015 documents `ContractDraft` review/update as an explicit server-owned
+  draft-only boundary for proposed fields, before `ready_for_approval`, approval,
+  work item, gate, or proof
+- D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
 
@@ -112,7 +115,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and fourteen boundary ADRs exist
+- kernel schema note and fifteen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -129,7 +132,7 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarification-requests`, `POST /v1/clarification-requests/{id}/answers`, `POST /v1/clarification-answers/{id}/apply`, and `POST /v1/goals/{id}/contract-seed`
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarification-requests`, `POST /v1/clarification-requests/{id}/answers`, `POST /v1/clarification-answers/{id}/apply`, `POST /v1/goals/{id}/contract-seed`, and `POST /v1/contract-seeds/{id}/contract-draft`
 - `apps/server` now has a Postgres persistence foundation for the Organization / Project / RepoBinding context plus IntakeRecord, Goal, and intake/goal EventLog state
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
@@ -145,11 +148,13 @@ The project currently has:
 - ClarificationAnswer recording stores canonical answer evidence only as an in-memory prototype, requires all questions answered, transitions the request from `open` to `answered`, and appends `clarification.answer_recorded` and `clarification.request_answered` through the configured EventLog
 - answer application remains part of the in-memory clarification prototype for request/answer state; when DB is configured it updates persisted Goal intent-plane hints, rejects unsupported raw-text `goal.intent_owner` mapping, guards repeated application with `409 already_applied`, and appends events through the configured EventLog; it does not call readiness automatically
 - ContractSeed creation stores a `ContractSeed(created)` snapshot only as an in-memory prototype from `Goal(ready_for_contract_seed)`, guards repeated creation with `409 already_seeded`, appends `contract_seed.created`, and does not mutate Goal state
+- ContractDraft creation stores a `ContractDraft(draft)` only as an in-memory prototype from `ContractSeed(created)`, guards repeated creation with `409 already_drafted`, appends `contract_draft.created`, and does not mutate ContractSeed
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011 and still keeps clarification request/answer state in-memory
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as an in-memory snapshot prototype only; it does not create `ContractDraft`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
-- the `ContractDraft` boundary is documented in ADR-0014 as `ContractSeed(created)` -> `ContractDraft(draft)`, but no `ContractDraft` implementation exists yet
+- the `ContractDraft` boundary is documented in ADR-0014 and implemented as an in-memory draft prototype only; it does not create approved Contract, `WorkItem`, `GateDecision`, or `Proof`
+- the `ContractDraft` review/update boundary is documented in ADR-0015, but no update implementation exists yet
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -160,10 +165,10 @@ The project currently has:
 - no runtime registry implementation
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
-- no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` / `ContractSeed` prototypes yet
-- no durable server storage for clarification request/answer or ContractSeed state yet
-- no automatic readiness re-check after answer application and no `ContractDraft` implementation yet
-- no server-created Contract, WorkItem, GateDecision, or Proof yet
+- no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` / `ContractSeed` / `ContractDraft` prototypes yet
+- no durable server storage for clarification request/answer, ContractSeed, or ContractDraft state yet
+- no automatic readiness re-check after answer application
+- no approved Contract, contract approval, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet
@@ -212,7 +217,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, intake/goal EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory ContractSeed creation when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, and in-memory `ContractSeed(created)` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable clarification or ContractSeed storage, automatic readiness re-check, contract composition, `ContractDraft`, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, intake/goal EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory ContractSeed / ContractDraft creation when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, in-memory `ContractSeed(created)`, and in-memory `ContractDraft(draft)` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable clarification, ContractSeed, or ContractDraft storage, automatic readiness re-check, approved Contract, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
