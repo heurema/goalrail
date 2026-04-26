@@ -40,7 +40,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- thirteen kernel/CLI/server/domain boundary ADRs
+- fourteen kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -99,6 +99,9 @@ The project currently has:
   separate server-owned transition before any contract seed boundary
 - ADR-0013 documents `ContractSeed` as an explicit server-owned canonical
   bridge from `Goal(ready_for_contract_seed)` to future contract drafting
+- ADR-0014 documents `ContractDraft(draft)` as an explicit server-owned draft
+  boundary from `ContractSeed(created)`, before approval, work item, gate, or
+  proof
 
 ### Delivery model
 - roadmap phases defined
@@ -106,7 +109,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and thirteen boundary ADRs exist
+- kernel schema note and fourteen boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -142,6 +145,7 @@ The project currently has:
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011 and still keeps clarification request/answer state in-memory
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as an in-memory snapshot prototype only; it does not create `ContractDraft`, approved Contract, `WorkItem`, `GateDecision`, or `Proof`
+- the `ContractDraft` boundary is documented in ADR-0014 as `ContractSeed(created)` -> `ContractDraft(draft)`, but no `ContractDraft` implementation exists yet
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -154,7 +158,7 @@ The project currently has:
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` / `ContractSeed` prototypes yet
 - no durable server storage for clarification request/answer or ContractSeed state yet
-- no automatic readiness re-check after answer application, no contract composition, and no `ContractDraft` implementation yet
+- no automatic readiness re-check after answer application and no `ContractDraft` implementation yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync

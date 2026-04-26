@@ -453,7 +453,25 @@ Rationale:
 - avoids hidden transition chains from readiness to contract artifacts or executable work
 - gives the next implementation slice a bounded target before `ContractDraft` generation
 
-## D-0038 — Intake, Goal, and EventLog persist in Postgres
+## D-0038 — ContractDraft is draft state before approval
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- `ContractDraft` may be created explicitly from `ContractSeed(created)`
+- `ContractDraft` is canonical server-owned draft state containing proposed contract terms
+- `ContractDraft` is not an approved Contract, not executable work, and not approval
+- `ContractDraft` creation must not create `WorkItem`, start execution, write `GateDecision`, or create `Proof`
+- `ContractDraft` creation must not mutate `ContractSeed`; the seed remains `created` unless a later boundary defines a transition
+- repeated draft creation for the same `ContractSeed` should return `409 already_drafted` in v0
+- this boundary does not modify ADR-0010 persistence or introduce new durable storage requirements
+
+Rationale:
+- preserves a bounded drafting stage between ContractSeed and approval
+- prevents proposed terms from being treated as approved scope or runnable work
+- gives the next implementation slice a focused target before approval, task shaping, gate, and proof boundaries
+
+## D-0039 — Intake, Goal, and EventLog persist in Postgres
 Date: 2026-04-26
 Status: accepted
 
