@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
@@ -39,6 +40,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
 	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
 	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
+	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
 	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
@@ -53,6 +55,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		goals = store.NewPostgresTransactionalGoalStore(pool)
 		contractSeedStore = store.NewPostgresTransactionalContractSeedStore(pool)
 		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
+		approvedContractStore = store.NewPostgresTransactionalApprovedContractStore(pool)
 		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}
@@ -67,6 +70,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
+	approvedContractService := approvedcontract.NewService(contractDraftStore, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
+	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     http.HandlerFunc(healthHandler.Livez),
@@ -81,6 +86,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		ContractSeedDraft:         http.HandlerFunc(contractDraftHandler.Create),
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
 		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
+		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

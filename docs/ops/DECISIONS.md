@@ -585,3 +585,20 @@ Rationale:
 - separates draft history from approved contract truth
 - keeps approval distinct from execution planning and delivery verification
 - prevents approval from becoming gate/proof or task creation semantics
+
+## D-0045 — ApprovedContract persists in Postgres with evented approval
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- approving `ContractDraft(ready_for_approval)` creates a separate `ApprovedContract(approved)` snapshot
+- approval requires `approved_by` and records it on the snapshot and `contract.approved` event
+- the snapshot copies current draft terms and source refs without mutating `ContractDraft`
+- Postgres-backed approval inserts `approved_contracts` and appends `contract.approved` in one transaction
+- repeated approval for the same `contract_draft_id` returns `409 already_approved`
+- approval does not create `WorkItem`, plan tasks, start execution, write `GateDecision`, or create `Proof`
+
+Rationale:
+- makes approved contract truth durable before work planning exists
+- preserves the separation between approval and execution
+- keeps audit events synchronous without queue, outbox, event bus, sqlc, or ORM

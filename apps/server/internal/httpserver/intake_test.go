@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
@@ -38,15 +39,16 @@ const validIntakeJSON = `{
 }`
 
 type testServerDeps struct {
-	router         http.Handler
-	intakes        *store.IntakeStore
-	goals          *store.GoalStore
-	clarifications *store.ClarificationStore
-	answers        *store.ClarificationAnswerStore
-	contractSeeds  *store.ContractSeedStore
-	contractDrafts *store.ContractDraftStore
-	events         *eventlog.EventLog
-	idFactory      *sequenceIDs
+	router            http.Handler
+	intakes           *store.IntakeStore
+	goals             *store.GoalStore
+	clarifications    *store.ClarificationStore
+	answers           *store.ClarificationAnswerStore
+	contractSeeds     *store.ContractSeedStore
+	contractDrafts    *store.ContractDraftStore
+	approvedContracts *store.ApprovedContractStore
+	events            *eventlog.EventLog
+	idFactory         *sequenceIDs
 }
 
 func TestPostIntakeReturnsAccepted(t *testing.T) {
@@ -1242,6 +1244,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	answerStore := store.NewClarificationAnswerStore()
 	contractSeedStore := store.NewContractSeedStore()
 	contractDraftStore := store.NewContractDraftStore()
+	approvedContractStore := store.NewApprovedContractStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
@@ -1254,17 +1257,20 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
 	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
+	approvedContractService := approvedcontract.NewService(contractDraftStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
+	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
 
 	return testServerDeps{
-		router:         baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler, contractDraftHandler),
-		intakes:        intakeStore,
-		goals:          goalStore,
-		clarifications: clarificationStore,
-		answers:        answerStore,
-		contractSeeds:  contractSeedStore,
-		contractDrafts: contractDraftStore,
-		events:         events,
-		idFactory:      ids,
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler, contractDraftHandler, approvedContractHandler),
+		intakes:           intakeStore,
+		goals:             goalStore,
+		clarifications:    clarificationStore,
+		answers:           answerStore,
+		contractSeeds:     contractSeedStore,
+		contractDrafts:    contractDraftStore,
+		approvedContracts: approvedContractStore,
+		events:            events,
+		idFactory:         ids,
 	}
 }
 
@@ -1298,14 +1304,15 @@ func (c fixedClock) Now() time.Time {
 }
 
 type sequenceIDs struct {
-	intake        int
-	goal          int
-	clarification int
-	question      int
-	answer        int
-	contractSeed  int
-	contractDraft int
-	event         int
+	intake           int
+	goal             int
+	clarification    int
+	question         int
+	answer           int
+	contractSeed     int
+	contractDraft    int
+	approvedContract int
+	event            int
 }
 
 func (g *sequenceIDs) NewIntakeID() (spine.IntakeID, error) {
@@ -1346,6 +1353,11 @@ func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {
 func (g *sequenceIDs) NewContractDraftID() (spine.ContractDraftID, error) {
 	g.contractDraft++
 	return spine.ContractDraftID(fmt.Sprintf("contract-draft-%d", g.contractDraft)), nil
+}
+
+func (g *sequenceIDs) NewApprovedContractID() (spine.ApprovedContractID, error) {
+	g.approvedContract++
+	return spine.ApprovedContractID(fmt.Sprintf("approved-contract-%d", g.approvedContract)), nil
 }
 
 func testTime() time.Time {

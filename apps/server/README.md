@@ -2,7 +2,7 @@
 
 This server is still an early prototype. Existing intake, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, ContractDraft
-ready_for_approval, and event log flows use Postgres when
+ready_for_approval, ApprovedContract approval, and event log flows use Postgres when
 `GOALRAIL_DATABASE_DSN` is configured. Clarification request and answer state
 remain in-memory.
 
@@ -61,12 +61,12 @@ curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ContractSeed`,
-`ContractDraft`, and their events are durable and survive server restarts.
+`ContractDraft`, `ApprovedContract`, and their events are durable and survive server restarts.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
 the seeded context. Intake creation, Goal promotion, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, and ContractDraft
-ready_for_approval writes share a transaction with their expected event
-appends.
+ready_for_approval writes, and ApprovedContract approval writes share a
+transaction with their expected event appends.
 
 After clarification answers are applied and an explicit readiness re-check marks
 the Goal `ready_for_contract_seed`, create a seed snapshot:
@@ -105,8 +105,18 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/re
   }'
 ```
 
-This flow still does not create executable work, approved Contract, gate
-decisions, proof, runner jobs, or VCS integration. Clarification request and
+Then approve the ready draft into an approved contract snapshot:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approve \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "approved_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
+  }'
+```
+
+This flow still does not create executable work, gate decisions, proof, runner
+jobs, or VCS integration. Clarification request and
 answer state is still prototype/in-memory. ContractSeed creation does not
 create `ContractDraft`, `WorkItem`, approved Contract, `GateDecision`, `Proof`,
 or executable work. ContractDraft creation does not approve Contract, create
@@ -116,3 +126,6 @@ modify proposed fields only, keep `ContractDraft.state` as `draft`, and treat
 only `ContractDraft.state` from `draft` to `ready_for_approval`, requires
 `marked_by` as audit identity, runs completeness checks, and does not approve
 Contract, create `WorkItem`, write `GateDecision`, or create `Proof`.
+Approval creates an immutable `ApprovedContract(approved)` snapshot from a ready
+draft, requires `approved_by`, appends `contract.approved`, and does not mutate
+`ContractDraft` or create `WorkItem`, execution, `GateDecision`, or `Proof`.

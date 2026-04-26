@@ -192,6 +192,48 @@ CREATE INDEX contract_drafts_project_created_at_idx
 CREATE INDEX contract_drafts_repo_binding_created_at_idx
     ON contract_drafts(repo_binding_id, created_at);
 
+CREATE TABLE approved_contracts (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    contract_draft_id UUID NOT NULL REFERENCES contract_drafts(id) ON DELETE CASCADE,
+    contract_seed_id UUID NOT NULL REFERENCES contract_seeds(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    intent_summary TEXT NOT NULL,
+    scope JSONB NOT NULL DEFAULT '[]'::JSONB,
+    non_goals JSONB NOT NULL DEFAULT '[]'::JSONB,
+    constraints JSONB NOT NULL DEFAULT '[]'::JSONB,
+    acceptance_criteria JSONB NOT NULL DEFAULT '[]'::JSONB,
+    expected_checks JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proof_expectations JSONB NOT NULL DEFAULT '[]'::JSONB,
+    risk_hints JSONB NOT NULL DEFAULT '[]'::JSONB,
+    approved_by JSONB NOT NULL,
+    approved_at TIMESTAMPTZ NOT NULL,
+    source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    state TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT approved_contracts_contract_draft_id_unique UNIQUE (contract_draft_id),
+    CONSTRAINT approved_contracts_state_check CHECK (state IN ('approved'))
+);
+
+CREATE INDEX approved_contracts_organization_approved_at_idx
+    ON approved_contracts(organization_id, approved_at);
+
+CREATE INDEX approved_contracts_project_approved_at_idx
+    ON approved_contracts(project_id, approved_at);
+
+CREATE INDEX approved_contracts_repo_binding_approved_at_idx
+    ON approved_contracts(repo_binding_id, approved_at);
+
+CREATE INDEX approved_contracts_contract_seed_id_idx
+    ON approved_contracts(contract_seed_id);
+
+CREATE INDEX approved_contracts_goal_id_idx
+    ON approved_contracts(goal_id);
+
 CREATE TABLE events (
     id UUID PRIMARY KEY,
     event_sequence BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
@@ -226,6 +268,12 @@ DROP INDEX IF EXISTS events_entity_sequence_idx;
 DROP INDEX IF EXISTS events_project_sequence_idx;
 DROP INDEX IF EXISTS events_organization_sequence_idx;
 DROP TABLE IF EXISTS events;
+DROP INDEX IF EXISTS approved_contracts_goal_id_idx;
+DROP INDEX IF EXISTS approved_contracts_contract_seed_id_idx;
+DROP INDEX IF EXISTS approved_contracts_repo_binding_approved_at_idx;
+DROP INDEX IF EXISTS approved_contracts_project_approved_at_idx;
+DROP INDEX IF EXISTS approved_contracts_organization_approved_at_idx;
+DROP TABLE IF EXISTS approved_contracts;
 DROP INDEX IF EXISTS contract_drafts_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS contract_drafts_project_created_at_idx;
 DROP INDEX IF EXISTS contract_drafts_organization_created_at_idx;
