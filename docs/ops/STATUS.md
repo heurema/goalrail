@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-04-26
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intake/goal prototypes exist
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intake/goal/clarification prototypes exist
 Owner: Vitaly
 
 ## Current state
@@ -50,7 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with in-memory source-neutral intake, Goal promotion, and Goal readiness prototypes
+- a Go server bootstrap under `apps/server` with in-memory source-neutral intake, Goal promotion, Goal readiness, and ClarificationRequest prototypes
 
 ## What is real now
 
@@ -113,11 +113,11 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, and `POST /v1/goals/{id}/readiness`
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intake`, `GET /v1/intake/{id}`, `POST /v1/intake/{id}/promote`, `POST /v1/goals/{id}/readiness`, and `POST /v1/goals/{id}/clarification-requests`
 - the source-neutral intake API stores `IntakeRecord` only as an in-memory prototype and appends an in-memory `intake.received` event
 - Goal promotion stores `Goal` only as non-executable normalized intent and appends in-memory `goal.created` and `intake.promoted_to_goal` events
 - Goal readiness updates `Goal` state only as an in-memory deterministic prototype, returns reason codes, and appends in-memory readiness transition events
-- the `ClarificationRequest` boundary is documented in ADR-0007, but no clarification implementation exists yet
+- ClarificationRequest creation stores an open request only as an in-memory prototype, generates deterministic questions from Goal readiness reason codes, and appends an in-memory `clarification.requested` event
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - `.github/` now contains real contributor/community health surfaces and the docs-check workflow
 - `scripts/` remains parked for future bounded implementation slices
@@ -128,9 +128,9 @@ The project currently has:
 - no runtime registry implementation
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
-- no server-owned canonical domain implementation beyond the in-memory `IntakeRecord` and `Goal` prototypes yet
+- no server-owned canonical domain implementation beyond the in-memory `IntakeRecord`, `Goal`, and `ClarificationRequest` prototypes yet
 - no durable server storage or event log persistence yet
-- no server-side `ClarificationRequest` implementation, clarification answer flow, or contract composition yet
+- no server-side `ClarificationAnswer` implementation, answer application, Goal hint update flow, automatic readiness re-check, or contract composition yet
 - no server-created Contract, WorkItem, GateDecision, or Proof yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
@@ -177,7 +177,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, and deterministic Goal readiness prototypes; it creates `IntakeRecord` and non-executable `Goal` only, updates Goal readiness state only, and does not claim durable storage, clarification objects, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, and ClarificationRequest creation prototypes; it creates `IntakeRecord`, non-executable `Goal`, and open `ClarificationRequest` only, updates Goal readiness state only, and does not claim durable storage, ClarificationAnswer, answer application, Goal hint updates, automatic readiness re-check, contract composition, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

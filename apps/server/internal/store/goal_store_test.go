@@ -83,6 +83,48 @@ func TestGoalStoreUpdateState(t *testing.T) {
 	}
 }
 
+func TestGoalStoreUpdateReadinessStoresReasonCodes(t *testing.T) {
+	goalStore := store.NewGoalStore()
+	created := validGoal()
+	if err := goalStore.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	reasons := []spine.GoalReadinessReasonCode{
+		spine.GoalReadinessReasonMissingScopeHint,
+		spine.GoalReadinessReasonMissingAcceptanceHint,
+	}
+	updated, ok, err := goalStore.UpdateReadiness(context.Background(), created.ID, spine.GoalStateNeedsClarification, reasons)
+	if err != nil {
+		t.Fatalf("UpdateReadiness() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdateReadiness() ok = false, want true")
+	}
+	if updated.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("updated state = %q, want %q", updated.State, spine.GoalStateNeedsClarification)
+	}
+	if !reflect.DeepEqual(updated.LastReadinessReasonCodes, reasons) {
+		t.Fatalf("updated reasons = %#v, want %#v", updated.LastReadinessReasonCodes, reasons)
+	}
+
+	reasons[0] = spine.GoalReadinessReasonMissingGoalSummary
+	stored, ok, err := goalStore.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	want := []spine.GoalReadinessReasonCode{
+		spine.GoalReadinessReasonMissingScopeHint,
+		spine.GoalReadinessReasonMissingAcceptanceHint,
+	}
+	if !reflect.DeepEqual(stored.LastReadinessReasonCodes, want) {
+		t.Fatalf("stored reasons = %#v, want %#v", stored.LastReadinessReasonCodes, want)
+	}
+}
+
 func validGoal() spine.Goal {
 	return spine.Goal{
 		ID:             "goal-1",

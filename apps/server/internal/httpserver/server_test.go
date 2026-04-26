@@ -127,19 +127,25 @@ func newRouter(
 	versionHandler http.Handler,
 	intakeHandler *httpserver.IntakeHandler,
 	goalHandler *httpserver.GoalHandler,
+	clarificationHandler *httpserver.ClarificationHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
-		Livez:         livez,
-		Readyz:        readyz,
-		Version:       versionHandler,
-		IntakeSubmit:  http.HandlerFunc(intakeHandler.Submit),
-		IntakeGet:     http.HandlerFunc(intakeHandler.Get),
-		IntakePromote: http.HandlerFunc(goalHandler.PromoteFromIntake),
-		GoalReadiness: http.HandlerFunc(goalHandler.CheckReadiness),
+		Livez:                     livez,
+		Readyz:                    readyz,
+		Version:                   versionHandler,
+		IntakeSubmit:              http.HandlerFunc(intakeHandler.Submit),
+		IntakeGet:                 http.HandlerFunc(intakeHandler.Get),
+		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
+		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
+		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
 	})
 }
 
-func baseHandlers(intakeHandler *httpserver.IntakeHandler, goalHandler *httpserver.GoalHandler) http.Handler {
+func baseHandlers(
+	intakeHandler *httpserver.IntakeHandler,
+	goalHandler *httpserver.GoalHandler,
+	clarificationHandler *httpserver.ClarificationHandler,
+) http.Handler {
 	healthHandler := health.NewHandler()
 	return newRouter(
 		http.HandlerFunc(healthHandler.Livez),
@@ -147,6 +153,7 @@ func baseHandlers(intakeHandler *httpserver.IntakeHandler, goalHandler *httpserv
 		version.NewHandler(),
 		intakeHandler,
 		goalHandler,
+		clarificationHandler,
 	)
 }
 

@@ -6,13 +6,14 @@ import (
 
 // RouteHandlers contains the concrete handlers wired by the app composition root.
 type RouteHandlers struct {
-	Livez         http.Handler
-	Readyz        http.Handler
-	Version       http.Handler
-	IntakeSubmit  http.Handler
-	IntakeGet     http.Handler
-	IntakePromote http.Handler
-	GoalReadiness http.Handler
+	Livez                     http.Handler
+	Readyz                    http.Handler
+	Version                   http.Handler
+	IntakeSubmit              http.Handler
+	IntakeGet                 http.Handler
+	IntakePromote             http.Handler
+	GoalReadiness             http.Handler
+	GoalClarificationRequests http.Handler
 }
 
 // NewRouter builds the server router.
@@ -26,6 +27,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("GET /v1/intake/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intake/{id}/promote", mustHandler("intake promote", handlers.IntakePromote))
 	mux.Handle("POST /v1/goals/{id}/readiness", mustHandler("goal readiness", handlers.GoalReadiness))
+	mux.Handle("POST /v1/goals/{id}/clarification-requests", mustHandler("goal clarification requests", handlers.GoalClarificationRequests))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		RespondError(w, http.StatusNotFound, "not_found", "not found")
 	})

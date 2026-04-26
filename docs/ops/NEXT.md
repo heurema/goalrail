@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, and Goal readiness prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus in-memory source-neutral intake, Goal promotion, Goal readiness, and ClarificationRequest prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
@@ -86,10 +86,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. ClarificationRequest prototype
-   - create the smallest in-memory Goal -> ClarificationRequest(open) prototype from readiness reason codes
-   - do not implement ClarificationAnswer, answer application, or automatic readiness re-check in this slice
-   - keep `ready_for_contract_seed` distinct from `ContractDraft`
+1. ClarificationAnswer boundary/design
+   - define the smallest bounded path for storing answers as canonical evidence
+   - decide whether answer application to Goal hints is part of the first answer slice or a separate explicit transition
+   - keep ClarificationAnswer distinct from approval
    - do not implement contract seed, contract draft, work items, gate, or proof
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
