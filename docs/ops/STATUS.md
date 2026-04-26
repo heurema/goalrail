@@ -50,7 +50,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a local RU pilot-intake landing prototype under `apps/web/pilot-intake-ru`
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, and intake/goal EventLog persistence when DB is configured, plus in-memory ClarificationRequest, ClarificationAnswer recording, answer application, explicit re-check-after-applied-answers, and ContractSeed creation prototypes
+- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, intake/goal EventLog persistence, and transactional canonical write + event append hardening when DB is configured, plus in-memory ClarificationRequest, ClarificationAnswer recording, answer application, explicit re-check-after-applied-answers, and ContractSeed creation prototypes
 
 ## What is real now
 
@@ -102,6 +102,9 @@ The project currently has:
 - ADR-0014 documents `ContractDraft(draft)` as an explicit server-owned draft
   boundary from `ContractSeed(created)`, before approval, work item, gate, or
   proof
+- D-0040 documents transactional Postgres-backed intake create, Goal promotion,
+  and Goal readiness write/event boundaries without adding queue, outbox, or
+  Unit of Work framework semantics
 
 ### Delivery model
 - roadmap phases defined
@@ -137,6 +140,7 @@ The project currently has:
 - the source-neutral intake API now requires `project_id` and `repo_binding_id`, validates the repo binding against the persisted Project / RepoBinding context when DB is configured, derives `organization_id`, stores `IntakeRecord` in Postgres when DB is configured, and appends a durable `intake.received` event with context fields
 - Goal promotion stores `Goal` as non-executable normalized intent in Postgres when DB is configured, carries `organization_id`, `project_id`, and `repo_binding_id` from the IntakeRecord, prevents duplicate promotion through the persisted `intake_id` uniqueness boundary, and appends durable `goal.created` and `intake.promoted_to_goal` events with context fields
 - Goal readiness updates persisted `Goal` state and readiness reason codes when DB is configured, returns reason codes, appends durable readiness transition events, and can be explicitly re-run after answer application
+- Postgres-backed intake create, Goal promotion, and Goal readiness writes now share a transaction with their expected event appends, so the durable canonical write does not commit without its audit events
 - ClarificationRequest creation stores an open request only as an in-memory prototype, generates deterministic questions from Goal readiness reason codes, and appends `clarification.requested` through the configured EventLog
 - ClarificationAnswer recording stores canonical answer evidence only as an in-memory prototype, requires all questions answered, transitions the request from `open` to `answered`, and appends `clarification.answer_recorded` and `clarification.request_answered` through the configured EventLog
 - answer application remains part of the in-memory clarification prototype for request/answer state; when DB is configured it updates persisted Goal intent-plane hints, rejects unsupported raw-text `goal.intent_owner` mapping, guards repeated application with `409 already_applied`, and appends events through the configured EventLog; it does not call readiness automatically
@@ -208,7 +212,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, intake/goal EventLog persistence, explicit re-check-after-applied-answers, and in-memory ContractSeed creation when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, and in-memory `ContractSeed(created)` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable clarification or ContractSeed storage, automatic readiness re-check, contract composition, `ContractDraft`, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, intake/goal EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory ContractSeed creation when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, and in-memory `ContractSeed(created)` only, updates Goal readiness state, request answered state, and Goal intent-plane hints only, and does not claim durable clarification or ContractSeed storage, automatic readiness re-check, contract composition, `ContractDraft`, contract approval, work item creation, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified local RU pilot-intake landing prototype for the pilot-first public entry
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

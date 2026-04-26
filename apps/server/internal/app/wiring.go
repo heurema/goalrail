@@ -47,8 +47,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 			return nil, nil, fmt.Errorf("open project context db: %w", err)
 		}
 		projectContext = store.NewProjectContextStore(pool)
-		intakeStore = store.NewPostgresIntakeStore(pool)
-		goals = store.NewPostgresGoalStore(pool)
+		intakeStore = store.NewPostgresTransactionalIntakeStore(pool)
+		goals = store.NewPostgresTransactionalGoalStore(pool)
 		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}
