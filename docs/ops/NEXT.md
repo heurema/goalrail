@@ -89,22 +89,16 @@ Done means:
 
 ### Server follow-up slices
 
-1. Server persistence foundation and dev seed
-   - add pgx/goose/Squirrel dependencies
-   - add one editable init migration
-   - add tables for User/Organization/Membership/Project/RepoBinding
-   - add idempotent dev seed
-   - no CRUD endpoints, no auth, no UI, no GitHub, no runner
-2. Intake project/repo binding validation
+1. Intake project/repo binding validation
    - add `project_id` to intake context
    - validate repo_binding belongs to project and organization
    - keep intake non-executable
-3. Answer application to Goal hints prototype
+2. Answer application to Goal hints prototype
    - implement explicit server-owned application from recorded ClarificationAnswer evidence to Goal intent-plane hints
    - append answer application / goal hints updated events
    - guard duplicate application with `409 already_applied`
    - do not trigger readiness re-check or create contract seed / contract draft / work items / gate / proof
-4. CLI-to-server intake submit integration
+3. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
 
