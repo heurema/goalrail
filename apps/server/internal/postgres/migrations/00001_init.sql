@@ -131,6 +131,67 @@ CREATE INDEX goals_repo_binding_created_at_idx
 CREATE INDEX goals_intake_id_idx
     ON goals(intake_id);
 
+CREATE TABLE contract_seeds (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    intent_summary TEXT NOT NULL,
+    intent_owner JSONB NOT NULL,
+    scope_hint TEXT NOT NULL,
+    acceptance_hint TEXT NOT NULL,
+    source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    state TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT contract_seeds_goal_id_unique UNIQUE (goal_id),
+    CONSTRAINT contract_seeds_state_check CHECK (state IN ('created'))
+);
+
+CREATE INDEX contract_seeds_organization_created_at_idx
+    ON contract_seeds(organization_id, created_at);
+
+CREATE INDEX contract_seeds_project_created_at_idx
+    ON contract_seeds(project_id, created_at);
+
+CREATE INDEX contract_seeds_repo_binding_created_at_idx
+    ON contract_seeds(repo_binding_id, created_at);
+
+CREATE TABLE contract_drafts (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    contract_seed_id UUID NOT NULL REFERENCES contract_seeds(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    intent_summary TEXT NOT NULL,
+    proposed_scope JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proposed_non_goals JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proposed_constraints JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proposed_acceptance_criteria JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proposed_expected_checks JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proposed_proof_expectations JSONB NOT NULL DEFAULT '[]'::JSONB,
+    risk_hints JSONB NOT NULL DEFAULT '[]'::JSONB,
+    source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    state TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT contract_drafts_contract_seed_id_unique UNIQUE (contract_seed_id),
+    CONSTRAINT contract_drafts_state_check CHECK (state IN ('draft'))
+);
+
+CREATE INDEX contract_drafts_organization_created_at_idx
+    ON contract_drafts(organization_id, created_at);
+
+CREATE INDEX contract_drafts_project_created_at_idx
+    ON contract_drafts(project_id, created_at);
+
+CREATE INDEX contract_drafts_repo_binding_created_at_idx
+    ON contract_drafts(repo_binding_id, created_at);
+
 CREATE TABLE events (
     id UUID PRIMARY KEY,
     event_sequence BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
@@ -165,6 +226,14 @@ DROP INDEX IF EXISTS events_entity_sequence_idx;
 DROP INDEX IF EXISTS events_project_sequence_idx;
 DROP INDEX IF EXISTS events_organization_sequence_idx;
 DROP TABLE IF EXISTS events;
+DROP INDEX IF EXISTS contract_drafts_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS contract_drafts_project_created_at_idx;
+DROP INDEX IF EXISTS contract_drafts_organization_created_at_idx;
+DROP TABLE IF EXISTS contract_drafts;
+DROP INDEX IF EXISTS contract_seeds_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS contract_seeds_project_created_at_idx;
+DROP INDEX IF EXISTS contract_seeds_organization_created_at_idx;
+DROP TABLE IF EXISTS contract_seeds;
 DROP INDEX IF EXISTS goals_intake_id_idx;
 DROP INDEX IF EXISTS goals_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS goals_project_created_at_idx;

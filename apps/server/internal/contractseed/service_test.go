@@ -36,6 +36,12 @@ func TestServiceCreatesContractSeedSnapshotFromGoal(t *testing.T) {
 	if created.RepoBindingID != goal.RepoBindingID {
 		t.Fatalf("repo_binding_id = %q, want %q", created.RepoBindingID, goal.RepoBindingID)
 	}
+	if created.OrganizationID != goal.OrganizationID {
+		t.Fatalf("organization_id = %q, want %q", created.OrganizationID, goal.OrganizationID)
+	}
+	if created.ProjectID != goal.ProjectID {
+		t.Fatalf("project_id = %q, want %q", created.ProjectID, goal.ProjectID)
+	}
 	if created.Title != goal.Title {
 		t.Fatalf("title = %q, want %q", created.Title, goal.Title)
 	}

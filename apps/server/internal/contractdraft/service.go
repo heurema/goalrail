@@ -51,6 +51,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type transactionalDraftStore interface {
+	CreateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -109,6 +113,8 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	now := s.Clock.Now().UTC()
 	created := spine.ContractDraft{
 		ID:                         draftID,
+		OrganizationID:             seed.OrganizationID,
+		ProjectID:                  seed.ProjectID,
 		ContractSeedID:             seed.ID,
 		GoalID:                     seed.GoalID,
 		RepoBindingID:              seed.RepoBindingID,
@@ -129,6 +135,17 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	event, err := s.contractDraftCreatedEvent(created)
 	if err != nil {
 		return spine.ContractDraft{}, err
+	}
+	if txDrafts, ok := s.Drafts.(transactionalDraftStore); ok {
+		if err := txDrafts.CreateWithEvent(ctx, created, event); err != nil {
+			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
+				return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.ContractDraft{}, ErrAlreadyDrafted
+			}
+			return spine.ContractDraft{}, fmt.Errorf("create contract draft with event: %w", err)
+		}
+		return created, nil
 	}
 	if err := s.Drafts.Create(ctx, created); err != nil {
 		if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
@@ -197,13 +214,15 @@ func (s *Service) contractDraftCreatedEvent(created spine.ContractDraft) (spine.
 	}
 
 	return spine.Event{
-		ID:            eventID,
-		Type:          EventTypeContractDraftCreated,
-		EntityType:    EntityTypeContractDraft,
-		EntityID:      string(created.ID),
-		RepoBindingID: created.RepoBindingID,
-		Timestamp:     created.CreatedAt,
-		Payload:       payload,
+		ID:             eventID,
+		Type:           EventTypeContractDraftCreated,
+		EntityType:     EntityTypeContractDraft,
+		EntityID:       string(created.ID),
+		OrganizationID: created.OrganizationID,
+		ProjectID:      created.ProjectID,
+		RepoBindingID:  created.RepoBindingID,
+		Timestamp:      created.CreatedAt,
+		Payload:        payload,
 	}, nil
 }
 

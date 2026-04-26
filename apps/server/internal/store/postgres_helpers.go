@@ -1,10 +1,12 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -20,4 +22,12 @@ func uuidString(value pgtype.UUID) string {
 		return ""
 	}
 	return uuid.UUID(value.Bytes).String()
+}
+
+func uniqueViolationConstraint(err error) string {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return pgErr.ConstraintName
+	}
+	return ""
 }

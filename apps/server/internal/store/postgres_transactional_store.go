@@ -213,6 +213,106 @@ func (s *PostgresTransactionalGoalStore) UpdateReadinessWithEvents(ctx context.C
 	return updated, ok, err
 }
 
+type PostgresTransactionalContractSeedStore struct {
+	base       *PostgresContractSeedStore
+	events     *PostgresEventLog
+	transactor postgresTransactor
+}
+
+func NewPostgresTransactionalContractSeedStore(pool *pgxpool.Pool) *PostgresTransactionalContractSeedStore {
+	db := newPostgresDB(pool)
+	return newPostgresTransactionalContractSeedStore(
+		NewPostgresContractSeedStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		pgxpoolTransactor{pool: pool},
+	)
+}
+
+func newPostgresTransactionalContractSeedStore(base *PostgresContractSeedStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractSeedStore {
+	return &PostgresTransactionalContractSeedStore{
+		base:       base,
+		events:     events,
+		transactor: transactor,
+	}
+}
+
+func (s *PostgresTransactionalContractSeedStore) Create(ctx context.Context, created spine.ContractSeed) error {
+	return s.base.Create(ctx, created)
+}
+
+func (s *PostgresTransactionalContractSeedStore) Get(ctx context.Context, id spine.ContractSeedID) (spine.ContractSeed, bool, error) {
+	return s.base.Get(ctx, id)
+}
+
+func (s *PostgresTransactionalContractSeedStore) GetByGoalID(ctx context.Context, id spine.GoalID) (spine.ContractSeed, bool, error) {
+	return s.base.GetByGoalID(ctx, id)
+}
+
+func (s *PostgresTransactionalContractSeedStore) CreateWithEvent(ctx context.Context, created spine.ContractSeed, event spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.Create(txCtx, created); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+type PostgresTransactionalContractDraftStore struct {
+	base       *PostgresContractDraftStore
+	events     *PostgresEventLog
+	transactor postgresTransactor
+}
+
+func NewPostgresTransactionalContractDraftStore(pool *pgxpool.Pool) *PostgresTransactionalContractDraftStore {
+	db := newPostgresDB(pool)
+	return newPostgresTransactionalContractDraftStore(
+		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		pgxpoolTransactor{pool: pool},
+	)
+}
+
+func newPostgresTransactionalContractDraftStore(base *PostgresContractDraftStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractDraftStore {
+	return &PostgresTransactionalContractDraftStore{
+		base:       base,
+		events:     events,
+		transactor: transactor,
+	}
+}
+
+func (s *PostgresTransactionalContractDraftStore) Create(ctx context.Context, created spine.ContractDraft) error {
+	return s.base.Create(ctx, created)
+}
+
+func (s *PostgresTransactionalContractDraftStore) Get(ctx context.Context, id spine.ContractDraftID) (spine.ContractDraft, bool, error) {
+	return s.base.Get(ctx, id)
+}
+
+func (s *PostgresTransactionalContractDraftStore) GetByContractSeedID(ctx context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
+	return s.base.GetByContractSeedID(ctx, id)
+}
+
+func (s *PostgresTransactionalContractDraftStore) CreateWithEvent(ctx context.Context, created spine.ContractDraft, event spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.Create(txCtx, created); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func withPostgresTx(ctx context.Context, pool *pgxpool.Pool, opts pgx.TxOptions, fn postgresTxFunc) error {
 	if _, ok := postgresTxFromContext(ctx); ok {
 		return fn(ctx)
