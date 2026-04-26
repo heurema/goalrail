@@ -309,3 +309,41 @@ Rationale:
 - preserves an audit trail for missing information before contract generation
 - keeps clarification separate from approval and executable work
 - gives the next server implementation slice a bounded target without expanding into contract/gate/proof work
+
+## D-0030 — Repository checkout and checks run behind runner boundary
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- repository checkout, workspace preparation, code inspection, and check execution belong behind a dedicated runner boundary
+- the Goalrail API server owns canonical state, scheduling decisions, task packets, run records, event append, and proof input references, but must not clone repositories or run checks in-process
+- Goalrail supports both `goalrail_hosted_runner` and `customer_hosted_runner` deployment modes
+- customer-hosted runners are first-class for security-sensitive teams, self-managed VCS, private networks, and customers that do not allow repository contents to leave their environment
+- customer-hosted runners may operate without Goalrail cloud-side VCS connection or clone credential
+- VCS provider discovery, repository records, repo bindings, and checkout permission are separate concerns
+- `RepoBinding` identifies which repository a Project works with, but does not itself authorize checkout
+- checkout authority is determined by runner mode, policy, and checkout access mode
+- runners produce receipts and artifacts; final decision remains gate-owned
+- persistent full-repository mirrors and repository write access are out of scope for the MVP runner boundary
+
+Rationale:
+- keeps the server as source-of-truth owner without turning it into a hidden CI or DevOps platform
+- lets early managed pilots use hosted runners where allowed while preserving a path for customer-owned repository access
+- supports stronger security posture before GitHub, GitLab, Bitbucket, or custom Git connectors are implemented
+
+## D-0031 — First runner prototype is hosted read-only checkout
+Date: 2026-04-26
+Status: accepted
+
+Decision:
+- first runnable runner prototype starts with `goalrail_hosted_runner`
+- first prototype uses a Goalrail-operated hosted runner pool
+- hosted runner workers use pull-based / poll-based job leasing from the API server
+- first prototype performs read-only ephemeral checkout and returns a checkout receipt
+- customer-hosted runner remains first-class in the architecture model, but is deferred from the first implementation slice
+- first prototype does not implement repository writes, persistent mirrors, arbitrary command execution, customer-hosted runner installer/registration/auth, gate, or proof
+
+Rationale:
+- keeps the first implementation small and testable
+- proves the runner boundary without building a full hosted execution platform
+- preserves future customer-hosted runner path without blocking MVP progress

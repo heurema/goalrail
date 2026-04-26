@@ -1,5 +1,5 @@
 schema_version: goalrail.components.v0
-updated_at: 2026-04-25
+updated_at: 2026-04-26
 authority: operational
 status_anchor: true
 components:
@@ -45,6 +45,13 @@ components:
     implementation_paths: []
     public_claim_allowed: false
     notes: CLI-first adapter boundary exists as ADR; no adapter code yet.
+  runner_checkout:
+    name: Runner Checkout Boundary
+    status: docs_only
+    truth_owner: docs/adr/ADR-0008-runner-checkout-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. It documents hosted and customer-hosted runner modes; the first prototype direction is hosted-only read-only ephemeral checkout with a checkout receipt, using pull/poll-based job leasing. Customer-hosted runner remains documented but unimplemented. No runner code exists yet.
   advisory_panel:
     name: Advisory Panel
     status: planned
@@ -80,7 +87,7 @@ components:
       - apps/web/demo-change-packet-ru
       - apps/web/pilot-intake-ru
     public_claim_allowed: false
-    notes: Shared web rules live under apps/web. The empty real console shells live under apps/web/console for console.goalrail.dev and apps/web/console-ru for console.goalrail.ru with three navigation-only surfaces and no data-backed product functionality. Current React + Vite + Mantine prototypes are the EN change-packet walkthrough under apps/web/demo-change-packet deployed at demo.goalrail.dev, the separate RU change-packet copy under apps/web/demo-change-packet-ru deployed at demo.goalrail.ru, and the RU pilot-intake landing under apps/web/pilot-intake-ru. These are prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
+    notes: Shared web rules live under apps/web. Current web surfaces remain prototype/public packaging surfaces only; no Goalrail web product loop is implemented yet.
   cli_surface:
     name: CLI Surface
     status: prototype
@@ -103,7 +110,7 @@ components:
       - apps/cli/internal/proofcmd
       - apps/cli/testdata
     public_claim_allowed: false
-    notes: First stdlib-only Go CLI bootstrap exists with canonical binary goalrail. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, no production repo auth or deploy-key provisioning, no hosted execution, no real gate, and no proof generation.
+    notes: First stdlib-only Go CLI bootstrap exists with canonical binary goalrail. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, hosted execution, real gate, runner integration, or proof generation.
   server_surface:
     name: Server Surface
     status: prototype
@@ -123,7 +130,7 @@ components:
       - apps/server/internal/health
       - apps/server/internal/version
     public_claim_allowed: false
-    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, and ClarificationRequest creation prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only; Goal readiness updates Goal state only with fixed reason codes; ClarificationRequest creation creates an open request only from stored readiness reason codes. Events remain in-memory, including intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, readiness transition events, and clarification.requested. There is no durable storage, no ClarificationAnswer or answer flow, no Goal hint update flow, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, and no workers.
+    notes: Go server skeleton exists with canonical binary goalrail-server. It exposes health/version plus in-memory source-neutral intake, Goal promotion, deterministic Goal readiness, and ClarificationRequest creation prototypes. Intake creates IntakeRecord only; Goal promotion creates non-executable Goal only; Goal readiness updates Goal state only with fixed reason codes; ClarificationRequest creation creates an open request only from stored readiness reason codes. Events remain in-memory, including intake.received, goal.created, intake.promoted_to_goal, goal.readiness_checked, readiness transition events, and clarification.requested. There is no durable storage, no ClarificationAnswer or answer flow, no Goal hint update flow, no automatic readiness re-check, no contract/work item creation, no gate/proof, no repo readiness, no auth, no workers, and no repository checkout.
   tracker_sync:
     name: Tracker Sync
     status: planned
