@@ -6,6 +6,8 @@ Goalrail is a productized operating layer for AI-assisted delivery.
 
 **Tagline:** from business goal to verified code change.
 
+![Goalrail pipeline overview](goalrail-pipeline.png)
+
 ## What it is
 
 Goalrail helps software teams move from intent to a bounded, verified delivery change.
