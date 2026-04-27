@@ -147,16 +147,21 @@ Decision:
 - the early sales motion is founder-led and pilot-first
 - landing and outreach should be lead-capture and contract-centered, not prompt-tool centric
 
-## D-0017 — Goalrail adopts overlay workspace boundaries
+## D-0017 — Goalrail adopts overlay workspace boundaries and publishing thin binding
 Date: 2026-04-20
-Status: accepted
+Status: updated (2026-04-27)
 
 Decision:
 - the planning repo uses explicit overlay support planes instead of broad root-level artifact directories
 - `.goalrail/work/` tracks bounded goals, reports, and Goalrail delivery memory
 - `.goalrail/knowledge/` tracks Goalrail advisory research and ideas
-- `.punk/publishing/` tracks public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
-- `.punk/publishing/` uses an explicit publication-plane name to avoid confusion with conventional frontend/static-assets `public/` directories
+- `.punk/publishing.toml` is the committed repo-local publishing binding manifest; it is the desired source of truth for publishing context
+- the runtime publishing workspace (drafts, posts, receipts, manual metrics, generated host wrappers, sessions, credentials, platform cache, and secrets) is external to the project repo and lives in user/platform-local storage
+- agents and tools must discover the publishing workspace through: `punk publishing locate --project-root . --json`
+- physical paths are platform-native and resolver-owned; they must not be committed into repo docs or manifests
+- `.punk/publishing/` is transitional legacy content pending migration; it must not be treated as the default workspace path
+- secrets, credentials, browser sessions, and platform cache must not be stored in the repo
+- symlinks are intentionally not used as part of the architecture
 - `.goalrail/flows/` and `.goalrail/evals/` are reserved as planned spec boundaries for future runtime and verification work
 - `apps/`, `scripts/`, and `.github/` remain parked until a bounded implementation slice activates them
 

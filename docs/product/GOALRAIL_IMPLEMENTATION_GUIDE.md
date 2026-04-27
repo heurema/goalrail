@@ -51,7 +51,8 @@ Use the repo with these boundaries:
 - `docs/ops/` — current operating layer
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog
-- `.punk/publishing/` — Punk-owned public narrative drafts, receipts, and manual metrics
+- `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external
+- `.punk/publishing/` — legacy/transitional publishing content pending migration
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `apps/`, `scripts/`, `.github/` — parked implementation surfaces until a bounded slice makes them real

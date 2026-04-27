@@ -54,3 +54,24 @@
 
 This repository is currently documentation-first, with a local mocked demo under `apps/web/demo-change-packet/`.
 Placeholders in `apps/`, `scripts/`, and `.github/` are not evidence of implementation unless `docs/ops/COMPONENTS.yaml` and code reality agree.
+
+## Punk publishing tasks
+
+- Do not write directly to `.punk/publishing/` as the default workspace.
+- Resolve publishing context with: `punk publishing locate --project-root . --json`
+- If the resolver is unavailable:
+  1. Read `.punk/publishing.toml` as committed binding metadata.
+  2. Check for optional ignored local pointer: `.punk/publishing.local.toml`.
+  3. Use `.punk/publishing.local.toml` only if:
+     - it contains `workspace_root`.
+     - its `workspace_ref`, if present, matches `.punk/publishing.toml`.
+     - it is treated as local-only and not project truth.
+  4. If the local pointer is missing or invalid:
+     - do not invent a workspace path or store runtime artifacts in the repo.
+     - produce the draft in the response, or ask for an explicit external target path.
+     - suggest manual bootstrap by creating an ignored `.punk/publishing.local.toml`.
+- Treat `.punk/publishing/` as legacy/transitional pending migration.
+- Never store credentials, tokens, browser sessions, account secrets, platform secrets or publishing account secrets in repo.
+- Physical paths are platform-native and resolver-owned. Do not commit expanded user paths into repo files.
+- Symlinks are not part of the publishing architecture and must not be created as a workaround.
+- `.punk/local/` must not be created as a workaround.

@@ -140,7 +140,8 @@ The project currently has:
 - the repo now mirrors `punk`-style planning boundaries
 - `.goalrail/work/` is reserved for goals, reports, and bounded planning artifacts such as demo-planning packs
 - `.goalrail/knowledge/` is reserved for advisory research and idea backlog
-- `.punk/publishing/` is reserved for public narrative drafts, receipts, and manual metrics owned by the Punk publishing layer
+- `.punk/publishing.toml` is the committed repo-local publishing binding manifest
+- `.punk/publishing/` is legacy/transitional content pending migration; the runtime publishing workspace is intended to be external user/platform-local storage
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
 - `apps/web/console` is the empty real console shell with three left-nav surfaces: Contracts, Delivery Readiness, and Proof

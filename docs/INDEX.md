@@ -108,9 +108,11 @@ related_docs:
 63. `docs/reference/design/reference_screens/`
 64. `.goalrail/work/`
 65. `.goalrail/knowledge/`
-66. `.punk/publishing/`
+66. `.punk/publishing.toml`
 67. `.goalrail/flows/`
 68. `.goalrail/evals/`
+69. `docs/ops/PUBLISHING_MIGRATION.md`
+70. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -197,9 +199,12 @@ related_docs:
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
-- `.punk/publishing/` — Punk-owned public narrative drafts, receipts, and manual metrics
+- `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external and resolved via CLI
+- `.punk/publishing/` — legacy/transitional publishing content pending migration
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
+- `docs/ops/PUBLISHING_MIGRATION.md` — planning for legacy Punk workspace migration
+- `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md` — machine contract for external publishing workspace resolution
 
 ## Source-of-truth priority
 
@@ -232,7 +237,7 @@ Notes:
 10. Нельзя менять implementation scope без сверки с concept canon.
 11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
-13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing/`, `.goalrail/flows/`, `.goalrail/evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
+13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing.toml`, `.goalrail/flows/`, `.goalrail/evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 
 ## Current top-level thesis
 

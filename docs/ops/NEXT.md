@@ -61,6 +61,18 @@ Done means:
 - any exclusions or attribution needs are explicit
 - repo-level OSS policy stays aligned with actual asset rights
 
+### Slice 5 — Publishing Boundary Migration
+Goal:
+- establish the thin binding manifest and prepare for external workspace migration
+
+Done means:
+- `.punk/publishing.toml` exists as the committed binding manifest
+- resolver contract `punk publishing locate --project-root . --json` is documented
+- existing content in `.punk/publishing/` is inventoried and classified (canon, drafts, receipts, assets, cache, secrets)
+- a migration plan is ready to move non-product artifacts out of the repo
+- `AGENTS.md` is prepared to use the resolver instead of writing to the legacy directory
+- `.gitignore` is prepared to block secrets/sessions while keeping the manifest trackable
+
 ### Architecture follow-up slices
 
 1. Organization / project / repo binding persistence boundary

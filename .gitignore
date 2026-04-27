@@ -15,3 +15,13 @@ output/
 .idea/
 .vscode/
 .playwright-mcp/
+
+# Punk publishing runtime artifacts
+.punk/publishing.local.toml
+.punk/**/*.secret
+.punk/**/secrets.*
+.punk/**/credentials.*
+.punk/**/sessions/
+.punk/**/cache/
+.punk/**/.env
+.punk/**/*.token

@@ -36,7 +36,7 @@ Use it together with:
 | `tools/` | Repository tooling, checks, schemas, and fixtures | You add automation that validates or maintains the repo |
 | `scripts/` | Thin maintenance commands and wrappers | You add helper commands that do not imply a Goalrail runtime exists |
 | `.goalrail/` | Goalrail working overlay | You add working memory, research backlog, flow specs, eval specs, or slice reports |
-| `.punk/` | Punk-owned overlay | You add Punk publishing drafts, receipts, or public narrative artifacts |
+| `.punk/` | Punk-owned overlay | You add the committed publishing binding manifest here; runtime workspace is external |
 | `.github/` | GitHub workflows and repository templates | You add CI or GitHub-native repository process files |
 | `.codex/` | Agent routing references | You adjust thin local agent routing, not project truth |
 | root files | Public/legal/community entry points and minimal repo config | You update existing root policy or entry files only |
@@ -75,7 +75,24 @@ Use it together with:
 | Goalrail working slice reports | `.goalrail/work/` |
 | Future Goalrail flow/spec artifacts | `.goalrail/flows/` |
 | Future eval/spec artifacts | `.goalrail/evals/` |
-| Punk publishing work | `.punk/publishing/` |
+| Punk publishing manifest | `.punk/publishing.toml` |
+| Legacy Punk publishing work | `.punk/publishing/` |
+
+## Publishing Workspace Boundary
+
+The full publishing workspace is user-local / platform-local and lives outside the project repo.
+Drafts, posts, receipts, metrics, generated host wrappers, sessions, platform cache, credentials and secrets are not project repo artifacts.
+
+Agents and tools must discover the publishing workspace through:
+```bash
+punk publishing locate --project-root . --json
+```
+
+Rules:
+- Physical paths are platform-native and resolver-owned.
+- Symlinks are intentionally not used as part of the architecture.
+- `.punk/publishing/` is transitional legacy content pending migration.
+
 
 ## Root rules
 
