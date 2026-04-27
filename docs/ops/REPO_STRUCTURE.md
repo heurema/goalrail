@@ -58,6 +58,8 @@ Use it together with:
 | Server clarification request and answer service logic | `apps/server/internal/clarification/` |
 | Server ContractSeed creation service logic | `apps/server/internal/contractseed/` |
 | Server ContractDraft creation/update/ready_for_approval service logic | `apps/server/internal/contractdraft/` |
+| Server ApprovedContract approval service logic | `apps/server/internal/approvedcontract/` |
+| Server WorkItem planning service logic | `apps/server/internal/workitem/` |
 | Server in-memory stores and event logs | `apps/server/internal/store/` and `apps/server/internal/eventlog/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |

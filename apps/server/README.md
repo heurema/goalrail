@@ -3,8 +3,8 @@
 This server is still an early prototype. Existing intake, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, ContractDraft
 ready_for_approval, ApprovedContract approval, and event log flows use Postgres when
-`GOALRAIL_DATABASE_DSN` is configured. Clarification request and answer state
-remain in-memory.
+`GOALRAIL_DATABASE_DSN` is configured. WorkItem planning, ClarificationRequest,
+and ClarificationAnswer state remain in-memory prototypes.
 
 ## Local Postgres foundation
 
@@ -62,6 +62,8 @@ curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ContractSeed`,
 `ContractDraft`, `ApprovedContract`, and their events are durable and survive server restarts.
+WorkItems are currently planned through an in-memory prototype store; no
+`work_items` table or migration exists in this slice.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
 the seeded context. Intake creation, Goal promotion, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, and ContractDraft
@@ -115,6 +117,12 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/ap
   }'
 ```
 
+Then plan one non-executable WorkItem from the approved contract:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/approved-contracts/{approved_contract_id}/work-items
+```
+
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and
 answer state is still prototype/in-memory. ContractSeed creation does not
@@ -128,4 +136,8 @@ only `ContractDraft.state` from `draft` to `ready_for_approval`, requires
 Contract, create `WorkItem`, write `GateDecision`, or create `Proof`.
 Approval creates an immutable `ApprovedContract(approved)` snapshot from a ready
 draft, requires `approved_by`, appends `contract.approved`, and does not mutate
-`ContractDraft` or create `WorkItem`, execution, `GateDecision`, or `Proof`.
+`ContractDraft` or create execution, `GateDecision`, or `Proof`. WorkItem
+planning creates exactly one in-memory `WorkItem(planned)` per approved
+contract in v0, appends `work_item.created`, guards repeated planning with
+`409 already_planned`, and does not assign, claim, create `Run`, checkout a
+repository, submit a receipt, write `GateDecision`, or create `Proof`.
