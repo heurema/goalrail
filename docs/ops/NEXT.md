@@ -21,6 +21,7 @@
 - ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; approval remains a later boundary
 - ADR-0016 now defines the `ContractDraft ready_for_approval` boundary, and the server implements it as an explicit `draft -> ready_for_approval` transition with completeness checks and `marked_by` audit identity; approval, approved Contract, work item, gate, and proof remain later boundaries
 - ADR-0017 now defines the Contract approval boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`; the server implements it as explicit ApprovedContract snapshot creation with `approved_by` and `contract.approved`; WorkItem planning, execution, gate, and proof remain later boundaries
+- ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; no WorkItem implementation exists yet, and execution, Run, receipt, gate, and proof remain later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Next bounded slices
@@ -95,9 +96,10 @@ Done means:
 
 ### Server follow-up slices
 
-1. WorkItem planning boundary design/implementation
-   - define the smallest boundary from `ApprovedContract` to non-executable work planning
+1. WorkItem planning implementation
+   - implement the smallest boundary from `ApprovedContract(approved)` to `WorkItem(planned)`
    - keep runner, execution, gate, and proof as later boundaries
+   - do not assign or claim work in this slice
    - do not start execution from approval
 2. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists

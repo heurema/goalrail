@@ -602,3 +602,29 @@ Rationale:
 - makes approved contract truth durable before work planning exists
 - preserves the separation between approval and execution
 - keeps audit events synchronous without queue, outbox, event bus, sqlc, or ORM
+
+## D-0046 — WorkItem planning is a non-executable boundary
+Date: 2026-04-27
+Status: accepted
+
+Decision:
+- WorkItem planning is an explicit server-owned boundary from
+  `ApprovedContract(approved)` to `WorkItem(planned)`
+- WorkItems are canonical planning units derived from approved scope,
+  acceptance criteria, and proof expectations
+- recommended v0 planning creates one planned WorkItem per ApprovedContract
+- repeated planning should return `409 already_planned`
+- `owner_hint` is advisory only and does not assign or claim work
+- WorkItem planning writes `work_item.created`
+- WorkItem planning does not start execution, create `Run`, checkout a repo,
+  submit a receipt, write `GateDecision`, or create `Proof`
+- assignment, claiming, runtime task packets, runner checkout, execution,
+  receipt submission, gate, and proof remain later explicit boundaries
+- this boundary does not introduce storage or migration requirements by itself
+
+Rationale:
+- gives approved contracts a bounded non-executable planning handoff
+- keeps approval separate from work planning and work planning separate from
+  execution
+- prevents WorkItem creation from becoming hidden runner, receipt, gate, or
+  proof semantics
