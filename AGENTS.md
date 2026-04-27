@@ -70,7 +70,9 @@ Placeholders in `apps/`, `scripts/`, and `.github/` are not evidence of implemen
      - do not invent a workspace path or store runtime artifacts in the repo.
      - produce the draft in the response, or ask for an explicit external target path.
      - suggest manual bootstrap by creating an ignored `.punk/publishing.local.toml`.
-- Treat `.punk/publishing/` as legacy/transitional pending migration.
+- `.punk/publishing/` has been removed from repo and must not be used or recreated as a publishing workspace.
+- If it appears locally, treat it as ignored legacy residue and do not write to it.
+- Use resolver or validated `.punk/publishing.local.toml`.
 - Never store credentials, tokens, browser sessions, account secrets, platform secrets or publishing account secrets in repo.
 - Physical paths are platform-native and resolver-owned. Do not commit expanded user paths into repo files.
 - Symlinks are not part of the publishing architecture and must not be created as a workaround.

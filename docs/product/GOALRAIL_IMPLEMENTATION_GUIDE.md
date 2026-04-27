@@ -52,7 +52,7 @@ Use the repo with these boundaries:
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog
 - `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external
-- `.punk/publishing/` — legacy/transitional publishing content pending migration
+- legacy `.punk/publishing/` removed after external copy/verify, not a product surface
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `apps/`, `scripts/`, `.github/` — parked implementation surfaces until a bounded slice makes them real

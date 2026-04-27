@@ -200,7 +200,7 @@ related_docs:
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
 - `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external and resolved via CLI
-- `.punk/publishing/` — legacy/transitional publishing content pending migration
+- legacy `.punk/publishing/` was removed; see `docs/ops/PUBLISHING_MIGRATION.md`
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `docs/ops/PUBLISHING_MIGRATION.md` — planning for legacy Punk workspace migration

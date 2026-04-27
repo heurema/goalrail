@@ -159,7 +159,8 @@ Decision:
 - the runtime publishing workspace (drafts, posts, receipts, manual metrics, generated host wrappers, sessions, credentials, platform cache, and secrets) is external to the project repo and lives in user/platform-local storage
 - agents and tools must discover the publishing workspace through: `punk publishing locate --project-root . --json`
 - physical paths are platform-native and resolver-owned; they must not be committed into repo docs or manifests
-- `.punk/publishing/` is transitional legacy content pending migration; it must not be treated as the default workspace path
+- `.punk/publishing/` legacy directory has been removed from repo after external copy/verify; it is ignored to prevent accidental reintroduction
+- repo cleanup is complete; resolver implementation remains pending and semantic cleanup of the external workspace remains future work
 - secrets, credentials, browser sessions, and platform cache must not be stored in the repo
 - symlinks are intentionally not used as part of the architecture
 - `.goalrail/flows/` and `.goalrail/evals/` are reserved as planned spec boundaries for future runtime and verification work

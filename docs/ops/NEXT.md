@@ -63,15 +63,16 @@ Done means:
 
 ### Slice 5 — Publishing Boundary Migration
 Goal:
-- establish the thin binding manifest and prepare for external workspace migration
+- establish the thin binding manifest and perform repository cleanup
 
 Done means:
-- `.punk/publishing.toml` exists as the committed binding manifest
-- resolver contract `punk publishing locate --project-root . --json` is documented
-- existing content in `.punk/publishing/` is inventoried and classified (canon, drafts, receipts, assets, cache, secrets)
-- a migration plan is ready to move non-product artifacts out of the repo
-- `AGENTS.md` is prepared to use the resolver instead of writing to the legacy directory
-- `.gitignore` is prepared to block secrets/sessions while keeping the manifest trackable
+- ✅ `.punk/publishing.toml` exists as the committed binding manifest
+- ✅ resolver contract `punk publishing locate --project-root . --json` is documented
+- ✅ existing content in `.punk/publishing/` has been inventoried and classified
+- ✅ legacy repo-local directory `.punk/publishing/` has been removed from the repository
+- `AGENTS.md` uses the manual bootstrap fallback/resolver logic
+- `.gitignore` blocks secrets/sessions and the legacy directory path
+- Next: implement or verify the resolver; perform semantic review of styles/prompts in the external workspace
 
 ### Architecture follow-up slices
 

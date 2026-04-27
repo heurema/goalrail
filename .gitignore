@@ -17,6 +17,7 @@ output/
 .playwright-mcp/
 
 # Punk publishing runtime artifacts
+.punk/publishing/
 .punk/publishing.local.toml
 .punk/**/*.secret
 .punk/**/secrets.*

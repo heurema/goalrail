@@ -76,7 +76,7 @@ Use it together with:
 | Future Goalrail flow/spec artifacts | `.goalrail/flows/` |
 | Future eval/spec artifacts | `.goalrail/evals/` |
 | Punk publishing manifest | `.punk/publishing.toml` |
-| Legacy Punk publishing work | `.punk/publishing/` |
+| No repo-local workspace | Do not add; `.punk/publishing/` is removed and ignored |
 
 ## Publishing Workspace Boundary
 
@@ -91,7 +91,7 @@ punk publishing locate --project-root . --json
 Rules:
 - Physical paths are platform-native and resolver-owned.
 - Symlinks are intentionally not used as part of the architecture.
-- `.punk/publishing/` is transitional legacy content pending migration.
+- `.punk/publishing/` legacy directory has been removed after copy/verify.
 
 
 ## Root rules

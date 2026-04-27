@@ -1,12 +1,11 @@
 # Publishing Migration Plan
 
 ## Status
-- **Status:** planned
-- Migration is not complete.
-- Legacy `.punk/publishing/` still exists as transitional legacy content pending copy/verify.
-- It is not the desired publishing source of truth.
+- **Status:** repo_cleanup_complete
+- Repo-local legacy directory `.punk/publishing/` has been removed.
+- First-pass external copy preserved the legacy tree shape.
 - `.punk/publishing.toml` is the committed binding manifest.
-- **Manual Bootstrap:** Optional `.punk/publishing.local.toml` is supported for early local development.
+- **Manual Bootstrap:** Optional `.punk/publishing.local.toml` is supported; runtime support is pending.
 
 ## Goal
 - Move runtime publishing artifacts (drafts, assets, prompts, receipts) out of the project repository.
