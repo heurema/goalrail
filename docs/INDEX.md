@@ -58,61 +58,62 @@ related_docs:
 ### 5. Product shape and external posture
 22. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
 23. `docs/product/GOALRAIL_LANDING_COPY.md`
-24. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-25. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-26. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+24. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+25. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+26. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+27. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-27. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-28. `docs/PROJECT_SPINE_SCHEMA.md`
-29. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-30. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-31. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-32. `docs/adr/ADR-0003-go-cli-layout.md`
-33. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
-34. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
-35. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
-36. `docs/adr/ADR-0007-clarification-request-boundary.md`
-37. `docs/adr/ADR-0008-runner-checkout-boundary.md`
-38. `docs/adr/ADR-0009-clarification-answer-boundary.md`
-39. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
-40. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
-41. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
-42. `docs/adr/ADR-0013-contract-seed-boundary.md`
-43. `docs/adr/ADR-0014-contract-draft-boundary.md`
-44. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
-45. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
-46. `docs/adr/ADR-0017-contract-approval-boundary.md`
-47. `docs/adr/ADR-0018-workitem-planning-boundary.md`
+28. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+29. `docs/PROJECT_SPINE_SCHEMA.md`
+30. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+31. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+32. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+33. `docs/adr/ADR-0003-go-cli-layout.md`
+34. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
+35. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+36. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
+37. `docs/adr/ADR-0007-clarification-request-boundary.md`
+38. `docs/adr/ADR-0008-runner-checkout-boundary.md`
+39. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+40. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
+41. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
+42. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
+43. `docs/adr/ADR-0013-contract-seed-boundary.md`
+44. `docs/adr/ADR-0014-contract-draft-boundary.md`
+45. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
+46. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
+47. `docs/adr/ADR-0017-contract-approval-boundary.md`
+48. `docs/adr/ADR-0018-workitem-planning-boundary.md`
 
 ### 7. Governance and change control
-48. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-49. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-50. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-51. `docs/product/GOALRAIL_RULE_STACK.md`
+49. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+50. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+51. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+52. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-52. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-53. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-54. `docs/ops/STATUS.md`
-55. `docs/ops/NEXT.md`
-56. `docs/ops/DECISIONS.md`
-57. `docs/ops/COMPONENTS.yaml`
-58. `docs/ops/REPO_STRUCTURE.md`
-59. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-60. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+53. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+54. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+55. `docs/ops/STATUS.md`
+56. `docs/ops/NEXT.md`
+57. `docs/ops/DECISIONS.md`
+58. `docs/ops/COMPONENTS.yaml`
+59. `docs/ops/REPO_STRUCTURE.md`
+60. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+61. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-61. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-62. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-63. `docs/reference/design/reference_screens/`
-64. `.goalrail/work/`
-65. `.goalrail/knowledge/`
-66. `.punk/publishing.toml`
-67. `.goalrail/flows/`
-68. `.goalrail/evals/`
-69. `docs/ops/PUBLISHING_MIGRATION.md`
-70. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+62. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+63. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+64. `docs/reference/design/reference_screens/`
+65. `.goalrail/work/`
+66. `.goalrail/knowledge/`
+67. `.punk/publishing.toml`
+68. `.goalrail/flows/`
+69. `.goalrail/evals/`
+70. `docs/ops/PUBLISHING_MIGRATION.md`
+71. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -149,6 +150,7 @@ related_docs:
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
 - `GOALRAIL_LANDING_COPY.md` — first landing / entry scene copy
+- `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — canonical copy/governance reference for the RU pilot-first interactive landing demo; implementation lives at `apps/web/pilot-intake-ru`; the demo is local-only and deterministic per `docs/ops/DECISIONS.md` D-0047 (no backend, no LLM, no repo connection, no execution, no persistence, no analytics)
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
 - `GOALRAIL_COMPETITOR_MAP.md` — reference market map
 - `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture

@@ -635,6 +635,470 @@ Rationale:
 - prevents WorkItem creation from becoming hidden runner, receipt, gate, or
   proof semantics
 
+## D-0047 — Public landing demo remains local-only and deterministic
+Date: 2026-04-28
+Status: accepted
+
+Decision:
+- `apps/web/pilot-intake-ru` demonstrates GoalRail's contract-first
+  workflow through local deterministic functions (`detectScenario`,
+  `buildContractDraft`, `buildReviewReport`, `deriveOutcomeTone`,
+  `buildOutcomeReport`)
+- the pilot-first interactive landing demo must not call LLMs, AI APIs,
+  backend services, repo providers, analytics endpoints, or execution
+  runtimes
+- the pilot-first interactive landing demo must not persist user input
+  in any form (memory beyond the React tree, network, storage)
+- the final outcome CTA only focuses the existing email input and may
+  apply a temporary local highlight class; it does not POST anything
+- the current email lead remains a `mailto:` form; backend handoff for
+  email capture requires a separate explicit decision
+- new scenarios beyond `manual_review_gate` and `bounded_task` require
+  an explicit decision before implementation
+- chat-style UI (history, user/assistant turns, avatars, model selector)
+  is not allowed
+- file upload is not allowed
+- a fake numeric readiness score must not be presented as if it were
+  real measurement
+- canonical copy, scenario rules, and accessibility hardening are
+  recorded in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+
+Rationale:
+- GoalRail's value is the method: intake, clarification, contract,
+  review, honest outcome
+- a local deterministic demo is safer, cheaper, and more honest for
+  first public/pilot positioning than a live AI/agent demo
+- it avoids turning the public landing into a generic AI/chat demo
+- it preserves trust by not implying that user tasks are executed,
+  that real repos are assessed, or that GoalRail has delivered work
+- it keeps the public surface aligned with `GOALRAIL_PRODUCT_CONCEPT.md`
+  and `GOALRAIL_OPERATING_MODEL.md` instead of drifting into autonomy
+  claims
+
+## D-0048 — Public RU pilot-first landing demo candidate approved
+Date: 2026-04-28
+Status: accepted
+
+Decision:
+- `apps/web/pilot-intake-ru` is approved as the candidate public RU
+  pilot-first interactive landing demo surface.
+- The basis for this approval is the completed internal review captured in
+  `docs/ops/PILOT_INTAKE_RU_INTERNAL_REVIEW_NOTES.md`, whose
+  recommendation was `READY WITH WARNINGS — READY FOR PUBLIC-DOMAIN
+  DECISION`.
+- The only review warning is narrow hero-title tightness at very-narrow
+  widths around 380px; it is non-blocking and does not gate this approval.
+- This decision is approval of the demo surface as the public candidate.
+  It is not deployment wiring.
+- Publication / deployment requires a separate deployment-prep slice
+  recorded in `docs/ops/NEXT.md`.
+- D-0047 continues to govern the surface in full: no backend, no
+  LLM/API, no repo provider integration, no code execution, no
+  persistence, no analytics or session tracking, no chat UI, no file
+  upload, no model selector.
+- Email lead capture remains `mailto:` / focus-only / manual handoff.
+  Any move to backend submission requires its own separate explicit
+  decision.
+- Analytics remain disallowed. Enabling analytics requires its own
+  separate explicit decision.
+- New scenarios beyond `manual_review_gate` and `bounded_task`, new
+  outcome tones, repo-provider integration, runtime execution, and
+  persistence remain disallowed under D-0047 and are not unlocked by
+  this decision.
+
+Rationale:
+- The 5-step interactive walkthrough demonstrates the GoalRail method
+  (intake → clarification → contract → review → honest outcome) more
+  faithfully than a static landing page would, while staying local and
+  deterministic.
+- The surface is explicit about its boundaries: code is not executed,
+  repos are not connected, no result is delivered, no fake numeric
+  readiness score is shown. This is a stronger trust posture than a
+  generic AI/agent demo.
+- Canonical copy and governance are recorded in
+  `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`, so future
+  contributors and reviewers have a single source of truth.
+- The internal review evidence base (matrix across visual / responsive /
+  keyboard / a11y / boundary / outcome flows) is captured in
+  `docs/ops/PILOT_INTAKE_RU_INTERNAL_REVIEW_NOTES.md` and references
+  this decision.
+
+Consequences:
+- `docs/ops/NEXT.md` is updated to point to a `Pilot intake RU
+  deployment prep` slice covering domain/surface confirmation, build
+  and hosting path without backend behavior, D-0047 boundary
+  re-confirmation in the deployment context, optional CSS-only
+  very-narrow hero polish, production build/smoke check, secrets/env
+  audit, public-copy parity check against
+  `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`, and verification
+  that email capture remains `mailto:` / focus-only / manual handoff.
+- `docs/ops/STATUS.md` reflects this candidate-approved state without
+  implying deployment, live status, backend, or analytics.
+- `docs/ops/COMPONENTS.yaml` `web_surface.notes` is updated with a
+  short candidate-approved marker pointing at this decision.
+- Any future public-domain/hosting work must preserve D-0047 in full
+  and must not introduce backend, analytics, email submission, repo
+  integration, or runtime execution without a separate explicit
+  decision.
+
+## D-0049 — Pilot intake RU target domain and hosting surface selected
+Date: 2026-04-28
+Status: superseded by D-0053 for target domain and canonical public URL (active target is now `pilot.goalrail.ru`; the hosting-surface portion was already addressed by D-0050 → D-0051 supersession; D-0049 body is preserved as historical record)
+
+Decision:
+- `apps/web/pilot-intake-ru` will be prepared for publication at the
+  target domain `pilot.goalrail.dev` with public path `/`.
+- Hosting target: `static CDN target TBD` — the concrete CDN /
+  static-bucket / DNS surface is not picked in this decision and
+  remains a deployment-wiring detail. The chosen surface, when picked,
+  must be static-only.
+- Public status: `candidate-public` — the surface is the chosen
+  candidate for public publication; it is not yet deployed and is not
+  yet live.
+- This decision unlocks a future `Pilot intake RU deployment wiring`
+  slice (recorded in `docs/ops/NEXT.md`) by satisfying the
+  domain-decision gating prerequisite identified in
+  `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md` §5 / §10.
+- This decision does not deploy the surface.
+- This decision does not create DNS, hosting, CDN, or build wiring.
+- This decision does not approve backend email capture.
+- This decision does not approve analytics.
+- This decision does not change D-0047 or D-0048; both continue to
+  govern the surface in full.
+- Because `PUBLIC_PATH` is `/`, deployment wiring must verify root-path
+  behavior and static asset paths. No `vite.config.ts` `base` adjustment
+  is required at this time.
+- Email lead capture remains `mailto:` / focus-only / manual handoff.
+  Any move to backend submission requires its own separate explicit
+  decision.
+- Analytics remain disallowed. Enabling analytics requires its own
+  separate explicit decision.
+- Deployment wiring must remain static-only. No backend, no serverless
+  functions, no server-rendered routes are introduced by this decision
+  or by any wiring slice that follows from it.
+- If the chosen target domain is later changed (different host, different
+  public path, or both), that must be recorded as a separate explicit
+  decision in `docs/ops/DECISIONS.md`. This decision pins
+  `pilot.goalrail.dev` + `/` until such a future decision supersedes it.
+
+Rationale:
+- Phase 8B deployment-prep
+  (`docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md`) found the candidate
+  surface static-hostable with no env vars, secrets, or backend
+  dependencies, and explicitly recorded target-domain selection as a
+  blocking pre-requisite for the deployment wiring slice.
+- A target domain / public path is needed to define the asset path
+  layout, the smoke-check URL, the canonical link target in landing
+  copy, and the publishing instructions a wiring slice will follow.
+- Recording the decision now prevents accidental publication to the
+  wrong surface and prevents drift between docs (canonical landing copy,
+  status, deployment prep) and the surface that will eventually be
+  served.
+- Keeping this docs-only preserves the local-only deterministic
+  boundary recorded in D-0047 and the candidate-approval recorded in
+  D-0048 — no code, hosting config, DNS, or runtime artifacts are
+  introduced by this decision.
+
+Consequences:
+- `docs/ops/NEXT.md` is updated: the
+  `Pilot intake RU deployment wiring` slice no longer carries a
+  domain-decision gating prerequisite; its done-means now references
+  the values pinned here.
+- `docs/ops/STATUS.md` is updated with a concise marker that the
+  target-domain decision is recorded and that deployment wiring is
+  still pending.
+- `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md` §5 (`Target domain`)
+  and §8 (`Known pre-publish risks`) are updated to point at this
+  decision; the recommendation remains `READY WITH WARNINGS`.
+- `docs/ops/COMPONENTS.yaml` `web_surface.notes` is updated with a
+  short marker that target domain / hosting is recorded and deployment
+  wiring is the next slice.
+- The deployment wiring slice that follows must:
+  - remain static-only;
+  - run a production build;
+  - run `vite preview` (or equivalent) and a smoke check across all 5
+    walkthrough steps;
+  - verify no env or secrets assumptions;
+  - verify canonical copy parity against
+    `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`;
+  - verify the `mailto:` / focus / manual email handoff still holds;
+  - re-confirm D-0047 boundaries in the deployed/preview context.
+- The surface remains not deployed and not live until a future
+  deployment-wiring patch completes. This decision does not by itself
+  authorise publication.
+
+## D-0050 — Pilot intake RU static hosting provider selected
+Date: 2026-04-28
+Status: superseded by D-0051 for hosting provider and deployment mode (Cloudflare Pages Direct Upload is no longer the selected RU launch path; Cloudflare Pages, Workers, Functions, KV/R2/D1/Durable Objects/Queues, proxy/CDN, and Web Analytics remain disallowed for this surface per D-0051)
+
+Decision:
+- `apps/web/pilot-intake-ru` will use **Cloudflare Pages** for the
+  candidate public static surface at `https://pilot.goalrail.dev/`.
+- **Hosting target detail:** Cloudflare Pages Direct Upload project for
+  pilot-intake-ru; static assets from `apps/web/pilot-intake-ru/dist`;
+  the concrete project name on Cloudflare Pages is to be confirmed
+  during the deployment wiring slice (see `Pre-conditions` below).
+- **DNS strategy:** add `pilot.goalrail.dev` as a Cloudflare Pages
+  custom domain, then configure/confirm DNS for `pilot.goalrail.dev`
+  to point to the Cloudflare Pages target. If `goalrail.dev` DNS is
+  already managed in Cloudflare, allow Cloudflare to create or manage
+  the required CNAME during the custom-domain setup; otherwise DNS is
+  handled externally by the operator after Pages provides the required
+  target.
+- **TLS strategy:** Cloudflare-managed TLS. Deployment wiring must
+  verify HTTPS is active for `https://pilot.goalrail.dev/` before any
+  public use.
+- **Deployment mode:** static-only manual Direct Upload after a local
+  production build. Use Wrangler or the Cloudflare Pages dashboard to
+  upload prebuilt assets from `apps/web/pilot-intake-ru/dist`. **No Git
+  integration** and **no automatic redeploys** unless a future explicit
+  decision changes the deployment model.
+- **Preview mode:** Cloudflare Pages preview deployment /
+  `*.pages.dev` preview URL before DNS cutover, plus the local
+  `vite preview` smoke check. If provider preview is not yet available
+  before the first upload (i.e. before the Cloudflare Pages project
+  exists), the wiring slice must record that and rely on local preview
+  until the Pages project is created.
+
+Pre-conditions for the deployment-wiring slice authorised by this
+decision:
+- the deployment-wiring slice must verify whether a suitable
+  Cloudflare Pages project name is available **before** recording any
+  final provider config in the repo. If the desired name is taken or
+  reserved, the wiring slice records the actual project name in
+  `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md` (and, only if a
+  different surface or naming pattern is implied, raises the question
+  via a separate explicit decision rather than silently picking).
+
+Constraints (the decision itself does not change runtime; these guard
+the next slice):
+- This decision **does not deploy** the surface.
+- This decision **does not create DNS records**.
+- This decision **does not add provider config** (e.g. `wrangler.toml`,
+  `_redirects`, `_headers`, GitHub Actions workflow). Any minimal
+  provider-side config the wiring slice adds must be static-only and
+  must not introduce Cloudflare Workers, Functions, KV, R2, D1,
+  Durable Objects, Queues, or any other dynamic / stateful Cloudflare
+  surface beyond static asset delivery and TLS termination.
+- This decision **does not add a CI deploy workflow**. The Direct
+  Upload model is explicitly chosen so that production deploys remain
+  operator-gated and not triggered by Git events.
+- This decision **does not approve backend email capture**.
+- This decision **does not approve analytics or session tracking** —
+  Cloudflare Pages Web Analytics (or any equivalent) must remain
+  disabled by default and must not be enabled without a separate
+  explicit decision.
+- This decision **does not change D-0047, D-0048, or D-0049**; all
+  three continue to govern the surface in full.
+- Email lead capture remains `mailto:` / focus-only / manual handoff.
+- Any backend / email / analytics / dynamic-edge change requires a
+  separate explicit decision.
+- Direct Upload means **no automatic Git-based production deploys** in
+  this project unless a future explicit decision creates a different
+  deployment model.
+
+Rationale:
+- Phase 8D found no repo-wide static-hosting convention to inherit,
+  and explicitly recorded the deployment-wiring slice as
+  `BLOCKED ON HOSTING PROVIDER SELECTION` until a concrete provider
+  was chosen.
+- A concrete provider decision is required before any provider-specific
+  static-hosting config can be added to the repo.
+- Cloudflare Pages provides static-asset hosting with managed TLS, a
+  free tier appropriate for a pilot landing surface, native support
+  for custom domains under DNS that Cloudflare can already manage, and
+  Direct Upload mode for operator-controlled deployments.
+- Direct Upload (rather than the Git-integration mode) preserves
+  D-0047's local-only deterministic boundary by keeping production
+  deploys an explicit operator action rather than an automatic
+  side-effect of pushing to a branch.
+- Static-only usage (no Workers, Functions, KV, R2, D1, Durable
+  Objects, Queues) keeps the surface aligned with D-0047 — no backend,
+  no execution, no persistence, no analytics.
+- Recording the provider as a decision (rather than picking it inside
+  the wiring slice) prevents accidental deployment to an unintended
+  surface and gives the wiring slice an unambiguous target.
+
+Consequences:
+- `docs/ops/NEXT.md` is updated: the
+  `Pilot intake RU hosting provider selection (blocker)` slice is
+  marked DONE by this decision; the
+  `Pilot intake RU provider-specific deployment wiring` slice (formerly
+  the `(post-blocker)` deployment-wiring slice) becomes the active next
+  slice with concrete Cloudflare Pages values folded in.
+- `docs/ops/STATUS.md` is updated with a concise marker that the
+  hosting provider decision is recorded, that provider-specific
+  deployment wiring is still pending, and that the surface is not
+  deployed.
+- `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md` §5 (`Hosting wiring
+  status`) is updated from `BLOCKED ON HOSTING PROVIDER SELECTION` to
+  `PROVIDER SELECTED — WIRING PENDING`, with provider values and a
+  pointer to this decision; §9 (`Recommendation`) is updated
+  accordingly.
+- `docs/ops/COMPONENTS.yaml` `web_surface.notes` is updated with a
+  short marker that the provider decision is recorded and that
+  provider-specific wiring is the next slice.
+- The provider-specific deployment-wiring slice that follows must:
+  - remain static-only (no Workers / Functions / KV / R2 / D1 /
+    Durable Objects / Queues / Cloudflare Pages Web Analytics);
+  - use the D-0049 values: domain `pilot.goalrail.dev`, public path
+    `/`;
+  - verify the canonical URL in built `dist/index.html` is
+    `https://pilot.goalrail.dev/` (already aligned in Phase 8E);
+  - run the production build locally and a `vite preview` smoke check
+    plus, when available, a Cloudflare Pages preview / `*.pages.dev`
+    smoke check before DNS cutover;
+  - verify no env/secrets/runtime configuration is required;
+  - verify the `mailto:` / focus / manual email handoff still holds;
+  - verify HTTPS is active on the chosen Cloudflare Pages target and
+    on `https://pilot.goalrail.dev/` once the custom domain is added;
+  - re-confirm D-0047 boundaries in the deployed/preview context.
+- The surface remains not deployed and not live until a future
+  deployment-wiring patch completes. This decision does not by itself
+  authorise publication.
+
+## D-0051 — Pilot intake RU hosting path changed to operator-managed SSH static server
+Date: 2026-04-28
+Status: accepted
+Supersedes: D-0050 (hosting provider and deployment mode only)
+
+Decision:
+- `apps/web/pilot-intake-ru` will be prepared for manual static
+  deployment to an **operator-managed SSH static server**.
+- This decision **supersedes D-0050** for hosting provider and
+  deployment mode. Cloudflare Pages Direct Upload is no longer the
+  selected RU launch path.
+- D-0049 is **preserved**: target domain remains `pilot.goalrail.dev`
+  and public path remains `/` with public status `candidate-public`.
+- D-0047 and D-0048 are **preserved** and continue to govern the
+  surface in full.
+- **Hosting provider:** operator-managed SSH static server.
+- **Hosting target detail:** operator-managed Linux server reachable
+  over SSH; exact host, IP address, SSH port, SSH user, and
+  credentials are kept out of repo; static web root and release
+  directory will be confirmed during deployment wiring.
+- **DNS strategy:** DNS handled externally by the operator;
+  `pilot.goalrail.dev` will point to the SSH server or upstream
+  reverse proxy using A / AAAA / CNAME as appropriate. If the DNS
+  zone is currently managed through Cloudflare, the record must be
+  DNS-only / non-proxied or otherwise configured so public traffic
+  does **not** depend on Cloudflare Pages, Cloudflare proxy,
+  Cloudflare Workers, or Cloudflare CDN services.
+- **TLS strategy:** server-managed HTTPS via existing reverse proxy
+  or Let's Encrypt. HTTPS for `https://pilot.goalrail.dev/` must be
+  verified before any public use.
+- **Deployment mode:** manual static upload over SSH after a local
+  production build. Preferred mechanism is `rsync` / `scp` to a
+  timestamped release directory with an atomic `current` symlink
+  switch. **No automatic redeploys.** No CI deploy workflow.
+- **Preview mode:** local `vite preview` smoke check plus a server
+  smoke check after manual upload. An optional staging vhost / path
+  is allowed only if the operator explicitly provides one; this
+  decision does not require staging infrastructure and does not
+  authorise its creation.
+- **Public status:** `candidate-public`. Surface is not deployed and
+  not live until the future deployment-wiring patch completes with
+  HTTPS verified.
+
+Constraints (the decision itself does not change runtime; these guard
+the next slice):
+- This decision **does not deploy** the surface.
+- This decision **does not create DNS records**.
+- This decision **does not add SSH scripts**.
+- This decision **does not add Nginx, Caddy, Apache, or other
+  reverse-proxy config** to the repo. Any minimal server-side config
+  the wiring slice creates lives on the operator-managed server, not
+  in this repository, unless a separate explicit decision authorises
+  committing repo-side server config.
+- This decision **does not approve backend email capture**.
+- This decision **does not approve analytics or session tracking**.
+- This decision **does not approve server-side forms**.
+- This decision **does not approve persistence**.
+- This decision **does not approve runtime execution**.
+- This decision **does not approve Cloudflare Pages, Cloudflare
+  Workers, Cloudflare Functions, Cloudflare KV / R2 / D1 / Durable
+  Objects / Queues, Cloudflare proxy/CDN, or Cloudflare Web
+  Analytics** for this surface. If the DNS zone happens to live in
+  Cloudflare, the record must be DNS-only / non-proxied; Cloudflare
+  surfaces beyond plain DNS hosting are not part of the launch path.
+- Server hostnames, IP addresses, usernames, SSH keys, tokens, and
+  credentials **must not** be committed to the repository.
+- Email lead capture remains `mailto:` / focus-only / manual handoff.
+- Any backend / email / analytics / dynamic-edge change requires a
+  separate explicit decision.
+- Deployment wiring must remain static-only and operator-gated.
+- Deployment wiring should prefer an atomic release strategy: upload
+  to a timestamped release directory; switch the `current` symlink;
+  keep at least one previous release for rollback.
+
+Rationale:
+- The RU-segment launch path should not depend on Cloudflare Pages
+  availability or any Cloudflare-managed surface beyond plain DNS
+  hosting.
+- An operator-managed SSH static server preserves manual control over
+  publication, rollback, and operational state.
+- Static upload over SSH fits the existing local-only deterministic
+  demo (D-0047) without introducing provider features such as
+  analytics, server functions, edge workers, or automatic Git deploys.
+- Atomic release strategy with timestamped directories and a
+  `current` symlink gives a fast, low-risk rollback path that the
+  operator can execute without touching the repo.
+- Keeping production deployments operator-gated (no Git integration,
+  no CI deploy, no provider-driven auto-build) preserves D-0047's
+  trust posture and prevents accidental scope drift into automatic
+  pipelines.
+- Recording the change as an explicit supersession (rather than
+  silently substituting the provider in D-0050) keeps the public
+  audit trail honest and prevents readers from acting on the
+  Cloudflare Pages instructions in D-0050.
+
+Consequences:
+- D-0050 status is updated from `accepted` to
+  `superseded by D-0051 for hosting provider and deployment mode`.
+  D-0050's body remains in the file as historical record but is no
+  longer the active hosting path.
+- D-0049 remains in force unchanged: `pilot.goalrail.dev` / `/` /
+  `candidate-public`. The Phase 8E canonical-link metadata fix in
+  `apps/web/pilot-intake-ru/index.html` (and built `dist/index.html`)
+  is still correct.
+- `docs/ops/NEXT.md` is updated: the `Slice — Pilot intake RU
+  provider-specific deployment wiring` (Cloudflare-Pages-shaped) is
+  replaced by `Slice — Pilot intake RU SSH static deployment wiring`
+  with concrete SSH-shaped done-means.
+- `docs/ops/STATUS.md` is updated with a concise marker that the
+  Cloudflare Pages launch path is superseded for the RU segment, that
+  the new SSH static path is selected per this decision, and that the
+  surface is not deployed.
+- `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md` §5 (`Hosting wiring
+  status`) and §9 (`Recommendation`) are updated to point at this
+  decision rather than D-0050; provider values, DNS, TLS, deployment,
+  and preview modes are restated for the SSH path.
+- `docs/ops/COMPONENTS.yaml` `web_surface.notes` is updated to
+  describe the SSH static path and to record that the Cloudflare
+  Pages path was superseded for this surface.
+- The deployment-wiring slice that follows must:
+  - remain static-only and operator-gated;
+  - use the D-0049 values: domain `pilot.goalrail.dev`, public path
+    `/`;
+  - confirm web server type / reverse proxy and the deploy root /
+    release directory on the chosen SSH server;
+  - define a manual upload method (rsync / scp), explicitly avoiding
+    any credential, key, token, hostname, IP address, or SSH config
+    in the repository;
+  - define a rollback method (previous release directory or symlink
+    rollback);
+  - run the production build locally, run a `vite preview` smoke
+    check, and (only after manual upload) a server smoke check;
+  - verify the canonical URL is `https://pilot.goalrail.dev/`;
+  - verify HTTPS is active on `https://pilot.goalrail.dev/` before
+    public use;
+  - re-confirm D-0047 boundaries in the deployed/preview context;
+  - record the result in
+    `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md`.
+- The surface remains **not deployed** and **not live** until the
+  future deployment-wiring patch completes. This decision does not by
+  itself authorise publication.
+
 ## D-0052 — ChatUI / universal natural-language input is deferred as a primary near-term product surface
 Date: 2026-04-28
 Status: accepted
@@ -692,3 +1156,94 @@ Rationale:
 - keeps the boundary between contract shaping, planning, execution,
   gate, and proof inspectable rather than collapsing them behind a
   single conversational input
+
+## D-0053 — Pilot intake RU target domain changed to pilot.goalrail.ru
+Date: 2026-04-28
+Status: accepted
+Supersedes: D-0049 (target domain and canonical public URL only)
+
+Decision:
+- `apps/web/pilot-intake-ru` active target domain changes from
+  `pilot.goalrail.dev` to `pilot.goalrail.ru`.
+- Public path remains `/`.
+- Public status remains `candidate-public`.
+- D-0049 is **superseded** for target domain and canonical public
+  URL. D-0049's body is preserved as historical record.
+- D-0047 remains fully in force.
+- D-0048 remains fully in force.
+- D-0051 remains the active hosting / deployment path
+  (operator-managed SSH static server, manual `rsync` / `scp` upload
+  to a timestamped release directory with atomic `current` symlink
+  switch, server-managed HTTPS via existing reverse proxy or Let's
+  Encrypt, externally-managed DNS, no automatic redeploys, no CI
+  deploy workflow); D-0051's target-domain references inside its
+  body should be read with D-0053 in mind — the active target is
+  now `pilot.goalrail.ru`, while D-0051's hosting / deployment mode
+  remains in force unchanged.
+- D-0050 remains superseded by D-0051 for hosting provider and
+  deployment mode.
+- The `.dev` domain (`pilot.goalrail.dev`) is reserved for a later
+  global-market rollout and is **not** the current active target.
+- This decision **does not deploy** the surface.
+- This decision **does not create DNS records**.
+- This decision **does not provision TLS**.
+- This decision **does not add Nginx, Caddy, Apache, or other
+  reverse-proxy config** to the repo.
+- This decision **does not approve backend email capture**.
+- This decision **does not approve analytics or session tracking**.
+- This decision **does not approve server-side forms**.
+- This decision **does not approve persistence**.
+- This decision **does not approve runtime execution**.
+- This decision **does not approve repo-provider or LLM
+  integration**.
+- This decision **does not introduce new scenarios** beyond
+  `manual_review_gate` and `bounded_task`.
+- This decision **does not introduce new outcome tones** beyond
+  `ready` / `readyWithCaveats` / `blocked`.
+- This decision **does not change product behavior**.
+- Server hostnames, IP addresses, usernames, SSH keys, tokens, and
+  credentials **must not** be committed to the repository.
+
+Rationale:
+- The current public/RU launch path is for the Russian-speaking
+  segment.
+- The RU segment should publish under the `.ru` domain rather than
+  the `.dev` domain.
+- The `.dev` domain is reserved for a later global-market rollout.
+- Updating the target-domain decision before the SSH deployment
+  remote half runs avoids publishing under the wrong public
+  surface.
+- The change is compatible with D-0051's SSH static-hosting path:
+  domain choice is orthogonal to hosting provider, so D-0051
+  remains in force without modification.
+- Recording the change as an explicit supersession (rather than
+  silently substituting the domain in D-0049) keeps the public
+  audit trail honest and prevents readers from acting on the
+  `pilot.goalrail.dev` instructions in D-0049.
+
+Consequences:
+- `apps/web/pilot-intake-ru/index.html`
+  `<link rel="canonical" href>` is updated from
+  `https://pilot.goalrail.dev/` to `https://pilot.goalrail.ru/`.
+- The built `dist/index.html` must contain
+  `https://pilot.goalrail.ru/` and must not contain
+  `https://pilot.goalrail.dev/` outside historical decision bodies.
+- Future SSH deployment runs use the env value
+  `GR_PILOT_DOMAIN=pilot.goalrail.ru`.
+- DNS / TLS verification targets `https://pilot.goalrail.ru/`.
+- Server-side and public browser smoke checks target
+  `https://pilot.goalrail.ru/`.
+- `docs/ops/STATUS.md`, `docs/ops/NEXT.md`,
+  `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md`,
+  `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md`, and
+  `docs/ops/COMPONENTS.yaml` are updated to refer to
+  `pilot.goalrail.ru` as the active target. The
+  `pilot.goalrail.dev` references inside D-0049 / D-0050 / D-0051
+  bodies are preserved as historical record.
+- Any future switch back to `pilot.goalrail.dev`, or to any other
+  domain, requires its own separate explicit decision in
+  `docs/ops/DECISIONS.md` before it is implemented.
+- The surface remains **not deployed** and **not live** until the
+  future deployment-wiring patch completes with HTTPS verified
+  active on `https://pilot.goalrail.ru/`. This decision does not
+  by itself authorise publication.
