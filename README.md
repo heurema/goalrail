@@ -19,9 +19,34 @@ It sits between planning and execution:
 
 ## Current state
 
-Goalrail is currently docs-first.
-The product canon, MVP shape, and operating model are documented.
-A public implementation baseline does not exist yet.
+Goalrail's product canon, MVP shape, and operating model are documented,
+and an early Go server prototype now exists under `apps/server` with a
+bounded persistence slice.
+
+The implemented slice covers a server-owned lifecycle from intake through
+work-item planning:
+IntakeRecord → Goal → ContractSeed → ContractDraft (`draft`) →
+ContractDraft (`ready_for_approval`) → ApprovedContract (`approved`) →
+WorkItem (`planned` prototype). HTTP routes, Postgres-backed persistence
+for the core canonical objects, migrations, and event append for the key
+transitions are in place.
+
+This is **not** a full Goalrail runtime and **not** an agent platform.
+The following major pieces are intentionally not implemented yet:
+
+- runner
+- queue / jobs
+- workers
+- repo checkout
+- gate
+- proof generation
+- durable `WorkItem` storage
+- durable clarification persistence
+- authn / authz
+- runnable eval harness
+
+Goalrail remains a contract-first, bounded control plane that supplements
+existing developer and business tools rather than replacing them.
 
 ## Read first
 

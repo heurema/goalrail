@@ -634,3 +634,61 @@ Rationale:
   execution
 - prevents WorkItem creation from becoming hidden runner, receipt, gate, or
   proof semantics
+
+## D-0052 — ChatUI / universal natural-language input is deferred as a primary near-term product surface
+Date: 2026-04-28
+Status: accepted
+
+Decision:
+- a primary universal ChatUI / free-form natural-language input
+  surface is **deferred** as a near-term GoalRail product surface
+- GoalRail is intended to supplement existing developer and business
+  tools, not to replace them; users continue working in the tools
+  they already use, while GoalRail acts as a bounded control plane
+  that normalizes work into inspectable contracts, scopes, jobs,
+  artifacts, and later proof
+- a primary universal ChatUI would pull the product toward a generic
+  AI workspace and increase intent-to-scope risk before trusted
+  actor identity, durable scope envelopes, job boundaries, scoped
+  workers, and verification / proof boundaries exist
+- this decision is **deferral**, not a permanent ban; ChatUI may
+  later exist as an operator / debug / review console or as an eval
+  playground if and when its boundaries are explicit and supporting
+  primitives exist
+- near-term allowed product surfaces are:
+  - CLI
+  - API / control plane
+  - MCP / tools for coding agents, once boundaries are stable
+  - external adapters such as Jira / Linear later
+  - optional web console for status, approvals, review, traces, and
+    debugging
+- not allowed as an MVP primary surface:
+  - universal ChatUI
+  - general-purpose free-form agent workspace
+  - broad "ask anything and let the agent decide" interface
+- this decision does **not** describe any unimplemented runtime,
+  worker, gate, proof, or ChatUI as existing
+- this decision does **not** introduce new roadmap items beyond the
+  deferral itself
+- review date: 2026-06-15, after `ActorContext`, durable
+  clarifications / `WorkItem`s, `ScopeEnvelope`, and the first
+  scoped worker boundary exist
+
+Rationale:
+- prevents scope creep into an AI IDE or generic agent platform
+- prevents user-workflow displacement by keeping GoalRail an
+  intake / contract / verification layer over the user's existing
+  tools rather than a replacement workspace
+- prevents premature free-form intent routing before trusted actor
+  identity, durable scope envelopes, and job boundaries exist
+- prevents unsafe broad worker authority arising from a chat surface
+  that lets users "ask anything" before scoped workers and gate /
+  proof boundaries are defined
+- preserves the current direction recorded in D-0001, D-0002,
+  D-0012, D-0013, D-0021, D-0024, D-0025, and the intake → goal →
+  clarification → contract → approval → work-item chain (D-0027,
+  D-0028, D-0029, D-0035, D-0036, D-0037, D-0038, D-0040, D-0043,
+  D-0044, D-0045, D-0046)
+- keeps the boundary between contract shaping, planning, execution,
+  gate, and proof inspectable rather than collapsing them behind a
+  single conversational input
