@@ -65,9 +65,9 @@ We should avoid starting with:
 
 Founding Pilot:
 
-- Duration: 2 weeks
-- Effort: approximately 80 hours
-- Price: approximately $3,000 during the founding pilot stage
+- Duration: approximately 2 weeks
+- Scope: fixed-scope pilot with a selected product area
+- Commercial terms: intentionally discounted during the founding pilot stage and maintained separately from this repository
 
 Included:
 
@@ -78,6 +78,8 @@ Included:
 5. Contract-based task process setup.
 6. First real AI-assisted development workflow on a selected product area.
 7. Final report with what works, what blocks scaling, and recommended next steps.
+
+Exact pricing, discounts, and client-specific commercial terms are not maintained in this repository. They should live in the commercial source of truth used by sales or business operations.
 
 ## Messaging
 
