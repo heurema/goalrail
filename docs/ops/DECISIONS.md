@@ -1247,3 +1247,64 @@ Consequences:
   future deployment-wiring patch completes with HTTPS verified
   active on `https://pilot.goalrail.ru/`. This decision does not
   by itself authorise publication.
+
+## D-0054 — Actor identity is server-resolved; payload actor fields are prototype compatibility only
+Date: 2026-04-28
+Status: accepted
+
+Decision:
+- GoalRail must treat actor identity for canonical state transitions
+  as **server-resolved**, not as arbitrary client-supplied truth
+- the current server prototype still accepts actor-like fields from
+  request payloads, including `request_author`, `intent_owner`,
+  `submitted_by`, `applied_by`, `updated_by`, `marked_by`, and
+  `approved_by`
+- in the current prototype, those payload-supplied fields are
+  **compatibility / audit labels only**
+- they are **not** production authorization and must not be treated
+  as proof that a human, worker, or service actor was trusted by the
+  server
+- this is acceptable only as dev / prototype behavior while GoalRail
+  has no production authn / authz layer, no workers, no runner, and
+  no public agent runtime
+- this behavior **must not** survive into agent / worker runtime as
+  the authority model
+- future workers must act as **server-resolved service actors**, not
+  by placing arbitrary human actor JSON into payload fields
+- future human approvals must be resolved from a **trusted request
+  context** or an equivalent trusted control-plane identity
+  mechanism
+- `ActorContext` is the intended bounded primitive for this
+  direction, but this decision **does not implement** `ActorContext`
+- `ActorContext` introduction is a future bounded slice and must
+  not add broad production auth infrastructure without a scoped
+  plan
+- highest-risk transitions to migrate first, in order:
+  1. approve contract draft / create `ApprovedContract`
+  2. mark `ContractDraft` `ready_for_approval`
+  3. apply clarification answer
+  4. update `ContractDraft` proposed fields
+  5. intake `request_author` / `intent_owner` handling
+- this decision does **not** change current API behavior
+- this decision does **not** add middleware, headers, auth provider,
+  authz policy, migrations, agents, workers, runner, gate, proof,
+  eval harness, or ChatUI
+- this decision does **not** expand MVP scope
+
+Rationale:
+- prevents forged approval identity from becoming a normalized
+  product behavior, which would silently undermine the audit value
+  of `contract.approved`, `contract_draft.marked_ready_for_approval`,
+  `contract_draft.updated`, and `clarification.answer_applied`
+- keeps approval, update, clarification, and future worker
+  identities inspectable rather than collapsing them into trusted
+  payload strings
+- prevents future agents / workers from claiming human authority
+  through payload fields, which would make a coding agent capable
+  of self-approving its own work
+- aligns with GoalRail's server-owned canonical state transitions
+  (D-0027, D-0028, D-0029, D-0035, D-0036, D-0037, D-0038, D-0040,
+  D-0043, D-0044, D-0045, D-0046)
+- aligns with D-0052, which names `ActorContext` as a missing
+  primitive that must exist before revisiting ChatUI / universal
+  input

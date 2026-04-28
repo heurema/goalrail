@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
@@ -198,6 +199,97 @@ func TestServiceValidatesApprovedBy(t *testing.T) {
 			}
 			if validationErr.Field != tt.field {
 				t.Fatalf("validation field = %q, want %q", validationErr.Field, tt.field)
+			}
+			if got := len(events.Events()); got != 0 {
+				t.Fatalf("events = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func TestServiceUsesActorContextWhenPresent(t *testing.T) {
+	service, drafts, _, events := approvalService(t)
+	draft := validReadyDraft()
+	if err := drafts.Create(context.Background(), draft); err != nil {
+		t.Fatalf("drafts.Create() error = %v", err)
+	}
+
+	ctxActor := spine.ActorRef{Kind: "user", ID: "ctx_approver", DisplayName: "Context Approver"}
+	ctx := actor.WithActor(context.Background(), actor.ActorContext{
+		Actor:  ctxActor,
+		Source: actor.SourceDevHeader,
+	})
+
+	approved, err := service.ApproveDraft(ctx, draft.ID, approveRequest())
+	if err != nil {
+		t.Fatalf("ApproveDraft() error = %v", err)
+	}
+	if approved.ApprovedBy != ctxActor {
+		t.Fatalf("approved.ApprovedBy = %#v, want ctxActor %#v", approved.ApprovedBy, ctxActor)
+	}
+
+	appended := events.Events()
+	if got := countEventType(appended, approvedcontract.EventTypeContractApproved); got != 1 {
+		t.Fatalf("contract.approved events = %d, want 1", got)
+	}
+	var payload struct {
+		ApprovedBy spine.ActorRef `json:"approved_by"`
+	}
+	if err := json.Unmarshal(appended[len(appended)-1].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal contract.approved payload: %v", err)
+	}
+	if payload.ApprovedBy != ctxActor {
+		t.Fatalf("event approved_by = %#v, want ctxActor %#v", payload.ApprovedBy, ctxActor)
+	}
+}
+
+func TestServiceFallsBackToPayloadActorWhenContextAbsent(t *testing.T) {
+	service, drafts, _, _ := approvalService(t)
+	draft := validReadyDraft()
+	if err := drafts.Create(context.Background(), draft); err != nil {
+		t.Fatalf("drafts.Create() error = %v", err)
+	}
+
+	approved, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
+	if err != nil {
+		t.Fatalf("ApproveDraft() error = %v", err)
+	}
+	want := approveRequest().ApprovedBy
+	if approved.ApprovedBy != want {
+		t.Fatalf("approved.ApprovedBy = %#v, want payload %#v", approved.ApprovedBy, want)
+	}
+}
+
+func TestServiceValidatesEffectiveApproverFromContext(t *testing.T) {
+	tests := []struct {
+		name      string
+		ctxActor  spine.ActorRef
+		wantField string
+	}{
+		{name: "ctx_missing_kind", ctxActor: spine.ActorRef{ID: "ctx_approver"}, wantField: "approved_by.kind"},
+		{name: "ctx_missing_id", ctxActor: spine.ActorRef{Kind: "user"}, wantField: "approved_by.id"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, drafts, _, events := approvalService(t)
+			draft := validReadyDraft()
+			if err := drafts.Create(context.Background(), draft); err != nil {
+				t.Fatalf("drafts.Create() error = %v", err)
+			}
+
+			ctx := actor.WithActor(context.Background(), actor.ActorContext{
+				Actor:  tt.ctxActor,
+				Source: actor.SourceDevHeader,
+			})
+
+			_, err := service.ApproveDraft(ctx, draft.ID, approveRequest())
+			var validationErr *approvedcontract.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("ApproveDraft() error = %v, want ValidationError", err)
+			}
+			if validationErr.Field != tt.wantField {
+				t.Fatalf("validation field = %q, want %q", validationErr.Field, tt.wantField)
 			}
 			if got := len(events.Events()); got != 0 {
 				t.Fatalf("events = %d, want 0", got)

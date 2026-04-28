@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
@@ -104,7 +105,8 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 	if err := s.validateDependencies(); err != nil {
 		return spine.ApprovedContract{}, err
 	}
-	if err := validateApprovedBy(input.ApprovedBy); err != nil {
+	approvedBy := effectiveApprover(ctx, input)
+	if err := validateApprovedBy(approvedBy); err != nil {
 		return spine.ApprovedContract{}, err
 	}
 
@@ -132,7 +134,7 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		return spine.ApprovedContract{}, fmt.Errorf("new approved contract id: %w", err)
 	}
 	now := s.Clock.Now().UTC()
-	approved := approvedContractFromDraft(approvedID, draft, input.ApprovedBy, now)
+	approved := approvedContractFromDraft(approvedID, draft, approvedBy, now)
 	event, err := s.contractApprovedEvent(approved, draft.State)
 	if err != nil {
 		return spine.ApprovedContract{}, err
@@ -187,6 +189,18 @@ func approvedContractFromDraft(id spine.ApprovedContractID, draft spine.Contract
 		SourceRefs:         sourceRefsForDraft(draft),
 		State:              spine.ApprovedContractStateApproved,
 	}
+}
+
+// effectiveApprover returns the actor that should be recorded as
+// approver for this transition. Per D-0054, when a server-resolved
+// ActorContext is present in ctx it is preferred over the legacy
+// payload-supplied ApprovedBy field; otherwise the payload field is
+// used as prototype compatibility / audit label only.
+func effectiveApprover(ctx context.Context, input spine.ApproveContractDraftRequest) spine.ActorRef {
+	if ac, ok := actor.FromContext(ctx); ok {
+		return ac.Actor
+	}
+	return input.ApprovedBy
 }
 
 func validateApprovedBy(approvedBy spine.ActorRef) error {
