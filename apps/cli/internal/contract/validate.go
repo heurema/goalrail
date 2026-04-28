@@ -9,6 +9,11 @@ import (
 
 var ErrValidationFailed = errors.New("contract validation failed")
 
+// Validate validates the local/demo CLI Contract JSON DTO consumed by
+// `goalrail contract validate`. It preserves current local validator
+// behavior. It does not validate the canonical server-owned
+// ContractSeed / ContractDraft / ApprovedContract lifecycle; aligning the
+// CLI with that server-owned lifecycle is a separate planned slice.
 func Validate(contract spine.Contract) spine.ContractValidationReport {
 	findings := []spine.ContractValidationFinding{}
 
