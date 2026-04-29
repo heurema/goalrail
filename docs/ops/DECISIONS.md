@@ -1308,3 +1308,224 @@ Rationale:
 - aligns with D-0052, which names `ActorContext` as a missing
   primitive that must exist before revisiting ChatUI / universal
   input
+
+## D-0055 — Business-first Founding Pilot landing supersedes technical interactive walkthrough as primary public RU landing
+Date: 2026-04-29
+Status: accepted
+
+Decision:
+- The public RU landing for `apps/web/pilot-intake-ru` should sell the
+  safe пилот ИИ-разработки, not GoalRail internals.
+- The primary public message is `ИИ-кодинг без хаоса`.
+- The primary offer is a safe 2-week пилот ИИ-разработки on one bounded
+  product area.
+- The landing should explain the business control layer: repository
+  readiness, project context, controlled tasks, and verified result.
+- The previous 5-step technical interactive walkthrough is demoted to
+  internal / technical demo or checkpoint status. It remains available in
+  git history and should not be copied into a duplicate app folder unless
+  a future explicit bounded slice requests that.
+- D-0047 boundaries remain in force: no backend, no LLM/API, no repo
+  provider integration, no code execution, no persistence, no analytics or
+  session tracking, no chat UI, no file upload, no model selector, and no
+  real repository scan claim.
+- Illustrative business demo cards may show example readiness values only
+  when clearly marked as examples and not as real scan results.
+- D-0053 remains in force: active domain and canonical public URL remain
+  `https://pilot.goalrail.ru/` with public path `/`.
+- D-0051 remains in force: SSH static deployment remains the hosting path.
+- This decision does not deploy the surface.
+- This decision does not add deployment wiring, SSH scripts, DNS, TLS,
+  hosting config, backend, analytics, email backend, persistence, LLM/API,
+  repo-provider integration, runtime execution, or autonomous development.
+
+Rationale:
+- The current business question is: `Как мне использовать AI в разработке и
+  не получить хаос в продукте?`
+- Buyers need a calm pilot offer and risk/control framing before they need
+  internal GoalRail workflow terminology.
+- The previous technical walkthrough demonstrated method, but it made the
+  public first screen too technical for the new pilot-first business motion.
+- A business-first landing better matches the Founding Pilot hypothesis: teams
+  already use AI tools; the open question is how to avoid losing control over
+  code quality, architecture, and releases.
+
+Consequences:
+- `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md` becomes the canonical
+  business-first pilot landing copy/governance document.
+- `apps/web/pilot-intake-ru` is rewritten as a mostly static RU landing rather
+  than a 5-step interactive walkthrough.
+- `docs/ops/STATUS.md`, `docs/ops/NEXT.md`, and
+  `docs/ops/COMPONENTS.yaml` should describe the public RU target as the
+  business-first pilot landing and keep deployment status as not live until
+  SSH deployment completes.
+- Future deployment validation should validate the business-first landing
+  before any SSH deployment attempt.
+
+## D-0056 — Minimal RU pilot lead-capture endpoint allowed
+Date: 2026-04-29
+Status: accepted
+
+Decision:
+- `apps/web/pilot-intake-ru` may use a minimal server-side lead-capture
+  endpoint for email submissions.
+- Scope is limited to `POST /api/pilot-lead` on the operator-managed RU
+  server.
+- The endpoint may validate an email address, send a notification email to
+  `hello@goalrail.dev`, and append a local JSONL lead record.
+- Notification subject must start with `Пилот`.
+- Sending uses local Postfix configured to relay through
+  `skvmrelay.netangels.ru:25`.
+- This decision does not approve analytics, tracking, Google Sheets, CRM
+  integrations, cookies, sessions, user accounts, LLM/API calls, repo
+  integrations, runtime execution, or a broad backend platform.
+- Existing D-0047 boundaries remain in force except for this narrow
+  lead-capture exception.
+- Email remains `hello@goalrail.dev`.
+- Active target remains `pilot.goalrail.ru`.
+- SSH static hosting path remains active.
+
+Rationale:
+- `mailto:` is unreliable for business users and can trigger browser warnings.
+- Visitors expect inline confirmation after submitting an email.
+- A minimal endpoint improves UX while preserving manual handoff.
+- Netangels SMTP relay solves blocked outbound SMTP on VDS START.
+- Local JSONL provides a simple backup lead log without a CRM.
+
+Consequences:
+- Nginx must route `/api/pilot-lead` to a minimal server endpoint.
+- Server must have Postfix configured with relayhost
+  `[skvmrelay.netangels.ru]:25`.
+- Endpoint must reject invalid email and spam-like submissions.
+- No broad backend expansion is allowed.
+- The direct `mailto:hello@goalrail.dev` fallback remains available.
+
+## D-0057 — Server-local direct lead recipient override allowed
+Date: 2026-04-29
+Status: accepted
+
+Decision:
+- The RU pilot lead endpoint may use a server-local notification recipient
+  override for form submissions.
+- The override path is `/srv/goalrail/pilot/backend/lead-recipient.local`.
+- The override file is operator-managed server state and must not be committed
+  to the repository.
+- If the override file exists, the endpoint validates the contained email
+  address and sends lead notifications directly to it.
+- If the override file is absent, the endpoint falls back to
+  `hello@goalrail.dev`.
+- Public/manual contact email remains `hello@goalrail.dev`.
+- Cloudflare Email Routing remains the manual-email path for direct messages
+  sent by visitors to `hello@goalrail.dev`.
+- This decision does not approve storing personal recipient addresses in repo
+  docs/code/tests.
+- This decision does not approve analytics, tracking, CRM, Google Sheets,
+  cookies, sessions, user accounts, LLM/API calls, repo integrations, runtime
+  execution, or a broad backend platform.
+- D-0056 remains the only approved lead-capture endpoint scope.
+
+Rationale:
+- Cloudflare Email Routing forwards normal authenticated manual mail to
+  `hello@goalrail.dev`, but form-generated notifications from
+  `noreply@pilot.goalrail.ru` were classified as `unauthenticatedForward`.
+- A direct server-local recipient override makes form notifications reliable
+  without running a separate mail server and without exposing a personal
+  destination address in the repository.
+- Keeping `hello@goalrail.dev` public preserves the manual fallback path while
+  separating machine-generated notifications from Cloudflare forwarding.
+
+Consequences:
+- Server bootstrap / operations must provision the override file only on the
+  operator-managed server when direct form notification is desired.
+- The endpoint must validate the override value before using it.
+- Docs may mention the override path and redacted status, but must not include
+  the actual destination email address.
+
+## D-0058 — Daily RU pilot lead digest allowed
+Date: 2026-04-29
+Status: accepted
+
+Decision:
+- The RU pilot lead-capture path may send a daily server-side digest of leads.
+- The digest scope is limited to records in `/srv/goalrail/pilot/leads/leads.jsonl`.
+- The digest runs once per day at 07:00 GMT+3, implemented as `04:00 UTC` server cron.
+- The digest covers the previous GMT+3 calendar day.
+- If the previous day has zero leads, no email is sent.
+- If the previous day has one or more leads, one digest email is sent to the
+  same server-local recipient selection used by the lead endpoint: direct
+  override from `/srv/goalrail/pilot/backend/lead-recipient.local` if present,
+  otherwise fallback to `hello@goalrail.dev`.
+- New lead records should include both UTC submission time and GMT+3 local
+  submission fields so the digest can be audited without inferring local dates.
+- The actual direct recipient address remains operator-managed server state and
+  must not be committed to the repository.
+- This decision does not approve analytics, tracking, CRM, Google Sheets,
+  cookies, sessions, user accounts, LLM/API calls, repo integrations, runtime
+  execution, a broad backend platform, or a separate mail server.
+- D-0056 and D-0057 remain the only approved lead-capture / recipient override
+  boundaries.
+
+Rationale:
+- Immediate per-lead notification is useful, but the operator also needs a
+  clear daily reminder when there were leads that require action.
+- Sending nothing on empty days avoids notification noise.
+- Reusing the JSONL log and the direct recipient override keeps the mechanism
+  simple and avoids adding a database, CRM, or external automation service.
+
+Consequences:
+- Server operations must install a PHP CLI digest script and a cron entry.
+- The cron entry is server-local operational state and is documented, not a
+  repo-side deploy automation system.
+- The digest must not mutate the lead log or mark rows as processed.
+- Operators should still inspect the JSONL log directly when needed.
+
+## D-0059 — Resend HTTPS transport allowed for RU pilot lead mail
+Date: 2026-04-29
+Status: accepted
+
+Decision:
+- The RU pilot lead-capture path may use Resend as a narrow transactional
+  email transport for lead notifications and daily lead digests.
+- Scope is limited to the existing `apps/web/pilot-intake-ru` server-side
+  email sends from `POST /api/pilot-lead` and
+  `/srv/goalrail/pilot/backend/pilot-leads-digest.php`.
+- Resend must be called only from the operator-managed server over HTTPS
+  (`https://api.resend.com/emails`).
+- The sending domain for this path is `skill7.dev`, because the Resend free
+  tier already has that single domain configured.
+- The sender is `GoalRail Pilot <noreply@skill7.dev>`.
+- The API key must live only in server-local state at
+  `/srv/goalrail/pilot/backend/resend-api-key.local` and must not be committed
+  to the repository, docs, tests, logs, or command transcripts.
+- The recipient remains selected by D-0057: server-local direct recipient
+  override from `/srv/goalrail/pilot/backend/lead-recipient.local` when present,
+  otherwise fallback to `hello@goalrail.dev`.
+- The local JSONL lead log remains the only approved lead persistence.
+- Postfix / Netangels relay may remain only as a temporary fallback while the
+  Resend API key is absent; once the key is installed, Resend is the intended
+  primary transport.
+- This decision does not approve analytics, tracking, contact lists, marketing
+  campaigns, CRM integrations, Google Sheets, cookies, sessions, user accounts,
+  LLM/API calls, repo integrations, runtime execution, or a broad backend
+  platform.
+- This decision does not change the public/manual contact email
+  `hello@goalrail.dev` or the active target `pilot.goalrail.ru`.
+
+Rationale:
+- Netangels SMTP / port-25 relay accepts messages but direct Gmail delivery is
+  unreliable and lacks useful end-to-end diagnostics.
+- The operator reports SMTP ports are blocked/limited, making authenticated
+  SMTP a poor next step.
+- Resend provides a port-443 HTTPS API, domain authentication, and delivery
+  diagnostics without running a separate mail server.
+- Reusing `skill7.dev` avoids adding another domain to the Resend free tier.
+
+Consequences:
+- Server operations must provision the Resend API key only on the
+  operator-managed server.
+- PHP mail helpers must avoid logging or echoing the API key.
+- Lead endpoint and digest behavior must remain otherwise unchanged: validate
+  email, suppress duplicates, append local JSONL for first submissions, send
+  notification/digest, and keep direct mailto fallback.
+- If Resend delivery fails, the app should surface the same generic
+  `mail_unavailable` error and the local JSONL log remains the backup source.

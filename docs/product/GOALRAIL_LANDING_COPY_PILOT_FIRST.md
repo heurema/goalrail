@@ -1,6 +1,6 @@
 ---
 id: goalrail_landing_copy_pilot_first
-title: GoalRail Landing Copy — Pilot-First Interactive Demo
+title: GoalRail Landing Copy — Business-First Пилот ИИ-разработки
 kind: product_canon
 authority: canonical
 status: current
@@ -8,6 +8,7 @@ owner: product
 truth_surfaces:
   - landing_copy_canon
   - public_demo_governance
+  - pilot_positioning
 lifecycle: active-core
 review_after: 2026-07-19
 supersedes: []
@@ -20,439 +21,422 @@ related_docs:
   - docs/ops/DECISIONS.md
   - docs/ops/COMPONENTS.yaml
 ---
-# GoalRail Landing Copy — Pilot-First Interactive Demo
+# GoalRail Landing Copy — Business-First Пилот ИИ-разработки
 
-> Status: canonical for the RU public pilot-first landing demo.
+> Status: canonical for the RU public pilot landing at `pilot.goalrail.ru`.
 > Implementation: `apps/web/pilot-intake-ru`.
-> Current behavior: local deterministic 5-step walkthrough.
+> Current behavior: mostly static business-first landing for a safe 2-week пилот ИИ-разработки on one product area.
 >
 > Source-of-truth ordering for this surface:
 > - this doc (copy + governance)
 > - `apps/web/pilot-intake-ru/src/App.tsx` (authoritative implementation)
 > - `apps/web/pilot-intake-ru/src/App.css` (visual system)
 > - `apps/web/pilot-intake-ru/src/App.test.tsx` (regression net)
->
-> If this doc and the code disagree, the code is the implementation truth, but
-> the boundaries below must hold.
 
 ---
 
 ## A. Product intent
 
-The landing lets a visitor describe a task, PR, change, or case and then walks
-them through a local simulation of GoalRail's contract-first workflow. The goal
-is to show the **method**, not to execute work.
+The public RU landing must sell a safe business pilot, not explain GoalRail as
+a technical system.
 
-What it is:
-- a public product-led landing/demo surface;
-- a guided contract walkthrough: raw task → clarification → contract draft →
-  review/gaps → honest outcome;
-- a calm, technical, bounded demonstration of how GoalRail thinks about
-  AI-assisted delivery.
+Business question answered by the page:
 
-What it is **not**:
-- a generic AI assistant;
-- a chat demo;
-- a live execution environment;
-- a place where a real repo is assessed;
-- a place where a result is "delivered".
+> Как мне использовать ИИ в разработке и не получить хаос в продукте?
 
----
+Primary message:
 
-## B. Core promise
+> **ИИ-кодинг без хаоса**
 
-Public promise:
+Core promise:
 
-> **Покажите задачу — мы проведём вас по контракту**
+> GoalRail helps product teams safely introduce ИИ-разработку by checking
+> repository readiness, collecting project context, creating a controlled task
+> process, and running the first supervised pilot on one real product area.
 
-Meaning:
-- user brings a real-ish task;
-- GoalRail shows how it becomes a bounded contract;
-- clarification comes before execution;
-- risk and ambiguity are visible;
-- the outcome is honest — including the case where a pilot is not yet ready.
+Above-the-fold framing must make clear that this is a safe 2-week pilot for
+1 team and 1 product area, not a full AI transformation or a promise to
+replace the team's development process.
 
-Hero subtitle (canonical):
+Business framing:
 
-> Опишите реальную задачу, PR, изменение или кейс. Демо покажет, как GoalRail
-> превращает её в контракт, уточняющие вопросы, критерии и честный следующий
-> шаг — без выполнения кода и подключения репозитория.
+> Ваши разработчики уже используют ИИ-инструменты. Вопрос уже не в том,
+> использовать ли ИИ. Вопрос в том, как не потерять контроль над качеством
+> кода, архитектурой и релизами.
 
----
+Primary offer:
 
-## C. Firm boundaries
+> Запустите безопасный 2-недельный пилот ИИ-разработки на одном участке
+> продукта.
 
-The landing demo must not, without an explicit superseding decision:
+## B. Positioning rules
 
-- call any backend;
-- persist user input anywhere (memory, storage, network);
-- call any LLM or AI API;
-- connect to any repo provider (GitHub/GitLab/Bitbucket);
+Tone:
+- calm;
+- adult;
+- business-friendly;
+- no ИИ hype;
+- no `10x speed` promise;
+- no fully autonomous ИИ agent promise;
+- no deep technical architecture in the hero.
+
+The page should preserve:
+- existing dark GoalRail palette;
+- premium technical mood;
+- muted panels;
+- amber primary CTA;
+- violet accents;
+- IBM Plex fonts;
+- inline email submission through the narrow D-0056 lead endpoint, with
+  D-0059 Resend HTTPS transport for notification delivery when configured and
+  `mailto:hello@goalrail.dev` as a fallback.
+
+The page must remove or demote:
+- `Goal Intake` as hero;
+- 5-step interactive walkthrough as the main page object;
+- Clarification / Contract Draft / Review / Honest Outcome as public
+  first-screen flow;
+- technical contract-object UI;
+- deep internal system terms;
+- agent execution language;
+- YAML/JSON examples;
+- terminal-heavy first screen.
+
+## C. Required landing sections
+
+### 1. Hero
+
+Hero title:
+
+> ИИ-кодинг без хаоса
+
+Hero body:
+
+> Ваши разработчики уже используют Cursor, Claude Code, Codex или Copilot.
+> GoalRail помогает внедрить ИИ-разработку как управляемый процесс: с аудитом
+> репозитория, проектным контекстом, понятными задачами и проверяемым
+> результатом.
+
+Supporting line:
+
+> Запустите безопасный 2-недельный пилот на одном участке продукта — не
+> полную ИИ-трансформацию, а управляемую проверку качества, архитектуры и
+> релизного контроля.
+
+Hero microcopy near CTA:
+
+> 2 недели · 1 команда · 1 участок продукта · без перестройки процесса
+
+Primary CTA:
+
+> Обсудить пилот
+
+CTA behavior:
+- focus the existing email/contact area;
+- submit only to the same-origin `POST /api/pilot-lead` endpoint allowed by
+  D-0056;
+- no analytics;
+- no external network call from the browser.
+
+Hero right card:
+- visible header label: `Пример пилотного отчёта`
+- title: `Пилот ИИ-разработки`
+- fields:
+  - `Готовность репозитория: 74 / 100`
+  - `Участок пилота: Внутренний админ-модуль`
+  - `Найдено рисков: 5`
+  - `Задачи под контролем: Готово`
+- next step: `Запустить первый сценарий под контролем`
+- disclaimer: `Иллюстрация результата. Реальный аудит проводится отдельно.`
+
+The readiness value is illustrative only. It must not imply a real repository
+scan.
+
+### 2. Problem
+
+Title:
+
+> ИИ ускоряет разработку. Но без процесса он быстро создает скрытый хаос.
+
+Copy:
+
+> На старте все выглядит хорошо: разработчики быстрее пишут код, быстрее
+> собирают прототипы и закрывают задачи. Проблема появляется позже: ИИ
+> предлагает разные решения для похожих задач, дублирует логику, обходит
+> архитектурные ограничения и меняет код без понятного объяснения.
+
+Bullets:
+- архитектура начинает разъезжаться;
+- одинаковая логика появляется в разных местах;
+- Пул-реквесты выглядят рабочими, но их сложнее объяснить;
+- тесты не покрывают реальные риски;
+- разработчики используют ИИ по-разному;
+- бизнес видит скорость, но не видит риски.
+
+### 3. Control layer framing
+
+Title:
+
+> Проблема не в ИИ-инструментах. Проблема в отсутствии слоя контроля.
+
+Copy:
+
+> Cursor, Claude Code, Codex и Copilot уже помогают разработчикам писать код.
+> Но они не отвечают на вопросы бизнеса: готов ли репозиторий к
+> ИИ-разработке, какие участки продукта безопасно отдавать в пилот, какие
+> ограничения должен соблюдать ИИ, как проверить результат и как понять, что
+> команда не накапливает скрытый технический долг.
+
+Closing line:
+
+> GoalRail добавляет этот слой контроля поверх ИИ-инструментов.
+
+Simple visual explanation:
+
+1. `AI-инструменты` — `Cursor · Claude Code · Codex · Copilot`
+2. `GoalRail control layer` — `аудит · контекст · правила задач · проверка`
+3. `Безопасный пилот` — `один участок продукта · контролируемые AI-задачи · проверяемый результат`
+4. `Решение для бизнеса` — `что масштабировать · что исправить · где AI пока рискован`
+
+This visual must stay a compact business explanation, not a technical
+architecture diagram, execution engine, terminal, code block, YAML, JSON, or
+agent log.
+
+### 4. What GoalRail does
+
+Title:
+
+> GoalRail ставит ИИ-разработку на рельсы
+
+Four cards:
+- `Аудит готовности` — Проверяем, насколько ваш репозиторий готов к работе с
+  ИИ-инструментами: структура, тесты, документация, контекст, риски и
+  ограничения.
+- `Контекст проекта` — Собираем базу знаний о проекте, чтобы ИИ и
+  разработчики работали не вслепую, а с пониманием архитектуры и правил
+  команды.
+- `Контролируемые задачи` — Каждая ИИ-задача проходит через понятную рамку:
+  цель, границы изменений, ограничения, проверки и ожидаемый результат.
+- `Проверяемый результат` — Команда получает не просто сгенерированный код,
+  а прозрачный процесс: что было сделано, почему так, как проверено и какие
+  риски остались.
+
+### 5. Pilot offer
+
+Title:
+
+> Начните с безопасного пилота, а не с большого внедрения
+
+Copy:
+
+> Мы не предлагаем сразу перестраивать всю разработку. GoalRail Founding Pilot
+> запускается на одном выбранном участке продукта: модуле, внутреннем сервисе,
+> админ-панели, интеграции или другой зоне, где можно проверить подход без
+> риска для критичного ядра.
+
+Repeatable-process line:
+
+> Пилот проводится по повторяемому процессу GoalRail, а не как разовый
+> консалтинг-проект.
+
+List:
+1. выбор подходящего участка продукта;
+2. аудит репозитория;
+3. оценка готовности к ИИ;
+4. список рисков и блокеров;
+5. настройка проектного контекста;
+6. введение процесса ИИ-задач;
+7. запуск первого реального рабочего сценария;
+8. финальный отчет: что масштабировать, что исправить, где ИИ пока рискован.
+
+Important phrase:
+
+> Цель пилота — не доказать, что ИИ может писать код. Цель — понять, как
+> вашей команде использовать ИИ безопасно, системно и предсказуемо.
+
+### 6. Business demo cards
+
+Title:
+
+> Как выглядит пилотный результат
+
+This section shows three illustrative cards, not an interactive technical demo.
+Mark them as examples / illustrative, not real результаты реального сканирования.
+
+Cards:
+- `Готовность репозитория` with `Оценка готовности: 74 / 100`, ready items, and
+  risks.
+- `Контролируемая AI-задача` with task, goal, boundaries, and checks.
+- `Результат пилота` with result, evidence, and recommendation.
+
+### 7. For whom / not for whom
+
+Title:
+
+> Для команд, которые уже пробуют ИИ-разработку
+
+Fits:
+- у вас продуктовая команда от 3 до 20 разработчиков;
+- разработчики уже используют Cursor, Claude Code, Codex, Copilot или похожие
+  инструменты;
+- вы хотите использовать ИИ активнее, но боитесь пускать его в критичный код;
+- у вас есть участок продукта, на котором можно провести безопасный пилот;
+- вы хотите не просто скорость, а контроль над качеством и архитектурой.
+
+Not a fit:
+- вы ждете полной автономной разработки без людей;
+- вы хотите обещание десятикратной скорости;
+- у вас огромный старый монолит и вы хотите сразу внедрить ИИ во все;
+- команда еще вообще не использует ИИ-инструменты;
+- вам нужен кастомный консалтинг без повторяемого процесса.
+
+### 8. До и после
+
+Title:
+
+> Что меняется после пилота
+
+Before:
+- ИИ используется каждым разработчиком по-своему;
+- неясно, какие части кода безопасны для ИИ;
+- контекст проекта живет в головах людей;
+- задачи формулируются промптами без общих правил;
+- результат проверяется вручную и не всегда системно;
+- бизнес видит скорость, но не видит риски.
+
+After:
+- понятно, где ИИ можно использовать безопасно;
+- есть оценка готовности репозитория;
+- есть база знаний проекта;
+- ИИ-задачи проходят через общий процесс;
+- результаты проверяются по понятным критериям;
+- бизнес видит не только скорость, но и управляемость.
+
+### 9. Частые вопросы
+
+Required questions:
+- Это заменяет разработчиков?
+- Это альтернатива Cursor или Claude Code?
+- Вы ускоряете разработку?
+- Можно внедрить сразу во весь продукт?
+- Что нужно от команды?
+
+Answers must be concise and aligned with the business positioning:
+- no developer replacement;
+- not an alternative to Cursor / Claude Code / Codex / Copilot;
+- speed may improve, but control is the primary promise;
+- do not start with whole-product rollout;
+- the team must provide an engineering owner, repository or representative
+  codebase access, a safe pilot area, and one real workflow to test.
+
+### 10. Final CTA
+
+Title:
+
+> Проверьте, готова ли ваша команда к AI-разработке
+
+Copy:
+
+> Начните с ограниченного пилота. Мы поможем выбрать безопасный участок
+> продукта, провести аудит и запустить первый управляемый рабочий сценарий
+> ИИ-разработки.
+
+Primary CTA:
+
+> Обсудить пилот
+
+Email/contact area:
+- keep `hello@goalrail.dev`;
+- primary path: email field submits to same-origin `POST /api/pilot-lead`;
+- keep direct `mailto:hello@goalrail.dev` fallback;
+- use honest microcopy such as `Без рассылок, трекинга, CRM и автоматической
+  воронки. Если форма не сработает, напишите напрямую.`;
+- success copy: `Спасибо. Получили почту — вернёмся с коротким следующим
+  шагом.`;
+- duplicate copy: `Этот адрес уже есть в списке. Повторно заявку не
+  отправляем, чтобы не дублировать письма. Мы вернёмся с коротким следующим
+  шагом.`;
+- error copy: `Не удалось отправить заявку. Напишите напрямую:
+  hello@goalrail.dev`;
+- no analytics.
+
+## D. Firm boundaries
+
+This landing must not, without an explicit superseding decision:
+
+- call any LLM or ИИ API;
+- connect to any repo provider;
 - execute code or run any runner;
 - accept file uploads;
 - send analytics/session/tracking events;
 - render chat history;
 - show a model selector;
-- show user/assistant turns;
-- show avatars;
-- claim that the user's task was completed;
-- claim that a real repo was assessed;
-- show a numeric readiness "score" as if it were real measurement.
-
-Final CTA contract:
-- the primary outcome CTA only **focuses** the existing email input
-  (`#pilot-email`) inside the lead block and applies a temporary local
-  highlight class (`ctaCard--highlight`).
-- it does not POST anything anywhere.
-- the email lead remains a `mailto:hello@goalrail.dev` form;
-  any future backend handoff requires its own decision.
-
-These boundaries are recorded in `docs/ops/DECISIONS.md` (D-0047).
-
----
-
-## D. 5-step walkthrough
-
-The local state machine has exactly five `demoStep` values:
-`intake → clarification → contract → review → outcome`.
-
-### Step 1 — Goal Intake / Запрос
-
-- Purpose: capture the user's raw task description as plain text.
-- User-visible: hero, eyebrow `ПИЛОТНЫЙ ФОРМАТ`, composer textarea, safety
-  microcopy, three example chips, primary CTA `Запустить демо`.
-- CTA enabled when trimmed length is 20–1500 characters.
-- Local/deterministic: textarea is a controlled input; `detectScenario` runs
-  on submit.
-- Must not imply: that pasting a real PR sends it anywhere.
-
-### Step 2 — Clarification / Уточнения
-
-- Purpose: surface 3 deterministic questions to scope the contract.
-- User-visible: panel `CLARIFICATION · Шаг 2 из 5`, intake summary `ЗАПРОС
-  ПРИНЯТ` with the original text rendered as text only, three radiogroups,
-  progress `Ответы: N / 3`, primary CTA `Подготовить контракт`.
-- CTA enabled only when all three questions are answered.
-- Local/deterministic: questions and option labels are constants per scenario.
-- Must not imply: that GoalRail is asking the user using an LLM.
-
-### Step 3 — Contract Draft / Контракт
-
-- Purpose: render a bounded structured contract preview.
-- User-visible: panel `CONTRACT DRAFT · Шаг 3 из 5`, structured `<dl>` with
-  rows (Название / Цель / Scope / Правило review / Failure mode / Вне scope /
-  Критерии приёмки / Open ambiguity / Следующий шаг). Acceptance criteria are
-  numbered AC-NN. Open ambiguities are amber-tinted cards with ID, text and
-  `требует решения` badge.
-- Primary CTA: `Перейти к проверке`. Secondary: `Вернуться к уточнениям`.
-  Tertiary: `Изменить запрос`.
-- Local/deterministic: `buildContractDraft({scenario, answers, intakeText})`.
-- Must not imply: that this is an AI-generated proposal or that the contract
-  is approved/binding.
-
-### Step 4 — Review / Проверка
-
-- Purpose: structured local check of the contract draft.
-- User-visible: panel `REVIEW · Шаг 4 из 5`. Three sections — `Готовность к
-  следующему шагу` (readiness items with status badges `ГОТОВО`/`ОГОВОРКА`/
-  `БЛОКЕР`), `Риски и ambiguity` (R-NN risk cards with severity badges
-  `СПРАВКА`/`ОГОВОРКА`/`БЛОКЕР` plus the inherited ambiguity list),
-  `Проверочный вывод` with deterministic conclusion text.
-- Primary CTA: `Подготовить итог`. Secondary: `Вернуться к черновику`.
-- Local/deterministic: `buildReviewReport({scenario, answers, draft})`.
-- Must not imply: that this is a real readiness scan or runtime verification.
-  The `Demo execution is simulated` advisory risk is always present.
-
-### Step 5 — Honest Outcome / Итог
-
-- Purpose: a final structured verdict about whether this case looks like a
-  good first pilot candidate.
-- User-visible: panel `OUTCOME · Шаг 5 из 5`. Three mini-digests (intake,
-  contract, review) with counter pills (Блокеры / Оговорки / Открытых
-  ambiguity). One dominant `verdictCard` keyed by tone with label, title,
-  body, and recommended next step. Four sections — `Что стало ясно`, `Что
-  осталось открытым`, `Что демо не делало`, `Следующий шаг`.
-- Primary CTA: `outcomeReport.ctaLabel` (varies by tone — see section H).
-  Clicking it focuses the email input and adds the `ctaCard--highlight`
-  state for ~2.4s. No submission.
-- Secondary: `Вернуться к проверке`. Tertiary: `Начать заново`.
-- Local/deterministic: `buildOutcomeReport({scenario, draft, review})` plus
-  `deriveOutcomeTone(review)`.
-- Must not imply: that GoalRail has actually committed to anything, that the
-  task was completed, or that a real assessment was performed.
-
----
-
-## E. Canonical copy
-
-Hero (intake):
-
-- Eyebrow: `ПИЛОТНЫЙ ФОРМАТ`
-- Title: `Покажите задачу — мы проведём вас по контракту`
-- Subtitle: `Опишите реальную задачу, PR, изменение или кейс. Демо покажет,
-  как GoalRail превращает её в контракт, уточняющие вопросы, критерии и
-  честный следующий шаг — без выполнения кода и подключения репозитория.`
-
-Composer (intake):
-
-- Header label: `GOAL INTAKE · Шаг 1 из 5`
-- Stage marker: `→ Уточнения`
-- Placeholder: `Опишите задачу, PR, изменение или кейс…`
-- Safety microcopy (referenced by `aria-describedby` on the textarea):
-  `Не вставляйте секреты, токены и приватные данные.`
-- Counter format: `<N> / 1500`
-- Primary CTA: `Запустить демо`
-
-Example chips (canonical 3):
-
-- `Добавить manual review перед proof approval`
-- `Разобрать PR с неясными критериями приёмки`
-- `Оценить готовность repo к AI-assisted delivery`
-
-Top status chips (3 fixed):
-
-- `ПИЛОТ ОТКРЫТ`
-- `РУЧНОЙ ФОРМАТ`
-- `РЕАЛЬНЫЙ КЕЙС`
-
-5-step rail labels (in order):
-
-1. `Запрос`
-2. `Уточнения`
-3. `Контракт`
-4. `Проверка`
-5. `Итог`
-
-Context strip rows (per step):
-
-- intake idle: `демо-кейс / без подключения repo / ручной пилот / оценим
-  после описания`
-- intake valid: `demo-contract / без подключения repo / ручной пилот /
-  демо-оценка появится дальше`
-- clarification: `demo-contract / без подключения repo / clarification /
-  появится после контракта`
-- contract: `demo-contract / без подключения repo / contract-draft /
-  появится после проверки`
-- review: `demo-contract / без подключения repo / review / локальная
-  демо-проверка`
-- outcome: `demo-contract / без подключения repo / outcome / метод
-  показан`
-
-Right-column cards (per step):
-
-- always visible: `Что вы увидите`, `Безопасно для демо`, `Итог пилота`.
-- step 2 prepends: `Зачем уточнения`.
-- step 3 prepends: `Что в черновике`.
-- step 4 prepends: `Что проверяется`.
-- step 5 prepends: `Что в итоге`.
-
-Safety card (`Безопасно для демо`) items — must remain visible everywhere:
-
-- `код не выполняется`
-- `repo не подключается`
-- `данные не сохраняются как production-сущности`
-- `изменений в вашей среде не происходит`
-
-Outcome `notDone` list (canonical 4 items, must remain explicit):
-
-1. `код не выполнялся`
-2. `repo не подключался`
-3. `production-сущности не создавались`
-4. `результат не является выполненной задачей`
-
----
-
-## F. Scenario model
-
-Two local scenarios, picked deterministically by `detectScenario(text)`:
-
-### 1. `manual_review_gate`
-
-- Intent: tasks about review/approval/proof gates.
-- Detection: lowercase-substring match on any of:
-  `review`, `reviewer`, `approval`, `approve`, `proof`, `gate`, `manual`,
-  `провер`, `ревью`, `аппрув`, `соглас`, `утвержд`.
-- Clarification questions (3, fixed):
-  - `Где должен применяться review gate?` —
-    `только новые контракты` / `новые и активные контракты` /
-    `только repo-scoped контракты` / `пока не уверен`
-  - `Кто должен принимать review decision?` —
-    `один назначенный reviewer` / `любой operator` /
-    `quorum / два человека` / `пока не определено`
-  - `Что должно произойти, если review не пройден?` —
-    `proof блокируется` / `контракт возвращается в clarification` /
-    `execution останавливается` / `нужно решить вручную`
-- Contract draft: title `Ручной review gate перед proof approval`, fixed
-  outOfScope and acceptanceCriteria, scope text and reviewer/failure-mode
-  rows derived from answers.
-- Review: 4 readiness items (Scope зафиксирован / Review decision rule
-  выбран / Failure mode определён / Out of scope отделён). Risks include
-  `Нужна политика для активных контрактов`, `Владелец решения по review не
-  определён`, `Путь ручного решения не описан` based on answers, plus the
-  always-on advisory `Выполнение в демо симулируется`.
-- Outcome: tone derived from review (see H).
-
-### 2. `bounded_task`
-
-- Intent: any task that is not picked up as `manual_review_gate`.
-- Detection: fallback when no review-gate signal matches.
-- Clarification questions (3, fixed):
-  - `Какая граница задачи?` —
-    `один repo / один кейс` / `несколько частей продукта` /
-    `процесс всей команды` / `пока не уверен`
-  - `Что должно быть видно в контракте?` —
-    `критерии приёмки` / `риски и ambiguity` /
-    `proof / проверка результата` / `всё перечисленное`
-  - `Какой честный итог нужен?` —
-    `можно запускать пилот` / `нужно уточнить scope` /
-    `кейс пока не подходит` / `хочу увидеть риски`
-- Contract draft: title `Черновик рабочего контракта`, fixed outOfScope and
-  acceptanceCriteria, scope text from selected boundary, no reviewer/failure
-  rows.
-- Review: 4 readiness items including `Что должно быть видно в контракте`
-  flagged warning if `всё перечисленное`. Risks include `Scope может быть
-  слишком широким`, `Scope процесса команды слишком широкий`, `Scope не
-  определён`, `Контракт может быть перегружен` based on answers, plus the
-  always-on advisory `Выполнение в демо симулируется`.
-- Outcome: tone derived from review (see H).
-
-Governance:
-- new scenarios are not added without an explicit decision.
-- existing scenarios can have their copy refined; they cannot be expanded
-  into network-driven behavior.
-
----
-
-## G. Pure local logic
-
-The demo is built from five pure functions plus React state. No effects
-except the local cleanup timeout for the email-CTA highlight.
-
-| Helper | Input | Output | Behavior |
-|--------|-------|--------|----------|
-| `detectScenario(text)` | trimmed user text | `Scenario` | lowercase substring match |
-| `buildContractDraft({scenario, answers, intakeText})` | local state | `ContractDraft` | builds title/scope/criteria/ambiguities deterministically |
-| `buildReviewReport({scenario, answers, draft})` | scenario + answers + draft | `ReviewReport` | builds readiness items + risks + readiness label/summary/nextStep |
-| `deriveOutcomeTone(review)` | review report | `OutcomeTone` | structural derivation (see H) |
-| `buildOutcomeReport({scenario, draft, review})` | scenario + draft + review | `OutcomeReport` | builds verdict, learned items, remains-open list, next step, ctaLabel |
-
-Boundary:
-- these helpers do not read any global state outside their arguments;
-- they do not call `fetch`, `XMLHttpRequest`, or any persistence API;
-- they do not mutate input;
-- they are intended to demonstrate the GoalRail method and remain
-  inspectable line by line.
-
----
-
-## H. Outcome tones
-
-Three tones, derived from structured review data only — **never** from a
-substring match on the Russian readiness label.
-
-`deriveOutcomeTone(review)`:
-
-1. If any `readinessItem.status === "blocking"` or any
-   `riskItem.severity === "blocking"` → `blocked`.
-2. Else if any `readinessItem.status === "warning"` or any
-   `riskItem.severity === "warning"` or
-   `review.ambiguityItems.length > 0` → `readyWithCaveats`.
-3. Else → `ready`.
-
-| Tone | Label | Title | CTA label |
-|------|-------|-------|-----------|
-| `ready` | `ГОТОВ К ПИЛОТУ` | Кейс подходит для короткого пилота | `Обсудить пилот` |
-| `readyWithCaveats` | `ПОДХОДИТ С ОГОВОРКАМИ` | Кейс можно брать в пилот, но с явными условиями | `Обсудить оговорки` |
-| `blocked` | `СНАЧАЛА НУЖНЫ РЕШЕНИЯ` | Кейс пока не готов к пилоту | `Разобрать кейс` |
-
-Tone meaning:
-- `ready` — good candidate for short manual pilot.
-- `readyWithCaveats` — useful case, but risks/ambiguity must be fixed or
-  acknowledged before starting.
-- `blocked` — case is not ready; this is a useful honest output, not a demo
-  failure. The verdict copy is explicit:
-  *«Это не провал демо: GoalRail должен показать, где рано обещать
-  результат.»*
-
-Color rules:
-- olive — only for ready/clear states (status `ok`, ready verdict tone).
-- amber — for warnings, caveats, open ambiguity.
-- rust (`--blocking: #c47156`) — for blocking states. Strong but not
-  alarming; it is not "production failure" red.
-- there is no fake numeric readiness score anywhere on the page.
-
----
-
-## I. Accessibility and UX hardening
-
-The implementation through Phase 6C ships:
-
-- skip link `<a href="#main-content">К основному содержимому</a>` revealed
-  on focus, with explicit `onClick` that calls `target.focus()` and
-  `scrollIntoView`.
-- main landmark with `id="main-content"`, `tabIndex={-1}`, and
-  `aria-label="Демо GoalRail"` so the skip link can land focus and screen
-  readers can name the page region.
-- sidebar `<aside aria-label="Разделы лендинга">` and right-column
-  `<aside aria-label="О демо">` as labelled complementary landmarks.
-- composer textarea `aria-describedby="demo-intake-safety"` referencing the
-  safety microcopy span.
-- 5-step rail with `aria-current="step"` on the active step and
-  `data-step-state` attribute (`done` / `active` / `muted`) for non-color
-  state cues.
-- structured radiogroups for clarification options with `aria-labelledby`
-  pointing at each question prompt.
-- structured `aria-label`'d counter spans for the review digest in step 5.
-- horizontal-scroll demo rail at narrow widths with CSS `scroll-snap-type`
-  and a right-edge `mask-image` scroll-shadow, plus a compact <420px
-  breakpoint.
-- subtle 140ms CSS-only fade-in on step blocks, gated by
-  `prefers-reduced-motion: reduce` and by `data-skip-animation="true"` for
-  back-navigation.
-- outcome primary CTA focuses the email input and applies a temporary
-  `ctaCard--highlight` state, cleaned up with a guarded `setTimeout` and
-  unmount cleanup.
-
----
-
-## J. Future extension rules
-
-May be considered later, only after explicit decision:
-
-- additional scenarios (beyond `manual_review_gate` and `bounded_task`);
-- hash-based shareable local demo state (e.g. `#/clarification?case=…`);
-- a docs-to-code copy extraction layer that pulls canonical strings from
-  this doc instead of from `App.tsx` constants;
-- visual regression baseline (e.g. Playwright snapshots);
-- localization mirror (EN side-by-side with RU);
-- analytics — only after a separate decision that explicitly defines what
-  is collected, why, and how the user is informed.
-
-Must not happen without a new explicit decision (see D-0047):
-
-- backend submission of intake or email;
-- LLM or AI API call;
-- repo provider integration;
-- real execution / runner / sandbox;
-- persistence of user input;
-- analytics or session tracking of any kind;
-- chat-style UI (history, turns, avatars, model selector).
-
----
-
-## K. Implementation pointer
+- claim that a real repo was scanned;
+- claim that a result was delivered;
+- claim fully autonomous development.
+
+Allowed:
+- static illustrative cards;
+- illustrative readiness score only with explicit disclaimer;
+- local button behavior that focuses the email/contact field;
+- `POST /api/pilot-lead` as the only browser `fetch`, limited to email lead
+  capture under D-0056;
+- `mailto:` fallback handoff.
+
+D-0047 remains in force for no-analytics / no-real-scan / no-runtime /
+no-repo / no-LLM boundaries except for the narrow D-0056 lead-capture
+exception. D-0055 records that the business-first Founding Pilot landing
+supersedes the technical interactive walkthrough as the primary public RU
+landing. D-0056 allows only `POST /api/pilot-lead` on the operator-managed RU
+server: validate email, dedupe already-submitted addresses by the local JSONL
+lead log, send notification, and append a local JSONL lead record for first
+submissions. D-0057 allows a server-local direct recipient override at
+`/srv/goalrail/pilot/backend/lead-recipient.local`; if it is absent, the
+endpoint falls back to `hello@goalrail.dev`. The public/manual contact email
+remains `hello@goalrail.dev`. These decisions do not approve analytics, tracking, cookies,
+sessions, CRM, Google Sheets, user accounts, LLM/API calls, repo integration,
+runtime execution, or a broad backend platform.
+
+## E. Technical walkthrough demotion
+
+The previous 5-step local technical walkthrough is no longer the primary public
+RU landing shape.
+
+Status:
+- keep it in git history as the checkpointed technical demo;
+- do not copy it into a duplicate app folder by default;
+- treat it as an internal / technical demo checkpoint unless a future bounded
+  slice explicitly restores or moves it.
+
+## F. Metadata
+
+Active public URL:
+
+> `https://pilot.goalrail.ru/`
+
+`apps/web/pilot-intake-ru/index.html` canonical must remain:
+
+> `https://pilot.goalrail.ru/`
+
+## G. Implementation pointer
 
 - App: `apps/web/pilot-intake-ru`
 - Main code: `apps/web/pilot-intake-ru/src/App.tsx`
 - Styles: `apps/web/pilot-intake-ru/src/App.css`
 - Tests: `apps/web/pilot-intake-ru/src/App.test.tsx`
 
-Quality gates as of this docs update:
-- typecheck: `npm run pilot-intake-ru:typecheck` (passes)
-- tests: `npm run pilot-intake-ru:test` (full walkthrough plus
-  Phase 6A/6B/6C polish coverage; previously reported as 67 tests)
-- build: `npm run pilot-intake-ru:build` (passes)
+Quality gates:
+- typecheck: `npm run pilot-intake-ru:typecheck` from `apps/web`
+- tests: `npm run pilot-intake-ru:test` from `apps/web`
+- build: `npm run pilot-intake-ru:build` from `apps/web`
+- preview: app workspace exposes `npm run preview --workspace @goalrail/pilot-intake-ru-web`
 
 This doc is the canonical product/copy/governance reference for the RU
-pilot-first interactive landing demo. Any change that contradicts the
-boundaries in section C requires a new entry in `docs/ops/DECISIONS.md`.
+business-first pilot landing. Any server behavior beyond the D-0056
+`POST /api/pilot-lead` exception, analytics, deployment mode change,
+third-party lead sink, repo integration, runtime execution, or autonomous-agent
+claim requires a separate decision. D-0058 allows only a server-local daily
+lead digest from the existing JSONL log at 07:00 GMT+3 for the previous local
+calendar day; empty days send no digest. D-0059 allows only a narrow Resend
+HTTPS transactional email transport for these lead notifications/digests, using
+`skill7.dev` as the configured sending domain and a server-local API key.

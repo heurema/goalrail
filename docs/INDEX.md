@@ -123,7 +123,7 @@ related_docs:
 - `GOALRAIL_OPERATING_MODEL.md` — core operating flow: как входящая задача становится contract -> execution -> verify -> proof
 - `GOALRAIL_DEPLOYMENT_MODEL.md` — как Goalrail подключается к команде и раскатывается как productized operating layer
 - `GOALRAIL_PILOT_MODEL.md` — как выглядит первый pilot engagement, что входит, что не входит и какой результат считается успехом
-- `GOALRAIL_GTM_MODEL.md` — как Goalrail продаётся, через какой motion заходит в компанию и какой CTA используется
+- `GOALRAIL_GTM_MODEL.md` — как Goalrail продается, через какой motion заходит в компанию и какой CTA используется
 - `GOALRAIL_ICP.md` — целевые команды, qualification logic и no-fit cases
 - `GOALRAIL_OFFER.md` — текущее sellable package: free qualification, paid pilot, outputs, non-goals и expansion path
 - `GOALRAIL_PRICING_MODEL.md` — текущая pricing and packaging logic: USD pilot anchor (`Managed pilot — from $5,000`), internal pilot ranges, design-partner discount mode, modifiers and post-pilot retainers
@@ -150,7 +150,7 @@ related_docs:
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
 - `GOALRAIL_LANDING_COPY.md` — first landing / entry scene copy
-- `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — canonical copy/governance reference for the RU pilot-first interactive landing demo; implementation lives at `apps/web/pilot-intake-ru`; the demo is local-only and deterministic per `docs/ops/DECISIONS.md` D-0047 (no backend, no LLM, no repo connection, no execution, no persistence, no analytics)
+- `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — canonical copy/governance reference for the RU business-first pilot landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
 - `GOALRAIL_COMPETITOR_MAP.md` — reference market map
 - `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture
@@ -182,7 +182,7 @@ related_docs:
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
 - `GOALRAIL_RESEARCH_INTAKE.md` — как adjacent/external ideas классифицируются без roadmap sprawl
 - `GOALRAIL_DOC_GOVERNANCE.md` — truth model, metadata vocabulary, lifecycle rules и staged deterministic enforcement posture
-- `GOALRAIL_RULE_STACK.md` — rule precedence, dogfooding law, component/slice/PR hierarchy, and non-override behavior
+- `GOALRAIL_RULE_STACK.md` — rule precedence, dogfooding law, component/slice/пул-реквест hierarchy, and non-override behavior
 
 ### Delivery, build, and pilot operations
 - `GOALRAIL_BUILD_ROADMAP.md` — очередность фаз и checkpoints
@@ -237,7 +237,7 @@ Notes:
 8. Только после этого меняются roadmap, implementation и ops docs.
 9. Adjacent experiments и research synthesis имеют advisory-статус и не могут переопределять canonical docs без Goalrail intake / promotion path.
 10. Нельзя менять implementation scope без сверки с concept canon.
-11. Goalrail продаётся и проектируется как productized operating layer, а не как bespoke consulting per company.
+11. Goalrail продается и проектируется как productized operating layer, а не как bespoke consulting per company.
 12. Company-specific differences должны покрываться profile / policy / adapter / template настройками, а не пересборкой ядра процесса.
 13. Overlay planning surfaces (`.goalrail/work/`, `.goalrail/knowledge/`, `.punk/publishing.toml`, `.goalrail/flows/`, `.goalrail/evals/`) поддерживают работу и исследования, но не переопределяют канонические docs.
 

@@ -15,276 +15,378 @@ superseded_by: null
 related_docs:
   - docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md
   - docs/ops/DECISIONS.md
-  - docs/ops/PILOT_INTAKE_RU_INTERNAL_REVIEW_NOTES.md
-  - docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md
   - docs/ops/STATUS.md
   - docs/ops/NEXT.md
   - docs/ops/COMPONENTS.yaml
 ---
 # Pilot Intake RU — Deployment Wiring
 
-## 1. Purpose
+## Current status
 
-This note records the deployment-wiring status for `apps/web/pilot-intake-ru`
-under D-0053's chosen target (active target `pilot.goalrail.ru` / public
-path `/` / public status `candidate-public`; D-0053 supersedes D-0049
-for target domain and canonical public URL — D-0049's original
-`pilot.goalrail.dev` is now reserved for a later global-market
-rollout) and D-0051's hosting path (operator-managed SSH static
-server). It does **not** record an actual live deployment. The surface
-is not deployed, not live, and no remote state has been changed by
-this note.
+**SERVER UPLOAD COMPLETE — DNS/TLS PENDING.**
 
-Wiring date: 2026-04-28 (Phase 8H); same-day re-attempt (Phase 8I);
-Phase 8J stopped at env gate; Phase 8K target-domain realignment to
-`.ru`.
-Owner: ops.
+The business-first RU pilot landing from `apps/web/pilot-intake-ru` has been
+built locally, uploaded to the operator-managed SSH static server, and exposed
+through the server-side `current` symlink. The public site is **not live yet**
+because DNS for `pilot.goalrail.ru` does not currently appear to point to the
+operator-managed server in public resolver / public-smoke verification. Server-side
+HTTPS provisioning succeeded, but public HTTPS still reaches a different upstream,
+so the live smoke does not pass yet.
 
-## 2. Decision basis
+D-0056 now allows one narrow lead-capture exception for this surface:
+`POST /api/pilot-lead` validates an email, dedupes already-submitted
+addresses by the local JSONL lead log, sends a notification to
+the configured notification recipient, and appends a local JSONL lead record
+for first submissions. D-0057 allows a server-local direct recipient override;
+`hello@goalrail.dev` remains the public/manual contact address. D-0058 allows
+a server-local daily digest from the same JSONL lead log at 07:00 GMT+3 for the
+previous local calendar day; empty days send no digest. D-0059 allows Resend
+HTTPS transport through `skill7.dev` for the same notification/digest emails;
+the API key is configured server-locally at `/srv/goalrail/pilot/backend/resend-api-key.local`.
+The endpoint and daily digest cron have been installed and smoke-tested server-locally. No
+analytics, tracking, Google Sheets, CRM, cookies, sessions, user accounts,
+LLM/API calls, repo integration, runtime execution, broad backend platform, CI/CD workflow, deploy script, or
+repo-side server config was added.
 
-- `docs/ops/DECISIONS.md` D-0047 — public landing demo remains
-  local-only and deterministic (firm boundary).
-- `docs/ops/DECISIONS.md` D-0048 — apps/web/pilot-intake-ru approved
-  as candidate public RU pilot-first landing demo.
-- `docs/ops/DECISIONS.md` D-0049 — original target domain
-  `pilot.goalrail.dev`, public path `/`, hosting target `static CDN
-  target TBD`, public status `candidate-public`. Superseded by
-  D-0053 for target domain and canonical public URL; body preserved
-  as historical record.
-- `docs/ops/DECISIONS.md` D-0053 — active target domain
-  `pilot.goalrail.ru` (supersedes D-0049 for target domain and
-  canonical public URL); public path `/` and public status
-  `candidate-public` are preserved; the `.dev` domain is reserved
-  for a later global-market rollout. Any further change of domain
-  requires a separate decision.
-- `docs/ops/PILOT_INTAKE_RU_INTERNAL_REVIEW_NOTES.md` — Phase 7C
-  internal review evidence (recommendation `READY WITH WARNINGS`).
-- `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_PREP.md` — Phase 8B
-  deployment-prep evidence (recommendation `READY WITH WARNINGS`).
-- `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — canonical copy
-  and governance reference.
+## Decision basis
 
-## 3. Target surface
+- D-0047 remains in force except for the narrow D-0056 lead-capture exception:
+  no analytics, tracking, broad backend platform, persistence beyond the local
+  JSONL lead log, LLM/API, repo integration, runtime execution, chat UI, file
+  upload, model selector, or real scan claim.
+- D-0048 remains in force: `apps/web/pilot-intake-ru` is approved as the RU
+  pilot-first public candidate surface.
+- D-0049 remains superseded by D-0053 for target domain and canonical public
+  URL.
+- D-0050 remains superseded by D-0051 for hosting provider and deployment
+  mode; Cloudflare Pages / Workers / proxy / CDN / Web Analytics remain out of
+  scope for this surface.
+- D-0051 remains in force: operator-managed SSH static server, manual static
+  upload, timestamped release directory, atomic `current` symlink, externally
+  managed DNS, server-managed HTTPS, no automatic redeploys.
+- D-0053 remains in force: active target domain and canonical URL are
+  `https://pilot.goalrail.ru/`.
+- D-0055 remains in force: the business-first Founding Pilot landing supersedes
+  the old technical interactive walkthrough as the primary public RU landing.
+- D-0056 remains in force: the RU landing may use only the narrow
+  `POST /api/pilot-lead` endpoint for lead capture. It may validate email,
+  dedupe by the local JSONL lead log, send notification email, append a local
+  JSONL record for first submissions, and use local Postfix relay through
+  `skvmrelay.netangels.ru:25`; it does not approve analytics, tracking, CRM,
+  Google Sheets, cookies, sessions, user accounts, LLM/API calls, repo
+  integration, runtime execution, or a broad backend platform.
+- D-0057 remains in force: form notifications may use a server-local direct
+  recipient override at `/srv/goalrail/pilot/backend/lead-recipient.local`. The
+  override is operator-managed server state and the actual recipient address is
+  not committed to repo docs/code/tests. If absent, the endpoint falls back to
+  `hello@goalrail.dev`.
+- D-0058 remains in force: a server-local daily digest may read the existing
+  JSONL lead log, send one previous-day digest at `07:00 GMT+3` only when
+  leads exist, and send nothing on empty days.
+- D-0059 remains in force: Resend may be used only as a narrow HTTPS
+  transactional transport for the existing lead notification/digest emails,
+  with sender `GoalRail Pilot <noreply@skill7.dev>` and a server-local API key.
+
+## Target surface
 
 | Field | Value |
 |-------|-------|
-| Domain | `pilot.goalrail.ru` (active per D-0053; supersedes D-0049's `pilot.goalrail.dev`, which is reserved for a later global-market rollout) |
+| Domain | `pilot.goalrail.ru` |
+| Canonical URL | `https://pilot.goalrail.ru/` |
 | Public path | `/` |
-| Public status | `candidate-public` |
-| Hosting target | `static CDN target TBD` (concrete provider not picked) |
-| Live status | **NOT DEPLOYED** — surface is not live, no remote state has been provisioned in this slice. |
+| App | `apps/web/pilot-intake-ru` |
+| Hosting path | operator-managed SSH static server per D-0051 |
+| Release root | `/srv/goalrail/pilot/releases` |
+| Current symlink | `/srv/goalrail/pilot/current` |
+| Lead endpoint | `POST /api/pilot-lead` |
+| Endpoint source | `apps/web/pilot-intake-ru/server/pilot-lead.php` |
+| Server endpoint path | `/srv/goalrail/pilot/backend/pilot-lead.php` |
+| Local lead log | `/srv/goalrail/pilot/leads/leads.jsonl` |
+| Direct recipient override | `/srv/goalrail/pilot/backend/lead-recipient.local` (server-local, not committed) |
+| Daily digest script | `/srv/goalrail/pilot/backend/pilot-leads-digest.php` |
+| Shared mail helper | `/srv/goalrail/pilot/backend/pilot-mail.php` |
+| Resend API key | `/srv/goalrail/pilot/backend/resend-api-key.local` (server-local, not committed) |
+| Resend sender | `GoalRail Pilot <noreply@skill7.dev>` |
+| Daily digest cron | `/etc/cron.d/goalrail-pilot-leads-digest`; `04:00 UTC` / `07:00 GMT+3`, previous GMT+3 day, only if leads exist |
+| Current deployment status | **SERVER UPLOAD COMPLETE — DNS/TLS PENDING** |
+| Public live status | **NOT LIVE** until DNS points to the operator-managed server and HTTPS public smoke passes |
 
-## 4. Build and output
+Server hostnames, IP addresses, SSH ports, usernames, key paths, tokens,
+credentials, and provider-specific identifiers are intentionally not recorded
+in this repository.
 
-| Aspect | Value |
-|--------|-------|
-| App path | `apps/web/pilot-intake-ru` |
-| Workspace package | `@goalrail/pilot-intake-ru-web` |
-| Build command | `npm run pilot-intake-ru:build` (root: `npm run build --workspace @goalrail/pilot-intake-ru-web`); script body: `tsc -b && vite build` |
-| Test command | `npm run pilot-intake-ru:test` |
-| Typecheck | `npm run pilot-intake-ru:typecheck` |
-| Preview command | `npm run pilot-intake-ru:preview` (workspace exposes `vite preview`); local default `http://localhost:4173/` |
-| Output directory | `apps/web/pilot-intake-ru/dist/` |
-| `dist/` contents | `index.html`, `favicon.svg`, `assets/index-*.{js,css}`, `assets/ibm-plex-{sans,mono}-*.{woff,woff2}` |
-| `dist/` size | ~908 KB (fonts dominate); index-*.css 245.36 KB / gzip 36.95 KB; index-*.js 267.36 KB / gzip 79.05 KB |
-| Vite `base` setting | not set in `vite.config.ts` → defaults to `/`, which matches D-0049 `PUBLIC_PATH=/`; **no config change required** |
-| Root-path asset references | `<script src="/assets/index-*.js">`, `<link href="/assets/index-*.css">`, `<link href="/favicon.svg">` — all root-absolute, root-safe |
-| Env vars at build | NONE (`grep -nE "import\.meta\.env\|process\.env\|VITE_"` against `src/*` returns no matches) |
-| Env vars at runtime | NONE |
-| Secrets required | NONE |
+## Run result
 
-## 5. Hosting wiring status
+### SSH aliases / access
 
-**READY FOR SSH DEPLOY — RUNTIME VALUES REQUIRED.**
+- Operator-provided root SSH target: reachable.
+- Operator-provided deploy SSH target: reachable.
+- No actual host, IP, username, port, or key path was recorded in repo docs.
 
-Phase 8H attempted SSH static deployment wiring per D-0051. Phase 8I
-re-attempted the same slice. In both attempts the local preflight,
-boundary audit, and local preview smoke passed (see §7 below). In both
-attempts no remote SSH operation was performed because the required
-runtime environment variables were not provided in the operator's
-shell:
+### Remote bootstrap
 
-| Required env var | Present? |
-|------------------|----------|
-| `GR_PILOT_REMOTE_DEPLOY=yes` | NO |
-| `GR_PILOT_SSH_TARGET` | NO |
-| `GR_PILOT_RELEASE_ROOT` | NO |
-| `GR_PILOT_CURRENT_LINK` | NO |
-| `GR_PILOT_DOMAIN` | NO |
+- Remote OS path used `apt`; unsupported-distro blocker did not occur.
+- Minimal static-hosting packages installed or confirmed present: `nginx`,
+  `certbot`, `python3-certbot-nginx`, `rsync`, `ufw`.
+- Lead-capture packages installed or confirmed present after D-0056: `php-fpm`,
+  `postfix`, and local `mail` support.
+- Deploy user exists.
+- Deploy SSH directory and authorized keys were ensured idempotently.
+- SSH hardening drop-in was installed with:
+  - `PasswordAuthentication no`
+  - `PubkeyAuthentication yes`
+  - `PermitRootLogin prohibit-password`
+- SSH config test passed before reload.
+- UFW was enabled with SSH, HTTP, and HTTPS allowed.
 
-Per Phase 8H Scope C and Phase 8I Scope A, no SSH connection was
-opened, no `rsync` or `scp` was run, and no remote state was touched.
-The repo did not acquire any server identifiers, credentials,
-hostnames, IP addresses, SSH ports, usernames, keys, or tokens. The
-previously-pinned hosting target table (below) is unchanged.
+### Release layout and placeholder
 
-Active provider decision: `docs/ops/DECISIONS.md` D-0051 —
-**operator-managed SSH static server** for `pilot.goalrail.ru`
-(active per D-0053; supersedes D-0049's `pilot.goalrail.dev`).
-D-0051 explicitly supersedes D-0050 for hosting provider and
-deployment mode; D-0049 is preserved.
+- `/srv/goalrail/pilot/releases` exists.
+- Placeholder release exists at `/srv/goalrail/pilot/releases/placeholder`.
+- Placeholder `index.html` was written with correct heredoc syntax.
+- `/srv/goalrail/pilot/current` was ensured and was later switched to the
+  uploaded timestamped release.
+- `current/index.html` is readable.
 
-| Field | Value |
-|-------|-------|
-| Hosting provider | operator-managed SSH static server |
-| Hosting target detail | operator-managed Linux server reachable over SSH; exact host, IP address, SSH port, SSH user, and credentials are kept out of repo; static web root and release directory will be confirmed during deployment wiring |
-| DNS strategy | DNS handled externally by the operator; `pilot.goalrail.ru` (per D-0053) will point to the SSH server or upstream reverse proxy using A / AAAA / CNAME as appropriate; if the DNS zone is currently managed through Cloudflare, the record must be DNS-only / non-proxied or otherwise configured so public traffic does **not** depend on Cloudflare Pages, Cloudflare proxy, Cloudflare Workers, or Cloudflare CDN services |
-| TLS strategy | server-managed HTTPS via existing reverse proxy or Let's Encrypt; HTTPS for `https://pilot.goalrail.ru/` must be verified before any public use |
-| Deployment mode | manual static upload over SSH after a local production build; preferred mechanism is `rsync` / `scp` to a timestamped release directory with an atomic `current` symlink switch; **no automatic redeploys**; no CI deploy workflow |
-| Preview mode | local `vite preview` smoke check plus a server smoke check after manual upload; an optional staging vhost / path is allowed only if the operator explicitly provides one |
+### Nginx
 
-Supersession trail (kept for history):
-- A repo-wide search in Phase 8D returned **no evidence** of an
-  existing static hosting convention (none of `netlify.toml`,
-  `vercel.json`, `wrangler.toml`, `fly.toml`, `firebase.json`,
-  `.firebaserc`, `amplify.yml`, `_redirects`, `_headers`,
-  `Dockerfile*`, `render.yaml`, `Caddyfile`, `nginx.conf`, root
-  `Makefile`). Only CI workflow was
-  `.github/workflows/docs-check.yml`. Phase 8D therefore left this
-  slice `BLOCKED ON HOSTING PROVIDER SELECTION`. Phase 8E resolved
-  the canonical-link metadata WARN.
-- D-0050 then selected Cloudflare Pages Direct Upload as the
-  provider, moving status to `PROVIDER SELECTED — WIRING PENDING`.
-- D-0051 supersedes D-0050 for hosting provider and deployment mode:
-  Cloudflare Pages Direct Upload is no longer the selected RU launch
-  path. Cloudflare Pages, Workers, Functions, KV / R2 / D1 / Durable
-  Objects / Queues, proxy / CDN, and Web Analytics remain disallowed
-  for this surface. The active path is now an operator-managed SSH
-  static server with the values pinned above.
+- `/etc/nginx/sites-available/pilot.goalrail.ru` was created/updated on the
+  server as a static config rooted at `/srv/goalrail/pilot/current`.
+- After D-0056, the same site config includes a narrow `location = /api/pilot-lead`
+  routed to PHP-FPM for `/srv/goalrail/pilot/backend/pilot-lead.php`.
+- The site is enabled through `sites-enabled`.
+- `nginx -t` passed.
+- Nginx reload succeeded.
+- Server-local static smoke via Host header passed for index and asset bundle.
+- `nginx -t` passed after adding the lead endpoint location.
+- Nginx reload succeeded after adding the lead endpoint location.
 
-What is unblocked by D-0051:
-- the next slice may identify the operator-managed SSH server out of
-  repo, confirm its static web root and release directory layout
-  (without committing host / IP / credentials), define the manual
-  upload procedure (rsync / scp), exercise it once, and switch the
-  `current` symlink to expose the new release;
-- adding `pilot.goalrail.ru` (per D-0053) to point at the server
-  (or its upstream reverse proxy) via externally-managed DNS, with
-  the record kept DNS-only / non-proxied if the zone is in
-  Cloudflare;
-- verifying HTTPS for `https://pilot.goalrail.ru/` (server-managed
-  via existing reverse proxy or Let's Encrypt) before public use;
-- running a server-side smoke check against the manually-uploaded
-  release.
+### DNS / TLS
 
-What remains explicitly out of scope under D-0047 + D-0048 + D-0049 +
-D-0051 in the wiring slice:
-- backend, persistence, LLM/API, repo provider integration, code
-  execution;
-- analytics or session tracking;
-- CI deploy workflow / automatic Git-based deploys / any automatic
-  redeploys;
-- Cloudflare Pages, Workers, Functions, KV / R2 / D1 / Durable
-  Objects / Queues, proxy / CDN, Web Analytics;
-- email lead capture beyond `mailto:` / focus / manual handoff;
-- any change of target domain or public path (D-0049 invariant);
-- committing SSH keys, server credentials, hostnames, IP addresses,
-  ports, usernames, deploy scripts, or reverse-proxy config to the
-  repository.
+- Phase 8M DNS check result: **DNS does not appear to point to the
+  operator-managed server** in public resolver comparison.
+- Server static root verification: PASS. `/srv/goalrail/pilot/current` exists,
+  `current/index.html` is readable, `current/assets/` exists, and the deployed
+  canonical is `https://pilot.goalrail.ru/`.
+- `nginx -t`: PASS.
+- Certbot result: PASS on the operator-managed server. This was run after an
+  initial DNS check appeared positive; the later public resolver / public-smoke
+  check showed the live domain still does not reach this server.
+- `certbot renew --dry-run`: PASS.
+- Server-local HTTPS smoke with the `pilot.goalrail.ru` host: PASS for HTTP
+  200 and canonical metadata.
+- Public HTTPS smoke: FAIL / pending. A verified public `curl` request to
+  `https://pilot.goalrail.ru/` does not reach the deployed static landing and
+  fails TLS verification against the currently-resolved public endpoint.
+- Required next action: correct external DNS for `pilot.goalrail.ru` so public
+  traffic reaches the operator-managed server, then rerun DNS verification,
+  public HTTPS smoke, and deployed-surface boundary checks.
 
-## 6. Boundary verification (D-0047)
+### Lead capture endpoint
 
-Source-level + preview-runtime verification.
+D-0056 allows the only server-side exception for this surface. Implemented
+behavior:
 
-| Boundary | Status | Evidence |
-|----------|--------|----------|
-| No backend (`fetch(`, `XMLHttpRequest`, `sendBeacon`) | PASS | source grep returns no matches in `src/{App.tsx,App.css,main.tsx,theme.ts}`; preview-runtime test recorded zero non-static network requests during a full walkthrough including primary outcome CTA click |
-| No LLM/API endpoints | PASS | source grep returns no matches for `openai`, `anthropic`, `claude.ai`, `api.openai`, `api.anthropic` |
-| No repo provider integration | PASS | source grep returns no matches for `api.github`, `api.gitlab`, `bitbucket.org/api`, `github.com/api` |
-| No code execution / runtime | PASS | no `eval`, no `Function()` constructor, no Web Worker calls; React component memory only |
-| No persistence | PASS | no `localStorage`, no `sessionStorage`, no `indexedDB`, no cookies set by app |
-| No analytics / session tracking | PASS | no `gtag`, no `googletagmanager`, no `mixpanel`, no `sentry`, no `datadog`, no `analytics` references |
-| No chat UI | PASS | tests assert absence of `chat history`, `assistant`, model selector, file upload across all 5 steps |
-| No file upload | PASS | no `<input type="file">` |
-| No model selector | PASS | no model `<select>` or model-named `combobox` |
-| No backend email POST | PASS | `<form action="mailto:hello@goalrail.dev">` only; outcome primary CTA implementation calls only `target.focus()` + `target.scrollIntoView()` + temporary local CSS class |
-| Email lead capture stays mailto/focus/manual | PASS | preview test confirmed `document.activeElement === pilot-email` after CTA click; mailto `<a href>` and `<form action>` preserved |
+- Frontend contact form submits JSON to same-origin `POST /api/pilot-lead`.
+- Payload includes `email`, `source: ru-pilot`, `page: pilot.goalrail.ru`, and
+  a hidden `website` honeypot.
+- Invalid email is rejected client-side before calling `fetch`.
+- Duplicate email submissions return success with a distinct duplicate message,
+  without appending a new JSONL line or sending another notification.
+- Direct fallback remains `mailto:hello@goalrail.dev`.
+- PHP endpoint source lives at `apps/web/pilot-intake-ru/server/pilot-lead.php`.
+- Server endpoint is installed at `/srv/goalrail/pilot/backend/pilot-lead.php`.
+- Local lead log path is `/srv/goalrail/pilot/leads/leads.jsonl`.
+- Public/manual contact remains `hello@goalrail.dev`.
+- Notification recipient may be a server-local direct override from
+  `/srv/goalrail/pilot/backend/lead-recipient.local`; the configured value is
+  not stored in repo docs/code/tests.
+- If the override file is absent, notification recipient falls back to
+  `hello@goalrail.dev`.
+- Notification subject starts with `Пилот`.
+- A shared PHP mail helper prefers Resend HTTPS transport when
+  `/srv/goalrail/pilot/backend/resend-api-key.local` exists.
+- Resend sender: `GoalRail Pilot <noreply@skill7.dev>`.
+- Resend API key status: configured on the operator-managed server; the key
+  value is not recorded in repo docs/code/tests/logs.
+- Resend transport smoke: PASS. A one-off current-day digest reported
+  `transport=resend` and included the expected non-empty lead count.
+- If the Resend API key is absent, the helper temporarily falls back to PHP
+  `mail()` / Postfix with `noreply@pilot.goalrail.ru` as envelope sender.
+- Local Postfix is configured with relayhost `[skvmrelay.netangels.ru]:25` and
+  loopback-only inbound interfaces.
+- UFW remains limited to SSH, HTTP, and HTTPS; inbound SMTP was not opened.
+- Server-local endpoint smoke: valid JSON lead returned HTTP 200 / `{ ok: true }`.
+- Server-local duplicate smoke: HTTP 200 / `{ ok: true, duplicate: true }`,
+  with unchanged JSONL line count and no new notification.
+- Server-local invalid email smoke: HTTP 400.
+- Server-local honeypot smoke: HTTP 400.
+- Lead log append smoke: PASS.
+- Email send smoke: PHP `mail()` accepted the notification and the local mail
+  queue was empty after the smoke. Cloudflare Email Routing classified
+  form-generated `noreply@pilot.goalrail.ru` mail to `hello@goalrail.dev` as
+  `unauthenticatedForward`, so D-0057 direct recipient override is used for
+  form notifications while `hello@goalrail.dev` remains the manual address.
+- Direct recipient override status: configured on the operator-managed server
+  with a validated operator-provided address; the address is not committed to
+  repo docs/code/tests.
+- Direct recipient override smoke: HTTP 200 / `{ ok: true, duplicate: false }`,
+  lead log appended, and local mail queue remained empty after relay handoff.
 
-## 7. Smoke check
+Generic Nginx location shape for this endpoint:
 
-Performed on the production build via `npm run pilot-intake-ru:preview`
-(default `http://localhost:4173/`) with browser automation. Re-run in
-Phase 8H and again in Phase 8I to confirm nothing regressed since
-Phase 8D / 8E. **No remote / domain smoke was run** — neither Phase 8H
-nor Phase 8I opened an SSH connection (see §5).
+```nginx
+location = /api/pilot-lead {
+    limit_except POST { deny all; }
+    include fastcgi_params;
+    fastcgi_param SCRIPT_FILENAME /srv/goalrail/pilot/backend/pilot-lead.php;
+    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+}
+```
 
-| Smoke item | Result |
-|------------|--------|
-| `index.html` loads | PASS |
-| Hero title (`Покажите задачу — мы проведём вас по контракту`) visible | PASS (`document.querySelector('h1#hero-title')` found) |
-| 5-step rail visible (`[aria-label="Шаги демо"] li`) | PASS (5 items) |
-| Full walkthrough reaches outcome (RG flow with clean answers) | PASS — `data-outcome-tone="ready"` |
-| Primary outcome CTA focuses email input | PASS — `document.activeElement.id === "pilot-email"` |
-| Console errors during walkthrough | 0 errors |
-| Console warnings during walkthrough | 0 warnings |
-| Non-static network requests during walkthrough | 0 (no `fetch`, no XHR, no `sendBeacon`) |
-| `index.html` `<link rel="canonical" href>` value | `https://pilot.goalrail.ru/` (active per D-0053) — first realigned from `https://goalrail.ru/` to D-0049's `https://pilot.goalrail.dev/` in Phase 8E pre-publish hygiene patch, then realigned from `https://pilot.goalrail.dev/` to D-0053's `https://pilot.goalrail.ru/` in Phase 8K target-domain supersession (HTML-metadata only — no copy / behavior change in either pass); built `dist/index.html` line 12 contains the active `.ru` canonical after Phase 8K rebuild |
-| `dist/` asset paths root-safe under `PUBLIC_PATH=/` | PASS — `/favicon.svg`, `/assets/index-*.{js,css}` |
-| Phase 8H local preflight (typecheck/test/build) | PASS — typecheck 0 errors; tests 67/67; build ~208ms |
-| Phase 8H source boundary scan (`fetch(`, `XMLHttpRequest`, `sendBeacon`, `localStorage`, `sessionStorage`, `indexedDB`, `gtag`, `analytics`, `mixpanel`, `sentry`, `datadog`, `openai`, `anthropic`, `claude.ai`, `api.github`, `api.gitlab`) | PASS — no matches in `index.html` / `App.tsx` / `App.css` / `main.tsx` / `theme.ts` |
-| Phase 8H local preview smoke at `http://localhost:4173/` | PASS — full RG walkthrough → outcome `ready`; primary outcome CTA focuses email; canonical at the time = `https://pilot.goalrail.dev/` (then-active D-0049 value; later realigned to `https://pilot.goalrail.ru/` in Phase 8K per D-0053); 0 console errors, 0 console warnings, 0 non-static network requests |
-| Phase 8I env gate check (`GR_PILOT_REMOTE_DEPLOY=yes` plus four required runtime values) | NOT SATISFIED — `printenv` showed none of `GR_PILOT_REMOTE_DEPLOY`, `GR_PILOT_SSH_TARGET`, `GR_PILOT_RELEASE_ROOT`, `GR_PILOT_CURRENT_LINK`, `GR_PILOT_DOMAIN` set; per Phase 8I Scope A this disallowed any remote SSH/rsync/scp activity |
-| Phase 8I local preflight (typecheck/test/build) | PASS — typecheck 0 errors; tests 67/67 (~18.91s); build OK (~198ms) |
-| Phase 8I dist canonical line check | PASS at the time — `dist/index.html` line 12 = `<link rel="canonical" href="https://pilot.goalrail.dev/" />` (the then-active D-0049 value; Phase 8K realigned to `https://pilot.goalrail.ru/` per D-0053 and rebuilt `dist/`) |
-| Phase 8I source boundary scan | PASS — no forbidden patterns in `index.html` / `App.tsx` / `App.css` / `main.tsx` / `theme.ts` |
-| Phase 8I local preview smoke at `http://localhost:4173/` | PASS — full RG walkthrough → outcome `ready`; primary outcome CTA focuses email; canonical at the time = `https://pilot.goalrail.dev/` (then-active D-0049 value; later realigned to `https://pilot.goalrail.ru/` in Phase 8K per D-0053); 0 console errors, 0 console warnings, 0 non-static network requests |
+The PHP-FPM socket version is server-specific and must be detected during
+wiring. The committed repository does not contain server hostnames, IPs, SSH
+users, ports, key paths, credentials, live Nginx config, or direct recipient
+email addresses.
 
-## 8. Remaining deployment tasks
+Daily digest behavior:
 
-| Task | Status | Notes |
-|------|--------|-------|
-| Choose concrete static hosting path | DONE per `docs/ops/DECISIONS.md` D-0051 (which supersedes D-0050 for hosting provider and deployment mode) | operator-managed SSH static server with manual rsync/scp upload, atomic release directory + `current` symlink, server-managed HTTPS, externally-managed DNS, no automatic redeploys, no CI deploy workflow. |
-| Identify SSH server and release layout (out of repo) | PENDING | The wiring slice identifies the operator-managed SSH server and confirms the static web root and release directory layout. Server hostnames, IP addresses, SSH ports, usernames, keys, and credentials must remain out of the repository. The actual confirmed release-root path may be summarised in this doc but server identifiers must not be. |
-| Add repo-side server config | NONE PLANNED | D-0051 explicitly does not authorise committing reverse-proxy config (nginx / Caddy / Apache / etc.) or SSH-related scripts to this repo. Any such config lives on the operator-managed server unless a separate explicit decision authorises a repo-side artefact. |
-| DNS for `pilot.goalrail.ru` | PENDING | Externally-managed by the operator per D-0051: A / AAAA / CNAME as appropriate to the SSH server or upstream reverse proxy. The active target domain is `pilot.goalrail.ru` per D-0053 (which supersedes D-0049's `pilot.goalrail.dev`, now reserved for a later global-market rollout). If the DNS zone is in Cloudflare, the record must be DNS-only / non-proxied so public traffic does not depend on Cloudflare Pages, Cloudflare proxy, Cloudflare Workers, or Cloudflare CDN services. |
-| TLS for `https://pilot.goalrail.ru/` | PENDING | Server-managed HTTPS via existing reverse proxy or Let's Encrypt per D-0051; HTTPS must be verified active on the active `.ru` target before any public use. |
-| Publish-time canonical link fix in `index.html` | RESOLVED in Phase 8E (against D-0049's `.dev`), realigned in Phase 8K (to D-0053's `.ru`) | Phase 8E updated `apps/web/pilot-intake-ru/index.html` line 12 from `<link rel="canonical" href="https://goalrail.ru/" />` to `<link rel="canonical" href="https://pilot.goalrail.dev/" />` to match the then-active D-0049. Phase 8K then updated the same line from `https://pilot.goalrail.dev/` to `https://pilot.goalrail.ru/` to match D-0053 (which supersedes D-0049 for target domain and canonical public URL). HTML-metadata only — no copy rewrite, no behavior change in either pass. The built `dist/index.html` contains the active `.ru` canonical after the Phase 8K rebuild. Source-grep boundary scan re-run: PASS. Production preview smoke (Phase 8K): PASS — canonical link is `https://pilot.goalrail.ru/`, hero visible, 5-step rail visible, 0 console errors/warnings, 0 non-static network requests. Inspection of `index.html` again found no other absolute public URL metadata (no `og:url`, no `twitter:url`, no other canonical-like links); only this one entry needed alignment. |
-| Production preview / smoke check at chosen provider | PENDING | Local preview pass recorded in §7. Provider-context preview is part of the wiring slice once provider is picked. |
-| Real-device pass (iOS Safari + Android Chrome) | PENDING | Recorded in `PILOT_INTAKE_RU_INTERNAL_REVIEW_NOTES.md` and `PILOT_INTAKE_RU_DEPLOYMENT_PREP.md`. |
-| Native-speaker proofread of canonical Russian copy | PENDING | Recorded in same prior notes. |
-| Behavioural screen-reader audit (VoiceOver / NVDA / TalkBack) | PENDING | Recorded in same prior notes. |
-| Verify `mailto:` handoff in deployed context | PENDING | Local preview confirmed; needs re-confirmation at the chosen provider. |
-| Re-confirm D-0047 boundaries in deployed context | PENDING | Source + local preview confirmed; needs re-confirmation post-deploy. |
+- Script source: `apps/web/pilot-intake-ru/server/pilot-leads-digest.php`.
+- Server path: `/srv/goalrail/pilot/backend/pilot-leads-digest.php`.
+- Cron path: `/etc/cron.d/goalrail-pilot-leads-digest` on the operator-managed
+  server.
+- Schedule: `04:00 UTC`, equivalent to `07:00 GMT+3`.
+- Window: previous GMT+3 calendar day.
+- Empty previous day: no email is sent.
+- One or more leads: one digest email is sent to the same D-0057 recipient
+  selection.
+- New JSONL rows include `submitted_at` (UTC), `submitted_at_local`, and
+  `submitted_date_local` for digest/audit readability. Existing rows without
+  local fields are converted from `submitted_at` when the digest is generated.
+- Server install status: PASS. `pilot-lead.php` and `pilot-leads-digest.php`
+  are installed under `/srv/goalrail/pilot/backend/` and passed `php -l` on the
+  operator-managed server.
+- Cron install status: PASS. `/etc/cron.d/goalrail-pilot-leads-digest` runs the
+  digest as `www-data` at `04:00 UTC`.
+- Digest dry-run smoke: PASS. A non-empty local-day dry run reported that a
+  digest would be sent; a known-empty day reported `no_leads` and exited
+  without sending. No real digest email was sent during this smoke to avoid
+  duplicate notification noise.
+- One-off digest send smoke after envelope-sender alignment: server-side
+  Postfix accepted and relayed the message, and the local queue was empty;
+  mailbox delivery still depended on recipient/provider filtering and sender
+  authentication posture.
+- One-off digest send smoke after D-0059 Resend key installation: PASS; the
+  digest reported `sent ... transport=resend` with the expected non-empty lead
+  count.
 
-## 9. Recommendation
 
-**READY FOR SSH DEPLOY — RUNTIME VALUES REQUIRED.**
+### Local build / preflight
 
-Phase 8H executed the local half of the SSH static deployment wiring
-slice (build, boundary scan, local preview smoke). Phase 8I
-re-attempted the same slice and re-ran the local half end-to-end with
-identical PASS results. In both phases the remote half (SSH
-connection, `rsync` upload, atomic `current` symlink switch, DNS / TLS
-verification, server-side smoke) was **not** performed because the
-operator did not provide the required runtime environment variables
-(`GR_PILOT_REMOTE_DEPLOY=yes`, `GR_PILOT_SSH_TARGET`,
-`GR_PILOT_RELEASE_ROOT`, `GR_PILOT_CURRENT_LINK`, `GR_PILOT_DOMAIN`).
-Per Phase 8H Scope C and Phase 8I Scope A, this is the correct
-outcome: no remote state was changed, no server identifiers were
-committed.
+Run from `apps/web`:
 
-The surface itself remains **READY WITH WARNINGS** for static
-deployment:
-- build/test/typecheck pass (Phase 8H re-ran them; Phase 8I re-ran
-  them again with the same PASS outcomes);
-- output is root-path safe with no env or secret requirements;
-- boundary verification PASS at source and preview runtime in both
-  Phase 8H and Phase 8I;
-- local preview smoke check confirms the full 5-step walkthrough works
-  and the primary outcome CTA correctly focuses the email input;
-- no provider-specific wiring is required by the app code itself
-  (Vite default `base="/"` matches D-0049);
-- the canonical-link metadata mismatch identified in Phase 8D §8 was
-  resolved in Phase 8E (HTML-metadata only, no copy/behavior change).
+- `npm run pilot-intake-ru:typecheck` — PASS.
+- `npm run pilot-intake-ru:test` — PASS, 19 tests. Existing Vitest warning:
+  `--localstorage-file was provided without a valid path`.
+- `npm run pilot-intake-ru:build` — PASS.
+- `apps/web/pilot-intake-ru/dist/index.html` exists.
+- `apps/web/pilot-intake-ru/server/pilot-lead.php` exists and is the deployable
+  PHP endpoint source.
+- `apps/web/pilot-intake-ru/server/pilot-leads-digest.php` exists and is the
+  deployable PHP daily digest source.
+- `apps/web/pilot-intake-ru/server/pilot-mail.php` exists and is the deployable
+  shared PHP mail transport helper.
+- `apps/web/pilot-intake-ru/dist/assets/` exists.
+- Built canonical is `https://pilot.goalrail.ru/`.
+- Built `dist/` contains no `pilot.goalrail.dev` references.
+- Root-absolute asset paths are valid for `/`.
 
-To unblock the next attempt, the operator provides the five runtime
-env vars in their shell and re-runs the SSH static deployment wiring
-slice (see §10 / `docs/ops/NEXT.md`). Optional `GR_PILOT_SSH_OPTS`,
-`GR_PILOT_RSYNC_OPTS`, `GR_PILOT_RELEASE_ID`, `GR_PILOT_KEEP_RELEASES`,
-and `GR_PILOT_PREVIOUS_RELEASE` may also be exported.
+### Local preview smoke
 
-D-0047 + D-0048 + D-0049 + D-0051 boundaries are intact. D-0050 is
-preserved in the file as historical record but is `superseded by
-D-0051 for hosting provider and deployment mode`. The surface remains
-not deployed and not live until the wiring slice completes with HTTPS
-verified active on `https://pilot.goalrail.ru/` (active per D-0053).
+Run from `apps/web`:
+
+- `npm run preview --workspace @goalrail/pilot-intake-ru-web -- --host 127.0.0.1` — PASS.
+- Page loads.
+- Hero `ИИ-кодинг без хаоса` visible.
+- Primary CTA `Обсудить пилот` visible.
+- Canonical in DOM is `https://pilot.goalrail.ru/`.
+- Contact email `hello@goalrail.dev` visible.
+- Console errors: 0.
+- Failed requests: 0.
+- Non-static requests on load: 0.
+- Contact form visible. Valid-submit behavior is covered by Vitest with a
+  mocked `/api/pilot-lead` response; local Vite preview does not run PHP-FPM.
+
+### Boundary audit
+
+Source grep against production files passed with the D-0056 exception:
+
+- `fetch('/api/pilot-lead')` is the only allowed browser network call;
+- no external `fetch`, `XMLHttpRequest`, `sendBeacon`;
+- no `localStorage`, `sessionStorage`, `indexedDB`;
+- no `gtag`, `googletagmanager`, `analytics`, `mixpanel`, `sentry`, `datadog`;
+- no `openai`, `anthropic`, `claude.ai`;
+- no `api.github`, `api.gitlab`;
+- no `input type="file"`;
+- no `model selector`;
+- no `chat history`.
+
+### Upload and symlink
+
+- A new timestamped release directory was created under
+  `/srv/goalrail/pilot/releases`.
+- After D-0056, a newer timestamped static release containing the lead-capture
+  frontend was uploaded and switched through the same atomic symlink pattern.
+- `apps/web/pilot-intake-ru/dist/` was uploaded with `rsync --delete` through
+  the operator-provided deploy SSH target.
+- Remote release verification passed:
+  - release `index.html` exists;
+  - release `assets/` exists;
+  - release canonical contains `https://pilot.goalrail.ru/`;
+  - no `pilot.goalrail.dev` reference was found in the uploaded release.
+- `/srv/goalrail/pilot/current` was atomically switched to the new timestamped
+  release using `ln -sfn` + `mv -Tf`.
+- `current/index.html` is readable.
+- `current/assets/` exists.
+
+### Public smoke
+
+- Server-local static smoke via Nginx and Host header: PASS.
+- Server-local HTTPS smoke with forced local resolution: PASS for HTTP 200 and
+  canonical metadata.
+- Remote static-root smoke over SSH: PASS.
+- Public HTTPS smoke at `https://pilot.goalrail.ru/`: FAIL / pending because the
+  public domain currently resolves to a different upstream instead of the
+  operator-managed server.
+- Public `/api/pilot-lead` smoke is also pending until DNS reaches the
+  operator-managed server.
+- Public live status: **NOT LIVE**.
+
+## Rollback note
+
+No previous non-placeholder release was found during this run. The placeholder
+release remains present. Once there is at least one previous real release, the
+generic rollback procedure is:
+
+1. Switch `/srv/goalrail/pilot/current` back to the previous release with the
+   same atomic `ln -sfn` + `mv -Tf` pattern.
+2. Re-run server-local smoke.
+3. Re-run public HTTPS smoke after DNS / TLS are active.
+
+No releases were deleted in this run.
+
+## Next action
+
+1. Correct external DNS for `pilot.goalrail.ru` so the public domain reaches the
+   operator-managed server.
+2. Re-run resolver comparison from public resolvers and verify the domain no
+   longer reaches the unrelated upstream.
+3. Re-run public HTTPS smoke at `https://pilot.goalrail.ru/`.
+4. Re-run deployed-surface boundary checks: canonical, hero, CTA, contact email,
+   console errors, no non-static network requests on load except
+   `/api/pilot-lead` on submit, and a valid `/api/pilot-lead` smoke.
+5. Confirm lead notification delivery at `hello@goalrail.dev` if mailbox access
+   is available.
+6. Update this doc, `docs/ops/STATUS.md`, `docs/ops/NEXT.md`, and
+   `docs/ops/COMPONENTS.yaml` to `LIVE VIA SSH STATIC SERVER — SMOKE PASSED`
+   only after public HTTPS smoke passes.
