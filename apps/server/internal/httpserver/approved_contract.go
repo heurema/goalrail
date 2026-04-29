@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -28,7 +29,15 @@ func (h *ApprovedContractHandler) ApproveDraft(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	approved, err := h.service.ApproveDraft(r.Context(), spine.ContractDraftID(r.PathValue("id")), input)
+	ctx := r.Context()
+	if _, ok := actor.FromContext(ctx); !ok {
+		ctx = actor.WithActor(ctx, actor.ActorContext{
+			Actor:  input.ApprovedBy,
+			Source: actor.SourcePayloadCompat,
+		})
+	}
+
+	approved, err := h.service.ApproveDraft(ctx, spine.ContractDraftID(r.PathValue("id")), input)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
