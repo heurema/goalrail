@@ -25,6 +25,22 @@
 - ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; the server implements one in-memory planned WorkItem per ApprovedContract in v0, while assignment, claiming, execution, Run, receipt, gate, and proof remain later boundaries
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
+## Stabilization tranche — source-of-truth and public-surface hardening
+
+This tranche is the immediate priority before new feature slices. It is not a
+product expansion, does not change MVP scope, and does not approve new runtime,
+analytics, CRM, repo integration, LLM/API, runner, gate, proof, or broad backend
+claims.
+
+Ordered follow-up slices:
+
+A. Documentation source-of-truth alignment — docs-only slice; complete when the landing canon, stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
+B. Pilot lead capture reliability patch.
+C. Repo checks CI for Go / web / PHP syntax.
+D. Branch protection / PR-only governance checklist.
+E. PII / abuse / retention guardrails for pilot lead capture.
+F. Root onboarding surface map cleanup if not completed in this PR.
+
 ## Next bounded slices
 
 ### Slice 1 — CTO deck outline

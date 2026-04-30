@@ -20,9 +20,15 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft / ApprovedContract persistence plus WorkItem planning prototype exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, server-side TLS provisioning, server-local HTTPS smoke, and D-0058 digest cron dry-run are complete but public DNS still resolves to a different upstream, so the public site is not live until `https://pilot.goalrail.ru/` reaches the operator-managed server and smoke passes, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
+
+Current risk note: stabilization is now the immediate priority before new
+feature slices. Source-of-truth cleanup is starting as a docs-only alignment
+slice. CI hardening, branch protection, pilot lead reliability, and PII /
+abuse / retention guardrails are still follow-up work and must not be claimed
+as implemented yet.
 
 ## Current state
 

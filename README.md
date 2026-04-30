@@ -32,21 +32,24 @@ for the core canonical objects, migrations, and event append for the key
 transitions are in place.
 
 This is **not** a full Goalrail runtime and **not** an agent platform.
-The following major pieces are intentionally not implemented yet:
-
-- runner
-- queue / jobs
-- workers
-- repo checkout
-- gate
-- proof generation
-- durable `WorkItem` storage
-- durable clarification persistence
-- authn / authz
-- runnable eval harness
-
 Goalrail remains a contract-first, bounded control plane that supplements
 existing developer and business tools rather than replacing them.
+
+## Repo surfaces
+
+- `apps/server` — early Go server prototype and bounded persistence slice; see
+  `apps/server/README.md`.
+- `apps/cli` — early local/demo Go CLI.
+- `apps/web` — shared web workspace with console shells, demo surfaces, and the
+  RU pilot landing; see `apps/web/README.md`.
+
+## What is not implemented
+
+- runner, workers, queue / jobs, or repo checkout
+- gate, proof generation, or runnable eval harness
+- durable `WorkItem` storage or durable clarification persistence
+- authn / authz, tracker sync, analytics, CRM, or product web loop
+- broad backend platform, LLM/API calls, repo integration, or runtime execution
 
 ## Read first
 
