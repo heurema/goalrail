@@ -226,7 +226,5 @@ components:
       - .github/workflows/pr-intake-gate.yml
       - .github/CODEOWNERS
       - .github/ISSUE_TEMPLATE
-      - scripts/pr_intake_gate.py
-      - tools/pr-intake-gate
     public_claim_allowed: true
-    notes: Open-source and contributor-experience baseline is real; this governs licensing, DCO signoff, community docs, issue/PR intake, and the deterministic PR Intake Gate, not product runtime behavior.
+    notes: Open-source and contributor-experience baseline is real; this governs licensing, DCO signoff, community docs, issue/PR intake, and the deterministic PR Intake Gate workflow/policy. The reusable gate engine lives in `heurema/repo-governance`, not in Goalrail runtime code.

@@ -152,11 +152,13 @@ Direct external PRs are intended only for small, low-risk edits. Non-trivial ext
 
 External PRs touching high-risk surfaces such as `.github/**`, `apps/**`, `scripts/**`, `tools/**`, `docs/product/**`, `docs/ops/**`, `docs/adr/**`, `docs/research/**`, `.goalrail/**`, `.punk/**`, dependency files, deployments, migrations, auth, security, crypto, or runtime behavior require maintainer attention before ordinary code review.
 
-Local deterministic check:
+Shared gate engine:
 
-```bash
-python3 tools/pr-intake-gate/test_pr_intake_gate.py
-```
+- runtime action: `heurema/repo-governance/actions/pr-intake-gate@v0.1.0`;
+- local policy: `.github/pr-intake-gate.yml`;
+- workflow wrapper: `.github/workflows/pr-intake-gate.yml`.
+
+For policy changes, use a PR and verify the `pr-intake-gate` check.
 
 ## Reporting bugs
 

@@ -9,4 +9,3 @@ Current rule:
 ## Current scripts
 
 - `check-staged.sh` — runs the docs-check changed-files ratchet against staged files, including repo-structure placement rules.
-- `pr_intake_gate.py` — deterministic GitHub PR Intake Gate used by `.github/workflows/pr-intake-gate.yml`; it reads trusted base-branch code and GitHub PR metadata only.
