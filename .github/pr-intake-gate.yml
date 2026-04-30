@@ -118,3 +118,5 @@ label_details:
 
 bot_comment:
   marker: '<!-- goalrail-pr-intake-gate -->'
+
+# Temporary trusted-author PR intake flow probe. Do not merge.
