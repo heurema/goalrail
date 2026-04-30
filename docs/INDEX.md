@@ -99,21 +99,22 @@ related_docs:
 56. `docs/ops/NEXT.md`
 57. `docs/ops/DECISIONS.md`
 58. `docs/ops/COMPONENTS.yaml`
-59. `docs/ops/REPO_STRUCTURE.md`
-60. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-61. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+59. `docs/ops/BRANCH_PROTECTION.md`
+60. `docs/ops/REPO_STRUCTURE.md`
+61. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+62. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-62. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-63. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-64. `docs/reference/design/reference_screens/`
-65. `.goalrail/work/`
-66. `.goalrail/knowledge/`
-67. `.punk/publishing.toml`
-68. `.goalrail/flows/`
-69. `.goalrail/evals/`
-70. `docs/ops/PUBLISHING_MIGRATION.md`
-71. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+63. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+64. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+65. `docs/reference/design/reference_screens/`
+66. `.goalrail/work/`
+67. `.goalrail/knowledge/`
+68. `.punk/publishing.toml`
+69. `.goalrail/flows/`
+70. `.goalrail/evals/`
+71. `docs/ops/PUBLISHING_MIGRATION.md`
+72. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -191,6 +192,7 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
