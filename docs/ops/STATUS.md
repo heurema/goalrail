@@ -24,19 +24,17 @@ Last updated: 2026-04-30
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft / ApprovedContract persistence plus WorkItem planning prototype exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, server-side TLS provisioning, server-local HTTPS smoke, and D-0058 digest cron dry-run are complete but public DNS still resolves to a different upstream, so the public site is not live until `https://pilot.goalrail.ru/` reaches the operator-managed server and smoke passes, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
-Current risk note: stabilization is now the immediate priority before new
-feature slices. Source-of-truth cleanup has landed as a docs-only alignment
-slice. The pilot lead reliability patch now exists as the narrow D-0061
-repo-side update. The repo-side D-0062 Go sidecar migration replaces the active
-PHP source for the narrow pilot endpoint/digest in repository source; it does
-not claim the operator-managed public server has migrated from the earlier
-PHP-FPM install. The D-0063 repo checks CI slice now adds Go + web PR checks
-only and intentionally excludes PHP and deployment automation. D-0064 branch
-protection now requires the current docs-check, PR intake, Go, and web PR
-checks on `main` with strict up-to-date checks and admin enforcement. D-0065
-now adds repo-side PII minimization and local JSONL retention guardrails for
-the RU pilot lead sidecar; it does not claim public server deployment has
-applied a purge cron or reverse-proxy rate limiting yet.
+Current risk note: the stabilization tranche is complete repo-side through
+D-0065. Source-of-truth cleanup, the D-0061 lead reliability patch, the D-0062
+Go sidecar migration in repository source, D-0063 Go + web PR checks, D-0064
+branch protection, and D-0065 PII / retention guardrails have landed. The next
+recommended bounded slice is operator-managed Go sidecar deployment plus public
+DNS/live smoke. This status does not claim the operator-managed public server
+has migrated from the earlier PHP-FPM wiring, does not claim a purge cron or
+reverse-proxy rate limiting is installed, and does not claim public DNS or
+public live smoke is complete. It also does not approve analytics, CRM,
+database, queue, LLM/API, repo integration, runtime execution, gate, proof, or
+broad backend platform behavior.
 
 ## Current state
 

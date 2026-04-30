@@ -27,20 +27,59 @@
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
 
-This tranche is the immediate priority before new feature slices. It is not a
-product expansion, does not change MVP scope, and does not approve new runtime,
-analytics, CRM, repo integration, LLM/API, runner, gate, proof, or broad backend
-claims.
+Status: **COMPLETE repo-side through D-0065**.
 
-Ordered follow-up slices:
+This tranche was the immediate stabilization priority before new feature
+slices. It was not a product expansion, did not change MVP scope, and did not
+approve new runtime, analytics, CRM, repo integration, LLM/API, runner, gate,
+proof, or broad backend claims.
 
-A. Documentation source-of-truth alignment — docs-only slice; complete when the landing canon, stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
-B. Pilot lead capture reliability patch — D-0061 runtime + docs slice; completed by local JSONL notification status and retry-after-failure semantics without concurrent duplicate notification attempts.
-C. Pilot lead runtime migration to Go sidecar — D-0062 runtime-language consolidation slice; replace the transitional PHP source under `apps/web/pilot-intake-ru/server` without changing the endpoint path, MVP scope, or public landing boundary.
-D. Repo checks CI for Go + web surfaces only — D-0063 quality-gate slice; add PR checks for current Go modules and `apps/web` workspaces only, with no PHP and no deployment automation.
-E. Branch protection / PR-only governance checklist — D-0064 completed; `main` now requires current repo checks through verified GitHub branch protection, with no required human review or signed-commit requirement added in this slice.
-F. PII / abuse / retention guardrails for pilot lead capture — D-0065 guardrail slice; new rows omit user-agent, local JSONL purge is available with dry-run default, and reverse-proxy rate limiting remains operator-managed.
-G. Root onboarding surface map cleanup — pending if gaps remain after source-of-truth alignment.
+Completed slices:
+
+A. Documentation source-of-truth alignment — complete; landing canon,
+   stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
+B. Pilot lead capture reliability patch — D-0061 complete; local JSONL
+   notification status keeps retry-after-failure possible without concurrent
+   duplicate notification attempts.
+C. Pilot lead runtime migration to Go sidecar — D-0062 complete; transitional
+   PHP source was removed from active repo runtime under
+   `apps/web/pilot-intake-ru/server` without changing the endpoint path, MVP
+   scope, or public landing boundary.
+D. Repo checks CI for Go + web surfaces only — D-0063 complete; PR checks cover
+   current Go modules and `apps/web` workspaces only, with no PHP and no
+   deployment automation.
+E. Branch protection / PR-only governance checklist — D-0064 complete; `main`
+   requires current repo checks through verified GitHub branch protection, with
+   no required human review or signed-commit requirement added in this slice.
+F. PII / abuse / retention guardrails for pilot lead capture — D-0065
+   complete; new rows omit user-agent, local JSONL purge is available with
+   dry-run default, and reverse-proxy rate limiting remains operator-managed.
+G. Root onboarding surface map cleanup — complete / no further action from this
+   tranche; README, README.ru, and AGENTS already reflect the current repo
+   surfaces and non-implemented boundaries.
+
+## Next recommended bounded slice
+
+### Operator-managed Go sidecar deployment and public DNS/live smoke
+
+Goal:
+- migrate the operator-managed public RU pilot lead endpoint from the earlier
+  PHP-FPM wiring to the repo-side Go sidecar, then correct public DNS and run
+  HTTPS plus `/api/pilot-lead` live smoke.
+
+Done means:
+- the Go sidecar is deployed and wired by the operator outside repo source
+  control; no server hostnames, IPs, ports, credentials, concrete
+  reverse-proxy config, deployment scripts, or secrets are committed
+- public DNS for `pilot.goalrail.ru` reaches the operator-managed server
+- public HTTPS smoke and public `/api/pilot-lead` smoke pass
+- ops docs are updated only after verification
+
+Current truth:
+- repo-side Go sidecar source exists under `apps/web/pilot-intake-ru/server`
+- operator-managed public server migration to the Go sidecar is **not yet
+  claimed complete**
+- public DNS / live smoke remains **pending**
 
 ## Next bounded slices
 
