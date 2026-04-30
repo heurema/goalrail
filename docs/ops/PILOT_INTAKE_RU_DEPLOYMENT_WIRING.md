@@ -23,15 +23,13 @@ related_docs:
 
 ## Current status
 
-**SERVER UPLOAD COMPLETE — DNS/TLS PENDING.**
+**LIVE VIA SSH STATIC SERVER — SMOKE PASSED.**
 
 The business-first RU pilot landing from `apps/web/pilot-intake-ru` has been
 built locally, uploaded to the operator-managed SSH static server, and exposed
-through the server-side `current` symlink. The public site is **not live yet**
-because DNS for `pilot.goalrail.ru` does not currently appear to point to the
-operator-managed server in public resolver / public-smoke verification. Server-side
-HTTPS provisioning succeeded, but public HTTPS still reaches a different upstream,
-so the live smoke does not pass yet.
+through the server-side `current` symlink. Public DNS for
+`pilot.goalrail.ru` now reaches the operator-managed server, public HTTPS smoke
+passes, and same-origin `POST /api/pilot-lead` public smoke passes.
 
 D-0056 allows one narrow lead-capture exception for this surface:
 `POST /api/pilot-lead` validates an email, dedupes already-submitted addresses
@@ -51,13 +49,15 @@ omitting user-agent, adds a local dry-run-first JSONL purge command with a
 90-day default retention window, and keeps reverse-proxy rate limiting as
 operator-managed deployment posture rather than repo-side server config.
 
-The previous operator-managed server install used PHP-FPM; migrating that live
-server wiring to the Go sidecar is a separate operator-managed deployment step
-unless performed and recorded separately. This repository change does not claim
-that public deployment has already migrated. No analytics, tracking, Google
-Sheets, CRM, cookies, sessions, user accounts, LLM/API calls, repo integration,
-runtime execution, broad backend platform, CI/CD deployment workflow, deploy
-script, concrete reverse-proxy config, or repo-side server config was added.
+The previous operator-managed server install used PHP-FPM. On 2026-04-30, that
+live endpoint wiring was migrated to the repo-side Go sidecar through
+operator-managed process supervision and reverse proxy configuration outside
+this repository. Reverse-proxy rate limiting was applied as operator-managed
+posture; no concrete Nginx/Caddy config is committed here. No analytics,
+tracking, Google Sheets, CRM, cookies, sessions, user accounts, LLM/API calls,
+repo integration, runtime execution, broad backend platform, CI/CD deployment
+workflow, deploy script, concrete reverse-proxy config, or repo-side server
+config was added.
 
 ## Decision basis
 
@@ -131,9 +131,9 @@ script, concrete reverse-proxy config, or repo-side server config was added.
 | Resend sender | `GoalRail Pilot <noreply@skill7.dev>` |
 | Daily digest cron | `/etc/cron.d/goalrail-pilot-leads-digest`; `04:00 UTC` / `07:00 GMT+3`, previous GMT+3 day, only if leads exist |
 | Repo migration status | Active repo source migrated from PHP to Go sidecar per D-0062 |
-| Operator server migration status | Separate deployment/wiring step; not claimed by this repo PR |
-| Current deployment status | **SERVER UPLOAD COMPLETE — DNS/TLS PENDING** |
-| Public live status | **NOT LIVE** until DNS points to the operator-managed server and HTTPS public smoke passes |
+| Operator server migration status | Migrated from previous PHP-FPM wiring to the Go sidecar outside repo source control |
+| Current deployment status | **LIVE VIA SSH STATIC SERVER — SMOKE PASSED** |
+| Public live status | **LIVE** after public DNS, HTTPS, and `/api/pilot-lead` smoke passed |
 
 Server hostnames, IP addresses, SSH ports, usernames, key paths, tokens,
 credentials, and provider-specific identifiers are intentionally not recorded
@@ -154,8 +154,9 @@ in this repository.
   `certbot`, `python3-certbot-nginx`, `rsync`, `ufw`.
 - Previous D-0056 lead-capture packages installed or confirmed present:
   `php-fpm`, `postfix`, and local `mail` support. D-0062 changes repo source
-  to Go; replacing those server packages/wiring is a separate operator-managed
-  deployment step.
+  to Go; the active endpoint wiring has now migrated to the Go sidecar. Package
+  removal, if any, remains an operator-managed server hygiene task and is not
+  represented in repo source.
 - Deploy user exists.
 - Deploy SSH directory and authorized keys were ensured idempotently.
 - SSH hardening drop-in was installed with:
@@ -179,9 +180,9 @@ in this repository.
 - `/etc/nginx/sites-available/pilot.goalrail.ru` was created/updated on the
   server as a static config rooted at `/srv/goalrail/pilot/current`.
 - After D-0056, the same site config included a narrow
-  `location = /api/pilot-lead` routed to PHP-FPM. After D-0062, the generic
-  target shape is reverse proxying that same path to the local Go sidecar; the
-  actual server migration/config is not committed here.
+  `location = /api/pilot-lead` routed to PHP-FPM. On 2026-04-30, the active
+  operator-managed wiring was switched to reverse proxy that same path to the
+  local Go sidecar; the concrete server config is not committed here.
 - The site is enabled through `sites-enabled`.
 - `nginx -t` passed.
 - Nginx reload succeeded.
@@ -191,24 +192,26 @@ in this repository.
 
 ### DNS / TLS
 
-- Phase 8M DNS check result: **DNS does not appear to point to the
-  operator-managed server** in public resolver comparison.
+- Phase 8M DNS check result: historical blocker; DNS did not appear to point to
+  the operator-managed server at that time.
+- 2026-04-30 DNS verification: PASS. Public resolver comparison now shows
+  `pilot.goalrail.ru` reaching the operator-managed server without recording
+  the server IP in repo docs.
 - Server static root verification: PASS. `/srv/goalrail/pilot/current` exists,
   `current/index.html` is readable, `current/assets/` exists, and the deployed
   canonical is `https://pilot.goalrail.ru/`.
 - `nginx -t`: PASS.
-- Certbot result: PASS on the operator-managed server. This was run after an
-  initial DNS check appeared positive; the later public resolver / public-smoke
-  check showed the live domain still does not reach this server.
+- Certbot result: PASS on the operator-managed server.
 - `certbot renew --dry-run`: PASS.
 - Server-local HTTPS smoke with the `pilot.goalrail.ru` host: PASS for HTTP
   200 and canonical metadata.
-- Public HTTPS smoke: FAIL / pending. A verified public `curl` request to
-  `https://pilot.goalrail.ru/` does not reach the deployed static landing and
-  fails TLS verification against the currently-resolved public endpoint.
-- Required next action: correct external DNS for `pilot.goalrail.ru` so public
-  traffic reaches the operator-managed server, then rerun DNS verification,
-  public HTTPS smoke, and deployed-surface boundary checks.
+- Public HTTPS smoke: PASS. A public `curl` request to
+  `https://pilot.goalrail.ru/` returns HTTP 200, the canonical
+  `https://pilot.goalrail.ru/`, and the hero `ИИ-кодинг без хаоса`.
+- Public `/api/pilot-lead` smoke: PASS. A fresh operator smoke lead returned
+  HTTP 200 / `{"duplicate":false,"ok":true}`, duplicate retry returned HTTP 200
+  / `{"duplicate":true,"ok":true}`, invalid email returned HTTP 400, and
+  honeypot returned HTTP 400.
 
 ### Lead capture endpoint
 
@@ -226,7 +229,7 @@ behavior:
   `apps/web/pilot-intake-ru/server`.
 - The command entrypoint is
   `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru`.
-- Server deployment of the Go sidecar is a separate operator-managed wiring
+- Server deployment of the Go sidecar is complete as an operator-managed wiring
   step; this repo doc does not record live server hostnames, listen addresses,
   process managers, or reverse-proxy config.
 - Local lead log path is `/srv/goalrail/pilot/leads/leads.jsonl`.
@@ -238,8 +241,8 @@ behavior:
     local purge.
 - Retention defaults to 90 days and may be overridden with
   `GOALRAIL_LEAD_RETENTION_DAYS` in the bounded 7–365 day range.
-- Reverse-proxy rate limiting should be applied by the operator-managed web
-  server / reverse proxy; no concrete Nginx/Caddy config is committed here.
+- Reverse-proxy rate limiting is applied by the operator-managed web server /
+  reverse proxy; no concrete Nginx/Caddy config is committed here.
 - Public/manual contact remains `hello@goalrail.dev`.
 - Notification recipient may be a server-local direct override from
   `/srv/goalrail/pilot/backend/lead-recipient.local`; the configured value is
@@ -260,12 +263,18 @@ behavior:
 - Previous server-local Postfix wiring is operator-managed server state and is
   not committed here.
 - UFW remains limited to SSH, HTTP, and HTTPS; inbound SMTP was not opened.
-- Server-local endpoint smoke: valid JSON lead returned HTTP 200 / `{ ok: true }`.
+- Server-local Go sidecar process smoke: PASS.
+- Server-local endpoint smoke through the reverse proxy: valid JSON lead
+  returned HTTP 200 / `{ "ok": true, "duplicate": false }`.
 - Server-local duplicate smoke: HTTP 200 / `{ ok: true, duplicate: true }`,
   with unchanged JSONL line count and no new notification.
 - Server-local invalid email smoke: HTTP 400.
 - Server-local honeypot smoke: HTTP 400.
 - Lead log append smoke: PASS.
+- New JSONL row smoke: PASS. The smoke row includes `notification_status`,
+  `submitted_at`, `submitted_at_local`, and `submitted_date_local`; it omits
+  `user_agent` and does not include IP, cookie, session, fingerprint, or browser
+  identifiers.
 - Previous email send smoke: PHP `mail()` accepted the notification and the
   local mail queue was empty after the smoke. Cloudflare Email Routing
   classified form-generated `noreply@pilot.goalrail.ru` mail to
@@ -287,7 +296,7 @@ location = /api/pilot-lead {
     proxy_pass http://<local-go-sidecar-upstream>;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # Visitor IP does not need to be forwarded to the Go sidecar.
 }
 ```
 
@@ -313,17 +322,20 @@ Daily digest behavior:
   Existing rows without local fields are converted from `submitted_at` when the
   digest is generated; legacy rows with `user_agent` remain readable but the
   digest does not include user-agent.
-- Previous server install status: PASS. `pilot-lead.php` and
+- Previous server install status: superseded. `pilot-lead.php` and
   `pilot-leads-digest.php` were installed under `/srv/goalrail/pilot/backend/`
-  and passed `php -l` on the operator-managed server before D-0062. The repo
-  source has now migrated to Go; server migration to the Go binary remains a
-  separate deployment/wiring step unless performed separately.
+  and passed `php -l` on the operator-managed server before D-0062. On
+  2026-04-30, the active operator-managed endpoint wiring was migrated to the Go
+  sidecar; PHP-FPM is no longer the active endpoint path for `/api/pilot-lead`.
 - Cron install status: PASS. `/etc/cron.d/goalrail-pilot-leads-digest` runs the
   digest as `www-data` at `04:00 UTC`.
 - Digest dry-run smoke: PASS. A non-empty local-day dry run reported that a
   digest would be sent; a known-empty day reported `no_leads` and exited
   without sending. No real digest email was sent during this smoke to avoid
   duplicate notification noise.
+- Go sidecar digest dry-run smoke after live migration: PASS, exit 0.
+- Go sidecar purge dry-run smoke after live migration: PASS, exit 0; dry-run
+  output reported `would_purge` with 90-day retention and did not delete rows.
 - One-off digest send smoke after envelope-sender alignment: server-side
   Postfix accepted and relayed the message, and the local queue was empty;
   mailbox delivery still depended on recipient/provider filtering and sender
@@ -338,7 +350,7 @@ Daily digest behavior:
 Run from `apps/web`:
 
 - `npm run pilot-intake-ru:typecheck` — PASS.
-- `npm run pilot-intake-ru:test` — PASS, 19 tests. Existing Vitest warning:
+- `npm run pilot-intake-ru:test` — PASS, 20 tests. Existing Vitest warning:
   `--localstorage-file was provided without a valid path`.
 - `npm run pilot-intake-ru:build` — PASS.
 - `apps/web/pilot-intake-ru/dist/index.html` exists.
@@ -349,6 +361,9 @@ Run from `apps/web`:
 - `apps/web/pilot-intake-ru/server/internal/pilotlead` contains the JSONL store,
   HTTP handler, mail transport, digest behavior, purge behavior, and tests for
   the sidecar.
+- Go sidecar pre-deploy validation on 2026-04-30: `go test ./...`, `go vet
+  ./...`, and `go build ./cmd/goalrail-pilot-intake-ru` all passed from
+  `apps/web/pilot-intake-ru/server`.
 - `apps/web/pilot-intake-ru/dist/assets/` exists.
 - Built canonical is `https://pilot.goalrail.ru/`.
 - Built `dist/` contains no `pilot.goalrail.dev` references.
@@ -409,12 +424,20 @@ Source grep against production files passed with the D-0056 exception:
 - Server-local HTTPS smoke with forced local resolution: PASS for HTTP 200 and
   canonical metadata.
 - Remote static-root smoke over SSH: PASS.
-- Public HTTPS smoke at `https://pilot.goalrail.ru/`: FAIL / pending because the
-  public domain currently resolves to a different upstream instead of the
-  operator-managed server.
-- Public `/api/pilot-lead` smoke is also pending until DNS reaches the
-  operator-managed server.
-- Public live status: **NOT LIVE**.
+- Public DNS resolver comparison: PASS; the public domain reaches the
+  operator-managed server. The server IP is not recorded in repo docs.
+- Public HTTPS smoke at `https://pilot.goalrail.ru/`: PASS for HTTP 200,
+  canonical metadata, and hero copy.
+- Public `/api/pilot-lead` smoke: PASS for fresh lead, duplicate retry, invalid
+  email, and honeypot cases with the expected generic JSON responses.
+- Public page-load boundary scan: PASS. Public HTML loads only same-origin
+  static resources, sets no cookies, contains no analytics / tracking /
+  LLM-provider / repo-provider calls, and submit remains same-origin
+  `/api/pilot-lead`.
+- Public deployed asset scan confirms `hello@goalrail.dev` remains present and
+  the primary CTA / lead-form focus behavior remains covered by the existing
+  frontend test suite.
+- Public live status: **LIVE VIA SSH STATIC SERVER — SMOKE PASSED**.
 
 ## Rollback note
 
@@ -425,22 +448,14 @@ generic rollback procedure is:
 1. Switch `/srv/goalrail/pilot/current` back to the previous release with the
    same atomic `ln -sfn` + `mv -Tf` pattern.
 2. Re-run server-local smoke.
-3. Re-run public HTTPS smoke after DNS / TLS are active.
+3. Re-run public HTTPS and `/api/pilot-lead` smoke after rollback.
 
 No releases were deleted in this run.
 
 ## Next action
 
-1. Correct external DNS for `pilot.goalrail.ru` so the public domain reaches the
-   operator-managed server.
-2. Re-run resolver comparison from public resolvers and verify the domain no
-   longer reaches the unrelated upstream.
-3. Re-run public HTTPS smoke at `https://pilot.goalrail.ru/`.
-4. Re-run deployed-surface boundary checks: canonical, hero, CTA, contact email,
-   console errors, no non-static network requests on load except
-   `/api/pilot-lead` on submit, and a valid `/api/pilot-lead` smoke.
-5. Confirm lead notification delivery at `hello@goalrail.dev` if mailbox access
-   is available.
-6. Update this doc, `docs/ops/STATUS.md`, `docs/ops/NEXT.md`, and
-   `docs/ops/COMPONENTS.yaml` to `LIVE VIA SSH STATIC SERVER — SMOKE PASSED`
-   only after public HTTPS smoke passes.
+1. Perform a real-device mobile smoke pass on iOS Safari and Android Chrome.
+2. Perform a native-speaker proofread pass of the live Russian copy.
+3. Keep monitoring the operator-managed Go sidecar, local JSONL retention
+   lifecycle, and reverse-proxy rate limiting posture without committing server
+   config or secrets.

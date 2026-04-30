@@ -10,7 +10,7 @@
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
-- `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, D-0056 lead-capture endpoint wiring, and server-side TLS provisioning are complete, but public DNS still resolves to a different upstream, so the public site is not live until `https://pilot.goalrail.ru/` reaches the operator-managed server and smoke passes.
+- `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and in-memory ClarificationRequest, ClarificationAnswer recording, answer application, and WorkItem planning prototypes; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
@@ -58,9 +58,11 @@ G. Root onboarding surface map cleanup — complete / no further action from thi
    tranche; README, README.ru, and AGENTS already reflect the current repo
    surfaces and non-implemented boundaries.
 
-## Next recommended bounded slice
+## Completed deployment/live slice
 
 ### Operator-managed Go sidecar deployment and public DNS/live smoke
+
+Status: **DONE — LIVE VIA SSH STATIC SERVER / SMOKE PASSED.**
 
 Goal:
 - migrate the operator-managed public RU pilot lead endpoint from the earlier
@@ -77,9 +79,26 @@ Done means:
 
 Current truth:
 - repo-side Go sidecar source exists under `apps/web/pilot-intake-ru/server`
-- operator-managed public server migration to the Go sidecar is **not yet
-  claimed complete**
-- public DNS / live smoke remains **pending**
+- operator-managed public server migration to the Go sidecar is complete
+  outside repo source control
+- public DNS, HTTPS smoke, and public `/api/pilot-lead` smoke passed
+- no server config, deployment scripts, secrets, hostnames, IPs, ports,
+  usernames, key paths, or DNS provider credentials were committed
+
+## Next recommended bounded slice
+
+### Pilot intake RU post-live mobile and copy QA
+
+Goal:
+- run real-device iOS Safari / Android Chrome smoke and native-speaker Russian
+  copy proofread against the live public surface.
+
+Done means:
+- mobile rendering and lead form behavior are checked on real devices
+- any copy changes land in lock-step with
+  `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+- no analytics, tracking, cookies, sessions, CRM, repo integration, LLM/API,
+  runtime execution, gate, proof, or broad backend platform is added
 
 ## Next bounded slices
 
@@ -131,12 +150,12 @@ Status: DONE (Phase 8K). `docs/ops/DECISIONS.md` D-0053 records the target-domai
 Goal:
 - validate the rewritten business-first `apps/web/pilot-intake-ru` landing locally, then publish it at `https://pilot.goalrail.ru/` on the operator-managed SSH static server per D-0055 + D-0053 + D-0051, without expanding product scope and without weakening D-0047
 
-Status: **SERVER UPLOAD COMPLETE — DNS/TLS PENDING.** The business-first landing rewrite and D-0056 lead-capture patch passed local typecheck / test / build / boundary audit / local preview smoke. The operator-managed SSH server was bootstrapped, Nginx static serving was configured, timestamped releases were uploaded with `rsync`, and `/srv/goalrail/pilot/current` was atomically switched to the latest release. The earlier server install used a narrow PHP-FPM `/api/pilot-lead` endpoint; D-0062 migrates active repo source to a Go sidecar, while live server migration remains a separate operator-managed deployment step. D-0059 Resend HTTPS transport was configured with `skill7.dev` sender and server-local API key, local Postfix/sendmail remains a fallback where available, server-local direct recipient override was configured outside the repo, lead JSONL append and duplicate suppression passed, the daily digest cron was installed for 07:00 GMT+3 previous-day summaries, digest dry-run smoke passed, a one-off digest send was accepted/relayed after envelope-sender alignment, a one-off digest send via Resend reported `transport=resend`, and server-local endpoint smoke passed. Server-side TLS provisioning, renew dry-run, and server-local HTTPS smoke succeeded, but public DNS for `pilot.goalrail.ru` still resolves to a different upstream, so public HTTPS smoke does not reach the deployed landing. The public site is not live yet.
+Status: **LIVE VIA SSH STATIC SERVER — SMOKE PASSED.** The business-first landing rewrite and D-0056 lead-capture patch passed local typecheck / test / build / boundary audit / local preview smoke. The operator-managed SSH server was bootstrapped, Nginx static serving was configured, timestamped releases were uploaded with `rsync`, and `/srv/goalrail/pilot/current` was atomically switched to the latest release. The earlier server install used a narrow PHP-FPM `/api/pilot-lead` endpoint; live endpoint wiring has now migrated to the D-0062 Go sidecar outside repo source control. D-0059 Resend HTTPS transport is configured with `skill7.dev` sender and server-local API key, local Postfix/sendmail remains a fallback where available, server-local direct recipient override is configured outside the repo, lead JSONL append and duplicate suppression passed, the daily digest cron is installed for 07:00 GMT+3 previous-day summaries, digest dry-run and purge dry-run smoke passed, and server-local endpoint smoke passed. Server-side TLS provisioning, renew dry-run, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke passed.
 
 Immediate next action:
-- correct external DNS for `pilot.goalrail.ru` so the public domain reaches the operator-managed server, then rerun resolver comparison, public HTTPS smoke, `/api/pilot-lead` smoke, and deployed-surface boundary checks. Update ops docs to `LIVE VIA SSH STATIC SERVER — SMOKE PASSED` only after HTTPS and endpoint smoke pass.
+- perform real-device iOS Safari / Android Chrome smoke and native-speaker Russian copy proofread against the live public surface; file any fixes as separate small patches.
 
-Pre-requisites (base gating satisfied; static upload complete, DNS/TLS pending):
+Pre-requisites (base gating satisfied; static upload and live smoke complete):
 - the target-domain decision is recorded (D-0053: `pilot.goalrail.ru` / `/` / `candidate-public`, supersedes D-0049 for target domain and canonical public URL; D-0051 hosting/deployment mode preserved)
 - the canonical-link metadata fix has landed (Phase 8E — DONE)
 - the hosting-path decision is recorded (D-0051: operator-managed SSH static server; D-0050 is `superseded by D-0051 for hosting provider and deployment mode`)
@@ -152,16 +171,16 @@ Done means:
 - because `PUBLIC_PATH` is `/`, no `vite.config.ts` `base` adjustment is required; root-path behavior and static asset paths are explicitly verified on the deployed surface
 - no env vars, no secrets, and no runtime configuration are introduced anywhere — neither in repo nor in the deployed assets
 - a local `vite preview` smoke check (`npm run preview --workspace @goalrail/pilot-intake-ru-web` from `apps/web`) is run before upload; visually verifies the business-first landing sections, CTA focus, lead form visibility, mailto fallback, canonical URL, and no non-static network requests on load
-- a server-local static smoke check passed against the manually-uploaded release; server-side TLS provisioning and server-local HTTPS smoke succeeded, but public `https://pilot.goalrail.ru/` smoke remains pending until DNS reaches the operator-managed server
+- a server-local static smoke check passed against the manually-uploaded release; server-side TLS provisioning, server-local HTTPS smoke, public `https://pilot.goalrail.ru/` smoke, and public `/api/pilot-lead` smoke passed
 - the canonical URL in the deployed `index.html` is verified to be `https://pilot.goalrail.ru/`
-- canonical copy parity is re-confirmed against `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; any drift is reconciled before going live
+- canonical copy parity is re-confirmed against `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; any drift is reconciled in a follow-up patch
 - the lead form posts only to same-origin `/api/pilot-lead`, the fallback still resolves to `mailto:hello@goalrail.dev`, and the primary CTA still only focuses the email input with the temporary local highlight
-- DNS remains the active blocker: correct external DNS per D-0051 so `pilot.goalrail.ru` (per D-0053) reaches the operator-managed SSH server (or approved upstream reverse proxy) via A / AAAA / CNAME as appropriate; public resolver checks currently show the domain reaching a different upstream. If the DNS zone is in Cloudflare, the record is DNS-only / non-proxied so public traffic does not depend on Cloudflare Pages, Cloudflare proxy, Cloudflare Workers, or Cloudflare CDN
-- server-side HTTPS provisioning is installed on the operator-managed server, but public HTTPS at `https://pilot.goalrail.ru/` is not verified live until DNS reaches that server and the public smoke passes
-- a real-device pass is performed on iOS Safari and Android Chrome (against the staging path if available, else against the live URL only after HTTPS is confirmed); any blockers are filed as separate small patches before going live
-- a native-speaker proofread of canonical Russian copy is performed; any wording changes land in lock-step in `App.tsx` and `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+- DNS now reaches the operator-managed SSH server per D-0051 / D-0053, and public resolver comparison passed without recording server IPs in repo docs. If the DNS zone is in Cloudflare, the record remains outside Cloudflare Pages, Workers, Web Analytics, and repo-side infrastructure config unless a separate decision changes that.
+- server-side HTTPS provisioning is installed on the operator-managed server, and public HTTPS at `https://pilot.goalrail.ru/` is verified live
+- a real-device pass is performed on iOS Safari and Android Chrome against the live URL; any blockers are filed as separate small patches
+- a native-speaker proofread of canonical Russian copy is performed as a post-live QA slice; any wording changes land in lock-step in `App.tsx` and `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
 - D-0047 boundary is re-confirmed in the deployed context with the D-0056 exception: no LLM/API, no repo provider integration, no code execution, no persistence beyond local JSONL lead log, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector; no non-static network requests are observed during page load, and submit only calls same-origin `/api/pilot-lead`
-- the result is recorded in `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md` as `SERVER UPLOAD COMPLETE — DNS/TLS PENDING`; it may move to `LIVE VIA SSH STATIC SERVER — SMOKE PASSED` only once public DNS reaches the operator-managed server and HTTPS smoke passes
+- the result is recorded in `docs/ops/PILOT_INTAKE_RU_DEPLOYMENT_WIRING.md` as `LIVE VIA SSH STATIC SERVER — SMOKE PASSED`
 - if the chosen target domain or public path ever changes, that change is recorded as a separate explicit decision in `docs/ops/DECISIONS.md` before it is implemented; if the deployment mode is later changed (e.g. CI deploy, automatic deploys, repo-side server config), that also requires its own separate decision per D-0051
 
 Out of immediate scope (do not introduce without a new decision):
