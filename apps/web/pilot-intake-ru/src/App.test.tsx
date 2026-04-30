@@ -1,7 +1,12 @@
 import indexMarkup from '../index.html?raw';
-import leadDigestSourceText from '../server/pilot-leads-digest.php?raw';
-import leadEndpointSourceText from '../server/pilot-lead.php?raw';
-import pilotMailSourceText from '../server/pilot-mail.php?raw';
+import sidecarMainSourceText from '../server/cmd/goalrail-pilot-intake-ru/main.go?raw';
+import configSourceText from '../server/internal/pilotlead/config.go?raw';
+import digestSourceText from '../server/internal/pilotlead/digest.go?raw';
+import handlerSourceText from '../server/internal/pilotlead/handler.go?raw';
+import mailSourceText from '../server/internal/pilotlead/mail.go?raw';
+import storeSourceText from '../server/internal/pilotlead/store.go?raw';
+import timeSourceText from '../server/internal/pilotlead/time.go?raw';
+import typesSourceText from '../server/internal/pilotlead/types.go?raw';
 import appSourceText from './App.tsx?raw';
 
 import { screen, waitFor, within } from '@testing-library/react';
@@ -19,15 +24,29 @@ function indexHtml() {
 }
 
 function leadEndpointSource() {
-  return leadEndpointSourceText;
+  return [
+    sidecarMainSourceText,
+    configSourceText,
+    handlerSourceText,
+    storeSourceText,
+    timeSourceText,
+    typesSourceText,
+  ].join('\n');
 }
 
 function leadDigestSource() {
-  return leadDigestSourceText;
+  return [
+    sidecarMainSourceText,
+    configSourceText,
+    digestSourceText,
+    storeSourceText,
+    timeSourceText,
+    typesSourceText,
+  ].join('\n');
 }
 
 function pilotMailSource() {
-  return pilotMailSourceText;
+  return [configSourceText, mailSourceText].join('\n');
 }
 
 afterEach(() => {
@@ -269,35 +288,38 @@ describe('Pilot intake RU business-first landing', () => {
     expect(source).not.toMatch(/input\s+type=["']file["']/i);
   });
 
-  it('keeps the PHP endpoint narrow: local JSONL, mail notification, no external integrations', () => {
+  it('keeps the Go sidecar endpoint narrow: local JSONL, mail notification, no external integrations', () => {
     const source = leadEndpointSource();
 
     expect(source).toContain('/srv/goalrail/pilot/leads/leads.jsonl');
-    expect(source).toContain('pilot-mail.php');
+    expect(source).toContain('/api/pilot-lead');
     expect(source).toContain('Пилот — заявка с RU лендинга');
-    expect(source).toContain("'duplicate' => true");
-    expect(source).toContain('store_lead_once');
-    expect(source).toContain('pilot_mail_recipient');
-    expect(source).toContain('pilot_send_text_email');
+    expect(source).toContain('MaxBodyBytes = 8192');
+    expect(source).toContain('PrepareAttempt');
+    expect(source).toContain('MarkNotificationResult');
+    expect(source).toContain('StatusNotificationFailed');
+    expect(source).toContain('StatusReceived');
+    expect(source).toContain('MailRecipient');
+    expect(source).toContain('SendText');
     expect(source).toContain('submitted_at_local');
     expect(source).toContain('submitted_date_local');
-    expect(source).toContain('filter_var($email, FILTER_VALIDATE_EMAIL)');
-    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab/i);
+    expect(source).toContain('ValidateEmail');
+    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab|database\/sql/i);
   });
 
   it('keeps the daily digest bounded to previous-day JSONL email only', () => {
     const source = leadDigestSource();
 
     expect(source).toContain('/srv/goalrail/pilot/leads/leads.jsonl');
-    expect(source).toContain('pilot-mail.php');
-    expect(source).toContain("const DIGEST_TZ = 'Europe/Moscow'");
-    expect(source).toContain("new DateTimeImmutable('yesterday', $tz)");
-    expect(source).toContain('if ($records === [])');
-    expect(source).toContain('exit(0)');
-    expect(source).toContain("LEAD_SUBJECT_PREFIX = 'Пилот'");
-    expect(source).toContain('pilot_mail_recipient');
-    expect(source).toContain('pilot_send_text_email');
-    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab/i);
+    expect(source).toContain('DigestTZ           = "Europe/Moscow"');
+    expect(source).toContain('GOALRAIL_DIGEST_DATE');
+    expect(source).toContain('GOALRAIL_DIGEST_DRY_RUN');
+    expect(source).toContain('AddDate(0, 0, -1)');
+    expect(source).toContain('DigestRecords');
+    expect(source).toContain('no_leads');
+    expect(source).toContain('would_send');
+    expect(source).toContain('SendText');
+    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab|database\/sql/i);
   });
 
 
@@ -309,10 +331,10 @@ describe('Pilot intake RU business-first landing', () => {
     expect(source).toContain('/srv/goalrail/pilot/backend/lead-recipient.local');
     expect(source).toContain('GoalRail Pilot <noreply@skill7.dev>');
     expect(source).toContain('hello@goalrail.dev');
-    expect(source).toContain('Authorization: Bearer ');
+    expect(source).toContain('Authorization');
     expect(source).toContain('reply_to');
-    expect(source).toContain("return 'resend'");
-    expect(source).toContain("return 'postfix'");
-    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab/i);
+    expect(source).toContain('return "resend"');
+    expect(source).toContain('return "sendmail"');
+    expect(source).not.toMatch(/google|sheets|crm|analytics|openai|anthropic|api\.github|api\.gitlab|database\/sql/i);
   });
 });

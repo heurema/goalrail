@@ -36,10 +36,11 @@ Ordered follow-up slices:
 
 A. Documentation source-of-truth alignment — docs-only slice; complete when the landing canon, stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
 B. Pilot lead capture reliability patch — D-0061 runtime + docs slice; completed by local JSONL notification status and retry-after-failure semantics without concurrent duplicate notification attempts.
-C. Repo checks CI for Go / web / PHP syntax — pending.
-D. Branch protection / PR-only governance checklist — pending.
-E. PII / abuse / retention guardrails for pilot lead capture — pending.
-F. Root onboarding surface map cleanup — pending if gaps remain after source-of-truth alignment.
+C. Pilot lead runtime migration to Go sidecar — D-0062 runtime-language consolidation slice; replace the transitional PHP source under `apps/web/pilot-intake-ru/server` without changing the endpoint path, MVP scope, or public landing boundary.
+D. Repo checks CI for Go / web checks after PHP removal — pending.
+E. Branch protection / PR-only governance checklist — pending.
+F. PII / abuse / retention guardrails for pilot lead capture — pending.
+G. Root onboarding surface map cleanup — pending if gaps remain after source-of-truth alignment.
 
 ## Next bounded slices
 
@@ -91,7 +92,7 @@ Status: DONE (Phase 8K). `docs/ops/DECISIONS.md` D-0053 records the target-domai
 Goal:
 - validate the rewritten business-first `apps/web/pilot-intake-ru` landing locally, then publish it at `https://pilot.goalrail.ru/` on the operator-managed SSH static server per D-0055 + D-0053 + D-0051, without expanding product scope and without weakening D-0047
 
-Status: **SERVER UPLOAD COMPLETE — DNS/TLS PENDING.** The business-first landing rewrite and D-0056 lead-capture patch passed local typecheck / test / build / boundary audit / local preview smoke. The operator-managed SSH server was bootstrapped, Nginx static serving was configured, timestamped releases were uploaded with `rsync`, and `/srv/goalrail/pilot/current` was atomically switched to the latest release. The narrow PHP-FPM `/api/pilot-lead` endpoint was installed, D-0059 Resend HTTPS transport was configured with `skill7.dev` sender and server-local API key, Postfix relay through Netangels remains a temporary fallback, server-local direct recipient override was configured outside the repo, lead JSONL append and duplicate suppression passed, the daily digest cron was installed for 07:00 GMT+3 previous-day summaries, digest dry-run smoke passed, a one-off digest send was accepted/relayed after envelope-sender alignment, a one-off digest send via Resend reported `transport=resend`, and server-local endpoint smoke passed. Server-side TLS provisioning, renew dry-run, and server-local HTTPS smoke succeeded, but public DNS for `pilot.goalrail.ru` still resolves to a different upstream, so public HTTPS smoke does not reach the deployed landing. The public site is not live yet.
+Status: **SERVER UPLOAD COMPLETE — DNS/TLS PENDING.** The business-first landing rewrite and D-0056 lead-capture patch passed local typecheck / test / build / boundary audit / local preview smoke. The operator-managed SSH server was bootstrapped, Nginx static serving was configured, timestamped releases were uploaded with `rsync`, and `/srv/goalrail/pilot/current` was atomically switched to the latest release. The earlier server install used a narrow PHP-FPM `/api/pilot-lead` endpoint; D-0062 migrates active repo source to a Go sidecar, while live server migration remains a separate operator-managed deployment step. D-0059 Resend HTTPS transport was configured with `skill7.dev` sender and server-local API key, local Postfix/sendmail remains a fallback where available, server-local direct recipient override was configured outside the repo, lead JSONL append and duplicate suppression passed, the daily digest cron was installed for 07:00 GMT+3 previous-day summaries, digest dry-run smoke passed, a one-off digest send was accepted/relayed after envelope-sender alignment, a one-off digest send via Resend reported `transport=resend`, and server-local endpoint smoke passed. Server-side TLS provisioning, renew dry-run, and server-local HTTPS smoke succeeded, but public DNS for `pilot.goalrail.ru` still resolves to a different upstream, so public HTTPS smoke does not reach the deployed landing. The public site is not live yet.
 
 Immediate next action:
 - correct external DNS for `pilot.goalrail.ru` so the public domain reaches the operator-managed server, then rerun resolver comparison, public HTTPS smoke, `/api/pilot-lead` smoke, and deployed-surface boundary checks. Update ops docs to `LIVE VIA SSH STATIC SERVER — SMOKE PASSED` only after HTTPS and endpoint smoke pass.

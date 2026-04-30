@@ -430,6 +430,8 @@ Active public URL:
 - Main code: `apps/web/pilot-intake-ru/src/App.tsx`
 - Styles: `apps/web/pilot-intake-ru/src/App.css`
 - Tests: `apps/web/pilot-intake-ru/src/App.test.tsx`
+- Lead endpoint/digest sidecar: `apps/web/pilot-intake-ru/server` (Go,
+  landing-owned, not the core `apps/server` product API)
 
 Quality gates:
 - typecheck: `npm run pilot-intake-ru:typecheck` from `apps/web`

@@ -1569,3 +1569,26 @@ Rationale:
 - Prevent lost leads when mail transport fails.
 - Keep JSONL as the narrow backup source.
 - Preserve D-0056/D-0058/D-0059 boundaries.
+
+## D-0062 — Pilot lead capture runtime migrates from PHP to Go sidecar
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- The RU pilot lead-capture runtime will use a narrow Go sidecar under
+  `apps/web/pilot-intake-ru/server`.
+- PHP-FPM is treated as an accidental transitional implementation detail, not a
+  product runtime direction.
+- D-0061 reliability semantics are preserved.
+- The sidecar remains landing-owned and must not be folded into the core
+  `apps/server` product API.
+- This does not approve analytics, CRM, Google Sheets, cookies, sessions,
+  queue, database, LLM/API, repo integration, runtime execution, gate, proof,
+  or broad backend platform.
+- CI should later cover Go + web only, not PHP.
+
+Rationale:
+- Avoid institutionalizing PHP in repo CI/runtime.
+- Keep runtime language aligned with the existing Go direction.
+- Preserve the narrow public landing backend exception without expanding
+  product scope.

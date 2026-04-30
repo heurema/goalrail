@@ -33,19 +33,27 @@ operator-managed server in public resolver / public-smoke verification. Server-s
 HTTPS provisioning succeeded, but public HTTPS still reaches a different upstream,
 so the live smoke does not pass yet.
 
-D-0056 now allows one narrow lead-capture exception for this surface:
-`POST /api/pilot-lead` validates an email, dedupes already-submitted
-addresses by the local JSONL lead log, sends a notification to
-the configured notification recipient, and appends a local JSONL lead record
-for first submissions. D-0057 allows a server-local direct recipient override;
-`hello@goalrail.dev` remains the public/manual contact address. D-0058 allows
-a server-local daily digest from the same JSONL lead log at 07:00 GMT+3 for the
-previous local calendar day; empty days send no digest. D-0059 allows Resend
-HTTPS transport through `skill7.dev` for the same notification/digest emails;
-the API key is configured server-locally at `/srv/goalrail/pilot/backend/resend-api-key.local`.
-The endpoint and daily digest cron have been installed and smoke-tested server-locally. No
-analytics, tracking, Google Sheets, CRM, cookies, sessions, user accounts,
-LLM/API calls, repo integration, runtime execution, broad backend platform, CI/CD workflow, deploy script, or
+D-0056 allows one narrow lead-capture exception for this surface:
+`POST /api/pilot-lead` validates an email, dedupes already-submitted addresses
+by the local JSONL lead log, sends a notification to the configured
+notification recipient, and records local JSONL notification status. D-0057
+allows a server-local direct recipient override; `hello@goalrail.dev` remains
+the public/manual contact address. D-0058 allows a server-local daily digest
+from the same JSONL lead log at 07:00 GMT+3 for the previous local calendar day;
+empty days send no digest. D-0059 allows Resend HTTPS transport through
+`skill7.dev` for the same notification/digest emails; the API key is configured
+server-locally at `/srv/goalrail/pilot/backend/resend-api-key.local`. D-0061
+keeps failed notification attempts retryable without allowing concurrent
+duplicate notification attempts. D-0062 migrates the active repo source for the
+endpoint/digest from transitional PHP-FPM scripts to a narrow Go sidecar under
+`apps/web/pilot-intake-ru/server`.
+
+The previous operator-managed server install used PHP-FPM; migrating that live
+server wiring to the Go sidecar is a separate operator-managed deployment step
+unless performed and recorded separately. This repository change does not claim
+that public deployment has already migrated. No analytics, tracking, Google
+Sheets, CRM, cookies, sessions, user accounts, LLM/API calls, repo integration,
+runtime execution, broad backend platform, CI/CD workflow, deploy script, or
 repo-side server config was added.
 
 ## Decision basis
@@ -70,11 +78,11 @@ repo-side server config was added.
   the old technical interactive walkthrough as the primary public RU landing.
 - D-0056 remains in force: the RU landing may use only the narrow
   `POST /api/pilot-lead` endpoint for lead capture. It may validate email,
-  dedupe by the local JSONL lead log, send notification email, append a local
-  JSONL record for first submissions, and use local Postfix relay through
-  `skvmrelay.netangels.ru:25`; it does not approve analytics, tracking, CRM,
-  Google Sheets, cookies, sessions, user accounts, LLM/API calls, repo
-  integration, runtime execution, or a broad backend platform.
+  dedupe by the local JSONL lead log, send notification email, write/update
+  local JSONL notification status, and use local sendmail/Postfix fallback
+  where available; it does not approve analytics, tracking, CRM, Google Sheets,
+  cookies, sessions, user accounts, LLM/API calls, repo integration, runtime
+  execution, or a broad backend platform.
 - D-0057 remains in force: form notifications may use a server-local direct
   recipient override at `/srv/goalrail/pilot/backend/lead-recipient.local`. The
   override is operator-managed server state and the actual recipient address is
@@ -86,6 +94,12 @@ repo-side server config was added.
 - D-0059 remains in force: Resend may be used only as a narrow HTTPS
   transactional transport for the existing lead notification/digest emails,
   with sender `GoalRail Pilot <noreply@skill7.dev>` and a server-local API key.
+- D-0061 remains in force: `notification_failed` remains retryable, while
+  `received` / `pending` are in-flight states and missing / unknown statuses are
+  conservative duplicates.
+- D-0062 remains in force: active repo source for the endpoint/digest is a
+  landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not PHP-FPM
+  and not the core `apps/server` product API.
 
 ## Target surface
 
@@ -99,15 +113,17 @@ repo-side server config was added.
 | Release root | `/srv/goalrail/pilot/releases` |
 | Current symlink | `/srv/goalrail/pilot/current` |
 | Lead endpoint | `POST /api/pilot-lead` |
-| Endpoint source | `apps/web/pilot-intake-ru/server/pilot-lead.php` |
-| Server endpoint path | `/srv/goalrail/pilot/backend/pilot-lead.php` |
+| Endpoint source | `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru` + `apps/web/pilot-intake-ru/server/internal/pilotlead` |
+| Server endpoint mode | Go sidecar `serve` mode on an operator-managed local listen address |
 | Local lead log | `/srv/goalrail/pilot/leads/leads.jsonl` |
 | Direct recipient override | `/srv/goalrail/pilot/backend/lead-recipient.local` (server-local, not committed) |
-| Daily digest script | `/srv/goalrail/pilot/backend/pilot-leads-digest.php` |
-| Shared mail helper | `/srv/goalrail/pilot/backend/pilot-mail.php` |
+| Daily digest source | Go sidecar `digest` mode |
+| Shared mail transport | Go sidecar mail transport; Resend HTTPS when configured, local sendmail/Postfix fallback where available |
 | Resend API key | `/srv/goalrail/pilot/backend/resend-api-key.local` (server-local, not committed) |
 | Resend sender | `GoalRail Pilot <noreply@skill7.dev>` |
 | Daily digest cron | `/etc/cron.d/goalrail-pilot-leads-digest`; `04:00 UTC` / `07:00 GMT+3`, previous GMT+3 day, only if leads exist |
+| Repo migration status | Active repo source migrated from PHP to Go sidecar per D-0062 |
+| Operator server migration status | Separate deployment/wiring step; not claimed by this repo PR |
 | Current deployment status | **SERVER UPLOAD COMPLETE — DNS/TLS PENDING** |
 | Public live status | **NOT LIVE** until DNS points to the operator-managed server and HTTPS public smoke passes |
 
@@ -128,8 +144,10 @@ in this repository.
 - Remote OS path used `apt`; unsupported-distro blocker did not occur.
 - Minimal static-hosting packages installed or confirmed present: `nginx`,
   `certbot`, `python3-certbot-nginx`, `rsync`, `ufw`.
-- Lead-capture packages installed or confirmed present after D-0056: `php-fpm`,
-  `postfix`, and local `mail` support.
+- Previous D-0056 lead-capture packages installed or confirmed present:
+  `php-fpm`, `postfix`, and local `mail` support. D-0062 changes repo source
+  to Go; replacing those server packages/wiring is a separate operator-managed
+  deployment step.
 - Deploy user exists.
 - Deploy SSH directory and authorized keys were ensured idempotently.
 - SSH hardening drop-in was installed with:
@@ -152,8 +170,10 @@ in this repository.
 
 - `/etc/nginx/sites-available/pilot.goalrail.ru` was created/updated on the
   server as a static config rooted at `/srv/goalrail/pilot/current`.
-- After D-0056, the same site config includes a narrow `location = /api/pilot-lead`
-  routed to PHP-FPM for `/srv/goalrail/pilot/backend/pilot-lead.php`.
+- After D-0056, the same site config included a narrow
+  `location = /api/pilot-lead` routed to PHP-FPM. After D-0062, the generic
+  target shape is reverse proxying that same path to the local Go sidecar; the
+  actual server migration/config is not committed here.
 - The site is enabled through `sites-enabled`.
 - `nginx -t` passed.
 - Nginx reload succeeded.
@@ -194,8 +214,13 @@ behavior:
 - Duplicate email submissions return success with a distinct duplicate message,
   without appending a new JSONL line or sending another notification.
 - Direct fallback remains `mailto:hello@goalrail.dev`.
-- PHP endpoint source lives at `apps/web/pilot-intake-ru/server/pilot-lead.php`.
-- Server endpoint is installed at `/srv/goalrail/pilot/backend/pilot-lead.php`.
+- Active repo endpoint/digest source lives in the Go module at
+  `apps/web/pilot-intake-ru/server`.
+- The command entrypoint is
+  `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru`.
+- Server deployment of the Go sidecar is a separate operator-managed wiring
+  step; this repo doc does not record live server hostnames, listen addresses,
+  process managers, or reverse-proxy config.
 - Local lead log path is `/srv/goalrail/pilot/leads/leads.jsonl`.
 - Public/manual contact remains `hello@goalrail.dev`.
 - Notification recipient may be a server-local direct override from
@@ -204,17 +229,18 @@ behavior:
 - If the override file is absent, notification recipient falls back to
   `hello@goalrail.dev`.
 - Notification subject starts with `Пилот`.
-- A shared PHP mail helper prefers Resend HTTPS transport when
-  `/srv/goalrail/pilot/backend/resend-api-key.local` exists.
+- The Go sidecar prefers Resend HTTPS transport when
+  `/srv/goalrail/pilot/backend/resend-api-key.local` exists and is valid.
 - Resend sender: `GoalRail Pilot <noreply@skill7.dev>`.
 - Resend API key status: configured on the operator-managed server; the key
   value is not recorded in repo docs/code/tests/logs.
 - Resend transport smoke: PASS. A one-off current-day digest reported
   `transport=resend` and included the expected non-empty lead count.
-- If the Resend API key is absent, the helper temporarily falls back to PHP
-  `mail()` / Postfix with `noreply@pilot.goalrail.ru` as envelope sender.
-- Local Postfix is configured with relayhost `[skvmrelay.netangels.ru]:25` and
-  loopback-only inbound interfaces.
+- If the Resend API key is absent, the sidecar falls back to local
+  sendmail/Postfix where available, with `noreply@pilot.goalrail.ru` as the
+  envelope sender.
+- Previous server-local Postfix wiring is operator-managed server state and is
+  not committed here.
 - UFW remains limited to SSH, HTTP, and HTTPS; inbound SMTP was not opened.
 - Server-local endpoint smoke: valid JSON lead returned HTTP 200 / `{ ok: true }`.
 - Server-local duplicate smoke: HTTP 200 / `{ ok: true, duplicate: true }`,
@@ -222,37 +248,41 @@ behavior:
 - Server-local invalid email smoke: HTTP 400.
 - Server-local honeypot smoke: HTTP 400.
 - Lead log append smoke: PASS.
-- Email send smoke: PHP `mail()` accepted the notification and the local mail
-  queue was empty after the smoke. Cloudflare Email Routing classified
-  form-generated `noreply@pilot.goalrail.ru` mail to `hello@goalrail.dev` as
-  `unauthenticatedForward`, so D-0057 direct recipient override is used for
-  form notifications while `hello@goalrail.dev` remains the manual address.
+- Previous email send smoke: PHP `mail()` accepted the notification and the
+  local mail queue was empty after the smoke. Cloudflare Email Routing
+  classified form-generated `noreply@pilot.goalrail.ru` mail to
+  `hello@goalrail.dev` as `unauthenticatedForward`, so D-0057 direct recipient
+  override is used for form notifications while `hello@goalrail.dev` remains
+  the manual address. This is historical server evidence, not a claim that PHP
+  remains active repo source after D-0062.
 - Direct recipient override status: configured on the operator-managed server
   with a validated operator-provided address; the address is not committed to
   repo docs/code/tests.
 - Direct recipient override smoke: HTTP 200 / `{ ok: true, duplicate: false }`,
   lead log appended, and local mail queue remained empty after relay handoff.
 
-Generic Nginx location shape for this endpoint:
+Generic reverse-proxy shape for this endpoint after the Go sidecar migration:
 
 ```nginx
 location = /api/pilot-lead {
     limit_except POST { deny all; }
-    include fastcgi_params;
-    fastcgi_param SCRIPT_FILENAME /srv/goalrail/pilot/backend/pilot-lead.php;
-    fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+    proxy_pass http://<local-go-sidecar-upstream>;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 ```
 
-The PHP-FPM socket version is server-specific and must be detected during
-wiring. The committed repository does not contain server hostnames, IPs, SSH
-users, ports, key paths, credentials, live Nginx config, or direct recipient
-email addresses.
+The concrete process manager, listen address, reverse-proxy config, and restart
+policy are operator-managed server wiring and are intentionally not committed.
+The committed repository does not contain server hostnames, IPs, SSH users,
+ports, key paths, credentials, live Nginx config, or direct recipient email
+addresses.
 
 Daily digest behavior:
 
-- Script source: `apps/web/pilot-intake-ru/server/pilot-leads-digest.php`.
-- Server path: `/srv/goalrail/pilot/backend/pilot-leads-digest.php`.
+- Source: Go sidecar `digest` mode from `apps/web/pilot-intake-ru/server`.
+- Binary command: `goalrail-pilot-intake-ru digest`.
 - Cron path: `/etc/cron.d/goalrail-pilot-leads-digest` on the operator-managed
   server.
 - Schedule: `04:00 UTC`, equivalent to `07:00 GMT+3`.
@@ -263,9 +293,11 @@ Daily digest behavior:
 - New JSONL rows include `submitted_at` (UTC), `submitted_at_local`, and
   `submitted_date_local` for digest/audit readability. Existing rows without
   local fields are converted from `submitted_at` when the digest is generated.
-- Server install status: PASS. `pilot-lead.php` and `pilot-leads-digest.php`
-  are installed under `/srv/goalrail/pilot/backend/` and passed `php -l` on the
-  operator-managed server.
+- Previous server install status: PASS. `pilot-lead.php` and
+  `pilot-leads-digest.php` were installed under `/srv/goalrail/pilot/backend/`
+  and passed `php -l` on the operator-managed server before D-0062. The repo
+  source has now migrated to Go; server migration to the Go binary remains a
+  separate deployment/wiring step unless performed separately.
 - Cron install status: PASS. `/etc/cron.d/goalrail-pilot-leads-digest` runs the
   digest as `www-data` at `04:00 UTC`.
 - Digest dry-run smoke: PASS. A non-empty local-day dry run reported that a
@@ -290,12 +322,12 @@ Run from `apps/web`:
   `--localstorage-file was provided without a valid path`.
 - `npm run pilot-intake-ru:build` — PASS.
 - `apps/web/pilot-intake-ru/dist/index.html` exists.
-- `apps/web/pilot-intake-ru/server/pilot-lead.php` exists and is the deployable
-  PHP endpoint source.
-- `apps/web/pilot-intake-ru/server/pilot-leads-digest.php` exists and is the
-  deployable PHP daily digest source.
-- `apps/web/pilot-intake-ru/server/pilot-mail.php` exists and is the deployable
-  shared PHP mail transport helper.
+- `apps/web/pilot-intake-ru/server/go.mod` exists for the landing-owned Go
+  sidecar.
+- `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru` exists as the
+  Go command source for `serve` and `digest` modes.
+- `apps/web/pilot-intake-ru/server/internal/pilotlead` contains the JSONL store,
+  HTTP handler, mail transport, digest behavior, and tests for the sidecar.
 - `apps/web/pilot-intake-ru/dist/assets/` exists.
 - Built canonical is `https://pilot.goalrail.ru/`.
 - Built `dist/` contains no `pilot.goalrail.dev` references.
@@ -315,7 +347,8 @@ Run from `apps/web`:
 - Failed requests: 0.
 - Non-static requests on load: 0.
 - Contact form visible. Valid-submit behavior is covered by Vitest with a
-  mocked `/api/pilot-lead` response; local Vite preview does not run PHP-FPM.
+  mocked `/api/pilot-lead` response; local Vite preview does not run the Go
+  sidecar.
 
 ### Boundary audit
 
