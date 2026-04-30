@@ -1,4 +1,27 @@
+---
+id: goalrail_landing_copy
+title: Goalrail Landing Copy — Historical Technical Draft
+kind: public_entry
+authority: reference
+status: superseded
+owner: product
+truth_surfaces:
+  - historical_technical_landing_draft
+lifecycle: retired
+review_after: 2026-07-19
+supersedes: []
+superseded_by: docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md
+related_docs:
+  - docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md
+  - docs/ops/DECISIONS.md
+---
 # Goalrail — Landing Copy
+
+> **Historical / superseded.**
+> This is a historical technical landing draft for prompt / agent handoff framing.
+> It is **not** the current public RU landing canon.
+> Current canon: `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`.
+> Implementation surface: `apps/web/pilot-intake-ru`.
 
 > Версия для первого публичного экрана.
 > Не классический лендинг. Не SaaS-homepage. Не dashboard.

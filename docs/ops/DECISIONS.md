@@ -1529,3 +1529,22 @@ Consequences:
   notification/digest, and keep direct mailto fallback.
 - If Resend delivery fails, the app should surface the same generic
   `mail_unavailable` error and the local JSONL log remains the backup source.
+
+## D-0060 — Stabilization tranche precedes new feature slices
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- Before new feature expansion, Goalrail will stabilize source-of-truth docs,
+  public lead-capture reliability, repo checks, PR/mainline governance, and
+  pilot lead PII / abuse / retention guardrails.
+- This does not expand MVP scope.
+- This does not approve analytics, CRM, Google Sheets, LLM/API calls, repo
+  integration, runtime execution, broad backend platform, or new public product
+  claims.
+
+Rationale:
+- Real public/web/governance implementation now exists.
+- Repo protection must catch up with implementation reality.
+- Public lead capture must not lose leads or create unmanaged PII risk.
+- Source-of-truth docs must be aligned before further implementation.

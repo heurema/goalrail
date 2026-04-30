@@ -57,8 +57,8 @@ related_docs:
 
 ### 5. Product shape and external posture
 22. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-23. `docs/product/GOALRAIL_LANDING_COPY.md`
-24. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+23. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+24. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
 25. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
 26. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
 27. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
@@ -149,8 +149,8 @@ related_docs:
 
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
-- `GOALRAIL_LANDING_COPY.md` — first landing / entry scene copy
-- `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — canonical copy/governance reference for the RU business-first pilot landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
+- `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — current public RU pilot landing canon and copy/governance reference for the business-first landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
+- `GOALRAIL_LANDING_COPY.md` — historical / superseded technical prompt-handoff landing draft; not current public landing canon and not the source of truth for `apps/web/pilot-intake-ru`
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
 - `GOALRAIL_COMPETITOR_MAP.md` — reference market map
 - `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture

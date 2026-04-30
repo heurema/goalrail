@@ -52,8 +52,11 @@
 
 ## Current repository state
 
-This repository is currently documentation-first, with a local mocked demo under `apps/web/demo-change-packet/`.
-Placeholders in `apps/`, `scripts/`, and `.github/` are not evidence of implementation unless `docs/ops/COMPONENTS.yaml` and code reality agree.
+This repository remains canon-first and docs-governed.
+Early implementation prototypes exist under `apps/server`, `apps/cli`, and `apps/web`.
+`apps/web/pilot-intake-ru` is a public RU pilot landing surface with narrow D-0056/D-0058/D-0059 backend exceptions for lead capture, daily digest, and Resend mail transport.
+No runner, gate, proof generation, auth, repo checkout, runtime execution, tracker sync, broad backend platform, analytics, CRM, or product web loop exists yet.
+Paths in `apps/`, `scripts/`, and `.github/` are evidence of implementation only when `docs/ops/COMPONENTS.yaml` and code reality agree.
 
 ## Punk publishing tasks
 
