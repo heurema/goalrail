@@ -1548,3 +1548,24 @@ Rationale:
 - Repo protection must catch up with implementation reality.
 - Public lead capture must not lose leads or create unmanaged PII risk.
 - Source-of-truth docs must be aligned before further implementation.
+
+## D-0061 — Pilot lead capture records notification status before duplicate suppression
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- RU pilot lead capture stores notification status in the local JSONL log.
+- Duplicate suppression applies to successfully notified or legacy processed
+  rows, not to failed notification attempts.
+- Retry after `notification_failed` is allowed.
+- In-flight `received` / `pending` attempts are not treated as fresh retries,
+  to avoid concurrent duplicate notifications for the same email.
+- Browser-facing errors remain generic.
+- This does not approve analytics, CRM, Google Sheets, cookies, sessions,
+  queue, database, LLM/API, repo integration, runtime execution, or broad
+  backend platform.
+
+Rationale:
+- Prevent lost leads when mail transport fails.
+- Keep JSONL as the narrow backup source.
+- Preserve D-0056/D-0058/D-0059 boundaries.

@@ -388,14 +388,20 @@ no-repo / no-LLM boundaries except for the narrow D-0056 lead-capture
 exception. D-0055 records that the business-first Founding Pilot landing
 supersedes the technical interactive walkthrough as the primary public RU
 landing. D-0056 allows only `POST /api/pilot-lead` on the operator-managed RU
-server: validate email, dedupe already-submitted addresses by the local JSONL
-lead log, send notification, and append a local JSONL lead record for first
-submissions. D-0057 allows a server-local direct recipient override at
+server: validate email, write local JSONL lead state with notification status,
+attempt notification, mark successful notifications as `notified`, and keep
+`notification_failed` rows retryable. In-flight `received` / `pending` rows are
+not treated as fresh retries, so near-simultaneous submissions do not start
+concurrent duplicate notifications. Duplicate suppression applies to
+successfully notified addresses and legacy rows without `notification_status`,
+which are treated conservatively as already processed. D-0057 allows a
+server-local direct recipient override at
 `/srv/goalrail/pilot/backend/lead-recipient.local`; if it is absent, the
 endpoint falls back to `hello@goalrail.dev`. The public/manual contact email
-remains `hello@goalrail.dev`. These decisions do not approve analytics, tracking, cookies,
-sessions, CRM, Google Sheets, user accounts, LLM/API calls, repo integration,
-runtime execution, or a broad backend platform.
+remains `hello@goalrail.dev`. Browser-facing mail errors stay generic as
+`mail_unavailable`. These decisions do not approve analytics, tracking,
+cookies, sessions, CRM, Google Sheets, user accounts, LLM/API calls, repo
+integration, runtime execution, or a broad backend platform.
 
 ## E. Technical walkthrough demotion
 
@@ -439,4 +445,10 @@ claim requires a separate decision. D-0058 allows only a server-local daily
 lead digest from the existing JSONL log at 07:00 GMT+3 for the previous local
 calendar day; empty days send no digest. D-0059 allows only a narrow Resend
 HTTPS transactional email transport for these lead notifications/digests, using
-`skill7.dev` as the configured sending domain and a server-local API key.
+`skill7.dev` as the configured sending domain and a server-local API key. The
+lead endpoint may record `notification_status`, `notification_attempted_at`,
+`notification_updated_at`, successful `notification_transport`, and generic
+`notification_error: "mail_unavailable"` in the local JSONL backup log; it must
+keep `notification_failed` retryable while treating `received` / `pending` as
+in-flight for new submissions, and must not expose transport exception details
+to the browser.
