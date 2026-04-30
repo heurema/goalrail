@@ -60,6 +60,39 @@ func recordLocalDate(record LeadRecord, loc *time.Location) string {
 	return parsed.In(loc).Format("2006-01-02")
 }
 
+func retentionLocalDate(record LeadRecord, loc *time.Location) (string, bool) {
+	if record == nil {
+		return "", false
+	}
+	if stored, ok := parseLocalDate(stringValue(record, "submitted_date_local")); ok {
+		return stored, true
+	}
+
+	submittedAt := stringValue(record, "submitted_at")
+	if submittedAt == "" {
+		return "", false
+	}
+	parsed, err := time.Parse(time.RFC3339, submittedAt)
+	if err != nil {
+		return "", false
+	}
+	if loc == nil {
+		loc = MoscowLocation()
+	}
+	return parsed.In(loc).Format("2006-01-02"), true
+}
+
+func parseLocalDate(value string) (string, bool) {
+	if !digestDatePattern.MatchString(value) {
+		return "", false
+	}
+	parsed, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return "", false
+	}
+	return parsed.Format("2006-01-02"), true
+}
+
 func recordLocalTime(record LeadRecord, loc *time.Location) string {
 	stored := stringValue(record, "submitted_at_local")
 	if stored != "" {

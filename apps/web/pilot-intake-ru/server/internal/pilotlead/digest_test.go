@@ -19,6 +19,7 @@ func TestDigestIncludesCorrectLocalDateRows(t *testing.T) {
 		"submitted_at_local":   "2026-04-29T23:30:00+03:00",
 		"submitted_date_local": "2026-04-29",
 		"notification_status":  StatusNotified,
+		"user_agent":           "legacy-agent",
 	})
 	appendRawRecord(t, logPath, LeadRecord{
 		"email":                "failed@example.com",
@@ -68,6 +69,9 @@ func TestDigestIncludesCorrectLocalDateRows(t *testing.T) {
 	}
 	if !strings.Contains(mailer.lastBody, "failed@example.com") {
 		t.Fatalf("digest body missed failed target row: %s", mailer.lastBody)
+	}
+	if strings.Contains(mailer.lastBody, "legacy-agent") {
+		t.Fatalf("digest body included legacy user-agent: %s", mailer.lastBody)
 	}
 }
 

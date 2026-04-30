@@ -389,19 +389,22 @@ exception. D-0055 records that the business-first Founding Pilot landing
 supersedes the technical interactive walkthrough as the primary public RU
 landing. D-0056 allows only `POST /api/pilot-lead` on the operator-managed RU
 server: validate email, write local JSONL lead state with notification status,
-attempt notification, mark successful notifications as `notified`, and keep
-`notification_failed` rows retryable. In-flight `received` / `pending` rows are
-not treated as fresh retries, so near-simultaneous submissions do not start
-concurrent duplicate notifications. Duplicate suppression applies to
-successfully notified addresses and legacy rows without `notification_status`,
-which are treated conservatively as already processed. D-0057 allows a
-server-local direct recipient override at
+attempt notification, mark successful notifications as `notified`, keep
+`notification_failed` rows retryable, omit user-agent from new rows, and keep
+local retention / purge as an operator lifecycle. In-flight `received` /
+`pending` rows are not treated as fresh retries, so near-simultaneous
+submissions do not start concurrent duplicate notifications. Duplicate
+suppression applies to successfully notified addresses and legacy rows without
+`notification_status`, which are treated conservatively as already processed.
+D-0057 allows a server-local direct recipient override at
 `/srv/goalrail/pilot/backend/lead-recipient.local`; if it is absent, the
 endpoint falls back to `hello@goalrail.dev`. The public/manual contact email
 remains `hello@goalrail.dev`. Browser-facing mail errors stay generic as
-`mail_unavailable`. These decisions do not approve analytics, tracking,
-cookies, sessions, CRM, Google Sheets, user accounts, LLM/API calls, repo
-integration, runtime execution, or a broad backend platform.
+`mail_unavailable`. These decisions do not approve analytics, tracking, IP
+logging, fingerprinting, cookies, sessions, CRM, Google Sheets, user accounts,
+LLM/API calls, repo integration, runtime execution, or a broad backend
+platform. Reverse-proxy rate limiting is a deployment guardrail, not
+analytics/tracking.
 
 ## E. Technical walkthrough demotion
 
@@ -452,5 +455,7 @@ lead endpoint may record `notification_status`, `notification_attempted_at`,
 `notification_updated_at`, successful `notification_transport`, and generic
 `notification_error: "mail_unavailable"` in the local JSONL backup log; it must
 keep `notification_failed` retryable while treating `received` / `pending` as
-in-flight for new submissions, and must not expose transport exception details
-to the browser.
+in-flight for new submissions, must not store user-agent/IP/cookie/session
+tracking fields in new lead rows, must support local retention/purge as an
+operator lifecycle, and must not expose transport exception details to the
+browser.

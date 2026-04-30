@@ -69,7 +69,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"email":                email,
 		"source":               truncateDefault(field(data, "source"), "ru-pilot", 80),
 		"page":                 truncateDefault(field(data, "page"), "pilot.goalrail.ru", 120),
-		"user_agent":           truncate(r.UserAgent(), 240),
 	}
 
 	stored, err := s.Store.PrepareAttempt(record, email, now)

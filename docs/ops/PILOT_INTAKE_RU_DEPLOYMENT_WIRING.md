@@ -46,7 +46,10 @@ server-locally at `/srv/goalrail/pilot/backend/resend-api-key.local`. D-0061
 keeps failed notification attempts retryable without allowing concurrent
 duplicate notification attempts. D-0062 migrates the active repo source for the
 endpoint/digest from transitional PHP-FPM scripts to a narrow Go sidecar under
-`apps/web/pilot-intake-ru/server`.
+`apps/web/pilot-intake-ru/server`. D-0065 minimizes new lead records by
+omitting user-agent, adds a local dry-run-first JSONL purge command with a
+90-day default retention window, and keeps reverse-proxy rate limiting as
+operator-managed deployment posture rather than repo-side server config.
 
 The previous operator-managed server install used PHP-FPM; migrating that live
 server wiring to the Go sidecar is a separate operator-managed deployment step
@@ -54,7 +57,7 @@ unless performed and recorded separately. This repository change does not claim
 that public deployment has already migrated. No analytics, tracking, Google
 Sheets, CRM, cookies, sessions, user accounts, LLM/API calls, repo integration,
 runtime execution, broad backend platform, CI/CD deployment workflow, deploy
-script, or repo-side server config was added.
+script, concrete reverse-proxy config, or repo-side server config was added.
 
 ## Decision basis
 
@@ -79,10 +82,12 @@ script, or repo-side server config was added.
 - D-0056 remains in force: the RU landing may use only the narrow
   `POST /api/pilot-lead` endpoint for lead capture. It may validate email,
   dedupe by the local JSONL lead log, send notification email, write/update
-  local JSONL notification status, and use local sendmail/Postfix fallback
-  where available; it does not approve analytics, tracking, CRM, Google Sheets,
-  cookies, sessions, user accounts, LLM/API calls, repo integration, runtime
-  execution, or a broad backend platform.
+  local JSONL notification status, omit user-agent from new lead records,
+  provide a local retention purge command, and use local sendmail/Postfix
+  fallback where available; it does not approve analytics, tracking, IP
+  logging, fingerprinting, CRM, Google Sheets, cookies, sessions, user
+  accounts, LLM/API calls, repo integration, runtime execution, or a broad
+  backend platform.
 - D-0057 remains in force: form notifications may use a server-local direct
   recipient override at `/srv/goalrail/pilot/backend/lead-recipient.local`. The
   override is operator-managed server state and the actual recipient address is
@@ -100,6 +105,9 @@ script, or repo-side server config was added.
 - D-0062 remains in force: active repo source for the endpoint/digest is a
   landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not PHP-FPM
   and not the core `apps/server` product API.
+- D-0065 remains in force: new lead rows omit user-agent, local JSONL retention
+  purge is dry-run by default, and abuse rate limiting is an operator-managed
+  reverse-proxy guardrail without committed Nginx/Caddy config.
 
 ## Target surface
 
@@ -222,6 +230,16 @@ behavior:
   step; this repo doc does not record live server hostnames, listen addresses,
   process managers, or reverse-proxy config.
 - Local lead log path is `/srv/goalrail/pilot/leads/leads.jsonl`.
+- New JSONL rows omit user-agent and do not replace it with IP logging, hashed
+  IP, cookies, sessions, fingerprinting, or browser identifiers.
+- Local retention command examples:
+  - `goalrail-pilot-intake-ru purge` — dry-run by default.
+  - `GOALRAIL_PURGE_CONFIRM=yes goalrail-pilot-intake-ru purge` — confirmed
+    local purge.
+- Retention defaults to 90 days and may be overridden with
+  `GOALRAIL_LEAD_RETENTION_DAYS` in the bounded 7–365 day range.
+- Reverse-proxy rate limiting should be applied by the operator-managed web
+  server / reverse proxy; no concrete Nginx/Caddy config is committed here.
 - Public/manual contact remains `hello@goalrail.dev`.
 - Notification recipient may be a server-local direct override from
   `/srv/goalrail/pilot/backend/lead-recipient.local`; the configured value is
@@ -291,8 +309,10 @@ Daily digest behavior:
 - One or more leads: one digest email is sent to the same D-0057 recipient
   selection.
 - New JSONL rows include `submitted_at` (UTC), `submitted_at_local`, and
-  `submitted_date_local` for digest/audit readability. Existing rows without
-  local fields are converted from `submitted_at` when the digest is generated.
+  `submitted_date_local` for digest/audit readability, and omit `user_agent`.
+  Existing rows without local fields are converted from `submitted_at` when the
+  digest is generated; legacy rows with `user_agent` remain readable but the
+  digest does not include user-agent.
 - Previous server install status: PASS. `pilot-lead.php` and
   `pilot-leads-digest.php` were installed under `/srv/goalrail/pilot/backend/`
   and passed `php -l` on the operator-managed server before D-0062. The repo
@@ -325,9 +345,10 @@ Run from `apps/web`:
 - `apps/web/pilot-intake-ru/server/go.mod` exists for the landing-owned Go
   sidecar.
 - `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru` exists as the
-  Go command source for `serve` and `digest` modes.
+  Go command source for `serve`, `digest`, and `purge` modes.
 - `apps/web/pilot-intake-ru/server/internal/pilotlead` contains the JSONL store,
-  HTTP handler, mail transport, digest behavior, and tests for the sidecar.
+  HTTP handler, mail transport, digest behavior, purge behavior, and tests for
+  the sidecar.
 - `apps/web/pilot-intake-ru/dist/assets/` exists.
 - Built canonical is `https://pilot.goalrail.ru/`.
 - Built `dist/` contains no `pilot.goalrail.dev` references.

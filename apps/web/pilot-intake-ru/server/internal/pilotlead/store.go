@@ -14,6 +14,12 @@ import (
 
 var ErrLeadLogUnavailable = errors.New("lead log unavailable")
 
+type PurgeResult struct {
+	Purged          int
+	Kept            int
+	KeptUnknownDate int
+}
+
 type Store struct {
 	Path string
 	Now  func() time.Time
@@ -140,6 +146,60 @@ func (s *Store) DigestRecords(date string, loc *time.Location) ([]LeadRecord, er
 		records = append(records, entry.record)
 	}
 	return records, nil
+}
+
+func (s *Store) PurgeBeforeLocalDate(cutoff string, loc *time.Location, dryRun bool) (PurgeResult, error) {
+	if _, ok := parseLocalDate(cutoff); !ok {
+		return PurgeResult{}, fmt.Errorf("%w: invalid_cutoff", ErrLeadLogUnavailable)
+	}
+	if loc == nil {
+		loc = time.UTC
+	}
+
+	file, err := os.OpenFile(s.Path, os.O_RDWR, 0)
+	if errors.Is(err, os.ErrNotExist) {
+		return PurgeResult{}, nil
+	}
+	if err != nil {
+		return PurgeResult{}, fmt.Errorf("%w: %v", ErrLeadLogUnavailable, err)
+	}
+	defer file.Close()
+
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		return PurgeResult{}, fmt.Errorf("%w: %v", ErrLeadLogUnavailable, err)
+	}
+	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+
+	entries, err := readEntries(file)
+	if err != nil {
+		return PurgeResult{}, err
+	}
+
+	result := PurgeResult{}
+	keptEntries := make([]leadEntry, 0, len(entries))
+	for _, entry := range entries {
+		date, ok := retentionLocalDate(entry.record, loc)
+		if !ok {
+			result.Kept++
+			result.KeptUnknownDate++
+			keptEntries = append(keptEntries, entry)
+			continue
+		}
+		if date < cutoff {
+			result.Purged++
+			continue
+		}
+		result.Kept++
+		keptEntries = append(keptEntries, entry)
+	}
+
+	if dryRun {
+		return result, nil
+	}
+	if err := rewriteEntries(file, keptEntries); err != nil {
+		return PurgeResult{}, err
+	}
+	return result, nil
 }
 
 type leadStateKind string
