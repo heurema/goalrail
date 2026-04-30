@@ -248,6 +248,9 @@ describe('Pilot intake RU business-first landing', () => {
     const honeypot = document.querySelector('input[name="website"]');
     expect(honeypot).toBeInTheDocument();
     expect(honeypot).toHaveAttribute('tabindex', '-1');
+    expect(honeypot).toHaveAttribute('aria-hidden', 'true');
+    expect(honeypot).toHaveAttribute('inert');
+    expect(screen.queryByText('Не заполняйте это поле')).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Рабочая почта'), 'not-an-email');
     await user.click(screen.getByRole('button', { name: 'Отправить заявку' }));
