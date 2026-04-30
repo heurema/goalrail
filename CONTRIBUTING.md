@@ -121,6 +121,7 @@ By doing so, you certify the terms in `DCO.md`.
 Please use the PR template and make sure it includes:
 
 - the goal / intent of the change;
+- the no-code alternative and why code or repository automation is needed;
 - explicit scope boundaries;
 - component impact;
 - documentation impact;
@@ -129,6 +130,33 @@ Please use the PR template and make sure it includes:
 
 A PR may be asked to change shape, split into smaller pieces, or add docs before
 merge if it moves faster than the documented product and architecture canon.
+
+## PR Intake Gate
+
+Goalrail uses a deterministic PR Intake Gate before ordinary code review.
+
+The gate is conservative for external contributors and low-friction for trusted repository authors:
+
+- it runs from trusted base-branch code through `pull_request_target`;
+- it reads PR metadata, changed-file metadata, and author repository permission through the GitHub API;
+- it does not checkout, import, install, or execute PR head code;
+- trusted authors with `admin`, `maintain`, or `write` repository permission pass intake automatically;
+- if permission lookup is unavailable, `OWNER`, `MEMBER`, and `COLLABORATOR` author associations pass as a fallback;
+- external PRs are labeled with `intake/pass`, `intake/needs-linked-intent`, `intake/needs-more-context`, `intake/no-code-alternative`, or `intake/high-risk`;
+- first-time external contributors also receive `intake/first-time-contributor`;
+- label and bot-comment updates are best-effort visibility aids; the check verdict comes from deterministic PR metadata evaluation;
+- maintainers can accept a non-high-risk external PR with `intake/accepted-for-pr`;
+- maintainers can bypass intake with `maintainer/override-intake` when they explicitly accept responsibility.
+
+Direct external PRs are intended only for small, low-risk edits. Non-trivial external PRs should link an Issue, Discussion, decision, ADR, research note, or Goalrail work artifact and fill the PR template sections for `Goal / intent`, `ComponentImpact`, `DocImpact`, `Rule Stack checklist`, `Validation / proof`, `No-code alternative`, and `Why code is needed`.
+
+External PRs touching high-risk surfaces such as `.github/**`, `apps/**`, `scripts/**`, `tools/**`, `docs/product/**`, `docs/ops/**`, `docs/adr/**`, `docs/research/**`, `.goalrail/**`, `.punk/**`, dependency files, deployments, migrations, auth, security, crypto, or runtime behavior require maintainer attention before ordinary code review.
+
+Local deterministic check:
+
+```bash
+python3 tools/pr-intake-gate/test_pr_intake_gate.py
+```
 
 ## Reporting bugs
 
