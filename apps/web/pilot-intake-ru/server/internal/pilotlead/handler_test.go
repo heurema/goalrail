@@ -61,6 +61,9 @@ func TestHandlerNewLeadMailSuccessStoresNotified(t *testing.T) {
 	if got := stringValue(records[0], "notification_error"); got != "" {
 		t.Fatalf("notification_error = %q, want empty", got)
 	}
+	if _, ok := records[0]["user_agent"]; ok {
+		t.Fatalf("new lead record contains user_agent: %#v", records[0]["user_agent"])
+	}
 }
 
 func TestHandlerNewLeadMailFailureStoresGenericFailure(t *testing.T) {

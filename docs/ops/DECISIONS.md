@@ -1648,3 +1648,24 @@ Rationale:
 - Direct mainline changes should not bypass PR checks.
 - Branch protection must catch up with implementation reality without blocking
   the repo on unavailable reviewers.
+
+## D-0065 — Pilot lead capture minimizes PII and adds local retention guardrails
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- New RU pilot lead records no longer store user-agent.
+- The Go sidecar supports a local JSONL purge command with safe dry-run
+  default.
+- Default retention is 90 days with a bounded override from 7 to 365 days.
+- Reverse-proxy rate limiting is an operator-managed deployment guardrail, not
+  repo-side server config.
+- This does not approve analytics, CRM, Google Sheets, cookies, sessions, IP
+  logging, fingerprinting, database, queue, LLM/API, repo integration, runtime
+  execution, gate, proof, CAPTCHA-by-default, or broad backend platform.
+
+Rationale:
+- Reduce unnecessary PII.
+- Give the operator a local lifecycle for JSONL lead data.
+- Avoid turning the landing endpoint into a tracking or lead-management
+  platform.

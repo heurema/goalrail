@@ -38,8 +38,12 @@ func main() {
 		if err := pilotlead.RunDigest(context.Background(), config, store, mailer, os.Stdout); err != nil {
 			os.Exit(1)
 		}
+	case "purge":
+		if err := pilotlead.RunPurge(config, store, os.Stdout); err != nil {
+			os.Exit(1)
+		}
 	default:
-		_, _ = fmt.Fprintf(os.Stderr, "usage: %s [serve|digest]\n", os.Args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "usage: %s [serve|digest|purge]\n", os.Args[0])
 		os.Exit(2)
 	}
 }
