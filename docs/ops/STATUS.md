@@ -30,8 +30,10 @@ slice. The pilot lead reliability patch now exists as the narrow D-0061
 repo-side update. The repo-side D-0062 Go sidecar migration replaces the active
 PHP source for the narrow pilot endpoint/digest in repository source; it does
 not claim the operator-managed public server has migrated from the earlier
-PHP-FPM install. CI hardening, branch protection, and PII / abuse / retention
-guardrails are still follow-up work and must not be claimed as implemented yet.
+PHP-FPM install. The D-0063 repo checks CI slice now adds Go + web PR checks
+only and intentionally excludes PHP and deployment automation. Branch
+protection and PII / abuse / retention guardrails are still follow-up work and
+must not be claimed as implemented yet.
 
 ## Current state
 
@@ -193,7 +195,9 @@ The project currently has:
 - the Contract approval boundary is documented in ADR-0017 and implemented as `ContractDraft(ready_for_approval) -> ApprovedContract`; approval does not start execution, write `GateDecision`, or create `Proof`
 - the WorkItem planning boundary is documented in ADR-0018 and implemented as an in-memory `ApprovedContract(approved) -> WorkItem(planned)` prototype; WorkItem planning is not assignment, claiming, execution, `Run`, runner checkout, receipt, `GateDecision`, or `Proof`
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
-- `.github/` now contains real contributor/community health surfaces and the docs-check workflow
+- `.github/` now contains real contributor/community health surfaces, docs-check
+  and PR intake gate workflows, and D-0063 repo checks CI for Go + web surfaces
+  only
 - `scripts/` remains parked for future bounded implementation slices
 
 ## What is not real yet

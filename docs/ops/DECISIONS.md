@@ -1592,3 +1592,30 @@ Rationale:
 - Keep runtime language aligned with the existing Go direction.
 - Preserve the narrow public landing backend exception without expanding
   product scope.
+
+## D-0063 — Repo checks CI covers Go and web surfaces only
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- Add a repository checks workflow for pull requests that covers current Go and
+  web implementation surfaces.
+- Go checks cover `apps/server`, `apps/cli`, and
+  `apps/web/pilot-intake-ru/server` with `go test ./...`, `go vet ./...`, and
+  `go build` for each canonical command.
+- Web checks cover `apps/web` with `npm ci`, then workspace `typecheck`,
+  `test`, and `build` scripts.
+- PHP is not part of CI because D-0062 removed PHP as active repo runtime for
+  the RU pilot lead surface.
+- This is a repository quality gate only; it does not add deploy automation,
+  branch-protection changes, server configuration, secrets, analytics, CRM,
+  Google Sheets, cookies, sessions, database, queue, LLM/API, repo integration,
+  runtime execution, gate, proof, or broad backend platform.
+
+Rationale:
+- Real Go and web implementation surfaces now exist and need repeatable PR
+  checks before further stabilization work.
+- The previous PHP runtime was removed, so PHP checks would institutionalize a
+  no-longer-active runtime.
+- CI should catch build/test regressions without changing deployment mode or
+  expanding product scope.
