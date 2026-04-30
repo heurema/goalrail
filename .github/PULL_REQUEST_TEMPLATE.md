@@ -25,6 +25,14 @@ Mark all that apply.
 
 What problem does this PR solve? Why now?
 
+## No-code alternative
+
+Could this be solved with docs, configuration, process, or existing workflow instead of code?
+
+## Why code is needed
+
+If this PR adds or changes code/tooling/workflows, why is a repository change the right boundary?
+
 ## Scope
 
 In:
