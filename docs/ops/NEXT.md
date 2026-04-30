@@ -35,11 +35,11 @@ claims.
 Ordered follow-up slices:
 
 A. Documentation source-of-truth alignment — docs-only slice; complete when the landing canon, stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
-B. Pilot lead capture reliability patch.
-C. Repo checks CI for Go / web / PHP syntax.
-D. Branch protection / PR-only governance checklist.
-E. PII / abuse / retention guardrails for pilot lead capture.
-F. Root onboarding surface map cleanup if not completed in this PR.
+B. Pilot lead capture reliability patch — D-0061 runtime + docs slice; completed by local JSONL notification status and retry-after-failure semantics without concurrent duplicate notification attempts.
+C. Repo checks CI for Go / web / PHP syntax — pending.
+D. Branch protection / PR-only governance checklist — pending.
+E. PII / abuse / retention guardrails for pilot lead capture — pending.
+F. Root onboarding surface map cleanup — pending if gaps remain after source-of-truth alignment.
 
 ## Next bounded slices
 
