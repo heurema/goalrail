@@ -570,18 +570,18 @@ function App() {
                 }}
                 required
               />
-              <label className="honeypotField" htmlFor="pilot-website" aria-hidden="true">
-                Не заполняйте это поле
-                <input
-                  id="pilot-website"
-                  name="website"
-                  type="text"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={honeypot}
-                  onChange={(event) => setHoneypot(event.currentTarget.value)}
-                />
-              </label>
+              <input
+                className="honeypotField"
+                id="pilot-website"
+                name="website"
+                type="text"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                inert
+                value={honeypot}
+                onChange={(event) => setHoneypot(event.currentTarget.value)}
+              />
               <button className="ghostButton" type="submit" disabled={leadSubmitState === 'submitting'}>
                 {leadSubmitState === 'submitting' ? 'Отправляем…' : 'Отправить заявку'}
               </button>
