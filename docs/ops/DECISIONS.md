@@ -1619,3 +1619,32 @@ Rationale:
   no-longer-active runtime.
 - CI should catch build/test regressions without changing deployment mode or
   expanding product scope.
+
+## D-0064 — Main branch protection requires current repo checks
+Date: 2026-04-30
+Status: accepted
+
+Decision:
+- `main` is protected through GitHub branch protection.
+- Required checks:
+  - `docs-check`
+  - `pr-intake-gate`
+  - `go (apps/cli)`
+  - `go (apps/server)`
+  - `go (apps/web/pilot-intake-ru/server)`
+  - `web workspaces`
+- Branch must be up to date before merge.
+- Admin enforcement is enabled.
+- Force pushes and branch deletion are disabled.
+- Required approving reviews are not enabled in this slice to avoid
+  solo-maintainer deadlock.
+- Signed commits / DCO automation, merge queue, dependency automation, secret
+  scanning, and broader security automation remain separate possible slices.
+- This does not add product behavior, deployment automation, repo integration,
+  runtime execution, gate, proof, analytics, CRM, or broad backend platform.
+
+Rationale:
+- Existing runnable surfaces now have deterministic checks.
+- Direct mainline changes should not bypass PR checks.
+- Branch protection must catch up with implementation reality without blocking
+  the repo on unavailable reviewers.
