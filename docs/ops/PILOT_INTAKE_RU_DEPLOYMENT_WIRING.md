@@ -53,8 +53,8 @@ server wiring to the Go sidecar is a separate operator-managed deployment step
 unless performed and recorded separately. This repository change does not claim
 that public deployment has already migrated. No analytics, tracking, Google
 Sheets, CRM, cookies, sessions, user accounts, LLM/API calls, repo integration,
-runtime execution, broad backend platform, CI/CD workflow, deploy script, or
-repo-side server config was added.
+runtime execution, broad backend platform, CI/CD deployment workflow, deploy
+script, or repo-side server config was added.
 
 ## Decision basis
 

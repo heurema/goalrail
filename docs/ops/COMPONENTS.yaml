@@ -224,7 +224,8 @@ components:
       - .github/PULL_REQUEST_TEMPLATE.md
       - .github/pr-intake-gate.yml
       - .github/workflows/pr-intake-gate.yml
+      - .github/workflows/repo-checks.yml
       - .github/CODEOWNERS
       - .github/ISSUE_TEMPLATE
     public_claim_allowed: true
-    notes: Open-source and contributor-experience baseline is real; this governs licensing, DCO signoff, community docs, issue/PR intake, and the deterministic PR Intake Gate workflow/policy. The reusable gate engine lives in `heurema/repo-governance`, not in Goalrail runtime code.
+    notes: Open-source and contributor-experience baseline is real; this governs licensing, DCO signoff, community docs, issue/PR intake, the deterministic PR Intake Gate workflow/policy, and D-0063 repo checks CI for current Go + web surfaces only. The repo checks workflow runs Go test/vet/build for apps/server, apps/cli, and apps/web/pilot-intake-ru/server plus apps/web npm ci and workspace typecheck/test/build. It intentionally does not add PHP CI, deployment automation, server config, secrets, analytics, CRM, database, queue, LLM/API, repo integration, runtime execution, gate, proof, or broad backend platform. The reusable PR intake gate engine lives in `heurema/repo-governance`, not in Goalrail runtime code.

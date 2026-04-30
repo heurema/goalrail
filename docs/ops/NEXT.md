@@ -37,7 +37,7 @@ Ordered follow-up slices:
 A. Documentation source-of-truth alignment — docs-only slice; complete when the landing canon, stabilization decision, AGENTS, README, STATUS, and NEXT are aligned.
 B. Pilot lead capture reliability patch — D-0061 runtime + docs slice; completed by local JSONL notification status and retry-after-failure semantics without concurrent duplicate notification attempts.
 C. Pilot lead runtime migration to Go sidecar — D-0062 runtime-language consolidation slice; replace the transitional PHP source under `apps/web/pilot-intake-ru/server` without changing the endpoint path, MVP scope, or public landing boundary.
-D. Repo checks CI for Go / web checks after PHP removal — pending.
+D. Repo checks CI for Go + web surfaces only — D-0063 quality-gate slice; add PR checks for current Go modules and `apps/web` workspaces only, with no PHP and no deployment automation.
 E. Branch protection / PR-only governance checklist — pending.
 F. PII / abuse / retention guardrails for pilot lead capture — pending.
 G. Root onboarding surface map cleanup — pending if gaps remain after source-of-truth alignment.
