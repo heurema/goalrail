@@ -48,6 +48,46 @@ high_risk_path_globs:
   - '**/crypto/**'
   - '**/migrations/**'
 
+instruction_surface:
+  description: 'Goalrail docs and metadata that AI agents may read as instructions, product canon, operating truth, or PR governance context'
+  path_globs:
+    - 'README.md'
+    - 'README.ru.md'
+    - 'AGENTS.md'
+    - '**/AGENTS.md'
+    - 'CLAUDE.md'
+    - '**/CLAUDE.md'
+    - 'GEMINI.md'
+    - '**/GEMINI.md'
+    - 'SKILL.md'
+    - '**/SKILL.md'
+    - '.github/PULL_REQUEST_TEMPLATE.md'
+    - '.github/pull_request_template.md'
+    - '.github/pull_request_template/**'
+    - '.github/ISSUE_TEMPLATE/**'
+    - '.github/copilot-instructions.md'
+    - '.github/pr-intake-gate.yml'
+    - 'docs/INDEX.md'
+    - 'docs/product/**'
+    - 'docs/ops/**'
+    - 'docs/adr/**'
+    - 'docs/research/**'
+    - '.goalrail/**'
+
+prompt_injection:
+  enabled: true
+  description: 'detect obvious prompt-injection-like additions in external PRs before ordinary review'
+  text_path_globs:
+    - '*.md'
+    - '**/*.md'
+    - '*.mdx'
+    - '**/*.mdx'
+    - '*.txt'
+    - '**/*.txt'
+    - '.github/**'
+    - 'docs/**'
+    - '.goalrail/**'
+
 trusted_authors:
   permissions:
     - 'admin'
