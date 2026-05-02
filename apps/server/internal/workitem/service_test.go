@@ -137,6 +137,36 @@ func TestServiceAppendsWorkItemCreatedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceGetsPlannedWorkItem(t *testing.T) {
+	service, contracts, approvedContracts, _, _ := planningService(t)
+	approved := validApprovedContract()
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
+	created, err := service.PlanContract(context.Background(), approved.ContractID)
+	if err != nil {
+		t.Fatalf("PlanContract() error = %v", err)
+	}
+
+	got, err := service.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.ID != created.ID {
+		t.Fatalf("Get() id = %q, want %q", got.ID, created.ID)
+	}
+	if got.ContractID != approved.ContractID || got.ApprovedContractID != approved.ID {
+		t.Fatalf("Get() ids = %q/%q, want contract/approved ids", got.ContractID, got.ApprovedContractID)
+	}
+}
+
+func TestServiceGetUnknownWorkItemReturnsNotFound(t *testing.T) {
+	service, _, _, _, _ := planningService(t)
+
+	_, err := service.Get(context.Background(), "missing")
+	if !errors.Is(err, workitem.ErrWorkItemNotFound) {
+		t.Fatalf("Get() error = %v, want ErrWorkItemNotFound", err)
+	}
+}
+
 func TestServiceRejectsDuplicatePlanning(t *testing.T) {
 	service, contracts, approvedContracts, _, events := planningService(t)
 	approved := validApprovedContract()

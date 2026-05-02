@@ -502,6 +502,56 @@ func (s *PostgresTransactionalApprovedContractStore) CreateWithEvent(ctx context
 	})
 }
 
+type PostgresTransactionalWorkItemStore struct {
+	base       *PostgresWorkItemStore
+	events     *PostgresEventLog
+	transactor postgresTransactor
+}
+
+func NewPostgresTransactionalWorkItemStore(pool *pgxpool.Pool) *PostgresTransactionalWorkItemStore {
+	db := newPostgresDB(pool)
+	return newPostgresTransactionalWorkItemStore(
+		NewPostgresWorkItemStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		pgxpoolTransactor{pool: pool},
+	)
+}
+
+func newPostgresTransactionalWorkItemStore(base *PostgresWorkItemStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalWorkItemStore {
+	return &PostgresTransactionalWorkItemStore{
+		base:       base,
+		events:     events,
+		transactor: transactor,
+	}
+}
+
+func (s *PostgresTransactionalWorkItemStore) Create(ctx context.Context, item spine.WorkItem) error {
+	return s.base.Create(ctx, item)
+}
+
+func (s *PostgresTransactionalWorkItemStore) Get(ctx context.Context, id spine.WorkItemID) (spine.WorkItem, bool, error) {
+	return s.base.Get(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemStore) GetByApprovedContractID(ctx context.Context, id spine.ApprovedContractID) (spine.WorkItem, bool, error) {
+	return s.base.GetByApprovedContractID(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemStore) CreateWithEvent(ctx context.Context, item spine.WorkItem, event spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.Create(txCtx, item); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func withPostgresTx(ctx context.Context, pool *pgxpool.Pool, opts pgx.TxOptions, fn postgresTxFunc) error {
 	if _, ok := postgresTxFromContext(ctx); ok {
 		return fn(ctx)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -178,6 +179,16 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 				return errors.New("time value is not time")
 			}
 			*target = value
+		case *pgtype.Int4:
+			if r.values[i] == nil {
+				*target = pgtype.Int4{Valid: false}
+				continue
+			}
+			value, ok := r.values[i].(int32)
+			if !ok {
+				return errors.New("int4 value is not int32")
+			}
+			*target = pgtype.Int4{Int32: value, Valid: true}
 		case *spine.IntakeID:
 			value, ok := r.values[i].(string)
 			if !ok {

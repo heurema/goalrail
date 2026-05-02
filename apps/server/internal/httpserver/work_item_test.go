@@ -68,6 +68,62 @@ func TestPostContractTasksReturnsPlannedWorkItem(t *testing.T) {
 	}
 }
 
+func TestGetTaskReturnsPlannedWorkItem(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	createResponse := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+	if createResponse.code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d: %s", createResponse.code, http.StatusCreated, createResponse.body)
+	}
+	var created spine.WorkItem
+	decodeJSON(t, createResponse.body, &created)
+
+	getResponse := doJSON(t, server.router, http.MethodGet, "/v1/tasks/"+string(created.ID), "")
+	if getResponse.code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
+	}
+	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
+		if strings.Contains(getResponse.body, hiddenField) {
+			t.Fatalf("response includes hidden field %s", hiddenField)
+		}
+	}
+	for _, forbiddenField := range []string{"\"run_id\"", "\"receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(getResponse.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var got spine.WorkItem
+	decodeJSON(t, getResponse.body, &got)
+	if got.ID != created.ID {
+		t.Fatalf("id = %q, want %q", got.ID, created.ID)
+	}
+	if got.ContractID != approved.ContractID || got.ApprovedContractID != approved.ID {
+		t.Fatalf("contract ids = %q/%q, want %q/%q", got.ContractID, got.ApprovedContractID, approved.ContractID, approved.ID)
+	}
+	if got.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("status = %q, want planned", got.Status)
+	}
+}
+
+func TestGetTaskUnknownReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodGet, "/v1/tasks/missing", "")
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "not_found" {
+		t.Fatalf("error code = %q, want not_found", body.Error.Code)
+	}
+}
+
 func TestPostContractTasksAppendsWorkItemCreatedEvent(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)

@@ -274,6 +274,43 @@ CREATE INDEX approved_contracts_goal_id_idx
 CREATE INDEX approved_contracts_contract_id_idx
     ON approved_contracts(contract_id);
 
+CREATE TABLE work_items (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    scope JSONB NOT NULL DEFAULT '[]'::JSONB,
+    acceptance_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    proof_expectation_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    status TEXT NOT NULL,
+    owner_hint TEXT NOT NULL DEFAULT '',
+    order_index INTEGER NULL,
+    source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT work_items_approved_contract_id_unique UNIQUE (approved_contract_id),
+    CONSTRAINT work_items_status_check CHECK (status IN ('planned'))
+);
+
+CREATE INDEX work_items_organization_created_at_idx
+    ON work_items(organization_id, created_at);
+
+CREATE INDEX work_items_project_created_at_idx
+    ON work_items(project_id, created_at);
+
+CREATE INDEX work_items_contract_id_idx
+    ON work_items(contract_id);
+
+CREATE INDEX work_items_approved_contract_id_idx
+    ON work_items(approved_contract_id);
+
+CREATE INDEX work_items_repo_binding_id_idx
+    ON work_items(repo_binding_id);
+
 CREATE TABLE events (
     id UUID PRIMARY KEY,
     event_sequence BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
@@ -308,6 +345,12 @@ DROP INDEX IF EXISTS events_entity_sequence_idx;
 DROP INDEX IF EXISTS events_project_sequence_idx;
 DROP INDEX IF EXISTS events_organization_sequence_idx;
 DROP TABLE IF EXISTS events;
+DROP INDEX IF EXISTS work_items_repo_binding_id_idx;
+DROP INDEX IF EXISTS work_items_approved_contract_id_idx;
+DROP INDEX IF EXISTS work_items_contract_id_idx;
+DROP INDEX IF EXISTS work_items_project_created_at_idx;
+DROP INDEX IF EXISTS work_items_organization_created_at_idx;
+DROP TABLE IF EXISTS work_items;
 DROP INDEX IF EXISTS approved_contracts_contract_id_idx;
 DROP INDEX IF EXISTS approved_contracts_goal_id_idx;
 DROP INDEX IF EXISTS approved_contracts_contract_seed_id_idx;

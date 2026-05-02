@@ -13,6 +13,7 @@ import (
 
 type WorkItemService interface {
 	PlanContract(context.Context, spine.ContractID) (spine.WorkItem, error)
+	Get(context.Context, spine.WorkItemID) (spine.WorkItem, error)
 }
 
 type WorkItemHandler struct {
@@ -38,6 +39,16 @@ func (h *WorkItemHandler) PlanContractTasks(w http.ResponseWriter, r *http.Reque
 	RespondJSON(w, http.StatusCreated, item)
 }
 
+func (h *WorkItemHandler) GetTask(w http.ResponseWriter, r *http.Request) {
+	item, err := h.service.Get(r.Context(), spine.WorkItemID(r.PathValue("id")))
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, item)
+}
+
 func (h *WorkItemHandler) respondServiceError(w http.ResponseWriter, err error) {
 	var completenessErr *workitem.CompletenessError
 	switch {
@@ -55,6 +66,8 @@ func (h *WorkItemHandler) respondServiceError(w http.ResponseWriter, err error) 
 		RespondError(w, http.StatusConflict, "invalid_state", "approved contract is not approved")
 	case errors.Is(err, workitem.ErrAlreadyPlanned):
 		RespondError(w, http.StatusConflict, "already_planned", "approved contract already planned")
+	case errors.Is(err, workitem.ErrWorkItemNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "task not found")
 	default:
 		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
 	}

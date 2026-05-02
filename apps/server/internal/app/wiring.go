@@ -51,7 +51,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
 	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
 	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
-	workItemStore := store.NewWorkItemStore()
+	var workItemStore workitem.Store = store.NewWorkItemStore()
 	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
@@ -68,6 +68,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		contractSeedStore = store.NewPostgresTransactionalContractSeedStore(pool)
 		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
 		approvedContractStore = store.NewPostgresTransactionalApprovedContractStore(pool)
+		workItemStore = store.NewPostgresTransactionalWorkItemStore(pool)
 		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}
@@ -105,6 +106,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		ContractSubmit:            http.HandlerFunc(contractHandler.SubmitForApproval),
 		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
 		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
+		TaskGet:                   http.HandlerFunc(workItemHandler.GetTask),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
