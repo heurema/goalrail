@@ -100,7 +100,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
 		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
 		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
-		ApprovedContractWorkItems: http.HandlerFunc(workItemHandler.PlanApprovedContract),
+		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

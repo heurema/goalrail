@@ -101,7 +101,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ContractDraftUpdates:      probeRoute("contract_draft_updates"),
 		ContractDraftReady:        probeRoute("contract_draft_ready"),
 		ContractDraftApprove:      probeRoute("contract_draft_approve"),
-		ApprovedContractWorkItems: probeRoute("approved_contract_work_items"),
+		ContractTasks:             probeRoute("contract_tasks"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
 	})
@@ -124,7 +124,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "contract_draft_update", method: http.MethodPatch, path: "/v1/contract-drafts/draft-1", wantRoute: "contract_draft_updates"},
 		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/submissions", wantRoute: "contract_draft_ready"},
 		{name: "contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approvals", wantRoute: "contract_draft_approve"},
-		{name: "work_item_plan", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks", wantRoute: "approved_contract_work_items"},
+		{name: "work_item_plan", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks", wantRoute: "contract_tasks"},
 	}
 
 	for _, tt := range tests {
@@ -160,7 +160,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ContractDraftUpdates:      probeRoute("contract_draft_updates"),
 		ContractDraftReady:        probeRoute("contract_draft_ready"),
 		ContractDraftApprove:      probeRoute("contract_draft_approve"),
-		ApprovedContractWorkItems: probeRoute("approved_contract_work_items"),
+		ContractTasks:             probeRoute("contract_tasks"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
 	})
@@ -265,7 +265,7 @@ func newRouter(
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
 		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
 		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
-		ApprovedContractWorkItems: http.HandlerFunc(workItemHandler.PlanApprovedContract),
+		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

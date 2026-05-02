@@ -155,10 +155,6 @@ func (s *Service) PlanContract(ctx context.Context, contractID spine.ContractID)
 	return workItem, nil
 }
 
-func (s *Service) PlanApprovedContract(ctx context.Context, approvedContractID spine.ApprovedContractID) (spine.WorkItem, error) {
-	return s.PlanContract(ctx, spine.ContractID(approvedContractID))
-}
-
 func workItemFromApprovedContract(id spine.WorkItemID, approved spine.ApprovedContract, createdAt time.Time) spine.WorkItem {
 	return spine.WorkItem{
 		ID:                   id,

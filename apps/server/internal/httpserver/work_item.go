@@ -23,7 +23,7 @@ func NewWorkItemHandler(service WorkItemService) *WorkItemHandler {
 	return &WorkItemHandler{service: service}
 }
 
-func (h *WorkItemHandler) PlanApprovedContract(w http.ResponseWriter, r *http.Request) {
+func (h *WorkItemHandler) PlanContractTasks(w http.ResponseWriter, r *http.Request) {
 	if err := validateOptionalEmptyJSON(r.Body); err != nil {
 		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
 		return

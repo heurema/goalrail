@@ -13,7 +13,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 )
 
-func TestPostApprovedContractWorkItemsReturnsPlannedWorkItem(t *testing.T) {
+func TestPostContractTasksReturnsPlannedWorkItem(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
@@ -68,7 +68,7 @@ func TestPostApprovedContractWorkItemsReturnsPlannedWorkItem(t *testing.T) {
 	}
 }
 
-func TestPostApprovedContractWorkItemsAppendsWorkItemCreatedEvent(t *testing.T) {
+func TestPostContractTasksAppendsWorkItemCreatedEvent(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
@@ -114,7 +114,7 @@ func TestPostApprovedContractWorkItemsAppendsWorkItemCreatedEvent(t *testing.T) 
 	assertNoForbiddenWorkItemSideEffects(t, server.events.Events())
 }
 
-func TestPostApprovedContractWorkItemsUnknownApprovedContractReturnsNotFound(t *testing.T) {
+func TestPostContractTasksUnknownContractReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
 	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/missing/tasks", "")
@@ -132,7 +132,7 @@ func TestPostApprovedContractWorkItemsUnknownApprovedContractReturnsNotFound(t *
 	}
 }
 
-func TestPostApprovedContractWorkItemsApprovedSnapshotIDDoesNotPlan(t *testing.T) {
+func TestPostContractTasksApprovedSnapshotIDDoesNotPlan(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
@@ -142,7 +142,7 @@ func TestPostApprovedContractWorkItemsApprovedSnapshotIDDoesNotPlan(t *testing.T
 	}
 }
 
-func TestPostApprovedContractWorkItemsRejectsNotApprovedState(t *testing.T) {
+func TestPostContractTasksRejectsNotApprovedState(t *testing.T) {
 	server := testServer(t)
 	approved := validHTTPApprovedContract()
 	approved.State = spine.ApprovedContractState("draft")
@@ -166,7 +166,7 @@ func TestPostApprovedContractWorkItemsRejectsNotApprovedState(t *testing.T) {
 	}
 }
 
-func TestPostApprovedContractWorkItemsRejectsNonApprovedContract(t *testing.T) {
+func TestPostContractTasksRejectsNonApprovedContract(t *testing.T) {
 	server := testServer(t)
 	seed := createContractSeed(t, server)
 
@@ -185,7 +185,7 @@ func TestPostApprovedContractWorkItemsRejectsNonApprovedContract(t *testing.T) {
 	}
 }
 
-func TestPostApprovedContractWorkItemsRejectsIncompleteApprovedContract(t *testing.T) {
+func TestPostContractTasksRejectsIncompleteApprovedContract(t *testing.T) {
 	tests := []struct {
 		name   string
 		mutate func(*spine.ApprovedContract)
@@ -230,7 +230,7 @@ func TestPostApprovedContractWorkItemsRejectsIncompleteApprovedContract(t *testi
 	}
 }
 
-func TestPostApprovedContractWorkItemsRejectsDuplicatePlanning(t *testing.T) {
+func TestPostContractTasksRejectsDuplicatePlanning(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 	first := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
@@ -253,7 +253,7 @@ func TestPostApprovedContractWorkItemsRejectsDuplicatePlanning(t *testing.T) {
 	}
 }
 
-func TestPostApprovedContractWorkItemsDoesNotMutateApprovedContract(t *testing.T) {
+func TestPostContractTasksDoesNotMutateApprovedContract(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 	before, ok, err := server.approvedContracts.Get(context.Background(), approved.ID)
@@ -281,7 +281,7 @@ func TestPostApprovedContractWorkItemsDoesNotMutateApprovedContract(t *testing.T
 	}
 }
 
-func TestPostApprovedContractWorkItemsRejectsUnknownJSONField(t *testing.T) {
+func TestPostContractTasksRejectsUnknownJSONField(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
