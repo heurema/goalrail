@@ -20,6 +20,7 @@ related_docs:
   - docs/PROJECT_SPINE_SCHEMA.md
   - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
   - docs/adr/ADR-0020-public-contract-identity-boundary.md
+  - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -222,6 +223,24 @@ vocabulary uses product-facing resources such as `contracts`, `plans`,
 `proposals`, and `tasks`; internal domain names such as `ApprovedContract`,
 `WorkItem`, and `WorkItemPlanProposal` do not need to appear verbatim in public
 paths.
+
+Target planning lease direction:
+- `WorkItemPlan(state=queued)` is the typed planning queue item
+- future `WorkItemPlanLease` records reserve one planning job for one worker
+  attempt
+- workers should pull the next available planning job through a future
+  `POST /v1/plans/leases` API route; leasing mutates server-owned state and is
+  not a read-only `GET`
+- the API server owns lease selection, lease state, token validation, proposal
+  persistence, and accepted WorkItem materialization
+- workers compute proposals outside the API server and submit them back through
+  the API; workers must not read or write Postgres directly
+- this is a typed `WorkItemPlan` queue direction, not a generic queue platform
+  with `queue_jobs`, job kinds, JSONB payloads, worker registry, broad retry
+  machinery, or dead-letter queue semantics
+- the lease API is not implemented yet; current proposal submission may still be
+  manual and future implementation should require lease proof for worker
+  proposal submission
 
 ### Layer 4 — Delivery Runtime
 Produces:

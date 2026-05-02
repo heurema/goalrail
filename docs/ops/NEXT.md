@@ -25,6 +25,7 @@
 - ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, execution, Run, receipt, gate, and proof remain later boundaries
 - ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, while worker/controller/runner execution-side implementation remains deferred
 - ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary and public `/v1/contracts` lifecycle façade routes
+- ADR-0021 now defines the typed WorkItemPlan pull lease boundary: future planning workers should create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, no generic queue platform is accepted, and the lease API is not implemented yet
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -101,6 +102,27 @@ Done means:
   `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
 - no analytics, tracking, cookies, sessions, CRM, repo integration, LLM/API,
   runtime execution, gate, proof, or broad backend platform is added
+
+## Next backend bounded slice
+
+### Typed WorkItemPlan pull lease boundary implementation
+
+Goal:
+- implement the smallest API-server-owned typed planning lease protocol around
+  existing `WorkItemPlan` state.
+
+Done means:
+- future `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, and
+  `PATCH /v1/plans/leases/{id}` are implemented against typed
+  `WorkItemPlanLease` state
+- the API server atomically selects one eligible queued or expired-leased plan,
+  creates one active lease, marks the plan leased, stores only a lease token
+  hash, and returns the raw token only once
+- proposal submission requires valid lease proof once the lease protocol lands
+- v0 scheduling stays FIFO with lazy expiry and no cron
+- no generic `queue_jobs`, worker registry, checkout, execution, assignment,
+  claiming, queue/outbox/runtime registry, `Run`, receipt, `GateDecision`, or
+  `Proof` is added
 
 ## Next bounded slices
 
@@ -247,13 +269,13 @@ Done means:
 
 ### Server follow-up slices
 
-1. Worker/controller lease protocol design
-   - define the smallest server-owned planning lease/reconciliation protocol
-     after the public plan/proposal/acceptance API
+1. Typed WorkItemPlan pull lease boundary implementation
+   - implement the smallest server-owned typed planning lease protocol around
+     existing `WorkItemPlan` / `WorkItemPlanProposal` state
    - keep repo-aware planning computation behind worker / controller / runner
      boundaries
-   - do not implement checkout, execution, receipt, queue, outbox, gate, proof,
-     runtime registry, assignment, or claiming
+   - do not implement checkout, execution, receipt, generic queue, outbox, gate,
+     proof, runtime registry, assignment, or claiming
 2. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
