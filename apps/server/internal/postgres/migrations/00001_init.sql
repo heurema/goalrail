@@ -131,6 +131,75 @@ CREATE INDEX goals_repo_binding_created_at_idx
 CREATE INDEX goals_intake_id_idx
     ON goals(intake_id);
 
+CREATE TABLE clarification_requests (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    state TEXT NOT NULL,
+    reason_codes JSONB NOT NULL DEFAULT '[]'::JSONB,
+    questions JSONB NOT NULL DEFAULT '[]'::JSONB,
+    target JSONB NOT NULL DEFAULT '{}'::JSONB,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT clarification_requests_state_check CHECK (state IN ('open', 'answered'))
+);
+
+CREATE UNIQUE INDEX clarification_requests_one_open_per_goal_idx
+    ON clarification_requests(goal_id)
+    WHERE state = 'open';
+
+CREATE INDEX clarification_requests_organization_created_at_idx
+    ON clarification_requests(organization_id, created_at);
+
+CREATE INDEX clarification_requests_project_created_at_idx
+    ON clarification_requests(project_id, created_at);
+
+CREATE INDEX clarification_requests_repo_binding_id_idx
+    ON clarification_requests(repo_binding_id);
+
+CREATE INDEX clarification_requests_goal_id_idx
+    ON clarification_requests(goal_id);
+
+CREATE INDEX clarification_requests_state_idx
+    ON clarification_requests(state);
+
+CREATE TABLE clarification_answers (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    clarification_request_id UUID NOT NULL REFERENCES clarification_requests(id) ON DELETE CASCADE,
+    submitted_by JSONB NOT NULL,
+    answers JSONB NOT NULL DEFAULT '[]'::JSONB,
+    applied BOOLEAN NOT NULL DEFAULT FALSE,
+    applied_by JSONB NULL,
+    applied_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT clarification_answers_request_id_unique UNIQUE (clarification_request_id)
+);
+
+CREATE INDEX clarification_answers_organization_created_at_idx
+    ON clarification_answers(organization_id, created_at);
+
+CREATE INDEX clarification_answers_project_created_at_idx
+    ON clarification_answers(project_id, created_at);
+
+CREATE INDEX clarification_answers_repo_binding_id_idx
+    ON clarification_answers(repo_binding_id);
+
+CREATE INDEX clarification_answers_goal_id_idx
+    ON clarification_answers(goal_id);
+
+CREATE INDEX clarification_answers_request_id_idx
+    ON clarification_answers(clarification_request_id);
+
+CREATE INDEX clarification_answers_applied_idx
+    ON clarification_answers(applied);
+
 CREATE TABLE contracts (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -460,6 +529,20 @@ DROP INDEX IF EXISTS contracts_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS contracts_project_created_at_idx;
 DROP INDEX IF EXISTS contracts_organization_created_at_idx;
 DROP TABLE IF EXISTS contracts;
+DROP INDEX IF EXISTS clarification_answers_applied_idx;
+DROP INDEX IF EXISTS clarification_answers_request_id_idx;
+DROP INDEX IF EXISTS clarification_answers_goal_id_idx;
+DROP INDEX IF EXISTS clarification_answers_repo_binding_id_idx;
+DROP INDEX IF EXISTS clarification_answers_project_created_at_idx;
+DROP INDEX IF EXISTS clarification_answers_organization_created_at_idx;
+DROP TABLE IF EXISTS clarification_answers;
+DROP INDEX IF EXISTS clarification_requests_state_idx;
+DROP INDEX IF EXISTS clarification_requests_goal_id_idx;
+DROP INDEX IF EXISTS clarification_requests_repo_binding_id_idx;
+DROP INDEX IF EXISTS clarification_requests_project_created_at_idx;
+DROP INDEX IF EXISTS clarification_requests_organization_created_at_idx;
+DROP INDEX IF EXISTS clarification_requests_one_open_per_goal_idx;
+DROP TABLE IF EXISTS clarification_requests;
 DROP INDEX IF EXISTS goals_intake_id_idx;
 DROP INDEX IF EXISTS goals_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS goals_project_created_at_idx;

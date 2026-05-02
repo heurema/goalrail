@@ -441,6 +441,198 @@ func TestPostgresTransactionalWorkItemPlanStoreCommitsAcceptanceWithMultipleTask
 	}
 }
 
+func TestPostgresTransactionalClarificationStoreRollsBackAnswerRecordingWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	values := validClarificationRequestRowValues()
+	values[2] = spine.ClarificationRequestStateAnswered
+	tx := &recordingPostgresTx{
+		failExecCall: 2,
+		row:          fakeProjectContextRow{values: values},
+	}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalClarificationStore(
+		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
+		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	_, err := store.RecordAnswerWithEvents(ctx, validPostgresClarificationAnswer(), []spine.Event{
+		validPostgresEvent("clarification.answer_recorded", "ClarificationAnswer", "018f0000-0000-7000-8000-000000000b01"),
+		validPostgresEvent("clarification.request_answered", "ClarificationRequest", "018f0000-0000-7000-8000-000000000a01"),
+	})
+	if err == nil {
+		t.Fatal("RecordAnswerWithEvents() error = nil, want failure")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls) + len(db.fallbackQueryRowCalls); got != 0 {
+		t.Fatalf("fallback DB calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if got, want := len(tx.queryRowCalls), 1; got != want {
+		t.Fatalf("QueryRow calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "INSERT INTO clarification_answers") {
+		t.Fatalf("first SQL = %q, want clarification answer insert", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.queryRowCalls[0].sql, "UPDATE clarification_requests") {
+		t.Fatalf("QueryRow SQL = %q, want clarification request update", tx.queryRowCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
+func TestPostgresTransactionalClarificationStoreReturnsFalseWhenRequestAnsweredUpdateFindsNoRow(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{
+		row: fakeProjectContextRow{err: pgx.ErrNoRows},
+	}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalClarificationStore(
+		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
+		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	ok, err := store.RecordAnswerWithEvents(ctx, validPostgresClarificationAnswer(), []spine.Event{
+		validPostgresEvent("clarification.answer_recorded", "ClarificationAnswer", "018f0000-0000-7000-8000-000000000b01"),
+	})
+	if err != nil {
+		t.Fatalf("RecordAnswerWithEvents() error = %v, want nil", err)
+	}
+	if ok {
+		t.Fatal("RecordAnswerWithEvents() ok = true, want false")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got, want := len(tx.execCalls), 1; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if got, want := len(tx.queryRowCalls), 1; got != want {
+		t.Fatalf("QueryRow calls = %d, want %d", got, want)
+	}
+}
+
+func TestPostgresTransactionalClarificationStoreRollsBackApplicationWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{
+		failExecCall: 2,
+		row:          fakeProjectContextRow{values: validGoalRowValues()},
+	}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalClarificationStore(
+		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
+		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	_, marked, goalOK, err := store.ApplyAnswerWithGoalHintsAndEvents(
+		ctx,
+		"018f0000-0000-7000-8000-000000000b01",
+		"018f0000-0000-7000-8000-000000000201",
+		spine.GoalHintUpdate{ScopeHint: stringPtrForStoreTest("Updated scope")},
+		spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		testStoreTime(),
+		[]spine.Event{
+			validPostgresEvent("clarification.answer_applied_to_goal", "ClarificationAnswer", "018f0000-0000-7000-8000-000000000b01"),
+			validPostgresEvent("goal.hints_updated", "Goal", "018f0000-0000-7000-8000-000000000201"),
+		},
+	)
+	if err == nil {
+		t.Fatal("ApplyAnswerWithGoalHintsAndEvents() error = nil, want failure")
+	}
+	if !marked {
+		t.Fatal("marked = false, want true before rollback")
+	}
+	if !goalOK {
+		t.Fatal("goalOK = false, want true before rollback")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if got, want := len(tx.queryRowCalls), 1; got != want {
+		t.Fatalf("QueryRow calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "UPDATE clarification_answers") {
+		t.Fatalf("first SQL = %q, want clarification answer update", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.queryRowCalls[0].sql, "UPDATE goals SET") {
+		t.Fatalf("QueryRow SQL = %q, want goal hints update", tx.queryRowCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
+func TestPostgresTransactionalClarificationStoreRollsBackApplicationWhenGoalUpdateFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{
+		row: fakeProjectContextRow{err: pgx.ErrNoRows},
+	}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalClarificationStore(
+		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
+		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	_, marked, goalOK, err := store.ApplyAnswerWithGoalHintsAndEvents(
+		ctx,
+		"018f0000-0000-7000-8000-000000000b01",
+		"018f0000-0000-7000-8000-000000000201",
+		spine.GoalHintUpdate{ScopeHint: stringPtrForStoreTest("Updated scope")},
+		spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		testStoreTime(),
+		[]spine.Event{validPostgresEvent("goal.hints_updated", "Goal", "018f0000-0000-7000-8000-000000000201")},
+	)
+	if err != nil {
+		t.Fatalf("ApplyAnswerWithGoalHintsAndEvents() error = %v, want nil with goalOK=false", err)
+	}
+	if !marked {
+		t.Fatal("marked = false, want true before rollback")
+	}
+	if goalOK {
+		t.Fatal("goalOK = true, want false")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got, want := len(tx.execCalls), 1; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if got, want := len(tx.queryRowCalls), 1; got != want {
+		t.Fatalf("QueryRow calls = %d, want %d", got, want)
+	}
+}
+
 func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{}
@@ -515,6 +707,10 @@ func validPostgresEvent(eventType string, entityType string, entityID string) sp
 		Timestamp:      testStoreTime(),
 		Payload:        []byte(`{"id":"` + entityID + `"}`),
 	}
+}
+
+func stringPtrForStoreTest(value string) *string {
+	return &value
 }
 
 type recordingPostgresTransactor struct {

@@ -347,6 +347,25 @@ func TestServiceRecordAnswerRejectsRepeatedAnswer(t *testing.T) {
 	}
 }
 
+func TestServiceRecordAnswerReturnsNotFoundWhenTransactionLosesRequest(t *testing.T) {
+	baseService, goals, requests, answers, events := requestService(t)
+	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
+	service := clarification.NewService(
+		goals,
+		requests,
+		answers,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		clarification.WithAnswerRecordingTransaction(answerRecordingTransaction{ok: false}),
+	)
+
+	_, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if !errors.Is(err, clarification.ErrRequestNotFound) {
+		t.Fatalf("RecordAnswer() error = %v, want ErrRequestNotFound", err)
+	}
+}
+
 func TestServiceRecordAnswerValidation(t *testing.T) {
 	tests := []struct {
 		name string
@@ -640,6 +659,15 @@ type sequenceIDs struct {
 	question      int
 	answer        int
 	event         int
+}
+
+type answerRecordingTransaction struct {
+	ok  bool
+	err error
+}
+
+func (tx answerRecordingTransaction) RecordAnswerWithEvents(context.Context, spine.ClarificationAnswer, []spine.Event) (bool, error) {
+	return tx.ok, tx.err
 }
 
 func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {

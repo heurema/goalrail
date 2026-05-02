@@ -62,7 +62,7 @@ func TestClarificationAnswerStorePreventsDuplicateApplication(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	marked, err := answerStore.MarkApplied(context.Background(), created.ID)
+	marked, err := answerStore.MarkApplied(context.Background(), created.ID, spine.ActorRef{Kind: "user", ID: "dev_1"}, created.CreatedAt)
 	if err != nil {
 		t.Fatalf("first MarkApplied() error = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestClarificationAnswerStorePreventsDuplicateApplication(t *testing.T) {
 		t.Fatal("first MarkApplied() marked = false, want true")
 	}
 
-	marked, err = answerStore.MarkApplied(context.Background(), created.ID)
+	marked, err = answerStore.MarkApplied(context.Background(), created.ID, spine.ActorRef{Kind: "user", ID: "dev_1"}, created.CreatedAt)
 	if err != nil {
 		t.Fatalf("second MarkApplied() error = %v", err)
 	}

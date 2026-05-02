@@ -2,10 +2,13 @@ package store
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -153,6 +156,196 @@ func TestPostgresGoalStoreUpdateReadinessScansPersistedState(t *testing.T) {
 	}
 	if !strings.Contains(query.calls[0].sql, "RETURNING") {
 		t.Fatalf("SQL = %q, want returning persisted goal", query.calls[0].sql)
+	}
+}
+
+func TestPostgresClarificationRequestStoreCreateBuildsDurableInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresClarificationRequestStoreWithExecutorAndQuerier(exec, nil)
+
+	if err := store.Create(ctx, validPostgresClarificationRequest()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO clarification_requests") {
+		t.Fatalf("SQL = %q, want clarification_requests insert", call.sql)
+	}
+	if !strings.Contains(call.sql, "FROM goals") {
+		t.Fatalf("SQL = %q, want goal context select", call.sql)
+	}
+	if got, want := len(call.args), 8; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestPostgresClarificationRequestStoreCreateDetectsMissingGoal(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{tag: pgconn.NewCommandTag("INSERT 0 0")}
+	store := NewPostgresClarificationRequestStoreWithExecutorAndQuerier(exec, nil)
+
+	err := store.Create(ctx, validPostgresClarificationRequest())
+	if !errors.Is(err, errPostgresClarificationGoalNotFound) {
+		t.Fatalf("Create() error = %v, want errPostgresClarificationGoalNotFound", err)
+	}
+}
+
+func TestPostgresClarificationRequestStoreGetOpenByGoalIDScansRequest(t *testing.T) {
+	ctx := context.Background()
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validClarificationRequestRowValues()}}
+	store := NewPostgresClarificationRequestStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	request, ok, err := store.GetOpenByGoalID(ctx, "018f0000-0000-7000-8000-000000000201")
+	if err != nil {
+		t.Fatalf("GetOpenByGoalID() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetOpenByGoalID() ok = false, want true")
+	}
+	if request.ID != "018f0000-0000-7000-8000-000000000a01" {
+		t.Fatalf("ID = %q, want persisted clarification request id", request.ID)
+	}
+	if len(request.ReasonCodes) != 1 || request.ReasonCodes[0] != spine.GoalReadinessReasonMissingScopeHint {
+		t.Fatalf("ReasonCodes = %#v, want missing_scope_hint", request.ReasonCodes)
+	}
+	if len(request.Questions) != 1 || request.Questions[0].MapsTo != spine.ClarificationMapsToGoalScopeHint {
+		t.Fatalf("Questions = %#v, want persisted question mapping", request.Questions)
+	}
+	if request.Target.ActorRef == nil || request.Target.ActorRef.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("Target = %#v, want persisted target actor", request.Target)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM clarification_requests") {
+		t.Fatalf("SQL = %q, want clarification_requests select", query.calls[0].sql)
+	}
+	if !strings.Contains(query.calls[0].sql, "state = $2") {
+		t.Fatalf("SQL = %q, want open state filter", query.calls[0].sql)
+	}
+}
+
+func TestPostgresClarificationRequestStoreUpdateStateReturnsAnsweredRequest(t *testing.T) {
+	ctx := context.Background()
+	values := validClarificationRequestRowValues()
+	values[2] = spine.ClarificationRequestStateAnswered
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: values}}
+	store := NewPostgresClarificationRequestStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	request, ok, err := store.UpdateState(ctx, "018f0000-0000-7000-8000-000000000a01", spine.ClarificationRequestStateAnswered)
+	if err != nil {
+		t.Fatalf("UpdateState() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("UpdateState() ok = false, want true")
+	}
+	if request.State != spine.ClarificationRequestStateAnswered {
+		t.Fatalf("State = %q, want answered", request.State)
+	}
+	if !strings.Contains(query.calls[0].sql, "UPDATE clarification_requests SET") {
+		t.Fatalf("SQL = %q, want clarification_requests update", query.calls[0].sql)
+	}
+}
+
+func TestPostgresClarificationRequestStoreMapsDuplicateOpenRequest(t *testing.T) {
+	ctx := context.Background()
+	store := NewPostgresClarificationRequestStoreWithExecutorAndQuerier(uniqueViolationExecer{constraint: "clarification_requests_one_open_per_goal_idx"}, nil)
+
+	err := store.Create(ctx, validPostgresClarificationRequest())
+	if err != ErrClarificationRequestAlreadyOpen {
+		t.Fatalf("Create() error = %v, want ErrClarificationRequestAlreadyOpen", err)
+	}
+}
+
+func TestPostgresClarificationAnswerStoreCreateBuildsDurableInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(exec, nil)
+
+	if err := store.Create(ctx, validPostgresClarificationAnswer()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO clarification_answers") {
+		t.Fatalf("SQL = %q, want clarification_answers insert", call.sql)
+	}
+	if !strings.Contains(call.sql, "FROM clarification_requests") {
+		t.Fatalf("SQL = %q, want clarification request context select", call.sql)
+	}
+	if got, want := len(call.args), 6; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestPostgresClarificationAnswerStoreGetByRequestIDScansAnswer(t *testing.T) {
+	ctx := context.Background()
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validClarificationAnswerRowValues()}}
+	store := NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	answer, ok, err := store.GetByRequestID(ctx, "018f0000-0000-7000-8000-000000000a01")
+	if err != nil {
+		t.Fatalf("GetByRequestID() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetByRequestID() ok = false, want true")
+	}
+	if answer.ID != "018f0000-0000-7000-8000-000000000b01" {
+		t.Fatalf("ID = %q, want persisted answer id", answer.ID)
+	}
+	if answer.State != spine.ClarificationAnswerStateRecorded {
+		t.Fatalf("State = %q, want recorded", answer.State)
+	}
+	if len(answer.Answers) != 1 || answer.Answers[0].Value != "Persisted scope" {
+		t.Fatalf("Answers = %#v, want persisted answer item", answer.Answers)
+	}
+	if answer.SubmittedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("SubmittedBy = %#v, want persisted actor", answer.SubmittedBy)
+	}
+	if !strings.Contains(query.calls[0].sql, "WHERE clarification_request_id = $1") {
+		t.Fatalf("SQL = %q, want request id lookup", query.calls[0].sql)
+	}
+}
+
+func TestPostgresClarificationAnswerStoreMarkAppliedPersistsActorAndTimestamp(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(exec, nil)
+
+	marked, err := store.MarkApplied(
+		ctx,
+		"018f0000-0000-7000-8000-000000000b01",
+		spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		testStoreTime(),
+	)
+	if err != nil {
+		t.Fatalf("MarkApplied() error = %v", err)
+	}
+	if !marked {
+		t.Fatal("MarkApplied() marked = false, want true")
+	}
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	for _, want := range []string{"UPDATE clarification_answers SET", "applied = $1", "applied_by =", "applied_at =", "WHERE id ="} {
+		if !strings.Contains(call.sql, want) {
+			t.Fatalf("SQL = %q, want %q", call.sql, want)
+		}
+	}
+}
+
+func TestPostgresClarificationAnswerStoreMapsDuplicateRequestAnswer(t *testing.T) {
+	ctx := context.Background()
+	store := NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(uniqueViolationExecer{constraint: "clarification_answers_request_id_unique"}, nil)
+
+	err := store.Create(ctx, validPostgresClarificationAnswer())
+	if err != ErrClarificationAnswerAlreadyRecorded {
+		t.Fatalf("Create() error = %v, want ErrClarificationAnswerAlreadyRecorded", err)
 	}
 }
 
@@ -629,6 +822,45 @@ func validPostgresGoal() spine.Goal {
 	}
 }
 
+func validPostgresClarificationRequest() spine.ClarificationRequest {
+	now := testStoreTime()
+	return spine.ClarificationRequest{
+		ID:          "018f0000-0000-7000-8000-000000000a01",
+		GoalID:      "018f0000-0000-7000-8000-000000000201",
+		ReasonCodes: []spine.GoalReadinessReasonCode{spine.GoalReadinessReasonMissingScopeHint},
+		Questions: []spine.ClarificationQuestion{
+			{
+				ID:         "018f0000-0000-7000-8000-000000000a11",
+				Text:       "What is the intended scope at a high level?",
+				WhyNeeded:  "A scope hint is required before contract seed readiness.",
+				AnswerType: spine.ClarificationAnswerTypeText,
+				MapsTo:     spine.ClarificationMapsToGoalScopeHint,
+			},
+		},
+		Target: spine.ClarificationTarget{
+			Role:     spine.ClarificationTargetRoleIntentOwner,
+			ActorRef: &spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		},
+		State:     spine.ClarificationRequestStateOpen,
+		CreatedAt: now,
+	}
+}
+
+func validPostgresClarificationAnswer() spine.ClarificationAnswer {
+	now := testStoreTime()
+	return spine.ClarificationAnswer{
+		ID:        "018f0000-0000-7000-8000-000000000b01",
+		RequestID: "018f0000-0000-7000-8000-000000000a01",
+		GoalID:    "018f0000-0000-7000-8000-000000000201",
+		Answers: []spine.ClarificationAnswerItem{
+			{QuestionID: "018f0000-0000-7000-8000-000000000a11", Value: "Persisted scope"},
+		},
+		SubmittedBy: spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		State:       spine.ClarificationAnswerStateRecorded,
+		CreatedAt:   now,
+	}
+}
+
 func validPostgresContractSeed() spine.ContractSeed {
 	now := testStoreTime()
 	return spine.ContractSeed{
@@ -859,6 +1091,29 @@ func validGoalRowValues() []any {
 	}
 }
 
+func validClarificationRequestRowValues() []any {
+	return []any{
+		"018f0000-0000-7000-8000-000000000a01",
+		"018f0000-0000-7000-8000-000000000201",
+		spine.ClarificationRequestStateOpen,
+		[]byte(`["missing_scope_hint"]`),
+		[]byte(`[{"id":"018f0000-0000-7000-8000-000000000a11","text":"What is the intended scope at a high level?","why_needed":"A scope hint is required before contract seed readiness.","answer_type":"text","maps_to":"goal.scope_hint"}]`),
+		[]byte(`{"role":"intent_owner","actor_ref":{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}}`),
+		testStoreTime(),
+	}
+}
+
+func validClarificationAnswerRowValues() []any {
+	return []any{
+		"018f0000-0000-7000-8000-000000000b01",
+		"018f0000-0000-7000-8000-000000000a01",
+		"018f0000-0000-7000-8000-000000000201",
+		[]byte(`{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}`),
+		[]byte(`[{"question_id":"018f0000-0000-7000-8000-000000000a11","value":"Persisted scope"}]`),
+		testStoreTime(),
+	}
+}
+
 func validContractSeedRowValues() []any {
 	return []any{
 		"018f0000-0000-7000-8000-000000000401",
@@ -964,4 +1219,12 @@ func assertJSONBytesEqual(t *testing.T, got any, want string) {
 	if string(gotBytes) != want {
 		t.Fatalf("json arg = %s, want %s", gotBytes, want)
 	}
+}
+
+type uniqueViolationExecer struct {
+	constraint string
+}
+
+func (e uniqueViolationExecer) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, &pgconn.PgError{Code: "23505", ConstraintName: e.constraint}
 }

@@ -62,6 +62,88 @@ func TestInitMigrationCreatesContractsTableAndLifecycleLinks(t *testing.T) {
 	}
 }
 
+func TestInitMigrationCreatesClarificationTables(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE clarification_requests",
+		"organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE",
+		"project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE",
+		"repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE",
+		"goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE",
+		"CONSTRAINT clarification_requests_state_check CHECK (state IN ('open', 'answered'))",
+		"CREATE UNIQUE INDEX clarification_requests_one_open_per_goal_idx",
+		"WHERE state = 'open'",
+		"CREATE INDEX clarification_requests_organization_created_at_idx",
+		"CREATE INDEX clarification_requests_project_created_at_idx",
+		"CREATE INDEX clarification_requests_repo_binding_id_idx",
+		"CREATE INDEX clarification_requests_goal_id_idx",
+		"CREATE INDEX clarification_requests_state_idx",
+		"CREATE TABLE clarification_answers",
+		"clarification_request_id UUID NOT NULL REFERENCES clarification_requests(id) ON DELETE CASCADE",
+		"CONSTRAINT clarification_answers_request_id_unique UNIQUE (clarification_request_id)",
+		"CREATE INDEX clarification_answers_organization_created_at_idx",
+		"CREATE INDEX clarification_answers_project_created_at_idx",
+		"CREATE INDEX clarification_answers_repo_binding_id_idx",
+		"CREATE INDEX clarification_answers_goal_id_idx",
+		"CREATE INDEX clarification_answers_request_id_idx",
+		"CREATE INDEX clarification_answers_applied_idx",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE goals") > strings.Index(sql, "CREATE TABLE clarification_requests") {
+		t.Fatalf("clarification_requests must be created after goals")
+	}
+	if strings.Index(sql, "CREATE TABLE clarification_requests") > strings.Index(sql, "CREATE TABLE clarification_answers") {
+		t.Fatalf("clarification_answers must be created after clarification_requests")
+	}
+	if strings.Index(sql, "CREATE TABLE clarification_answers") > strings.Index(sql, "CREATE TABLE contracts") {
+		t.Fatalf("clarification tables must be created before contracts")
+	}
+}
+
+func TestInitMigrationDropsClarificationTablesBeforeGoals(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"DROP INDEX IF EXISTS clarification_answers_applied_idx;",
+		"DROP INDEX IF EXISTS clarification_answers_request_id_idx;",
+		"DROP INDEX IF EXISTS clarification_answers_goal_id_idx;",
+		"DROP INDEX IF EXISTS clarification_answers_repo_binding_id_idx;",
+		"DROP INDEX IF EXISTS clarification_answers_project_created_at_idx;",
+		"DROP INDEX IF EXISTS clarification_answers_organization_created_at_idx;",
+		"DROP TABLE IF EXISTS clarification_answers;",
+		"DROP INDEX IF EXISTS clarification_requests_state_idx;",
+		"DROP INDEX IF EXISTS clarification_requests_goal_id_idx;",
+		"DROP INDEX IF EXISTS clarification_requests_repo_binding_id_idx;",
+		"DROP INDEX IF EXISTS clarification_requests_project_created_at_idx;",
+		"DROP INDEX IF EXISTS clarification_requests_organization_created_at_idx;",
+		"DROP INDEX IF EXISTS clarification_requests_one_open_per_goal_idx;",
+		"DROP TABLE IF EXISTS clarification_requests;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration down missing %q", want)
+		}
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS clarification_answers;") > strings.Index(sql, "DROP TABLE IF EXISTS clarification_requests;") {
+		t.Fatalf("clarification_answers must be dropped before clarification_requests")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS clarification_requests;") > strings.Index(sql, "DROP TABLE IF EXISTS goals;") {
+		t.Fatalf("clarification_requests must be dropped before goals")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS contracts;") > strings.Index(sql, "DROP TABLE IF EXISTS clarification_answers;") {
+		t.Fatalf("contracts must be dropped before clarification tables")
+	}
+}
+
 func TestInitMigrationDropsApprovedContractsTable(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
