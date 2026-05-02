@@ -38,7 +38,12 @@ type contractStore interface {
 	contractseed.ContractStore
 	contractdraft.ContractStore
 	approvedcontract.ContractStore
-	workitem.ContractReader
+	workitemplan.ContractReader
+}
+
+type workItemStore interface {
+	workitem.Store
+	workitemplan.WorkItemStore
 }
 
 func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
@@ -52,7 +57,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
 	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
 	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
-	var workItemStore workitem.Store = store.NewWorkItemStore()
+	var workItemStore workItemStore = store.NewWorkItemStore()
 	var workItemPlanStore workitemplan.PlanStore = store.NewWorkItemPlanStore()
 	var workItemPlanProposalStore workitemplan.ProposalStore = store.NewWorkItemPlanProposalStore()
 	var acceptanceTransaction workitemplan.AcceptanceTransaction
@@ -95,7 +100,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	}
 	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService, contractOptions...)
 	contractHandler := httpserver.NewContractHandler(contractService)
-	workItemService := workitem.NewService(contracts, approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
+	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 	workItemPlanOptions := []workitemplan.Option{}
 	if acceptanceTransaction != nil {

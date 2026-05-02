@@ -1269,7 +1269,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
 	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService)
 	contractHandler := httpserver.NewContractHandler(contractService)
-	workItemService := workitem.NewService(contractStore, approvedContractStore, workItemStore, events, fixedClock{now: testTime()}, ids)
+	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, fixedClock{now: testTime()}, ids)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
