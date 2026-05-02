@@ -113,6 +113,7 @@ func TestProjectContextStoreResolveRepoBindingReturnsNotFound(t *testing.T) {
 
 type recordingProjectContextExecer struct {
 	calls []recordedExecCall
+	tag   pgconn.CommandTag
 }
 
 type recordedExecCall struct {
@@ -125,6 +126,9 @@ func (r *recordingProjectContextExecer) Exec(_ context.Context, sql string, args
 		sql:  sql,
 		args: append([]any(nil), args...),
 	})
+	if r.tag.String() != "" {
+		return r.tag, nil
+	}
 	return pgconn.NewCommandTag("INSERT 0 1"), nil
 }
 
@@ -221,6 +225,12 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 			value, ok := r.values[i].(spine.GoalState)
 			if !ok {
 				return errors.New("goal state value is not goal state")
+			}
+			*target = value
+		case *spine.ClarificationRequestState:
+			value, ok := r.values[i].(spine.ClarificationRequestState)
+			if !ok {
+				return errors.New("clarification request state value is not clarification request state")
 			}
 			*target = value
 		case *spine.OrganizationID:

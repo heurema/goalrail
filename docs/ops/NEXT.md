@@ -11,11 +11,11 @@
 - `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and in-memory ClarificationRequest, ClarificationAnswer recording, and answer application prototypes; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, and explicit re-check; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
-- ADR-0011 now defines answer application to Goal hints and the server still keeps clarification request/answer state in-memory; future answer work must keep readiness re-check separate
+- ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured
 - ADR-0012 defines explicit readiness re-check after applied answers, and the server verifies that the existing readiness endpoint can move an applied-answer Goal to `ready_for_contract_seed` without creating contract seed
 - ADR-0013 now defines the `ContractSeed` boundary, and the server persists `ContractSeed(created)` in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
 - ADR-0014 now defines the `ContractDraft` boundary, and the server persists `ContractDraft(draft)` creation in Postgres when DB is configured; future contract work must keep approval, work item, gate, and proof as later boundaries
@@ -247,26 +247,26 @@ Done means:
 
 ### Server follow-up slices
 
-1. Durable clarification boundary
-   - define the smallest durable persistence slice for ClarificationRequest and ClarificationAnswer after intake/Goal persistence
-   - preserve current server-owned answer evidence semantics
-   - do not create contract seed, work items, gate, proof, runner, or VCS integration
-2. Worker/controller lease protocol design
+1. Worker/controller lease protocol design
    - define the smallest server-owned planning lease/reconciliation protocol
      after the public plan/proposal/acceptance API
    - keep repo-aware planning computation behind worker / controller / runner
      boundaries
    - do not implement checkout, execution, receipt, queue, outbox, gate, proof,
      runtime registry, assignment, or claiming
-3. CLI-to-server intake submit integration
-   - submit intake from the CLI to the server once the API boundary exists
-   - keep the CLI as an adapter, not a canonical state owner
-4. WorkItem assignment/claiming boundary design
+2. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
    - keep runner, execution, receipt, gate, and proof as later boundaries
    - do not start execution from assignment/claiming
    - preserve `owner_hint` as advisory unless a later boundary upgrades it
+3. Runner boundary design
+   - define the hosted runner protocol and checkout boundary before any code
+     execution work
+   - keep execution, gate, and proof deferred
+4. CLI-to-server intake submit integration
+   - submit intake from the CLI to the server once the API boundary exists
+   - keep the CLI as an adapter, not a canonical state owner
 
 ## Deferred until later
 

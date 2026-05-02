@@ -5,7 +5,8 @@ public Contract lifecycle, ContractSeed creation, ContractDraft
 creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
 WorkItem planning, and event log flows use Postgres when
 `GOALRAIL_DATABASE_DSN` is configured. ClarificationRequest and
-ClarificationAnswer state remain in-memory prototypes.
+ClarificationAnswer state also use Postgres when configured, with in-memory
+fallback when no database DSN is set.
 
 ## Local Postgres foundation
 
@@ -61,10 +62,10 @@ curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/goals
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
-With Postgres configured, `IntakeRecord`, `Goal`, the public `Contract`
-aggregate, `ContractSeed`, `ContractDraft`, `ApprovedContract`, and their
-events are durable and survive server restarts. Planned WorkItems are also
-durable when Postgres is configured.
+With Postgres configured, `IntakeRecord`, `Goal`, `ClarificationRequest`,
+`ClarificationAnswer`, the public `Contract` aggregate, `ContractSeed`,
+`ContractDraft`, `ApprovedContract`, and their events are durable and survive
+server restarts. Planned WorkItems are also durable when Postgres is configured.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
 the seeded context. Intake creation, Goal promotion, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, ContractDraft
@@ -174,8 +175,9 @@ curl -sS http://localhost:8080/v1/tasks/{task_id}
 There is no task list/search endpoint in this slice.
 
 This flow still does not create executable work, gate decisions, proof, runner
-jobs, or VCS integration. Clarification request and answer state is still
-prototype/in-memory. There is no standalone public ContractSeed route; public
+jobs, VCS integration, or automatic readiness re-check after answer application.
+Clarification does not create contracts, plans, tasks, or work items. There is
+no standalone public ContractSeed route; public
 `POST /v1/contracts` composes the internal seed and draft records under one
 stable `contract_id`. Standalone seed creation does not approve Contract, create
 `WorkItem`, write `GateDecision`, create `Proof`, or create executable work.

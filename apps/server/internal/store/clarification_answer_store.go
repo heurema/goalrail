@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -70,7 +71,7 @@ func (s *ClarificationAnswerStore) GetByRequestID(_ context.Context, requestID s
 	return cloneClarificationAnswer(answer), true, nil
 }
 
-func (s *ClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID) (bool, error) {
+func (s *ClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID, _ spine.ActorRef, _ time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
