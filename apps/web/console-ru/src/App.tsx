@@ -161,27 +161,31 @@ function App() {
   const userRows = useMemo(
     () =>
       visibleUsers.map((user) => (
-        <div className="userRow" key={user.id}>
-          <div className="userName">
-            <span className="avatar" aria-hidden="true">
-              {initials(user.name)}
-            </span>
-            <span>{user.name}</span>
-          </div>
-          <div className="userEmail">{user.email}</div>
-          <div>
+        <tr className="userRow" key={user.id}>
+          <td>
+            <div className="userName">
+              <span className="avatar" aria-hidden="true">
+                {initials(user.name)}
+              </span>
+              <span>{user.name}</span>
+            </div>
+          </td>
+          <td className="userEmail">{user.email}</td>
+          <td>
             <span className={user.role === 'Владелец' ? 'pill roleOwner' : 'pill'}>{user.role}</span>
-          </div>
-          <div>
+          </td>
+          <td>
             <span className={`pill ${statusClass(user.status)}`}>{user.status}</span>
-          </div>
-          <div className="userActions">
-            <button className="iconButton" onClick={() => openExistingUser(user)} type="button">
-              <span aria-hidden="true">✎</span>
-              <span className="srOnly">Редактировать {user.name}</span>
-            </button>
-          </div>
-        </div>
+          </td>
+          <td>
+            <div className="userActions">
+              <button className="iconButton" onClick={() => openExistingUser(user)} type="button">
+                <span aria-hidden="true">✎</span>
+                <span className="srOnly">Редактировать {user.name}</span>
+              </button>
+            </div>
+          </td>
+        </tr>
       )),
     [visibleUsers]
   );
@@ -292,6 +296,7 @@ function App() {
                 <label className="searchBox">
                   <span aria-hidden="true">⌕</span>
                   <input
+                    aria-label="Поиск пользователей"
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Поиск по имени или email"
                     type="search"
@@ -326,16 +331,28 @@ function App() {
                 </label>
               </div>
 
-              <div className="usersTable" role="table" aria-label="Пользователи рабочего пространства">
-                <div className="userRow userHead" role="row">
-                  <div role="columnheader">Имя</div>
-                  <div role="columnheader">Email</div>
-                  <div role="columnheader">Роль</div>
-                  <div role="columnheader">Статус</div>
-                  <div role="columnheader" aria-label="Действия" />
-                </div>
-                {userRows}
-                {visibleUsers.length === 0 ? <div className="emptyUsers">Нет пользователей по выбранным условиям.</div> : null}
+              <div className="usersTableFrame">
+                <table className="usersTable" aria-label="Пользователи рабочего пространства">
+                  <thead>
+                    <tr className="userRow userHead">
+                      <th scope="col">Имя</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Роль</th>
+                      <th scope="col">Статус</th>
+                      <th scope="col" aria-label="Действия" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {userRows}
+                    {visibleUsers.length === 0 ? (
+                      <tr>
+                        <td className="emptyUsers" colSpan={5}>
+                          Нет пользователей по выбранным условиям.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
               </div>
 
             </div>

@@ -15,6 +15,7 @@ superseded_by: null
 related_docs:
   - docs/ops/DECISIONS.md
   - docs/ops/COMPONENTS.yaml
+  - .github/workflows/codex-review-gate.yml
   - .github/workflows/docs-check.yml
   - .github/workflows/pr-intake-gate.yml
   - .github/workflows/repo-checks.yml
@@ -34,6 +35,7 @@ represent the active repository policy.
 The protected `main` branch requires these PR checks before merge:
 
 - `docs-check`
+- `codex-review-gate`
 - `pr-intake-gate`
 - `go (apps/cli)`
 - `go (apps/server)`
@@ -42,7 +44,7 @@ The protected `main` branch requires these PR checks before merge:
 
 ## Verified settings
 
-Verified on 2026-04-30:
+Verified on 2026-05-02:
 
 - required status checks are enabled;
 - required checks must be up to date before merge (`strict: true`);
@@ -90,6 +92,7 @@ Expected required contexts:
 
 ```text
 docs-check
+codex-review-gate
 pr-intake-gate
 go (apps/cli)
 go (apps/server)

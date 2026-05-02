@@ -76,6 +76,8 @@ describe('App', () => {
     login();
 
     fireEvent.click(screen.getByRole('button', { name: /настройки/i }));
+    expect(screen.getByRole('table', { name: /пользователи рабочего пространства/i })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: /поиск пользователей/i })).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(/поиск по имени или email/i), {
       target: { value: 'reviewer' },
     });

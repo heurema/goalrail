@@ -555,23 +555,56 @@ select:focus-visible {
   outline: none;
 }
 
-.usersTable {
-  overflow: hidden;
+.usersTableFrame {
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--panel);
 }
 
-.userRow {
-  display: grid;
-  grid-template-columns: minmax(130px, 1.1fr) minmax(160px, 1.4fr) minmax(110px, 0.9fr) minmax(110px, 0.9fr) 44px;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line-soft);
+.usersTable {
+  width: 100%;
+  min-width: 720px;
+  border-spacing: 0;
+  border-collapse: separate;
 }
 
-.userRow:last-child {
+.userRow {
+  height: 58px;
+}
+
+.userRow > th,
+.userRow > td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.userRow > th:first-child,
+.userRow > td:first-child {
+  width: 26%;
+}
+
+.userRow > th:nth-child(2),
+.userRow > td:nth-child(2) {
+  width: 32%;
+}
+
+.userRow > th:nth-child(3),
+.userRow > td:nth-child(3),
+.userRow > th:nth-child(4),
+.userRow > td:nth-child(4) {
+  width: 17%;
+}
+
+.userRow > th:last-child,
+.userRow > td:last-child {
+  width: 8%;
+}
+
+.usersTable tbody tr:last-child > td {
   border-bottom: 0;
 }
 
@@ -579,10 +612,11 @@ select:focus-visible {
   background: color-mix(in oklab, var(--panel-2) 70%, transparent);
 }
 
-.userHead > * {
+.userHead > th {
   color: var(--mute);
   font-family: var(--font-mono);
   font-size: 9.5px;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -611,6 +645,7 @@ select:focus-visible {
 
 .userEmail {
   min-width: 0;
+  max-width: 220px;
   overflow: hidden;
   color: var(--ink-2);
   font-family: var(--font-mono);
