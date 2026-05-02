@@ -89,6 +89,12 @@ type Store interface {
 	GetByContractSeedID(context.Context, spine.ContractSeedID) (spine.ContractDraft, bool, error)
 }
 
+type ContractStore interface {
+	Get(context.Context, spine.ContractID) (spine.Contract, bool, error)
+	MarkDraftCreated(context.Context, spine.ContractID, spine.ContractDraftID, time.Time) error
+	MarkReadyForApproval(context.Context, spine.ContractID, time.Time) error
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
@@ -97,12 +103,20 @@ type transactionalDraftStore interface {
 	CreateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
 }
 
+type transactionalDraftContractStore interface {
+	CreateWithContractUpdateAndEvent(context.Context, spine.ContractDraft, spine.Event, time.Time) error
+}
+
 type transactionalDraftUpdateStore interface {
 	UpdateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
 }
 
 type transactionalDraftReadyStore interface {
 	MarkReadyForApprovalWithEvent(context.Context, spine.ContractDraft, spine.Event) error
+}
+
+type transactionalDraftReadyContractStore interface {
+	MarkReadyForApprovalWithContractUpdateAndEvent(context.Context, spine.ContractDraft, spine.Event, time.Time) error
 }
 
 type Clock interface {
@@ -115,20 +129,22 @@ type IDGenerator interface {
 }
 
 type Service struct {
-	Seeds  SeedReader
-	Drafts Store
-	Events EventLog
-	Clock  Clock
-	IDs    IDGenerator
+	Seeds     SeedReader
+	Contracts ContractStore
+	Drafts    Store
+	Events    EventLog
+	Clock     Clock
+	IDs       IDGenerator
 }
 
-func NewService(seeds SeedReader, drafts Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(seeds SeedReader, contracts ContractStore, drafts Store, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		Seeds:  seeds,
-		Drafts: drafts,
-		Events: events,
-		Clock:  clock,
-		IDs:    ids,
+		Seeds:     seeds,
+		Contracts: contracts,
+		Drafts:    drafts,
+		Events:    events,
+		Clock:     clock,
+		IDs:       ids,
 	}
 }
 
@@ -155,6 +171,11 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	if err := validateSeedForDraft(seed); err != nil {
 		return spine.ContractDraft{}, err
 	}
+	if _, ok, err := s.Contracts.Get(ctx, seed.ContractID); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("get contract: %w", err)
+	} else if !ok {
+		return spine.ContractDraft{}, ErrContractSeedNotFound
+	}
 
 	draftID, err := s.IDs.NewContractDraftID()
 	if err != nil {
@@ -165,6 +186,7 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 		ID:                         draftID,
 		OrganizationID:             seed.OrganizationID,
 		ProjectID:                  seed.ProjectID,
+		ContractID:                 seed.ContractID,
 		ContractSeedID:             seed.ID,
 		GoalID:                     seed.GoalID,
 		RepoBindingID:              seed.RepoBindingID,
@@ -186,6 +208,17 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
+	if txDrafts, ok := s.Drafts.(transactionalDraftContractStore); ok {
+		if err := txDrafts.CreateWithContractUpdateAndEvent(ctx, created, event, now); err != nil {
+			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
+				return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.ContractDraft{}, ErrAlreadyDrafted
+			}
+			return spine.ContractDraft{}, fmt.Errorf("create contract draft with contract update and event: %w", err)
+		}
+		return created, nil
+	}
 	if txDrafts, ok := s.Drafts.(transactionalDraftStore); ok {
 		if err := txDrafts.CreateWithEvent(ctx, created, event); err != nil {
 			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
@@ -204,6 +237,9 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 			return spine.ContractDraft{}, ErrAlreadyDrafted
 		}
 		return spine.ContractDraft{}, fmt.Errorf("create contract draft: %w", err)
+	}
+	if err := s.Contracts.MarkDraftCreated(ctx, created.ContractID, created.ID, now); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("mark contract draft created: %w", err)
 	}
 	if err := s.Events.Append(ctx, event); err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("append contract draft created event: %w", err)
@@ -380,6 +416,12 @@ func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.Contra
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
+	if txDrafts, ok := s.Drafts.(transactionalDraftReadyContractStore); ok {
+		if err := txDrafts.MarkReadyForApprovalWithContractUpdateAndEvent(ctx, updated, event, now); err != nil {
+			return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval with contract update and event: %w", err)
+		}
+		return updated, nil
+	}
 	if txDrafts, ok := s.Drafts.(transactionalDraftReadyStore); ok {
 		if err := txDrafts.MarkReadyForApprovalWithEvent(ctx, updated, event); err != nil {
 			return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval with event: %w", err)
@@ -388,6 +430,9 @@ func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.Contra
 	}
 	if err := s.Drafts.MarkReadyForApproval(ctx, updated); err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval: %w", err)
+	}
+	if err := s.Contracts.MarkReadyForApproval(ctx, updated.ContractID, now); err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("mark contract ready for approval: %w", err)
 	}
 	if err := s.Events.Append(ctx, event); err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("append contract draft marked ready for approval event: %w", err)
@@ -473,6 +518,7 @@ func isEditableField(field string) bool {
 func isNonEditableField(field string) bool {
 	switch field {
 	case "id",
+		"contract_id",
 		"contract_seed_id",
 		"goal_id",
 		"repo_binding_id",
@@ -518,6 +564,9 @@ func cloneStrings(values []string) []string {
 func validateSeedForDraft(seed spine.ContractSeed) error {
 	if strings.TrimSpace(string(seed.GoalID)) == "" {
 		return &ValidationError{Field: "goal_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(seed.ContractID)) == "" {
+		return &ValidationError{Field: "contract_id", Message: "is required"}
 	}
 	if strings.TrimSpace(string(seed.RepoBindingID)) == "" {
 		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
@@ -581,6 +630,7 @@ func (s *Service) contractDraftCreatedEvent(created spine.ContractDraft) (spine.
 
 type contractDraftUpdatedPayload struct {
 	ContractDraftID spine.ContractDraftID `json:"contract_draft_id"`
+	ContractID      spine.ContractID      `json:"contract_id"`
 	ChangedFields   []string              `json:"changed_fields"`
 	UpdatedBy       spine.ActorRef        `json:"updated_by"`
 	PreviousValues  map[string]any        `json:"previous_values"`
@@ -596,6 +646,7 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 
 	payload, err := json.Marshal(contractDraftUpdatedPayload{
 		ContractDraftID: updated.ID,
+		ContractID:      updated.ContractID,
 		ChangedFields:   append([]string{}, changedFields...),
 		UpdatedBy:       updatedBy,
 		PreviousValues:  previousValues,
@@ -621,6 +672,7 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 
 type contractDraftMarkedReadyForApprovalPayload struct {
 	ContractDraftID spine.ContractDraftID    `json:"contract_draft_id"`
+	ContractID      spine.ContractID         `json:"contract_id"`
 	ContractSeedID  spine.ContractSeedID     `json:"contract_seed_id"`
 	GoalID          spine.GoalID             `json:"goal_id"`
 	MarkedBy        spine.ActorRef           `json:"marked_by"`
@@ -638,6 +690,7 @@ func (s *Service) contractDraftMarkedReadyForApprovalEvent(updated spine.Contrac
 
 	payload, err := json.Marshal(contractDraftMarkedReadyForApprovalPayload{
 		ContractDraftID: updated.ID,
+		ContractID:      updated.ContractID,
 		ContractSeedID:  updated.ContractSeedID,
 		GoalID:          updated.GoalID,
 		MarkedBy:        markedBy,
@@ -666,6 +719,9 @@ func (s *Service) contractDraftMarkedReadyForApprovalEvent(updated spine.Contrac
 func (s *Service) validateDependencies() error {
 	if s.Seeds == nil {
 		return errors.New("contract draft service seed store is nil")
+	}
+	if s.Contracts == nil {
+		return errors.New("contract draft service contract store is nil")
 	}
 	if s.Drafts == nil {
 		return errors.New("contract draft service draft store is nil")

@@ -150,24 +150,23 @@ the historical meaning of the earlier lifecycle records.
 
 ### Negative
 
-- A later implementation slice must introduce a `Contract` aggregate and map it
-  to existing lifecycle records.
-- Current transitional routes and examples need to remain honest about current
-  internal IDs until the aggregate exists.
+- Initial implementation now introduces a minimal `Contract` aggregate and maps
+  it to existing lifecycle records, but public lifecycle façade routes are still
+  a later slice.
+- Transitional routes and examples need to remain honest about any remaining
+  internal lifecycle IDs until the public lifecycle façade exists.
 - Some existing endpoint candidates in historical ADRs are now transitional
   implementation details, not final public API shape.
 
 ## Non-goals
 
-This ADR does not define or implement:
+This ADR did not originally define or implement:
 
 - code changes
 - migrations
-- a `contracts` table
-- stores
+- public `/v1/contracts` lifecycle façade routes
 - endpoint implementation
 - route compatibility aliases
-- public Contract aggregate storage
 - runner, worker, or controller implementation
 - checkout
 - execution

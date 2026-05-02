@@ -17,7 +17,7 @@ func TestPostApprovedContractWorkItemsReturnsPlannedWorkItem(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -39,6 +39,9 @@ func TestPostApprovedContractWorkItemsReturnsPlannedWorkItem(t *testing.T) {
 	}
 	if item.ApprovedContractID != approved.ID {
 		t.Fatalf("approved_contract_id = %q, want %q", item.ApprovedContractID, approved.ID)
+	}
+	if item.ContractID != approved.ContractID {
+		t.Fatalf("contract_id = %q, want %q", item.ContractID, approved.ContractID)
 	}
 	if item.Title != approved.Title || item.Summary != approved.IntentSummary {
 		t.Fatalf("title/summary not copied from approved contract")
@@ -69,7 +72,7 @@ func TestPostApprovedContractWorkItemsAppendsWorkItemCreatedEvent(t *testing.T) 
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -89,6 +92,7 @@ func TestPostApprovedContractWorkItemsAppendsWorkItemCreatedEvent(t *testing.T) 
 	}
 	var payload struct {
 		WorkItemID         spine.WorkItemID         `json:"work_item_id"`
+		ContractID         spine.ContractID         `json:"contract_id"`
 		ApprovedContractID spine.ApprovedContractID `json:"approved_contract_id"`
 		RepoBindingID      spine.RepoBindingID      `json:"repo_binding_id"`
 		Status             spine.WorkItemStatus     `json:"status"`
@@ -98,8 +102,8 @@ func TestPostApprovedContractWorkItemsAppendsWorkItemCreatedEvent(t *testing.T) 
 	if payload.WorkItemID == "" {
 		t.Fatal("payload work_item_id is empty")
 	}
-	if payload.ApprovedContractID != approved.ID || payload.RepoBindingID != approved.RepoBindingID {
-		t.Fatalf("payload ids = %q/%q, want approved/repo ids", payload.ApprovedContractID, payload.RepoBindingID)
+	if payload.ContractID != approved.ContractID || payload.ApprovedContractID != approved.ID || payload.RepoBindingID != approved.RepoBindingID {
+		t.Fatalf("payload ids = %q/%q/%q, want contract/approved/repo ids", payload.ContractID, payload.ApprovedContractID, payload.RepoBindingID)
 	}
 	if payload.Status != spine.WorkItemStatusPlanned {
 		t.Fatalf("payload status = %q, want planned", payload.Status)
@@ -128,15 +132,45 @@ func TestPostApprovedContractWorkItemsUnknownApprovedContractReturnsNotFound(t *
 	}
 }
 
+func TestPostApprovedContractWorkItemsApprovedSnapshotIDDoesNotPlan(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	if response.code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
+	}
+}
+
 func TestPostApprovedContractWorkItemsRejectsNotApprovedState(t *testing.T) {
 	server := testServer(t)
 	approved := validHTTPApprovedContract()
 	approved.State = spine.ApprovedContractState("draft")
+	storeHTTPContractForApproved(t, server, approved)
 	if err := server.approvedContracts.Create(context.Background(), approved); err != nil {
 		t.Fatalf("approvedContracts.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+}
+
+func TestPostApprovedContractWorkItemsRejectsNonApprovedContract(t *testing.T) {
+	server := testServer(t)
+	seed := createContractSeed(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(seed.ContractID)+"/tasks", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -167,13 +201,15 @@ func TestPostApprovedContractWorkItemsRejectsIncompleteApprovedContract(t *testi
 			server := testServer(t)
 			approved := validHTTPApprovedContract()
 			approved.ID = spine.ApprovedContractID("approved-contract-" + tt.name)
+			approved.ContractID = spine.ContractID("contract-" + tt.name)
 			approved.ContractDraftID = spine.ContractDraftID("contract-draft-" + tt.name)
 			tt.mutate(&approved)
+			storeHTTPContractForApproved(t, server, approved)
 			if err := server.approvedContracts.Create(context.Background(), approved); err != nil {
 				t.Fatalf("approvedContracts.Create() error = %v", err)
 			}
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -197,12 +233,12 @@ func TestPostApprovedContractWorkItemsRejectsIncompleteApprovedContract(t *testi
 func TestPostApprovedContractWorkItemsRejectsDuplicatePlanning(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
-	first := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
 
-	second := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
 	}
@@ -228,7 +264,7 @@ func TestPostApprovedContractWorkItemsDoesNotMutateApprovedContract(t *testing.T
 		t.Fatal("approved contract missing before planning")
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -249,7 +285,7 @@ func TestPostApprovedContractWorkItemsRejectsUnknownJSONField(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", `{"unexpected":true}`)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", `{"unexpected":true}`)
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -268,7 +304,7 @@ func TestFullFlowCreatesPlannedWorkItemOnly(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -305,6 +341,7 @@ func validHTTPApprovedContract() spine.ApprovedContract {
 		ID:                 "approved-contract-1",
 		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
 		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		ContractID:         "contract-1",
 		ContractDraftID:    "contract-draft-1",
 		ContractSeedID:     "contract-seed-1",
 		GoalID:             "goal-1",
@@ -322,6 +359,29 @@ func validHTTPApprovedContract() spine.ApprovedContract {
 			{Kind: "goal", ID: "goal-1"},
 		},
 		State: spine.ApprovedContractStateApproved,
+	}
+}
+
+func storeHTTPContractForApproved(t *testing.T, server testServerDeps, approved spine.ApprovedContract) {
+	t.Helper()
+	currentSeedID := approved.ContractSeedID
+	currentDraftID := approved.ContractDraftID
+	approvedSnapshotID := approved.ID
+	contract := spine.Contract{
+		ID:                 approved.ContractID,
+		OrganizationID:     approved.OrganizationID,
+		ProjectID:          approved.ProjectID,
+		RepoBindingID:      approved.RepoBindingID,
+		GoalID:             approved.GoalID,
+		State:              spine.ContractStateApproved,
+		CurrentSeedID:      &currentSeedID,
+		CurrentDraftID:     &currentDraftID,
+		ApprovedSnapshotID: &approvedSnapshotID,
+		CreatedAt:          testTime(),
+		UpdatedAt:          testTime(),
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
 	}
 }
 

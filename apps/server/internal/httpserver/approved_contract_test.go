@@ -41,6 +41,9 @@ func TestPostContractDraftApproveReturnsApprovedContract(t *testing.T) {
 	if approved.ContractDraftID != draft.ID {
 		t.Fatalf("contract_draft_id = %q, want %q", approved.ContractDraftID, draft.ID)
 	}
+	if approved.ContractID != draft.ContractID {
+		t.Fatalf("contract_id = %q, want %q", approved.ContractID, draft.ContractID)
+	}
 	if approved.Scope[0] != draft.ProposedScope[0] {
 		t.Fatalf("scope = %#v, want draft scope %#v", approved.Scope, draft.ProposedScope)
 	}
@@ -67,6 +70,19 @@ func TestPostContractDraftApproveReturnsApprovedContract(t *testing.T) {
 	}
 	if storedApproved.ApprovedBy != approved.ApprovedBy {
 		t.Fatalf("stored approved_by = %#v, want response approved_by %#v", storedApproved.ApprovedBy, approved.ApprovedBy)
+	}
+	contract, ok, err := server.contracts.Get(context.Background(), draft.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract missing after approval")
+	}
+	if contract.State != spine.ContractStateApproved {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateApproved)
+	}
+	if contract.ApprovedSnapshotID == nil || *contract.ApprovedSnapshotID != approved.ID {
+		t.Fatalf("approved_snapshot_id = %v, want %q", contract.ApprovedSnapshotID, approved.ID)
 	}
 }
 
@@ -146,6 +162,7 @@ func TestPostContractDraftApproveAppendsContractApprovedEvent(t *testing.T) {
 	}
 	var payload struct {
 		ApprovedContractID spine.ApprovedContractID `json:"approved_contract_id"`
+		ContractID         spine.ContractID         `json:"contract_id"`
 		ContractDraftID    spine.ContractDraftID    `json:"contract_draft_id"`
 		ApprovedBy         spine.ActorRef           `json:"approved_by"`
 		ApprovedAt         string                   `json:"approved_at"`
@@ -153,6 +170,9 @@ func TestPostContractDraftApproveAppendsContractApprovedEvent(t *testing.T) {
 	decodeJSON(t, string(event.Payload), &payload)
 	if payload.ApprovedContractID == "" {
 		t.Fatal("approved_contract_id is empty")
+	}
+	if payload.ContractID != draft.ContractID {
+		t.Fatalf("contract_id = %q, want %q", payload.ContractID, draft.ContractID)
 	}
 	if payload.ContractDraftID != draft.ID {
 		t.Fatalf("contract_draft_id = %q, want %q", payload.ContractDraftID, draft.ID)
@@ -356,8 +376,10 @@ func TestPostContractDraftApproveRejectsIncompleteDraft(t *testing.T) {
 	server := testServer(t)
 	draft := validHTTPContractDraft()
 	draft.ID = "incomplete-ready-draft"
+	draft.ContractID = "incomplete-contract"
 	draft.State = spine.ContractDraftStateReadyForApproval
 	draft.ProposedAcceptanceCriteria = []string{}
+	storeHTTPContractForDraft(t, server, draft)
 	if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}

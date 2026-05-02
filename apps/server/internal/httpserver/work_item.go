@@ -12,7 +12,7 @@ import (
 )
 
 type WorkItemService interface {
-	PlanApprovedContract(context.Context, spine.ApprovedContractID) (spine.WorkItem, error)
+	PlanContract(context.Context, spine.ContractID) (spine.WorkItem, error)
 }
 
 type WorkItemHandler struct {
@@ -29,7 +29,7 @@ func (h *WorkItemHandler) PlanApprovedContract(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	item, err := h.service.PlanApprovedContract(r.Context(), spine.ApprovedContractID(r.PathValue("id")))
+	item, err := h.service.PlanContract(r.Context(), spine.ContractID(r.PathValue("id")))
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -43,6 +43,12 @@ func (h *WorkItemHandler) respondServiceError(w http.ResponseWriter, err error) 
 	switch {
 	case errors.As(err, &completenessErr):
 		RespondError(w, http.StatusBadRequest, "validation_failed", completenessErr.Error())
+	case errors.Is(err, workitem.ErrContractNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "contract not found")
+	case errors.Is(err, workitem.ErrInvalidContractState):
+		RespondError(w, http.StatusConflict, "invalid_state", "contract is not approved")
+	case errors.Is(err, workitem.ErrContractMissingApprovedSnapshot):
+		RespondError(w, http.StatusConflict, "invalid_state", "contract approved snapshot is missing")
 	case errors.Is(err, workitem.ErrApprovedContractNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "approved contract not found")
 	case errors.Is(err, workitem.ErrInvalidApprovedContractState):

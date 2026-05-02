@@ -53,6 +53,7 @@ func (s *ContractDraftStore) Update(_ context.Context, updated spine.ContractDra
 	}
 
 	updated.ContractSeedID = existing.ContractSeedID
+	updated.ContractID = existing.ContractID
 	updated.GoalID = existing.GoalID
 	updated.RepoBindingID = existing.RepoBindingID
 	updated.SourceRefs = append([]spine.SourceRef(nil), existing.SourceRefs...)

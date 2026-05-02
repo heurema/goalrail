@@ -38,6 +38,30 @@ func TestInitMigrationCreatesApprovedContractsTable(t *testing.T) {
 	}
 }
 
+func TestInitMigrationCreatesContractsTableAndLifecycleLinks(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE contracts",
+		"CONSTRAINT contracts_goal_id_unique UNIQUE (goal_id)",
+		"CONSTRAINT contracts_state_check CHECK (state IN ('seeded', 'draft', 'ready_for_approval', 'approved'))",
+		"contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE",
+		"CONSTRAINT contract_seeds_contract_id_unique UNIQUE (contract_id)",
+		"CONSTRAINT contract_drafts_contract_id_unique UNIQUE (contract_id)",
+		"CONSTRAINT approved_contracts_contract_id_unique UNIQUE (contract_id)",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE contracts") > strings.Index(sql, "CREATE TABLE contract_seeds") {
+		t.Fatalf("contracts must be created before contract_seeds")
+	}
+}
+
 func TestInitMigrationDropsApprovedContractsTable(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
@@ -58,5 +82,8 @@ func TestInitMigrationDropsApprovedContractsTable(t *testing.T) {
 	}
 	if strings.Index(sql, "DROP TABLE IF EXISTS approved_contracts;") > strings.Index(sql, "DROP TABLE IF EXISTS contract_drafts;") {
 		t.Fatalf("approved_contracts must be dropped before contract_drafts")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS contracts;") < strings.Index(sql, "DROP TABLE IF EXISTS contract_seeds;") {
+		t.Fatalf("contracts must be dropped after contract_seeds")
 	}
 }

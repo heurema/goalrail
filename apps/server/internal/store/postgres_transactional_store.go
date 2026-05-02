@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -215,6 +216,7 @@ func (s *PostgresTransactionalGoalStore) UpdateReadinessWithEvents(ctx context.C
 
 type PostgresTransactionalContractSeedStore struct {
 	base       *PostgresContractSeedStore
+	contracts  *PostgresContractStore
 	events     *PostgresEventLog
 	transactor postgresTransactor
 }
@@ -223,14 +225,16 @@ func NewPostgresTransactionalContractSeedStore(pool *pgxpool.Pool) *PostgresTran
 	db := newPostgresDB(pool)
 	return newPostgresTransactionalContractSeedStore(
 		NewPostgresContractSeedStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		pgxpoolTransactor{pool: pool},
 	)
 }
 
-func newPostgresTransactionalContractSeedStore(base *PostgresContractSeedStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractSeedStore {
+func newPostgresTransactionalContractSeedStore(base *PostgresContractSeedStore, contracts *PostgresContractStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractSeedStore {
 	return &PostgresTransactionalContractSeedStore{
 		base:       base,
+		contracts:  contracts,
 		events:     events,
 		transactor: transactor,
 	}
@@ -246,6 +250,27 @@ func (s *PostgresTransactionalContractSeedStore) Get(ctx context.Context, id spi
 
 func (s *PostgresTransactionalContractSeedStore) GetByGoalID(ctx context.Context, id spine.GoalID) (spine.ContractSeed, bool, error) {
 	return s.base.GetByGoalID(ctx, id)
+}
+
+func (s *PostgresTransactionalContractSeedStore) CreateContractWithSeedAndEvent(ctx context.Context, contract spine.Contract, created spine.ContractSeed, event spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	if s.contracts == nil {
+		return fmt.Errorf("postgres contract store is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.contracts.Create(txCtx, contract); err != nil {
+			return err
+		}
+		if err := s.base.Create(txCtx, created); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *PostgresTransactionalContractSeedStore) CreateWithEvent(ctx context.Context, created spine.ContractSeed, event spine.Event) error {
@@ -265,6 +290,7 @@ func (s *PostgresTransactionalContractSeedStore) CreateWithEvent(ctx context.Con
 
 type PostgresTransactionalContractDraftStore struct {
 	base       *PostgresContractDraftStore
+	contracts  *PostgresContractStore
 	events     *PostgresEventLog
 	transactor postgresTransactor
 }
@@ -273,14 +299,16 @@ func NewPostgresTransactionalContractDraftStore(pool *pgxpool.Pool) *PostgresTra
 	db := newPostgresDB(pool)
 	return newPostgresTransactionalContractDraftStore(
 		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		pgxpoolTransactor{pool: pool},
 	)
 }
 
-func newPostgresTransactionalContractDraftStore(base *PostgresContractDraftStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractDraftStore {
+func newPostgresTransactionalContractDraftStore(base *PostgresContractDraftStore, contracts *PostgresContractStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalContractDraftStore {
 	return &PostgresTransactionalContractDraftStore{
 		base:       base,
+		contracts:  contracts,
 		events:     events,
 		transactor: transactor,
 	}
@@ -304,6 +332,27 @@ func (s *PostgresTransactionalContractDraftStore) Get(ctx context.Context, id sp
 
 func (s *PostgresTransactionalContractDraftStore) GetByContractSeedID(ctx context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
 	return s.base.GetByContractSeedID(ctx, id)
+}
+
+func (s *PostgresTransactionalContractDraftStore) CreateWithContractUpdateAndEvent(ctx context.Context, created spine.ContractDraft, event spine.Event, updatedAt time.Time) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	if s.contracts == nil {
+		return fmt.Errorf("postgres contract store is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.Create(txCtx, created); err != nil {
+			return err
+		}
+		if err := s.contracts.MarkDraftCreated(txCtx, created.ContractID, created.ID, updatedAt); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *PostgresTransactionalContractDraftStore) CreateWithEvent(ctx context.Context, created spine.ContractDraft, event spine.Event) error {
@@ -351,8 +400,30 @@ func (s *PostgresTransactionalContractDraftStore) MarkReadyForApprovalWithEvent(
 	})
 }
 
+func (s *PostgresTransactionalContractDraftStore) MarkReadyForApprovalWithContractUpdateAndEvent(ctx context.Context, updated spine.ContractDraft, event spine.Event, updatedAt time.Time) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	if s.contracts == nil {
+		return fmt.Errorf("postgres contract store is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.MarkReadyForApproval(txCtx, updated); err != nil {
+			return err
+		}
+		if err := s.contracts.MarkReadyForApproval(txCtx, updated.ContractID, updatedAt); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 type PostgresTransactionalApprovedContractStore struct {
 	base       *PostgresApprovedContractStore
+	contracts  *PostgresContractStore
 	events     *PostgresEventLog
 	transactor postgresTransactor
 }
@@ -361,14 +432,16 @@ func NewPostgresTransactionalApprovedContractStore(pool *pgxpool.Pool) *Postgres
 	db := newPostgresDB(pool)
 	return newPostgresTransactionalApprovedContractStore(
 		NewPostgresApprovedContractStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		pgxpoolTransactor{pool: pool},
 	)
 }
 
-func newPostgresTransactionalApprovedContractStore(base *PostgresApprovedContractStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalApprovedContractStore {
+func newPostgresTransactionalApprovedContractStore(base *PostgresApprovedContractStore, contracts *PostgresContractStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalApprovedContractStore {
 	return &PostgresTransactionalApprovedContractStore{
 		base:       base,
+		contracts:  contracts,
 		events:     events,
 		transactor: transactor,
 	}
@@ -384,6 +457,27 @@ func (s *PostgresTransactionalApprovedContractStore) Get(ctx context.Context, id
 
 func (s *PostgresTransactionalApprovedContractStore) GetByContractDraftID(ctx context.Context, id spine.ContractDraftID) (spine.ApprovedContract, bool, error) {
 	return s.base.GetByContractDraftID(ctx, id)
+}
+
+func (s *PostgresTransactionalApprovedContractStore) CreateWithContractUpdateAndEvent(ctx context.Context, approved spine.ApprovedContract, event spine.Event, updatedAt time.Time) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	if s.contracts == nil {
+		return fmt.Errorf("postgres contract store is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.base.Create(txCtx, approved); err != nil {
+			return err
+		}
+		if err := s.contracts.MarkApproved(txCtx, approved.ContractID, approved.ID, updatedAt); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (s *PostgresTransactionalApprovedContractStore) CreateWithEvent(ctx context.Context, approved spine.ApprovedContract, event spine.Event) error {

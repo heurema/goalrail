@@ -187,9 +187,10 @@ Public Contract identity:
   contract creation, draft updates, submission, approval, tasks, plans, and
   proposals rather than exposing `contract-seeds`, `contract-drafts`, or
   `approved-contracts` as product-facing resource names
-- this is accepted target architecture; the current server still implements the
-  internal lifecycle records directly and does not yet have public Contract
-  aggregate storage
+- the current server implements the smallest stable `contract_id` aggregate
+  boundary and still uses internal lifecycle records for transitional
+  seed/draft/approval routes; public `/v1/contracts` lifecycle façade routes
+  remain a later bounded slice
 
 Control-plane split:
 - the API server is the canonical state machine for planning transitions,

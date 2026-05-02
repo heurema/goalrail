@@ -16,11 +16,9 @@ import (
 )
 
 func TestServiceApprovesReadyContractDraft(t *testing.T) {
-	service, drafts, approvedStore, _ := approvalService(t)
+	service, contracts, drafts, approvedStore, _ := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 
 	approved, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
 	if err != nil {
@@ -32,6 +30,9 @@ func TestServiceApprovesReadyContractDraft(t *testing.T) {
 	}
 	if approved.ContractDraftID != draft.ID {
 		t.Fatalf("contract_draft_id = %q, want %q", approved.ContractDraftID, draft.ID)
+	}
+	if approved.ContractID != draft.ContractID {
+		t.Fatalf("contract_id = %q, want %q", approved.ContractID, draft.ContractID)
 	}
 	if approved.ContractSeedID != draft.ContractSeedID || approved.GoalID != draft.GoalID || approved.RepoBindingID != draft.RepoBindingID {
 		t.Fatalf("source ids = %q/%q/%q, want draft ids", approved.ContractSeedID, approved.GoalID, approved.RepoBindingID)
@@ -79,14 +80,25 @@ func TestServiceApprovesReadyContractDraft(t *testing.T) {
 	if !reflect.DeepEqual(storedDraft, draft) {
 		t.Fatalf("stored draft mutated: %#v want %#v", storedDraft, draft)
 	}
+	contract, ok, err := contracts.Get(context.Background(), draft.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	if contract.State != spine.ContractStateApproved {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateApproved)
+	}
+	if contract.ApprovedSnapshotID == nil || *contract.ApprovedSnapshotID != approved.ID {
+		t.Fatalf("approved_snapshot_id = %v, want %q", contract.ApprovedSnapshotID, approved.ID)
+	}
 }
 
 func TestServiceAppendsContractApprovedEvent(t *testing.T) {
-	service, drafts, _, events := approvalService(t)
+	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 
 	approved, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
 	if err != nil {
@@ -110,6 +122,7 @@ func TestServiceAppendsContractApprovedEvent(t *testing.T) {
 
 	var payload struct {
 		ApprovedContractID spine.ApprovedContractID `json:"approved_contract_id"`
+		ContractID         spine.ContractID         `json:"contract_id"`
 		ContractDraftID    spine.ContractDraftID    `json:"contract_draft_id"`
 		ContractSeedID     spine.ContractSeedID     `json:"contract_seed_id"`
 		GoalID             spine.GoalID             `json:"goal_id"`
@@ -121,7 +134,7 @@ func TestServiceAppendsContractApprovedEvent(t *testing.T) {
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal contract.approved payload: %v", err)
 	}
-	if payload.ApprovedContractID != approved.ID || payload.ContractDraftID != draft.ID || payload.ContractSeedID != draft.ContractSeedID || payload.GoalID != draft.GoalID {
+	if payload.ApprovedContractID != approved.ID || payload.ContractID != draft.ContractID || payload.ContractDraftID != draft.ID || payload.ContractSeedID != draft.ContractSeedID || payload.GoalID != draft.GoalID {
 		t.Fatalf("payload ids = %q/%q/%q/%q, want approved/draft/source ids", payload.ApprovedContractID, payload.ContractDraftID, payload.ContractSeedID, payload.GoalID)
 	}
 	if payload.ApprovedBy.Kind != "user" || payload.ApprovedBy.ID != "dev_approver" {
@@ -139,11 +152,9 @@ func TestServiceAppendsContractApprovedEvent(t *testing.T) {
 }
 
 func TestServiceRejectsDuplicateApproval(t *testing.T) {
-	service, drafts, _, events := approvalService(t)
+	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 	if _, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest()); err != nil {
 		t.Fatalf("first ApproveDraft() error = %v", err)
 	}
@@ -158,12 +169,10 @@ func TestServiceRejectsDuplicateApproval(t *testing.T) {
 }
 
 func TestServiceRejectsDraftNotReadyForApproval(t *testing.T) {
-	service, drafts, _, events := approvalService(t)
+	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
 	draft.State = spine.ContractDraftStateDraft
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 
 	_, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
 	if !errors.Is(err, approvedcontract.ErrInvalidDraftState) {
@@ -186,11 +195,9 @@ func TestServiceValidatesApprovedBy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, drafts, _, events := approvalService(t)
+			service, contracts, drafts, _, events := approvalService(t)
 			draft := validReadyDraft()
-			if err := drafts.Create(context.Background(), draft); err != nil {
-				t.Fatalf("drafts.Create() error = %v", err)
-			}
+			storeDraftWithContract(t, drafts, contracts, draft)
 
 			_, err := service.ApproveDraft(context.Background(), draft.ID, spine.ApproveContractDraftRequest{ApprovedBy: tt.actor})
 			var validationErr *approvedcontract.ValidationError
@@ -208,11 +215,9 @@ func TestServiceValidatesApprovedBy(t *testing.T) {
 }
 
 func TestServiceUsesActorContextWhenPresent(t *testing.T) {
-	service, drafts, _, events := approvalService(t)
+	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 
 	ctxActor := spine.ActorRef{Kind: "user", ID: "ctx_approver", DisplayName: "Context Approver"}
 	ctx := actor.WithActor(context.Background(), actor.ActorContext{
@@ -244,11 +249,9 @@ func TestServiceUsesActorContextWhenPresent(t *testing.T) {
 }
 
 func TestServiceFallsBackToPayloadActorWhenContextAbsent(t *testing.T) {
-	service, drafts, _, _ := approvalService(t)
+	service, contracts, drafts, _, _ := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 
 	approved, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
 	if err != nil {
@@ -272,11 +275,9 @@ func TestServiceValidatesEffectiveApproverFromContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, drafts, _, events := approvalService(t)
+			service, contracts, drafts, _, events := approvalService(t)
 			draft := validReadyDraft()
-			if err := drafts.Create(context.Background(), draft); err != nil {
-				t.Fatalf("drafts.Create() error = %v", err)
-			}
+			storeDraftWithContract(t, drafts, contracts, draft)
 
 			ctx := actor.WithActor(context.Background(), actor.ActorContext{
 				Actor:  tt.ctxActor,
@@ -311,13 +312,12 @@ func TestServiceRejectsIncompleteDraft(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, drafts, _, events := approvalService(t)
+			service, contracts, drafts, _, events := approvalService(t)
 			draft := validReadyDraft()
 			draft.ID = spine.ContractDraftID("contract-draft-" + tt.name)
+			draft.ContractID = spine.ContractID("contract-" + tt.name)
 			tt.mutate(&draft)
-			if err := drafts.Create(context.Background(), draft); err != nil {
-				t.Fatalf("drafts.Create() error = %v", err)
-			}
+			storeDraftWithContract(t, drafts, contracts, draft)
 
 			_, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest())
 			var completenessErr *approvedcontract.CompletenessError
@@ -335,25 +335,24 @@ func TestServiceRejectsIncompleteDraft(t *testing.T) {
 }
 
 func TestServiceDoesNotAppendWorkGateProofEvents(t *testing.T) {
-	service, drafts, _, events := approvalService(t)
+	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
-	if err := drafts.Create(context.Background(), draft); err != nil {
-		t.Fatalf("drafts.Create() error = %v", err)
-	}
+	storeDraftWithContract(t, drafts, contracts, draft)
 	if _, err := service.ApproveDraft(context.Background(), draft.ID, approveRequest()); err != nil {
 		t.Fatalf("ApproveDraft() error = %v", err)
 	}
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func approvalService(t *testing.T) (*approvedcontract.Service, *store.ContractDraftStore, *store.ApprovedContractStore, *eventlog.EventLog) {
+func approvalService(t *testing.T) (*approvedcontract.Service, *store.ContractStore, *store.ContractDraftStore, *store.ApprovedContractStore, *eventlog.EventLog) {
 	t.Helper()
 
+	contracts := store.NewContractStore()
 	drafts := store.NewContractDraftStore()
 	approved := store.NewApprovedContractStore()
 	events := eventlog.NewEventLog()
-	service := approvedcontract.NewService(drafts, approved, events, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, drafts, approved, events
+	service := approvedcontract.NewService(drafts, contracts, approved, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, contracts, drafts, approved, events
 }
 
 func validReadyDraft() spine.ContractDraft {
@@ -361,6 +360,7 @@ func validReadyDraft() spine.ContractDraft {
 		ID:                         "contract-draft-1",
 		OrganizationID:             "organization-1",
 		ProjectID:                  "project-1",
+		ContractID:                 "contract-1",
 		ContractSeedID:             "contract-seed-1",
 		GoalID:                     "goal-1",
 		RepoBindingID:              "repo-binding-1",
@@ -380,6 +380,30 @@ func validReadyDraft() spine.ContractDraft {
 		},
 		State:     spine.ContractDraftStateReadyForApproval,
 		CreatedAt: testTime(),
+	}
+}
+
+func storeDraftWithContract(t *testing.T, drafts *store.ContractDraftStore, contracts *store.ContractStore, draft spine.ContractDraft) {
+	t.Helper()
+	currentSeedID := draft.ContractSeedID
+	currentDraftID := draft.ID
+	contract := spine.Contract{
+		ID:             draft.ContractID,
+		OrganizationID: draft.OrganizationID,
+		ProjectID:      draft.ProjectID,
+		RepoBindingID:  draft.RepoBindingID,
+		GoalID:         draft.GoalID,
+		State:          spine.ContractStateReadyForApproval,
+		CurrentSeedID:  &currentSeedID,
+		CurrentDraftID: &currentDraftID,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
+	}
+	if err := contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+	if err := drafts.Create(context.Background(), draft); err != nil {
+		t.Fatalf("drafts.Create() error = %v", err)
 	}
 }
 

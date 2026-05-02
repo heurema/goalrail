@@ -204,7 +204,28 @@ func TestPostgresContractSeedStoreCreateBuildsDurableInsert(t *testing.T) {
 	if !strings.Contains(call.sql, "INSERT INTO contract_seeds") {
 		t.Fatalf("SQL = %q, want contract_seeds insert", call.sql)
 	}
-	if got, want := len(call.args), 14; got != want {
+	if got, want := len(call.args), 15; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestPostgresContractStoreCreateBuildsDurableInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresContractStoreWithExecutorAndQuerier(exec, nil)
+
+	if err := store.Create(ctx, validPostgresContract()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO contracts") {
+		t.Fatalf("SQL = %q, want contracts insert", call.sql)
+	}
+	if got, want := len(call.args), 11; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
 }
@@ -254,12 +275,12 @@ func TestPostgresContractDraftStoreCreateBuildsDurableInsert(t *testing.T) {
 	if !strings.Contains(call.sql, "INSERT INTO contract_drafts") {
 		t.Fatalf("SQL = %q, want contract_drafts insert", call.sql)
 	}
-	if got, want := len(call.args), 19; got != want {
+	if got, want := len(call.args), 20; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
-	assertJSONBytesEqual(t, call.args[8], `["Persist contract seeds","Preserve draft arrays"]`)
-	assertJSONBytesEqual(t, call.args[11], `["Seed can be read after restart","Draft array values are retained"]`)
-	assertJSONBytesEqual(t, call.args[13], `["Provide evidence that acceptance criteria were checked.","Show persisted draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[9], `["Persist contract seeds","Preserve draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[12], `["Seed can be read after restart","Draft array values are retained"]`)
+	assertJSONBytesEqual(t, call.args[14], `["Provide evidence that acceptance criteria were checked.","Show persisted draft arrays"]`)
 }
 
 func TestPostgresContractDraftStoreUpdateBuildsDurableUpdate(t *testing.T) {
@@ -400,13 +421,13 @@ func TestPostgresApprovedContractStoreCreateBuildsDurableInsert(t *testing.T) {
 	if !strings.Contains(call.sql, "INSERT INTO approved_contracts") {
 		t.Fatalf("SQL = %q, want approved_contracts insert", call.sql)
 	}
-	if got, want := len(call.args), 22; got != want {
+	if got, want := len(call.args), 23; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
-	assertJSONBytesEqual(t, call.args[9], `["Persist contract seeds","Preserve draft arrays"]`)
-	assertJSONBytesEqual(t, call.args[12], `["Seed can be read after restart","Draft array values are retained"]`)
-	assertJSONBytesEqual(t, call.args[14], `["Provide evidence that acceptance criteria were checked.","Show persisted draft arrays"]`)
-	assertJSONBytesEqual(t, call.args[16], `{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}`)
+	assertJSONBytesEqual(t, call.args[10], `["Persist contract seeds","Preserve draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[13], `["Seed can be read after restart","Draft array values are retained"]`)
+	assertJSONBytesEqual(t, call.args[15], `["Provide evidence that acceptance criteria were checked.","Show persisted draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[17], `{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}`)
 }
 
 func TestPostgresApprovedContractStoreGetByContractDraftIDScansPersistedApprovedContract(t *testing.T) {
@@ -487,6 +508,7 @@ func validPostgresContractSeed() spine.ContractSeed {
 		OrganizationID: "018f0000-0000-7000-8000-000000000002",
 		ProjectID:      "018f0000-0000-7000-8000-000000000003",
 		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		ContractID:     "018f0000-0000-7000-8000-000000000301",
 		GoalID:         "018f0000-0000-7000-8000-000000000201",
 		Title:          "Persist seed",
 		IntentSummary:  "Make contract seed durable",
@@ -501,6 +523,22 @@ func validPostgresContractSeed() spine.ContractSeed {
 	}
 }
 
+func validPostgresContract() spine.Contract {
+	now := testStoreTime()
+	currentSeedID := spine.ContractSeedID("018f0000-0000-7000-8000-000000000401")
+	return spine.Contract{
+		ID:             "018f0000-0000-7000-8000-000000000301",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		GoalID:         "018f0000-0000-7000-8000-000000000201",
+		State:          spine.ContractStateSeeded,
+		CurrentSeedID:  &currentSeedID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+}
+
 func validPostgresContractDraft() spine.ContractDraft {
 	now := testStoreTime()
 	return spine.ContractDraft{
@@ -508,6 +546,7 @@ func validPostgresContractDraft() spine.ContractDraft {
 		OrganizationID:             "018f0000-0000-7000-8000-000000000002",
 		ProjectID:                  "018f0000-0000-7000-8000-000000000003",
 		RepoBindingID:              "018f0000-0000-7000-8000-000000000004",
+		ContractID:                 "018f0000-0000-7000-8000-000000000301",
 		ContractSeedID:             "018f0000-0000-7000-8000-000000000401",
 		GoalID:                     "018f0000-0000-7000-8000-000000000201",
 		Title:                      "Persist seed",
@@ -535,6 +574,7 @@ func validPostgresApprovedContract() spine.ApprovedContract {
 		OrganizationID:     draft.OrganizationID,
 		ProjectID:          draft.ProjectID,
 		RepoBindingID:      draft.RepoBindingID,
+		ContractID:         draft.ContractID,
 		ContractDraftID:    draft.ID,
 		ContractSeedID:     draft.ContractSeedID,
 		GoalID:             draft.GoalID,
@@ -583,6 +623,7 @@ func validContractSeedRowValues() []any {
 		"018f0000-0000-7000-8000-000000000002",
 		"018f0000-0000-7000-8000-000000000003",
 		"018f0000-0000-7000-8000-000000000004",
+		"018f0000-0000-7000-8000-000000000301",
 		"018f0000-0000-7000-8000-000000000201",
 		"Persist seed",
 		"Make contract seed durable",
@@ -601,6 +642,7 @@ func validContractDraftRowValues() []any {
 		"018f0000-0000-7000-8000-000000000002",
 		"018f0000-0000-7000-8000-000000000003",
 		"018f0000-0000-7000-8000-000000000004",
+		"018f0000-0000-7000-8000-000000000301",
 		"018f0000-0000-7000-8000-000000000401",
 		"018f0000-0000-7000-8000-000000000201",
 		"Persist seed",
@@ -624,6 +666,7 @@ func validApprovedContractRowValues() []any {
 		"018f0000-0000-7000-8000-000000000002",
 		"018f0000-0000-7000-8000-000000000003",
 		"018f0000-0000-7000-8000-000000000004",
+		"018f0000-0000-7000-8000-000000000301",
 		"018f0000-0000-7000-8000-000000000501",
 		"018f0000-0000-7000-8000-000000000401",
 		"018f0000-0000-7000-8000-000000000201",

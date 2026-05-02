@@ -12,6 +12,7 @@ type ApprovedContract struct {
 	ID                 ApprovedContractID    `json:"id"`
 	OrganizationID     OrganizationID        `json:"-"`
 	ProjectID          ProjectID             `json:"-"`
+	ContractID         ContractID            `json:"contract_id"`
 	ContractDraftID    ContractDraftID       `json:"contract_draft_id"`
 	ContractSeedID     ContractSeedID        `json:"contract_seed_id"`
 	GoalID             GoalID                `json:"goal_id"`

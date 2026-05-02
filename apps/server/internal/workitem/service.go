@@ -25,9 +25,12 @@ const (
 )
 
 var (
-	ErrApprovedContractNotFound     = errors.New("approved contract not found")
-	ErrInvalidApprovedContractState = errors.New("approved contract is not plannable")
-	ErrAlreadyPlanned               = errors.New("approved contract already planned")
+	ErrContractNotFound                = errors.New("contract not found")
+	ErrInvalidContractState            = errors.New("contract is not plannable")
+	ErrContractMissingApprovedSnapshot = errors.New("contract approved snapshot is missing")
+	ErrApprovedContractNotFound        = errors.New("approved contract not found")
+	ErrInvalidApprovedContractState    = errors.New("approved contract is not plannable")
+	ErrAlreadyPlanned                  = errors.New("approved contract already planned")
 )
 
 type CompletenessError struct {
@@ -43,6 +46,10 @@ func (e *CompletenessError) Error() string {
 
 type ApprovedContractReader interface {
 	Get(context.Context, spine.ApprovedContractID) (spine.ApprovedContract, bool, error)
+}
+
+type ContractReader interface {
+	Get(context.Context, spine.ContractID) (spine.Contract, bool, error)
 }
 
 type Store interface {
@@ -65,6 +72,7 @@ type IDGenerator interface {
 }
 
 type Service struct {
+	Contracts         ContractReader
 	ApprovedContracts ApprovedContractReader
 	WorkItems         Store
 	Events            EventLog
@@ -72,8 +80,9 @@ type Service struct {
 	IDs               IDGenerator
 }
 
-func NewService(approvedContracts ApprovedContractReader, workItems Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(contracts ContractReader, approvedContracts ApprovedContractReader, workItems Store, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
+		Contracts:         contracts,
 		ApprovedContracts: approvedContracts,
 		WorkItems:         workItems,
 		Events:            events,
@@ -82,12 +91,26 @@ func NewService(approvedContracts ApprovedContractReader, workItems Store, event
 	}
 }
 
-func (s *Service) PlanApprovedContract(ctx context.Context, approvedContractID spine.ApprovedContractID) (spine.WorkItem, error) {
+func (s *Service) PlanContract(ctx context.Context, contractID spine.ContractID) (spine.WorkItem, error) {
 	if err := s.validateDependencies(); err != nil {
 		return spine.WorkItem{}, err
 	}
 
-	approved, ok, err := s.ApprovedContracts.Get(ctx, approvedContractID)
+	contract, ok, err := s.Contracts.Get(ctx, contractID)
+	if err != nil {
+		return spine.WorkItem{}, fmt.Errorf("get contract: %w", err)
+	}
+	if !ok {
+		return spine.WorkItem{}, ErrContractNotFound
+	}
+	if contract.State != spine.ContractStateApproved {
+		return spine.WorkItem{}, fmt.Errorf("%w: %s", ErrInvalidContractState, contract.State)
+	}
+	if contract.ApprovedSnapshotID == nil || strings.TrimSpace(string(*contract.ApprovedSnapshotID)) == "" {
+		return spine.WorkItem{}, ErrContractMissingApprovedSnapshot
+	}
+
+	approved, ok, err := s.ApprovedContracts.Get(ctx, *contract.ApprovedSnapshotID)
 	if err != nil {
 		return spine.WorkItem{}, fmt.Errorf("get approved contract: %w", err)
 	}
@@ -132,11 +155,16 @@ func (s *Service) PlanApprovedContract(ctx context.Context, approvedContractID s
 	return workItem, nil
 }
 
+func (s *Service) PlanApprovedContract(ctx context.Context, approvedContractID spine.ApprovedContractID) (spine.WorkItem, error) {
+	return s.PlanContract(ctx, spine.ContractID(approvedContractID))
+}
+
 func workItemFromApprovedContract(id spine.WorkItemID, approved spine.ApprovedContract, createdAt time.Time) spine.WorkItem {
 	return spine.WorkItem{
 		ID:                   id,
 		OrganizationID:       approved.OrganizationID,
 		ProjectID:            approved.ProjectID,
+		ContractID:           approved.ContractID,
 		ApprovedContractID:   approved.ID,
 		RepoBindingID:        approved.RepoBindingID,
 		Title:                approved.Title,
@@ -215,6 +243,7 @@ func cloneStrings(values []string) []string {
 
 type workItemCreatedPayload struct {
 	WorkItemID           spine.WorkItemID         `json:"work_item_id"`
+	ContractID           spine.ContractID         `json:"contract_id"`
 	ApprovedContractID   spine.ApprovedContractID `json:"approved_contract_id"`
 	RepoBindingID        spine.RepoBindingID      `json:"repo_binding_id"`
 	Title                string                   `json:"title"`
@@ -237,6 +266,7 @@ func (s *Service) workItemCreatedEvent(workItem spine.WorkItem) (spine.Event, er
 
 	payload, err := json.Marshal(workItemCreatedPayload{
 		WorkItemID:           workItem.ID,
+		ContractID:           workItem.ContractID,
 		ApprovedContractID:   workItem.ApprovedContractID,
 		RepoBindingID:        workItem.RepoBindingID,
 		Title:                workItem.Title,
@@ -278,6 +308,9 @@ func cloneIntPointer(value *int) *int {
 func (s *Service) validateDependencies() error {
 	if s.ApprovedContracts == nil {
 		return errors.New("work item service approved contract store is nil")
+	}
+	if s.Contracts == nil {
+		return errors.New("work item service contract store is nil")
 	}
 	if s.WorkItems == nil {
 		return errors.New("work item service work item store is nil")

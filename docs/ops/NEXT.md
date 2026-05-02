@@ -24,7 +24,7 @@
 - ADR-0017 now defines the Contract approval boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`; the server implements it as explicit ApprovedContract snapshot creation with `approved_by` and `contract.approved`; approval does not start execution, gate, or proof
 - ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; the server implements one in-memory planned WorkItem per ApprovedContract in v0, while assignment, claiming, execution, Run, receipt, gate, and proof remain later boundaries
 - ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries through a planning request / proposal / acceptance model; this model is intended direction only and is not implemented yet
-- ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; this aggregate is not implemented yet
+- ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary, without public `/v1/contracts` lifecycle façade routes
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -247,16 +247,14 @@ Done means:
 
 ### Server follow-up slices
 
-1. Public Contract aggregate implementation boundary
-   - define and implement the smallest API-server-owned public `Contract`
-     aggregate and stable `contract_id`
+1. Public Contract lifecycle façade route boundary
+   - define and implement the smallest `/v1/contracts` lifecycle façade around
+     the implemented stable `contract_id`
    - preserve existing internal `ContractSeed`, `ContractDraft`, and
      `ApprovedContract` lifecycle records
-   - make public contract routes resolve through the aggregate instead of
-     exposing internal lifecycle IDs as product API identity
    - do not implement task planning requests/proposals, runner checkout,
      execution, receipt, queue, outbox, gate, proof, runtime registry,
-     assignment, or claiming
+     assignment, claiming, list, search, auth, or onboarding
 2. WorkItem planning request/proposal boundary design
    - define the smallest API-server-owned `WorkItemPlanningRequest` /
      `WorkItemPlanProposal` / acceptance boundary after `ApprovedContract(approved)`

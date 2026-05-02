@@ -12,6 +12,7 @@ type WorkItem struct {
 	ID                   WorkItemID         `json:"id"`
 	OrganizationID       OrganizationID     `json:"-"`
 	ProjectID            ProjectID          `json:"-"`
+	ContractID           ContractID         `json:"contract_id"`
 	ApprovedContractID   ApprovedContractID `json:"approved_contract_id"`
 	RepoBindingID        RepoBindingID      `json:"repo_binding_id"`
 	Title                string             `json:"title"`

@@ -18,7 +18,7 @@ func TestPostGoalContractSeedReturnsCreatedSeed(t *testing.T) {
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-	for _, forbiddenField := range []string{"\"contract_id\"", "\"contract_draft_id\"", "\"work_item_id\"", "\"proof_id\""} {
+	for _, forbiddenField := range []string{"\"contract_draft_id\"", "\"work_item_id\"", "\"proof_id\""} {
 		if strings.Contains(response.body, forbiddenField) {
 			t.Fatalf("response includes forbidden field %s", forbiddenField)
 		}
@@ -28,6 +28,9 @@ func TestPostGoalContractSeedReturnsCreatedSeed(t *testing.T) {
 	decodeJSON(t, response.body, &seed)
 	if seed.State != spine.ContractSeedStateCreated {
 		t.Fatalf("state = %q, want %q", seed.State, spine.ContractSeedStateCreated)
+	}
+	if seed.ContractID == "" {
+		t.Fatal("contract_id is empty")
 	}
 	if seed.GoalID != goal.ID {
 		t.Fatalf("goal_id = %q, want %q", seed.GoalID, goal.ID)
@@ -40,6 +43,16 @@ func TestPostGoalContractSeedReturnsCreatedSeed(t *testing.T) {
 	}
 	if seed.IntentSummary != goal.Summary {
 		t.Fatalf("intent_summary = %q, want %q", seed.IntentSummary, goal.Summary)
+	}
+	contract, ok, err := server.contracts.Get(context.Background(), seed.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not stored")
+	}
+	if contract.State != spine.ContractStateSeeded {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateSeeded)
 	}
 	if seed.ScopeHint != goal.ScopeHint {
 		t.Fatalf("scope_hint = %q, want %q", seed.ScopeHint, goal.ScopeHint)
