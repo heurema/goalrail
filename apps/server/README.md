@@ -123,6 +123,11 @@ Then plan one non-executable WorkItem from the approved contract:
 curl -sS -X POST http://localhost:8080/v1/contracts/{approved_contract_id}/tasks
 ```
 
+This `contracts` route spelling follows the public Contract identity direction
+from ADR-0020, but the current prototype still resolves the ID against the
+approved contract snapshot store internally. A stable public Contract aggregate
+and `contract_id` are not implemented yet.
+
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and
 answer state is still prototype/in-memory. ContractSeed creation does not
