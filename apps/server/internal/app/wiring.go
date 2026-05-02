@@ -81,7 +81,11 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	contractSeedService := contractseed.NewService(goals, contracts, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
 	contractDraftService := contractdraft.NewService(contractSeedStore, contracts, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contracts, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
-	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService)
+	contractOptions := []contract.Option{}
+	if runner, ok := contractSeedStore.(contract.TransactionRunner); ok {
+		contractOptions = append(contractOptions, contract.WithTransactionRunner(runner))
+	}
+	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService, contractOptions...)
 	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(contracts, approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)

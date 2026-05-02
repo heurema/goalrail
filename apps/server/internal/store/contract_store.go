@@ -70,6 +70,21 @@ func (s *ContractStore) GetByGoalID(_ context.Context, goalID spine.GoalID) (spi
 	return cloneContract(contract), true, nil
 }
 
+func (s *ContractStore) Delete(_ context.Context, id spine.ContractID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	contract, exists := s.contracts[id]
+	if !exists {
+		return nil
+	}
+	delete(s.contracts, id)
+	if currentID, ok := s.byGoal[contract.GoalID]; ok && currentID == id {
+		delete(s.byGoal, contract.GoalID)
+	}
+	return nil
+}
+
 func (s *ContractStore) MarkDraftCreated(_ context.Context, contractID spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

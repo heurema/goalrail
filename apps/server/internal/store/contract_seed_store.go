@@ -68,6 +68,21 @@ func (s *ContractSeedStore) GetByGoalID(_ context.Context, goalID spine.GoalID) 
 	return cloneContractSeed(seed), true, nil
 }
 
+func (s *ContractSeedStore) Delete(_ context.Context, id spine.ContractSeedID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	seed, exists := s.seeds[id]
+	if !exists {
+		return nil
+	}
+	delete(s.seeds, id)
+	if currentID, ok := s.byGoal[seed.GoalID]; ok && currentID == id {
+		delete(s.byGoal, seed.GoalID)
+	}
+	return nil
+}
+
 func cloneContractSeed(seed spine.ContractSeed) spine.ContractSeed {
 	if seed.SourceRefs != nil {
 		seed.SourceRefs = append([]spine.SourceRef(nil), seed.SourceRefs...)
