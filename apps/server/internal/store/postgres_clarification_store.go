@@ -522,6 +522,21 @@ func newPostgresTransactionalClarificationStore(requests *PostgresClarificationR
 	}
 }
 
+func (s *PostgresTransactionalClarificationStore) CreateRequestWithEvent(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.requests.Create(txCtx, request); err != nil {
+			return err
+		}
+		if err := s.events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func (s *PostgresTransactionalClarificationStore) RecordAnswerWithEvents(ctx context.Context, answer spine.ClarificationAnswer, eventsToAppend []spine.Event) (bool, error) {
 	if s.transactor == nil {
 		return false, fmt.Errorf("postgres transactor is nil")

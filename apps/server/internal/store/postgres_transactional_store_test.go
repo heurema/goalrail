@@ -441,6 +441,49 @@ func TestPostgresTransactionalWorkItemPlanStoreCommitsAcceptanceWithMultipleTask
 	}
 }
 
+func TestPostgresTransactionalClarificationStoreRollsBackRequestCreationWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{failExecCall: 2}
+	db := &recordingPostgresDB{}
+	transactor := &recordingPostgresTransactor{tx: tx}
+	store := newPostgresTransactionalClarificationStore(
+		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
+		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
+		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		transactor,
+	)
+
+	err := store.CreateRequestWithEvent(ctx, validPostgresClarificationRequest(), validPostgresEvent("clarification.requested", "ClarificationRequest", "018f0000-0000-7000-8000-000000000a01"))
+	if err == nil {
+		t.Fatal("CreateRequestWithEvent() error = nil, want failure")
+	}
+	if got, want := len(transactor.isoLevels), 1; got != want {
+		t.Fatalf("transaction count = %d, want %d", got, want)
+	}
+	if transactor.isoLevels[0] != pgx.ReadCommitted {
+		t.Fatalf("transaction isolation = %s, want %s", transactor.isoLevels[0], pgx.ReadCommitted)
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls) + len(db.fallbackQueryRowCalls); got != 0 {
+		t.Fatalf("fallback DB calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 2; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	if !strings.Contains(tx.execCalls[0].sql, "INSERT INTO clarification_requests") {
+		t.Fatalf("first SQL = %q, want clarification request insert", tx.execCalls[0].sql)
+	}
+	if !strings.Contains(tx.execCalls[1].sql, "INSERT INTO events") {
+		t.Fatalf("second SQL = %q, want event insert", tx.execCalls[1].sql)
+	}
+}
+
 func TestPostgresTransactionalClarificationStoreRollsBackAnswerRecordingWhenEventAppendFails(t *testing.T) {
 	ctx := context.Background()
 	values := validClarificationRequestRowValues()

@@ -75,6 +75,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type RequestCreationTransaction interface {
+	CreateRequestWithEvent(context.Context, spine.ClarificationRequest, spine.Event) error
+}
+
 type AnswerRecordingTransaction interface {
 	RecordAnswerWithEvents(context.Context, spine.ClarificationAnswer, []spine.Event) (bool, error)
 }
@@ -102,11 +106,18 @@ type Service struct {
 	Clock   Clock
 	IDs     IDGenerator
 
+	RequestCreationTx   RequestCreationTransaction
 	AnswerRecordingTx   AnswerRecordingTransaction
 	AnswerApplicationTx AnswerApplicationTransaction
 }
 
 type Option func(*Service)
+
+func WithRequestCreationTransaction(tx RequestCreationTransaction) Option {
+	return func(s *Service) {
+		s.RequestCreationTx = tx
+	}
+}
 
 func WithAnswerRecordingTransaction(tx AnswerRecordingTransaction) Option {
 	return func(s *Service) {
@@ -179,14 +190,24 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 	if err != nil {
 		return spine.ClarificationRequest{}, err
 	}
-	if err := s.Store.Create(ctx, created); err != nil {
-		if errors.Is(err, ErrAlreadyOpen) {
-			return spine.ClarificationRequest{}, ErrAlreadyOpen
+
+	if s.RequestCreationTx != nil {
+		if err := s.RequestCreationTx.CreateRequestWithEvent(ctx, created, event); err != nil {
+			if errors.Is(err, ErrAlreadyOpen) {
+				return spine.ClarificationRequest{}, ErrAlreadyOpen
+			}
+			return spine.ClarificationRequest{}, fmt.Errorf("create clarification request transaction: %w", err)
 		}
-		return spine.ClarificationRequest{}, fmt.Errorf("create clarification request: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ClarificationRequest{}, fmt.Errorf("append clarification requested event: %w", err)
+	} else {
+		if err := s.Store.Create(ctx, created); err != nil {
+			if errors.Is(err, ErrAlreadyOpen) {
+				return spine.ClarificationRequest{}, ErrAlreadyOpen
+			}
+			return spine.ClarificationRequest{}, fmt.Errorf("create clarification request: %w", err)
+		}
+		if err := s.Events.Append(ctx, event); err != nil {
+			return spine.ClarificationRequest{}, fmt.Errorf("append clarification requested event: %w", err)
+		}
 	}
 
 	return created, nil
