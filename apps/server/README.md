@@ -1,10 +1,11 @@
 # Goalrail Server
 
 This server is still an early prototype. Existing intake, Goal readiness,
-ContractSeed creation, ContractDraft creation/update, ContractDraft
-ready_for_approval, ApprovedContract approval, and event log flows use Postgres when
-`GOALRAIL_DATABASE_DSN` is configured. WorkItem planning, ClarificationRequest,
-and ClarificationAnswer state remain in-memory prototypes.
+Contract aggregate creation, ContractSeed creation, ContractDraft
+creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
+and event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
+WorkItem planning, ClarificationRequest, and ClarificationAnswer state remain
+in-memory prototypes.
 
 ## Local Postgres foundation
 
@@ -60,15 +61,17 @@ curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/goals
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
-With Postgres configured, `IntakeRecord`, `Goal`, `ContractSeed`,
-`ContractDraft`, `ApprovedContract`, and their events are durable and survive server restarts.
+With Postgres configured, `IntakeRecord`, `Goal`, the public `Contract`
+aggregate, `ContractSeed`, `ContractDraft`, `ApprovedContract`, and their
+events are durable and survive server restarts.
 WorkItems are currently planned through an in-memory prototype store; no
 `work_items` table or migration exists in this slice.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
 the seeded context. Intake creation, Goal promotion, Goal readiness,
-ContractSeed creation, ContractDraft creation/update, and ContractDraft
+ContractSeed creation, ContractDraft creation/update, ContractDraft
 ready_for_approval writes, and ApprovedContract approval writes share a
-transaction with their expected event appends.
+transaction with their expected event appends. The stable `contract_id` is
+returned by ContractSeed, ContractDraft, and ApprovedContract responses.
 
 After clarification answers are applied and an explicit readiness re-check marks
 the Goal `ready_for_contract_seed`, create a seed snapshot:
@@ -117,16 +120,17 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/ap
   }'
 ```
 
-Then plan one non-executable WorkItem from the approved contract:
+Then plan one non-executable WorkItem from the approved Contract using the
+stable public `contract_id` returned earlier:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contracts/{approved_contract_id}/tasks
+curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/tasks
 ```
 
-This `contracts` route spelling follows the public Contract identity direction
-from ADR-0020, but the current prototype still resolves the ID against the
-approved contract snapshot store internally. A stable public Contract aggregate
-and `contract_id` are not implemented yet.
+This route resolves `{contract_id}` through the public Contract aggregate,
+requires the Contract to be `approved`, and then uses the internal immutable
+ApprovedContract snapshot to create the simple v0 planned WorkItem. The server
+does not expose `/v1/contracts` lifecycle façade routes yet.
 
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and

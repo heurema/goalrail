@@ -58,6 +58,10 @@ func (s *PostgresContractDraftStore) Create(ctx context.Context, created spine.C
 	if err != nil {
 		return err
 	}
+	contractID, err := uuidValue(created.ContractID, "contract draft contract id")
+	if err != nil {
+		return err
+	}
 	seedID, err := uuidValue(created.ContractSeedID, "contract draft contract seed id")
 	if err != nil {
 		return err
@@ -114,6 +118,7 @@ func (s *PostgresContractDraftStore) Create(ctx context.Context, created spine.C
 			"organization_id",
 			"project_id",
 			"repo_binding_id",
+			"contract_id",
 			"contract_seed_id",
 			"goal_id",
 			"title",
@@ -135,6 +140,7 @@ func (s *PostgresContractDraftStore) Create(ctx context.Context, created spine.C
 			orgID,
 			projectID,
 			repoBindingID,
+			contractID,
 			seedID,
 			goalID,
 			created.Title,
@@ -307,6 +313,7 @@ func scanContractDraft(row pgx.Row) (spine.ContractDraft, error) {
 	var organizationID string
 	var projectID string
 	var repoBindingID string
+	var contractID string
 	var seedID string
 	var goalID string
 	var proposedScope []byte
@@ -323,6 +330,7 @@ func scanContractDraft(row pgx.Row) (spine.ContractDraft, error) {
 		&organizationID,
 		&projectID,
 		&repoBindingID,
+		&contractID,
 		&seedID,
 		&goalID,
 		&draft.Title,
@@ -344,6 +352,7 @@ func scanContractDraft(row pgx.Row) (spine.ContractDraft, error) {
 	draft.OrganizationID = spine.OrganizationID(organizationID)
 	draft.ProjectID = spine.ProjectID(projectID)
 	draft.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	draft.ContractID = spine.ContractID(contractID)
 	draft.ContractSeedID = spine.ContractSeedID(seedID)
 	draft.GoalID = spine.GoalID(goalID)
 	draft.State = spine.ContractDraftState(state)
@@ -381,6 +390,7 @@ func contractDraftColumns() []string {
 		"organization_id",
 		"project_id",
 		"repo_binding_id",
+		"contract_id",
 		"contract_seed_id",
 		"goal_id",
 		"title",

@@ -16,7 +16,7 @@ import (
 )
 
 func TestServiceCreatesContractSeedSnapshotFromGoal(t *testing.T) {
-	service, goals, seeds, _ := seedService(t)
+	service, goals, contracts, seeds, _ := seedService(t)
 	goal := validSeedableGoal()
 	if err := goals.Create(context.Background(), goal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -29,6 +29,9 @@ func TestServiceCreatesContractSeedSnapshotFromGoal(t *testing.T) {
 
 	if created.State != spine.ContractSeedStateCreated {
 		t.Fatalf("state = %q, want %q", created.State, spine.ContractSeedStateCreated)
+	}
+	if created.ContractID == "" {
+		t.Fatal("contract_id is empty")
 	}
 	if created.GoalID != goal.ID {
 		t.Fatalf("goal_id = %q, want %q", created.GoalID, goal.ID)
@@ -74,10 +77,26 @@ func TestServiceCreatesContractSeedSnapshotFromGoal(t *testing.T) {
 	if stored.ID != created.ID {
 		t.Fatalf("stored seed id = %q, want %q", stored.ID, created.ID)
 	}
+	contract, ok, err := contracts.Get(context.Background(), created.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not stored")
+	}
+	if contract.State != spine.ContractStateSeeded {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateSeeded)
+	}
+	if contract.CurrentSeedID == nil || *contract.CurrentSeedID != created.ID {
+		t.Fatalf("contract current_seed_id = %v, want %q", contract.CurrentSeedID, created.ID)
+	}
+	if contract.GoalID != goal.ID {
+		t.Fatalf("contract goal_id = %q, want %q", contract.GoalID, goal.ID)
+	}
 }
 
 func TestServiceAppendsContractSeedCreatedEvent(t *testing.T) {
-	service, goals, _, events := seedService(t)
+	service, goals, _, _, events := seedService(t)
 	goal := validSeedableGoal()
 	if err := goals.Create(context.Background(), goal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -119,10 +138,13 @@ func TestServiceAppendsContractSeedCreatedEvent(t *testing.T) {
 	if payload.ID != created.ID {
 		t.Fatalf("payload id = %q, want %q", payload.ID, created.ID)
 	}
+	if payload.ContractID != created.ContractID {
+		t.Fatalf("payload contract_id = %q, want %q", payload.ContractID, created.ContractID)
+	}
 }
 
 func TestServiceRejectsDuplicateSeedForGoal(t *testing.T) {
-	service, goals, _, events := seedService(t)
+	service, goals, _, _, events := seedService(t)
 	goal := validSeedableGoal()
 	if err := goals.Create(context.Background(), goal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -141,7 +163,7 @@ func TestServiceRejectsDuplicateSeedForGoal(t *testing.T) {
 }
 
 func TestServiceRejectsGoalNotReadyForContractSeed(t *testing.T) {
-	service, goals, _, _ := seedService(t)
+	service, goals, _, _, _ := seedService(t)
 	goal := validSeedableGoal()
 	goal.State = spine.GoalStateNeedsClarification
 	if err := goals.Create(context.Background(), goal); err != nil {
@@ -155,7 +177,7 @@ func TestServiceRejectsGoalNotReadyForContractSeed(t *testing.T) {
 }
 
 func TestServiceRejectsUnknownGoal(t *testing.T) {
-	service, _, _, _ := seedService(t)
+	service, _, _, _, _ := seedService(t)
 
 	_, err := service.Create(context.Background(), "missing")
 	if !errors.Is(err, contractseed.ErrGoalNotFound) {
@@ -179,7 +201,7 @@ func TestServiceValidatesRequiredGoalFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, goals, _, events := seedService(t)
+			service, goals, _, _, events := seedService(t)
 			goal := validSeedableGoal()
 			goal.ID = spine.GoalID("goal-" + tt.name)
 			goal.IntakeID = spine.IntakeID("intake-" + tt.name)
@@ -201,7 +223,7 @@ func TestServiceValidatesRequiredGoalFields(t *testing.T) {
 }
 
 func TestServiceDoesNotMutateGoal(t *testing.T) {
-	service, goals, _, _ := seedService(t)
+	service, goals, _, _, _ := seedService(t)
 	goal := validSeedableGoal()
 	if err := goals.Create(context.Background(), goal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -224,7 +246,7 @@ func TestServiceDoesNotMutateGoal(t *testing.T) {
 }
 
 func TestServiceDoesNotAppendContractWorkGateProofEvents(t *testing.T) {
-	service, goals, _, events := seedService(t)
+	service, goals, _, _, events := seedService(t)
 	goal := validSeedableGoal()
 	if err := goals.Create(context.Background(), goal); err != nil {
 		t.Fatalf("Create goal: %v", err)
@@ -236,14 +258,15 @@ func TestServiceDoesNotAppendContractWorkGateProofEvents(t *testing.T) {
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func seedService(t *testing.T) (*contractseed.Service, *store.GoalStore, *store.ContractSeedStore, *eventlog.EventLog) {
+func seedService(t *testing.T) (*contractseed.Service, *store.GoalStore, *store.ContractStore, *store.ContractSeedStore, *eventlog.EventLog) {
 	t.Helper()
 
 	goals := store.NewGoalStore()
+	contracts := store.NewContractStore()
 	seeds := store.NewContractSeedStore()
 	events := eventlog.NewEventLog()
-	service := contractseed.NewService(goals, seeds, events, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, goals, seeds, events
+	service := contractseed.NewService(goals, contracts, seeds, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, goals, contracts, seeds, events
 }
 
 func validSeedableGoal() spine.Goal {
@@ -303,8 +326,14 @@ func (c fixedClock) Now() time.Time {
 }
 
 type sequenceIDs struct {
+	contract     int
 	contractSeed int
 	event        int
+}
+
+func (g *sequenceIDs) NewContractID() (spine.ContractID, error) {
+	g.contract++
+	return spine.ContractID(fmt.Sprintf("contract-%d", g.contract)), nil
 }
 
 func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {

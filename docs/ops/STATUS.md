@@ -21,7 +21,7 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-05-02
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft / ApprovedContract persistence plus WorkItem planning prototype exists; public Contract aggregate identity is now accepted target architecture but not implemented; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate / ContractSeed / ContractDraft / ApprovedContract persistence plus WorkItem planning prototype exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary, while public `/v1/contracts` lifecycle façade routes are still deferred; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
 Current risk note: the stabilization tranche is complete repo-side through
@@ -134,7 +134,9 @@ The project currently has:
 - ADR-0020 documents public `Contract` as the stable product-facing lifecycle
   identity across seed, draft, approval, and later planning, while
   `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal
-  lifecycle records; the public Contract aggregate is not implemented yet
+  lifecycle records; the server now implements the smallest stable
+  `contract_id` aggregate boundary, without public `/v1/contracts` lifecycle
+  façade routes
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -177,10 +179,10 @@ The project currently has:
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
 - server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/goals/{id}/contract-seeds`, `POST /v1/contract-seeds/{id}/contract-drafts`, `PATCH /v1/contract-drafts/{id}`, `POST /v1/contract-drafts/{id}/submissions`, `POST /v1/contract-drafts/{id}/approvals`, and `POST /v1/contracts/{id}/tasks`
 - `POST /v1/contracts/{id}/tasks` uses the shorter public `contracts` route
-  vocabulary, but current implementation still resolves the ID through the
-  existing approved-contract snapshot store; no public `Contract` aggregate,
-  `contracts` table, or stable public `contract_id` implementation exists yet
-- `apps/server` now has a Postgres persistence foundation for the Organization / Project / RepoBinding context plus IntakeRecord, Goal, ContractSeed, ContractDraft, and EventLog state
+  vocabulary and now resolves `{id}` as stable public `contract_id`; the server
+  requires the Contract to be `approved` and then loads the internal immutable
+  ApprovedContract snapshot for simple v0 task planning
+- `apps/server` now has a Postgres persistence foundation for the Organization / Project / RepoBinding context plus IntakeRecord, Goal, public Contract aggregate, ContractSeed, ContractDraft, ApprovedContract, and EventLog state
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
@@ -210,9 +212,9 @@ The project currently has:
 - the Contract approval boundary is documented in ADR-0017 and implemented as `ContractDraft(ready_for_approval) -> ApprovedContract`; approval does not start execution, write `GateDecision`, or create `Proof`
 - the WorkItem planning boundary is documented in ADR-0018 and implemented as an in-memory `ApprovedContract(approved) -> WorkItem(planned)` prototype; ADR-0019 documents the intended worker/controller/runner-assisted planning request/proposal/acceptance model for richer repo-aware planning, but that model is not implemented; WorkItem planning is not assignment, claiming, execution, `Run`, runner checkout, receipt, `GateDecision`, or `Proof`
 - the public Contract identity boundary is documented in ADR-0020, but no
-  public Contract aggregate storage or API implementation exists yet; current
-  contract lifecycle implementation still uses `ContractSeed`, `ContractDraft`,
-  and `ApprovedContract` records directly
+  public `/v1/contracts` lifecycle façade API exists yet; the server now stores
+  a minimal public Contract aggregate and links `ContractSeed`, `ContractDraft`,
+  and `ApprovedContract` records to the stable `contract_id`
 - the Organization / Project / RepoBinding and persistence bootstrap boundary is documented in ADR-0010, and the first server-local Postgres foundation exists
 - `.github/` now contains real contributor/community health surfaces, docs-check
   and PR intake gate workflows, and D-0063 repo checks CI for Go + web surfaces
@@ -228,8 +230,8 @@ The project currently has:
 - no production runtime CLI beyond the local/demo `apps/cli` command foundation
 - no server integration for the CLI
 - no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` / `ContractSeed` / `ContractDraft creation/update/ready_for_approval` / `ApprovedContract` slice and in-memory `ClarificationRequest` / `ClarificationAnswer` / `WorkItem planning` prototypes yet
-- no public `Contract` aggregate table, store, lifecycle view, or stable public
-  `contract_id` implementation yet
+- no public `/v1/contracts` lifecycle façade routes or lifecycle view endpoint
+  yet
 - no durable server storage for clarification request/answer state yet
 - no automatic readiness re-check after answer application
 - no WorkItem assignment/claiming, durable WorkItem storage, `Run`, receipt, GateDecision, or Proof yet
@@ -284,7 +286,7 @@ Current packaging target:
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` and `apps/web/console-ru` provide verified empty console shells only; they do not claim backend, server, auth, data, or product-loop implementation
 - `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory clarification request/answer and simple v0 WorkItem planning prototypes when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, and one direct `WorkItem(planned)` per approved contract only, updates Goal readiness state, request answered state, Goal intent-plane hints, ContractDraft proposed fields, and ContractDraft readiness state only, and does not claim public Contract aggregate storage, stable public `contract_id` implementation, durable clarification storage, automatic readiness re-check, WorkItem planning requests/proposals/acceptance, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, public Contract aggregate persistence, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, EventLog persistence, transactional canonical write + event append hardening, explicit re-check-after-applied-answers, and in-memory clarification request/answer and simple v0 WorkItem planning prototypes when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open in-memory `ClarificationRequest`, recorded in-memory `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, and one direct `WorkItem(planned)` per approved contract only, updates Goal readiness state, request answered state, Goal intent-plane hints, Contract aggregate state/pointers, ContractDraft proposed fields, and ContractDraft readiness state only, and does not claim public `/v1/contracts` lifecycle façade routes, durable clarification storage, automatic readiness re-check, WorkItem planning requests/proposals/acceptance, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, auth, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, plus `mailto:` fallback. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

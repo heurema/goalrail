@@ -58,6 +58,10 @@ func (s *PostgresApprovedContractStore) Create(ctx context.Context, approved spi
 	if err != nil {
 		return err
 	}
+	contractID, err := uuidValue(approved.ContractID, "approved contract contract id")
+	if err != nil {
+		return err
+	}
 	draftID, err := uuidValue(approved.ContractDraftID, "approved contract contract draft id")
 	if err != nil {
 		return err
@@ -123,6 +127,7 @@ func (s *PostgresApprovedContractStore) Create(ctx context.Context, approved spi
 			"organization_id",
 			"project_id",
 			"repo_binding_id",
+			"contract_id",
 			"contract_draft_id",
 			"contract_seed_id",
 			"goal_id",
@@ -147,6 +152,7 @@ func (s *PostgresApprovedContractStore) Create(ctx context.Context, approved spi
 			orgID,
 			projectID,
 			repoBindingID,
+			contractID,
 			draftID,
 			seedID,
 			goalID,
@@ -228,6 +234,7 @@ func scanApprovedContract(row pgx.Row) (spine.ApprovedContract, error) {
 	var organizationID string
 	var projectID string
 	var repoBindingID string
+	var contractID string
 	var draftID string
 	var seedID string
 	var goalID string
@@ -246,6 +253,7 @@ func scanApprovedContract(row pgx.Row) (spine.ApprovedContract, error) {
 		&organizationID,
 		&projectID,
 		&repoBindingID,
+		&contractID,
 		&draftID,
 		&seedID,
 		&goalID,
@@ -269,6 +277,7 @@ func scanApprovedContract(row pgx.Row) (spine.ApprovedContract, error) {
 	approved.OrganizationID = spine.OrganizationID(organizationID)
 	approved.ProjectID = spine.ProjectID(projectID)
 	approved.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	approved.ContractID = spine.ContractID(contractID)
 	approved.ContractDraftID = spine.ContractDraftID(draftID)
 	approved.ContractSeedID = spine.ContractSeedID(seedID)
 	approved.GoalID = spine.GoalID(goalID)
@@ -310,6 +319,7 @@ func approvedContractColumns() []string {
 		"organization_id",
 		"project_id",
 		"repo_binding_id",
+		"contract_id",
 		"contract_draft_id",
 		"contract_seed_id",
 		"goal_id",

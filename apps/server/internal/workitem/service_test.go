@@ -15,15 +15,13 @@ import (
 )
 
 func TestServiceCreatesPlannedWorkItemFromApprovedContract(t *testing.T) {
-	service, approvedContracts, workItems, _ := planningService(t)
+	service, contracts, approvedContracts, workItems, _ := planningService(t)
 	approved := validApprovedContract()
-	if err := approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
-	}
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
 
-	item, err := service.PlanApprovedContract(context.Background(), approved.ID)
+	item, err := service.PlanContract(context.Background(), approved.ContractID)
 	if err != nil {
-		t.Fatalf("PlanApprovedContract() error = %v", err)
+		t.Fatalf("PlanContract() error = %v", err)
 	}
 
 	if item.Status != spine.WorkItemStatusPlanned {
@@ -31,6 +29,9 @@ func TestServiceCreatesPlannedWorkItemFromApprovedContract(t *testing.T) {
 	}
 	if item.ApprovedContractID != approved.ID || item.RepoBindingID != approved.RepoBindingID {
 		t.Fatalf("ids = %q/%q, want approved/repo ids", item.ApprovedContractID, item.RepoBindingID)
+	}
+	if item.ContractID != approved.ContractID {
+		t.Fatalf("contract_id = %q, want %q", item.ContractID, approved.ContractID)
 	}
 	if item.OrganizationID != approved.OrganizationID || item.ProjectID != approved.ProjectID {
 		t.Fatalf("context = %q/%q, want approved context %q/%q", item.OrganizationID, item.ProjectID, approved.OrganizationID, approved.ProjectID)
@@ -84,15 +85,13 @@ func TestServiceCreatesPlannedWorkItemFromApprovedContract(t *testing.T) {
 }
 
 func TestServiceAppendsWorkItemCreatedEvent(t *testing.T) {
-	service, approvedContracts, _, events := planningService(t)
+	service, contracts, approvedContracts, _, events := planningService(t)
 	approved := validApprovedContract()
-	if err := approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
-	}
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
 
-	item, err := service.PlanApprovedContract(context.Background(), approved.ID)
+	item, err := service.PlanContract(context.Background(), approved.ContractID)
 	if err != nil {
-		t.Fatalf("PlanApprovedContract() error = %v", err)
+		t.Fatalf("PlanContract() error = %v", err)
 	}
 
 	appended := events.Events()
@@ -112,6 +111,7 @@ func TestServiceAppendsWorkItemCreatedEvent(t *testing.T) {
 
 	var payload struct {
 		WorkItemID           spine.WorkItemID         `json:"work_item_id"`
+		ContractID           spine.ContractID         `json:"contract_id"`
 		ApprovedContractID   spine.ApprovedContractID `json:"approved_contract_id"`
 		RepoBindingID        spine.RepoBindingID      `json:"repo_binding_id"`
 		AcceptanceRefs       []string                 `json:"acceptance_refs"`
@@ -123,8 +123,8 @@ func TestServiceAppendsWorkItemCreatedEvent(t *testing.T) {
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal work_item.created payload: %v", err)
 	}
-	if payload.WorkItemID != item.ID || payload.ApprovedContractID != approved.ID || payload.RepoBindingID != approved.RepoBindingID {
-		t.Fatalf("payload ids = %q/%q/%q, want item/approved/repo ids", payload.WorkItemID, payload.ApprovedContractID, payload.RepoBindingID)
+	if payload.WorkItemID != item.ID || payload.ContractID != approved.ContractID || payload.ApprovedContractID != approved.ID || payload.RepoBindingID != approved.RepoBindingID {
+		t.Fatalf("payload ids = %q/%q/%q/%q, want item/contract/approved/repo ids", payload.WorkItemID, payload.ContractID, payload.ApprovedContractID, payload.RepoBindingID)
 	}
 	if payload.Status != spine.WorkItemStatusPlanned {
 		t.Fatalf("payload status = %q, want planned", payload.Status)
@@ -138,18 +138,16 @@ func TestServiceAppendsWorkItemCreatedEvent(t *testing.T) {
 }
 
 func TestServiceRejectsDuplicatePlanning(t *testing.T) {
-	service, approvedContracts, _, events := planningService(t)
+	service, contracts, approvedContracts, _, events := planningService(t)
 	approved := validApprovedContract()
-	if err := approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
-	}
-	if _, err := service.PlanApprovedContract(context.Background(), approved.ID); err != nil {
-		t.Fatalf("first PlanApprovedContract() error = %v", err)
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
+	if _, err := service.PlanContract(context.Background(), approved.ContractID); err != nil {
+		t.Fatalf("first PlanContract() error = %v", err)
 	}
 
-	_, err := service.PlanApprovedContract(context.Background(), approved.ID)
+	_, err := service.PlanContract(context.Background(), approved.ContractID)
 	if !errors.Is(err, workitem.ErrAlreadyPlanned) {
-		t.Fatalf("second PlanApprovedContract() error = %v, want ErrAlreadyPlanned", err)
+		t.Fatalf("second PlanContract() error = %v, want ErrAlreadyPlanned", err)
 	}
 	if got := countEventType(events.Events(), workitem.EventTypeWorkItemCreated); got != 1 {
 		t.Fatalf("work_item.created events = %d, want 1", got)
@@ -157,16 +155,39 @@ func TestServiceRejectsDuplicatePlanning(t *testing.T) {
 }
 
 func TestServiceRejectsApprovedContractNotApproved(t *testing.T) {
-	service, approvedContracts, _, events := planningService(t)
+	service, contracts, approvedContracts, _, events := planningService(t)
 	approved := validApprovedContract()
 	approved.State = spine.ApprovedContractState("draft")
-	if err := approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
+
+	_, err := service.PlanContract(context.Background(), approved.ContractID)
+	if !errors.Is(err, workitem.ErrInvalidApprovedContractState) {
+		t.Fatalf("PlanContract() error = %v, want ErrInvalidApprovedContractState", err)
+	}
+	if got := len(events.Events()); got != 0 {
+		t.Fatalf("events = %d, want 0", got)
+	}
+}
+
+func TestServiceRejectsContractNotApproved(t *testing.T) {
+	service, contracts, approvedContracts, _, events := planningService(t)
+	approved := validApprovedContract()
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
+	contract, ok, err := contracts.Get(context.Background(), approved.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	contract.State = spine.ContractStateDraft
+	if err := contracts.MarkDraftCreated(context.Background(), contract.ID, approved.ContractDraftID, testTime()); err != nil {
+		t.Fatalf("contracts.MarkDraftCreated() error = %v", err)
 	}
 
-	_, err := service.PlanApprovedContract(context.Background(), approved.ID)
-	if !errors.Is(err, workitem.ErrInvalidApprovedContractState) {
-		t.Fatalf("PlanApprovedContract() error = %v, want ErrInvalidApprovedContractState", err)
+	_, err = service.PlanContract(context.Background(), approved.ContractID)
+	if !errors.Is(err, workitem.ErrInvalidContractState) {
+		t.Fatalf("PlanContract() error = %v, want ErrInvalidContractState", err)
 	}
 	if got := len(events.Events()); got != 0 {
 		t.Fatalf("events = %d, want 0", got)
@@ -189,19 +210,17 @@ func TestServiceRejectsIncompleteApprovedContract(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, approvedContracts, _, events := planningService(t)
+			service, contracts, approvedContracts, _, events := planningService(t)
 			approved := validApprovedContract()
 			approved.ID = spine.ApprovedContractID("approved-contract-" + tt.name)
 			approved.ContractDraftID = spine.ContractDraftID("contract-draft-" + tt.name)
 			tt.mutate(&approved)
-			if err := approvedContracts.Create(context.Background(), approved); err != nil {
-				t.Fatalf("approvedContracts.Create() error = %v", err)
-			}
+			storeApprovedWithContract(t, contracts, approvedContracts, approved)
 
-			_, err := service.PlanApprovedContract(context.Background(), approved.ID)
+			_, err := service.PlanContract(context.Background(), approved.ContractID)
 			var completenessErr *workitem.CompletenessError
 			if !errors.As(err, &completenessErr) {
-				t.Fatalf("PlanApprovedContract() error = %v, want CompletenessError", err)
+				t.Fatalf("PlanContract() error = %v, want CompletenessError", err)
 			}
 			if !hasReason(completenessErr.ReasonCodes, tt.reason) {
 				t.Fatalf("reason codes = %#v, want %q", completenessErr.ReasonCodes, tt.reason)
@@ -214,25 +233,24 @@ func TestServiceRejectsIncompleteApprovedContract(t *testing.T) {
 }
 
 func TestServiceDoesNotAppendRunReceiptGateProofEvents(t *testing.T) {
-	service, approvedContracts, _, events := planningService(t)
+	service, contracts, approvedContracts, _, events := planningService(t)
 	approved := validApprovedContract()
-	if err := approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
-	}
-	if _, err := service.PlanApprovedContract(context.Background(), approved.ID); err != nil {
-		t.Fatalf("PlanApprovedContract() error = %v", err)
+	storeApprovedWithContract(t, contracts, approvedContracts, approved)
+	if _, err := service.PlanContract(context.Background(), approved.ContractID); err != nil {
+		t.Fatalf("PlanContract() error = %v", err)
 	}
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func planningService(t *testing.T) (*workitem.Service, *store.ApprovedContractStore, *store.WorkItemStore, *eventlog.EventLog) {
+func planningService(t *testing.T) (*workitem.Service, *store.ContractStore, *store.ApprovedContractStore, *store.WorkItemStore, *eventlog.EventLog) {
 	t.Helper()
 
+	contracts := store.NewContractStore()
 	approvedContracts := store.NewApprovedContractStore()
 	workItems := store.NewWorkItemStore()
 	events := eventlog.NewEventLog()
-	service := workitem.NewService(approvedContracts, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, approvedContracts, workItems, events
+	service := workitem.NewService(contracts, approvedContracts, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, contracts, approvedContracts, workItems, events
 }
 
 func validApprovedContract() spine.ApprovedContract {
@@ -240,6 +258,7 @@ func validApprovedContract() spine.ApprovedContract {
 		ID:                 "approved-contract-1",
 		OrganizationID:     "organization-1",
 		ProjectID:          "project-1",
+		ContractID:         "contract-1",
 		ContractDraftID:    "contract-draft-1",
 		ContractSeedID:     "contract-seed-1",
 		GoalID:             "goal-1",
@@ -261,6 +280,32 @@ func validApprovedContract() spine.ApprovedContract {
 			{Kind: "goal", ID: "goal-1"},
 		},
 		State: spine.ApprovedContractStateApproved,
+	}
+}
+
+func storeApprovedWithContract(t *testing.T, contracts *store.ContractStore, approvedContracts *store.ApprovedContractStore, approved spine.ApprovedContract) {
+	t.Helper()
+	currentSeedID := approved.ContractSeedID
+	currentDraftID := approved.ContractDraftID
+	approvedSnapshotID := approved.ID
+	contract := spine.Contract{
+		ID:                 approved.ContractID,
+		OrganizationID:     approved.OrganizationID,
+		ProjectID:          approved.ProjectID,
+		RepoBindingID:      approved.RepoBindingID,
+		GoalID:             approved.GoalID,
+		State:              spine.ContractStateApproved,
+		CurrentSeedID:      &currentSeedID,
+		CurrentDraftID:     &currentDraftID,
+		ApprovedSnapshotID: &approvedSnapshotID,
+		CreatedAt:          testTime(),
+		UpdatedAt:          testTime(),
+	}
+	if err := contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+	if err := approvedContracts.Create(context.Background(), approved); err != nil {
+		t.Fatalf("approvedContracts.Create() error = %v", err)
 	}
 }
 

@@ -32,6 +32,13 @@ type eventAppender interface {
 	Append(context.Context, spine.Event) error
 }
 
+type contractStore interface {
+	contractseed.ContractStore
+	contractdraft.ContractStore
+	approvedcontract.ContractStore
+	workitem.ContractReader
+}
+
 func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	healthHandler := health.NewHandler()
 	versionHandler := version.NewHandler()
@@ -39,6 +46,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var goals goalStore = store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	clarificationAnswerStore := store.NewClarificationAnswerStore()
+	var contracts contractStore = store.NewContractStore()
 	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
 	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
 	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
@@ -55,6 +63,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		projectContext = store.NewProjectContextStore(pool)
 		intakeStore = store.NewPostgresTransactionalIntakeStore(pool)
 		goals = store.NewPostgresTransactionalGoalStore(pool)
+		contracts = store.NewPostgresContractStore(pool)
 		contractSeedStore = store.NewPostgresTransactionalContractSeedStore(pool)
 		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
 		approvedContractStore = store.NewPostgresTransactionalApprovedContractStore(pool)
@@ -68,13 +77,13 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goals, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
-	contractSeedService := contractseed.NewService(goals, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
+	contractSeedService := contractseed.NewService(goals, contracts, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
-	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
+	contractDraftService := contractdraft.NewService(contractSeedStore, contracts, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
-	approvedContractService := approvedcontract.NewService(contractDraftStore, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
+	approvedContractService := approvedcontract.NewService(contractDraftStore, contracts, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
 	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
-	workItemService := workitem.NewService(approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
+	workItemService := workitem.NewService(contracts, approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
@@ -91,7 +100,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
 		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
 		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
-		ApprovedContractWorkItems: http.HandlerFunc(workItemHandler.PlanApprovedContract),
+		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

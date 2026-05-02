@@ -66,12 +66,20 @@ type Store interface {
 	GetByContractDraftID(context.Context, spine.ContractDraftID) (spine.ApprovedContract, bool, error)
 }
 
+type ContractStore interface {
+	MarkApproved(context.Context, spine.ContractID, spine.ApprovedContractID, time.Time) error
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
 type transactionalStore interface {
 	CreateWithEvent(context.Context, spine.ApprovedContract, spine.Event) error
+}
+
+type transactionalContractStore interface {
+	CreateWithContractUpdateAndEvent(context.Context, spine.ApprovedContract, spine.Event, time.Time) error
 }
 
 type Clock interface {
@@ -84,20 +92,22 @@ type IDGenerator interface {
 }
 
 type Service struct {
-	Drafts   DraftReader
-	Approved Store
-	Events   EventLog
-	Clock    Clock
-	IDs      IDGenerator
+	Drafts    DraftReader
+	Contracts ContractStore
+	Approved  Store
+	Events    EventLog
+	Clock     Clock
+	IDs       IDGenerator
 }
 
-func NewService(drafts DraftReader, approved Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(drafts DraftReader, contracts ContractStore, approved Store, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		Drafts:   drafts,
-		Approved: approved,
-		Events:   events,
-		Clock:    clock,
-		IDs:      ids,
+		Drafts:    drafts,
+		Contracts: contracts,
+		Approved:  approved,
+		Events:    events,
+		Clock:     clock,
+		IDs:       ids,
 	}
 }
 
@@ -141,6 +151,17 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 	}
 
 	if txStore, ok := s.Approved.(transactionalStore); ok {
+		if txStoreWithContract, ok := s.Approved.(transactionalContractStore); ok {
+			if err := txStoreWithContract.CreateWithContractUpdateAndEvent(ctx, approved, event, now); err != nil {
+				if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
+					return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
+				} else if ok {
+					return spine.ApprovedContract{}, ErrAlreadyApproved
+				}
+				return spine.ApprovedContract{}, fmt.Errorf("create approved contract with contract update and event: %w", err)
+			}
+			return approved, nil
+		}
 		if err := txStore.CreateWithEvent(ctx, approved, event); err != nil {
 			if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
 				return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
@@ -159,6 +180,9 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		}
 		return spine.ApprovedContract{}, fmt.Errorf("create approved contract: %w", err)
 	}
+	if err := s.Contracts.MarkApproved(ctx, approved.ContractID, approved.ID, now); err != nil {
+		return spine.ApprovedContract{}, fmt.Errorf("mark contract approved: %w", err)
+	}
 	if err := s.Events.Append(ctx, event); err != nil {
 		return spine.ApprovedContract{}, fmt.Errorf("append contract approved event: %w", err)
 	}
@@ -171,6 +195,7 @@ func approvedContractFromDraft(id spine.ApprovedContractID, draft spine.Contract
 		ID:                 id,
 		OrganizationID:     draft.OrganizationID,
 		ProjectID:          draft.ProjectID,
+		ContractID:         draft.ContractID,
 		ContractDraftID:    draft.ID,
 		ContractSeedID:     draft.ContractSeedID,
 		GoalID:             draft.GoalID,
@@ -273,6 +298,7 @@ func cloneStrings(values []string) []string {
 
 type contractApprovedPayload struct {
 	ApprovedContractID spine.ApprovedContractID `json:"approved_contract_id"`
+	ContractID         spine.ContractID         `json:"contract_id"`
 	ContractDraftID    spine.ContractDraftID    `json:"contract_draft_id"`
 	ContractSeedID     spine.ContractSeedID     `json:"contract_seed_id"`
 	GoalID             spine.GoalID             `json:"goal_id"`
@@ -290,6 +316,7 @@ func (s *Service) contractApprovedEvent(approved spine.ApprovedContract, previou
 
 	payload, err := json.Marshal(contractApprovedPayload{
 		ApprovedContractID: approved.ID,
+		ContractID:         approved.ContractID,
 		ContractDraftID:    approved.ContractDraftID,
 		ContractSeedID:     approved.ContractSeedID,
 		GoalID:             approved.GoalID,
@@ -318,6 +345,9 @@ func (s *Service) contractApprovedEvent(approved spine.ApprovedContract, previou
 func (s *Service) validateDependencies() error {
 	if s.Drafts == nil {
 		return errors.New("approved contract service draft store is nil")
+	}
+	if s.Contracts == nil {
+		return errors.New("approved contract service contract store is nil")
 	}
 	if s.Approved == nil {
 		return errors.New("approved contract service approved contract store is nil")

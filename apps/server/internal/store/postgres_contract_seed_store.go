@@ -58,6 +58,10 @@ func (s *PostgresContractSeedStore) Create(ctx context.Context, created spine.Co
 	if err != nil {
 		return err
 	}
+	contractID, err := uuidValue(created.ContractID, "contract seed contract id")
+	if err != nil {
+		return err
+	}
 	goalID, err := uuidValue(created.GoalID, "contract seed goal id")
 	if err != nil {
 		return err
@@ -86,6 +90,7 @@ func (s *PostgresContractSeedStore) Create(ctx context.Context, created spine.Co
 			"organization_id",
 			"project_id",
 			"repo_binding_id",
+			"contract_id",
 			"goal_id",
 			"title",
 			"intent_summary",
@@ -102,6 +107,7 @@ func (s *PostgresContractSeedStore) Create(ctx context.Context, created spine.Co
 			orgID,
 			projectID,
 			repoBindingID,
+			contractID,
 			goalID,
 			created.Title,
 			created.IntentSummary,
@@ -175,6 +181,7 @@ func scanContractSeed(row pgx.Row) (spine.ContractSeed, error) {
 	var organizationID string
 	var projectID string
 	var repoBindingID string
+	var contractID string
 	var goalID string
 	var intentOwner []byte
 	var sourceRefs []byte
@@ -184,6 +191,7 @@ func scanContractSeed(row pgx.Row) (spine.ContractSeed, error) {
 		&organizationID,
 		&projectID,
 		&repoBindingID,
+		&contractID,
 		&goalID,
 		&seed.Title,
 		&seed.IntentSummary,
@@ -200,6 +208,7 @@ func scanContractSeed(row pgx.Row) (spine.ContractSeed, error) {
 	seed.OrganizationID = spine.OrganizationID(organizationID)
 	seed.ProjectID = spine.ProjectID(projectID)
 	seed.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	seed.ContractID = spine.ContractID(contractID)
 	seed.GoalID = spine.GoalID(goalID)
 	seed.State = spine.ContractSeedState(state)
 	if err := json.Unmarshal(intentOwner, &seed.IntentOwner); err != nil {
@@ -218,6 +227,7 @@ func contractSeedColumns() []string {
 		"organization_id",
 		"project_id",
 		"repo_binding_id",
+		"contract_id",
 		"goal_id",
 		"title",
 		"intent_summary",

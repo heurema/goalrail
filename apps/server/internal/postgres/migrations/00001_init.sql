@@ -131,11 +131,37 @@ CREATE INDEX goals_repo_binding_created_at_idx
 CREATE INDEX goals_intake_id_idx
     ON goals(intake_id);
 
+CREATE TABLE contracts (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    state TEXT NOT NULL,
+    current_seed_id UUID NULL,
+    current_draft_id UUID NULL,
+    approved_snapshot_id UUID NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT contracts_goal_id_unique UNIQUE (goal_id),
+    CONSTRAINT contracts_state_check CHECK (state IN ('seeded', 'draft', 'ready_for_approval', 'approved'))
+);
+
+CREATE INDEX contracts_organization_created_at_idx
+    ON contracts(organization_id, created_at);
+
+CREATE INDEX contracts_project_created_at_idx
+    ON contracts(project_id, created_at);
+
+CREATE INDEX contracts_repo_binding_created_at_idx
+    ON contracts(repo_binding_id, created_at);
+
 CREATE TABLE contract_seeds (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
     goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     intent_summary TEXT NOT NULL,
@@ -146,6 +172,7 @@ CREATE TABLE contract_seeds (
     state TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT contract_seeds_contract_id_unique UNIQUE (contract_id),
     CONSTRAINT contract_seeds_goal_id_unique UNIQUE (goal_id),
     CONSTRAINT contract_seeds_state_check CHECK (state IN ('created'))
 );
@@ -159,11 +186,15 @@ CREATE INDEX contract_seeds_project_created_at_idx
 CREATE INDEX contract_seeds_repo_binding_created_at_idx
     ON contract_seeds(repo_binding_id, created_at);
 
+CREATE INDEX contract_seeds_contract_id_idx
+    ON contract_seeds(contract_id);
+
 CREATE TABLE contract_drafts (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
     contract_seed_id UUID NOT NULL REFERENCES contract_seeds(id) ON DELETE CASCADE,
     goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
@@ -179,6 +210,7 @@ CREATE TABLE contract_drafts (
     state TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT contract_drafts_contract_id_unique UNIQUE (contract_id),
     CONSTRAINT contract_drafts_contract_seed_id_unique UNIQUE (contract_seed_id),
     CONSTRAINT contract_drafts_state_check CHECK (state IN ('draft', 'ready_for_approval'))
 );
@@ -192,11 +224,15 @@ CREATE INDEX contract_drafts_project_created_at_idx
 CREATE INDEX contract_drafts_repo_binding_created_at_idx
     ON contract_drafts(repo_binding_id, created_at);
 
+CREATE INDEX contract_drafts_contract_id_idx
+    ON contract_drafts(contract_id);
+
 CREATE TABLE approved_contracts (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
     contract_draft_id UUID NOT NULL REFERENCES contract_drafts(id) ON DELETE CASCADE,
     contract_seed_id UUID NOT NULL REFERENCES contract_seeds(id) ON DELETE CASCADE,
     goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
@@ -215,6 +251,7 @@ CREATE TABLE approved_contracts (
     state TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT approved_contracts_contract_id_unique UNIQUE (contract_id),
     CONSTRAINT approved_contracts_contract_draft_id_unique UNIQUE (contract_draft_id),
     CONSTRAINT approved_contracts_state_check CHECK (state IN ('approved'))
 );
@@ -233,6 +270,9 @@ CREATE INDEX approved_contracts_contract_seed_id_idx
 
 CREATE INDEX approved_contracts_goal_id_idx
     ON approved_contracts(goal_id);
+
+CREATE INDEX approved_contracts_contract_id_idx
+    ON approved_contracts(contract_id);
 
 CREATE TABLE events (
     id UUID PRIMARY KEY,
@@ -268,6 +308,7 @@ DROP INDEX IF EXISTS events_entity_sequence_idx;
 DROP INDEX IF EXISTS events_project_sequence_idx;
 DROP INDEX IF EXISTS events_organization_sequence_idx;
 DROP TABLE IF EXISTS events;
+DROP INDEX IF EXISTS approved_contracts_contract_id_idx;
 DROP INDEX IF EXISTS approved_contracts_goal_id_idx;
 DROP INDEX IF EXISTS approved_contracts_contract_seed_id_idx;
 DROP INDEX IF EXISTS approved_contracts_repo_binding_approved_at_idx;
@@ -275,13 +316,19 @@ DROP INDEX IF EXISTS approved_contracts_project_approved_at_idx;
 DROP INDEX IF EXISTS approved_contracts_organization_approved_at_idx;
 DROP TABLE IF EXISTS approved_contracts;
 DROP INDEX IF EXISTS contract_drafts_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS contract_drafts_contract_id_idx;
 DROP INDEX IF EXISTS contract_drafts_project_created_at_idx;
 DROP INDEX IF EXISTS contract_drafts_organization_created_at_idx;
 DROP TABLE IF EXISTS contract_drafts;
 DROP INDEX IF EXISTS contract_seeds_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS contract_seeds_contract_id_idx;
 DROP INDEX IF EXISTS contract_seeds_project_created_at_idx;
 DROP INDEX IF EXISTS contract_seeds_organization_created_at_idx;
 DROP TABLE IF EXISTS contract_seeds;
+DROP INDEX IF EXISTS contracts_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS contracts_project_created_at_idx;
+DROP INDEX IF EXISTS contracts_organization_created_at_idx;
+DROP TABLE IF EXISTS contracts;
 DROP INDEX IF EXISTS goals_intake_id_idx;
 DROP INDEX IF EXISTS goals_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS goals_project_created_at_idx;

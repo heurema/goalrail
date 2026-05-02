@@ -16,11 +16,9 @@ import (
 )
 
 func TestServiceCreatesContractDraftFromSeed(t *testing.T) {
-	service, seeds, drafts, _ := draftService(t)
+	service, seeds, contracts, drafts, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
@@ -32,6 +30,9 @@ func TestServiceCreatesContractDraftFromSeed(t *testing.T) {
 	}
 	if created.ContractSeedID != seed.ID {
 		t.Fatalf("contract_seed_id = %q, want %q", created.ContractSeedID, seed.ID)
+	}
+	if created.ContractID != seed.ContractID {
+		t.Fatalf("contract_id = %q, want %q", created.ContractID, seed.ContractID)
 	}
 	if created.GoalID != seed.GoalID {
 		t.Fatalf("goal_id = %q, want %q", created.GoalID, seed.GoalID)
@@ -92,14 +93,25 @@ func TestServiceCreatesContractDraftFromSeed(t *testing.T) {
 	if stored.ID != created.ID {
 		t.Fatalf("stored draft id = %q, want %q", stored.ID, created.ID)
 	}
+	contract, ok, err := contracts.Get(context.Background(), seed.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	if contract.State != spine.ContractStateDraft {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateDraft)
+	}
+	if contract.CurrentDraftID == nil || *contract.CurrentDraftID != created.ID {
+		t.Fatalf("contract current_draft_id = %v, want %q", contract.CurrentDraftID, created.ID)
+	}
 }
 
 func TestServiceAppendsContractDraftCreatedEvent(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
@@ -137,14 +149,15 @@ func TestServiceAppendsContractDraftCreatedEvent(t *testing.T) {
 	if payload.ID != created.ID {
 		t.Fatalf("payload id = %q, want %q", payload.ID, created.ID)
 	}
+	if payload.ContractID != created.ContractID {
+		t.Fatalf("payload contract_id = %q, want %q", payload.ContractID, created.ContractID)
+	}
 }
 
 func TestServiceRejectsDuplicateDraftForSeed(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	if _, err := service.Create(context.Background(), seed.ID); err != nil {
 		t.Fatalf("first Create() error = %v", err)
 	}
@@ -159,12 +172,10 @@ func TestServiceRejectsDuplicateDraftForSeed(t *testing.T) {
 }
 
 func TestServiceRejectsSeedNotCreated(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
 	seed.State = "superseded"
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 
 	_, err := service.Create(context.Background(), seed.ID)
 	if !errors.Is(err, contractdraft.ErrInvalidSeedState) {
@@ -173,7 +184,7 @@ func TestServiceRejectsSeedNotCreated(t *testing.T) {
 }
 
 func TestServiceRejectsUnknownSeed(t *testing.T) {
-	service, _, _, _ := draftService(t)
+	service, _, _, _, _ := draftService(t)
 
 	_, err := service.Create(context.Background(), "missing")
 	if !errors.Is(err, contractdraft.ErrContractSeedNotFound) {
@@ -198,14 +209,12 @@ func TestServiceValidatesRequiredSeedFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, seeds, _, events := draftService(t)
+			service, seeds, contracts, _, events := draftService(t)
 			seed := validDraftableSeed()
 			seed.ID = spine.ContractSeedID("contract-seed-" + tt.name)
 			seed.GoalID = spine.GoalID("goal-" + tt.name)
 			tt.mutate(&seed)
-			if err := seeds.Create(context.Background(), seed); err != nil {
-				t.Fatalf("Create seed: %v", err)
-			}
+			storeSeedWithContract(t, seeds, contracts, seed)
 
 			_, err := service.Create(context.Background(), seed.ID)
 			var validationErr *contractdraft.ValidationError
@@ -220,11 +229,9 @@ func TestServiceValidatesRequiredSeedFields(t *testing.T) {
 }
 
 func TestServiceDoesNotMutateSeed(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 
 	if _, err := service.Create(context.Background(), seed.ID); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -243,11 +250,9 @@ func TestServiceDoesNotMutateSeed(t *testing.T) {
 }
 
 func TestServiceDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 
 	if _, err := service.Create(context.Background(), seed.ID); err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -256,11 +261,9 @@ func TestServiceDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
 }
 
 func TestServiceUpdatesEditableDraftFields(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -326,11 +329,9 @@ func TestServiceUpdatesEditableDraftFields(t *testing.T) {
 }
 
 func TestServiceUpdateAllowsEmptyCoreDraftArrays(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -357,11 +358,9 @@ func TestServiceUpdateAllowsEmptyCoreDraftArrays(t *testing.T) {
 }
 
 func TestServiceRejectsNonEditableUpdateField(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -378,11 +377,9 @@ func TestServiceRejectsNonEditableUpdateField(t *testing.T) {
 }
 
 func TestServiceRejectsUnknownUpdateField(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -396,11 +393,9 @@ func TestServiceRejectsUnknownUpdateField(t *testing.T) {
 }
 
 func TestServiceRejectsMissingUpdatedBy(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -433,11 +428,9 @@ func TestServiceRejectsMissingUpdatedBy(t *testing.T) {
 }
 
 func TestServiceRejectsEmptyUpdateChanges(t *testing.T) {
-	service, seeds, _, _ := draftService(t)
+	service, seeds, contracts, _, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -457,7 +450,7 @@ func TestServiceRejectsEmptyUpdateChanges(t *testing.T) {
 }
 
 func TestServiceRejectsUpdateWhenDraftNotDraft(t *testing.T) {
-	service, _, drafts, _ := draftService(t)
+	service, _, _, drafts, _ := draftService(t)
 	created := validStoredDraft()
 	created.State = "ready_for_approval"
 	if err := drafts.Create(context.Background(), created); err != nil {
@@ -471,11 +464,9 @@ func TestServiceRejectsUpdateWhenDraftNotDraft(t *testing.T) {
 }
 
 func TestServiceAppendsContractDraftUpdatedEvent(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -542,11 +533,9 @@ func TestServiceAppendsContractDraftUpdatedEvent(t *testing.T) {
 }
 
 func TestServiceUpdateDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -558,11 +547,9 @@ func TestServiceUpdateDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
 }
 
 func TestServiceMarksDraftReadyForApproval(t *testing.T) {
-	service, seeds, drafts, _ := draftService(t)
+	service, seeds, contracts, drafts, _ := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -592,6 +579,16 @@ func TestServiceMarksDraftReadyForApproval(t *testing.T) {
 	if !reflect.DeepEqual(stored, expected) {
 		t.Fatalf("stored draft = %#v, want %#v", stored, expected)
 	}
+	contract, ok, err := contracts.Get(context.Background(), seed.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	if contract.State != spine.ContractStateReadyForApproval {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateReadyForApproval)
+	}
 }
 
 func TestServiceRejectsIncompleteDraftForReadyForApproval(t *testing.T) {
@@ -612,7 +609,7 @@ func TestServiceRejectsIncompleteDraftForReadyForApproval(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, _, drafts, events := draftService(t)
+			service, _, _, drafts, events := draftService(t)
 			created := validStoredDraft()
 			created.ID = spine.ContractDraftID("contract-draft-" + tt.name)
 			created.ContractSeedID = spine.ContractSeedID("contract-seed-" + tt.name)
@@ -637,7 +634,7 @@ func TestServiceRejectsIncompleteDraftForReadyForApproval(t *testing.T) {
 }
 
 func TestServiceRejectsMissingMarkedBy(t *testing.T) {
-	service, _, drafts, _ := draftService(t)
+	service, _, _, drafts, _ := draftService(t)
 	created := validStoredDraft()
 	if err := drafts.Create(context.Background(), created); err != nil {
 		t.Fatalf("drafts.Create() error = %v", err)
@@ -667,7 +664,7 @@ func TestServiceRejectsMissingMarkedBy(t *testing.T) {
 }
 
 func TestServiceRejectsReadyForApprovalWhenDraftNotDraft(t *testing.T) {
-	service, _, drafts, _ := draftService(t)
+	service, _, _, drafts, _ := draftService(t)
 	created := validStoredDraft()
 	created.State = spine.ContractDraftStateReadyForApproval
 	if err := drafts.Create(context.Background(), created); err != nil {
@@ -681,11 +678,9 @@ func TestServiceRejectsReadyForApprovalWhenDraftNotDraft(t *testing.T) {
 }
 
 func TestServiceAppendsContractDraftMarkedReadyForApprovalEvent(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -743,11 +738,9 @@ func TestServiceAppendsContractDraftMarkedReadyForApprovalEvent(t *testing.T) {
 }
 
 func TestServiceReadyForApprovalDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
-	service, seeds, _, events := draftService(t)
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
-	if err := seeds.Create(context.Background(), seed); err != nil {
-		t.Fatalf("Create seed: %v", err)
-	}
+	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -758,14 +751,15 @@ func TestServiceReadyForApprovalDoesNotAppendApprovalWorkGateProofEvents(t *test
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStore, *store.ContractDraftStore, *eventlog.EventLog) {
+func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStore, *store.ContractStore, *store.ContractDraftStore, *eventlog.EventLog) {
 	t.Helper()
 
 	seeds := store.NewContractSeedStore()
+	contracts := store.NewContractStore()
 	drafts := store.NewContractDraftStore()
 	events := eventlog.NewEventLog()
-	service := contractdraft.NewService(seeds, drafts, events, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, seeds, drafts, events
+	service := contractdraft.NewService(seeds, contracts, drafts, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, seeds, contracts, drafts, events
 }
 
 func updateRequest(t *testing.T, changesJSON string) spine.ContractDraftUpdateRequest {
@@ -790,6 +784,7 @@ func readyForApprovalRequest() spine.ContractDraftReadyForApprovalRequest {
 func validStoredDraft() spine.ContractDraft {
 	return spine.ContractDraft{
 		ID:                         "contract-draft-1",
+		ContractID:                 "contract-1",
 		ContractSeedID:             "contract-seed-1",
 		GoalID:                     "goal-1",
 		RepoBindingID:              "repo-binding-1",
@@ -817,6 +812,7 @@ func validDraftableSeed() spine.ContractSeed {
 		ID:             "contract-seed-1",
 		OrganizationID: "organization-1",
 		ProjectID:      "project-1",
+		ContractID:     "contract-1",
 		GoalID:         "goal-1",
 		RepoBindingID:  "repo-binding-1",
 		Title:          "Refactor CSV export filters",
@@ -830,6 +826,31 @@ func validDraftableSeed() spine.ContractSeed {
 		},
 		State:     spine.ContractSeedStateCreated,
 		CreatedAt: testTime(),
+	}
+}
+
+func storeSeedWithContract(t *testing.T, seeds *store.ContractSeedStore, contracts *store.ContractStore, seed spine.ContractSeed) {
+	t.Helper()
+	if err := contracts.Create(context.Background(), contractForSeed(seed)); err != nil {
+		t.Fatalf("Create contract: %v", err)
+	}
+	if err := seeds.Create(context.Background(), seed); err != nil {
+		t.Fatalf("Create seed: %v", err)
+	}
+}
+
+func contractForSeed(seed spine.ContractSeed) spine.Contract {
+	currentSeedID := seed.ID
+	return spine.Contract{
+		ID:             seed.ContractID,
+		OrganizationID: seed.OrganizationID,
+		ProjectID:      seed.ProjectID,
+		RepoBindingID:  seed.RepoBindingID,
+		GoalID:         seed.GoalID,
+		State:          spine.ContractStateSeeded,
+		CurrentSeedID:  &currentSeedID,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
 	}
 }
 

@@ -45,6 +45,7 @@ type testServerDeps struct {
 	goals             *store.GoalStore
 	clarifications    *store.ClarificationStore
 	answers           *store.ClarificationAnswerStore
+	contracts         *store.ContractStore
 	contractSeeds     *store.ContractSeedStore
 	contractDrafts    *store.ContractDraftStore
 	approvedContracts *store.ApprovedContractStore
@@ -1244,6 +1245,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalStore := store.NewGoalStore()
 	clarificationStore := store.NewClarificationStore()
 	answerStore := store.NewClarificationAnswerStore()
+	contractStore := store.NewContractStore()
 	contractSeedStore := store.NewContractSeedStore()
 	contractDraftStore := store.NewContractDraftStore()
 	approvedContractStore := store.NewApprovedContractStore()
@@ -1256,13 +1258,13 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
-	contractSeedService := contractseed.NewService(goalStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
+	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
 	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
-	contractDraftService := contractdraft.NewService(contractSeedStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
+	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
 	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
-	approvedContractService := approvedcontract.NewService(contractDraftStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
+	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
 	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
-	workItemService := workitem.NewService(approvedContractStore, workItemStore, events, fixedClock{now: testTime()}, ids)
+	workItemService := workitem.NewService(contractStore, approvedContractStore, workItemStore, events, fixedClock{now: testTime()}, ids)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 
 	return testServerDeps{
@@ -1271,6 +1273,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 		goals:             goalStore,
 		clarifications:    clarificationStore,
 		answers:           answerStore,
+		contracts:         contractStore,
 		contractSeeds:     contractSeedStore,
 		contractDrafts:    contractDraftStore,
 		approvedContracts: approvedContractStore,
@@ -1315,6 +1318,7 @@ type sequenceIDs struct {
 	clarification    int
 	question         int
 	answer           int
+	contract         int
 	contractSeed     int
 	contractDraft    int
 	approvedContract int
@@ -1350,6 +1354,11 @@ func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionI
 func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
 	g.answer++
 	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
+}
+
+func (g *sequenceIDs) NewContractID() (spine.ContractID, error) {
+	g.contract++
+	return spine.ContractID(fmt.Sprintf("contract-%d", g.contract)), nil
 }
 
 func (g *sequenceIDs) NewContractSeedID() (spine.ContractSeedID, error) {

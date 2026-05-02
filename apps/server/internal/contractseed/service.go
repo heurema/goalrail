@@ -46,6 +46,12 @@ type Store interface {
 	GetByGoalID(context.Context, spine.GoalID) (spine.ContractSeed, bool, error)
 }
 
+type ContractStore interface {
+	Create(context.Context, spine.Contract) error
+	Get(context.Context, spine.ContractID) (spine.Contract, bool, error)
+	GetByGoalID(context.Context, spine.GoalID) (spine.Contract, bool, error)
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
@@ -54,30 +60,37 @@ type transactionalSeedStore interface {
 	CreateWithEvent(context.Context, spine.ContractSeed, spine.Event) error
 }
 
+type transactionalContractSeedStore interface {
+	CreateContractWithSeedAndEvent(context.Context, spine.Contract, spine.ContractSeed, spine.Event) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
 
 type IDGenerator interface {
+	NewContractID() (spine.ContractID, error)
 	NewContractSeedID() (spine.ContractSeedID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
-	Goals  GoalReader
-	Seeds  Store
-	Events EventLog
-	Clock  Clock
-	IDs    IDGenerator
+	Goals     GoalReader
+	Contracts ContractStore
+	Seeds     Store
+	Events    EventLog
+	Clock     Clock
+	IDs       IDGenerator
 }
 
-func NewService(goals GoalReader, seeds Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(goals GoalReader, contracts ContractStore, seeds Store, events EventLog, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		Goals:  goals,
-		Seeds:  seeds,
-		Events: events,
-		Clock:  clock,
-		IDs:    ids,
+		Goals:     goals,
+		Contracts: contracts,
+		Seeds:     seeds,
+		Events:    events,
+		Clock:     clock,
+		IDs:       ids,
 	}
 }
 
@@ -101,19 +114,41 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	} else if ok {
 		return spine.ContractSeed{}, ErrAlreadySeeded
 	}
+	if _, ok, err := s.Contracts.GetByGoalID(ctx, goal.ID); err != nil {
+		return spine.ContractSeed{}, fmt.Errorf("get contract by goal id: %w", err)
+	} else if ok {
+		return spine.ContractSeed{}, ErrAlreadySeeded
+	}
 	if err := validateGoalForSeed(goal); err != nil {
 		return spine.ContractSeed{}, err
 	}
 
+	contractID, err := s.IDs.NewContractID()
+	if err != nil {
+		return spine.ContractSeed{}, fmt.Errorf("new contract id: %w", err)
+	}
 	seedID, err := s.IDs.NewContractSeedID()
 	if err != nil {
 		return spine.ContractSeed{}, fmt.Errorf("new contract seed id: %w", err)
 	}
 	now := s.Clock.Now().UTC()
+	currentSeedID := seedID
+	contract := spine.Contract{
+		ID:             contractID,
+		OrganizationID: goal.OrganizationID,
+		ProjectID:      goal.ProjectID,
+		RepoBindingID:  goal.RepoBindingID,
+		GoalID:         goal.ID,
+		State:          spine.ContractStateSeeded,
+		CurrentSeedID:  &currentSeedID,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
 	created := spine.ContractSeed{
 		ID:             seedID,
 		OrganizationID: goal.OrganizationID,
 		ProjectID:      goal.ProjectID,
+		ContractID:     contractID,
 		GoalID:         goal.ID,
 		RepoBindingID:  goal.RepoBindingID,
 		Title:          goal.Title,
@@ -129,6 +164,30 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	event, err := s.contractSeedCreatedEvent(created, goal)
 	if err != nil {
 		return spine.ContractSeed{}, err
+	}
+	if txSeeds, ok := s.Seeds.(transactionalContractSeedStore); ok {
+		if err := txSeeds.CreateContractWithSeedAndEvent(ctx, contract, created, event); err != nil {
+			if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
+				return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.ContractSeed{}, ErrAlreadySeeded
+			}
+			if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
+				return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.ContractSeed{}, ErrAlreadySeeded
+			}
+			return spine.ContractSeed{}, fmt.Errorf("create contract seed with contract and event: %w", err)
+		}
+		return created, nil
+	}
+	if err := s.Contracts.Create(ctx, contract); err != nil {
+		if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
+			return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
+		} else if ok {
+			return spine.ContractSeed{}, ErrAlreadySeeded
+		}
+		return spine.ContractSeed{}, fmt.Errorf("create contract: %w", err)
 	}
 	if txSeeds, ok := s.Seeds.(transactionalSeedStore); ok {
 		if err := txSeeds.CreateWithEvent(ctx, created, event); err != nil {
@@ -221,6 +280,9 @@ func (s *Service) validateDependencies() error {
 	if s.Goals == nil {
 		return errors.New("contract seed service goal store is nil")
 	}
+	if s.Contracts == nil {
+		return errors.New("contract seed service contract store is nil")
+	}
 	if s.Seeds == nil {
 		return errors.New("contract seed service seed store is nil")
 	}
@@ -243,6 +305,14 @@ func (SystemClock) Now() time.Time {
 }
 
 type UUIDGenerator struct{}
+
+func (UUIDGenerator) NewContractID() (spine.ContractID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.ContractID(id.String()), nil
+}
 
 func (UUIDGenerator) NewContractSeedID() (spine.ContractSeedID, error) {
 	id, err := uuid.NewV7()

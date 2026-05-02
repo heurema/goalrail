@@ -145,6 +145,7 @@ func TestPostgresTransactionalContractSeedStoreRollsBackWhenEventAppendFails(t *
 	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalContractSeedStore(
 		NewPostgresContractSeedStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
@@ -179,6 +180,7 @@ func TestPostgresTransactionalContractDraftStoreRollsBackWhenEventAppendFails(t 
 	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalContractDraftStore(
 		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
@@ -213,6 +215,7 @@ func TestPostgresTransactionalContractDraftStoreRollsBackUpdateWhenEventAppendFa
 	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalContractDraftStore(
 		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
@@ -247,6 +250,7 @@ func TestPostgresTransactionalContractDraftStoreRollsBackMarkReadyForApprovalWhe
 	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalContractDraftStore(
 		NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)
@@ -286,6 +290,7 @@ func TestPostgresTransactionalApprovedContractStoreRollsBackWhenEventAppendFails
 	db := &recordingPostgresDB{}
 	store := newPostgresTransactionalApprovedContractStore(
 		NewPostgresApprovedContractStoreWithExecutorAndQuerier(db, db),
+		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
 		NewPostgresEventLogWithExecutorAndQuerier(db, db),
 		&recordingPostgresTransactor{tx: tx},
 	)

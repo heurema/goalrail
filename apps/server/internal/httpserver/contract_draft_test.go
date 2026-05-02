@@ -40,6 +40,9 @@ func TestPostContractSeedContractDraftReturnsCreatedDraft(t *testing.T) {
 	if draft.ContractSeedID != seed.ID {
 		t.Fatalf("contract_seed_id = %q, want %q", draft.ContractSeedID, seed.ID)
 	}
+	if draft.ContractID != seed.ContractID {
+		t.Fatalf("contract_id = %q, want %q", draft.ContractID, seed.ContractID)
+	}
 	if draft.GoalID != seed.GoalID {
 		t.Fatalf("goal_id = %q, want %q", draft.GoalID, seed.GoalID)
 	}
@@ -104,6 +107,19 @@ func TestPostContractSeedContractDraftReturnsCreatedDraft(t *testing.T) {
 	if !reflect.DeepEqual(afterSeed, beforeSeed) {
 		t.Fatalf("contract seed mutated: got %#v, want %#v", afterSeed, beforeSeed)
 	}
+	contract, ok, err := server.contracts.Get(context.Background(), seed.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	if contract.State != spine.ContractStateDraft {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateDraft)
+	}
+	if contract.CurrentDraftID == nil || *contract.CurrentDraftID != draft.ID {
+		t.Fatalf("current_draft_id = %v, want %q", contract.CurrentDraftID, draft.ID)
+	}
 }
 
 func TestPostContractSeedContractDraftUnknownSeedReturnsNotFound(t *testing.T) {
@@ -129,6 +145,7 @@ func TestPostContractSeedContractDraftRejectsSeedNotCreated(t *testing.T) {
 	server := testServer(t)
 	seed := validHTTPContractSeed()
 	seed.State = "superseded"
+	storeHTTPContractForSeed(t, server, seed)
 	if err := server.contractSeeds.Create(context.Background(), seed); err != nil {
 		t.Fatalf("contractSeeds.Create() error = %v", err)
 	}
@@ -153,6 +170,7 @@ func TestPostContractSeedContractDraftRejectsMissingRequiredSeedFields(t *testin
 	server := testServer(t)
 	seed := validHTTPContractSeed()
 	seed.ScopeHint = ""
+	storeHTTPContractForSeed(t, server, seed)
 	if err := server.contractSeeds.Create(context.Background(), seed); err != nil {
 		t.Fatalf("contractSeeds.Create() error = %v", err)
 	}
@@ -350,6 +368,7 @@ func TestPatchContractDraftRejectsDraftNotDraft(t *testing.T) {
 	server := testServer(t)
 	draft := validHTTPContractDraft()
 	draft.State = "ready_for_approval"
+	storeHTTPContractForDraft(t, server, draft)
 	if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
@@ -553,6 +572,16 @@ func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
 	if !reflect.DeepEqual(stored, expectedStored) {
 		t.Fatalf("stored draft = %#v, want %#v", stored, expectedStored)
 	}
+	contract, ok, err := server.contracts.Get(context.Background(), draft.ContractID)
+	if err != nil {
+		t.Fatalf("contracts.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("contract not found")
+	}
+	if contract.State != spine.ContractStateReadyForApproval {
+		t.Fatalf("contract state = %q, want %q", contract.State, spine.ContractStateReadyForApproval)
+	}
 }
 
 func TestPostContractDraftReadyForApprovalUnknownDraftReturnsNotFound(t *testing.T) {
@@ -578,6 +607,7 @@ func TestPostContractDraftReadyForApprovalRejectsDraftNotDraft(t *testing.T) {
 	server := testServer(t)
 	draft := validHTTPContractDraft()
 	draft.State = spine.ContractDraftStateReadyForApproval
+	storeHTTPContractForDraft(t, server, draft)
 	if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
@@ -647,8 +677,10 @@ func TestPostContractDraftReadyForApprovalRejectsIncompleteDraft(t *testing.T) {
 			server := testServer(t)
 			draft := validHTTPContractDraft()
 			draft.ID = spine.ContractDraftID("contract-draft-" + tt.name)
+			draft.ContractID = spine.ContractID("contract-" + tt.name)
 			draft.ContractSeedID = spine.ContractSeedID("contract-seed-" + tt.name)
 			tt.mutate(&draft)
+			storeHTTPContractForDraft(t, server, draft)
 			if err := server.contractDrafts.Create(context.Background(), draft); err != nil {
 				t.Fatalf("contractDrafts.Create() error = %v", err)
 			}
@@ -700,6 +732,7 @@ func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
 	}
 	var payload struct {
 		ContractDraftID spine.ContractDraftID    `json:"contract_draft_id"`
+		ContractID      spine.ContractID         `json:"contract_id"`
 		ContractSeedID  spine.ContractSeedID     `json:"contract_seed_id"`
 		GoalID          spine.GoalID             `json:"goal_id"`
 		MarkedBy        spine.ActorRef           `json:"marked_by"`
@@ -707,7 +740,7 @@ func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
 		NewState        spine.ContractDraftState `json:"new_state"`
 	}
 	decodeJSON(t, string(event.Payload), &payload)
-	if payload.ContractDraftID != draft.ID || payload.ContractSeedID != draft.ContractSeedID || payload.GoalID != draft.GoalID {
+	if payload.ContractDraftID != draft.ID || payload.ContractID != draft.ContractID || payload.ContractSeedID != draft.ContractSeedID || payload.GoalID != draft.GoalID {
 		t.Fatalf("payload identity = %q/%q/%q, want draft identity %q/%q/%q", payload.ContractDraftID, payload.ContractSeedID, payload.GoalID, draft.ID, draft.ContractSeedID, draft.GoalID)
 	}
 	if payload.MarkedBy.Kind != "user" || payload.MarkedBy.ID != "dev_1" {
@@ -770,6 +803,9 @@ func createContractSeed(t *testing.T, server testServerDeps) spine.ContractSeed 
 
 	var seed spine.ContractSeed
 	decodeJSON(t, response.body, &seed)
+	if seed.ContractID == "" {
+		t.Fatal("contract_seed contract_id is empty")
+	}
 	return seed
 }
 
@@ -811,6 +847,7 @@ func readyForApprovalJSON() string {
 func validHTTPContractSeed() spine.ContractSeed {
 	return spine.ContractSeed{
 		ID:             "contract-seed-1",
+		ContractID:     "contract-1",
 		GoalID:         "goal-1",
 		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
 		Title:          "Refactor CSV export filters",
@@ -827,9 +864,50 @@ func validHTTPContractSeed() spine.ContractSeed {
 	}
 }
 
+func storeHTTPContractForSeed(t *testing.T, server testServerDeps, seed spine.ContractSeed) {
+	t.Helper()
+	currentSeedID := seed.ID
+	contract := spine.Contract{
+		ID:             seed.ContractID,
+		OrganizationID: seed.OrganizationID,
+		ProjectID:      seed.ProjectID,
+		RepoBindingID:  seed.RepoBindingID,
+		GoalID:         seed.GoalID,
+		State:          spine.ContractStateSeeded,
+		CurrentSeedID:  &currentSeedID,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+}
+
+func storeHTTPContractForDraft(t *testing.T, server testServerDeps, draft spine.ContractDraft) {
+	t.Helper()
+	currentSeedID := draft.ContractSeedID
+	currentDraftID := draft.ID
+	contract := spine.Contract{
+		ID:             draft.ContractID,
+		OrganizationID: draft.OrganizationID,
+		ProjectID:      draft.ProjectID,
+		RepoBindingID:  draft.RepoBindingID,
+		GoalID:         draft.GoalID,
+		State:          spine.ContractStateDraft,
+		CurrentSeedID:  &currentSeedID,
+		CurrentDraftID: &currentDraftID,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+}
+
 func validHTTPContractDraft() spine.ContractDraft {
 	return spine.ContractDraft{
 		ID:                         "contract-draft-1",
+		ContractID:                 "contract-1",
 		ContractSeedID:             "contract-seed-1",
 		GoalID:                     "goal-1",
 		RepoBindingID:              "018f0000-0000-7000-8000-000000000004",
