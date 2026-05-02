@@ -14,6 +14,76 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
+func TestProjectContextStoreBuildsInstallationUpsertWithModeAndPublicBaseURL(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewProjectContextStoreWithExecutor(exec)
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+
+	err := store.UpsertInstallation(ctx, spine.Installation{
+		ID:            "018f0000-0000-7000-8000-000000000006",
+		Mode:          spine.InstallationModeSelfHosted,
+		PublicBaseURL: "http://localhost:8080",
+		State:         spine.EntityStateActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	})
+	if err != nil {
+		t.Fatalf("UpsertInstallation() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO installations") {
+		t.Fatalf("SQL = %q, want installations insert", call.sql)
+	}
+	if !strings.Contains(call.sql, "ON CONFLICT (id) DO UPDATE SET") {
+		t.Fatalf("SQL = %q, want idempotent conflict clause", call.sql)
+	}
+	if !strings.Contains(call.sql, "$1") {
+		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
+	}
+	if got, want := len(call.args), 6; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreBuildsOrganizationUpsertWithInstallationID(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewProjectContextStoreWithExecutor(exec)
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+
+	err := store.UpsertOrganization(ctx, spine.Organization{
+		ID:             "018f0000-0000-7000-8000-000000000002",
+		InstallationID: "018f0000-0000-7000-8000-000000000006",
+		Slug:           "dev-default",
+		DisplayName:    "Goalrail Dev Organization",
+		State:          spine.EntityStateActive,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	})
+	if err != nil {
+		t.Fatalf("UpsertOrganization() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO organizations") {
+		t.Fatalf("SQL = %q, want organizations insert", call.sql)
+	}
+	if !strings.Contains(call.sql, "installation_id") {
+		t.Fatalf("SQL = %q, want installation_id column", call.sql)
+	}
+	if got, want := len(call.args), 7; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
 func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *testing.T) {
 	ctx := context.Background()
 	exec := &recordingProjectContextExecer{}

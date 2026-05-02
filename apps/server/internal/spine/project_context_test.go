@@ -15,6 +15,10 @@ func TestProjectContextIDGeneratorsReturnUUIDv7(t *testing.T) {
 			id, err := NewUserID()
 			return string(id), err
 		}},
+		{name: "installation", generate: func() (string, error) {
+			id, err := NewInstallationID()
+			return string(id), err
+		}},
 		{name: "organization", generate: func() (string, error) {
 			id, err := NewOrganizationID()
 			return string(id), err

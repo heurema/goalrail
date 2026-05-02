@@ -12,6 +12,7 @@ import (
 
 const (
 	DevUserID                   spine.UserID                   = "018f0000-0000-7000-8000-000000000001"
+	DevInstallationID           spine.InstallationID           = "018f0000-0000-7000-8000-000000000006"
 	DevOrganizationID           spine.OrganizationID           = "018f0000-0000-7000-8000-000000000002"
 	DevProjectID                spine.ProjectID                = "018f0000-0000-7000-8000-000000000003"
 	DevRepoBindingID            spine.RepoBindingID            = "018f0000-0000-7000-8000-000000000004"
@@ -20,6 +21,7 @@ const (
 
 type ProjectContextStore interface {
 	UpsertUser(ctx context.Context, user spine.User) error
+	UpsertInstallation(ctx context.Context, installation spine.Installation) error
 	UpsertOrganization(ctx context.Context, org spine.Organization) error
 	UpsertOrganizationMembership(ctx context.Context, membership spine.OrganizationMembership) error
 	UpsertProject(ctx context.Context, project spine.Project) error
@@ -41,13 +43,26 @@ func RunDev(ctx context.Context, projectContext ProjectContextStore, now time.Ti
 		return err
 	}
 
+	installation := spine.Installation{
+		ID:            DevInstallationID,
+		Mode:          spine.InstallationModeSelfHosted,
+		PublicBaseURL: "http://localhost:8080",
+		State:         spine.EntityStateActive,
+		CreatedAt:     createdAt,
+		UpdatedAt:     createdAt,
+	}
+	if err := projectContext.UpsertInstallation(ctx, installation); err != nil {
+		return err
+	}
+
 	org := spine.Organization{
-		ID:          DevOrganizationID,
-		Slug:        "dev-default",
-		DisplayName: "Goalrail Dev Organization",
-		State:       spine.EntityStateActive,
-		CreatedAt:   createdAt,
-		UpdatedAt:   createdAt,
+		ID:             DevOrganizationID,
+		InstallationID: DevInstallationID,
+		Slug:           "dev-default",
+		DisplayName:    "Goalrail Dev Organization",
+		State:          spine.EntityStateActive,
+		CreatedAt:      createdAt,
+		UpdatedAt:      createdAt,
 	}
 	if err := projectContext.UpsertOrganization(ctx, org); err != nil {
 		return err

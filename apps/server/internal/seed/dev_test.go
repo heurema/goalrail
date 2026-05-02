@@ -21,8 +21,20 @@ func TestRunDevUsesDeterministicProjectContextRecords(t *testing.T) {
 	if got, want := store.user.ID, DevUserID; got != want {
 		t.Fatalf("user ID = %q, want %q", got, want)
 	}
+	if got, want := store.installation.ID, DevInstallationID; got != want {
+		t.Fatalf("installation ID = %q, want %q", got, want)
+	}
+	if got, want := store.installation.Mode, spine.InstallationModeSelfHosted; got != want {
+		t.Fatalf("installation mode = %q, want %q", got, want)
+	}
+	if got, want := store.installation.PublicBaseURL, "http://localhost:8080"; got != want {
+		t.Fatalf("installation public_base_url = %q, want %q", got, want)
+	}
 	if got, want := store.organization.ID, DevOrganizationID; got != want {
 		t.Fatalf("organization ID = %q, want %q", got, want)
+	}
+	if got, want := store.organization.InstallationID, DevInstallationID; got != want {
+		t.Fatalf("organization installation_id = %q, want %q", got, want)
 	}
 	if got, want := store.membership.Role, spine.OrganizationMembershipRoleOwner; got != want {
 		t.Fatalf("membership role = %q, want %q", got, want)
@@ -35,6 +47,7 @@ func TestRunDevUsesDeterministicProjectContextRecords(t *testing.T) {
 	}
 	for name, id := range map[string]string{
 		"user":                    string(DevUserID),
+		"installation":            string(DevInstallationID),
 		"organization":            string(DevOrganizationID),
 		"organization_membership": string(DevOrganizationMembershipID),
 		"project":                 string(DevProjectID),
@@ -51,7 +64,7 @@ func TestRunDevUsesDeterministicProjectContextRecords(t *testing.T) {
 	if got, want := store.repoBinding.AccessMode, spine.RepoBindingAccessModeMetadataOnly; got != want {
 		t.Fatalf("repo binding access mode = %q, want %q", got, want)
 	}
-	if got, want := store.calls, []string{"user", "organization", "membership", "project", "repo_binding"}; !equalStrings(got, want) {
+	if got, want := store.calls, []string{"user", "installation", "organization", "membership", "project", "repo_binding"}; !equalStrings(got, want) {
 		t.Fatalf("calls = %v, want %v", got, want)
 	}
 }
@@ -71,6 +84,7 @@ func assertUUIDv7(t *testing.T, name string, value string) {
 type recordingSeedStore struct {
 	calls        []string
 	user         spine.User
+	installation spine.Installation
 	organization spine.Organization
 	membership   spine.OrganizationMembership
 	project      spine.Project
@@ -80,6 +94,12 @@ type recordingSeedStore struct {
 func (s *recordingSeedStore) UpsertUser(_ context.Context, user spine.User) error {
 	s.calls = append(s.calls, "user")
 	s.user = user
+	return nil
+}
+
+func (s *recordingSeedStore) UpsertInstallation(_ context.Context, installation spine.Installation) error {
+	s.calls = append(s.calls, "installation")
+	s.installation = installation
 	return nil
 }
 

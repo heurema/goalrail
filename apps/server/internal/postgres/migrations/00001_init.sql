@@ -8,13 +8,28 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE installations (
+    id UUID PRIMARY KEY,
+    mode TEXT NOT NULL,
+    public_base_url TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT installations_mode_check CHECK (mode IN ('self_hosted', 'saas')),
+    CONSTRAINT installations_public_base_url_check
+        CHECK (public_base_url <> '' AND public_base_url !~ '/$')
+);
+
 CREATE TABLE organizations (
     id UUID PRIMARY KEY,
-    slug TEXT NOT NULL UNIQUE,
+    installation_id UUID NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
+    slug TEXT NOT NULL,
     display_name TEXT NOT NULL,
     state TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT organizations_installation_slug_unique
+        UNIQUE (installation_id, slug)
 );
 
 CREATE TABLE organization_memberships (
@@ -558,4 +573,5 @@ DROP TABLE IF EXISTS repo_bindings;
 DROP TABLE IF EXISTS projects;
 DROP TABLE IF EXISTS organization_memberships;
 DROP TABLE IF EXISTS organizations;
+DROP TABLE IF EXISTS installations;
 DROP TABLE IF EXISTS users;

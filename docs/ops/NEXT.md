@@ -29,10 +29,11 @@
 - ADR-0022 now defines the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
-  are the only deployment modes, MVP starts with one bootstrapped primary
-  Organization in `self_hosted` mode, and no installation schema, auth, JWT,
-  CLI login, SaaS onboarding, organization creation API, or web UI is
-  implemented yet
+  are the only deployment modes, and the server now has the smallest
+  Installation schema foundation: `installations`, installation-scoped
+  organization slugs, and a dev `self_hosted` Installation linked to the dev
+  Organization. Auth, JWT, CLI login, SaaS onboarding, organization creation
+  API, and web UI remain unimplemented.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -110,24 +111,27 @@ Done means:
 - no analytics, tracking, cookies, sessions, CRM, repo integration, LLM/API,
   runtime execution, gate, proof, or broad backend platform is added
 
-## Next backend bounded slice
+## Completed backend bounded slice
 
 ### Installation schema foundation
+
+Status: **DONE — smallest ADR-0022 schema foundation exists.**
 
 Goal:
 - implement the smallest server persistence foundation for the documented
   Installation boundary before auth, CLI login, or SaaS onboarding.
 
 Done means:
-- `installations` table exists
-- `organizations.installation_id` exists
-- installation mode enum/check accepts only `self_hosted` and `saas`
-- `public_base_url` is stored on Installation
-- `public_base_url` bootstrap direction requires a normalized value without a
+- ✅ `installations` table exists
+- ✅ `organizations.installation_id` exists
+- ✅ organization slugs are unique within an Installation rather than globally
+- ✅ installation mode enum/check accepts only `self_hosted` and `saas`
+- ✅ `public_base_url` is stored on Installation
+- ✅ dev seed creates one `self_hosted` Installation with explicit
+  `http://localhost:8080` public base URL before the dev Organization
+- `public_base_url` production bootstrap direction requires a normalized value without a
   trailing slash, with HTTPS except localhost/dev
-- dev seed/bootstrap direction is updated for one self-hosted Installation and
-  one primary Organization
-- backend paths remain organization-aware and do not bypass `organization_id`
+- ✅ backend paths remain organization-aware and do not bypass `organization_id`
 - no auth implementation
 - no JWT implementation
 - no CLI login implementation
@@ -280,29 +284,20 @@ Done means:
 
 ### Server follow-up slices
 
-1. Installation schema foundation
-   - add `installations`, `organizations.installation_id`, deployment mode
-     check for only `self_hosted` / `saas`, and installation-owned
-     `public_base_url`
-   - update dev seed/bootstrap direction for one self-hosted Installation and
-     one primary Organization
-   - keep backend paths organization-aware
-   - do not implement auth, JWT, CLI login, SaaS onboarding, organization
-     creation API, or web UI
-2. Typed WorkItemPlan pull lease boundary implementation
+1. Typed WorkItemPlan pull lease boundary implementation
    - implement the smallest server-owned typed planning lease protocol around
      existing `WorkItemPlan` / `WorkItemPlanProposal` state
    - keep repo-aware planning computation behind worker / controller / runner
      boundaries
    - do not implement checkout, execution, receipt, generic queue, outbox, gate,
      proof, runtime registry, assignment, or claiming
-3. WorkItem assignment/claiming boundary design
+2. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
    - keep runner, execution, receipt, gate, and proof as later boundaries
    - do not start execution from assignment/claiming
    - preserve `owner_hint` as advisory unless a later boundary upgrades it
-4. Runner boundary design
+3. Runner boundary design
    - define the hosted runner protocol and checkout boundary before any code
      execution work
    - keep execution, gate, and proof deferred

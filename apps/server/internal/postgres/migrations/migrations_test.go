@@ -5,6 +5,35 @@ import (
 	"testing"
 )
 
+func TestInitMigrationCreatesInstallationBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE installations",
+		"public_base_url TEXT NOT NULL",
+		"CONSTRAINT installations_mode_check CHECK (mode IN ('self_hosted', 'saas'))",
+		"installation_id UUID NOT NULL REFERENCES installations(id) ON DELETE CASCADE",
+		"CONSTRAINT organizations_installation_slug_unique",
+		"UNIQUE (installation_id, slug)",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "slug TEXT NOT NULL UNIQUE") {
+		t.Fatalf("organizations slug must not be globally unique")
+	}
+	if strings.Index(sql, "CREATE TABLE installations") > strings.Index(sql, "CREATE TABLE organizations") {
+		t.Fatalf("installations must be created before organizations")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS organizations;") > strings.Index(sql, "DROP TABLE IF EXISTS installations;") {
+		t.Fatalf("installations must be dropped after organizations")
+	}
+}
+
 func TestInitMigrationAllowsContractDraftReadyForApprovalState(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
