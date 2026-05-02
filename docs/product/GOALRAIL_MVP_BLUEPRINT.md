@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_OPERATING_MODEL.md
   - docs/PROJECT_SPINE_SCHEMA.md
+  - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -92,6 +93,9 @@ slice.
 16. Sensitive policy may override risk-based fan-out.
 17. API server owns canonical state, but does not clone repositories or run
     checks in-process.
+18. API server validates and persists canonical planning state, but repo-aware
+    WorkItem planning computation belongs behind worker / controller / runner
+    boundaries.
 
 ## 3. Layer map
 
@@ -171,6 +175,34 @@ Responsibilities:
 - approval
 - task decomposition
 - routing defaults by task profile
+
+Control-plane split:
+- the API server is the canonical state machine for planning transitions,
+  validation, persistence, and event append
+- repo-aware task decomposition is not performed in-process by the API server
+- workers / controllers may reconcile planning requests but do not own canonical
+  truth or write directly to the database
+- runners / planners may compute WorkItem plan proposals using bounded
+  repo/context/knowledge inputs behind the runner boundary
+- canonical `WorkItem(planned)` records are created only through API-server
+  acceptance of validated planning output
+
+Conceptual rich planning flow:
+
+```text
+ApprovedContract(approved)
+  -> WorkItemPlanningRequest(queued)
+  -> worker/controller leases or reconciles request
+  -> runner/planner obtains bounded repo/context/knowledge snapshot
+  -> WorkItemPlanProposal(submitted)
+  -> API server validates and stores proposal
+  -> explicit acceptance creates WorkItem(planned) records
+```
+
+This flow is a target architecture direction, not an implemented MVP surface.
+The current direct one-WorkItem planning endpoint remains simple prototype v0
+behavior and must not be expanded into rich repo-aware planning inside the API
+server.
 
 ### Layer 4 — Delivery Runtime
 Produces:
