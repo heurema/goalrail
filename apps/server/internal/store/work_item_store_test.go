@@ -41,17 +41,24 @@ func TestWorkItemStoreCreateGetAndGetByApprovedContractID(t *testing.T) {
 	}
 }
 
-func TestWorkItemStorePreventsDuplicateForApprovedContract(t *testing.T) {
+func TestWorkItemStoreAllowsMultipleItemsForApprovedContract(t *testing.T) {
 	workItems := store.NewWorkItemStore()
 	created := validWorkItem()
 	if err := workItems.Create(context.Background(), created); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	duplicate := created
-	duplicate.ID = "work-item-2"
-	if err := workItems.Create(context.Background(), duplicate); err != store.ErrWorkItemAlreadyPlanned {
-		t.Fatalf("duplicate Create() error = %v, want %v", err, store.ErrWorkItemAlreadyPlanned)
+	second := created
+	second.ID = "work-item-2"
+	second.PlanID = "plan-2"
+	second.ProposalID = "proposal-2"
+	if err := workItems.Create(context.Background(), second); err != nil {
+		t.Fatalf("second Create() error = %v", err)
+	}
+	if _, ok, err := workItems.Get(context.Background(), second.ID); err != nil {
+		t.Fatalf("Get() error = %v", err)
+	} else if !ok {
+		t.Fatal("second item was not stored")
 	}
 }
 
@@ -62,6 +69,8 @@ func validWorkItem() spine.WorkItem {
 		ProjectID:            "project-1",
 		ContractID:           "contract-1",
 		ApprovedContractID:   "approved-contract-1",
+		PlanID:               "plan-1",
+		ProposalID:           "proposal-1",
 		RepoBindingID:        "repo-binding-1",
 		Title:                "Planned task",
 		Summary:              "Simple v0 planned task",

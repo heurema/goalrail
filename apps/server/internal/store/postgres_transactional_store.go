@@ -552,6 +552,96 @@ func (s *PostgresTransactionalWorkItemStore) CreateWithEvent(ctx context.Context
 	})
 }
 
+type PostgresTransactionalWorkItemPlanStore struct {
+	plans      *PostgresWorkItemPlanStore
+	proposals  *PostgresWorkItemPlanProposalStore
+	workItems  *PostgresWorkItemStore
+	events     *PostgresEventLog
+	transactor postgresTransactor
+}
+
+func NewPostgresTransactionalWorkItemPlanStore(pool *pgxpool.Pool) *PostgresTransactionalWorkItemPlanStore {
+	db := newPostgresDB(pool)
+	return newPostgresTransactionalWorkItemPlanStore(
+		NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		pgxpoolTransactor{pool: pool},
+	)
+}
+
+func newPostgresTransactionalWorkItemPlanStore(plans *PostgresWorkItemPlanStore, proposals *PostgresWorkItemPlanProposalStore, workItems *PostgresWorkItemStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalWorkItemPlanStore {
+	return &PostgresTransactionalWorkItemPlanStore{
+		plans:      plans,
+		proposals:  proposals,
+		workItems:  workItems,
+		events:     events,
+		transactor: transactor,
+	}
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) Create(ctx context.Context, plan spine.WorkItemPlan) error {
+	return s.plans.Create(ctx, plan)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) Get(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, bool, error) {
+	return s.plans.Get(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) GetByContractID(ctx context.Context, id spine.ContractID) (spine.WorkItemPlan, bool, error) {
+	return s.plans.GetByContractID(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) MarkProposalSubmitted(ctx context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	return s.plans.MarkProposalSubmitted(ctx, id, updatedAt)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) MarkAccepted(ctx context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	return s.plans.MarkAccepted(ctx, id, updatedAt)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) CreateProposal(ctx context.Context, proposal spine.WorkItemPlanProposal) error {
+	return s.proposals.Create(ctx, proposal)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) GetProposal(ctx context.Context, id spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, bool, error) {
+	return s.proposals.Get(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) GetProposalByPlanID(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlanProposal, bool, error) {
+	return s.proposals.GetByPlanID(ctx, id)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) MarkProposalAccepted(ctx context.Context, id spine.WorkItemPlanProposalID, acceptedBy spine.ActorRef, acceptedAt time.Time) error {
+	return s.proposals.MarkAccepted(ctx, id, acceptedBy, acceptedAt)
+}
+
+func (s *PostgresTransactionalWorkItemPlanStore) AcceptProposalWithWorkItemsAndEvents(ctx context.Context, planID spine.WorkItemPlanID, proposalID spine.WorkItemPlanProposalID, acceptedBy spine.ActorRef, acceptedAt time.Time, items []spine.WorkItem, eventsToAppend []spine.Event) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+		for _, item := range items {
+			if err := s.workItems.Create(txCtx, item); err != nil {
+				return err
+			}
+		}
+		if err := s.proposals.MarkAccepted(txCtx, proposalID, acceptedBy, acceptedAt); err != nil {
+			return err
+		}
+		if err := s.plans.MarkAccepted(txCtx, planID, acceptedAt); err != nil {
+			return err
+		}
+		for _, event := range eventsToAppend {
+			if err := s.events.Append(txCtx, event); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func withPostgresTx(ctx context.Context, pool *pgxpool.Pool, opts pgx.TxOptions, fn postgresTxFunc) error {
 	if _, ok := postgresTxFromContext(ctx); ok {
 		return fn(ctx)

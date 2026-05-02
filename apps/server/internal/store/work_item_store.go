@@ -17,13 +17,13 @@ var (
 type WorkItemStore struct {
 	mu                 sync.RWMutex
 	items              map[spine.WorkItemID]spine.WorkItem
-	byApprovedContract map[spine.ApprovedContractID]spine.WorkItemID
+	byApprovedContract map[spine.ApprovedContractID][]spine.WorkItemID
 }
 
 func NewWorkItemStore() *WorkItemStore {
 	return &WorkItemStore{
 		items:              make(map[spine.WorkItemID]spine.WorkItem),
-		byApprovedContract: make(map[spine.ApprovedContractID]spine.WorkItemID),
+		byApprovedContract: make(map[spine.ApprovedContractID][]spine.WorkItemID),
 	}
 }
 
@@ -34,12 +34,9 @@ func (s *WorkItemStore) Create(_ context.Context, item spine.WorkItem) error {
 	if _, exists := s.items[item.ID]; exists {
 		return ErrWorkItemAlreadyExists
 	}
-	if _, exists := s.byApprovedContract[item.ApprovedContractID]; exists {
-		return ErrWorkItemAlreadyPlanned
-	}
 
 	s.items[item.ID] = cloneWorkItem(item)
-	s.byApprovedContract[item.ApprovedContractID] = item.ID
+	s.byApprovedContract[item.ApprovedContractID] = append(s.byApprovedContract[item.ApprovedContractID], item.ID)
 	return nil
 }
 
@@ -58,11 +55,11 @@ func (s *WorkItemStore) GetByApprovedContractID(_ context.Context, id spine.Appr
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	itemID, ok := s.byApprovedContract[id]
-	if !ok {
+	itemIDs := s.byApprovedContract[id]
+	if len(itemIDs) == 0 {
 		return spine.WorkItem{}, false, nil
 	}
-	item, ok := s.items[itemID]
+	item, ok := s.items[itemIDs[0]]
 	if !ok {
 		return spine.WorkItem{}, false, nil
 	}

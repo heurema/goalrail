@@ -3,373 +3,341 @@ package httpserver_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
+	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
 
-func TestPostContractTasksReturnsPlannedWorkItem(t *testing.T) {
+func TestPostContractPlansReturnsQueuedPlan(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{"requested_by":{"kind":"user","id":"planner-requester"}}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
-		if strings.Contains(response.body, hiddenField) {
-			t.Fatalf("response includes hidden field %s", hiddenField)
-		}
+	assertNoHiddenContext(t, response.body)
+	assertNoForbiddenWorkItemSideEffects(t, server.events.Events())
+
+	var plan spine.WorkItemPlan
+	decodeJSON(t, response.body, &plan)
+	if plan.State != spine.WorkItemPlanStateQueued {
+		t.Fatalf("state = %q, want queued", plan.State)
 	}
-	for _, forbiddenField := range []string{"\"run_id\"", "\"receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
-		if strings.Contains(response.body, forbiddenField) {
-			t.Fatalf("response includes forbidden field %s", forbiddenField)
-		}
+	if plan.ContractID != approved.ContractID || plan.ApprovedContractID != approved.ID || plan.RepoBindingID != approved.RepoBindingID {
+		t.Fatalf("plan ids = %q/%q/%q, want approved contract ids", plan.ContractID, plan.ApprovedContractID, plan.RepoBindingID)
+	}
+	if plan.RequestedBy.Kind != "user" || plan.RequestedBy.ID != "planner-requester" {
+		t.Fatalf("requested_by = %#v, want payload actor", plan.RequestedBy)
+	}
+	if _, ok, err := server.workItems.GetByApprovedContractID(context.Background(), approved.ID); err != nil {
+		t.Fatalf("workItems.GetByApprovedContractID() error = %v", err)
+	} else if ok {
+		t.Fatal("plan creation materialized a WorkItem")
+	}
+}
+
+func TestPostContractPlansRejectsInvalidInputs(t *testing.T) {
+	t.Run("unknown contract", func(t *testing.T) {
+		server := testServer(t)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/missing/plans", `{"requested_by":{"kind":"user","id":"u1"}}`)
+		assertErrorCode(t, response, http.StatusNotFound, "not_found")
+	})
+
+	t.Run("non-approved contract", func(t *testing.T) {
+		server := testServer(t)
+		contract := createContract(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/plans", `{"requested_by":{"kind":"user","id":"u1"}}`)
+		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
+	})
+
+	t.Run("missing requested_by", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+	})
+}
+
+func TestGetPlanReturnsPlanAndUnknownReturnsNotFound(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+
+	response := doJSON(t, server.router, http.MethodGet, "/v1/plans/"+string(plan.ID), "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var got spine.WorkItemPlan
+	decodeJSON(t, response.body, &got)
+	if got.ID != plan.ID {
+		t.Fatalf("id = %q, want %q", got.ID, plan.ID)
 	}
 
-	var item spine.WorkItem
-	decodeJSON(t, response.body, &item)
-	if item.Status != spine.WorkItemStatusPlanned {
-		t.Fatalf("status = %q, want %q", item.Status, spine.WorkItemStatusPlanned)
+	missing := doJSON(t, server.router, http.MethodGet, "/v1/plans/missing", "")
+	assertErrorCode(t, missing, http.StatusNotFound, "not_found")
+}
+
+func TestPostPlanProposalsStoresProposalAndDoesNotCreateTasks(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID)))
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-	if item.ApprovedContractID != approved.ID {
-		t.Fatalf("approved_contract_id = %q, want %q", item.ApprovedContractID, approved.ID)
+	assertNoHiddenContext(t, response.body)
+
+	var proposal spine.WorkItemPlanProposal
+	decodeJSON(t, response.body, &proposal)
+	if proposal.State != spine.WorkItemProposalStateSubmitted {
+		t.Fatalf("proposal state = %q, want submitted", proposal.State)
 	}
-	if item.ContractID != approved.ContractID {
-		t.Fatalf("contract_id = %q, want %q", item.ContractID, approved.ContractID)
+	if proposal.PlanID != plan.ID || proposal.ContractID != approved.ContractID || proposal.ApprovedContractID != approved.ID {
+		t.Fatalf("proposal ids = %q/%q/%q, want plan/contract/approved ids", proposal.PlanID, proposal.ContractID, proposal.ApprovedContractID)
 	}
-	if item.Title != approved.Title || item.Summary != approved.IntentSummary {
-		t.Fatalf("title/summary not copied from approved contract")
+	if got := len(proposal.ProposedTasks); got != 2 {
+		t.Fatalf("proposed tasks = %d, want 2", got)
 	}
-	if !reflect.DeepEqual(item.Scope, approved.Scope) {
-		t.Fatalf("scope = %#v, want approved scope %#v", item.Scope, approved.Scope)
-	}
-	if item.OwnerHint != "" {
-		t.Fatalf("owner_hint = %q, want empty advisory hint", item.OwnerHint)
-	}
-	if !hasSourceRef(item.SourceRefs, workitem.SourceRefKindApprovedContract, string(approved.ID)) {
-		t.Fatalf("source_refs = %#v, want approved_contract ref", item.SourceRefs)
+	if proposal.ProposedTasks[1].OrderIndex == nil || *proposal.ProposedTasks[1].OrderIndex != 1 {
+		t.Fatalf("second order_index = %#v, want server-filled 1", proposal.ProposedTasks[1].OrderIndex)
 	}
 
-	stored, ok, err := server.workItems.Get(context.Background(), item.ID)
+	storedPlan, ok, err := server.workItemPlans.Get(context.Background(), plan.ID)
 	if err != nil {
-		t.Fatalf("workItems.Get() error = %v", err)
+		t.Fatalf("plans.Get() error = %v", err)
 	}
 	if !ok {
-		t.Fatal("work item not stored")
+		t.Fatal("plan missing")
 	}
-	if stored.ID != item.ID {
-		t.Fatalf("stored id = %q, want %q", stored.ID, item.ID)
+	if storedPlan.State != spine.WorkItemPlanStateProposalSubmitted {
+		t.Fatalf("plan state = %q, want proposal_submitted", storedPlan.State)
+	}
+	if _, ok, err := server.workItems.GetByApprovedContractID(context.Background(), approved.ID); err != nil {
+		t.Fatalf("workItems.GetByApprovedContractID() error = %v", err)
+	} else if ok {
+		t.Fatal("proposal submission materialized a WorkItem")
 	}
 }
 
-func TestGetTaskReturnsPlannedWorkItem(t *testing.T) {
+func TestPostPlanProposalsRejectsInvalidAndDuplicateProposal(t *testing.T) {
+	t.Run("missing proposed tasks", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", `{"submitted_by":{"kind":"worker","id":"planner-1"},"proposed_tasks":[]}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+	})
+
+	t.Run("invalid proposed task fields", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", `{"submitted_by":{"kind":"worker","id":"planner-1"},"proposed_tasks":[{"title":"","summary":"s","scope":["x"],"acceptance_refs":["a"],"proof_expectation_refs":["p"]}]}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+	})
+
+	t.Run("duplicate proposal", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		submitProposal(t, server, plan.ID, string(approved.ID))
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID)))
+		assertErrorCode(t, response, http.StatusConflict, "already_proposed")
+	})
+}
+
+func TestGetProposalReturnsProposalAndUnknownReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
-	createResponse := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-	if createResponse.code != http.StatusCreated {
-		t.Fatalf("create status = %d, want %d: %s", createResponse.code, http.StatusCreated, createResponse.body)
-	}
-	var created spine.WorkItem
-	decodeJSON(t, createResponse.body, &created)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
 
-	getResponse := doJSON(t, server.router, http.MethodGet, "/v1/tasks/"+string(created.ID), "")
-	if getResponse.code != http.StatusOK {
-		t.Fatalf("get status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
+	response := doJSON(t, server.router, http.MethodGet, "/v1/proposals/"+string(proposal.ID), "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
-	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
-		if strings.Contains(getResponse.body, hiddenField) {
-			t.Fatalf("response includes hidden field %s", hiddenField)
-		}
-	}
-	for _, forbiddenField := range []string{"\"run_id\"", "\"receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
-		if strings.Contains(getResponse.body, forbiddenField) {
-			t.Fatalf("response includes forbidden field %s", forbiddenField)
-		}
+	var got spine.WorkItemPlanProposal
+	decodeJSON(t, response.body, &got)
+	if got.ID != proposal.ID {
+		t.Fatalf("id = %q, want %q", got.ID, proposal.ID)
 	}
 
-	var got spine.WorkItem
-	decodeJSON(t, getResponse.body, &got)
-	if got.ID != created.ID {
-		t.Fatalf("id = %q, want %q", got.ID, created.ID)
-	}
-	if got.ContractID != approved.ContractID || got.ApprovedContractID != approved.ID {
-		t.Fatalf("contract ids = %q/%q, want %q/%q", got.ContractID, got.ApprovedContractID, approved.ContractID, approved.ID)
-	}
-	if got.Status != spine.WorkItemStatusPlanned {
-		t.Fatalf("status = %q, want planned", got.Status)
-	}
+	missing := doJSON(t, server.router, http.MethodGet, "/v1/proposals/missing", "")
+	assertErrorCode(t, missing, http.StatusNotFound, "not_found")
 }
 
-func TestGetTaskUnknownReturnsNotFound(t *testing.T) {
-	server := testServer(t)
-
-	response := doJSON(t, server.router, http.MethodGet, "/v1/tasks/missing", "")
-	if response.code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "not_found" {
-		t.Fatalf("error code = %q, want not_found", body.Error.Code)
-	}
-}
-
-func TestPostContractTasksAppendsWorkItemCreatedEvent(t *testing.T) {
+func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-
-	if got := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated); got != 1 {
-		t.Fatalf("work_item.created events = %d, want 1", got)
-	}
-	event := server.events.Events()[len(server.events.Events())-1]
-	if event.Type != workitem.EventTypeWorkItemCreated {
-		t.Fatalf("event type = %q, want work_item.created", event.Type)
-	}
-	if event.EntityType != workitem.EntityTypeWorkItem {
-		t.Fatalf("entity type = %q, want WorkItem", event.EntityType)
-	}
-	if event.OrganizationID != approved.OrganizationID || event.ProjectID != approved.ProjectID || event.RepoBindingID != approved.RepoBindingID {
-		t.Fatalf("event context = %q/%q/%q, want approved context %q/%q/%q", event.OrganizationID, event.ProjectID, event.RepoBindingID, approved.OrganizationID, approved.ProjectID, approved.RepoBindingID)
-	}
-	var payload struct {
-		WorkItemID         spine.WorkItemID         `json:"work_item_id"`
-		ContractID         spine.ContractID         `json:"contract_id"`
-		ApprovedContractID spine.ApprovedContractID `json:"approved_contract_id"`
-		RepoBindingID      spine.RepoBindingID      `json:"repo_binding_id"`
-		Status             spine.WorkItemStatus     `json:"status"`
-		SourceRefs         []spine.SourceRef        `json:"source_refs"`
-	}
-	decodeJSON(t, string(event.Payload), &payload)
-	if payload.WorkItemID == "" {
-		t.Fatal("payload work_item_id is empty")
-	}
-	if payload.ContractID != approved.ContractID || payload.ApprovedContractID != approved.ID || payload.RepoBindingID != approved.RepoBindingID {
-		t.Fatalf("payload ids = %q/%q/%q, want contract/approved/repo ids", payload.ContractID, payload.ApprovedContractID, payload.RepoBindingID)
-	}
-	if payload.Status != spine.WorkItemStatusPlanned {
-		t.Fatalf("payload status = %q, want planned", payload.Status)
-	}
-	if !hasSourceRef(payload.SourceRefs, workitem.SourceRefKindApprovedContract, string(approved.ID)) {
-		t.Fatalf("payload source_refs = %#v, want approved_contract ref", payload.SourceRefs)
-	}
 	assertNoForbiddenWorkItemSideEffects(t, server.events.Events())
+
+	var accepted spine.WorkItemPlanAcceptanceResult
+	decodeJSON(t, response.body, &accepted)
+	if accepted.State != spine.WorkItemProposalStateAccepted {
+		t.Fatalf("acceptance state = %q, want accepted", accepted.State)
+	}
+	if got := len(accepted.CreatedTaskIDs); got != 2 {
+		t.Fatalf("created_task_ids = %d, want 2", got)
+	}
+
+	for _, taskID := range accepted.CreatedTaskIDs {
+		stored, ok, err := server.workItems.Get(context.Background(), taskID)
+		if err != nil {
+			t.Fatalf("workItems.Get(%s) error = %v", taskID, err)
+		}
+		if !ok {
+			t.Fatalf("task %s not stored", taskID)
+		}
+		if stored.Status != spine.WorkItemStatusPlanned || stored.PlanID != plan.ID || stored.ProposalID != proposal.ID {
+			t.Fatalf("stored task state/trace = %q/%q/%q, want planned/%q/%q", stored.Status, stored.PlanID, stored.ProposalID, plan.ID, proposal.ID)
+		}
+		if !hasSourceRef(stored.SourceRefs, workitem.SourceRefKindApprovedContract, string(approved.ID)) {
+			t.Fatalf("source_refs = %#v, want approved_contract ref", stored.SourceRefs)
+		}
+		if !hasSourceRef(stored.SourceRefs, workitemplan.SourceRefKindProposal, string(proposal.ID)) {
+			t.Fatalf("source_refs = %#v, want proposal ref", stored.SourceRefs)
+		}
+	}
+
+	getResponse := doJSON(t, server.router, http.MethodGet, "/v1/tasks/"+string(accepted.CreatedTaskIDs[0]), "")
+	if getResponse.code != http.StatusOK {
+		t.Fatalf("GET task status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
+	}
+	var task spine.WorkItem
+	decodeJSON(t, getResponse.body, &task)
+	if task.ID != accepted.CreatedTaskIDs[0] {
+		t.Fatalf("task id = %q, want %q", task.ID, accepted.CreatedTaskIDs[0])
+	}
+
+	storedPlan, _, _ := server.workItemPlans.Get(context.Background(), plan.ID)
+	if storedPlan.State != spine.WorkItemPlanStateAccepted {
+		t.Fatalf("plan state = %q, want accepted", storedPlan.State)
+	}
+	storedProposal, _, _ := server.workItemProposals.Get(context.Background(), proposal.ID)
+	if storedProposal.State != spine.WorkItemProposalStateAccepted || storedProposal.AcceptedBy == nil {
+		t.Fatalf("proposal accepted state = %q/%#v, want accepted actor", storedProposal.State, storedProposal.AcceptedBy)
+	}
+	if got := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated); got != 2 {
+		t.Fatalf("work_item.created events = %d, want 2", got)
+	}
 }
 
-func TestPostContractTasksUnknownContractReturnsNotFound(t *testing.T) {
+func TestPostProposalAcceptanceRejectsDuplicateAndMissingActor(t *testing.T) {
+	t.Run("duplicate acceptance", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		acceptProposal(t, server, proposal.ID)
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
+		assertErrorCode(t, response, http.StatusConflict, "already_accepted")
+	})
+
+	t.Run("missing accepted_by", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+	})
+}
+
+func TestRemovedDirectTaskRouteAndListRoutesReturnNotFound(t *testing.T) {
 	server := testServer(t)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/missing/tasks", "")
-	if response.code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "not_found" {
-		t.Fatalf("error code = %q, want not_found", body.Error.Code)
-	}
-}
-
-func TestPostContractTasksApprovedSnapshotIDDoesNotPlan(t *testing.T) {
-	server := testServer(t)
-	approved := createApprovedContract(t, server)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ID)+"/tasks", "")
-	if response.code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
-	}
-}
-
-func TestPostContractTasksRejectsNotApprovedState(t *testing.T) {
-	server := testServer(t)
-	approved := validHTTPApprovedContract()
-	approved.State = spine.ApprovedContractState("draft")
-	storeHTTPContractForApproved(t, server, approved)
-	if err := server.approvedContracts.Create(context.Background(), approved); err != nil {
-		t.Fatalf("approvedContracts.Create() error = %v", err)
-	}
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-	if response.code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "invalid_state" {
-		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
-	}
-}
-
-func TestPostContractTasksRejectsNonApprovedContract(t *testing.T) {
-	server := testServer(t)
-	contract := createContract(t, server)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/tasks", "")
-	if response.code != http.StatusConflict {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "invalid_state" {
-		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
-	}
-}
-
-func TestPostContractTasksRejectsIncompleteApprovedContract(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(*spine.ApprovedContract)
-		reason string
+	for _, tt := range []struct {
+		method string
+		path   string
 	}{
-		{name: "missing_scope", mutate: func(approved *spine.ApprovedContract) { approved.Scope = nil }, reason: workitem.ReasonMissingScope},
-		{name: "missing_acceptance", mutate: func(approved *spine.ApprovedContract) { approved.AcceptanceCriteria = []string{} }, reason: workitem.ReasonMissingAcceptanceCriteria},
-		{name: "missing_proof", mutate: func(approved *spine.ApprovedContract) { approved.ProofExpectations = []string{" "} }, reason: workitem.ReasonMissingProofExpectations},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := testServer(t)
-			approved := validHTTPApprovedContract()
-			approved.ID = spine.ApprovedContractID("approved-contract-" + tt.name)
-			approved.ContractID = spine.ContractID("contract-" + tt.name)
-			approved.ContractDraftID = spine.ContractDraftID("contract-draft-" + tt.name)
-			tt.mutate(&approved)
-			storeHTTPContractForApproved(t, server, approved)
-			if err := server.approvedContracts.Create(context.Background(), approved); err != nil {
-				t.Fatalf("approvedContracts.Create() error = %v", err)
-			}
-
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-			if response.code != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
-			}
-			var body struct {
-				Error struct {
-					Code    string `json:"code"`
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			decodeJSON(t, response.body, &body)
-			if body.Error.Code != "validation_failed" {
-				t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
-			}
-			if !strings.Contains(body.Error.Message, tt.reason) {
-				t.Fatalf("error message = %q, want %q", body.Error.Message, tt.reason)
-			}
+		{method: http.MethodPost, path: "/v1/contracts/contract-1/tasks"},
+		{method: http.MethodGet, path: "/v1/plans"},
+		{method: http.MethodGet, path: "/v1/proposals"},
+		{method: http.MethodGet, path: "/v1/tasks"},
+	} {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			response := doJSON(t, server.router, tt.method, tt.path, "")
+			assertErrorCode(t, response, http.StatusNotFound, "not_found")
 		})
 	}
 }
 
-func TestPostContractTasksRejectsDuplicatePlanning(t *testing.T) {
-	server := testServer(t)
-	approved := createApprovedContract(t, server)
-	first := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-	if first.code != http.StatusCreated {
-		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
-	}
-
-	second := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-	if second.code != http.StatusConflict {
-		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, second.body, &body)
-	if body.Error.Code != "already_planned" {
-		t.Fatalf("error code = %q, want already_planned", body.Error.Code)
-	}
-}
-
-func TestPostContractTasksDoesNotMutateApprovedContract(t *testing.T) {
-	server := testServer(t)
-	approved := createApprovedContract(t, server)
-	before, ok, err := server.approvedContracts.Get(context.Background(), approved.ID)
-	if err != nil {
-		t.Fatalf("approvedContracts.Get() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("approved contract missing before planning")
-	}
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+func createPlan(t *testing.T, server testServerDeps, contractID spine.ContractID) spine.WorkItemPlan {
+	t.Helper()
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contractID)+"/plans", `{"requested_by":{"kind":"user","id":"planner-requester"}}`)
 	if response.code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("create plan status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-
-	after, ok, err := server.approvedContracts.Get(context.Background(), approved.ID)
-	if err != nil {
-		t.Fatalf("approvedContracts.Get() after error = %v", err)
-	}
-	if !ok {
-		t.Fatal("approved contract missing after planning")
-	}
-	if !reflect.DeepEqual(after, before) {
-		t.Fatalf("approved contract mutated: %#v want %#v", after, before)
-	}
+	var plan spine.WorkItemPlan
+	decodeJSON(t, response.body, &plan)
+	return plan
 }
 
-func TestPostContractTasksRejectsUnknownJSONField(t *testing.T) {
-	server := testServer(t)
-	approved := createApprovedContract(t, server)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", `{"unexpected":true}`)
-	if response.code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
-	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "invalid_json" {
-		t.Fatalf("error code = %q, want invalid_json", body.Error.Code)
-	}
-}
-
-func TestFullFlowCreatesPlannedWorkItemOnly(t *testing.T) {
-	server := testServer(t)
-	approved := createApprovedContract(t, server)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
+func submitProposal(t *testing.T, server testServerDeps, planID spine.WorkItemPlanID, approvedContractID string) spine.WorkItemPlanProposal {
+	t.Helper()
+	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(planID)+"/proposals", validProposalJSON(approvedContractID))
 	if response.code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("submit proposal status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-	var item spine.WorkItem
-	decodeJSON(t, response.body, &item)
-	if item.Status != spine.WorkItemStatusPlanned {
-		t.Fatalf("status = %q, want planned", item.Status)
+	var proposal spine.WorkItemPlanProposal
+	decodeJSON(t, response.body, &proposal)
+	return proposal
+}
+
+func acceptProposal(t *testing.T, server testServerDeps, proposalID spine.WorkItemPlanProposalID) spine.WorkItemPlanAcceptanceResult {
+	t.Helper()
+	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposalID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
+	if response.code != http.StatusCreated {
+		t.Fatalf("accept proposal status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
-	assertNoForbiddenWorkItemSideEffects(t, server.events.Events())
+	var result spine.WorkItemPlanAcceptanceResult
+	decodeJSON(t, response.body, &result)
+	return result
+}
+
+func validProposalJSON(approvedContractID string) string {
+	return fmt.Sprintf(`{
+  "submitted_by": {"kind": "worker", "id": "planner-worker-1"},
+  "planner": {"kind": "goalrail_worker", "id": "planner-worker-1", "version": "0.1.0"},
+  "source_snapshot_refs": [{"kind": "approved_contract", "id": %q}],
+  "rationale": "Split independent refactor and coverage tasks.",
+  "proposed_tasks": [
+    {
+      "title": "Refactor CSV export filter builder",
+      "summary": "Extract duplicated filter construction logic.",
+      "scope": ["Update export filter construction code"],
+      "acceptance_refs": ["acceptance_criteria[0]"],
+      "proof_expectation_refs": ["proof_expectations[0]"],
+      "owner_hint": "",
+      "order_index": 0,
+      "source_refs": [{"kind": "approved_contract", "id": %q}]
+    },
+    {
+      "title": "Cover CSV export filter behavior",
+      "summary": "Add coverage for preserved filter behavior.",
+      "scope": ["Add focused tests for CSV export filters"],
+      "acceptance_refs": ["acceptance_criteria[0]"],
+      "proof_expectation_refs": ["proof_expectations[0]"],
+      "source_refs": [{"kind": "approved_contract", "id": %q}]
+    }
+  ]
+}`, approvedContractID, approvedContractID, approvedContractID)
 }
 
 func createApprovedContract(t *testing.T, server testServerDeps) spine.ApprovedContract {
@@ -453,6 +421,36 @@ func assertNoForbiddenWorkItemSideEffects(t *testing.T, events []spine.Event) {
 		if forbidden[event.Type] {
 			t.Fatalf("forbidden event type appended: %s", event.Type)
 		}
+	}
+}
+
+func assertNoHiddenContext(t *testing.T, body string) {
+	t.Helper()
+	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
+		if strings.Contains(body, hiddenField) {
+			t.Fatalf("response includes hidden field %s", hiddenField)
+		}
+	}
+	for _, forbiddenField := range []string{"\"run_id\"", "\"receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+}
+
+func assertErrorCode(t *testing.T, response routeResponse, status int, code string) {
+	t.Helper()
+	if response.code != status {
+		t.Fatalf("status = %d, want %d: %s", response.code, status, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != code {
+		t.Fatalf("error code = %q, want %q", body.Error.Code, code)
 	}
 }
 

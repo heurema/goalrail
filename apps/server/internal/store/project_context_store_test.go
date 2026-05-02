@@ -189,6 +189,16 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 				return errors.New("int4 value is not int32")
 			}
 			*target = pgtype.Int4{Int32: value, Valid: true}
+		case *pgtype.Timestamptz:
+			if r.values[i] == nil {
+				*target = pgtype.Timestamptz{Valid: false}
+				continue
+			}
+			value, ok := r.values[i].(time.Time)
+			if !ok {
+				return errors.New("timestamptz value is not time")
+			}
+			*target = pgtype.Timestamptz{Time: value, Valid: true}
 		case *spine.IntakeID:
 			value, ok := r.values[i].(string)
 			if !ok {

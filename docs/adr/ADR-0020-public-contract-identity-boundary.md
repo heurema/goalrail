@@ -21,10 +21,11 @@ Those records are useful implementation and audit boundaries:
 - `ContractDraft` is mutable proposed contract material before approval.
 - `ApprovedContract` is the immutable approved snapshot after approval.
 
-PR #49 also shortens public route vocabulary toward product-facing resources,
-including `POST /v1/contracts/{id}/tasks`. That spelling is the right public
-direction, but the current server implementation still resolves that route
-against existing approved contract state internally.
+PR #49 shortened public route vocabulary toward product-facing resources,
+including the earlier direct `POST /v1/contracts/{id}/tasks` prototype. The
+current server now removes that shortcut and uses the ADR-0019
+`plans` / `proposals` / `acceptance` flow against the same stable public
+Contract identity.
 
 Goalrail needs an explicit public identity boundary so future route and storage
 work does not expose every internal lifecycle record as a top-level public
@@ -66,15 +67,15 @@ This target shape is implemented for the initial public Contract façade:
 | `PATCH /v1/contracts/{id}` | Updates draft proposed fields only while the Contract is in a draft-compatible state. |
 | `POST /v1/contracts/{id}/submissions` | Marks the current draft ready for approval. |
 | `POST /v1/contracts/{id}/approvals` | Approves the current ready draft and creates an immutable `ApprovedContract` snapshot internally. |
-| `POST /v1/contracts/{id}/tasks` | Simple v0 direct task planning from the approved contract state; later richer planning uses plan/proposal boundaries. |
+| `POST /v1/contracts/{id}/plans` | Creates a server-owned planning request for an approved Contract. |
+| `GET /v1/plans/{id}` | Reads a public planning request. |
+| `POST /v1/plans/{id}/proposals` | Stores a planner-submitted task decomposition proposal. |
+| `GET /v1/proposals/{id}` | Reads a public planning proposal. |
+| `POST /v1/proposals/{id}/acceptance` | Explicitly accepts a proposal and materializes canonical `WorkItem(planned)` records. |
+| `GET /v1/tasks/{id}` | Reads one canonical planned task by ID. |
 
-Planning request/proposal routes, when later implemented, should use:
-
-- `POST /v1/contracts/{id}/plans`
-- `GET /v1/plans/{id}`
-- `POST /v1/plans/{id}/proposals`
-- `GET /v1/proposals/{id}`
-- `POST /v1/proposals/{id}/acceptance`
+The direct `POST /v1/contracts/{id}/tasks` prototype route is no longer part of
+the public API.
 
 Future public REST paths should not use:
 

@@ -11,11 +11,11 @@ ADR-0018 defined the first WorkItem planning boundary:
 ApprovedContract(approved) -> WorkItem(planned)
 ```
 
-The current server implementation follows the simple v0 direction from
-ADR-0018: `POST /v1/contracts/{id}/tasks` creates exactly one
-`WorkItem(planned)` per approved contract, using Postgres when configured with
-in-memory fallback otherwise. That behavior is useful as a bounded prototype
-and as a non-executable handoff after approval.
+The current server implementation now replaces the earlier simple direct
+planning prototype with public `plans` / `proposals` / `acceptance` API routes.
+The API server owns the state transitions and materializes accepted proposals
+into canonical `WorkItem(planned)` records, using Postgres when configured with
+in-memory fallback otherwise.
 
 It must not become the final architecture for rich repo-aware planning.
 
@@ -112,9 +112,10 @@ Recommended initial posture:
 This ADR qualifies ADR-0018.
 
 ADR-0018 remains the source for the non-executable `WorkItem(planned)` concept
-and for the simple v0 direct planning prototype. The current
-`POST /v1/contracts/{id}/tasks` endpoint may remain documented as
-existing prototype behavior.
+and for the earlier simple v0 direct planning prototype. The public
+`POST /v1/contracts/{id}/tasks` endpoint has been removed in favor of
+`POST /v1/contracts/{id}/plans`, `POST /v1/plans/{id}/proposals`, and
+`POST /v1/proposals/{id}/acceptance`.
 
 However, ADR-0018's one-WorkItem direct planning path must not be expanded into
 repo-aware decomposition inside the API server. Rich planning belongs behind the
@@ -185,12 +186,7 @@ Represents explicit acceptance of a proposal into canonical
 
 This ADR does not define or implement:
 
-- code implementation
-- new endpoints
-- migrations
 - queue, outbox, broker, or event bus
-- durable WorkItemPlanningRequest storage
-- durable WorkItemPlanProposal storage
 - runner code
 - checkout jobs
 - runtime registry
@@ -218,15 +214,15 @@ This ADR does not define or implement:
 
 ### Negative
 
-- Rich planning needs at least one additional boundary before implementation.
+- Worker/controller/runner-side planning still needs an additional boundary.
 - Assignment / claiming should wait for this planning request / proposal model.
-- The current direct planning endpoint remains useful only as simple v0
-  prototype behavior.
+- The direct public task creation endpoint is removed; proposal acceptance is
+  now the only public path that materializes canonical WorkItems.
 
 ## Recommended next slice
 
-The next backend planning slice should design the smallest
-`WorkItemPlanningRequest` / `WorkItemPlanProposal` / acceptance API boundary.
+The next backend planning slice should design the smallest worker/controller
+lease or reconciliation protocol around the existing public plan/proposal API.
 
 It should not add runner checkout, execution, receipt submission,
 `GateDecision`, `Proof`, queue, outbox, broad worker platform, or runtime

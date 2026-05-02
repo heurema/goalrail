@@ -63,6 +63,14 @@ func (s *PostgresWorkItemStore) Create(ctx context.Context, item spine.WorkItem)
 	if err != nil {
 		return err
 	}
+	planID, err := uuidValue(item.PlanID, "work item plan id")
+	if err != nil {
+		return err
+	}
+	proposalID, err := uuidValue(item.ProposalID, "work item proposal id")
+	if err != nil {
+		return err
+	}
 	repoBindingID, err := uuidValue(item.RepoBindingID, "work item repo binding id")
 	if err != nil {
 		return err
@@ -104,6 +112,8 @@ func (s *PostgresWorkItemStore) Create(ctx context.Context, item spine.WorkItem)
 			"project_id",
 			"contract_id",
 			"approved_contract_id",
+			"plan_id",
+			"proposal_id",
 			"repo_binding_id",
 			"title",
 			"summary",
@@ -123,6 +133,8 @@ func (s *PostgresWorkItemStore) Create(ctx context.Context, item spine.WorkItem)
 			projectID,
 			contractID,
 			approvedContractID,
+			planID,
+			proposalID,
 			repoBindingID,
 			item.Title,
 			item.Summary,
@@ -138,9 +150,6 @@ func (s *PostgresWorkItemStore) Create(ctx context.Context, item spine.WorkItem)
 		)
 
 	if err := s.execSQL(ctx, "create work item", stmt); err != nil {
-		if uniqueViolationConstraint(err) == "work_items_approved_contract_id_unique" {
-			return ErrWorkItemAlreadyPlanned
-		}
 		if isUniqueViolation(err) {
 			return ErrWorkItemAlreadyExists
 		}
@@ -199,6 +208,8 @@ func scanWorkItem(row pgx.Row) (spine.WorkItem, error) {
 	var projectID string
 	var contractID string
 	var approvedContractID string
+	var planID string
+	var proposalID string
 	var repoBindingID string
 	var scope []byte
 	var acceptanceRefs []byte
@@ -212,6 +223,8 @@ func scanWorkItem(row pgx.Row) (spine.WorkItem, error) {
 		&projectID,
 		&contractID,
 		&approvedContractID,
+		&planID,
+		&proposalID,
 		&repoBindingID,
 		&item.Title,
 		&item.Summary,
@@ -231,6 +244,8 @@ func scanWorkItem(row pgx.Row) (spine.WorkItem, error) {
 	item.ProjectID = spine.ProjectID(projectID)
 	item.ContractID = spine.ContractID(contractID)
 	item.ApprovedContractID = spine.ApprovedContractID(approvedContractID)
+	item.PlanID = spine.WorkItemPlanID(planID)
+	item.ProposalID = spine.WorkItemPlanProposalID(proposalID)
 	item.RepoBindingID = spine.RepoBindingID(repoBindingID)
 	item.Status = spine.WorkItemStatus(status)
 	if orderIndex.Valid {
@@ -260,6 +275,8 @@ func workItemColumns() []string {
 		"project_id",
 		"contract_id",
 		"approved_contract_id",
+		"plan_id",
+		"proposal_id",
 		"repo_binding_id",
 		"title",
 		"summary",
