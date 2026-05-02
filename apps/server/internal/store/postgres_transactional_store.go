@@ -252,6 +252,13 @@ func (s *PostgresTransactionalContractSeedStore) GetByGoalID(ctx context.Context
 	return s.base.GetByGoalID(ctx, id)
 }
 
+func (s *PostgresTransactionalContractSeedStore) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	if s.transactor == nil {
+		return fmt.Errorf("postgres transactor is nil")
+	}
+	return s.transactor.ExecReadCommitted(ctx, postgresTxFunc(fn))
+}
+
 func (s *PostgresTransactionalContractSeedStore) CreateContractWithSeedAndEvent(ctx context.Context, contract spine.Contract, created spine.ContractSeed, event spine.Event) error {
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")

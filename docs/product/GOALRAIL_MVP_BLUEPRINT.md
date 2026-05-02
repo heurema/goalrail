@@ -183,14 +183,14 @@ Public Contract identity:
 - `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain precise
   internal lifecycle records for bridge, draft, and immutable approved snapshot
   semantics
-- future public API should use `contracts/{id}` and contract subresources for
+- public API uses `contracts/{id}` and contract subresources for
   contract creation, draft updates, submission, approval, tasks, plans, and
   proposals rather than exposing `contract-seeds`, `contract-drafts`, or
   `approved-contracts` as product-facing resource names
 - the current server implements the smallest stable `contract_id` aggregate
-  boundary and still uses internal lifecycle records for transitional
-  seed/draft/approval routes; public `/v1/contracts` lifecycle façade routes
-  remain a later bounded slice
+  boundary and public `/v1/contracts` lifecycle façade routes; internal
+  `ContractSeed`, `ContractDraft`, and `ApprovedContract` records still carry
+  lifecycle precision behind the public Contract view
 
 Control-plane split:
 - the API server is the canonical state machine for planning transitions,

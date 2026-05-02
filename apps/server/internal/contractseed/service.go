@@ -64,6 +64,14 @@ type transactionalContractSeedStore interface {
 	CreateContractWithSeedAndEvent(context.Context, spine.Contract, spine.ContractSeed, spine.Event) error
 }
 
+type seedDeleter interface {
+	Delete(context.Context, spine.ContractSeedID) error
+}
+
+type contractDeleter interface {
+	Delete(context.Context, spine.ContractID) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -213,6 +221,30 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	}
 
 	return created, nil
+}
+
+func (s *Service) RollbackCreate(ctx context.Context, seed spine.ContractSeed) error {
+	if strings.TrimSpace(string(seed.ID)) == "" {
+		return nil
+	}
+	seedStore, ok := s.Seeds.(seedDeleter)
+	if !ok {
+		return errors.New("contract seed store does not support rollback delete")
+	}
+	if err := seedStore.Delete(ctx, seed.ID); err != nil {
+		return fmt.Errorf("delete contract seed: %w", err)
+	}
+	if strings.TrimSpace(string(seed.ContractID)) == "" {
+		return nil
+	}
+	contractStore, ok := s.Contracts.(contractDeleter)
+	if !ok {
+		return errors.New("contract store does not support rollback delete")
+	}
+	if err := contractStore.Delete(ctx, seed.ContractID); err != nil {
+		return fmt.Errorf("delete contract: %w", err)
+	}
+	return nil
 }
 
 func validateGoalForSeed(goal spine.Goal) error {

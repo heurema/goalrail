@@ -12,6 +12,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
+	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
@@ -1259,16 +1260,15 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
-	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
-	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
-	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
+	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService)
+	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(contractStore, approvedContractStore, workItemStore, events, fixedClock{now: testTime()}, ids)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractSeedHandler, contractDraftHandler, approvedContractHandler, workItemHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractHandler, workItemHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,

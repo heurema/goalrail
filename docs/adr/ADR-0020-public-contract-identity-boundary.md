@@ -51,13 +51,13 @@ Future public API should avoid exposing `contract-seeds`, `contract-drafts`, and
 `/v1/contracts/{id}` and subresources around the stable public contract
 identity.
 
-The current implementation may keep transitional routes and internal IDs until a
-bounded implementation slice creates a public `Contract` aggregate. This ADR
-defines direction; it does not claim that aggregate exists today.
+The current implementation now has the minimal public `Contract` aggregate and
+public `/v1/contracts` lifecycle façade. Internal lifecycle IDs still exist for
+server-owned records, but public callers use the stable `contract_id`.
 
 ## Target public API shape
 
-This target shape is not implemented by this ADR:
+This target shape is implemented for the initial public Contract façade:
 
 | Route | Meaning |
 | --- | --- |
@@ -151,10 +151,9 @@ the historical meaning of the earlier lifecycle records.
 ### Negative
 
 - Initial implementation now introduces a minimal `Contract` aggregate and maps
-  it to existing lifecycle records, but public lifecycle façade routes are still
-  a later slice.
-- Transitional routes and examples need to remain honest about any remaining
-  internal lifecycle IDs until the public lifecycle façade exists.
+  it to existing lifecycle records; public lifecycle façade routes are present.
+- Transitional route examples need to be removed from active server docs and
+  tests because public callers should no longer use internal lifecycle IDs.
 - Some existing endpoint candidates in historical ADRs are now transitional
   implementation details, not final public API shape.
 

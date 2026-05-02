@@ -168,9 +168,9 @@ func TestPostContractTasksRejectsNotApprovedState(t *testing.T) {
 
 func TestPostContractTasksRejectsNonApprovedContract(t *testing.T) {
 	server := testServer(t)
-	seed := createContractSeed(t, server)
+	contract := createContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(seed.ContractID)+"/tasks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/tasks", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -319,14 +319,13 @@ func TestFullFlowCreatesPlannedWorkItemOnly(t *testing.T) {
 func createApprovedContract(t *testing.T, server testServerDeps) spine.ApprovedContract {
 	t.Helper()
 
-	draft := createReadyContractDraft(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
-	if response.code != http.StatusCreated {
-		t.Fatalf("approve status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	contract := createContract(t, server)
+	ready := submitContractForApproval(t, server, contract.ID)
+	approvedContract := approvePublicContract(t, server, ready.ID)
+	if approvedContract.ApprovedSnapshotID == nil {
+		t.Fatal("approved_snapshot_id is nil")
 	}
-	var approved spine.ApprovedContract
-	decodeJSON(t, response.body, &approved)
-	stored, ok, err := server.approvedContracts.Get(context.Background(), approved.ID)
+	stored, ok, err := server.approvedContracts.Get(context.Background(), *approvedContract.ApprovedSnapshotID)
 	if err != nil {
 		t.Fatalf("approvedContracts.Get() error = %v", err)
 	}
