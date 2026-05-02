@@ -9,9 +9,9 @@ Goalrail now has a bounded server-owned intent path:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
-- `POST /v1/goals/{id}/readiness-checks`
-- `POST /v1/goals/{id}/clarification-requests`
+- `POST /v1/intakes/{id}/goals`
+- `POST /v1/goals/{id}/readiness`
+- `POST /v1/goals/{id}/clarifications`
 
 A received `IntakeRecord` can be promoted into a non-executable `Goal`.
 Goal readiness can mark that Goal as `needs_clarification` using explicit
@@ -275,7 +275,7 @@ A later implementation slice may add:
   - `clarification.answer_recorded`
   - `clarification.request_answered`
 - endpoint candidate:
-  - `POST /v1/clarification-requests/{id}/answers`
+  - `POST /v1/clarifications/{id}/answers`
 
 That endpoint choice is not final product API canon.
 

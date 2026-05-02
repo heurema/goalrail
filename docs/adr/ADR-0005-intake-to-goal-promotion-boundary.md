@@ -178,7 +178,7 @@ A later implementation slice may add:
 - in-memory `GoalStore`
 - `goal.created` event
 - `intake.promoted_to_goal` event
-- a small promotion endpoint such as `POST /v1/intakes/{id}/promotions` or
+- a small promotion endpoint such as `POST /v1/intakes/{id}/goals` or
   `POST /v1/goals`
 
 That implementation slice must remain bounded to promotion. It must not add
@@ -188,7 +188,7 @@ slice explicitly authorizes them.
 
 ## Open questions
 
-1. Should the first promotion endpoint be `POST /v1/intakes/{id}/promotions` or
+1. Should the first promotion endpoint be `POST /v1/intakes/{id}/goals` or
    `POST /v1/goals`?
 2. Should `Goal.summary` initially be a rule-free copy from intake text, or a
    small deterministic normalization before a composer exists?

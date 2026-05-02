@@ -334,7 +334,7 @@ func TestPostPromoteIntakeReturnsCreatedGoal(t *testing.T) {
 	server := testServer(t)
 	intakeID := createIntake(t, server, validIntakeJSON)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/promotions", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/goals", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusCreated)
 	}
@@ -392,7 +392,7 @@ func TestPostPromoteIntakeReturnsCreatedGoal(t *testing.T) {
 func TestPostPromoteUnknownIntakeReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/missing/promotions", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/missing/goals", "")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -412,12 +412,12 @@ func TestPostPromoteIntakeTwiceReturnsConflict(t *testing.T) {
 	server := testServer(t)
 	intakeID := createIntake(t, server, validIntakeJSON)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/promotions", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/goals", "")
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d", first.code, http.StatusCreated)
 	}
 
-	second := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/promotions", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/goals", "")
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
 	}
@@ -448,7 +448,7 @@ func TestPostPromoteIntakeUsesTitleAsSummaryWhenBodyIsEmpty(t *testing.T) {
   "request_author": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
 }`)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/promotions", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/goals", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusCreated)
 	}
@@ -465,7 +465,7 @@ func TestPostGoalReadinessReturnsNeedsClarificationForPromotedGoal(t *testing.T)
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusOK)
 	}
@@ -516,11 +516,11 @@ func TestPostGoalReadinessCanRepeatForPromotedGoal(t *testing.T) {
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if first.code != http.StatusOK {
 		t.Fatalf("first status = %d, want %d", first.code, http.StatusOK)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if second.code != http.StatusOK {
 		t.Fatalf("second status = %d, want %d", second.code, http.StatusOK)
 	}
@@ -546,7 +546,7 @@ func TestPostGoalReadinessCanRepeatForPromotedGoal(t *testing.T) {
 func TestPostGoalReadinessUnknownGoalReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/readiness-checks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/readiness", "")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -566,7 +566,7 @@ func TestPostGoalClarificationRequestsReturnsOpenRequest(t *testing.T) {
 	server := testServer(t)
 	created := createClarificationReadyGoal(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -609,7 +609,7 @@ func TestPostGoalClarificationRequestsReturnsOpenRequest(t *testing.T) {
 func TestPostGoalClarificationRequestsUnknownGoalReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/clarifications", "")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -630,7 +630,7 @@ func TestPostGoalClarificationRequestsRejectsGoalNotNeedsClarification(t *testin
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusConflict)
 	}
@@ -668,7 +668,7 @@ func TestPostGoalClarificationRequestsRejectsMissingReadinessReasons(t *testing.
 		t.Fatalf("Create goal: %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusConflict)
 	}
@@ -688,11 +688,11 @@ func TestPostGoalClarificationRequestsRejectsDuplicateOpenRequest(t *testing.T) 
 	server := testServer(t)
 	created := createClarificationReadyGoal(t, server)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
 	}
@@ -713,7 +713,7 @@ func TestPostClarificationRequestAnswersReturnsRecordedAnswer(t *testing.T) {
 	request := createClarificationRequest(t, server)
 	body := answerSubmissionJSON(request)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers", body)
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -764,7 +764,7 @@ func TestPostClarificationRequestAnswersReturnsRecordedAnswer(t *testing.T) {
 func TestPostClarificationRequestAnswersUnknownRequestReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/missing/answers", `{
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/missing/answers", `{
   "submitted_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"},
   "answers": [{"question_id": "question-1", "value": "Scope"}]
 }`)
@@ -788,11 +788,11 @@ func TestPostClarificationRequestAnswersRejectsAlreadyAnsweredRequest(t *testing
 	request := createClarificationRequest(t, server)
 	body := answerSubmissionJSON(request)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	first := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers", body)
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", body)
+	second := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers", body)
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d", second.code, http.StatusConflict)
 	}
@@ -862,7 +862,7 @@ func TestPostClarificationRequestAnswersValidation(t *testing.T) {
 			server := testServer(t)
 			request := createClarificationRequest(t, server)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", tt.body(request))
+			response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers", tt.body(request))
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -887,7 +887,7 @@ func TestPostClarificationAnswersApplyReturnsUpdatedGoal(t *testing.T) {
 		spine.ClarificationMapsToGoalAcceptanceHint: "Updated acceptance hint",
 	}, spine.GoalReadinessReasonMissingScopeHint, spine.GoalReadinessReasonMissingAcceptanceHint)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -929,7 +929,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if initialReadiness.code != http.StatusOK {
 		t.Fatalf("initial readiness status = %d, want %d: %s", initialReadiness.code, http.StatusOK, initialReadiness.body)
 	}
@@ -949,7 +949,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 		t.Fatalf("initial readiness reasons = %#v, want %q", initialReadinessBody.Readiness.ReasonCodes, spine.GoalReadinessReasonMissingAcceptanceHint)
 	}
 
-	clarificationResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	clarificationResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if clarificationResponse.code != http.StatusCreated {
 		t.Fatalf("clarification request status = %d, want %d: %s", clarificationResponse.code, http.StatusCreated, clarificationResponse.body)
 	}
@@ -960,7 +960,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 		t,
 		server.router,
 		http.MethodPost,
-		"/v1/clarification-requests/"+string(request.ID)+"/answers",
+		"/v1/clarifications/"+string(request.ID)+"/answers",
 		answerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
 			spine.ClarificationMapsToGoalScopeHint:      "Refactor duplicate CSV export filter logic",
 			spine.ClarificationMapsToGoalAcceptanceHint: "Existing CSV export behavior is preserved",
@@ -974,7 +974,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 	decodeJSON(t, answerResponse.body, &answer)
 	readinessChecksBeforeApply := countEventType(server.events.Events(), goal.EventTypeGoalReadinessChecked)
 
-	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if applyResponse.code != http.StatusOK {
 		t.Fatalf("apply status = %d, want %d: %s", applyResponse.code, http.StatusOK, applyResponse.body)
 	}
@@ -1004,7 +1004,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 		t.Fatalf("ready_for_contract_seed events after apply = %d, want 0 before explicit re-check", got)
 	}
 
-	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if recheckResponse.code != http.StatusOK {
 		t.Fatalf("explicit re-check status = %d, want %d: %s", recheckResponse.code, http.StatusOK, recheckResponse.body)
 	}
@@ -1057,7 +1057,7 @@ func TestPostGoalReadinessExplicitRecheckAfterAppliedAnswersMarksReadyForContrac
 func TestPostClarificationAnswersApplyUnknownAnswerReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/missing/applications", applyRequestJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/answers/missing/applications", applyRequestJSON())
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -1099,7 +1099,7 @@ func TestPostClarificationAnswersApplyValidation(t *testing.T) {
 				spine.ClarificationMapsToGoalScopeHint: "Updated scope hint",
 			}, spine.GoalReadinessReasonMissingScopeHint)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", tt.body)
+			response := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", tt.body)
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -1123,11 +1123,11 @@ func TestPostClarificationAnswersApplyRejectsRepeatedApplication(t *testing.T) {
 		spine.ClarificationMapsToGoalScopeHint: "Updated scope hint",
 	}, spine.GoalReadinessReasonMissingScopeHint)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	first := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if first.code != http.StatusOK {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusOK, first.body)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	second := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
 	}
@@ -1196,7 +1196,7 @@ func TestPostClarificationAnswersApplyUpdatesAllowedMappings(t *testing.T) {
 				tt.mapsTo: tt.value,
 			}, tt.reason)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+			response := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 			if response.code != http.StatusOK {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 			}
@@ -1216,7 +1216,7 @@ func TestPostClarificationAnswersApplyRejectsRawTextIntentOwner(t *testing.T) {
 		spine.ClarificationMapsToGoalIntentOwner: "dev_2",
 	}, spine.GoalReadinessReasonMissingIntentOwner)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -1405,9 +1405,9 @@ func createIntake(t *testing.T, server testServerDeps, body string) string {
 func promoteIntake(t *testing.T, server testServerDeps, intakeID string) spine.Goal {
 	t.Helper()
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/promotions", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes/"+intakeID+"/goals", "")
 	if response.code != http.StatusCreated {
-		t.Fatalf("POST /v1/intakes/{id}/promotions status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("POST /v1/intakes/{id}/goals status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 
 	var created spine.Goal
@@ -1420,9 +1420,9 @@ func createClarificationReadyGoal(t *testing.T, server testServerDeps) spine.Goa
 
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if response.code != http.StatusOK {
-		t.Fatalf("POST /v1/goals/{id}/readiness-checks status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+		t.Fatalf("POST /v1/goals/{id}/readiness status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
 
 	var body struct {
@@ -1436,9 +1436,9 @@ func createClarificationRequest(t *testing.T, server testServerDeps) spine.Clari
 	t.Helper()
 
 	created := createClarificationReadyGoal(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if response.code != http.StatusCreated {
-		t.Fatalf("POST /v1/goals/{id}/clarification-requests status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("POST /v1/goals/{id}/clarifications status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 
 	var request spine.ClarificationRequest
@@ -1478,9 +1478,9 @@ func createClarificationRequestForReasons(t *testing.T, server testServerDeps, r
 		t.Fatalf("goals.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if response.code != http.StatusCreated {
-		t.Fatalf("POST /v1/goals/{id}/clarification-requests status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("POST /v1/goals/{id}/clarifications status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 
 	var request spine.ClarificationRequest
@@ -1492,9 +1492,9 @@ func createClarificationAnswerForReasons(t *testing.T, server testServerDeps, va
 	t.Helper()
 
 	request := createClarificationRequestForReasons(t, server, reasons...)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/clarification-requests/"+string(request.ID)+"/answers", answerSubmissionJSONWithValues(request, values))
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers", answerSubmissionJSONWithValues(request, values))
 	if response.code != http.StatusCreated {
-		t.Fatalf("POST /v1/clarification-requests/{id}/answers status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		t.Fatalf("POST /v1/clarifications/{id}/answers status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 
 	var answer spine.ClarificationAnswer

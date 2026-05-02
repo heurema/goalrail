@@ -211,12 +211,12 @@ func createReadyForContractSeedGoal(t *testing.T, server testServerDeps) spine.G
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if initialReadiness.code != http.StatusOK {
 		t.Fatalf("initial readiness status = %d, want %d: %s", initialReadiness.code, http.StatusOK, initialReadiness.body)
 	}
 
-	clarificationResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarification-requests", "")
+	clarificationResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/clarifications", "")
 	if clarificationResponse.code != http.StatusCreated {
 		t.Fatalf("clarification request status = %d, want %d: %s", clarificationResponse.code, http.StatusCreated, clarificationResponse.body)
 	}
@@ -227,7 +227,7 @@ func createReadyForContractSeedGoal(t *testing.T, server testServerDeps) spine.G
 		t,
 		server.router,
 		http.MethodPost,
-		"/v1/clarification-requests/"+string(request.ID)+"/answers",
+		"/v1/clarifications/"+string(request.ID)+"/answers",
 		answerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
 			spine.ClarificationMapsToGoalScopeHint:      "Refactor duplicate CSV export filter logic",
 			spine.ClarificationMapsToGoalAcceptanceHint: "Existing CSV export behavior is preserved",
@@ -239,12 +239,12 @@ func createReadyForContractSeedGoal(t *testing.T, server testServerDeps) spine.G
 
 	var answer spine.ClarificationAnswer
 	decodeJSON(t, answerResponse.body, &answer)
-	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
+	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if applyResponse.code != http.StatusOK {
 		t.Fatalf("apply status = %d, want %d: %s", applyResponse.code, http.StatusOK, applyResponse.body)
 	}
 
-	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
+	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
 	if recheckResponse.code != http.StatusOK {
 		t.Fatalf("explicit re-check status = %d, want %d: %s", recheckResponse.code, http.StatusOK, recheckResponse.body)
 	}

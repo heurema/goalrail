@@ -249,6 +249,8 @@ Done means:
 1. WorkItem planning request/proposal boundary design
    - define the smallest API-server-owned `WorkItemPlanningRequest` /
      `WorkItemPlanProposal` / acceptance boundary after `ApprovedContract(approved)`
+   - use public REST vocabulary such as `contracts`, `plans`, `proposals`, and
+     `tasks` rather than exposing long internal planning type names in URLs
    - keep current direct one-WorkItem planning as prototype/simple v0 only
    - keep canonical WorkItem creation API-server-owned
    - keep repo-aware planning computation behind worker / controller / runner

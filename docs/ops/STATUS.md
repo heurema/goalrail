@@ -20,7 +20,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-04-30
+Last updated: 2026-05-02
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / ContractSeed / ContractDraft / ApprovedContract persistence plus WorkItem planning prototype exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
@@ -171,7 +171,7 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/promotions`, `POST /v1/goals/{id}/readiness-checks`, `POST /v1/goals/{id}/clarification-requests`, `POST /v1/clarification-requests/{id}/answers`, `POST /v1/clarification-answers/{id}/applications`, `POST /v1/goals/{id}/contract-seeds`, `POST /v1/contract-seeds/{id}/contract-drafts`, `PATCH /v1/contract-drafts/{id}`, `POST /v1/contract-drafts/{id}/approval-submissions`, `POST /v1/contract-drafts/{id}/approvals`, and `POST /v1/approved-contracts/{id}/work-items`
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/goals/{id}/contract-seeds`, `POST /v1/contract-seeds/{id}/contract-drafts`, `PATCH /v1/contract-drafts/{id}`, `POST /v1/contract-drafts/{id}/submissions`, `POST /v1/contract-drafts/{id}/approvals`, and `POST /v1/contracts/{id}/tasks`
 - `apps/server` now has a Postgres persistence foundation for the Organization / Project / RepoBinding context plus IntakeRecord, Goal, ContractSeed, ContractDraft, and EventLog state
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration

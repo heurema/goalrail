@@ -9,11 +9,11 @@ Goalrail now has a bounded server-owned intent path:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
-- `POST /v1/goals/{id}/readiness-checks`
-- `POST /v1/goals/{id}/clarification-requests`
-- `POST /v1/clarification-requests/{id}/answers`
-- `POST /v1/clarification-answers/{id}/applications`
+- `POST /v1/intakes/{id}/goals`
+- `POST /v1/goals/{id}/readiness`
+- `POST /v1/goals/{id}/clarifications`
+- `POST /v1/clarifications/{id}/answers`
+- `POST /v1/answers/{id}/applications`
 
 A Goal can be promoted from an `IntakeRecord`. Goal readiness can identify
 missing intent-plane hints and move the Goal to `needs_clarification`.
@@ -69,7 +69,7 @@ future contract seed boundary. It is not contract creation.
 Recommended prototype direction: reuse the existing explicit endpoint:
 
 ```text
-POST /v1/goals/{id}/readiness-checks
+POST /v1/goals/{id}/readiness
 ```
 
 The same endpoint may be called after answer application. It may also be called
@@ -77,7 +77,7 @@ more than once. Repeated checks are audit events, not hidden automation.
 
 No automatic call is made from:
 
-- `POST /v1/clarification-answers/{id}/applications`
+- `POST /v1/answers/{id}/applications`
 - answer recording
 - clarification request creation
 - Goal promotion
@@ -243,7 +243,7 @@ This ADR does not define or implement:
 
 The next implementation slice may:
 
-- reuse `POST /v1/goals/{id}/readiness-checks`
+- reuse `POST /v1/goals/{id}/readiness`
 - ensure the existing readiness endpoint works after answer application
 - ensure a Goal can move from `needs_clarification` to
   `ready_for_contract_seed` after required hints are applied

@@ -203,6 +203,10 @@ This flow is a target architecture direction, not an implemented MVP surface.
 The current direct one-WorkItem planning endpoint remains simple prototype v0
 behavior and must not be expanded into rich repo-aware planning inside the API
 server.
+If this target flow later becomes public REST API, the public URL vocabulary
+should use product-facing resources such as `contracts`, `plans`, `proposals`,
+and `tasks`; internal domain names such as `ApprovedContract`, `WorkItem`, and
+`WorkItemPlanProposal` do not need to appear verbatim in public paths.
 
 ### Layer 4 — Delivery Runtime
 Produces:
