@@ -86,6 +86,118 @@ func TestUnknownRouteReturnsJSONNotFound(t *testing.T) {
 	}
 }
 
+func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
+	router := httpserver.NewRouter(httpserver.RouteHandlers{
+		Livez:                     probeRoute("livez"),
+		Readyz:                    probeRoute("readyz"),
+		Version:                   probeRoute("version"),
+		IntakeSubmit:              probeRoute("intake_submit"),
+		IntakeGet:                 probeRoute("intake_get"),
+		IntakePromote:             probeRoute("intake_promote"),
+		GoalReadiness:             probeRoute("goal_readiness"),
+		GoalClarificationRequests: probeRoute("goal_clarification_requests"),
+		GoalContractSeed:          probeRoute("goal_contract_seed"),
+		ContractSeedDraft:         probeRoute("contract_seed_draft"),
+		ContractDraftUpdates:      probeRoute("contract_draft_updates"),
+		ContractDraftReady:        probeRoute("contract_draft_ready"),
+		ContractDraftApprove:      probeRoute("contract_draft_approve"),
+		ApprovedContractWorkItems: probeRoute("approved_contract_work_items"),
+		ClarificationAnswers:      probeRoute("clarification_answers"),
+		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
+	})
+
+	tests := []struct {
+		name      string
+		method    string
+		path      string
+		wantRoute string
+	}{
+		{name: "intake_submit", method: http.MethodPost, path: "/v1/intakes", wantRoute: "intake_submit"},
+		{name: "intake_get", method: http.MethodGet, path: "/v1/intakes/intake-1", wantRoute: "intake_get"},
+		{name: "intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/promotions", wantRoute: "intake_promote"},
+		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness-checks", wantRoute: "goal_readiness"},
+		{name: "clarification_request", method: http.MethodPost, path: "/v1/goals/goal-1/clarification-requests", wantRoute: "goal_clarification_requests"},
+		{name: "clarification_answer", method: http.MethodPost, path: "/v1/clarification-requests/request-1/answers", wantRoute: "clarification_answers"},
+		{name: "clarification_answer_apply", method: http.MethodPost, path: "/v1/clarification-answers/answer-1/applications", wantRoute: "clarification_answer_apply"},
+		{name: "contract_seed", method: http.MethodPost, path: "/v1/goals/goal-1/contract-seeds", wantRoute: "goal_contract_seed"},
+		{name: "contract_draft", method: http.MethodPost, path: "/v1/contract-seeds/seed-1/contract-drafts", wantRoute: "contract_seed_draft"},
+		{name: "contract_draft_update", method: http.MethodPatch, path: "/v1/contract-drafts/draft-1", wantRoute: "contract_draft_updates"},
+		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approval-submissions", wantRoute: "contract_draft_ready"},
+		{name: "contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approvals", wantRoute: "contract_draft_approve"},
+		{name: "work_item_plan", method: http.MethodPost, path: "/v1/approved-contracts/contract-1/work-items", wantRoute: "approved_contract_work_items"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := doJSON(t, router, tt.method, tt.path, "")
+			if response.code != http.StatusOK {
+				t.Fatalf("%s %s status = %d, want %d: %s", tt.method, tt.path, response.code, http.StatusOK, response.body)
+			}
+
+			var body struct {
+				Route string `json:"route"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Route != tt.wantRoute {
+				t.Fatalf("route = %q, want %q", body.Route, tt.wantRoute)
+			}
+		})
+	}
+}
+
+func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
+	router := httpserver.NewRouter(httpserver.RouteHandlers{
+		Livez:                     probeRoute("livez"),
+		Readyz:                    probeRoute("readyz"),
+		Version:                   probeRoute("version"),
+		IntakeSubmit:              probeRoute("intake_submit"),
+		IntakeGet:                 probeRoute("intake_get"),
+		IntakePromote:             probeRoute("intake_promote"),
+		GoalReadiness:             probeRoute("goal_readiness"),
+		GoalClarificationRequests: probeRoute("goal_clarification_requests"),
+		GoalContractSeed:          probeRoute("goal_contract_seed"),
+		ContractSeedDraft:         probeRoute("contract_seed_draft"),
+		ContractDraftUpdates:      probeRoute("contract_draft_updates"),
+		ContractDraftReady:        probeRoute("contract_draft_ready"),
+		ContractDraftApprove:      probeRoute("contract_draft_approve"),
+		ApprovedContractWorkItems: probeRoute("approved_contract_work_items"),
+		ClarificationAnswers:      probeRoute("clarification_answers"),
+		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
+	})
+
+	tests := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "intake_submit", method: http.MethodPost, path: "/v1/intake"},
+		{name: "intake_get", method: http.MethodGet, path: "/v1/intake/intake-1"},
+		{name: "intake_promote", method: http.MethodPost, path: "/v1/intake/intake-1/promote"},
+		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness"},
+		{name: "clarification_answer_apply", method: http.MethodPost, path: "/v1/clarification-answers/answer-1/apply"},
+		{name: "contract_seed", method: http.MethodPost, path: "/v1/goals/goal-1/contract-seed"},
+		{name: "contract_draft", method: http.MethodPost, path: "/v1/contract-seeds/seed-1/contract-draft"},
+		{name: "contract_draft_updates", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/updates"},
+		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/ready-for-approval"},
+		{name: "contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approve"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := doJSON(t, router, tt.method, tt.path, "")
+			if response.code != http.StatusNotFound {
+				t.Fatalf("%s %s status = %d, want %d: %s", tt.method, tt.path, response.code, http.StatusNotFound, response.body)
+			}
+		})
+	}
+}
+
+func probeRoute(route string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpserver.RespondJSON(w, http.StatusOK, map[string]string{"route": route})
+	})
+}
+
 type routeResponse struct {
 	code        int
 	contentType string

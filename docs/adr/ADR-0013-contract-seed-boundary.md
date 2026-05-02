@@ -8,14 +8,14 @@ Date: 2026-04-26
 Goalrail now has a bounded server-owned intent path that can reach a
 readiness-checked Goal:
 
-- `POST /v1/intake`
-- `GET /v1/intake/{id}`
-- `POST /v1/intake/{id}/promote`
-- `POST /v1/goals/{id}/readiness`
+- `POST /v1/intakes`
+- `GET /v1/intakes/{id}`
+- `POST /v1/intakes/{id}/promotions`
+- `POST /v1/goals/{id}/readiness-checks`
 - `POST /v1/goals/{id}/clarification-requests`
 - `POST /v1/clarification-requests/{id}/answers`
-- `POST /v1/clarification-answers/{id}/apply`
-- explicit `POST /v1/goals/{id}/readiness` after applied answers
+- `POST /v1/clarification-answers/{id}/applications`
+- explicit `POST /v1/goals/{id}/readiness-checks` after applied answers
 
 The current flow can move a Goal to `ready_for_contract_seed`. That state means
 only that the intent-plane information is normalized enough for a later contract
@@ -267,7 +267,7 @@ The next implementation slice may add:
 - `ContractSeed` DTO / value types
 - in-memory `ContractSeedStore`
 - contract seed creation service
-- endpoint candidate: `POST /v1/goals/{id}/contract-seed`
+- endpoint candidate: `POST /v1/goals/{id}/contract-seeds`
 - duplicate guard by `goal_id`
 - event: `contract_seed.created`
 - tests proving seed creation only from `Goal(ready_for_contract_seed)`

@@ -8,8 +8,8 @@ Date: 2026-04-25
 Goalrail now has a bounded Go server prototype under `apps/server`.
 The server accepts source-neutral raw intake through:
 
-- `POST /v1/intake`
-- `GET /v1/intake/{id}`
+- `POST /v1/intakes`
+- `GET /v1/intakes/{id}`
 
 That slice creates `IntakeRecord` only, stores it in memory, and appends an
 in-memory `intake.received` event. It does not create `Goal`, `ContractDraft`,
@@ -178,7 +178,7 @@ A later implementation slice may add:
 - in-memory `GoalStore`
 - `goal.created` event
 - `intake.promoted_to_goal` event
-- a small promotion endpoint such as `POST /v1/intake/{id}/promote` or
+- a small promotion endpoint such as `POST /v1/intakes/{id}/promotions` or
   `POST /v1/goals`
 
 That implementation slice must remain bounded to promotion. It must not add
@@ -188,7 +188,7 @@ slice explicitly authorizes them.
 
 ## Open questions
 
-1. Should the first promotion endpoint be `POST /v1/intake/{id}/promote` or
+1. Should the first promotion endpoint be `POST /v1/intakes/{id}/promotions` or
    `POST /v1/goals`?
 2. Should `Goal.summary` initially be a rule-free copy from intake text, or a
    small deterministic normalization before a composer exists?

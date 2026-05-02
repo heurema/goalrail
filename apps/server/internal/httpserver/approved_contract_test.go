@@ -18,7 +18,7 @@ func TestPostContractDraftApproveReturnsApprovedContract(t *testing.T) {
 	server := testServer(t)
 	draft := createReadyContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -125,7 +125,7 @@ func TestPostContractDraftApproveAppendsContractApprovedEvent(t *testing.T) {
 	server := testServer(t)
 	draft := createReadyContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -188,7 +188,7 @@ func TestPostContractDraftApprovePreservesExistingActorContext(t *testing.T) {
 		t,
 		server.router,
 		http.MethodPost,
-		"/v1/contract-drafts/"+string(draft.ID)+"/approve",
+		"/v1/contract-drafts/"+string(draft.ID)+"/approvals",
 		approveContractJSONWithActor(t, payloadActor),
 		ctx,
 	)
@@ -229,12 +229,12 @@ func TestPostContractDraftApprovePreservesExistingActorContext(t *testing.T) {
 func TestPostContractDraftApproveRejectsDuplicateApproval(t *testing.T) {
 	server := testServer(t)
 	draft := createReadyContractDraft(t, server)
-	first := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	first := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
 
-	second := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	second := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
 	}
@@ -254,7 +254,7 @@ func TestPostContractDraftApproveRejectsDraftState(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -285,7 +285,7 @@ func TestPostContractDraftApproveValidatesApprovedBy(t *testing.T) {
 			server := testServer(t)
 			draft := createReadyContractDraft(t, server)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", tt.body)
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", tt.body)
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -362,7 +362,7 @@ func TestPostContractDraftApproveRejectsIncompleteDraft(t *testing.T) {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -385,7 +385,7 @@ func createReadyContractDraft(t *testing.T, server testServerDeps) spine.Contrac
 	t.Helper()
 
 	draft := createContractDraft(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("ready status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -444,7 +444,7 @@ func doApproveDraftHandlerJSON(t *testing.T, handler *httpserver.ApprovedContrac
 	t.Helper()
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/v1/contract-drafts/"+string(draftID)+"/approve", strings.NewReader(body))
+	request := httptest.NewRequest(http.MethodPost, "/v1/contract-drafts/"+string(draftID)+"/approvals", strings.NewReader(body))
 	if ctx != nil {
 		request = request.WithContext(ctx)
 	}

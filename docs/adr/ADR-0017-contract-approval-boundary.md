@@ -281,7 +281,7 @@ A later implementation slice may add:
 - `ApprovedContract` DTO
 - in-memory `ApprovedContractStore`
 - approval service
-- endpoint candidate: `POST /v1/contract-drafts/{id}/approve`
+- endpoint candidate: `POST /v1/contract-drafts/{id}/approvals`
 - required `approved_by` actor
 - event: `contract.approved`
 - duplicate approval guard by `contract_draft_id`

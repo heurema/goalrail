@@ -275,7 +275,7 @@ This ADR does not define or implement:
 
 The implementation slice uses:
 
-- endpoint: `POST /v1/contract-drafts/{id}/ready-for-approval`
+- endpoint: `POST /v1/contract-drafts/{id}/approval-submissions`
 - service method to validate completeness
 - `draft -> ready_for_approval` state transition
 - required `marked_by` actor
