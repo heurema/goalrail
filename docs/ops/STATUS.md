@@ -26,8 +26,10 @@ Owner: Vitaly
 
 Installation boundary note: ADR-0022 documents `Installation` as the running
 Goalrail control-plane boundary above `Organization`, with `self_hosted` and
-`saas` as the only deployment modes. This is documentation only. No
-installation schema is implemented yet, and no auth, JWT, CLI login, SaaS
+`saas` as the only deployment modes. The smallest server schema foundation now
+exists: `installations` stores mode and `public_base_url`,
+`organizations.installation_id` links Organizations to an Installation, and
+organization slugs are installation-scoped. No auth, JWT, CLI login, SaaS
 onboarding, organization creation API, or web UI is implemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
@@ -203,9 +205,10 @@ The project currently has:
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
-- the init migration creates `users`, `organizations`, `organization_memberships`, `projects`, `repo_bindings`, `intake_records`, `goals`, `clarification_requests`, `clarification_answers`, `contracts`, `contract_seeds`, `contract_drafts`, `approved_contracts`, `work_item_plans`, `work_item_plan_proposals`, `work_items`, and `events` with UUID persisted ID columns for canonical entities
-- the dev seed creates deterministic UUIDv7 IDs: `018f0000-0000-7000-8000-000000000001`, `018f0000-0000-7000-8000-000000000002`, `018f0000-0000-7000-8000-000000000005`, `018f0000-0000-7000-8000-000000000003`, and `018f0000-0000-7000-8000-000000000004`
-- the project-context store builds runtime SQL with Squirrel and executes upserts and repo-binding context lookups through pgx/pgxpool
+- the init migration creates `users`, `installations`, `organizations`, `organization_memberships`, `projects`, `repo_bindings`, `intake_records`, `goals`, `clarification_requests`, `clarification_answers`, `contracts`, `contract_seeds`, `contract_drafts`, `approved_contracts`, `work_item_plans`, `work_item_plan_proposals`, `work_items`, and `events` with UUID persisted ID columns for canonical entities
+- the dev seed creates deterministic UUIDv7 IDs: `018f0000-0000-7000-8000-000000000001`, `018f0000-0000-7000-8000-000000000006`, `018f0000-0000-7000-8000-000000000002`, `018f0000-0000-7000-8000-000000000005`, `018f0000-0000-7000-8000-000000000003`, and `018f0000-0000-7000-8000-000000000004`
+- the dev seed creates one `self_hosted` Installation with `public_base_url = http://localhost:8080` before creating the dev Organization linked to it
+- the project-context store builds runtime SQL with Squirrel and executes Installation / Organization / Project / RepoBinding upserts and repo-binding context lookups through pgx/pgxpool
 - the source-neutral intake API now requires `project_id` and `repo_binding_id`, validates the repo binding against the persisted Project / RepoBinding context when DB is configured, derives `organization_id`, stores `IntakeRecord` in Postgres when DB is configured, and appends a durable `intake.received` event with context fields
 - Goal promotion stores `Goal` as non-executable normalized intent in Postgres when DB is configured, carries `organization_id`, `project_id`, and `repo_binding_id` from the IntakeRecord, prevents duplicate promotion through the persisted `intake_id` uniqueness boundary, and appends durable `goal.created` and `intake.promoted_to_goal` events with context fields
 - Goal readiness updates persisted `Goal` state and readiness reason codes when DB is configured, returns reason codes, appends durable readiness transition events, and can be explicitly re-run after answer application
@@ -260,8 +263,8 @@ The project currently has:
   broker, or runtime registry yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
-- no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet
-- no installation schema implementation yet
+- no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation yet
+- no Installation bootstrap API, setup flow, or public management surface beyond the schema foundation yet
 - no auth, JWT, CLI login, SaaS onboarding, organization creation API, or
   Goalrail product web UI yet
 - no `VcsConnection` implementation yet

@@ -28,9 +28,10 @@ Apply the idempotent dev seed:
 go run ./cmd/goalrail-server seed dev
 ```
 
-The dev seed writes one deterministic UUIDv7 user, organization, owner
-membership, project, and repo binding. It is not auth, onboarding, or
-production data.
+The dev seed writes one deterministic UUIDv7 user, one `self_hosted`
+Installation with `public_base_url` set to `http://localhost:8080`, one linked
+organization, owner membership, project, and repo binding. It is not auth,
+onboarding, or production data.
 
 ## Dev intake flow
 
@@ -67,7 +68,8 @@ With Postgres configured, `IntakeRecord`, `Goal`, `ClarificationRequest`,
 `ContractDraft`, `ApprovedContract`, and their events are durable and survive
 server restarts. Planned WorkItems are also durable when Postgres is configured.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
-the seeded context. Intake creation, Goal promotion, Goal readiness,
+the seeded context; the seeded Organization is linked to the seeded
+Installation. Intake creation, Goal promotion, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, ContractDraft
 ready_for_approval writes, and ApprovedContract approval writes share a
 transaction with their expected event appends. The stable `contract_id` is

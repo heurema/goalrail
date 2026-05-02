@@ -9,6 +9,8 @@ import (
 
 type UserID string
 
+type InstallationID string
+
 type OrganizationID string
 
 type OrganizationMembershipID string
@@ -18,6 +20,13 @@ type ProjectID string
 type EntityState string
 
 const EntityStateActive EntityState = "active"
+
+type InstallationMode string
+
+const (
+	InstallationModeSelfHosted InstallationMode = "self_hosted"
+	InstallationModeSaaS       InstallationMode = "saas"
+)
 
 type OrganizationMembershipRole string
 
@@ -46,13 +55,23 @@ type User struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+type Installation struct {
+	ID            InstallationID   `json:"id"`
+	Mode          InstallationMode `json:"mode"`
+	PublicBaseURL string           `json:"public_base_url"`
+	State         EntityState      `json:"state"`
+	CreatedAt     time.Time        `json:"created_at"`
+	UpdatedAt     time.Time        `json:"updated_at"`
+}
+
 type Organization struct {
-	ID          OrganizationID `json:"id"`
-	Slug        string         `json:"slug"`
-	DisplayName string         `json:"display_name"`
-	State       EntityState    `json:"state"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID             OrganizationID `json:"id"`
+	InstallationID InstallationID `json:"installation_id"`
+	Slug           string         `json:"slug"`
+	DisplayName    string         `json:"display_name"`
+	State          EntityState    `json:"state"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
 }
 
 type OrganizationMembership struct {
@@ -106,6 +125,14 @@ func NewUserID() (UserID, error) {
 		return "", err
 	}
 	return UserID(id), nil
+}
+
+func NewInstallationID() (InstallationID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return InstallationID(id), nil
 }
 
 func NewOrganizationID() (OrganizationID, error) {

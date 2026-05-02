@@ -61,16 +61,34 @@ func (s *ProjectContextStore) UpsertUser(ctx context.Context, user spine.User) e
 	return s.execSQL(ctx, "upsert user", stmt)
 }
 
+func (s *ProjectContextStore) UpsertInstallation(ctx context.Context, installation spine.Installation) error {
+	installationID, err := uuidValue(installation.ID, "installation id")
+	if err != nil {
+		return err
+	}
+	stmt := s.psql.
+		Insert("installations").
+		Columns("id", "mode", "public_base_url", "state", "created_at", "updated_at").
+		Values(installationID, installation.Mode, installation.PublicBaseURL, installation.State, installation.CreatedAt, installation.UpdatedAt).
+		Suffix("ON CONFLICT (id) DO UPDATE SET mode = EXCLUDED.mode, public_base_url = EXCLUDED.public_base_url, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
+
+	return s.execSQL(ctx, "upsert installation", stmt)
+}
+
 func (s *ProjectContextStore) UpsertOrganization(ctx context.Context, org spine.Organization) error {
 	orgID, err := uuidValue(org.ID, "organization id")
 	if err != nil {
 		return err
 	}
+	installationID, err := uuidValue(org.InstallationID, "organization installation id")
+	if err != nil {
+		return err
+	}
 	stmt := s.psql.
 		Insert("organizations").
-		Columns("id", "slug", "display_name", "state", "created_at", "updated_at").
-		Values(orgID, org.Slug, org.DisplayName, org.State, org.CreatedAt, org.UpdatedAt).
-		Suffix("ON CONFLICT (id) DO UPDATE SET slug = EXCLUDED.slug, display_name = EXCLUDED.display_name, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
+		Columns("id", "installation_id", "slug", "display_name", "state", "created_at", "updated_at").
+		Values(orgID, installationID, org.Slug, org.DisplayName, org.State, org.CreatedAt, org.UpdatedAt).
+		Suffix("ON CONFLICT (id) DO UPDATE SET installation_id = EXCLUDED.installation_id, slug = EXCLUDED.slug, display_name = EXCLUDED.display_name, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
 
 	return s.execSQL(ctx, "upsert organization", stmt)
 }
