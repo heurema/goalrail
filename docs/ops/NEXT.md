@@ -26,6 +26,13 @@
 - ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, while worker/controller/runner execution-side implementation remains deferred
 - ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary and public `/v1/contracts` lifecycle façade routes
 - ADR-0021 now defines the typed WorkItemPlan pull lease boundary: future planning workers should create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, no generic queue platform is accepted, and the lease API is not implemented yet
+- ADR-0022 now defines the Installation boundary above Organization:
+  `Installation` is the concrete running Goalrail control plane / instance,
+  Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
+  are the only deployment modes, MVP starts with one bootstrapped primary
+  Organization in `self_hosted` mode, and no installation schema, auth, JWT,
+  CLI login, SaaS onboarding, organization creation API, or web UI is
+  implemented yet
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -105,24 +112,28 @@ Done means:
 
 ## Next backend bounded slice
 
-### Typed WorkItemPlan pull lease boundary implementation
+### Installation schema foundation
 
 Goal:
-- implement the smallest API-server-owned typed planning lease protocol around
-  existing `WorkItemPlan` state.
+- implement the smallest server persistence foundation for the documented
+  Installation boundary before auth, CLI login, or SaaS onboarding.
 
 Done means:
-- future `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, and
-  `PATCH /v1/plans/leases/{id}` are implemented against typed
-  `WorkItemPlanLease` state
-- the API server atomically selects one eligible queued or expired-leased plan,
-  creates one active lease, marks the plan leased, stores only a lease token
-  hash, and returns the raw token only once
-- proposal submission requires valid lease proof once the lease protocol lands
-- v0 scheduling stays FIFO with lazy expiry and no cron
-- no generic `queue_jobs`, worker registry, checkout, execution, assignment,
-  claiming, queue/outbox/runtime registry, `Run`, receipt, `GateDecision`, or
-  `Proof` is added
+- `installations` table exists
+- `organizations.installation_id` exists
+- installation mode enum/check accepts only `self_hosted` and `saas`
+- `public_base_url` is stored on Installation
+- `public_base_url` bootstrap direction requires a normalized value without a
+  trailing slash, with HTTPS except localhost/dev
+- dev seed/bootstrap direction is updated for one self-hosted Installation and
+  one primary Organization
+- backend paths remain organization-aware and do not bypass `organization_id`
+- no auth implementation
+- no JWT implementation
+- no CLI login implementation
+- no SaaS onboarding
+- no organization creation API
+- no web UI
 
 ## Next bounded slices
 
@@ -269,24 +280,33 @@ Done means:
 
 ### Server follow-up slices
 
-1. Typed WorkItemPlan pull lease boundary implementation
+1. Installation schema foundation
+   - add `installations`, `organizations.installation_id`, deployment mode
+     check for only `self_hosted` / `saas`, and installation-owned
+     `public_base_url`
+   - update dev seed/bootstrap direction for one self-hosted Installation and
+     one primary Organization
+   - keep backend paths organization-aware
+   - do not implement auth, JWT, CLI login, SaaS onboarding, organization
+     creation API, or web UI
+2. Typed WorkItemPlan pull lease boundary implementation
    - implement the smallest server-owned typed planning lease protocol around
      existing `WorkItemPlan` / `WorkItemPlanProposal` state
    - keep repo-aware planning computation behind worker / controller / runner
      boundaries
    - do not implement checkout, execution, receipt, generic queue, outbox, gate,
      proof, runtime registry, assignment, or claiming
-2. WorkItem assignment/claiming boundary design
+3. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
    - keep runner, execution, receipt, gate, and proof as later boundaries
    - do not start execution from assignment/claiming
    - preserve `owner_hint` as advisory unless a later boundary upgrades it
-3. Runner boundary design
+4. Runner boundary design
    - define the hosted runner protocol and checkout boundary before any code
      execution work
    - keep execution, gate, and proof deferred
-4. CLI-to-server intake submit integration
+5. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner
 

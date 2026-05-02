@@ -43,23 +43,36 @@ Goalrail внедряется как:
 - proof strictness
 - scope templates
 
-## 4. Supported deployment modes
+## 4. Supported installation modes
 
-### Mode A — Managed deployment
+For product and schema language, Goalrail has only two deployment modes:
+
+- `self_hosted`
+- `saas`
+
+Self-hosted is a deployment mode, not a separate product model. Dedicated or
+managed-dedicated enterprise modes are not reserved by the current canon.
+
+Managed and guided below describe rollout practice and service motion. They are
+not additional Goalrail deployment modes.
+
+## 5. Supported rollout modes
+
+### Mode A — Managed rollout
 Команда Goalrail руками ведёт initial setup, pilot и stabilization.
 
 Рекомендуется для первых design partners.
 
-### Mode B — Guided deployment
+### Mode B — Guided rollout
 Клиент получает toolkit, setup guidance и короткий enablement path.
 
 Рекомендуется позже, когда deployment playbook стабилизируется.
 
 ### Recommended default
-На первом этапе Goalrail должен запускаться как **managed deployment**.
-Guided deployment — позже.
+На первом этапе Goalrail должен запускаться как **managed rollout**.
+Guided rollout — позже.
 
-## 5. Deployment phases
+## 6. Deployment phases
 
 ### Phase 0 — Qualification / Fit Check
 Цель:
@@ -150,7 +163,7 @@ Guided deployment — позже.
 - second team
 - stop / pause if no-fit
 
-## 6. Deployment profiles
+## 7. Deployment profiles
 
 ### Profile 1 — Standard Product Team
 Для обычной продуктовой команды.
@@ -173,7 +186,7 @@ Guided deployment — позже.
 - stronger policy profile
 - more constrained execution packets
 
-## 7. Runtime recommendation
+## 8. Runtime recommendation
 
 Рекомендуемый первый runtime set:
 
@@ -185,7 +198,7 @@ Guided deployment — позже.
 - первые два покрывают самый вероятный initial deployment scope
 - третий стоит держать как optional adapter, а не как обязательный anchor
 
-## 8. Proof posture
+## 9. Proof posture
 
 Рекомендуемое правило:
 
@@ -200,7 +213,7 @@ Guided deployment — позже.
 - verdict
 - open risks / follow-ups
 
-## 9. What deployment is not
+## 10. What deployment is not
 
 Deployment Goalrail не должен означать:
 
@@ -209,7 +222,7 @@ Deployment Goalrail не должен означать:
 - полный audit factory-style complexity под каждого клиента
 - кастомную пересборку core operating logic
 
-## 10. Deployment success criteria
+## 11. Deployment success criteria
 
 Deployment считается успешным, если:
 
@@ -219,7 +232,7 @@ Deployment считается успешным, если:
 4. result завершился proof output
 5. клиент понимает, имеет ли смысл rollout дальше
 
-## 11. Default recommendation
+## 12. Default recommendation
 
 Рекомендуемый порядок запуска Goalrail:
 

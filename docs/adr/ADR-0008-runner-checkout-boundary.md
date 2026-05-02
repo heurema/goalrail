@@ -48,7 +48,7 @@ A `Runner` is an execution-side component that can prepare an isolated workspace
 obtain or receive repository access, run bounded checks or runtime commands, and
 return receipts plus artifacts to the server.
 
-Goalrail supports two runner deployment modes:
+Goalrail supports two runner modes:
 
 1. `goalrail_hosted_runner`
    - runner infrastructure operated by Goalrail
