@@ -174,16 +174,18 @@ curl -sS http://localhost:8080/v1/tasks/{task_id}
 There is no task list/search endpoint in this slice.
 
 This flow still does not create executable work, gate decisions, proof, runner
-jobs, or VCS integration. Clarification request and
-answer state is still prototype/in-memory. ContractSeed creation does not
-create `ContractDraft`, `WorkItem`, approved Contract, `GateDecision`, `Proof`,
-or executable work. ContractDraft creation does not approve Contract, create
-`WorkItem`, write `GateDecision`, or create `Proof`. ContractDraft updates
-modify proposed fields only, keep `ContractDraft.state` as `draft`, and treat
-`updated_by` as audit identity only. The ready_for_approval transition changes
-only `ContractDraft.state` from `draft` to `ready_for_approval`, requires
-`marked_by` as audit identity, runs completeness checks, and does not approve
-Contract, create `WorkItem`, write `GateDecision`, or create `Proof`.
+jobs, or VCS integration. Clarification request and answer state is still
+prototype/in-memory. There is no standalone public ContractSeed route; public
+`POST /v1/contracts` composes the internal seed and draft records under one
+stable `contract_id`. Standalone seed creation does not approve Contract, create
+`WorkItem`, write `GateDecision`, create `Proof`, or create executable work.
+ContractDraft creation does not approve Contract, create `WorkItem`, write
+`GateDecision`, or create `Proof`. ContractDraft updates modify proposed fields
+only, keep `ContractDraft.state` as `draft`, and treat `updated_by` as audit
+identity only. The ready_for_approval transition changes only
+`ContractDraft.state` from `draft` to `ready_for_approval`, requires `marked_by`
+as audit identity, runs completeness checks, and does not approve Contract,
+create `WorkItem`, write `GateDecision`, or create `Proof`.
 Approval creates an immutable `ApprovedContract(approved)` snapshot from a
 ready draft, requires `approved_by`, appends `contract.approved`, and does not
 mutate `ContractDraft` or create execution, `GateDecision`, or `Proof`.
