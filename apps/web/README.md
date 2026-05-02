@@ -41,3 +41,4 @@ Rule:
 - `apps/web/demo-change-packet` is the current EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is a separate RU copy intended for an independent demo domain, not an in-app translation layer
 - `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype
+- `apps/web/reference-designs` stores imported design handoff bundles for later implementation; it is not a runnable workspace
