@@ -86,36 +86,37 @@ related_docs:
 47. `docs/adr/ADR-0017-contract-approval-boundary.md`
 48. `docs/adr/ADR-0018-workitem-planning-boundary.md`
 49. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
+50. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
 
 ### 7. Governance and change control
-50. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-51. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-52. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-53. `docs/product/GOALRAIL_RULE_STACK.md`
+51. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+52. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+53. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+54. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-54. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-55. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-56. `docs/ops/STATUS.md`
-57. `docs/ops/NEXT.md`
-58. `docs/ops/DECISIONS.md`
-59. `docs/ops/COMPONENTS.yaml`
-60. `docs/ops/BRANCH_PROTECTION.md`
-61. `docs/ops/REPO_STRUCTURE.md`
-62. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-63. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+55. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+56. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+57. `docs/ops/STATUS.md`
+58. `docs/ops/NEXT.md`
+59. `docs/ops/DECISIONS.md`
+60. `docs/ops/COMPONENTS.yaml`
+61. `docs/ops/BRANCH_PROTECTION.md`
+62. `docs/ops/REPO_STRUCTURE.md`
+63. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+64. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-64. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-65. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-66. `docs/reference/design/reference_screens/`
-67. `.goalrail/work/`
-68. `.goalrail/knowledge/`
-69. `.punk/publishing.toml`
-70. `.goalrail/flows/`
-71. `.goalrail/evals/`
-72. `docs/ops/PUBLISHING_MIGRATION.md`
-73. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+65. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+66. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+67. `docs/reference/design/reference_screens/`
+68. `.goalrail/work/`
+69. `.goalrail/knowledge/`
+70. `.punk/publishing.toml`
+71. `.goalrail/flows/`
+72. `.goalrail/evals/`
+73. `docs/ops/PUBLISHING_MIGRATION.md`
+74. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -180,6 +181,7 @@ related_docs:
 - `ADR-0017` — Contract approval boundary
 - `ADR-0018` — WorkItem planning boundary
 - `ADR-0019` — WorkItem planning controller / runner boundary
+- `ADR-0020` — Public Contract identity boundary
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries

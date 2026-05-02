@@ -114,17 +114,17 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 	}{
 		{name: "intake_submit", method: http.MethodPost, path: "/v1/intakes", wantRoute: "intake_submit"},
 		{name: "intake_get", method: http.MethodGet, path: "/v1/intakes/intake-1", wantRoute: "intake_get"},
-		{name: "intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/promotions", wantRoute: "intake_promote"},
-		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness-checks", wantRoute: "goal_readiness"},
-		{name: "clarification_request", method: http.MethodPost, path: "/v1/goals/goal-1/clarification-requests", wantRoute: "goal_clarification_requests"},
-		{name: "clarification_answer", method: http.MethodPost, path: "/v1/clarification-requests/request-1/answers", wantRoute: "clarification_answers"},
-		{name: "clarification_answer_apply", method: http.MethodPost, path: "/v1/clarification-answers/answer-1/applications", wantRoute: "clarification_answer_apply"},
+		{name: "intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/goals", wantRoute: "intake_promote"},
+		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness", wantRoute: "goal_readiness"},
+		{name: "clarification_request", method: http.MethodPost, path: "/v1/goals/goal-1/clarifications", wantRoute: "goal_clarification_requests"},
+		{name: "clarification_answer", method: http.MethodPost, path: "/v1/clarifications/request-1/answers", wantRoute: "clarification_answers"},
+		{name: "clarification_answer_apply", method: http.MethodPost, path: "/v1/answers/answer-1/applications", wantRoute: "clarification_answer_apply"},
 		{name: "contract_seed", method: http.MethodPost, path: "/v1/goals/goal-1/contract-seeds", wantRoute: "goal_contract_seed"},
 		{name: "contract_draft", method: http.MethodPost, path: "/v1/contract-seeds/seed-1/contract-drafts", wantRoute: "contract_seed_draft"},
 		{name: "contract_draft_update", method: http.MethodPatch, path: "/v1/contract-drafts/draft-1", wantRoute: "contract_draft_updates"},
-		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approval-submissions", wantRoute: "contract_draft_ready"},
+		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/submissions", wantRoute: "contract_draft_ready"},
 		{name: "contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approvals", wantRoute: "contract_draft_approve"},
-		{name: "work_item_plan", method: http.MethodPost, path: "/v1/approved-contracts/contract-1/work-items", wantRoute: "approved_contract_work_items"},
+		{name: "work_item_plan", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks", wantRoute: "approved_contract_work_items"},
 	}
 
 	for _, tt := range tests {
@@ -173,13 +173,19 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		{name: "intake_submit", method: http.MethodPost, path: "/v1/intake"},
 		{name: "intake_get", method: http.MethodGet, path: "/v1/intake/intake-1"},
 		{name: "intake_promote", method: http.MethodPost, path: "/v1/intake/intake-1/promote"},
-		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness"},
 		{name: "clarification_answer_apply", method: http.MethodPost, path: "/v1/clarification-answers/answer-1/apply"},
 		{name: "contract_seed", method: http.MethodPost, path: "/v1/goals/goal-1/contract-seed"},
 		{name: "contract_draft", method: http.MethodPost, path: "/v1/contract-seeds/seed-1/contract-draft"},
 		{name: "contract_draft_updates", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/updates"},
 		{name: "contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/ready-for-approval"},
 		{name: "contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approve"},
+		{name: "intermediate_intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/promotions"},
+		{name: "intermediate_goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness-checks"},
+		{name: "intermediate_clarification_request", method: http.MethodPost, path: "/v1/goals/goal-1/clarification-requests"},
+		{name: "intermediate_clarification_answer", method: http.MethodPost, path: "/v1/clarification-requests/request-1/answers"},
+		{name: "intermediate_clarification_answer_apply", method: http.MethodPost, path: "/v1/clarification-answers/answer-1/applications"},
+		{name: "intermediate_contract_draft_ready", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approval-submissions"},
+		{name: "intermediate_work_item_plan", method: http.MethodPost, path: "/v1/approved-contracts/contract-1/work-items"},
 	}
 
 	for _, tt := range tests {

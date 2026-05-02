@@ -520,7 +520,7 @@ func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
 		t.Fatal("stored draft before ready not found")
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -558,7 +558,7 @@ func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
 func TestPostContractDraftReadyForApprovalUnknownDraftReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/approval-submissions", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/submissions", readyForApprovalJSON())
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
 	}
@@ -582,7 +582,7 @@ func TestPostContractDraftReadyForApprovalRejectsDraftNotDraft(t *testing.T) {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", readyForApprovalJSON())
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -613,7 +613,7 @@ func TestPostContractDraftReadyForApprovalValidatesMarkedBy(t *testing.T) {
 			server := testServer(t)
 			draft := createContractDraft(t, server)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", tt.body)
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", tt.body)
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -653,7 +653,7 @@ func TestPostContractDraftReadyForApprovalRejectsIncompleteDraft(t *testing.T) {
 				t.Fatalf("contractDrafts.Create() error = %v", err)
 			}
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", readyForApprovalJSON())
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -679,7 +679,7 @@ func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -732,7 +732,7 @@ func TestPostContractDraftReadyForApprovalFullFlow(t *testing.T) {
 		t.Fatalf("update status = %d, want %d: %s", update.code, http.StatusOK, update.body)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("ready status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}

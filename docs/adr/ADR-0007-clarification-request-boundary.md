@@ -9,8 +9,8 @@ Goalrail now has a bounded server-owned intent path:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
-- `POST /v1/goals/{id}/readiness-checks`
+- `POST /v1/intakes/{id}/goals`
+- `POST /v1/goals/{id}/readiness`
 
 A received `IntakeRecord` can be promoted into a non-executable `Goal`.
 The deterministic Goal readiness check can then mark the Goal as
@@ -280,7 +280,7 @@ creation:
 - `ClarificationRequest` DTO
 - in-memory `ClarificationStore`
 - deterministic request creation from readiness reason codes
-- endpoint candidate: `POST /v1/goals/{id}/clarification-requests`
+- endpoint candidate: `POST /v1/goals/{id}/clarifications`
 - event for request creation, such as `clarification.requested`
 
 That first implementation slice must not add `ClarificationAnswer`, answer
@@ -291,7 +291,7 @@ integration, or web UI unless a separate boundary explicitly authorizes them.
 Later bounded slices may add:
 
 - `ClarificationAnswer` DTO
-- answer endpoint candidate: `POST /v1/clarification-requests/{id}/answers`
+- answer endpoint candidate: `POST /v1/clarifications/{id}/answers`
 - answer recording events
 - Goal hint update events
 - explicit readiness re-check request events

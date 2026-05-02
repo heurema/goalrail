@@ -12,7 +12,7 @@ ApprovedContract(approved) -> WorkItem(planned)
 ```
 
 The current server implementation follows the simple v0 direction from
-ADR-0018: `POST /v1/approved-contracts/{id}/work-items` creates exactly one
+ADR-0018: `POST /v1/contracts/{id}/tasks` creates exactly one
 in-memory `WorkItem(planned)` per approved contract. That behavior is useful as
 a bounded prototype and as a non-executable handoff after approval.
 
@@ -89,6 +89,11 @@ ApprovedContract(approved)
   -> explicit acceptance creates WorkItem(planned) records
 ```
 
+If this flow later receives public REST routes, those routes should use short
+product-facing resources such as `plans` and `proposals`; long internal type
+names such as `work-item-planning-requests` or `work-item-plan-proposals`
+should remain implementation vocabulary, not URL vocabulary.
+
 Recommended initial posture:
 
 - one accepted proposal may create one or more `WorkItem(planned)` records
@@ -107,7 +112,7 @@ This ADR qualifies ADR-0018.
 
 ADR-0018 remains the source for the non-executable `WorkItem(planned)` concept
 and for the simple v0 direct planning prototype. The current
-`POST /v1/approved-contracts/{id}/work-items` endpoint may remain documented as
+`POST /v1/contracts/{id}/tasks` endpoint may remain documented as
 existing prototype behavior.
 
 However, ADR-0018's one-WorkItem direct planning path must not be expanded into

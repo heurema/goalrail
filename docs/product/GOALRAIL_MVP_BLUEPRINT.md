@@ -19,6 +19,7 @@ related_docs:
   - docs/product/GOALRAIL_OPERATING_MODEL.md
   - docs/PROJECT_SPINE_SCHEMA.md
   - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
+  - docs/adr/ADR-0020-public-contract-identity-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -176,6 +177,20 @@ Responsibilities:
 - task decomposition
 - routing defaults by task profile
 
+Public Contract identity:
+- public product/control API should expose one stable `Contract` lifecycle
+  aggregate and one stable public `contract_id`
+- `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain precise
+  internal lifecycle records for bridge, draft, and immutable approved snapshot
+  semantics
+- future public API should use `contracts/{id}` and contract subresources for
+  contract creation, draft updates, submission, approval, tasks, plans, and
+  proposals rather than exposing `contract-seeds`, `contract-drafts`, or
+  `approved-contracts` as product-facing resource names
+- this is accepted target architecture; the current server still implements the
+  internal lifecycle records directly and does not yet have public Contract
+  aggregate storage
+
 Control-plane split:
 - the API server is the canonical state machine for planning transitions,
   validation, persistence, and event append
@@ -203,6 +218,10 @@ This flow is a target architecture direction, not an implemented MVP surface.
 The current direct one-WorkItem planning endpoint remains simple prototype v0
 behavior and must not be expanded into rich repo-aware planning inside the API
 server.
+If this target flow later becomes public REST API, the public URL vocabulary
+should use product-facing resources such as `contracts`, `plans`, `proposals`,
+and `tasks`; internal domain names such as `ApprovedContract`, `WorkItem`, and
+`WorkItemPlanProposal` do not need to appear verbatim in public paths.
 
 ### Layer 4 — Delivery Runtime
 Produces:

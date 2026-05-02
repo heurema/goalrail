@@ -9,7 +9,7 @@ Goalrail now has a bounded server-owned intake and Goal path:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
+- `POST /v1/intakes/{id}/goals`
 
 The server stores `IntakeRecord` and non-executable `Goal` as in-memory
 prototypes. Promotion appends `goal.created` and `intake.promoted_to_goal`
@@ -148,7 +148,7 @@ No event in this boundary may create or imply `ContractDraft`, `ApprovedContract
 A later bounded implementation may add an endpoint such as:
 
 ```text
-POST /v1/goals/{id}/readiness-checks
+POST /v1/goals/{id}/readiness
 ```
 
 Recommended behavior for the first prototype:
@@ -222,7 +222,7 @@ The next implementation slice may add:
 - in-memory Goal state update support
 - deterministic readiness reason codes
 - readiness events
-- `POST /v1/goals/{id}/readiness-checks`
+- `POST /v1/goals/{id}/readiness`
 - tests for each transition and non-goal boundary
 
 That implementation slice must not add clarification objects, contract seed,
@@ -231,7 +231,7 @@ changes.
 
 ## Open questions
 
-1. Should the first readiness endpoint be `POST /v1/goals/{id}/readiness-checks`, or
+1. Should the first readiness endpoint be `POST /v1/goals/{id}/readiness`, or
    should readiness evaluation run automatically after Goal promotion?
 2. Should readiness reasons be a small enum from the start, or plain strings
    until the first clarification object exists?

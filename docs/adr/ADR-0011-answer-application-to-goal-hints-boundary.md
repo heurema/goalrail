@@ -9,10 +9,10 @@ Goalrail now has a bounded server-owned intent path:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
-- `POST /v1/goals/{id}/readiness-checks`
-- `POST /v1/goals/{id}/clarification-requests`
-- `POST /v1/clarification-requests/{id}/answers`
+- `POST /v1/intakes/{id}/goals`
+- `POST /v1/goals/{id}/readiness`
+- `POST /v1/goals/{id}/clarifications`
+- `POST /v1/clarifications/{id}/answers`
 
 Goal readiness can produce missing-information reason codes. A
 `ClarificationRequest(open)` can ask questions for those reasons. A
@@ -272,7 +272,7 @@ This ADR does not define or implement:
 
 A later bounded implementation slice may add:
 
-- endpoint candidate: `POST /v1/clarification-answers/{id}/applications`
+- endpoint candidate: `POST /v1/answers/{id}/applications`
 - answer application service
 - allowed mapping application
 - Goal hint update persistence

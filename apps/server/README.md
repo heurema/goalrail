@@ -56,8 +56,8 @@ curl -sS http://localhost:8080/v1/intakes \
 Then promote and check readiness:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/promotions
-curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness-checks
+curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/goals
+curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ContractSeed`,
@@ -100,7 +100,7 @@ curl -sS -X PATCH http://localhost:8080/v1/contract-drafts/{contract_draft_id} \
 Then mark a complete draft ready for approval:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approval-submissions \
+curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/submissions \
   -H 'Content-Type: application/json' \
   -d '{
     "marked_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
@@ -120,8 +120,13 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/ap
 Then plan one non-executable WorkItem from the approved contract:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/approved-contracts/{approved_contract_id}/work-items
+curl -sS -X POST http://localhost:8080/v1/contracts/{approved_contract_id}/tasks
 ```
+
+This `contracts` route spelling follows the public Contract identity direction
+from ADR-0020, but the current prototype still resolves the ID against the
+approved contract snapshot store internally. A stable public Contract aggregate
+and `contract_id` are not implemented yet.
 
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and

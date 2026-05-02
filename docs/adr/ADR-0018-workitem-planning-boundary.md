@@ -289,7 +289,7 @@ A later implementation slice may add:
 - `WorkItem` DTO
 - in-memory `WorkItemStore`
 - planning service
-- endpoint candidate: `POST /v1/approved-contracts/{id}/work-items`
+- endpoint candidate: `POST /v1/contracts/{id}/tasks`
 - one-WorkItem planning v0
 - duplicate guard by `approved_contract_id`
 - event: `work_item.created`

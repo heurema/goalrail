@@ -430,7 +430,7 @@ Status: accepted
 
 Decision:
 - after answer application updates Goal intent-plane hints, readiness re-check remains an explicit server-owned transition
-- the recommended prototype direction is to reuse `POST /v1/goals/{id}/readiness-checks` for the explicit re-check
+- the recommended prototype direction is to reuse `POST /v1/goals/{id}/readiness` for the explicit re-check
 - readiness re-check may move Goal to `needs_clarification`, `ready_for_contract_seed`, or `rejected`
 - `ready_for_contract_seed` is Goal state only and does not create contract seed, `ContractDraft`, `WorkItem`, `GateDecision`, or `Proof`
 - answer application must not automatically call readiness re-check
@@ -1693,3 +1693,28 @@ Rationale:
   runner boundaries.
 - Prevents simple v0 WorkItem planning from growing into hidden repo-aware
   computation inside the API server.
+
+## D-0067 — Public Contract identity is stable across lifecycle
+Date: 2026-05-02
+Status: accepted
+
+Decision:
+- Public/control API should expose one stable `Contract` resource and public
+  `contract_id` across seed, draft review, ready-for-approval, approval, and
+  later planning.
+- `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal
+  lifecycle records; `ApprovedContract` remains the immutable approved
+  snapshot.
+- Future public routes should use `contracts/{id}` and subresources such as
+  `tasks`, `plans`, and `proposals`, not `contract-seeds`,
+  `contract-drafts`, `approved-contracts`, `work-items`, or long internal
+  planning type names.
+- This does not implement a public Contract aggregate, `contracts` table,
+  stores, endpoints, migrations, runner/worker/controller behavior, execution,
+  `Run`, receipt, `GateDecision`, or `Proof`.
+
+Rationale:
+- Keeps public API product-facing rather than mirroring internal Go / DB types.
+- Gives callers one stable identity across the contract lifecycle.
+- Preserves strict internal lifecycle boundaries while allowing a cleaner
+  control-plane API shape.

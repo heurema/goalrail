@@ -10,12 +10,12 @@ readiness-checked Goal:
 
 - `POST /v1/intakes`
 - `GET /v1/intakes/{id}`
-- `POST /v1/intakes/{id}/promotions`
-- `POST /v1/goals/{id}/readiness-checks`
-- `POST /v1/goals/{id}/clarification-requests`
-- `POST /v1/clarification-requests/{id}/answers`
-- `POST /v1/clarification-answers/{id}/applications`
-- explicit `POST /v1/goals/{id}/readiness-checks` after applied answers
+- `POST /v1/intakes/{id}/goals`
+- `POST /v1/goals/{id}/readiness`
+- `POST /v1/goals/{id}/clarifications`
+- `POST /v1/clarifications/{id}/answers`
+- `POST /v1/answers/{id}/applications`
+- explicit `POST /v1/goals/{id}/readiness` after applied answers
 
 The current flow can move a Goal to `ready_for_contract_seed`. That state means
 only that the intent-plane information is normalized enough for a later contract
