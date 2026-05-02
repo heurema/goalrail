@@ -21,6 +21,7 @@ related_docs:
   - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
   - docs/adr/ADR-0020-public-contract-identity-boundary.md
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
+  - docs/adr/ADR-0022-installation-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -138,8 +139,13 @@ Storage:
 - materialized views for current-state projections
 
 Initial Project / repo context:
+- Installation sits above Organization as the concrete running Goalrail
+  control plane / instance
 - Goalrail Organization is an internal SaaS tenant/workspace, not a GitHub
   Organization, GitLab Group, or Bitbucket Workspace
+- Organization remains the tenant/workspace boundary inside an Installation
+- self_hosted mode has one bootstrapped primary Organization
+- future saas mode may support many Organizations inside one Goalrail service
 - Project is a delivery container inside an Organization
 - Project is not a repository
 - RepoBinding stores the repository reference directly in the MVP
@@ -305,6 +311,8 @@ Responsibilities:
 ## 4. Canonical object chain
 
 ```text
+Installation
+  ->
 Organization
   -> Project
   -> RepoBinding

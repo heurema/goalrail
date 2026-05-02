@@ -67,7 +67,7 @@ Qualification остаётся бесплатным, чтобы:
 - 1 repo
 - 1 основной кейс
 - 2 недели как базовый срок
-- managed deployment mode
+- managed rollout motion
 - remote-first
 - lightweight proof required from day one
 
@@ -151,14 +151,14 @@ Goalrail не должен заходить как pilot, если:
 ## 9. Delivery format
 
 ### Recommended default
-- managed deployment
+- managed rollout
 - remote-first
 - bounded pilot scope
 - limited configuration over a fixed operating core
 - founder-led pilot with founder + DevOps delivery cell
 
 ### Optional later
-- guided deployment
+- guided rollout
 - onsite support only when really needed
 - wider rollout after successful pilot
 

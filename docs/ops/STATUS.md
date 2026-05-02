@@ -24,6 +24,12 @@ Last updated: 2026-05-03
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
+Installation boundary note: ADR-0022 documents `Installation` as the running
+Goalrail control-plane boundary above `Organization`, with `self_hosted` and
+`saas` as the only deployment modes. This is documentation only. No
+installation schema is implemented yet, and no auth, JWT, CLI login, SaaS
+onboarding, organization creation API, or web UI is implemented.
+
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
 smoke slice has passed. The public RU pilot surface is now live through the
@@ -51,7 +57,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-one kernel/CLI/server/domain boundary ADRs
+- twenty-two kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -76,7 +82,7 @@ The project currently has:
 - fixed core vs configurable knobs is explicit in the canon
 
 ### Commercial and deployment model
-- managed deployment is the default early deployment mode
+- managed rollout is the default early rollout motion
 - pilot-first entry model is explicit
 - free qualification + paid pilot is explicit
 - RU-first, founder-led GTM is explicit
@@ -143,6 +149,12 @@ The project currently has:
   server-owned pull leasing through future `POST /v1/plans/leases`, FIFO v0
   scheduling with lazy expiry, and no generic `queue_jobs` / `jobs` /
   `work_queue` table for this boundary
+- ADR-0022 documents the Installation boundary above Organization:
+  `Installation` is the concrete running Goalrail control plane / instance,
+  Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
+  are the only deployment modes, MVP starts with one bootstrapped primary
+  Organization in `self_hosted` mode, the backend must remain
+  organization-aware, and `public_base_url` belongs to Installation
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -164,7 +176,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty boundary ADRs exist
+- kernel schema note and twenty-two boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -249,6 +261,9 @@ The project currently has:
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet
+- no installation schema implementation yet
+- no auth, JWT, CLI login, SaaS onboarding, organization creation API, or
+  Goalrail product web UI yet
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation

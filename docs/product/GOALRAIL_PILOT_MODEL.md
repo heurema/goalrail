@@ -32,7 +32,7 @@ Pilot — это:
 - 1 repo на старте
 - 1 основной кейс
 - 2 недели как базовый срок
-- managed deployment mode
+- managed rollout motion
 - lightweight proof required from day one
 
 ### Extended recommendation

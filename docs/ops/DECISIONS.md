@@ -120,13 +120,13 @@ Decision:
 - organization-specific differences are handled through limited knobs such as tracker binding, runtime binding, policy profile, review depth, terminology mapping, approval profile, proof strictness, and scope templates
 - configuration must not break the fixed operating core
 
-## D-0014 — Early deployment is managed-first
+## D-0014 — Early rollout is managed-first
 Date: 2026-04-15
 Status: accepted
 
 Decision:
-- early Goalrail deployments default to managed deployment
-- guided deployment comes later after the playbook stabilizes
+- early Goalrail rollout defaults to managed rollout
+- guided rollout comes later after the playbook stabilizes
 - Goalrail should not enter as bespoke process redesign per customer
 
 ## D-0015 — Commercial entry is free qualification plus paid pilot
@@ -323,7 +323,8 @@ Status: accepted
 Decision:
 - repository checkout, workspace preparation, code inspection, and check execution belong behind a dedicated runner boundary
 - the Goalrail API server owns canonical state, scheduling decisions, task packets, run records, event append, and proof input references, but must not clone repositories or run checks in-process
-- Goalrail supports both `goalrail_hosted_runner` and `customer_hosted_runner` deployment modes
+- Goalrail supports both `goalrail_hosted_runner` and
+  `customer_hosted_runner` runner modes
 - customer-hosted runners are first-class for security-sensitive teams, self-managed VCS, private networks, and customers that do not allow repository contents to leave their environment
 - customer-hosted runners may operate without Goalrail cloud-side VCS connection or clone credential
 - VCS provider discovery, repository records, repo bindings, and checkout permission are separate concerns
@@ -1718,3 +1719,23 @@ Rationale:
 - Gives callers one stable identity across the contract lifecycle.
 - Preserves strict internal lifecycle boundaries while allowing a cleaner
   control-plane API shape.
+
+## D-0068 — Installation is the running control-plane boundary
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- Goalrail accepts `Installation` as the running control-plane / instance
+  boundary above Organization.
+- Deployment modes are `self_hosted` and `saas` only.
+- Self-hosted starts with one bootstrapped primary Organization and disabled
+  organization creation.
+- Organization remains the tenant/workspace boundary inside an Installation.
+- The existing Organization -> Project -> RepoBinding model remains valid.
+- This is documentation only and does not implement installation schema, auth,
+  JWT, CLI login, SaaS onboarding, organization creation API, or web UI.
+
+Rationale:
+- Keeps self-hosted MVP bootstrap aligned with future SaaS tenancy.
+- Prevents self-hosted shortcuts from bypassing `organization_id`.
+- Clarifies deployment-mode language before auth and onboarding work begins.
