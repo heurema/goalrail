@@ -303,7 +303,7 @@ A later bounded implementation slice may add:
 - `ContractDraft` DTO
 - in-memory `ContractDraftStore`
 - `contractdraft` service
-- endpoint candidate: `POST /v1/contract-seeds/{id}/contract-draft`
+- endpoint candidate: `POST /v1/contract-seeds/{id}/contract-drafts`
 - duplicate guard by `contract_seed_id`
 - event: `contract_draft.created`
 

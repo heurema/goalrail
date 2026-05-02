@@ -14,7 +14,7 @@ func TestPostGoalContractSeedReturnsCreatedSeed(t *testing.T) {
 	server := testServer(t)
 	goal := createReadyForContractSeedGoal(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -80,7 +80,7 @@ func TestPostGoalContractSeedReturnsCreatedSeed(t *testing.T) {
 func TestPostGoalContractSeedUnknownGoalReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/missing/contract-seeds", "")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -101,7 +101,7 @@ func TestPostGoalContractSeedRejectsGoalNotReady(t *testing.T) {
 	intakeID := createIntake(t, server, validIntakeJSON)
 	goal := promoteIntake(t, server, intakeID)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -128,7 +128,7 @@ func TestPostGoalContractSeedRejectsMissingRequiredGoalFields(t *testing.T) {
 		t.Fatal("goal not found")
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -148,11 +148,11 @@ func TestPostGoalContractSeedRejectsDuplicateSeed(t *testing.T) {
 	server := testServer(t)
 	goal := createReadyForContractSeedGoal(t, server)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
 	}
@@ -172,7 +172,7 @@ func TestPostGoalContractSeedAppendsEventOnly(t *testing.T) {
 	server := testServer(t)
 	goal := createReadyForContractSeedGoal(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -187,7 +187,7 @@ func TestPostGoalContractSeedFullIntentPlaneFlow(t *testing.T) {
 	server := testServer(t)
 	goal := createReadyForContractSeedGoal(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -211,7 +211,7 @@ func createReadyForContractSeedGoal(t *testing.T, server testServerDeps) spine.G
 	intakeID := createIntake(t, server, validIntakeJSON)
 	created := promoteIntake(t, server, intakeID)
 
-	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	initialReadiness := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
 	if initialReadiness.code != http.StatusOK {
 		t.Fatalf("initial readiness status = %d, want %d: %s", initialReadiness.code, http.StatusOK, initialReadiness.body)
 	}
@@ -239,12 +239,12 @@ func createReadyForContractSeedGoal(t *testing.T, server testServerDeps) spine.G
 
 	var answer spine.ClarificationAnswer
 	decodeJSON(t, answerResponse.body, &answer)
-	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/apply", applyRequestJSON())
+	applyResponse := doJSON(t, server.router, http.MethodPost, "/v1/clarification-answers/"+string(answer.ID)+"/applications", applyRequestJSON())
 	if applyResponse.code != http.StatusOK {
 		t.Fatalf("apply status = %d, want %d: %s", applyResponse.code, http.StatusOK, applyResponse.body)
 	}
 
-	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness", "")
+	recheckResponse := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/readiness-checks", "")
 	if recheckResponse.code != http.StatusOK {
 		t.Fatalf("explicit re-check status = %d, want %d: %s", recheckResponse.code, http.StatusOK, recheckResponse.body)
 	}

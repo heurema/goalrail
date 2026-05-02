@@ -284,7 +284,7 @@ func createApprovedContract(t *testing.T, server testServerDeps) spine.ApprovedC
 	t.Helper()
 
 	draft := createReadyContractDraft(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approve", approveContractJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approvals", approveContractJSON())
 	if response.code != http.StatusCreated {
 		t.Fatalf("approve status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}

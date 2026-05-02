@@ -288,8 +288,8 @@ This ADR does not define or implement:
 A later bounded implementation slice may add:
 
 - update service for `ContractDraft`
-- endpoint candidate: `POST /v1/contract-drafts/{id}/updates`
-- alternative endpoint candidate: `PATCH /v1/contract-drafts/{id}`
+- endpoint candidate: `PATCH /v1/contract-drafts/{id}`
+- no compatibility alias is implied for older draft-update route shapes
 - full-field replacement for allowed proposed fields
 - partial update over allowed fields
 - required `updated_by` actor
@@ -299,7 +299,7 @@ Endpoint choice is not final public API canon.
 
 Recommended initial direction:
 
-- use `POST /v1/contract-drafts/{id}/updates` for transition clarity.
+- use `PATCH /v1/contract-drafts/{id}` for transition clarity.
 - allow partial field update over allowed fields.
 - require `updated_by.kind` and `updated_by.id`.
 - reject unknown and non-editable fields.
@@ -320,8 +320,8 @@ The immediate implementation slice must not:
 
 Open decision questions for later slices:
 
-1. Should v0 endpoint use `POST /v1/contract-drafts/{id}/updates` or
-   `PATCH /v1/contract-drafts/{id}`?
+1. Should v0 endpoint remain a direct `PATCH /v1/contract-drafts/{id}` update,
+   or later gain a nested revision/update resource?
 2. Should draft update allow partial field updates or require full replacement
    payload?
 3. Should empty `proposed_scope` / `proposed_acceptance_criteria` be allowed?
@@ -332,7 +332,7 @@ Open decision questions for later slices:
 
 Recommended initial direction:
 
-- use `POST /v1/contract-drafts/{id}/updates` for transition clarity
+- use `PATCH /v1/contract-drafts/{id}` for transition clarity
 - allow partial field update over allowed fields
 - require `updated_by`
 - reject non-editable fields

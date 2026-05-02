@@ -22,7 +22,7 @@ func TestPostContractSeedContractDraftReturnsCreatedDraft(t *testing.T) {
 		t.Fatal("contract seed not found")
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -109,7 +109,7 @@ func TestPostContractSeedContractDraftReturnsCreatedDraft(t *testing.T) {
 func TestPostContractSeedContractDraftUnknownSeedReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/missing/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/missing/contract-drafts", "")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.code, http.StatusNotFound)
 	}
@@ -133,7 +133,7 @@ func TestPostContractSeedContractDraftRejectsSeedNotCreated(t *testing.T) {
 		t.Fatalf("contractSeeds.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -157,7 +157,7 @@ func TestPostContractSeedContractDraftRejectsMissingRequiredSeedFields(t *testin
 		t.Fatalf("contractSeeds.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -177,11 +177,11 @@ func TestPostContractSeedContractDraftRejectsDuplicateDraft(t *testing.T) {
 	server := testServer(t)
 	seed := createContractSeed(t, server)
 
-	first := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	first := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if first.code != http.StatusCreated {
 		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
 	}
-	second := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	second := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if second.code != http.StatusConflict {
 		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
 	}
@@ -201,7 +201,7 @@ func TestPostContractSeedContractDraftAppendsEventOnly(t *testing.T) {
 	server := testServer(t)
 	seed := createContractSeed(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -216,7 +216,7 @@ func TestPostContractSeedContractDraftFullFlow(t *testing.T) {
 	server := testServer(t)
 	seed := createContractSeed(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -234,11 +234,11 @@ func TestPostContractSeedContractDraftFullFlow(t *testing.T) {
 	assertNoForbiddenEventTypes(t, server.events.Events())
 }
 
-func TestPostContractDraftUpdatesReturnsUpdatedDraft(t *testing.T) {
+func TestPatchContractDraftReturnsUpdatedDraft(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{
 		"title": "Reviewed draft title",
 		"intent_summary": "Reviewed summary",
 		"proposed_scope": ["Reviewed scope"],
@@ -301,11 +301,11 @@ func TestPostContractDraftUpdatesReturnsUpdatedDraft(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesAllowsEmptyCoreDraftArrays(t *testing.T) {
+func TestPatchContractDraftAllowsEmptyCoreDraftArrays(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{
 		"proposed_scope": [],
 		"proposed_acceptance_criteria": [],
 		"proposed_proof_expectations": []
@@ -327,10 +327,10 @@ func TestPostContractDraftUpdatesAllowsEmptyCoreDraftArrays(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesUnknownDraftReturnsNotFound(t *testing.T) {
+func TestPatchContractDraftUnknownDraftReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/updates", updateDraftJSON(`{"title": "Reviewed"}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/missing", updateDraftJSON(`{"title": "Reviewed"}`))
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
 	}
@@ -346,7 +346,7 @@ func TestPostContractDraftUpdatesUnknownDraftReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesRejectsDraftNotDraft(t *testing.T) {
+func TestPatchContractDraftRejectsDraftNotDraft(t *testing.T) {
 	server := testServer(t)
 	draft := validHTTPContractDraft()
 	draft.State = "ready_for_approval"
@@ -354,7 +354,7 @@ func TestPostContractDraftUpdatesRejectsDraftNotDraft(t *testing.T) {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"title": "Reviewed"}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{"title": "Reviewed"}`))
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -370,7 +370,7 @@ func TestPostContractDraftUpdatesRejectsDraftNotDraft(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesValidatesUpdatedBy(t *testing.T) {
+func TestPatchContractDraftValidatesUpdatedBy(t *testing.T) {
 	tests := []struct {
 		name string
 		body string
@@ -385,7 +385,7 @@ func TestPostContractDraftUpdatesValidatesUpdatedBy(t *testing.T) {
 			server := testServer(t)
 			draft := createContractDraft(t, server)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", tt.body)
+			response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), tt.body)
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -403,11 +403,11 @@ func TestPostContractDraftUpdatesValidatesUpdatedBy(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesRejectsEmptyChanges(t *testing.T) {
+func TestPatchContractDraftRejectsEmptyChanges(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{}`))
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -423,11 +423,11 @@ func TestPostContractDraftUpdatesRejectsEmptyChanges(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesRejectsUnknownFieldInChanges(t *testing.T) {
+func TestPatchContractDraftRejectsUnknownFieldInChanges(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"unexpected": "value"}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{"unexpected": "value"}`))
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -443,11 +443,11 @@ func TestPostContractDraftUpdatesRejectsUnknownFieldInChanges(t *testing.T) {
 	}
 }
 
-func TestPostContractDraftUpdatesRejectsNonEditableFieldInChanges(t *testing.T) {
+func TestPatchContractDraftRejectsNonEditableFieldInChanges(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"state": "ready_for_approval"}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{"state": "ready_for_approval"}`))
 	if response.code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 	}
@@ -463,11 +463,11 @@ func TestPostContractDraftUpdatesRejectsNonEditableFieldInChanges(t *testing.T) 
 	}
 }
 
-func TestPostContractDraftUpdatesAppendsEventOnly(t *testing.T) {
+func TestPatchContractDraftAppendsEventOnly(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{"proposed_scope": ["Reviewed scope"]}`))
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{"proposed_scope": ["Reviewed scope"]}`))
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -478,11 +478,11 @@ func TestPostContractDraftUpdatesAppendsEventOnly(t *testing.T) {
 	assertNoForbiddenEventTypes(t, server.events.Events())
 }
 
-func TestPostContractDraftUpdatesFullFlow(t *testing.T) {
+func TestPatchContractDraftFullFlow(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{
 		"proposed_scope": ["Reviewed scope"],
 		"proposed_acceptance_criteria": ["Reviewed acceptance"]
 	}`))
@@ -520,7 +520,7 @@ func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
 		t.Fatal("stored draft before ready not found")
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -558,7 +558,7 @@ func TestPostContractDraftReadyForApprovalReturnsReadyDraft(t *testing.T) {
 func TestPostContractDraftReadyForApprovalUnknownDraftReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/missing/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
 	}
@@ -582,7 +582,7 @@ func TestPostContractDraftReadyForApprovalRejectsDraftNotDraft(t *testing.T) {
 		t.Fatalf("contractDrafts.Create() error = %v", err)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
 	}
@@ -613,7 +613,7 @@ func TestPostContractDraftReadyForApprovalValidatesMarkedBy(t *testing.T) {
 			server := testServer(t)
 			draft := createContractDraft(t, server)
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", tt.body)
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", tt.body)
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -653,7 +653,7 @@ func TestPostContractDraftReadyForApprovalRejectsIncompleteDraft(t *testing.T) {
 				t.Fatalf("contractDrafts.Create() error = %v", err)
 			}
 
-			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 			if response.code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
 			}
@@ -679,7 +679,7 @@ func TestPostContractDraftReadyForApprovalAppendsEventOnly(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -723,7 +723,7 @@ func TestPostContractDraftReadyForApprovalFullFlow(t *testing.T) {
 	server := testServer(t)
 	draft := createContractDraft(t, server)
 
-	update := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/updates", updateDraftJSON(`{
+	update := doJSON(t, server.router, http.MethodPatch, "/v1/contract-drafts/"+string(draft.ID), updateDraftJSON(`{
 		"proposed_scope": ["Reviewed scope"],
 		"proposed_acceptance_criteria": ["Reviewed acceptance"],
 		"proposed_proof_expectations": ["Attach reviewed proof expectations"]
@@ -732,7 +732,7 @@ func TestPostContractDraftReadyForApprovalFullFlow(t *testing.T) {
 		t.Fatalf("update status = %d, want %d: %s", update.code, http.StatusOK, update.body)
 	}
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/ready-for-approval", readyForApprovalJSON())
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-drafts/"+string(draft.ID)+"/approval-submissions", readyForApprovalJSON())
 	if response.code != http.StatusOK {
 		t.Fatalf("ready status = %d, want %d: %s", response.code, http.StatusOK, response.body)
 	}
@@ -763,7 +763,7 @@ func createContractSeed(t *testing.T, server testServerDeps) spine.ContractSeed 
 	t.Helper()
 
 	goal := createReadyForContractSeedGoal(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seed", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(goal.ID)+"/contract-seeds", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("contract seed status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -777,7 +777,7 @@ func createContractDraft(t *testing.T, server testServerDeps) spine.ContractDraf
 	t.Helper()
 
 	seed := createContractSeed(t, server)
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-draft", "")
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contract-seeds/"+string(seed.ID)+"/contract-drafts", "")
 	if response.code != http.StatusCreated {
 		t.Fatalf("contract draft status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}

@@ -41,7 +41,7 @@ go run ./cmd/goalrail-server
 Submit intake with the seeded Project and RepoBinding context:
 
 ```bash
-curl -sS http://localhost:8080/v1/intake \
+curl -sS http://localhost:8080/v1/intakes \
   -H 'Content-Type: application/json' \
   -d '{
     "project_id": "018f0000-0000-7000-8000-000000000003",
@@ -56,8 +56,8 @@ curl -sS http://localhost:8080/v1/intake \
 Then promote and check readiness:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/intake/{intake_id}/promote
-curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
+curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/promotions
+curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness-checks
 ```
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ContractSeed`,
@@ -74,19 +74,19 @@ After clarification answers are applied and an explicit readiness re-check marks
 the Goal `ready_for_contract_seed`, create a seed snapshot:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seed
+curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seeds
 ```
 
 Then create a draft from the seed:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-seeds/{contract_seed_id}/contract-draft
+curl -sS -X POST http://localhost:8080/v1/contract-seeds/{contract_seed_id}/contract-drafts
 ```
 
 Then update proposed draft fields explicitly:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/updates \
+curl -sS -X PATCH http://localhost:8080/v1/contract-drafts/{contract_draft_id} \
   -H 'Content-Type: application/json' \
   -d '{
     "updated_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"},
@@ -100,7 +100,7 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/up
 Then mark a complete draft ready for approval:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/ready-for-approval \
+curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approval-submissions \
   -H 'Content-Type: application/json' \
   -d '{
     "marked_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
@@ -110,7 +110,7 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/re
 Then approve the ready draft into an approved contract snapshot:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approve \
+curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approvals \
   -H 'Content-Type: application/json' \
   -d '{
     "approved_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
