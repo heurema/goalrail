@@ -90,10 +90,14 @@ ApprovedContract(approved)
   -> explicit acceptance creates WorkItem(planned) records
 ```
 
-If this flow later receives public REST routes, those routes should use short
-product-facing resources such as `plans` and `proposals`; long internal type
-names such as `work-item-planning-requests` or `work-item-plan-proposals`
-should remain implementation vocabulary, not URL vocabulary.
+PR #53 implements the current public control-plane API for this flow with
+short product-facing resources: `POST /v1/contracts/{id}/plans`,
+`GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`,
+`GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and
+`GET /v1/tasks/{id}`. The current implementation names the public queued
+planning request `WorkItemPlan`; long internal type names such as
+`work-item-planning-requests` or `work-item-plan-proposals` should remain
+implementation vocabulary, not URL vocabulary.
 
 Recommended initial posture:
 
@@ -223,6 +227,8 @@ This ADR does not define or implement:
 
 The next backend planning slice should design the smallest worker/controller
 lease or reconciliation protocol around the existing public plan/proposal API.
+The public `plans` / `proposals` / `acceptance` routes exist; the
+worker/controller/runner execution-side implementation remains deferred.
 
 It should not add runner checkout, execution, receipt submission,
 `GateDecision`, `Proof`, queue, outbox, broad worker platform, or runtime

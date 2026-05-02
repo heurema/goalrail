@@ -284,6 +284,13 @@ This ADR does not define or implement:
 
 ## Implementation implications
 
+Post-ADR note: ADR-0019 and PR #53 supersede the direct public task-creation
+prototype for current server routing. The current public WorkItem planning path
+is `POST /v1/contracts/{id}/plans` -> `POST /v1/plans/{id}/proposals` ->
+`POST /v1/proposals/{id}/acceptance`. ADR-0018 remains the source for the
+non-executable `WorkItem(planned)` concept and for the historical simple v0
+planning direction; it is not current public URL vocabulary.
+
 A later implementation slice may add:
 
 - `WorkItem` DTO
