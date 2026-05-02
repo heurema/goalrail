@@ -1,15 +1,23 @@
 :root {
-  --bg: #0e0b08;
-  --bg-2: #100d0a;
-  --panel: #17120e;
-  --panel-2: #1d1712;
-  --border: #2d241c;
-  --border-soft: #211a15;
-  --text: #e5ddce;
-  --text-2: #a39888;
-  --text-3: #665c4f;
-  --violet: #9e86b0;
-  --violet-soft: #3a3044;
+  --bg: oklch(17.5% 0.008 55);
+  --bg-2: oklch(20.5% 0.008 55);
+  --panel: oklch(22.5% 0.007 55);
+  --panel-2: oklch(25.5% 0.007 55);
+  --panel-3: oklch(28.5% 0.007 55);
+  --line: oklch(30.5% 0.006 55);
+  --line-soft: oklch(25.5% 0.006 55);
+  --ink: oklch(95% 0.008 75);
+  --ink-2: oklch(84% 0.01 72);
+  --mute: oklch(68% 0.01 70);
+  --mute-2: oklch(52% 0.01 70);
+  --accent: oklch(72% 0.045 330);
+  --accent-soft: oklch(40% 0.03 330);
+  --pass: oklch(72% 0.065 115);
+  --pass-soft: oklch(38% 0.04 115);
+  --warn: oklch(76% 0.09 72);
+  --warn-soft: oklch(42% 0.055 72);
+  --danger: oklch(65% 0.095 28);
+  --danger-soft: oklch(40% 0.055 28);
   --font-ui: 'IBM Plex Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
@@ -28,124 +36,738 @@ body,
 body {
   min-width: 320px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
 
-button {
-  border: 0;
-  background: none;
+button,
+input,
+select {
   color: inherit;
   font: inherit;
 }
 
-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--violet) 76%, transparent);
+button {
+  border: 0;
+  background: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 72%, transparent);
   outline-offset: 3px;
 }
 
-.consoleShell {
-  display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--violet) 7%, transparent), transparent 34%),
-    var(--bg);
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 26px;
-  min-height: 100vh;
-  padding: 22px 14px;
-  border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-2) 96%, black);
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 34px;
-  padding: 0 8px;
+  gap: 10px;
 }
 
 .brandMark {
-  display: grid;
-  gap: 4px;
-  width: 20px;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.brandMark::before,
+.brandMark::after,
+.brandMark span {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.brandMark::before,
+.brandMark::after {
+  content: '';
+  background: var(--ink-2);
+}
+
+.brandMark::before {
+  top: 3px;
+}
+
+.brandMark::after {
+  bottom: 3px;
 }
 
 .brandMark span {
-  display: block;
-  width: 18px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: var(--text);
-}
-
-.brandMark span:nth-child(2) {
-  background: var(--violet);
+  top: 8px;
+  background: var(--accent);
 }
 
 .brandText {
-  color: var(--text);
+  color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.loginScreen {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 28px;
+  overflow: hidden;
+  background:
+    radial-gradient(900px 500px at 70% 20%, color-mix(in oklab, var(--accent) 7%, transparent), transparent 60%),
+    var(--bg);
+}
+
+.loginRails {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--ink) 4%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--ink) 3%, transparent) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(900px 700px at 30% 50%, black 30%, transparent 80%);
+  pointer-events: none;
+}
+
+.loginCard {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 36px 36px 32px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  box-shadow:
+    0 24px 60px color-mix(in oklab, black 50%, transparent),
+    inset 0 1px 0 color-mix(in oklab, white 4%, transparent);
+}
+
+.loginCard .brand {
+  margin-bottom: 28px;
+}
+
+.loginCard h1 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.loginSubtitle {
+  margin: 0 0 4px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.loginHelper {
+  margin: 0 0 24px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field span {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--ink);
+}
+
+.field input::placeholder {
+  color: var(--mute-2);
+}
+
+.fieldError input {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 14%, transparent);
+}
+
+.fieldMessage {
+  margin: -4px 0 14px;
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.primaryButton,
+.ghostButton,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 140ms, background 140ms, color 140ms, transform 80ms;
+}
+
+.primaryButton,
+.ghostButton {
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+}
+
+.primaryButton {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
+  background: color-mix(in oklab, var(--accent) 16%, var(--panel-2));
+  color: var(--ink);
+}
+
+.primaryButton:hover {
+  background: color-mix(in oklab, var(--accent) 24%, var(--panel-2));
+}
+
+.ghostButton {
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.ghostButton:hover {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--panel-2) 72%, transparent);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.loginFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.consoleShell {
+  position: relative;
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 18px 12px 14px;
+  border-right: 1px solid var(--line);
+  background: var(--bg-2);
+}
+
+.sidebar > .brand {
+  min-height: 38px;
+  padding: 0 6px 16px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .surfaceNav {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-top: 18px;
 }
 
-.surfaceButton {
+.surfaceButton,
+.settingsButton {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   min-height: 39px;
-  padding: 10px 11px;
+  padding: 9px 10px;
   border: 1px solid transparent;
-  border-radius: 5px;
-  color: var(--text-2);
+  border-radius: 4px;
+  color: var(--ink-2);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
+  font-size: 12.5px;
   line-height: 1.25;
   text-align: left;
+  transition: border-color 140ms, background 140ms, color 140ms;
+}
+
+.surfaceButton:hover,
+.settingsButton:hover {
+  border-color: var(--line-soft);
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+  color: var(--ink);
+}
+
+.surfaceButton.active,
+.settingsButton.active {
+  border-color: color-mix(in oklab, var(--accent) 50%, var(--line));
+  background: color-mix(in oklab, var(--accent) 10%, var(--panel));
+  color: var(--ink);
+}
+
+.sidebarSpacer {
+  flex: 1 1 auto;
+}
+
+.settingsDock {
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.settingsButton {
+  border-color: var(--line-soft);
+  color: var(--mute);
+}
+
+.utilityFoot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 0 4px;
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  transition: border-color 160ms, background-color 160ms, color 160ms;
-}
-
-.surfaceButton:hover {
-  border-color: var(--border-soft);
-  background: color-mix(in srgb, var(--panel) 72%, transparent);
-  color: var(--text);
-}
-
-.surfaceButton.active {
-  border-color: color-mix(in srgb, var(--violet) 48%, var(--border));
-  background: color-mix(in srgb, var(--violet-soft) 42%, var(--panel));
-  color: var(--text);
 }
 
 .emptySurface {
   min-width: 0;
   min-height: 100vh;
-  border-left: 1px solid color-mix(in srgb, white 2%, transparent);
+  border-left: 1px solid color-mix(in oklab, white 2%, transparent);
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--panel-2) 40%, transparent), transparent 34%),
+    linear-gradient(90deg, color-mix(in oklab, var(--panel-2) 40%, transparent), transparent 34%),
     var(--bg);
 }
 
-@media (max-width: 720px) {
+.settingsSurface {
+  min-width: 0;
+  min-height: 100vh;
+  padding: 28px 32px 36px;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.surfaceHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.kicker,
+.subnavLabel {
+  margin: 0;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.surfaceHeader h2,
+.drawerHeader h3 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.metaText {
+  margin: 0;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settingsLayout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.subnav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 40%, transparent);
+}
+
+.subnavLabel {
+  padding: 4px 10px 8px;
+}
+
+.subnavButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.subnavButton span:last-child {
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.subnavButton.active {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--accent) 12%, var(--panel));
+  color: var(--ink);
+}
+
+.settingsContent h3 {
+  margin: 0 0 6px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.settingsContent p {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.usersHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.usersToolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.searchBox,
+.filterBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--mute);
+}
+
+.searchBox {
+  flex: 1 1 auto;
+}
+
+.filterBox {
+  flex: 0 0 132px;
+}
+
+.filterBox span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.searchBox input {
+  flex: 1 1 auto;
+  height: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+}
+
+.searchBox input::placeholder {
+  color: var(--mute-2);
+}
+
+.filterBox select {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  outline: none;
+}
+
+.usersTable {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.userRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(160px, 1.4fr) minmax(110px, 0.9fr) minmax(110px, 0.9fr) 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.userRow:last-child {
+  border-bottom: 0;
+}
+
+.userHead {
+  background: color-mix(in oklab, var(--panel-2) 70%, transparent);
+}
+
+.userHead > * {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.userName {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.avatar {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--accent) 22%, var(--panel-2));
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.userEmail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.emptyUsers {
+  padding: 20px 16px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.iconButton {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--mute);
+}
+
+.iconButton:hover {
+  border-color: var(--line);
+  background: color-mix(in oklab, var(--panel-2) 60%, transparent);
+  color: var(--ink-2);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pill::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mute);
+  content: '';
+}
+
+.roleOwner {
+  border-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.roleOwner::before {
+  background: var(--accent);
+}
+
+.statusActive {
+  border-color: var(--pass-soft);
+  color: var(--pass);
+}
+
+.statusActive::before {
+  background: var(--pass);
+}
+
+.statusPending {
+  border-color: var(--warn-soft);
+  color: var(--warn);
+}
+
+.statusPending::before {
+  background: var(--warn);
+}
+
+.statusDisabled {
+  border-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+.statusDisabled::before {
+  background: var(--danger);
+}
+
+.settingsNote {
+  margin-top: 18px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.drawerScrim {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  background: color-mix(in oklab, black 50%, transparent);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+.drawer {
+  position: absolute;
+  z-index: 21;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(420px, 100%);
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--bg-2);
+  box-shadow: -20px 0 60px color-mix(in oklab, black 50%, transparent);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.drawerHeader h3 {
+  font-size: 15px;
+}
+
+.drawerBody {
+  flex: 1 1 auto;
+  padding: 20px 22px;
+  overflow: auto;
+}
+
+.drawerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line-soft);
+  background: color-mix(in oklab, var(--bg) 50%, var(--bg-2));
+}
+
+@media (max-width: 760px) {
   .consoleShell {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -153,27 +775,90 @@ button:focus-visible {
 
   .sidebar {
     min-height: auto;
-    gap: 16px;
-    padding: 16px 12px 12px;
+    padding: 14px 12px 12px;
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sidebar > .brand {
+    padding-bottom: 12px;
   }
 
   .surfaceNav {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
+    padding-top: 12px;
   }
 
   .surfaceButton {
+    justify-content: center;
     min-height: 44px;
     padding: 9px 8px;
-    font-size: 9px;
+    font-size: 9.5px;
     text-align: center;
   }
 
+  .settingsDock {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .settingsButton {
+    min-height: 44px;
+  }
+
   .emptySurface {
-    min-height: calc(100vh - 128px);
+    min-height: calc(100vh - 183px);
     border-left: 0;
+  }
+
+  .settingsSurface {
+    min-height: auto;
+    padding: 20px 16px 28px;
+  }
+
+  .surfaceHeader,
+  .usersHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settingsLayout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .usersToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filterBox {
+    flex-basis: auto;
+  }
+
+  .userRow {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 8px;
+  }
+
+  .userHead {
+    display: none;
+  }
+
+  .userActions {
+    justify-content: flex-start;
+  }
+
+  .loginCard {
+    padding: 28px 24px 24px;
+  }
+
+  .loginFoot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 }
