@@ -119,16 +119,51 @@ curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/approvals \
   }'
 ```
 
-Then plan one non-executable WorkItem from the approved Contract using the same
-stable public `contract_id`:
+Then create a server-owned planning request for the approved Contract using the
+same stable public `contract_id`:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/tasks
+curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/plans \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "requested_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
+  }'
 ```
 
-This route resolves `{contract_id}` through the public Contract aggregate,
-requires the Contract to be `approved`, and then uses the internal immutable
-ApprovedContract snapshot to create the simple v0 planned WorkItem.
+For now the future worker/planner output can be submitted manually through the
+API as a Proposal. The server validates and stores the Proposal but does not
+create canonical WorkItems yet:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/plans/{plan_id}/proposals \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "submitted_by": {"kind": "worker", "id": "planner-worker-1"},
+    "planner": {"kind": "goalrail_worker", "id": "planner-worker-1", "version": "0.1.0"},
+    "source_snapshot_refs": [{"kind": "approved_contract", "id": "{approved_contract_id}"}],
+    "rationale": "Why this task decomposition was proposed.",
+    "proposed_tasks": [{
+      "title": "Refactor CSV export filter builder",
+      "summary": "Extract duplicated filter construction logic.",
+      "scope": ["Update export filter construction code"],
+      "acceptance_refs": ["acceptance_criteria[0]"],
+      "proof_expectation_refs": ["proof_expectations[0]"],
+      "order_index": 0,
+      "source_refs": [{"kind": "approved_contract", "id": "{approved_contract_id}"}]
+    }]
+  }'
+```
+
+Explicitly accept the Proposal to materialize canonical durable
+`WorkItem(planned)` records:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/proposals/{proposal_id}/acceptance \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "accepted_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
+  }'
+```
 
 Read the planned task by its stable task ID:
 
@@ -152,8 +187,10 @@ Contract, create `WorkItem`, write `GateDecision`, or create `Proof`.
 Approval creates an immutable `ApprovedContract(approved)` snapshot from a
 ready draft, requires `approved_by`, appends `contract.approved`, and does not
 mutate `ContractDraft` or create execution, `GateDecision`, or `Proof`.
-WorkItem planning creates exactly one `WorkItem(planned)` per approved contract
-in v0, appends `work_item.created`, guards repeated planning with
-`409 already_planned`, persists the WorkItem when Postgres is configured, and
-does not assign, claim, create `Run`, checkout a repository, submit a receipt,
-write `GateDecision`, or create `Proof`.
+Planning now uses `Plan -> Proposal -> Acceptance`: one plan per approved
+Contract in v0, one proposal per plan in v0, and accepted proposals may create
+one or more `WorkItem(planned)` records. Acceptance appends `work_item.created`
+for each task and persists the plan/proposal/tasks when Postgres is configured.
+Workers/planners do not write WorkItems directly to the DB. This flow does not
+assign, claim, create `Run`, checkout a repository, submit a receipt, write
+`GateDecision`, or create `Proof`.

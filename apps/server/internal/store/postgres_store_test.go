@@ -478,12 +478,12 @@ func TestPostgresWorkItemStoreCreateBuildsDurableInsert(t *testing.T) {
 	if !strings.Contains(call.sql, "INSERT INTO work_items") {
 		t.Fatalf("SQL = %q, want work_items insert", call.sql)
 	}
-	if got, want := len(call.args), 17; got != want {
+	if got, want := len(call.args), 19; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
-	assertJSONBytesEqual(t, call.args[8], `["Persist contract seeds","Preserve draft arrays"]`)
-	assertJSONBytesEqual(t, call.args[9], `["acceptance_criteria[0]","acceptance_criteria[1]"]`)
-	assertJSONBytesEqual(t, call.args[10], `["proof_expectations[0]","proof_expectations[1]"]`)
+	assertJSONBytesEqual(t, call.args[10], `["Persist contract seeds","Preserve draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[11], `["acceptance_criteria[0]","acceptance_criteria[1]"]`)
+	assertJSONBytesEqual(t, call.args[12], `["proof_expectations[0]","proof_expectations[1]"]`)
 }
 
 func TestPostgresWorkItemStoreGetByApprovedContractIDScansPersistedWorkItem(t *testing.T) {
@@ -504,6 +504,9 @@ func TestPostgresWorkItemStoreGetByApprovedContractIDScansPersistedWorkItem(t *t
 	if item.Status != spine.WorkItemStatusPlanned {
 		t.Fatalf("Status = %q, want planned", item.Status)
 	}
+	if item.PlanID != "018f0000-0000-7000-8000-000000000801" || item.ProposalID != "018f0000-0000-7000-8000-000000000901" {
+		t.Fatalf("planning trace = %q/%q, want plan/proposal ids", item.PlanID, item.ProposalID)
+	}
 	if got, want := item.Scope, []string{"Persist contract seeds", "Preserve draft arrays"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Scope = %#v, want %#v", got, want)
 	}
@@ -518,6 +521,72 @@ func TestPostgresWorkItemStoreGetByApprovedContractIDScansPersistedWorkItem(t *t
 	}
 	if !strings.Contains(query.calls[0].sql, "WHERE approved_contract_id = $1") {
 		t.Fatalf("SQL = %q, want approved_contract_id lookup", query.calls[0].sql)
+	}
+}
+
+func TestPostgresWorkItemPlanStoreCreateGetAndMark(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validWorkItemPlanRowValues()}}
+	store := NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(exec, query)
+
+	if err := store.Create(ctx, validPostgresWorkItemPlan()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(exec.calls) != 1 || !strings.Contains(exec.calls[0].sql, "INSERT INTO work_item_plans") {
+		t.Fatalf("create SQL calls = %#v, want work_item_plans insert", exec.calls)
+	}
+	plan, ok, err := store.Get(ctx, "018f0000-0000-7000-8000-000000000801")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	if plan.State != spine.WorkItemPlanStateQueued || plan.RequestedBy.ID == "" {
+		t.Fatalf("plan state/requested_by = %q/%#v, want queued actor", plan.State, plan.RequestedBy)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM work_item_plans") {
+		t.Fatalf("get SQL = %q, want work_item_plans select", query.calls[0].sql)
+	}
+	if err := store.MarkProposalSubmitted(ctx, plan.ID, testStoreTime()); err != nil {
+		t.Fatalf("MarkProposalSubmitted() error = %v", err)
+	}
+	if !strings.Contains(exec.calls[1].sql, "UPDATE work_item_plans") {
+		t.Fatalf("mark SQL = %q, want work_item_plans update", exec.calls[1].sql)
+	}
+}
+
+func TestPostgresWorkItemPlanProposalStoreCreateGetAndMark(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validWorkItemPlanProposalRowValues()}}
+	store := NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(exec, query)
+
+	if err := store.Create(ctx, validPostgresWorkItemPlanProposal()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(exec.calls) != 1 || !strings.Contains(exec.calls[0].sql, "INSERT INTO work_item_plan_proposals") {
+		t.Fatalf("create SQL calls = %#v, want work_item_plan_proposals insert", exec.calls)
+	}
+	proposal, ok, err := store.Get(ctx, "018f0000-0000-7000-8000-000000000901")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Get() ok = false, want true")
+	}
+	if proposal.State != spine.WorkItemProposalStateSubmitted || len(proposal.ProposedTasks) != 1 {
+		t.Fatalf("proposal state/tasks = %q/%d, want submitted/1", proposal.State, len(proposal.ProposedTasks))
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM work_item_plan_proposals") {
+		t.Fatalf("get SQL = %q, want work_item_plan_proposals select", query.calls[0].sql)
+	}
+	if err := store.MarkAccepted(ctx, proposal.ID, spine.ActorRef{Kind: "user", ID: "acceptor"}, testStoreTime()); err != nil {
+		t.Fatalf("MarkAccepted() error = %v", err)
+	}
+	if !strings.Contains(exec.calls[1].sql, "UPDATE work_item_plan_proposals") {
+		t.Fatalf("mark SQL = %q, want work_item_plan_proposals update", exec.calls[1].sql)
 	}
 }
 
@@ -665,6 +734,8 @@ func validPostgresWorkItem() spine.WorkItem {
 		ProjectID:            approved.ProjectID,
 		ContractID:           approved.ContractID,
 		ApprovedContractID:   approved.ID,
+		PlanID:               "018f0000-0000-7000-8000-000000000801",
+		ProposalID:           "018f0000-0000-7000-8000-000000000901",
 		RepoBindingID:        approved.RepoBindingID,
 		Title:                approved.Title,
 		Summary:              approved.IntentSummary,
@@ -678,6 +749,93 @@ func validPostgresWorkItem() spine.WorkItem {
 			{Kind: "approved_contract", ID: string(approved.ID)},
 		},
 		CreatedAt: testStoreTime(),
+	}
+}
+
+func validPostgresWorkItemPlan() spine.WorkItemPlan {
+	approved := validPostgresApprovedContract()
+	return spine.WorkItemPlan{
+		ID:                 "018f0000-0000-7000-8000-000000000801",
+		OrganizationID:     approved.OrganizationID,
+		ProjectID:          approved.ProjectID,
+		ContractID:         approved.ContractID,
+		ApprovedContractID: approved.ID,
+		RepoBindingID:      approved.RepoBindingID,
+		State:              spine.WorkItemPlanStateQueued,
+		RequestedBy:        spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		CreatedAt:          testStoreTime(),
+		UpdatedAt:          testStoreTime(),
+	}
+}
+
+func validPostgresWorkItemPlanProposal() spine.WorkItemPlanProposal {
+	plan := validPostgresWorkItemPlan()
+	orderIndex := 0
+	return spine.WorkItemPlanProposal{
+		ID:                 "018f0000-0000-7000-8000-000000000901",
+		PlanID:             plan.ID,
+		OrganizationID:     plan.OrganizationID,
+		ProjectID:          plan.ProjectID,
+		ContractID:         plan.ContractID,
+		ApprovedContractID: plan.ApprovedContractID,
+		RepoBindingID:      plan.RepoBindingID,
+		State:              spine.WorkItemProposalStateSubmitted,
+		SubmittedBy:        spine.ActorRef{Kind: "worker", ID: "planner-worker-1"},
+		Planner:            map[string]any{"kind": "goalrail_worker", "id": "planner-worker-1"},
+		SourceSnapshotRefs: []spine.SourceRef{{Kind: "approved_contract", ID: string(plan.ApprovedContractID)}},
+		Rationale:          "Split durable work item planning.",
+		ProposedTasks: []spine.ProposedWorkItem{
+			{
+				Title:                "Persist task one",
+				Summary:              "Create the first durable task.",
+				Scope:                []string{"Persist task"},
+				AcceptanceRefs:       []string{"acceptance_criteria[0]"},
+				ProofExpectationRefs: []string{"proof_expectations[0]"},
+				OrderIndex:           &orderIndex,
+				SourceRefs:           []spine.SourceRef{{Kind: "approved_contract", ID: string(plan.ApprovedContractID)}},
+			},
+		},
+		CreatedAt: testStoreTime(),
+		UpdatedAt: testStoreTime(),
+	}
+}
+
+func validWorkItemPlanRowValues() []any {
+	plan := validPostgresWorkItemPlan()
+	return []any{
+		string(plan.ID),
+		string(plan.OrganizationID),
+		string(plan.ProjectID),
+		string(plan.ContractID),
+		string(plan.ApprovedContractID),
+		string(plan.RepoBindingID),
+		string(plan.State),
+		[]byte(`{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}`),
+		testStoreTime(),
+		testStoreTime(),
+	}
+}
+
+func validWorkItemPlanProposalRowValues() []any {
+	proposal := validPostgresWorkItemPlanProposal()
+	return []any{
+		string(proposal.ID),
+		string(proposal.PlanID),
+		string(proposal.OrganizationID),
+		string(proposal.ProjectID),
+		string(proposal.ContractID),
+		string(proposal.ApprovedContractID),
+		string(proposal.RepoBindingID),
+		string(proposal.State),
+		[]byte(`{"kind":"worker","id":"planner-worker-1"}`),
+		[]byte(`{"kind":"goalrail_worker","id":"planner-worker-1"}`),
+		[]byte(`[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000601"}]`),
+		proposal.Rationale,
+		[]byte(`[{"title":"Persist task one","summary":"Create the first durable task.","scope":["Persist task"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"order_index":0,"source_refs":[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000601"}]}]`),
+		[]byte(nil),
+		nil,
+		testStoreTime(),
+		testStoreTime(),
 	}
 }
 
@@ -777,6 +935,8 @@ func validWorkItemRowValues() []any {
 		"018f0000-0000-7000-8000-000000000003",
 		"018f0000-0000-7000-8000-000000000301",
 		"018f0000-0000-7000-8000-000000000601",
+		"018f0000-0000-7000-8000-000000000801",
+		"018f0000-0000-7000-8000-000000000901",
 		"018f0000-0000-7000-8000-000000000004",
 		"Persist seed",
 		"Make contract seed durable",

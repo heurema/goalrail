@@ -22,6 +22,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
+	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
 
 type goalStore interface {
@@ -37,7 +38,12 @@ type contractStore interface {
 	contractseed.ContractStore
 	contractdraft.ContractStore
 	approvedcontract.ContractStore
-	workitem.ContractReader
+	workitemplan.ContractReader
+}
+
+type workItemStore interface {
+	workitem.Store
+	workitemplan.WorkItemStore
 }
 
 func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
@@ -51,7 +57,10 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
 	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
 	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
-	var workItemStore workitem.Store = store.NewWorkItemStore()
+	var workItemStore workItemStore = store.NewWorkItemStore()
+	var workItemPlanStore workitemplan.PlanStore = store.NewWorkItemPlanStore()
+	var workItemPlanProposalStore workitemplan.ProposalStore = store.NewWorkItemPlanProposalStore()
+	var acceptanceTransaction workitemplan.AcceptanceTransaction
 	var events eventAppender = eventlog.NewEventLog()
 
 	var projectContext intake.ProjectContextResolver
@@ -69,6 +78,9 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
 		approvedContractStore = store.NewPostgresTransactionalApprovedContractStore(pool)
 		workItemStore = store.NewPostgresTransactionalWorkItemStore(pool)
+		workItemPlanStore = store.NewPostgresWorkItemPlanStore(pool)
+		workItemPlanProposalStore = store.NewPostgresWorkItemPlanProposalStore(pool)
+		acceptanceTransaction = store.NewPostgresTransactionalWorkItemPlanStore(pool)
 		events = store.NewPostgresEventLog(pool)
 		cleanup = pool.Close
 	}
@@ -88,8 +100,14 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	}
 	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService, contractOptions...)
 	contractHandler := httpserver.NewContractHandler(contractService)
-	workItemService := workitem.NewService(contracts, approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
+	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
+	workItemPlanOptions := []workitemplan.Option{}
+	if acceptanceTransaction != nil {
+		workItemPlanOptions = append(workItemPlanOptions, workitemplan.WithAcceptanceTransaction(acceptanceTransaction))
+	}
+	workItemPlanService := workitemplan.NewService(contracts, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}, workItemPlanOptions...)
+	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     http.HandlerFunc(healthHandler.Livez),
@@ -105,7 +123,11 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		ContractUpdate:            http.HandlerFunc(contractHandler.UpdateDraft),
 		ContractSubmit:            http.HandlerFunc(contractHandler.SubmitForApproval),
 		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
-		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
+		ContractPlans:             http.HandlerFunc(workItemPlanHandler.CreatePlan),
+		PlanGet:                   http.HandlerFunc(workItemPlanHandler.GetPlan),
+		PlanProposals:             http.HandlerFunc(workItemPlanHandler.SubmitProposal),
+		ProposalGet:               http.HandlerFunc(workItemPlanHandler.GetProposal),
+		ProposalAcceptance:        http.HandlerFunc(workItemPlanHandler.AcceptProposal),
 		TaskGet:                   http.HandlerFunc(workItemHandler.GetTask),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),

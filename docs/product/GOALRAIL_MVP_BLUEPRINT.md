@@ -184,8 +184,8 @@ Public Contract identity:
   internal lifecycle records for bridge, draft, and immutable approved snapshot
   semantics
 - public API uses `contracts/{id}` and contract subresources for
-  contract creation, draft updates, submission, approval, tasks, plans, and
-  proposals rather than exposing `contract-seeds`, `contract-drafts`, or
+  contract creation, draft updates, submission, approval, plans, proposals, and
+  accepted tasks rather than exposing `contract-seeds`, `contract-drafts`, or
   `approved-contracts` as product-facing resource names
 - the current server implements the smallest stable `contract_id` aggregate
   boundary and public `/v1/contracts` lifecycle façade routes; internal
@@ -203,26 +203,25 @@ Control-plane split:
 - canonical `WorkItem(planned)` records are created only through API-server
   acceptance of validated planning output
 
-Conceptual rich planning flow:
+Implemented control-plane planning flow:
 
 ```text
 ApprovedContract(approved)
-  -> WorkItemPlanningRequest(queued)
-  -> worker/controller leases or reconciles request
-  -> runner/planner obtains bounded repo/context/knowledge snapshot
-  -> WorkItemPlanProposal(submitted)
+  -> WorkItemPlan(queued)
+  -> planner/worker submits WorkItemPlanProposal(submitted) through API
   -> API server validates and stores proposal
   -> explicit acceptance creates WorkItem(planned) records
 ```
 
-This flow is a target architecture direction, not an implemented MVP surface.
-The current direct one-WorkItem planning endpoint remains simple prototype v0
-behavior and must not be expanded into rich repo-aware planning inside the API
-server.
-If this target flow later becomes public REST API, the public URL vocabulary
-should use product-facing resources such as `contracts`, `plans`, `proposals`,
-and `tasks`; internal domain names such as `ApprovedContract`, `WorkItem`, and
-`WorkItemPlanProposal` do not need to appear verbatim in public paths.
+The current server implements the public `plans` / `proposals` / `acceptance`
+control-plane API and removes the previous direct public task creation
+shortcut. This does not implement worker/controller leases, runner-backed repo
+inspection, checkout, execution, assignment, claiming, gate, or proof. Proposal
+submission remains an API stand-in for future worker output. Public URL
+vocabulary uses product-facing resources such as `contracts`, `plans`,
+`proposals`, and `tasks`; internal domain names such as `ApprovedContract`,
+`WorkItem`, and `WorkItemPlanProposal` do not need to appear verbatim in public
+paths.
 
 ### Layer 4 — Delivery Runtime
 Produces:

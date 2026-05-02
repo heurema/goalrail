@@ -353,6 +353,94 @@ func TestPostgresTransactionalWorkItemStoreRollsBackWhenEventAppendFails(t *test
 	}
 }
 
+func TestPostgresTransactionalWorkItemPlanStoreRollsBackAcceptanceWhenEventAppendFails(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{failExecCall: 4}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalWorkItemPlanStore(
+		NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	err := store.AcceptProposalWithWorkItemsAndEvents(
+		ctx,
+		"018f0000-0000-7000-8000-000000000801",
+		"018f0000-0000-7000-8000-000000000901",
+		spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		testStoreTime(),
+		[]spine.WorkItem{validPostgresWorkItem()},
+		[]spine.Event{validPostgresEvent("work_item.created", "WorkItem", "018f0000-0000-7000-8000-000000000701")},
+	)
+	if err == nil {
+		t.Fatal("AcceptProposalWithWorkItemsAndEvents() error = nil, want failure")
+	}
+	if tx.commitCalls != 0 {
+		t.Fatalf("Commit calls = %d, want 0", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 1 {
+		t.Fatalf("Rollback calls = %d, want 1", tx.rollbackCalls)
+	}
+	if got := len(db.fallbackExecCalls); got != 0 {
+		t.Fatalf("fallback Exec calls = %d, want 0", got)
+	}
+	if got, want := len(tx.execCalls), 4; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+	for i, want := range []string{
+		"INSERT INTO work_items",
+		"UPDATE work_item_plan_proposals",
+		"UPDATE work_item_plans",
+		"INSERT INTO events",
+	} {
+		if !strings.Contains(tx.execCalls[i].sql, want) {
+			t.Fatalf("exec %d SQL = %q, want %s", i, tx.execCalls[i].sql, want)
+		}
+	}
+}
+
+func TestPostgresTransactionalWorkItemPlanStoreCommitsAcceptanceWithMultipleTasksAndEvents(t *testing.T) {
+	ctx := context.Background()
+	tx := &recordingPostgresTx{}
+	db := &recordingPostgresDB{}
+	store := newPostgresTransactionalWorkItemPlanStore(
+		NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(db, db),
+		NewPostgresWorkItemStoreWithExecutorAndQuerier(db, db),
+		NewPostgresEventLogWithExecutorAndQuerier(db, db),
+		&recordingPostgresTransactor{tx: tx},
+	)
+
+	first := validPostgresWorkItem()
+	second := validPostgresWorkItem()
+	second.ID = "018f0000-0000-7000-8000-000000000702"
+	if err := store.AcceptProposalWithWorkItemsAndEvents(
+		ctx,
+		"018f0000-0000-7000-8000-000000000801",
+		"018f0000-0000-7000-8000-000000000901",
+		spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		testStoreTime(),
+		[]spine.WorkItem{first, second},
+		[]spine.Event{
+			validPostgresEvent("work_item.created", "WorkItem", "018f0000-0000-7000-8000-000000000701"),
+			validPostgresEvent("work_item.created", "WorkItem", "018f0000-0000-7000-8000-000000000702"),
+		},
+	); err != nil {
+		t.Fatalf("AcceptProposalWithWorkItemsAndEvents() error = %v", err)
+	}
+	if tx.commitCalls != 1 {
+		t.Fatalf("Commit calls = %d, want 1", tx.commitCalls)
+	}
+	if tx.rollbackCalls != 0 {
+		t.Fatalf("Rollback calls = %d, want 0", tx.rollbackCalls)
+	}
+	if got, want := len(tx.execCalls), 6; got != want {
+		t.Fatalf("Exec calls = %d, want %d", got, want)
+	}
+}
+
 func TestPostgresTransactionalGoalStoreCommitsPromotionWithEvents(t *testing.T) {
 	ctx := context.Background()
 	tx := &recordingPostgresTx{}

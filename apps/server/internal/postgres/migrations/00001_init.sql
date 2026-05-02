@@ -274,12 +274,81 @@ CREATE INDEX approved_contracts_goal_id_idx
 CREATE INDEX approved_contracts_contract_id_idx
     ON approved_contracts(contract_id);
 
+CREATE TABLE work_item_plans (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    state TEXT NOT NULL,
+    requested_by JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT work_item_plans_contract_id_unique UNIQUE (contract_id),
+    CONSTRAINT work_item_plans_state_check CHECK (state IN ('queued', 'proposal_submitted', 'accepted'))
+);
+
+CREATE INDEX work_item_plans_organization_created_at_idx
+    ON work_item_plans(organization_id, created_at);
+
+CREATE INDEX work_item_plans_project_created_at_idx
+    ON work_item_plans(project_id, created_at);
+
+CREATE INDEX work_item_plans_contract_id_idx
+    ON work_item_plans(contract_id);
+
+CREATE INDEX work_item_plans_approved_contract_id_idx
+    ON work_item_plans(approved_contract_id);
+
+CREATE INDEX work_item_plans_repo_binding_id_idx
+    ON work_item_plans(repo_binding_id);
+
+CREATE TABLE work_item_plan_proposals (
+    id UUID PRIMARY KEY,
+    plan_id UUID NOT NULL REFERENCES work_item_plans(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    state TEXT NOT NULL,
+    submitted_by JSONB NOT NULL,
+    planner JSONB NOT NULL DEFAULT '{}'::JSONB,
+    source_snapshot_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
+    rationale TEXT NOT NULL DEFAULT '',
+    proposed_tasks JSONB NOT NULL,
+    accepted_by JSONB NULL,
+    accepted_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT work_item_plan_proposals_plan_id_unique UNIQUE (plan_id),
+    CONSTRAINT work_item_plan_proposals_state_check CHECK (state IN ('submitted', 'accepted'))
+);
+
+CREATE INDEX work_item_plan_proposals_plan_id_idx
+    ON work_item_plan_proposals(plan_id);
+
+CREATE INDEX work_item_plan_proposals_contract_id_idx
+    ON work_item_plan_proposals(contract_id);
+
+CREATE INDEX work_item_plan_proposals_approved_contract_id_idx
+    ON work_item_plan_proposals(approved_contract_id);
+
+CREATE INDEX work_item_plan_proposals_organization_created_at_idx
+    ON work_item_plan_proposals(organization_id, created_at);
+
+CREATE INDEX work_item_plan_proposals_project_created_at_idx
+    ON work_item_plan_proposals(project_id, created_at);
+
 CREATE TABLE work_items (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
     approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE,
+    plan_id UUID NOT NULL REFERENCES work_item_plans(id) ON DELETE CASCADE,
+    proposal_id UUID NOT NULL REFERENCES work_item_plan_proposals(id) ON DELETE CASCADE,
     repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
     title TEXT NOT NULL,
     summary TEXT NOT NULL,
@@ -292,7 +361,6 @@ CREATE TABLE work_items (
     source_refs JSONB NOT NULL DEFAULT '[]'::JSONB,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    CONSTRAINT work_items_approved_contract_id_unique UNIQUE (approved_contract_id),
     CONSTRAINT work_items_status_check CHECK (status IN ('planned'))
 );
 
@@ -307,6 +375,12 @@ CREATE INDEX work_items_contract_id_idx
 
 CREATE INDEX work_items_approved_contract_id_idx
     ON work_items(approved_contract_id);
+
+CREATE INDEX work_items_plan_id_idx
+    ON work_items(plan_id);
+
+CREATE INDEX work_items_proposal_id_idx
+    ON work_items(proposal_id);
 
 CREATE INDEX work_items_repo_binding_id_idx
     ON work_items(repo_binding_id);
@@ -346,11 +420,25 @@ DROP INDEX IF EXISTS events_project_sequence_idx;
 DROP INDEX IF EXISTS events_organization_sequence_idx;
 DROP TABLE IF EXISTS events;
 DROP INDEX IF EXISTS work_items_repo_binding_id_idx;
+DROP INDEX IF EXISTS work_items_proposal_id_idx;
+DROP INDEX IF EXISTS work_items_plan_id_idx;
 DROP INDEX IF EXISTS work_items_approved_contract_id_idx;
 DROP INDEX IF EXISTS work_items_contract_id_idx;
 DROP INDEX IF EXISTS work_items_project_created_at_idx;
 DROP INDEX IF EXISTS work_items_organization_created_at_idx;
 DROP TABLE IF EXISTS work_items;
+DROP INDEX IF EXISTS work_item_plan_proposals_project_created_at_idx;
+DROP INDEX IF EXISTS work_item_plan_proposals_organization_created_at_idx;
+DROP INDEX IF EXISTS work_item_plan_proposals_approved_contract_id_idx;
+DROP INDEX IF EXISTS work_item_plan_proposals_contract_id_idx;
+DROP INDEX IF EXISTS work_item_plan_proposals_plan_id_idx;
+DROP TABLE IF EXISTS work_item_plan_proposals;
+DROP INDEX IF EXISTS work_item_plans_repo_binding_id_idx;
+DROP INDEX IF EXISTS work_item_plans_approved_contract_id_idx;
+DROP INDEX IF EXISTS work_item_plans_contract_id_idx;
+DROP INDEX IF EXISTS work_item_plans_project_created_at_idx;
+DROP INDEX IF EXISTS work_item_plans_organization_created_at_idx;
+DROP TABLE IF EXISTS work_item_plans;
 DROP INDEX IF EXISTS approved_contracts_contract_id_idx;
 DROP INDEX IF EXISTS approved_contracts_goal_id_idx;
 DROP INDEX IF EXISTS approved_contracts_contract_seed_id_idx;

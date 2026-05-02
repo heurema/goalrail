@@ -19,7 +19,11 @@ type RouteHandlers struct {
 	ContractUpdate            http.Handler
 	ContractSubmit            http.Handler
 	ContractApprove           http.Handler
-	ContractTasks             http.Handler
+	ContractPlans             http.Handler
+	PlanGet                   http.Handler
+	PlanProposals             http.Handler
+	ProposalGet               http.Handler
+	ProposalAcceptance        http.Handler
 	TaskGet                   http.Handler
 	ClarificationAnswers      http.Handler
 	ClarificationAnswerApply  http.Handler
@@ -42,7 +46,11 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("PATCH /v1/contracts/{id}", mustHandler("contract update", handlers.ContractUpdate))
 	mux.Handle("POST /v1/contracts/{id}/submissions", mustHandler("contract submit", handlers.ContractSubmit))
 	mux.Handle("POST /v1/contracts/{id}/approvals", mustHandler("contract approve", handlers.ContractApprove))
-	mux.Handle("POST /v1/contracts/{id}/tasks", mustHandler("contract tasks", handlers.ContractTasks))
+	mux.Handle("POST /v1/contracts/{id}/plans", mustHandler("contract plans", handlers.ContractPlans))
+	mux.Handle("GET /v1/plans/{id}", mustHandler("plan get", handlers.PlanGet))
+	mux.Handle("POST /v1/plans/{id}/proposals", mustHandler("plan proposals", handlers.PlanProposals))
+	mux.Handle("GET /v1/proposals/{id}", mustHandler("proposal get", handlers.ProposalGet))
+	mux.Handle("POST /v1/proposals/{id}/acceptance", mustHandler("proposal acceptance", handlers.ProposalAcceptance))
 	mux.Handle("GET /v1/tasks/{id}", mustHandler("task get", handlers.TaskGet))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))

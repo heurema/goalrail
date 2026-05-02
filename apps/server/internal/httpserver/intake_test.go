@@ -22,6 +22,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
+	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
 
 const validIntakeJSON = `{
@@ -51,6 +52,8 @@ type testServerDeps struct {
 	contractDrafts    *store.ContractDraftStore
 	approvedContracts *store.ApprovedContractStore
 	workItems         *store.WorkItemStore
+	workItemPlans     *store.WorkItemPlanStore
+	workItemProposals *store.WorkItemPlanProposalStore
 	events            *eventlog.EventLog
 	idFactory         *sequenceIDs
 }
@@ -1251,6 +1254,8 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	contractDraftStore := store.NewContractDraftStore()
 	approvedContractStore := store.NewApprovedContractStore()
 	workItemStore := store.NewWorkItemStore()
+	workItemPlanStore := store.NewWorkItemPlanStore()
+	workItemPlanProposalStore := store.NewWorkItemPlanProposalStore()
 	events := eventlog.NewEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
@@ -1264,11 +1269,13 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
 	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService)
 	contractHandler := httpserver.NewContractHandler(contractService)
-	workItemService := workitem.NewService(contractStore, approvedContractStore, workItemStore, events, fixedClock{now: testTime()}, ids)
+	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
+	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, fixedClock{now: testTime()}, ids)
+	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractHandler, workItemHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractHandler, workItemHandler, workItemPlanHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,
@@ -1278,6 +1285,8 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 		contractDrafts:    contractDraftStore,
 		approvedContracts: approvedContractStore,
 		workItems:         workItemStore,
+		workItemPlans:     workItemPlanStore,
+		workItemProposals: workItemPlanProposalStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -1323,6 +1332,8 @@ type sequenceIDs struct {
 	contractDraft    int
 	approvedContract int
 	workItem         int
+	workItemPlan     int
+	workItemProposal int
 	event            int
 }
 
@@ -1379,6 +1390,16 @@ func (g *sequenceIDs) NewApprovedContractID() (spine.ApprovedContractID, error) 
 func (g *sequenceIDs) NewWorkItemID() (spine.WorkItemID, error) {
 	g.workItem++
 	return spine.WorkItemID(fmt.Sprintf("work-item-%d", g.workItem)), nil
+}
+
+func (g *sequenceIDs) NewWorkItemPlanID() (spine.WorkItemPlanID, error) {
+	g.workItemPlan++
+	return spine.WorkItemPlanID(fmt.Sprintf("plan-%d", g.workItemPlan)), nil
+}
+
+func (g *sequenceIDs) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {
+	g.workItemProposal++
+	return spine.WorkItemPlanProposalID(fmt.Sprintf("proposal-%d", g.workItemProposal)), nil
 }
 
 func testTime() time.Time {

@@ -101,7 +101,11 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ContractUpdate:            probeRoute("contract_update"),
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
-		ContractTasks:             probeRoute("contract_tasks"),
+		ContractPlans:             probeRoute("contract_plans"),
+		PlanGet:                   probeRoute("plan_get"),
+		PlanProposals:             probeRoute("plan_proposals"),
+		ProposalGet:               probeRoute("proposal_get"),
+		ProposalAcceptance:        probeRoute("proposal_acceptance"),
 		TaskGet:                   probeRoute("task_get"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
@@ -125,7 +129,11 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "contract_update", method: http.MethodPatch, path: "/v1/contracts/contract-1", wantRoute: "contract_update"},
 		{name: "contract_submit", method: http.MethodPost, path: "/v1/contracts/contract-1/submissions", wantRoute: "contract_submit"},
 		{name: "contract_approve", method: http.MethodPost, path: "/v1/contracts/contract-1/approvals", wantRoute: "contract_approve"},
-		{name: "work_item_plan", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks", wantRoute: "contract_tasks"},
+		{name: "contract_plans", method: http.MethodPost, path: "/v1/contracts/contract-1/plans", wantRoute: "contract_plans"},
+		{name: "plan_get", method: http.MethodGet, path: "/v1/plans/plan-1", wantRoute: "plan_get"},
+		{name: "plan_proposals", method: http.MethodPost, path: "/v1/plans/plan-1/proposals", wantRoute: "plan_proposals"},
+		{name: "proposal_get", method: http.MethodGet, path: "/v1/proposals/proposal-1", wantRoute: "proposal_get"},
+		{name: "proposal_acceptance", method: http.MethodPost, path: "/v1/proposals/proposal-1/acceptance", wantRoute: "proposal_acceptance"},
 		{name: "task_get", method: http.MethodGet, path: "/v1/tasks/task-1", wantRoute: "task_get"},
 	}
 
@@ -162,7 +170,11 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ContractUpdate:            probeRoute("contract_update"),
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
-		ContractTasks:             probeRoute("contract_tasks"),
+		ContractPlans:             probeRoute("contract_plans"),
+		PlanGet:                   probeRoute("plan_get"),
+		PlanProposals:             probeRoute("plan_proposals"),
+		ProposalGet:               probeRoute("proposal_get"),
+		ProposalAcceptance:        probeRoute("proposal_acceptance"),
 		TaskGet:                   probeRoute("task_get"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
@@ -194,6 +206,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		{name: "transitional_contract_draft_update", method: http.MethodPatch, path: "/v1/contract-drafts/draft-1"},
 		{name: "transitional_contract_draft_submit", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/submissions"},
 		{name: "transitional_contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approvals"},
+		{name: "removed_direct_task_creation", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks"},
+		{name: "plan_list", method: http.MethodGet, path: "/v1/plans"},
+		{name: "proposal_list", method: http.MethodGet, path: "/v1/proposals"},
 		{name: "task_list", method: http.MethodGet, path: "/v1/tasks"},
 	}
 
@@ -257,6 +272,7 @@ func newRouter(
 	clarificationHandler *httpserver.ClarificationHandler,
 	contractHandler *httpserver.ContractHandler,
 	workItemHandler *httpserver.WorkItemHandler,
+	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     livez,
@@ -272,7 +288,11 @@ func newRouter(
 		ContractUpdate:            http.HandlerFunc(contractHandler.UpdateDraft),
 		ContractSubmit:            http.HandlerFunc(contractHandler.SubmitForApproval),
 		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
-		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
+		ContractPlans:             http.HandlerFunc(workItemPlanHandler.CreatePlan),
+		PlanGet:                   http.HandlerFunc(workItemPlanHandler.GetPlan),
+		PlanProposals:             http.HandlerFunc(workItemPlanHandler.SubmitProposal),
+		ProposalGet:               http.HandlerFunc(workItemPlanHandler.GetProposal),
+		ProposalAcceptance:        http.HandlerFunc(workItemPlanHandler.AcceptProposal),
 		TaskGet:                   http.HandlerFunc(workItemHandler.GetTask),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
@@ -285,6 +305,7 @@ func baseHandlers(
 	clarificationHandler *httpserver.ClarificationHandler,
 	contractHandler *httpserver.ContractHandler,
 	workItemHandler *httpserver.WorkItemHandler,
+	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
 	return newRouter(
@@ -296,6 +317,7 @@ func baseHandlers(
 		clarificationHandler,
 		contractHandler,
 		workItemHandler,
+		workItemPlanHandler,
 	)
 }
 

@@ -270,21 +270,31 @@ func TestPostContractApprovalsCreatesApprovedSnapshot(t *testing.T) {
 	assertNoForbiddenApprovalSideEffects(t, server.events.Events())
 }
 
-func TestContractLifecycleThroughTaskPlanningUsesPublicContractID(t *testing.T) {
+func TestContractLifecycleThroughPlanningFlowUsesPublicContractID(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/tasks", "")
-	if response.code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	plan := createPlan(t, server, approved.ContractID)
+	if plan.ContractID != approved.ContractID {
+		t.Fatalf("plan contract_id = %q, want %q", plan.ContractID, approved.ContractID)
 	}
-	var item spine.WorkItem
-	decodeJSON(t, response.body, &item)
-	if item.ContractID != approved.ContractID {
-		t.Fatalf("work item contract_id = %q, want %q", item.ContractID, approved.ContractID)
+	if plan.ApprovedContractID != approved.ID {
+		t.Fatalf("plan approved_contract_id = %q, want %q", plan.ApprovedContractID, approved.ID)
 	}
-	if item.ApprovedContractID != approved.ID {
-		t.Fatalf("work item approved_contract_id = %q, want %q", item.ApprovedContractID, approved.ID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	if len(accepted.CreatedTaskIDs) == 0 {
+		t.Fatal("acceptance created no task ids")
+	}
+	item, ok, err := server.workItems.Get(context.Background(), accepted.CreatedTaskIDs[0])
+	if err != nil {
+		t.Fatalf("workItems.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("accepted task not stored")
+	}
+	if item.ContractID != approved.ContractID || item.ApprovedContractID != approved.ID {
+		t.Fatalf("work item contract trace = %q/%q, want %q/%q", item.ContractID, item.ApprovedContractID, approved.ContractID, approved.ID)
 	}
 }
 
