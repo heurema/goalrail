@@ -151,6 +151,112 @@ func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
+	goals := store.NewGoalStore()
+	clarifications := store.NewClarificationStore()
+	answers := store.NewClarificationAnswerStore()
+	events := eventlog.NewEventLog()
+	tx := &requestCreationTransaction{
+		create: func(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
+			if err := clarifications.Create(ctx, request); err != nil {
+				return err
+			}
+			return events.Append(ctx, event)
+		},
+	}
+	service := clarification.NewService(
+		goals,
+		clarifications,
+		answers,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		clarification.WithRequestCreationTransaction(tx),
+	)
+	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
+	if err := goals.Create(context.Background(), createdGoal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	created, err := service.CreateRequest(context.Background(), createdGoal.ID)
+	if err != nil {
+		t.Fatalf("CreateRequest() error = %v", err)
+	}
+
+	if tx.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", tx.calls)
+	}
+	stored, ok, err := clarifications.GetOpenByGoalID(context.Background(), createdGoal.ID)
+	if err != nil {
+		t.Fatalf("GetOpenByGoalID() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored request not found")
+	}
+	if stored.ID != created.ID {
+		t.Fatalf("stored request id = %q, want %q", stored.ID, created.ID)
+	}
+	if got := len(events.Events()); got != 1 {
+		t.Fatalf("events length = %d, want 1", got)
+	}
+}
+
+func TestServiceCreateRequestTransactionFailureDoesNotUseFallbackStore(t *testing.T) {
+	goals := store.NewGoalStore()
+	clarifications := store.NewClarificationStore()
+	answers := store.NewClarificationAnswerStore()
+	events := eventlog.NewEventLog()
+	tx := &requestCreationTransaction{err: errors.New("forced transaction failure")}
+	service := clarification.NewService(
+		goals,
+		clarifications,
+		answers,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		clarification.WithRequestCreationTransaction(tx),
+	)
+	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
+	if err := goals.Create(context.Background(), createdGoal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	_, err := service.CreateRequest(context.Background(), createdGoal.ID)
+	if err == nil {
+		t.Fatal("CreateRequest() error = nil, want transaction failure")
+	}
+	if tx.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", tx.calls)
+	}
+	if _, ok, err := clarifications.GetOpenByGoalID(context.Background(), createdGoal.ID); err != nil {
+		t.Fatalf("GetOpenByGoalID() error = %v", err)
+	} else if ok {
+		t.Fatal("stored request found after transaction failure")
+	}
+	if got := len(events.Events()); got != 0 {
+		t.Fatalf("events length = %d, want 0", got)
+	}
+}
+
+func TestServiceCreateRequestDoesNotAppendReadinessOrContractEvents(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
+	if err := goals.Create(context.Background(), createdGoal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	if _, err := service.CreateRequest(context.Background(), createdGoal.ID); err != nil {
+		t.Fatalf("CreateRequest() error = %v", err)
+	}
+
+	for _, event := range events.Events() {
+		switch event.Type {
+		case "goal.readiness_recheck_requested", "contract.seed_created", "contract.created", "plan.created", "proposal.created", "task.created", "work_item.created", "run.created", "gate.decision_written", "proof.created":
+			t.Fatalf("unexpected event type %q", event.Type)
+		}
+	}
+}
+
 func TestServiceCreateRequestRejectsDuplicateOpenRequest(t *testing.T) {
 	service, goals, _, _, events := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
@@ -668,6 +774,23 @@ type answerRecordingTransaction struct {
 
 func (tx answerRecordingTransaction) RecordAnswerWithEvents(context.Context, spine.ClarificationAnswer, []spine.Event) (bool, error) {
 	return tx.ok, tx.err
+}
+
+type requestCreationTransaction struct {
+	calls  int
+	err    error
+	create func(context.Context, spine.ClarificationRequest, spine.Event) error
+}
+
+func (tx *requestCreationTransaction) CreateRequestWithEvent(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
+	tx.calls++
+	if tx.err != nil {
+		return tx.err
+	}
+	if tx.create != nil {
+		return tx.create(ctx, request, event)
+	}
+	return nil
 }
 
 func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {

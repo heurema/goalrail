@@ -79,6 +79,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		clarificationTransactions := store.NewPostgresTransactionalClarificationStore(pool)
 		clarificationOptions = append(
 			clarificationOptions,
+			clarification.WithRequestCreationTransaction(clarificationTransactions),
 			clarification.WithAnswerRecordingTransaction(clarificationTransactions),
 			clarification.WithAnswerApplicationTransaction(clarificationTransactions),
 		)
