@@ -1669,3 +1669,27 @@ Rationale:
 - Give the operator a local lifecycle for JSONL lead data.
 - Avoid turning the landing endpoint into a tracking or lead-management
   platform.
+
+## D-0066 — Repo-aware WorkItem planning belongs behind controller / runner boundary
+Date: 2026-05-02
+Status: accepted
+
+Decision:
+- The API server owns canonical state, validation, persistence, events, and
+  accepted `WorkItem(planned)` records.
+- The current direct one-WorkItem planning endpoint remains prototype/simple v0
+  behavior only.
+- Rich repo-aware WorkItem planning must use a planning request / proposal /
+  acceptance boundary coordinated by worker/controller/runner components.
+- Workers and runners must not write canonical WorkItems directly to the
+  database or own canonical truth.
+- This does not add runner code, checkout, execution, `Run`, receipt,
+  `GateDecision`, `Proof`, queue, outbox, runtime registry, or endpoint
+  implementation.
+
+Rationale:
+- Keeps the API server as a Kubernetes-style control-plane state machine.
+- Preserves ADR-0008's rule that repo checkout and code inspection stay behind
+  runner boundaries.
+- Prevents simple v0 WorkItem planning from growing into hidden repo-aware
+  computation inside the API server.
