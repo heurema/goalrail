@@ -125,6 +125,10 @@ However, ADR-0018's one-WorkItem direct planning path must not be expanded into
 repo-aware decomposition inside the API server. Rich planning belongs behind the
 planning request / proposal / acceptance boundary described here.
 
+ADR-0021 further qualifies this boundary by selecting a typed
+`WorkItemPlan` pull lease model for future worker polling. It rejects a generic
+queue table for planning work and keeps lease selection API-server-owned.
+
 ## Relationship to ADR-0008
 
 ADR-0008 remains the repository checkout boundary.

@@ -20,8 +20,8 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-02
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
+Last updated: 2026-05-03
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
 Current risk note: the stabilization tranche is complete repo-side through
@@ -32,8 +32,8 @@ sidecar rather than the previous PHP-FPM wiring. This status does not claim
 repo-side deployment automation, committed server config, committed DNS config,
 required human review, signed-commit enforcement, real-device mobile QA, or
 native-speaker copy proofread. It also does not approve analytics, CRM,
-database, queue, LLM/API, repo integration, runtime execution, gate, proof, or
-broad backend platform behavior.
+database, generic queue, lease implementation, LLM/API, repo integration,
+runtime execution, gate, proof, or broad backend platform behavior.
 
 ## Current state
 
@@ -51,7 +51,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty kernel/CLI/server/domain boundary ADRs
+- twenty-one kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -137,6 +137,12 @@ The project currently has:
   lifecycle records; the server now implements the smallest stable
   `contract_id` aggregate boundary and the smallest public `/v1/contracts`
   lifecycle façade routes
+- ADR-0021 documents the typed WorkItemPlan pull lease boundary: the accepted
+  future direction is `WorkItemPlan(state=queued)` as the canonical typed
+  planning queue item, `WorkItemPlanLease` as typed reservation state, API
+  server-owned pull leasing through future `POST /v1/plans/leases`, FIFO v0
+  scheduling with lazy expiry, and no generic `queue_jobs` / `jobs` /
+  `work_queue` table for this boundary
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -200,6 +206,10 @@ The project currently has:
 - `POST /v1/contracts/{id}/submissions` transitions the current internal draft to `ready_for_approval`, moves Contract state to `ready_for_approval`, requires `marked_by` as audit identity only, runs completeness checks, and does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
 - `POST /v1/contracts/{id}/approvals` creates an immutable internal `ApprovedContract(approved)` snapshot from the current ready draft, moves Contract state to `approved` with `approved_snapshot_id`, requires `approved_by`, guards repeated approval with `409 already_approved`, and does not mutate `ContractDraft`, start execution, write `GateDecision`, or create `Proof`
 - WorkItem planning now uses `Plan -> Proposal -> Acceptance`: one `WorkItemPlan` per approved public Contract in v0, one `WorkItemPlanProposal` per plan in v0, explicit acceptance materializes one or more durable canonical `WorkItem(planned)` records with `plan_id` and `proposal_id`, persists the records in Postgres when DB is configured, exposes `GET /v1/tasks/{id}` for single task reads, appends `work_item.created` for each accepted task transactionally with Postgres acceptance, and does not assign, claim, create `Run`, start execution, checkout a repository, submit a receipt, write `GateDecision`, or create `Proof`; workers/planners submit proposals through the API and do not write WorkItems directly to the DB
+- the typed WorkItemPlan pull lease queue direction is documented in ADR-0021,
+  but no lease protocol exists yet; current proposal submission may still be
+  manual, future `POST /v1/plans/leases` is not registered, and no generic queue
+  implementation exists
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
@@ -209,6 +219,9 @@ The project currently has:
 - the `ContractDraft ready_for_approval` boundary is documented in ADR-0016 and implemented as an explicit `draft -> ready_for_approval` state transition with completeness checks and `marked_by` audit identity; it is not approval, approved Contract, `WorkItem`, execution, `GateDecision`, or `Proof`
 - the Contract approval boundary is documented in ADR-0017 and implemented as `ContractDraft(ready_for_approval) -> ApprovedContract`; approval does not start execution, write `GateDecision`, or create `Proof`
 - the WorkItem planning boundary is documented in ADR-0018 and ADR-0019 and implemented as a public `Plan -> Proposal -> Acceptance -> WorkItem(planned)` control-plane flow with durable Postgres storage when configured and single task read by ID; the worker/controller/runner execution-side implementation remains deferred; WorkItem planning is not assignment, claiming, execution, `Run`, runner checkout, receipt, `GateDecision`, or `Proof`
+- the WorkItemPlan pull lease boundary is documented in ADR-0021 as accepted
+  design only; no lease routes, lease store, plan `leased` state, token handling,
+  or proposal lease-proof enforcement is implemented yet
 - the public Contract identity boundary is documented in ADR-0020 and the
   server now exposes the smallest public `/v1/contracts` lifecycle façade while
   keeping `ContractSeed`, `ContractDraft`, and `ApprovedContract` as internal
@@ -231,8 +244,8 @@ The project currently has:
 - no automatic readiness re-check after answer application
 - no WorkItem assignment/claiming, `Run`, receipt, GateDecision, or Proof yet
 - no planning worker/controller, runner-backed planning implementation, lease
-  protocol, assignment/claiming, checkout, execution, queue, outbox, broker, or
-  runtime registry yet
+  protocol, assignment/claiming, checkout, execution, generic queue, outbox,
+  broker, or runtime registry yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Organization / Project / RepoBinding Postgres foundation yet
