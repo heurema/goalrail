@@ -9,6 +9,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
+	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/eventlog"
@@ -78,11 +79,10 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	clarificationService := clarification.NewService(goals, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{})
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 	contractSeedService := contractseed.NewService(goals, contracts, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
-	contractSeedHandler := httpserver.NewContractSeedHandler(contractSeedService)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contracts, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
-	contractDraftHandler := httpserver.NewContractDraftHandler(contractDraftService)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contracts, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
-	approvedContractHandler := httpserver.NewApprovedContractHandler(approvedContractService)
+	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService)
+	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(contracts, approvedContractStore, workItemStore, events, workitem.SystemClock{}, workitem.UUIDGenerator{})
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 
@@ -95,11 +95,11 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
 		GoalReadiness:             http.HandlerFunc(goalHandler.CheckReadiness),
 		GoalClarificationRequests: http.HandlerFunc(clarificationHandler.CreateRequest),
-		GoalContractSeed:          http.HandlerFunc(contractSeedHandler.Create),
-		ContractSeedDraft:         http.HandlerFunc(contractDraftHandler.Create),
-		ContractDraftUpdates:      http.HandlerFunc(contractDraftHandler.Update),
-		ContractDraftReady:        http.HandlerFunc(contractDraftHandler.MarkReadyForApproval),
-		ContractDraftApprove:      http.HandlerFunc(approvedContractHandler.ApproveDraft),
+		ContractCreate:            http.HandlerFunc(contractHandler.Create),
+		ContractGet:               http.HandlerFunc(contractHandler.Get),
+		ContractUpdate:            http.HandlerFunc(contractHandler.UpdateDraft),
+		ContractSubmit:            http.HandlerFunc(contractHandler.SubmitForApproval),
+		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
 		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),

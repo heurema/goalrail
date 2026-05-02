@@ -1,7 +1,7 @@
 # Goalrail Server
 
 This server is still an early prototype. Existing intake, Goal readiness,
-Contract aggregate creation, ContractSeed creation, ContractDraft
+public Contract lifecycle, ContractSeed creation, ContractDraft
 creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
 and event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
 WorkItem planning, ClarificationRequest, and ClarificationAnswer state remain
@@ -74,22 +74,22 @@ transaction with their expected event appends. The stable `contract_id` is
 returned by ContractSeed, ContractDraft, and ApprovedContract responses.
 
 After clarification answers are applied and an explicit readiness re-check marks
-the Goal `ready_for_contract_seed`, create a seed snapshot:
+the Goal `ready_for_contract_seed`, create the public Contract lifecycle
+aggregate. This creates the internal `ContractSeed` and `ContractDraft` records
+and returns a public Contract view in `draft` state:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/contract-seeds
-```
-
-Then create a draft from the seed:
-
-```bash
-curl -sS -X POST http://localhost:8080/v1/contract-seeds/{contract_seed_id}/contract-drafts
+curl -sS -X POST http://localhost:8080/v1/contracts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "goal_id": "{goal_id}"
+  }'
 ```
 
 Then update proposed draft fields explicitly:
 
 ```bash
-curl -sS -X PATCH http://localhost:8080/v1/contract-drafts/{contract_draft_id} \
+curl -sS -X PATCH http://localhost:8080/v1/contracts/{contract_id} \
   -H 'Content-Type: application/json' \
   -d '{
     "updated_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"},
@@ -103,7 +103,7 @@ curl -sS -X PATCH http://localhost:8080/v1/contract-drafts/{contract_draft_id} \
 Then mark a complete draft ready for approval:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/submissions \
+curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/submissions \
   -H 'Content-Type: application/json' \
   -d '{
     "marked_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
@@ -113,15 +113,15 @@ curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/su
 Then approve the ready draft into an approved contract snapshot:
 
 ```bash
-curl -sS -X POST http://localhost:8080/v1/contract-drafts/{contract_draft_id}/approvals \
+curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/approvals \
   -H 'Content-Type: application/json' \
   -d '{
     "approved_by": {"kind": "user", "id": "018f0000-0000-7000-8000-000000000001"}
   }'
 ```
 
-Then plan one non-executable WorkItem from the approved Contract using the
-stable public `contract_id` returned earlier:
+Then plan one non-executable WorkItem from the approved Contract using the same
+stable public `contract_id`:
 
 ```bash
 curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/tasks
@@ -129,8 +129,7 @@ curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/tasks
 
 This route resolves `{contract_id}` through the public Contract aggregate,
 requires the Contract to be `approved`, and then uses the internal immutable
-ApprovedContract snapshot to create the simple v0 planned WorkItem. The server
-does not expose `/v1/contracts` lifecycle façade routes yet.
+ApprovedContract snapshot to create the simple v0 planned WorkItem.
 
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and

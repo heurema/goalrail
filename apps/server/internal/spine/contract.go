@@ -15,8 +15,8 @@ const (
 
 type Contract struct {
 	ID                 ContractID          `json:"id"`
-	OrganizationID     OrganizationID      `json:"organization_id"`
-	ProjectID          ProjectID           `json:"project_id"`
+	OrganizationID     OrganizationID      `json:"-"`
+	ProjectID          ProjectID           `json:"-"`
 	RepoBindingID      RepoBindingID       `json:"repo_binding_id"`
 	GoalID             GoalID              `json:"goal_id"`
 	State              ContractState       `json:"state"`
@@ -25,4 +25,8 @@ type Contract struct {
 	ApprovedSnapshotID *ApprovedContractID `json:"approved_snapshot_id,omitempty"`
 	CreatedAt          time.Time           `json:"created_at"`
 	UpdatedAt          time.Time           `json:"updated_at"`
+}
+
+type ContractCreateRequest struct {
+	GoalID GoalID `json:"goal_id"`
 }

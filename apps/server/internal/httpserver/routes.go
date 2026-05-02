@@ -14,11 +14,11 @@ type RouteHandlers struct {
 	IntakePromote             http.Handler
 	GoalReadiness             http.Handler
 	GoalClarificationRequests http.Handler
-	GoalContractSeed          http.Handler
-	ContractSeedDraft         http.Handler
-	ContractDraftUpdates      http.Handler
-	ContractDraftReady        http.Handler
-	ContractDraftApprove      http.Handler
+	ContractCreate            http.Handler
+	ContractGet               http.Handler
+	ContractUpdate            http.Handler
+	ContractSubmit            http.Handler
+	ContractApprove           http.Handler
 	ContractTasks             http.Handler
 	ClarificationAnswers      http.Handler
 	ClarificationAnswerApply  http.Handler
@@ -36,11 +36,11 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/intakes/{id}/goals", mustHandler("intake promote", handlers.IntakePromote))
 	mux.Handle("POST /v1/goals/{id}/readiness", mustHandler("goal readiness", handlers.GoalReadiness))
 	mux.Handle("POST /v1/goals/{id}/clarifications", mustHandler("goal clarification requests", handlers.GoalClarificationRequests))
-	mux.Handle("POST /v1/goals/{id}/contract-seeds", mustHandler("goal contract seed", handlers.GoalContractSeed))
-	mux.Handle("POST /v1/contract-seeds/{id}/contract-drafts", mustHandler("contract seed draft", handlers.ContractSeedDraft))
-	mux.Handle("PATCH /v1/contract-drafts/{id}", mustHandler("contract draft updates", handlers.ContractDraftUpdates))
-	mux.Handle("POST /v1/contract-drafts/{id}/submissions", mustHandler("contract draft ready for approval", handlers.ContractDraftReady))
-	mux.Handle("POST /v1/contract-drafts/{id}/approvals", mustHandler("contract draft approve", handlers.ContractDraftApprove))
+	mux.Handle("POST /v1/contracts", mustHandler("contract create", handlers.ContractCreate))
+	mux.Handle("GET /v1/contracts/{id}", mustHandler("contract get", handlers.ContractGet))
+	mux.Handle("PATCH /v1/contracts/{id}", mustHandler("contract update", handlers.ContractUpdate))
+	mux.Handle("POST /v1/contracts/{id}/submissions", mustHandler("contract submit", handlers.ContractSubmit))
+	mux.Handle("POST /v1/contracts/{id}/approvals", mustHandler("contract approve", handlers.ContractApprove))
 	mux.Handle("POST /v1/contracts/{id}/tasks", mustHandler("contract tasks", handlers.ContractTasks))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))
