@@ -47,3 +47,37 @@ The sales motion should be pilot-first, not self-serve:
 The public flow shows only the first honest slice of the broader product loop:
 
 `Goal -> Clarify -> Contract -> Tasks -> Change -> Verify -> Proof -> Feedback`
+
+## Console shell v0
+
+The Goalrail console uses a restrained terminal-adjacent visual direction.
+
+Main product surfaces remain exactly:
+
+- Contracts
+- Delivery Readiness
+- Proof
+
+Login, Settings, Appearance, and Users are support UI. They do not become
+product surfaces.
+
+Console v0 includes:
+
+- login-only entry screen
+- no registration path
+- bottom-left Settings utility
+- Appearance theme presets inspired by common terminal palettes
+- Users add/edit UI under Settings
+
+Current boundary:
+
+- UI shell only
+- no production auth
+- no user CRUD backend
+- no sessions/cookies
+- no analytics
+- no repo/runtime execution claims
+- no gate/proof implementation claims
+
+The UI must avoid fake scores, fake scans, fake live proof, and fake backend
+status.
