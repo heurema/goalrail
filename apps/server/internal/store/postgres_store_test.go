@@ -462,6 +462,65 @@ func TestPostgresApprovedContractStoreGetByContractDraftIDScansPersistedApproved
 	}
 }
 
+func TestPostgresWorkItemStoreCreateBuildsDurableInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresWorkItemStoreWithExecutorAndQuerier(exec, nil)
+
+	if err := store.Create(ctx, validPostgresWorkItem()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO work_items") {
+		t.Fatalf("SQL = %q, want work_items insert", call.sql)
+	}
+	if got, want := len(call.args), 17; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	assertJSONBytesEqual(t, call.args[8], `["Persist contract seeds","Preserve draft arrays"]`)
+	assertJSONBytesEqual(t, call.args[9], `["acceptance_criteria[0]","acceptance_criteria[1]"]`)
+	assertJSONBytesEqual(t, call.args[10], `["proof_expectations[0]","proof_expectations[1]"]`)
+}
+
+func TestPostgresWorkItemStoreGetByApprovedContractIDScansPersistedWorkItem(t *testing.T) {
+	ctx := context.Background()
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validWorkItemRowValues()}}
+	store := NewPostgresWorkItemStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	item, ok, err := store.GetByApprovedContractID(ctx, "018f0000-0000-7000-8000-000000000601")
+	if err != nil {
+		t.Fatalf("GetByApprovedContractID() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetByApprovedContractID() ok = false, want true")
+	}
+	if item.ID != "018f0000-0000-7000-8000-000000000701" {
+		t.Fatalf("ID = %q, want persisted work item id", item.ID)
+	}
+	if item.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("Status = %q, want planned", item.Status)
+	}
+	if got, want := item.Scope, []string{"Persist contract seeds", "Preserve draft arrays"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Scope = %#v, want %#v", got, want)
+	}
+	if item.OrderIndex == nil || *item.OrderIndex != 1 {
+		t.Fatalf("OrderIndex = %#v, want 1", item.OrderIndex)
+	}
+	if len(item.SourceRefs) != 1 || item.SourceRefs[0].Kind != "approved_contract" {
+		t.Fatalf("SourceRefs = %#v, want approved_contract ref", item.SourceRefs)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM work_items") {
+		t.Fatalf("SQL = %q, want work_items select", query.calls[0].sql)
+	}
+	if !strings.Contains(query.calls[0].sql, "WHERE approved_contract_id = $1") {
+		t.Fatalf("SQL = %q, want approved_contract_id lookup", query.calls[0].sql)
+	}
+}
+
 func validPostgresIntakeRecord() spine.IntakeRecord {
 	now := testStoreTime()
 	return spine.IntakeRecord{
@@ -597,6 +656,31 @@ func validPostgresApprovedContract() spine.ApprovedContract {
 	}
 }
 
+func validPostgresWorkItem() spine.WorkItem {
+	approved := validPostgresApprovedContract()
+	orderIndex := 1
+	return spine.WorkItem{
+		ID:                   "018f0000-0000-7000-8000-000000000701",
+		OrganizationID:       approved.OrganizationID,
+		ProjectID:            approved.ProjectID,
+		ContractID:           approved.ContractID,
+		ApprovedContractID:   approved.ID,
+		RepoBindingID:        approved.RepoBindingID,
+		Title:                approved.Title,
+		Summary:              approved.IntentSummary,
+		Scope:                approved.Scope,
+		AcceptanceRefs:       []string{"acceptance_criteria[0]", "acceptance_criteria[1]"},
+		ProofExpectationRefs: []string{"proof_expectations[0]", "proof_expectations[1]"},
+		Status:               spine.WorkItemStatusPlanned,
+		OwnerHint:            "platform",
+		OrderIndex:           &orderIndex,
+		SourceRefs: []spine.SourceRef{
+			{Kind: "approved_contract", ID: string(approved.ID)},
+		},
+		CreatedAt: testStoreTime(),
+	}
+}
+
 func validGoalRowValues() []any {
 	return []any{
 		"018f0000-0000-7000-8000-000000000201",
@@ -683,6 +767,27 @@ func validApprovedContractRowValues() []any {
 		testStoreTime(),
 		[]byte(`[{"kind":"contract_draft","id":"018f0000-0000-7000-8000-000000000501"},{"kind":"contract_seed","id":"018f0000-0000-7000-8000-000000000401"}]`),
 		string(spine.ApprovedContractStateApproved),
+	}
+}
+
+func validWorkItemRowValues() []any {
+	return []any{
+		"018f0000-0000-7000-8000-000000000701",
+		"018f0000-0000-7000-8000-000000000002",
+		"018f0000-0000-7000-8000-000000000003",
+		"018f0000-0000-7000-8000-000000000301",
+		"018f0000-0000-7000-8000-000000000601",
+		"018f0000-0000-7000-8000-000000000004",
+		"Persist seed",
+		"Make contract seed durable",
+		[]byte(`["Persist contract seeds","Preserve draft arrays"]`),
+		[]byte(`["acceptance_criteria[0]","acceptance_criteria[1]"]`),
+		[]byte(`["proof_expectations[0]","proof_expectations[1]"]`),
+		string(spine.WorkItemStatusPlanned),
+		"platform",
+		int32(1),
+		[]byte(`[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000601"}]`),
+		testStoreTime(),
 	}
 }
 

@@ -102,6 +102,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
 		ContractTasks:             probeRoute("contract_tasks"),
+		TaskGet:                   probeRoute("task_get"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
 	})
@@ -125,6 +126,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "contract_submit", method: http.MethodPost, path: "/v1/contracts/contract-1/submissions", wantRoute: "contract_submit"},
 		{name: "contract_approve", method: http.MethodPost, path: "/v1/contracts/contract-1/approvals", wantRoute: "contract_approve"},
 		{name: "work_item_plan", method: http.MethodPost, path: "/v1/contracts/contract-1/tasks", wantRoute: "contract_tasks"},
+		{name: "task_get", method: http.MethodGet, path: "/v1/tasks/task-1", wantRoute: "task_get"},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +163,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
 		ContractTasks:             probeRoute("contract_tasks"),
+		TaskGet:                   probeRoute("task_get"),
 		ClarificationAnswers:      probeRoute("clarification_answers"),
 		ClarificationAnswerApply:  probeRoute("clarification_answer_apply"),
 	})
@@ -191,6 +194,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		{name: "transitional_contract_draft_update", method: http.MethodPatch, path: "/v1/contract-drafts/draft-1"},
 		{name: "transitional_contract_draft_submit", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/submissions"},
 		{name: "transitional_contract_draft_approve", method: http.MethodPost, path: "/v1/contract-drafts/draft-1/approvals"},
+		{name: "task_list", method: http.MethodGet, path: "/v1/tasks"},
 	}
 
 	for _, tt := range tests {
@@ -269,6 +273,7 @@ func newRouter(
 		ContractSubmit:            http.HandlerFunc(contractHandler.SubmitForApproval),
 		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
 		ContractTasks:             http.HandlerFunc(workItemHandler.PlanContractTasks),
+		TaskGet:                   http.HandlerFunc(workItemHandler.GetTask),
 		ClarificationAnswers:      http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:  http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})

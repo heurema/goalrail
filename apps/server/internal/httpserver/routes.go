@@ -20,6 +20,7 @@ type RouteHandlers struct {
 	ContractSubmit            http.Handler
 	ContractApprove           http.Handler
 	ContractTasks             http.Handler
+	TaskGet                   http.Handler
 	ClarificationAnswers      http.Handler
 	ClarificationAnswerApply  http.Handler
 }
@@ -42,6 +43,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/contracts/{id}/submissions", mustHandler("contract submit", handlers.ContractSubmit))
 	mux.Handle("POST /v1/contracts/{id}/approvals", mustHandler("contract approve", handlers.ContractApprove))
 	mux.Handle("POST /v1/contracts/{id}/tasks", mustHandler("contract tasks", handlers.ContractTasks))
+	mux.Handle("GET /v1/tasks/{id}", mustHandler("task get", handlers.TaskGet))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

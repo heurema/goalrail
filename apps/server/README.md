@@ -3,9 +3,9 @@
 This server is still an early prototype. Existing intake, Goal readiness,
 public Contract lifecycle, ContractSeed creation, ContractDraft
 creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
-and event log flows use Postgres when `GOALRAIL_DATABASE_DSN` is configured.
-WorkItem planning, ClarificationRequest, and ClarificationAnswer state remain
-in-memory prototypes.
+WorkItem planning, and event log flows use Postgres when
+`GOALRAIL_DATABASE_DSN` is configured. ClarificationRequest and
+ClarificationAnswer state remain in-memory prototypes.
 
 ## Local Postgres foundation
 
@@ -63,9 +63,8 @@ curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 
 With Postgres configured, `IntakeRecord`, `Goal`, the public `Contract`
 aggregate, `ContractSeed`, `ContractDraft`, `ApprovedContract`, and their
-events are durable and survive server restarts.
-WorkItems are currently planned through an in-memory prototype store; no
-`work_items` table or migration exists in this slice.
+events are durable and survive server restarts. Planned WorkItems are also
+durable when Postgres is configured.
 Project/RepoBinding validation uses Postgres to derive `organization_id` from
 the seeded context. Intake creation, Goal promotion, Goal readiness,
 ContractSeed creation, ContractDraft creation/update, ContractDraft
@@ -131,6 +130,14 @@ This route resolves `{contract_id}` through the public Contract aggregate,
 requires the Contract to be `approved`, and then uses the internal immutable
 ApprovedContract snapshot to create the simple v0 planned WorkItem.
 
+Read the planned task by its stable task ID:
+
+```bash
+curl -sS http://localhost:8080/v1/tasks/{task_id}
+```
+
+There is no task list/search endpoint in this slice.
+
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, or VCS integration. Clarification request and
 answer state is still prototype/in-memory. ContractSeed creation does not
@@ -142,10 +149,11 @@ modify proposed fields only, keep `ContractDraft.state` as `draft`, and treat
 only `ContractDraft.state` from `draft` to `ready_for_approval`, requires
 `marked_by` as audit identity, runs completeness checks, and does not approve
 Contract, create `WorkItem`, write `GateDecision`, or create `Proof`.
-Approval creates an immutable `ApprovedContract(approved)` snapshot from a ready
-draft, requires `approved_by`, appends `contract.approved`, and does not mutate
-`ContractDraft` or create execution, `GateDecision`, or `Proof`. WorkItem
-planning creates exactly one in-memory `WorkItem(planned)` per approved
-contract in v0, appends `work_item.created`, guards repeated planning with
-`409 already_planned`, and does not assign, claim, create `Run`, checkout a
-repository, submit a receipt, write `GateDecision`, or create `Proof`.
+Approval creates an immutable `ApprovedContract(approved)` snapshot from a
+ready draft, requires `approved_by`, appends `contract.approved`, and does not
+mutate `ContractDraft` or create execution, `GateDecision`, or `Proof`.
+WorkItem planning creates exactly one `WorkItem(planned)` per approved contract
+in v0, appends `work_item.created`, guards repeated planning with
+`409 already_planned`, persists the WorkItem when Postgres is configured, and
+does not assign, claim, create `Run`, checkout a repository, submit a receipt,
+write `GateDecision`, or create `Proof`.

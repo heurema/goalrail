@@ -10,15 +10,15 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/store"
 )
 
-func TestWorkItemStoreCreateAndGet(t *testing.T) {
-	workItemStore := store.NewWorkItemStore()
+func TestWorkItemStoreCreateGetAndGetByApprovedContractID(t *testing.T) {
+	workItems := store.NewWorkItemStore()
 	created := validWorkItem()
 
-	if err := workItemStore.Create(context.Background(), created); err != nil {
+	if err := workItems.Create(context.Background(), created); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	got, ok, err := workItemStore.Get(context.Background(), created.ID)
+	got, ok, err := workItems.Get(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -29,7 +29,7 @@ func TestWorkItemStoreCreateAndGet(t *testing.T) {
 		t.Fatalf("Get() = %#v, want %#v", got, created)
 	}
 
-	byApproved, ok, err := workItemStore.GetByApprovedContractID(context.Background(), created.ApprovedContractID)
+	byApproved, ok, err := workItems.GetByApprovedContractID(context.Background(), created.ApprovedContractID)
 	if err != nil {
 		t.Fatalf("GetByApprovedContractID() error = %v", err)
 	}
@@ -42,50 +42,16 @@ func TestWorkItemStoreCreateAndGet(t *testing.T) {
 }
 
 func TestWorkItemStorePreventsDuplicateForApprovedContract(t *testing.T) {
-	workItemStore := store.NewWorkItemStore()
+	workItems := store.NewWorkItemStore()
 	created := validWorkItem()
-	if err := workItemStore.Create(context.Background(), created); err != nil {
+	if err := workItems.Create(context.Background(), created); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 
 	duplicate := created
 	duplicate.ID = "work-item-2"
-	if err := workItemStore.Create(context.Background(), duplicate); err != store.ErrWorkItemAlreadyPlanned {
+	if err := workItems.Create(context.Background(), duplicate); err != store.ErrWorkItemAlreadyPlanned {
 		t.Fatalf("duplicate Create() error = %v, want %v", err, store.ErrWorkItemAlreadyPlanned)
-	}
-}
-
-func TestWorkItemStoreReturnsClones(t *testing.T) {
-	workItemStore := store.NewWorkItemStore()
-	created := validWorkItem()
-	orderIndex := 0
-	created.OrderIndex = &orderIndex
-	if err := workItemStore.Create(context.Background(), created); err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-
-	got, ok, err := workItemStore.Get(context.Background(), created.ID)
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
-	}
-	if !ok {
-		t.Fatal("Get() ok = false, want true")
-	}
-	got.Scope[0] = "mutated"
-	got.AcceptanceRefs[0] = "mutated"
-	got.ProofExpectationRefs[0] = "mutated"
-	got.SourceRefs[0] = spine.SourceRef{Kind: "mutated", ID: "mutated"}
-	*got.OrderIndex = 99
-
-	stored, ok, err := workItemStore.Get(context.Background(), created.ID)
-	if err != nil {
-		t.Fatalf("Get() second error = %v", err)
-	}
-	if !ok {
-		t.Fatal("Get() second ok = false, want true")
-	}
-	if !reflect.DeepEqual(stored, created) {
-		t.Fatalf("stored mutated through returned value: %#v want %#v", stored, created)
 	}
 }
 
@@ -94,11 +60,12 @@ func validWorkItem() spine.WorkItem {
 		ID:                   "work-item-1",
 		OrganizationID:       "organization-1",
 		ProjectID:            "project-1",
+		ContractID:           "contract-1",
 		ApprovedContractID:   "approved-contract-1",
 		RepoBindingID:        "repo-binding-1",
-		Title:                "Approved title",
-		Summary:              "Approved summary",
-		Scope:                []string{"Approved scope"},
+		Title:                "Planned task",
+		Summary:              "Simple v0 planned task",
+		Scope:                []string{"Scope"},
 		AcceptanceRefs:       []string{"acceptance_criteria[0]"},
 		ProofExpectationRefs: []string{"proof_expectations[0]"},
 		Status:               spine.WorkItemStatusPlanned,

@@ -31,6 +31,7 @@ var (
 	ErrApprovedContractNotFound        = errors.New("approved contract not found")
 	ErrInvalidApprovedContractState    = errors.New("approved contract is not plannable")
 	ErrAlreadyPlanned                  = errors.New("approved contract already planned")
+	ErrWorkItemNotFound                = errors.New("work item not found")
 )
 
 type CompletenessError struct {
@@ -60,6 +61,10 @@ type Store interface {
 
 type EventLog interface {
 	Append(context.Context, spine.Event) error
+}
+
+type transactionalStore interface {
+	CreateWithEvent(context.Context, spine.WorkItem, spine.Event) error
 }
 
 type Clock interface {
@@ -140,6 +145,18 @@ func (s *Service) PlanContract(ctx context.Context, contractID spine.ContractID)
 		return spine.WorkItem{}, err
 	}
 
+	if txStore, ok := s.WorkItems.(transactionalStore); ok {
+		if err := txStore.CreateWithEvent(ctx, workItem, event); err != nil {
+			if _, ok, lookupErr := s.WorkItems.GetByApprovedContractID(ctx, approved.ID); lookupErr != nil {
+				return spine.WorkItem{}, fmt.Errorf("get work item by approved contract id after create failure: %w", lookupErr)
+			} else if ok {
+				return spine.WorkItem{}, ErrAlreadyPlanned
+			}
+			return spine.WorkItem{}, fmt.Errorf("create work item with event: %w", err)
+		}
+		return workItem, nil
+	}
+
 	if err := s.WorkItems.Create(ctx, workItem); err != nil {
 		if _, ok, lookupErr := s.WorkItems.GetByApprovedContractID(ctx, approved.ID); lookupErr != nil {
 			return spine.WorkItem{}, fmt.Errorf("get work item by approved contract id after create failure: %w", lookupErr)
@@ -153,6 +170,20 @@ func (s *Service) PlanContract(ctx context.Context, contractID spine.ContractID)
 	}
 
 	return workItem, nil
+}
+
+func (s *Service) Get(ctx context.Context, id spine.WorkItemID) (spine.WorkItem, error) {
+	if err := s.validateDependencies(); err != nil {
+		return spine.WorkItem{}, err
+	}
+	item, ok, err := s.WorkItems.Get(ctx, id)
+	if err != nil {
+		return spine.WorkItem{}, fmt.Errorf("get work item: %w", err)
+	}
+	if !ok {
+		return spine.WorkItem{}, ErrWorkItemNotFound
+	}
+	return item, nil
 }
 
 func workItemFromApprovedContract(id spine.WorkItemID, approved spine.ApprovedContract, createdAt time.Time) spine.WorkItem {

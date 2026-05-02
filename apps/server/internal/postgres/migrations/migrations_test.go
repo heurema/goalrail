@@ -87,3 +87,59 @@ func TestInitMigrationDropsApprovedContractsTable(t *testing.T) {
 		t.Fatalf("contracts must be dropped after contract_seeds")
 	}
 }
+
+func TestInitMigrationCreatesWorkItemsTable(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE work_items",
+		"contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE",
+		"approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE",
+		"CONSTRAINT work_items_approved_contract_id_unique UNIQUE (approved_contract_id)",
+		"CONSTRAINT work_items_status_check CHECK (status IN ('planned'))",
+		"CREATE INDEX work_items_organization_created_at_idx",
+		"CREATE INDEX work_items_project_created_at_idx",
+		"CREATE INDEX work_items_contract_id_idx",
+		"CREATE INDEX work_items_approved_contract_id_idx",
+		"CREATE INDEX work_items_repo_binding_id_idx",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE approved_contracts") > strings.Index(sql, "CREATE TABLE work_items") {
+		t.Fatalf("work_items must be created after approved_contracts")
+	}
+	if strings.Index(sql, "CREATE TABLE work_items") > strings.Index(sql, "CREATE TABLE events") {
+		t.Fatalf("work_items must be created before events")
+	}
+}
+
+func TestInitMigrationDropsWorkItemsBeforeApprovedContracts(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"DROP INDEX IF EXISTS work_items_repo_binding_id_idx;",
+		"DROP INDEX IF EXISTS work_items_approved_contract_id_idx;",
+		"DROP INDEX IF EXISTS work_items_contract_id_idx;",
+		"DROP INDEX IF EXISTS work_items_project_created_at_idx;",
+		"DROP INDEX IF EXISTS work_items_organization_created_at_idx;",
+		"DROP TABLE IF EXISTS work_items;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration down missing %q", want)
+		}
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS events;") > strings.Index(sql, "DROP TABLE IF EXISTS work_items;") {
+		t.Fatalf("events must be dropped before work_items")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS work_items;") > strings.Index(sql, "DROP TABLE IF EXISTS approved_contracts;") {
+		t.Fatalf("work_items must be dropped before approved_contracts")
+	}
+}

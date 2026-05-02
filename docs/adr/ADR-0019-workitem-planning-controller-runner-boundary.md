@@ -13,8 +13,9 @@ ApprovedContract(approved) -> WorkItem(planned)
 
 The current server implementation follows the simple v0 direction from
 ADR-0018: `POST /v1/contracts/{id}/tasks` creates exactly one
-in-memory `WorkItem(planned)` per approved contract. That behavior is useful as
-a bounded prototype and as a non-executable handoff after approval.
+`WorkItem(planned)` per approved contract, using Postgres when configured with
+in-memory fallback otherwise. That behavior is useful as a bounded prototype
+and as a non-executable handoff after approval.
 
 It must not become the final architecture for rich repo-aware planning.
 
