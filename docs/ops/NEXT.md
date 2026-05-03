@@ -107,7 +107,7 @@ Current truth:
 - no server config, deployment scripts, secrets, hostnames, IPs, ports,
   usernames, key paths, or DNS provider credentials were committed
 
-## Next recommended bounded slice
+## Next backend bounded slice
 
 ### Auth schema foundation
 
@@ -135,6 +135,8 @@ Done means:
 - no billing
 - no SSO/OIDC
 - no runner, gate, proof, or generic queue work
+
+## Next public-surface bounded slice
 
 ### Pilot intake RU post-live mobile and copy QA
 
