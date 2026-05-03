@@ -74,14 +74,6 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalStore interface {
-	CreateWithEvent(context.Context, spine.ApprovedContract, spine.Event) error
-}
-
-type transactionalContractStore interface {
-	CreateWithContractUpdateAndEvent(context.Context, spine.ApprovedContract, spine.Event, time.Time) error
-}
-
 type Clock interface {
 	Now() time.Time
 }
@@ -150,28 +142,6 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		return spine.ApprovedContract{}, err
 	}
 
-	if txStore, ok := s.Approved.(transactionalStore); ok {
-		if txStoreWithContract, ok := s.Approved.(transactionalContractStore); ok {
-			if err := txStoreWithContract.CreateWithContractUpdateAndEvent(ctx, approved, event, now); err != nil {
-				if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
-					return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
-				} else if ok {
-					return spine.ApprovedContract{}, ErrAlreadyApproved
-				}
-				return spine.ApprovedContract{}, fmt.Errorf("create approved contract with contract update and event: %w", err)
-			}
-			return approved, nil
-		}
-		if err := txStore.CreateWithEvent(ctx, approved, event); err != nil {
-			if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
-				return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ApprovedContract{}, ErrAlreadyApproved
-			}
-			return spine.ApprovedContract{}, fmt.Errorf("create approved contract with event: %w", err)
-		}
-		return approved, nil
-	}
 	if err := s.Approved.Create(ctx, approved); err != nil {
 		if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
 			return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)

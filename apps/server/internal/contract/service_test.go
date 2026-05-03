@@ -248,7 +248,74 @@ func TestSubmitForApprovalUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestDraftLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) {
+func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
+	createService := contract.NewService(contractStore, seedService, draftService, approvalService)
+	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	submitted, err := createService.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	if err != nil {
+		t.Fatalf("SubmitForApproval() error = %v", err)
+	}
+
+	txRunner := &fakeTransactionRunner{}
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+	approved, err := service.Approve(ctx, submitted.ID, approveRequest())
+	if err != nil {
+		t.Fatalf("Approve() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if !approvedStore.createSawTransaction {
+		t.Fatal("approved contract store Create did not run inside transaction runner")
+	}
+	if !contractStore.markApprovedSawTransaction {
+		t.Fatal("contract store MarkApproved did not run inside transaction runner")
+	}
+	if events.transactionalAppends != 1 {
+		t.Fatalf("transactional event appends = %d, want 1", events.transactionalAppends)
+	}
+	if approved.State != spine.ContractStateApproved {
+		t.Fatalf("contract state = %q, want %q", approved.State, spine.ContractStateApproved)
+	}
+	if approved.ApprovedSnapshotID == nil {
+		t.Fatal("approved_snapshot_id is nil")
+	}
+	snapshot, ok, err := approvedStore.Get(ctx, *approved.ApprovedSnapshotID)
+	if err != nil {
+		t.Fatalf("approved.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("approved snapshot not found")
+	}
+	if snapshot.ContractID != approved.ID {
+		t.Fatalf("approved snapshot contract_id = %q, want %q", snapshot.ContractID, approved.ID)
+	}
+	if got := countEventType(events.Events(), approvedcontract.EventTypeContractApproved); got != 1 {
+		t.Fatalf("contract.approved events = %d, want 1", got)
+	}
+}
+
+func TestContractLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -286,6 +353,13 @@ func TestDraftLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) {
 	if submitted.State != spine.ContractStateReadyForApproval {
 		t.Fatalf("submitted contract state = %q, want %q", submitted.State, spine.ContractStateReadyForApproval)
 	}
+	approved, err := service.Approve(ctx, created.ID, approveRequest())
+	if err != nil {
+		t.Fatalf("Approve() error = %v", err)
+	}
+	if approved.State != spine.ContractStateApproved {
+		t.Fatalf("approved contract state = %q, want %q", approved.State, spine.ContractStateApproved)
+	}
 	if draftStore.updateSawTransaction {
 		t.Fatal("draft store Update unexpectedly saw transaction context")
 	}
@@ -294,6 +368,12 @@ func TestDraftLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) {
 	}
 	if contractStore.markReadyForApprovalSawTransaction {
 		t.Fatal("contract store MarkReadyForApproval unexpectedly saw transaction context")
+	}
+	if approvedStore.createSawTransaction {
+		t.Fatal("approved contract store Create unexpectedly saw transaction context")
+	}
+	if contractStore.markApprovedSawTransaction {
+		t.Fatal("contract store MarkApproved unexpectedly saw transaction context")
 	}
 	if events.transactionalAppends != 0 {
 		t.Fatalf("transactional event appends = %d, want 0", events.transactionalAppends)
@@ -419,6 +499,7 @@ type fakeContractStore struct {
 	createSawTransaction               bool
 	markDraftCreatedSawTransaction     bool
 	markReadyForApprovalSawTransaction bool
+	markApprovedSawTransaction         bool
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -486,7 +567,8 @@ func (s *fakeContractStore) MarkReadyForApproval(ctx context.Context, id spine.C
 	return nil
 }
 
-func (s *fakeContractStore) MarkApproved(_ context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+func (s *fakeContractStore) MarkApproved(ctx context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+	s.markApprovedSawTransaction = s.markApprovedSawTransaction || sawTransaction(ctx)
 	contract, ok := s.contracts[id]
 	if !ok {
 		return nil
@@ -594,8 +676,9 @@ func (s *fakeContractDraftStore) GetByContractSeedID(_ context.Context, id spine
 }
 
 type fakeApprovedContractStore struct {
-	approved map[spine.ApprovedContractID]spine.ApprovedContract
-	byDraft  map[spine.ContractDraftID]spine.ApprovedContractID
+	approved             map[spine.ApprovedContractID]spine.ApprovedContract
+	byDraft              map[spine.ContractDraftID]spine.ApprovedContractID
+	createSawTransaction bool
 }
 
 func newFakeApprovedContractStore() *fakeApprovedContractStore {
@@ -605,7 +688,8 @@ func newFakeApprovedContractStore() *fakeApprovedContractStore {
 	}
 }
 
-func (s *fakeApprovedContractStore) Create(_ context.Context, approved spine.ApprovedContract) error {
+func (s *fakeApprovedContractStore) Create(ctx context.Context, approved spine.ApprovedContract) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.approved[approved.ID] = approved
 	s.byDraft[approved.ContractDraftID] = approved.ID
 	return nil
@@ -671,6 +755,12 @@ func draftUpdateRequest(t *testing.T, changesJSON string) spine.ContractDraftUpd
 func draftReadyForApprovalRequest() spine.ContractDraftReadyForApprovalRequest {
 	return spine.ContractDraftReadyForApprovalRequest{
 		MarkedBy: spine.ActorRef{Kind: "user", ID: "dev_1", DisplayName: "Developer"},
+	}
+}
+
+func approveRequest() spine.ApproveContractDraftRequest {
+	return spine.ApproveContractDraftRequest{
+		ApprovedBy: spine.ActorRef{Kind: "user", ID: "approver_1", DisplayName: "Approver"},
 	}
 }
 

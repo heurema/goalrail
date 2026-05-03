@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -139,80 +138,6 @@ func (s *PostgresTransactionalGoalStore) UpdateReadinessWithEvents(ctx context.C
 		return nil
 	})
 	return updated, ok, err
-}
-
-type PostgresTransactionalApprovedContractStore struct {
-	base       *PostgresApprovedContractStore
-	contracts  *PostgresContractStore
-	events     *PostgresEventLog
-	transactor postgresTransactor
-}
-
-func NewPostgresTransactionalApprovedContractStore(pool *pgxpool.Pool) *PostgresTransactionalApprovedContractStore {
-	db := newPostgresDB(pool)
-	return newPostgresTransactionalApprovedContractStore(
-		NewPostgresApprovedContractStoreWithExecutorAndQuerier(db, db),
-		NewPostgresContractStoreWithExecutorAndQuerier(db, db),
-		NewPostgresEventLogWithExecutorAndQuerier(db, db),
-		pgxpoolTransactor{pool: pool},
-	)
-}
-
-func newPostgresTransactionalApprovedContractStore(base *PostgresApprovedContractStore, contracts *PostgresContractStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalApprovedContractStore {
-	return &PostgresTransactionalApprovedContractStore{
-		base:       base,
-		contracts:  contracts,
-		events:     events,
-		transactor: transactor,
-	}
-}
-
-func (s *PostgresTransactionalApprovedContractStore) Create(ctx context.Context, approved spine.ApprovedContract) error {
-	return s.base.Create(ctx, approved)
-}
-
-func (s *PostgresTransactionalApprovedContractStore) Get(ctx context.Context, id spine.ApprovedContractID) (spine.ApprovedContract, bool, error) {
-	return s.base.Get(ctx, id)
-}
-
-func (s *PostgresTransactionalApprovedContractStore) GetByContractDraftID(ctx context.Context, id spine.ContractDraftID) (spine.ApprovedContract, bool, error) {
-	return s.base.GetByContractDraftID(ctx, id)
-}
-
-func (s *PostgresTransactionalApprovedContractStore) CreateWithContractUpdateAndEvent(ctx context.Context, approved spine.ApprovedContract, event spine.Event, updatedAt time.Time) error {
-	if s.transactor == nil {
-		return fmt.Errorf("postgres transactor is nil")
-	}
-	if s.contracts == nil {
-		return fmt.Errorf("postgres contract store is nil")
-	}
-	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.base.Create(txCtx, approved); err != nil {
-			return err
-		}
-		if err := s.contracts.MarkApproved(txCtx, approved.ContractID, approved.ID, updatedAt); err != nil {
-			return err
-		}
-		if err := s.events.Append(txCtx, event); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (s *PostgresTransactionalApprovedContractStore) CreateWithEvent(ctx context.Context, approved spine.ApprovedContract, event spine.Event) error {
-	if s.transactor == nil {
-		return fmt.Errorf("postgres transactor is nil")
-	}
-	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.base.Create(txCtx, approved); err != nil {
-			return err
-		}
-		if err := s.events.Append(txCtx, event); err != nil {
-			return err
-		}
-		return nil
-	})
 }
 
 type PostgresTransactionalWorkItemStore struct {
