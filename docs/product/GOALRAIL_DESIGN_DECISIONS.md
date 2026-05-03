@@ -69,6 +69,15 @@ Console v0 includes:
 - Appearance theme presets inspired by common terminal palettes
 - Users add/edit UI under Settings
 
+Theme rules:
+
+- theme presets are token-only CSS variable changes
+- theme switching is UI component state in v0
+- theme presets must not change layout, spacing, navigation, component
+  structure, product surfaces, or runtime behavior
+- theme selection must not imply backend preference persistence, user settings
+  API, sessions, cookies, analytics, or auth integration
+
 Current boundary:
 
 - UI shell only

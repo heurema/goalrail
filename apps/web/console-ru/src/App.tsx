@@ -3,7 +3,8 @@ import { FormEvent, useMemo, useState } from 'react';
 import './App.css';
 
 type SurfaceId = 'contracts' | 'delivery-readiness' | 'proof';
-type ScreenId = 'console' | 'settings-users';
+type ScreenId = 'console' | 'settings-appearance' | 'settings-users';
+type ThemeId = 'goalrail-default' | 'catppuccin-mocha' | 'dracula' | 'nord' | 'solarized-dark' | 'gruvbox-dark';
 type UserStatus = 'Активен' | 'Ожидает' | 'Отключен';
 type UserRole = 'Владелец' | 'Участник' | 'Наблюдатель';
 type RoleFilter = UserRole | 'all';
@@ -22,10 +23,25 @@ interface ConsoleUser {
   status: UserStatus;
 }
 
+interface ThemePreset {
+  id: ThemeId;
+  label: string;
+  swatches: string[];
+}
+
 const SURFACES: SurfaceItem[] = [
   { id: 'contracts', label: 'Контракты' },
   { id: 'delivery-readiness', label: 'Оценка готовности' },
   { id: 'proof', label: 'Проверка результата' },
+];
+
+const THEMES: ThemePreset[] = [
+  { id: 'goalrail-default', label: 'Goalrail Default', swatches: ['#201f1d', '#2d2b28', '#e8e0d2', '#c783a8', '#92b66f'] },
+  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha', swatches: ['#1e1e2e', '#313244', '#cdd6f4', '#cba6f7', '#a6e3a1'] },
+  { id: 'dracula', label: 'Dracula', swatches: ['#282a36', '#44475a', '#f8f8f2', '#bd93f9', '#50fa7b'] },
+  { id: 'nord', label: 'Nord', swatches: ['#2e3440', '#3b4252', '#eceff4', '#88c0d0', '#a3be8c'] },
+  { id: 'solarized-dark', label: 'Solarized Dark', swatches: ['#002b36', '#073642', '#eee8d5', '#268bd2', '#859900'] },
+  { id: 'gruvbox-dark', label: 'Gruvbox Dark', swatches: ['#282828', '#3c3836', '#ebdbb2', '#fe8019', '#b8bb26'] },
 ];
 
 const INITIAL_USERS: ConsoleUser[] = [
@@ -68,6 +84,7 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
   const [screen, setScreen] = useState<ScreenId>('console');
+  const [activeTheme, setActiveTheme] = useState<ThemeId>('goalrail-default');
   const [users, setUsers] = useState<ConsoleUser[]>(INITIAL_USERS);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -192,7 +209,11 @@ function App() {
 
   if (!isLoggedIn) {
     return (
-      <main className="loginScreen" data-deployment-target="console.goalrail.ru">
+      <main
+        className="loginScreen"
+        data-deployment-target="console.goalrail.ru"
+        data-goalrail-theme={activeTheme}
+      >
         <div className="loginRails" aria-hidden="true" />
         <form className="loginCard" onSubmit={handleLogin}>
           <Brand />
@@ -220,7 +241,11 @@ function App() {
   }
 
   return (
-    <main className="consoleShell" data-deployment-target="console.goalrail.ru">
+    <main
+      className="consoleShell"
+      data-deployment-target="console.goalrail.ru"
+      data-goalrail-theme={activeTheme}
+    >
       <aside className="sidebar" aria-label="Навигация консоли Goalrail">
         <Brand />
 
@@ -245,9 +270,9 @@ function App() {
 
         <div className="settingsDock">
           <button
-            aria-current={screen === 'settings-users' ? 'page' : undefined}
-            className={screen === 'settings-users' ? 'settingsButton active' : 'settingsButton'}
-            onClick={() => setScreen('settings-users')}
+            aria-current={screen.startsWith('settings-') ? 'page' : undefined}
+            className={screen.startsWith('settings-') ? 'settingsButton active' : 'settingsButton'}
+            onClick={() => setScreen('settings-appearance')}
             type="button"
           >
             <span aria-hidden="true">⚙</span>
@@ -259,90 +284,117 @@ function App() {
       {screen === 'console' ? (
         <section className="emptySurface" aria-label={`${activeLabel}: пустой раздел`} />
       ) : (
-        <section className="settingsSurface" aria-label="Настройки: пользователи">
+        <section
+          className="settingsSurface"
+          aria-label={screen === 'settings-appearance' ? 'Настройки: оформление' : 'Настройки: пользователи'}
+        >
           <header className="surfaceHeader">
             <div>
-              <p className="kicker">settings · users</p>
+              <p className="kicker">{screen === 'settings-appearance' ? 'settings · appearance' : 'settings · users'}</p>
               <h2>Настройки</h2>
             </div>
-            <p className="metaText">{visibleUsers.length} записи</p>
+            <p className="metaText">{screen === 'settings-appearance' ? `${THEMES.length} presets` : `${visibleUsers.length} записи`}</p>
           </header>
 
+          <nav className="settingsSectionNav" aria-label="Разделы настроек">
+            <button
+              aria-current={screen === 'settings-appearance' ? 'page' : undefined}
+              className={screen === 'settings-appearance' ? 'sectionButton active' : 'sectionButton'}
+              onClick={() => setScreen('settings-appearance')}
+              type="button"
+            >
+              Оформление
+            </button>
+            <button
+              aria-current={screen === 'settings-users' ? 'page' : undefined}
+              className={screen === 'settings-users' ? 'sectionButton active' : 'sectionButton'}
+              onClick={() => setScreen('settings-users')}
+              type="button"
+            >
+              Пользователи
+            </button>
+          </nav>
+
           <div className="settingsContent">
-            <div className="usersHeader">
-              <div>
-                <h3>Пользователи</h3>
-                <p>Управление доступом к рабочему пространству.</p>
-              </div>
-              <button aria-label="Добавить пользователя" className="primaryButton" onClick={openNewUser} type="button">
-                <span aria-hidden="true">+</span>
-                <span>Добавить</span>
-              </button>
-            </div>
+            {screen === 'settings-appearance' ? (
+              <AppearanceSettings activeTheme={activeTheme} onThemeChange={setActiveTheme} />
+            ) : (
+              <>
+                <div className="usersHeader">
+                  <div>
+                    <h3>Пользователи</h3>
+                    <p>Управление доступом к рабочему пространству.</p>
+                  </div>
+                  <button aria-label="Добавить пользователя" className="primaryButton" onClick={openNewUser} type="button">
+                    <span aria-hidden="true">+</span>
+                    <span>Добавить</span>
+                  </button>
+                </div>
 
-            <div className="usersToolbar">
-              <label className="searchBox">
-                <span aria-hidden="true">⌕</span>
-                <input
-                  aria-label="Поиск пользователей"
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Поиск по имени или email"
-                  type="search"
-                  value={searchQuery}
-                />
-              </label>
-              <label className="filterBox">
-                <span>Роль</span>
-                <select
-                  aria-label="Фильтр по роли"
-                  onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
-                  value={roleFilter}
-                >
-                  <option value="all">Все роли</option>
-                  <option value="Владелец">Владелец</option>
-                  <option value="Участник">Участник</option>
-                  <option value="Наблюдатель">Наблюдатель</option>
-                </select>
-              </label>
-              <label className="filterBox">
-                <span>Статус</span>
-                <select
-                  aria-label="Фильтр по статусу"
-                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-                  value={statusFilter}
-                >
-                  <option value="all">Все статусы</option>
-                  <option value="Активен">Активен</option>
-                  <option value="Ожидает">Ожидает</option>
-                  <option value="Отключен">Отключен</option>
-                </select>
-              </label>
-            </div>
+                <div className="usersToolbar">
+                  <label className="searchBox">
+                    <span aria-hidden="true">⌕</span>
+                    <input
+                      aria-label="Поиск пользователей"
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Поиск по имени или email"
+                      type="search"
+                      value={searchQuery}
+                    />
+                  </label>
+                  <label className="filterBox">
+                    <span>Роль</span>
+                    <select
+                      aria-label="Фильтр по роли"
+                      onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
+                      value={roleFilter}
+                    >
+                      <option value="all">Все роли</option>
+                      <option value="Владелец">Владелец</option>
+                      <option value="Участник">Участник</option>
+                      <option value="Наблюдатель">Наблюдатель</option>
+                    </select>
+                  </label>
+                  <label className="filterBox">
+                    <span>Статус</span>
+                    <select
+                      aria-label="Фильтр по статусу"
+                      onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                      value={statusFilter}
+                    >
+                      <option value="all">Все статусы</option>
+                      <option value="Активен">Активен</option>
+                      <option value="Ожидает">Ожидает</option>
+                      <option value="Отключен">Отключен</option>
+                    </select>
+                  </label>
+                </div>
 
-            <div className="usersTableFrame">
-              <table className="usersTable" aria-label="Пользователи рабочего пространства">
-                <thead>
-                  <tr className="userRow userHead">
-                    <th scope="col">Имя</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Роль</th>
-                    <th scope="col">Статус</th>
-                    <th scope="col" aria-label="Действия" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {userRows}
-                  {visibleUsers.length === 0 ? (
-                    <tr>
-                      <td className="emptyUsers" colSpan={5}>
-                        Нет пользователей по выбранным условиям.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-
+                <div className="usersTableFrame">
+                  <table className="usersTable" aria-label="Пользователи рабочего пространства">
+                    <thead>
+                      <tr className="userRow userHead">
+                        <th scope="col">Имя</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Роль</th>
+                        <th scope="col">Статус</th>
+                        <th scope="col" aria-label="Действия" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userRows}
+                      {visibleUsers.length === 0 ? (
+                        <tr>
+                          <td className="emptyUsers" colSpan={5}>
+                            Нет пользователей по выбранным условиям.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </section>
       )}
@@ -424,6 +476,53 @@ function App() {
         </>
       ) : null}
     </main>
+  );
+}
+
+function AppearanceSettings({
+  activeTheme,
+  onThemeChange,
+}: {
+  activeTheme: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
+}) {
+  return (
+    <div className="appearancePanel">
+      <div className="appearanceHeader">
+        <div>
+          <h3>Оформление</h3>
+          <p>Выберите визуальный пресет консоли. Это влияет только на интерфейс, не на delivery logic.</p>
+        </div>
+        <p className="themeDisclaimer">terminal-inspired visual presets · не связаны с авторами оригинальных схем</p>
+      </div>
+
+      <div className="themeGrid">
+        {THEMES.map((theme) => (
+          <button
+            aria-pressed={activeTheme === theme.id}
+            className={activeTheme === theme.id ? 'themeCard active' : 'themeCard'}
+            key={theme.id}
+            onClick={() => onThemeChange(theme.id)}
+            type="button"
+          >
+            <span className="themeCardTop">
+              <span>{theme.label}</span>
+              <span className="themeSelected">{activeTheme === theme.id ? 'Выбрана' : 'Выбрать'}</span>
+            </span>
+            <span className="themeSwatches" aria-hidden="true">
+              {theme.swatches.map((swatch) => (
+                <span className="themeSwatch" key={swatch} style={{ background: swatch }} />
+              ))}
+            </span>
+            <span className="themePreview" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

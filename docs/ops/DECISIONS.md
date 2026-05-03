@@ -1769,3 +1769,24 @@ Rationale:
 - Gives later auth schema and CLI work a bounded direction without implementing
   endpoints, tokens, password hashing, CLI changes, web UI, SaaS onboarding,
   organization creation, billing, SSO/OIDC, runner, gate, proof, or queue work.
+
+## D-0070 — Console themes are token-only frontend state
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- Implement console theme switching as named, terminal-inspired visual presets.
+- Apply themes through CSS variables only.
+- Keep theme selection in frontend component state for v0.
+- Do not add backend preference persistence, localStorage, cookies, sessions,
+  user settings API, analytics, auth integration, theme-specific layouts, or
+  theme-specific components.
+
+Rationale:
+- The console shell already uses CSS variables.
+- Named visual presets improve console feel without changing product scope.
+- Token-only themes prevent layout drift, component duplication, and backend
+  preference scope creep.
+
+Review:
+- Review after the first implemented theme picker pass.
