@@ -50,10 +50,13 @@ session on bearer-token logout, and resolves current user membership
 server-side instead of trusting role claims in JWTs. `goalrail login
 <server_url>` now starts a localhost loopback listener, opens or prints the
 server CLI login URL, exchanges a one-time code for tokens, and stores token
-metadata in a local 0600 auth file. SaaS onboarding, organization creation API,
+metadata in a local 0600 auth file. `GET /cli/login` and `POST /cli/login`
+currently use a minimal server-rendered HTML page as a temporary CLI auth bridge
+only; it is not the product web console login UI, and future React console login
+should replace or front this flow. SaaS onboarding, organization creation API,
 public registration, keychain integration, Organization / Project /
-RepoBinding profile selection, and web UI beyond the minimal CLI login page
-remain unimplemented.
+RepoBinding profile selection, and product web console login remain
+unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
@@ -198,7 +201,8 @@ The project currently has:
   for login, refresh, password change, logout, current-user profile, and CLI
   code exchange, and the CLI now stores token metadata locally after browser
   loopback login. Organization / Project / RepoBinding profile selection and
-  web UI remain unimplemented.
+  product web console login remain unimplemented; the current `/cli/login` HTML
+  page is a temporary CLI auth bridge only.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -329,7 +333,8 @@ The project currently has:
 - no refresh-token rotation, public registration, SaaS onboarding, organization
   creation API, admin user creation endpoint, keychain integration,
   Organization / Project / RepoBinding CLI profile selection, or Goalrail
-  product web UI yet
+  product web UI yet; the current server-rendered `/cli/login` page is only a
+  temporary CLI auth bridge for `goalrail login <server_url>`
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation

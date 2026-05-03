@@ -176,6 +176,12 @@ The server exposes the smallest browser page and code exchange needed for
 - `POST /cli/login`
 - `POST /v1/auth/cli/exchange`
 
+`/cli/login` currently uses a minimal server-rendered HTML page. This page is a
+temporary CLI auth bridge only, exists to support `goalrail login <server_url>`
+localhost loopback before a React console login exists, and is not the product
+web console login UI. Future React console login should replace or front this
+bridge.
+
 The CLI opens or prints `/cli/login` with a localhost loopback callback URL,
 random `state`, and an S256 `code_challenge`. The browser page accepts existing
 Goalrail email/password credentials, validates that the callback target is
@@ -190,12 +196,11 @@ expire after roughly five minutes, and are consumed once. These routes require
 the same structured Postgres database configuration as other product/auth
 routes. Without database configuration they return `503 database_not_configured`.
 
-There is still no web console login UI beyond this minimal CLI login page, no
-public registration, admin user creation endpoint, SaaS onboarding,
-organization creation API, password reset flow, email invite/reset delivery,
-refresh-token rotation, keychain integration, Organization / Project /
-RepoBinding profile selection, or broader session-management API in this
-slice.
+There is still no product web console login UI, public registration, admin user
+creation endpoint, SaaS onboarding, organization creation API, password reset
+flow, email invite/reset delivery, refresh-token rotation, keychain
+integration, Organization / Project / RepoBinding profile selection, or broader
+session-management API in this slice.
 
 ## Dev intake flow
 
