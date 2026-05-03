@@ -83,6 +83,6 @@ func mapHashError(err error) error {
 	case errors.Is(err, argon2id.ErrIncompatibleVersion):
 		return ErrUnsupportedHash
 	default:
-		return ErrMalformedHash
+		return fmt.Errorf("%w: %w", ErrMalformedHash, err)
 	}
 }
