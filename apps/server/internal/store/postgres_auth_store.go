@@ -236,14 +236,11 @@ func (s *PostgresAuthStore) GetPrimaryOrganizationMembership(ctx context.Context
 }
 
 func (s *PostgresAuthStore) getPasswordCredential(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.UserPasswordCredential, bool, error) {
-	if s.query == nil {
-		return spine.UserPasswordCredential{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryAuthRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.UserPasswordCredential{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.UserPasswordCredential{}, false, err
 	}
-	credential, err := scanPasswordCredential(s.query.QueryRow(ctx, sqlText, args...))
+	credential, err := scanPasswordCredential(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.UserPasswordCredential{}, false, nil
@@ -254,14 +251,11 @@ func (s *PostgresAuthStore) getPasswordCredential(ctx context.Context, op string
 }
 
 func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.UserSession, bool, error) {
-	if s.query == nil {
-		return spine.UserSession{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryAuthRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.UserSession{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.UserSession{}, false, err
 	}
-	session, err := scanUserSession(s.query.QueryRow(ctx, sqlText, args...))
+	session, err := scanUserSession(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.UserSession{}, false, nil
@@ -272,14 +266,11 @@ func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squi
 }
 
 func (s *PostgresAuthStore) getCLIAuthCode(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.CLIAuthCode, bool, error) {
-	if s.query == nil {
-		return spine.CLIAuthCode{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryAuthRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.CLIAuthCode{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.CLIAuthCode{}, false, err
 	}
-	code, err := scanCLIAuthCode(s.query.QueryRow(ctx, sqlText, args...))
+	code, err := scanCLIAuthCode(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.CLIAuthCode{}, false, nil
@@ -290,14 +281,11 @@ func (s *PostgresAuthStore) getCLIAuthCode(ctx context.Context, op string, stmt 
 }
 
 func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.User, bool, error) {
-	if s.query == nil {
-		return spine.User{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryAuthRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.User{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.User{}, false, err
 	}
-	user, err := scanUser(s.query.QueryRow(ctx, sqlText, args...))
+	user, err := scanUser(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.User{}, false, nil
@@ -308,14 +296,11 @@ func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirre
 }
 
 func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.OrganizationMembership, bool, error) {
-	if s.query == nil {
-		return spine.OrganizationMembership{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryAuthRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.OrganizationMembership{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.OrganizationMembership{}, false, err
 	}
-	membership, err := scanOrganizationMembership(s.query.QueryRow(ctx, sqlText, args...))
+	membership, err := scanOrganizationMembership(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.OrganizationMembership{}, false, nil
@@ -323,6 +308,17 @@ func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op st
 		return spine.OrganizationMembership{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return membership, true, nil
+}
+
+func queryAuthRow(ctx context.Context, query postgresRowQuerier, op string, stmt squirrel.SelectBuilder) (pgx.Row, error) {
+	if query == nil {
+		return nil, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	return query.QueryRow(ctx, sqlText, args...), nil
 }
 
 func scanPasswordCredential(row pgx.Row) (spine.UserPasswordCredential, error) {
