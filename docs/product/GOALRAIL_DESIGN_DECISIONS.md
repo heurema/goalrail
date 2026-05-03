@@ -81,3 +81,45 @@ Current boundary:
 
 The UI must avoid fake scores, fake scans, fake live proof, and fake backend
 status.
+
+## Console brand identity v0
+
+Date: 2026-05-03
+
+Decision:
+
+- Use **wordmark-only** branding for the console shell v0.
+- Remove the hamburger-like three-line console brand mark.
+- Defer a custom symbol / icon / app mark to a later brand slice.
+- Do not use a `GR` monogram for the console shell now.
+- Do not use a terminal prompt mark in this slice.
+- Keep the `GOALRAIL` wordmark unchanged.
+
+Wordmark-only v0:
+
+- uppercase `GOALRAIL`
+- no icon to the left of the wordmark
+- non-interactive brand area
+- terminal-adjacent and restrained
+
+Reason:
+
+- The previous three-line mark creates a false menu affordance.
+- The Rail Switch Mark v0 replacement did not pass visual review in the shell.
+- A `GR` monogram or terminal prompt mark would push this into premature
+  mini-branding work.
+- Wordmark-only removes the false menu affordance without introducing a weak
+  or generic symbol.
+
+Implementation rules:
+
+- Brand area must not be rendered as a button.
+- Brand area must not get hover, active, or menu affordance styling.
+- No `svg.brandMark` should be rendered in console v0.
+- If mobile needs a menu, that menu must be a separate control, visually and
+  semantically distinct from the brand wordmark.
+
+Review:
+
+- Review after the first implemented console shell flow, or before broad public
+  console launch.

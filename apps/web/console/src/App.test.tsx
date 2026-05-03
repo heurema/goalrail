@@ -8,9 +8,14 @@ describe('App', () => {
   it('renders only the three empty console surfaces in the left navigation', () => {
     render(<App />);
 
+    const brand = screen.getByLabelText(/^goalrail console$/i, { selector: '.brand' });
     const navigation = screen.getByRole('navigation', { name: /product surfaces/i });
     const buttons = screen.getAllByRole('button');
 
+    expect(brand.tagName).toBe('DIV');
+    expect(brand).toHaveTextContent(/^GOALRAIL$/);
+    expect(brand.querySelector('svg.brandMark')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /goalrail console/i })).not.toBeInTheDocument();
     expect(navigation).toBeInTheDocument();
     expect(buttons).toHaveLength(3);
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');

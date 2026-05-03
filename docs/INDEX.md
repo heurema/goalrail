@@ -16,6 +16,7 @@ related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/ops/STATUS.md
+  - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
 # Goalrail Docs Index
 
@@ -106,20 +107,21 @@ related_docs:
 63. `docs/ops/COMPONENTS.yaml`
 64. `docs/ops/BRANCH_PROTECTION.md`
 65. `docs/ops/REPO_STRUCTURE.md`
-66. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-67. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+66. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+67. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+68. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-68. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-69. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-70. `docs/reference/design/reference_screens/`
-71. `.goalrail/work/`
-72. `.goalrail/knowledge/`
-73. `.punk/publishing.toml`
-74. `.goalrail/flows/`
-75. `.goalrail/evals/`
-76. `docs/ops/PUBLISHING_MIGRATION.md`
-77. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+69. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+70. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+71. `docs/reference/design/reference_screens/`
+72. `.goalrail/work/`
+73. `.goalrail/knowledge/`
+74. `.punk/publishing.toml`
+75. `.goalrail/flows/`
+76. `.goalrail/evals/`
+77. `docs/ops/PUBLISHING_MIGRATION.md`
+78. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -207,6 +209,7 @@ related_docs:
 - `COMPONENTS.yaml` — component map
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
+- `CONSOLE_RU_DEPLOYMENT_WIRING.md` — operational record for the static `console.goalrail.ru` deployment wiring and smoke status
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
