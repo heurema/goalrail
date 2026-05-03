@@ -7,23 +7,14 @@ import (
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type ProjectContextExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type ProjectContextQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type ProjectContextStore struct {
-	exec  ProjectContextExecer
-	query ProjectContextQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -31,15 +22,15 @@ func NewProjectContextStore(pool *pgxpool.Pool) *ProjectContextStore {
 	return newProjectContextStore(pool, pool)
 }
 
-func NewProjectContextStoreWithExecutor(exec ProjectContextExecer) *ProjectContextStore {
+func NewProjectContextStoreWithExecutor(exec postgresExecer) *ProjectContextStore {
 	return newProjectContextStore(exec, nil)
 }
 
-func NewProjectContextStoreWithExecutorAndQuerier(exec ProjectContextExecer, query ProjectContextQuerier) *ProjectContextStore {
+func NewProjectContextStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *ProjectContextStore {
 	return newProjectContextStore(exec, query)
 }
 
-func newProjectContextStore(exec ProjectContextExecer, query ProjectContextQuerier) *ProjectContextStore {
+func newProjectContextStore(exec postgresExecer, query postgresRowQuerier) *ProjectContextStore {
 	return &ProjectContextStore{
 		exec:  exec,
 		query: query,

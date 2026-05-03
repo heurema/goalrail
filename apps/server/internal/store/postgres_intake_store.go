@@ -8,23 +8,14 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type IntakeExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type IntakeQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresIntakeStore struct {
-	exec  IntakeExecer
-	query IntakeQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -33,7 +24,7 @@ func NewPostgresIntakeStore(pool *pgxpool.Pool) *PostgresIntakeStore {
 	return NewPostgresIntakeStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresIntakeStoreWithExecutorAndQuerier(exec IntakeExecer, query IntakeQuerier) *PostgresIntakeStore {
+func NewPostgresIntakeStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresIntakeStore {
 	return &PostgresIntakeStore{
 		exec:  exec,
 		query: query,

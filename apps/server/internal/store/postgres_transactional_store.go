@@ -15,9 +15,9 @@ import (
 type postgresTxFunc func(context.Context) error
 
 type postgresDBTX interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	postgresExecer
+	postgresRowQuerier
+	postgresRowsQuerier
 }
 
 type postgresTx interface {

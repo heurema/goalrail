@@ -7,24 +7,15 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type AuthExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type AuthQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresAuthStore struct {
-	exec  AuthExecer
-	query AuthQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -33,7 +24,7 @@ func NewPostgresAuthStore(pool *pgxpool.Pool) *PostgresAuthStore {
 	return NewPostgresAuthStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresAuthStoreWithExecutorAndQuerier(exec AuthExecer, query AuthQuerier) *PostgresAuthStore {
+func NewPostgresAuthStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresAuthStore {
 	return &PostgresAuthStore{
 		exec:  exec,
 		query: query,
