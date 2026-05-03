@@ -191,7 +191,6 @@ components:
       - apps/cli/cmd/goalrail
       - apps/cli/internal/app
       - apps/cli/internal/clienv
-      - apps/cli/internal/cli
       - apps/cli/internal/exitcode
       - apps/cli/internal/spine
       - apps/cli/internal/term
@@ -204,7 +203,7 @@ components:
       - apps/cli/internal/proofcmd
       - apps/cli/testdata
     public_claim_allowed: false
-    notes: First stdlib-only Go CLI bootstrap exists with canonical binary goalrail. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, hosted execution, real gate, runner integration, or proof generation.
+    notes: First Go CLI bootstrap exists with canonical binary goalrail and Cobra-backed command parsing. It supports local/demo version, init repo binding draft, readiness scan, contract validate, and proof show commands. It has no server integration, hosted execution, real gate, runner integration, auth/session behavior, CLI login, or proof generation.
   server_surface:
     name: Server Surface
     status: prototype
