@@ -311,14 +311,7 @@ func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op st
 }
 
 func queryAuthRow(ctx context.Context, query postgresRowQuerier, op string, stmt squirrel.SelectBuilder) (pgx.Row, error) {
-	if query == nil {
-		return nil, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("%s SQL: %w", op, err)
-	}
-	return query.QueryRow(ctx, sqlText, args...), nil
+	return queryRow(ctx, query, op, stmt)
 }
 
 func scanPasswordCredential(row pgx.Row) (spine.UserPasswordCredential, error) {
