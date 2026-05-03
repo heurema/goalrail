@@ -31,6 +31,7 @@
 - Use `docs/ops/REPO_STRUCTURE.md` for where to add code, docs, tools, overlays, and new top-level paths.
 - When adding real implementation, create new code under `apps/` unless canon or ops docs explicitly assign a different bounded path.
 - When creating implementation later, keep scope explicit and bounded.
+- All Go changes must follow `docs/ops/GO_CODE_GUIDE.md`.
 - When working on Go code, use `.codex/skills/go-reference/SKILL.md` as a reference navigator: proceed directly when clear; when making meaningful architecture/API/layout/concurrency/dependency/test decisions or when uncertain, consult the linked Go references before deciding.
 
 ## Goalrail implementation guardrails
