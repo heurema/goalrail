@@ -32,9 +32,9 @@
   are the only deployment modes, and the server now has the smallest
   Installation schema foundation: `installations`, installation-scoped
   organization slugs, and a dev `self_hosted` Installation linked to the dev
-  Organization. The later ADR-0023 auth API slice now adds server-only login,
-  password change, and `/v1/me`; CLI login, browser loopback, SaaS onboarding,
-  organization creation API, and web UI remain unimplemented.
+  Organization. The later ADR-0023 auth API slices now add server-only login,
+  refresh, password change, logout, and `/v1/me`; CLI login, browser loopback,
+  SaaS onboarding, organization creation API, and web UI remain unimplemented.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -49,8 +49,9 @@
   now exists as schema, server-local types, Squirrel-backed store primitives,
   and Argon2id PHC-style password hashing/verification, and
   `goalrail-server bootstrap owner` now implements the smallest self-hosted
-  owner bootstrap command. The smallest server-only auth API/login slice now
-  exists; CLI login, browser loopback, and web UI remain unimplemented.
+  owner bootstrap command. The smallest server-only auth API lifecycle now
+  exists for login, refresh, password change, logout, and current-user profile;
+  CLI login, browser loopback, and web UI remain unimplemented.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -253,7 +254,43 @@ Done means:
 - no billing
 - no SSO/OIDC
 - no password reset or email invite/reset delivery
-- no refresh/logout endpoint
+- no runner, gate, proof, or generic queue work
+
+## Completed backend bounded slice
+
+### Auth refresh/logout API slice
+
+Status: **DONE — server-only refresh/logout lifecycle exists.**
+
+Goal:
+- implement the next narrow session lifecycle boundary around existing
+  `user_sessions` and opaque refresh-token storage, without broadening into CLI
+  login, browser loopback, web UI, public registration, admin user creation, or
+  SaaS onboarding.
+
+Done means:
+- ✅ `POST /v1/auth/refresh` accepts an opaque refresh token, hashes it with
+  the same opaque-token hash strategy used by login, looks up
+  `user_sessions.refresh_token_hash`, rejects unknown, revoked, expired, or
+  inactive sessions, rejects inactive users, requires an active
+  OrganizationMembership, updates `last_used_at` / `updated_at`, and returns a
+  new short-lived JWT access token only
+- ✅ refresh keeps the existing refresh token valid until expiry; this slice
+  does not implement refresh-token rotation
+- ✅ `POST /v1/auth/logout` validates the bearer access token, loads the
+  referenced session, marks that session revoked, and sets `revoked_at` /
+  `updated_at`
+- ✅ missing, invalid, or expired bearer tokens return unauthorized for logout
+- ✅ missing or weak `GOALRAIL_AUTH_JWT_SECRET` returns `auth_not_configured`
+  when refresh needs JWT signing
+- no CLI `goalrail login`
+- no browser loopback
+- no web UI
+- no public registration
+- no admin user creation endpoint
+- no SaaS onboarding
+- no organization creation API
+- no password reset or email invite/reset delivery
 - no runner, gate, proof, or generic queue work
 
 ## Next public-surface bounded slice

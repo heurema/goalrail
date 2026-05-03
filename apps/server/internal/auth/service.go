@@ -38,6 +38,7 @@ type Store interface {
 	UpsertPasswordCredential(context.Context, spine.UserPasswordCredential) error
 	UpsertSession(context.Context, spine.UserSession) error
 	GetSession(context.Context, spine.UserSessionID) (spine.UserSession, bool, error)
+	GetSessionByRefreshTokenHash(context.Context, string) (spine.UserSession, bool, error)
 	GetPrimaryOrganizationMembership(context.Context, spine.UserID) (spine.OrganizationMembership, bool, error)
 }
 
@@ -134,6 +135,17 @@ type LoginResult struct {
 	OrganizationMembership spine.OrganizationMembership
 }
 
+type RefreshInput struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type RefreshResult struct {
+	UserID               spine.UserID `json:"user_id"`
+	AccessToken          string       `json:"access_token"`
+	AccessTokenExpiresAt time.Time    `json:"access_token_expires_at"`
+	TokenType            string       `json:"token_type"`
+}
+
 type ChangePasswordInput struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
@@ -143,6 +155,10 @@ type ChangePasswordResult struct {
 	UserID             spine.UserID `json:"user_id"`
 	MustChangePassword bool         `json:"must_change_password"`
 	PasswordChangedAt  time.Time    `json:"password_changed_at"`
+}
+
+type LogoutResult struct {
+	Revoked bool `json:"revoked"`
 }
 
 type Profile struct {
@@ -244,6 +260,66 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	}, nil
 }
 
+func (s *Service) Refresh(ctx context.Context, input RefreshInput) (RefreshResult, error) {
+	if s.store == nil {
+		return RefreshResult{}, ErrStoreUnavailable
+	}
+	if strings.TrimSpace(input.RefreshToken) == "" {
+		return RefreshResult{}, ErrSessionInvalid
+	}
+
+	now := s.clock.Now().UTC()
+	session, ok, err := s.store.GetSessionByRefreshTokenHash(ctx, hashOpaqueToken(input.RefreshToken))
+	if err != nil {
+		return RefreshResult{}, fmt.Errorf("get user session by refresh token: %w", err)
+	}
+	if !ok || session.State != spine.UserSessionStateActive || !now.Before(session.ExpiresAt.UTC()) {
+		return RefreshResult{}, ErrSessionInvalid
+	}
+
+	user, ok, err := s.store.GetUser(ctx, session.UserID)
+	if err != nil {
+		return RefreshResult{}, fmt.Errorf("get user: %w", err)
+	}
+	if !ok {
+		return RefreshResult{}, ErrSessionInvalid
+	}
+	if user.State != spine.EntityStateActive {
+		return RefreshResult{}, ErrInactiveUser
+	}
+	membership, ok, err := s.store.GetPrimaryOrganizationMembership(ctx, user.ID)
+	if err != nil {
+		return RefreshResult{}, fmt.Errorf("get organization membership: %w", err)
+	}
+	if !ok || membership.State != spine.EntityStateActive {
+		return RefreshResult{}, ErrMembershipRequired
+	}
+
+	accessTokenExpiresAt := now.Add(s.accessTokenTTL)
+	accessToken, err := s.accessTokens.Sign(AccessTokenClaims{
+		UserID:    user.ID,
+		SessionID: session.ID,
+		IssuedAt:  now,
+		ExpiresAt: accessTokenExpiresAt,
+	})
+	if err != nil {
+		return RefreshResult{}, err
+	}
+
+	session.UpdatedAt = now
+	session.LastUsedAt = &now
+	if err := s.store.UpsertSession(ctx, session); err != nil {
+		return RefreshResult{}, fmt.Errorf("update user session last use: %w", err)
+	}
+
+	return RefreshResult{
+		UserID:               user.ID,
+		AccessToken:          accessToken,
+		AccessTokenExpiresAt: accessTokenExpiresAt,
+		TokenType:            "Bearer",
+	}, nil
+}
+
 func (s *Service) ChangePassword(ctx context.Context, accessToken string, input ChangePasswordInput) (ChangePasswordResult, error) {
 	if input.CurrentPassword == "" {
 		return ChangePasswordResult{}, ErrCurrentPassword
@@ -291,6 +367,23 @@ func (s *Service) ChangePassword(ctx context.Context, accessToken string, input 
 		MustChangePassword: false,
 		PasswordChangedAt:  now,
 	}, nil
+}
+
+func (s *Service) Logout(ctx context.Context, accessToken string) (LogoutResult, error) {
+	authenticated, err := s.AuthenticateAccessToken(ctx, accessToken)
+	if err != nil {
+		return LogoutResult{}, err
+	}
+
+	now := s.clock.Now().UTC()
+	session := authenticated.Session
+	session.State = spine.UserSessionStateRevoked
+	session.RevokedAt = &now
+	session.UpdatedAt = now
+	if err := s.store.UpsertSession(ctx, session); err != nil {
+		return LogoutResult{}, fmt.Errorf("revoke user session: %w", err)
+	}
+	return LogoutResult{Revoked: true}, nil
 }
 
 func (s *Service) Me(ctx context.Context, accessToken string) (Profile, error) {

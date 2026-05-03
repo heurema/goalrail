@@ -95,6 +95,22 @@ curl -sS http://localhost:8080/v1/auth/login \
 The response includes a short-lived bearer `access_token`, an opaque
 `refresh_token` backed by `user_sessions`, and `must_change_password`.
 
+Refresh the short-lived access token with the opaque refresh token:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/auth/refresh \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "refresh_token": "refresh-token"
+  }'
+```
+
+The refresh endpoint hashes the supplied opaque token, looks up the
+server-owned `user_sessions` row, rejects unknown, expired, revoked, or
+inactive sessions, loads the current User and active OrganizationMembership
+server-side, updates session `last_used_at`, and returns a new access token
+only. It does not rotate the refresh token in this slice.
+
 Change the temporary password with the bearer token:
 
 ```bash
@@ -118,10 +134,20 @@ curl -sS http://localhost:8080/v1/me \
 server-side. JWTs carry only identity/session claims, not broad role or
 permission claims.
 
+Log out the current bearer-token session:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/auth/logout \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+Logout validates the bearer access token, loads the referenced session, and
+marks that session revoked with `revoked_at`.
+
 There is still no CLI `goalrail login`, browser loopback, web UI, public
 registration, admin user creation endpoint, SaaS onboarding, organization
 creation API, password reset flow, email invite/reset delivery, refresh
-endpoint, or logout endpoint in this slice.
+token rotation, or broader session-management API in this slice.
 
 ## Dev intake flow
 

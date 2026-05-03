@@ -12,7 +12,9 @@ import (
 
 type AuthService interface {
 	Login(context.Context, auth.LoginInput) (auth.LoginResult, error)
+	Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error)
 	ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error)
+	Logout(context.Context, string) (auth.LogoutResult, error)
 	Me(context.Context, string) (auth.Profile, error)
 }
 
@@ -40,6 +42,13 @@ type changePasswordResponse struct {
 	PasswordChangedAt  string `json:"password_changed_at"`
 }
 
+type refreshResponse struct {
+	UserID               string `json:"user_id"`
+	AccessToken          string `json:"access_token"`
+	AccessTokenExpiresAt string `json:"access_token_expires_at"`
+	TokenType            string `json:"token_type"`
+}
+
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var input auth.LoginInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
@@ -63,6 +72,26 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var input auth.RefreshInput
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		return
+	}
+	result, err := h.service.Refresh(r.Context(), input)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, refreshResponse{
+		UserID:               string(result.UserID),
+		AccessToken:          result.AccessToken,
+		AccessTokenExpiresAt: result.AccessTokenExpiresAt.Format(time.RFC3339Nano),
+		TokenType:            result.TokenType,
+	})
+}
+
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	var input auth.ChangePasswordInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
@@ -80,6 +109,15 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		MustChangePassword: result.MustChangePassword,
 		PasswordChangedAt:  result.PasswordChangedAt.Format(time.RFC3339Nano),
 	})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.Logout(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, result)
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {

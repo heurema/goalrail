@@ -37,14 +37,17 @@ Squirrel-backed auth store, and Argon2id PHC-style password hashing /
 verification. `goalrail-server bootstrap owner` now creates or reuses the
 self-hosted Installation, primary Organization, first owner User, owner
 membership, and first temporary password credential without rotating existing
-credentials. The smallest server-only auth API/login slice now exists:
-`POST /v1/auth/login`, `POST /v1/auth/change-password`, and `GET /v1/me`.
+credentials. The smallest server-only auth API lifecycle now exists:
+`POST /v1/auth/login`, `POST /v1/auth/refresh`,
+`POST /v1/auth/change-password`, `POST /v1/auth/logout`, and `GET /v1/me`.
 It verifies existing `user_password_credentials`, creates server-owned
 `user_sessions` refresh-token state, signs short-lived JWT access tokens with
-`GOALRAIL_AUTH_JWT_SECRET`, and resolves current user membership server-side
-instead of trusting role claims in JWTs. No refresh/logout endpoint, CLI login,
-SaaS onboarding, organization creation API, public registration, or web UI is
-implemented.
+`GOALRAIL_AUTH_JWT_SECRET`, refreshes access tokens from opaque DB-backed
+refresh-token state without refresh-token rotation, revokes the current
+session on bearer-token logout, and resolves current user membership
+server-side instead of trusting role claims in JWTs. No CLI login, browser
+loopback, SaaS onboarding, organization creation API, public registration, or
+web UI is implemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
@@ -187,8 +190,9 @@ The project currently has:
   server-local types, Squirrel-backed store primitives, and password
   hashing/verification, the server now has the smallest self-hosted
   `goalrail-server bootstrap owner` command for initial owner credentials, and
-  the smallest server-only auth API exists for login, password change, and
-  current-user profile. CLI login and web UI remain unimplemented.
+  the smallest server-only auth API exists for login, refresh, password
+  change, logout, and current-user profile. CLI login and web UI remain
+  unimplemented.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -229,7 +233,7 @@ The project currently has:
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `POST /v1/auth/change-password`, `GET /v1/me`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no `GET /v1/plans`, `GET /v1/proposals`, or `GET /v1/tasks` list endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no `GET /v1/plans`, `GET /v1/proposals`, or `GET /v1/tasks` list endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
 - `POST /v1/contracts/{id}/plans` resolves `{id}` as stable public
   `contract_id`, requires the Contract to be `approved`, and creates a
   server-owned `WorkItemPlan(queued)` without creating WorkItems
@@ -311,9 +315,9 @@ The project currently has:
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation yet
 - no Installation bootstrap API, setup flow, or public management surface beyond
   the schema foundation and local `goalrail-server bootstrap owner` command yet
-- no refresh/logout endpoint, CLI login, browser loopback, public
-  registration, SaaS onboarding, organization creation API, admin user creation
-  endpoint, or Goalrail product web UI yet
+- no refresh-token rotation, CLI login, browser loopback, public registration,
+  SaaS onboarding, organization creation API, admin user creation endpoint, or
+  Goalrail product web UI yet
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
