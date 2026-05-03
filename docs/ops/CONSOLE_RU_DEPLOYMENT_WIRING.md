@@ -57,7 +57,7 @@ not recorded in this repository.
 | Hosting path | operator-managed SSH static server, colocated with the RU pilot static server |
 | Release root | `/srv/goalrail/console-ru/releases` |
 | Current symlink | `/srv/goalrail/console-ru/current` |
-| Active release | `/srv/goalrail/console-ru/releases/20260503T093017Z-console-ru-minimal-login` |
+| Active release | `/srv/goalrail/console-ru/releases/20260503T153849Z-console-ru-ux-polish` |
 | Runtime/backend | none |
 | Current deployment status | **LIVE VIA SSH STATIC SERVER — SMOKE PASSED** |
 
@@ -67,15 +67,17 @@ not recorded in this repository.
 
 Run from `apps/web`:
 
-- `npm run console-ru:test` — PASS, 5 tests. Existing Vitest warning:
-  `--localstorage-file was provided without a valid path`.
+- `npm run console-ru:typecheck` — PASS.
+- `npm run console-ru:test` — PASS, 9 tests.
 - `npm run console-ru:build` — PASS.
 - `apps/web/console-ru/dist/index.html` exists.
 - Built canonical is `https://console.goalrail.ru/`.
 - Source boundary scan passed: no app `fetch`, `XMLHttpRequest`, `sendBeacon`,
-  browser storage, analytics/tracking strings, provider API references, file
-  input, model selector, or chat-history surface in `apps/web/console-ru/src`
-  or `apps/web/console-ru/index.html`.
+  `document.cookie`, `sessionStorage`, analytics/tracking strings, provider API
+  references, file input, model selector, or chat-history surface in
+  `apps/web/console-ru/src` or `apps/web/console-ru/index.html`. The only
+  accepted browser storage usage is the local visual theme preference under
+  `goalrail.console.theme`.
 
 ### Upload and symlink
 
@@ -102,6 +104,11 @@ Run from `apps/web`:
 - On 2026-05-03, release `20260503T093017Z-console-ru-minimal-login` removed
   the login-card heading and helper copy, leaving only the wordmark and login
   fields.
+- On 2026-05-03, release `20260503T153849Z-console-ru-ux-polish` refreshed the
+  live console with Appearance theme switching, structured empty states for the
+  three product surfaces, and the local-only `goalrail.console.theme` visual
+  preference. Users, login state, product surfaces, sessions, cookies, API
+  calls, analytics, and backend behavior were not persisted or introduced.
 
 ### Nginx / TLS
 
@@ -130,8 +137,12 @@ Run from `apps/web`:
 - Deployed source-target check: `data-deployment-target="console.goalrail.ru"`
   is present in the built app bundle.
 - Public source boundary is unchanged from local source: no app API surface,
-  backend route, analytics/tracking, storage, provider API, file upload, model
-  selector, or chat-history feature is introduced by deployment.
+  backend route, analytics/tracking, provider API, file upload, model selector,
+  or chat-history feature is introduced by deployment. Browser storage remains
+  limited to the local visual theme preference under `goalrail.console.theme`.
+- Public UX-polish smoke passed: the deployed JavaScript bundle contains the
+  structured empty-state copy for `Оценка готовности`, `Проверка результата`,
+  `Goal → Contract → Task → Proof`, and the `goalrail.console.theme` key.
 - Public brand smoke passed: the deployed JavaScript bundle contains the
   `GOALRAIL` wordmark and no longer contains `svg.brandMark` or the rejected
   Rail Switch Mark v0 paths.
