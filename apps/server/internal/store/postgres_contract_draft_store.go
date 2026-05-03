@@ -281,14 +281,11 @@ func (s *PostgresContractDraftStore) getOne(ctx context.Context, op string, wher
 }
 
 func (s *PostgresContractDraftStore) queryContractDraft(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ContractDraft, bool, error) {
-	if s.query == nil {
-		return spine.ContractDraft{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.ContractDraft{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.ContractDraft{}, false, err
 	}
-	draft, err := scanContractDraft(s.query.QueryRow(ctx, sqlText, args...))
+	draft, err := scanContractDraft(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.ContractDraft{}, false, nil

@@ -149,14 +149,11 @@ func (s *PostgresContractSeedStore) getOne(ctx context.Context, op string, where
 }
 
 func (s *PostgresContractSeedStore) queryContractSeed(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ContractSeed, bool, error) {
-	if s.query == nil {
-		return spine.ContractSeed{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.ContractSeed{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.ContractSeed{}, false, err
 	}
-	seed, err := scanContractSeed(s.query.QueryRow(ctx, sqlText, args...))
+	seed, err := scanContractSeed(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.ContractSeed{}, false, nil

@@ -202,14 +202,11 @@ func (s *PostgresApprovedContractStore) getOne(ctx context.Context, op string, w
 }
 
 func (s *PostgresApprovedContractStore) queryApprovedContract(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ApprovedContract, bool, error) {
-	if s.query == nil {
-		return spine.ApprovedContract{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.ApprovedContract{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.ApprovedContract{}, false, err
 	}
-	approved, err := scanApprovedContract(s.query.QueryRow(ctx, sqlText, args...))
+	approved, err := scanApprovedContract(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.ApprovedContract{}, false, nil
