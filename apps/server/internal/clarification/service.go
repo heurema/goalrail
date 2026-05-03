@@ -114,10 +114,6 @@ func NewService(goals GoalReader, store Store, answers AnswerStore, events Event
 }
 
 func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine.ClarificationRequest, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ClarificationRequest{}, err
-	}
-
 	goal, ok, err := s.Goals.Get(ctx, goalID)
 	if err != nil {
 		return spine.ClarificationRequest{}, fmt.Errorf("get goal: %w", err)
@@ -181,10 +177,6 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 }
 
 func (s *Service) RecordAnswer(ctx context.Context, requestID spine.ClarificationRequestID, input spine.ClarificationAnswerSubmission) (spine.ClarificationAnswer, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ClarificationAnswer{}, err
-	}
-
 	request, ok, err := s.Store.Get(ctx, requestID)
 	if err != nil {
 		return spine.ClarificationAnswer{}, fmt.Errorf("get clarification request: %w", err)
@@ -260,9 +252,6 @@ func (s *Service) RecordAnswer(ctx context.Context, requestID spine.Clarificatio
 }
 
 func (s *Service) ApplyAnswer(ctx context.Context, answerID spine.ClarificationAnswerID, input spine.ClarificationAnswerApplicationRequest) (spine.ClarificationAnswerApplicationResult, spine.Goal, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
-	}
 	if strings.TrimSpace(input.AppliedBy.Kind) == "" {
 		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, &ValidationError{Field: "applied_by.kind", Message: "is required"}
 	}
@@ -670,28 +659,6 @@ type goalHintsUpdatedPayload struct {
 	AppliedBy       spine.ActorRef                            `json:"applied_by"`
 	AppliedMappings []spine.ClarificationAnswerAppliedMapping `json:"applied_mappings"`
 	AppliedAt       time.Time                                 `json:"applied_at"`
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Goals == nil {
-		return errors.New("clarification service goal reader is nil")
-	}
-	if s.Store == nil {
-		return errors.New("clarification service store is nil")
-	}
-	if s.Answers == nil {
-		return errors.New("clarification service answer store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("clarification service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("clarification service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("clarification service id generator is nil")
-	}
-	return nil
 }
 
 func cloneReasonCodes(reasons []spine.GoalReadinessReasonCode) []spine.GoalReadinessReasonCode {

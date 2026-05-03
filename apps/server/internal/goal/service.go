@@ -93,10 +93,6 @@ func NewService(intake IntakeReader, goals GoalStore, events EventLog, txRunner 
 }
 
 func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID) (spine.Goal, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Goal{}, err
-	}
-
 	record, ok, err := s.Intake.Get(ctx, intakeID)
 	if err != nil {
 		return spine.Goal{}, fmt.Errorf("get intake record: %w", err)
@@ -167,10 +163,6 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 }
 
 func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spine.GoalReadinessResult, spine.Goal, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, err
-	}
-
 	current, ok, err := s.Goals.Get(ctx, goalID)
 	if err != nil {
 		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("get goal: %w", err)
@@ -425,25 +417,6 @@ type goalReadinessPayload struct {
 	Result        spine.GoalReadinessResult `json:"result"`
 	PreviousState spine.GoalState           `json:"previous_state"`
 	NewState      spine.GoalState           `json:"new_state"`
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Intake == nil {
-		return errors.New("goal service intake reader is nil")
-	}
-	if s.Goals == nil {
-		return errors.New("goal service goal store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("goal service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("goal service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("goal service id generator is nil")
-	}
-	return nil
 }
 
 type SystemClock struct{}

@@ -104,9 +104,6 @@ func NewService(drafts DraftReader, contracts ContractStore, approved Store, eve
 }
 
 func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftID, input spine.ApproveContractDraftRequest) (spine.ApprovedContract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ApprovedContract{}, err
-	}
 	approvedBy := effectiveApprover(ctx, input)
 	if err := validateApprovedBy(approvedBy); err != nil {
 		return spine.ApprovedContract{}, err
@@ -310,28 +307,6 @@ func (s *Service) contractApprovedEvent(approved spine.ApprovedContract, previou
 		Timestamp:      approved.ApprovedAt,
 		Payload:        payload,
 	}, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Drafts == nil {
-		return errors.New("approved contract service draft store is nil")
-	}
-	if s.Contracts == nil {
-		return errors.New("approved contract service contract store is nil")
-	}
-	if s.Approved == nil {
-		return errors.New("approved contract service approved contract store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("approved contract service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("approved contract service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("approved contract service id generator is nil")
-	}
-	return nil
 }
 
 type SystemClock struct{}
