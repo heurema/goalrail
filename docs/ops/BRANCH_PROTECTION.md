@@ -42,6 +42,16 @@ The protected `main` branch requires these PR checks before merge:
 - `go (apps/web/pilot-intake-ru/server)`
 - `web workspaces`
 
+## Codex Review Gate behavior
+
+`codex-review-gate` blocks unresolved review threads authored by configured
+Codex review identities, while ignoring outdated threads. It does not require a
+fresh Codex Review object on every PR head.
+
+This keeps the repository protected when Codex Review actually reports
+actionable threads, but avoids blocking all PRs when the external Codex Review
+service does not submit a review artifact for the current head.
+
 ## Verified settings
 
 Verified on 2026-05-02:
