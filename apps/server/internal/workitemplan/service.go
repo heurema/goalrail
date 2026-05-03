@@ -81,6 +81,10 @@ type AcceptanceTransaction interface {
 	AcceptProposalWithWorkItemsAndEvents(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalID, spine.ActorRef, time.Time, []spine.WorkItem, []spine.Event) error
 }
 
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -100,6 +104,7 @@ type Service struct {
 	WorkItems             WorkItemStore
 	Events                EventLog
 	AcceptanceTransaction AcceptanceTransaction
+	TxRunner              TransactionRunner
 	Clock                 Clock
 	IDs                   IDGenerator
 }
@@ -109,6 +114,12 @@ type Option func(*Service)
 func WithAcceptanceTransaction(tx AcceptanceTransaction) Option {
 	return func(s *Service) {
 		s.AcceptanceTransaction = tx
+	}
+}
+
+func WithTransactionRunner(runner TransactionRunner) Option {
+	return func(s *Service) {
+		s.TxRunner = runner
 	}
 }
 
@@ -290,7 +301,29 @@ func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemP
 	if err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
-	if s.AcceptanceTransaction != nil {
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+			for _, item := range items {
+				if err := s.WorkItems.Create(txCtx, item); err != nil {
+					return err
+				}
+			}
+			if err := s.Proposals.MarkAccepted(txCtx, proposal.ID, input.AcceptedBy, acceptedAt); err != nil {
+				return err
+			}
+			if err := s.Plans.MarkAccepted(txCtx, plan.ID, acceptedAt); err != nil {
+				return err
+			}
+			for _, event := range events {
+				if err := s.Events.Append(txCtx, event); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
+		}
+	} else if s.AcceptanceTransaction != nil {
 		if err := s.AcceptanceTransaction.AcceptProposalWithWorkItemsAndEvents(ctx, plan.ID, proposal.ID, input.AcceptedBy, acceptedAt, items, events); err != nil {
 			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
 		}

@@ -78,7 +78,6 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	workItemStore := store.NewPostgresTransactionalWorkItemStore(pool)
 	workItemPlanStore := store.NewPostgresWorkItemPlanStore(pool)
 	workItemPlanProposalStore := store.NewPostgresWorkItemPlanProposalStore(pool)
-	acceptanceTransaction := store.NewPostgresTransactionalWorkItemPlanStore(pool)
 	events := store.NewPostgresEventLog(pool)
 	authStore := store.NewPostgresAuthStore(pool)
 	txRunner := store.NewPostgresTransactionRunner(pool)
@@ -97,10 +96,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
-	workItemPlanOptions := []workitemplan.Option{}
-	if acceptanceTransaction != nil {
-		workItemPlanOptions = append(workItemPlanOptions, workitemplan.WithAcceptanceTransaction(acceptanceTransaction))
-	}
+	workItemPlanOptions := []workitemplan.Option{workitemplan.WithTransactionRunner(txRunner)}
 	workItemPlanService := workitemplan.NewService(contracts, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}, workItemPlanOptions...)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 	authService := auth.NewService(authStore, cfg.AuthJWTSecret)
