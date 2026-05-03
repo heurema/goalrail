@@ -2,11 +2,13 @@ package workitemplan_test
 
 import (
 	"context"
+	"errors"
+	"testing"
+	"time"
+
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
-	"testing"
-	"time"
 )
 
 func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
@@ -101,7 +103,61 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}
 }
 
-func planningService(t *testing.T) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
+func TestServiceAcceptProposalUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	txRunner := &fakeTransactionRunner{}
+	fallback := &fakeAcceptanceTransaction{err: errors.New("acceptance transaction fallback called")}
+	service, _, _, plans, proposals, workItems, events := planningService(
+		t,
+		workitemplan.WithTransactionRunner(txRunner),
+		workitemplan.WithAcceptanceTransaction(fallback),
+	)
+	approved := validApprovedContract()
+
+	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID)))
+	if err != nil {
+		t.Fatalf("SubmitProposal() error = %v", err)
+	}
+
+	accepted, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
+		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
+	})
+	if err != nil {
+		t.Fatalf("AcceptProposal() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if fallback.calls != 0 {
+		t.Fatalf("AcceptanceTransaction calls = %d, want 0", fallback.calls)
+	}
+	if got := len(accepted.CreatedTaskIDs); got != 1 {
+		t.Fatalf("created tasks = %d, want 1", got)
+	}
+	if _, ok, err := workItems.Get(context.Background(), accepted.CreatedTaskIDs[0]); err != nil {
+		t.Fatalf("workItems.Get() error = %v", err)
+	} else if !ok {
+		t.Fatal("accepted task not stored")
+	}
+	storedProposal, _, _ := proposals.Get(context.Background(), proposal.ID)
+	if storedProposal.State != spine.WorkItemProposalStateAccepted {
+		t.Fatalf("proposal state = %q, want accepted", storedProposal.State)
+	}
+	storedPlan, _, _ := plans.Get(context.Background(), plan.ID)
+	if storedPlan.State != spine.WorkItemPlanStateAccepted {
+		t.Fatalf("plan state = %q, want accepted", storedPlan.State)
+	}
+	if got := countEventType(events.Events(), workitem.EventTypeWorkItemCreated); got != 1 {
+		t.Fatalf("work_item.created events = %d, want 1", got)
+	}
+}
+
+func planningService(t *testing.T, opts ...workitemplan.Option) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
 	t.Helper()
 	contracts := newFakeContractStore()
 	approvedContracts := newFakeApprovedContractStore()
@@ -114,8 +170,27 @@ func planningService(t *testing.T) (*workitemplan.Service, *fakeContractStore, *
 	if err := approvedContracts.Create(context.Background(), approved); err != nil {
 		t.Fatalf("approvedContracts.Create() error = %v", err)
 	}
-	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{}, opts...)
 	return service, contracts, approvedContracts, plans, proposals, workItems, events
+}
+
+type fakeTransactionRunner struct {
+	calls int
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(ctx)
+}
+
+type fakeAcceptanceTransaction struct {
+	calls int
+	err   error
+}
+
+func (tx *fakeAcceptanceTransaction) AcceptProposalWithWorkItemsAndEvents(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalID, spine.ActorRef, time.Time, []spine.WorkItem, []spine.Event) error {
+	tx.calls++
+	return tx.err
 }
 
 type fakeContractStore struct {
