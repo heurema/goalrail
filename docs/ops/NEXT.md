@@ -32,9 +32,10 @@
   are the only deployment modes, and the server now has the smallest
   Installation schema foundation: `installations`, installation-scoped
   organization slugs, and a dev `self_hosted` Installation linked to the dev
-  Organization. The later ADR-0023 auth API slices now add server-only login,
-  refresh, password change, logout, and `/v1/me`; CLI login, browser loopback,
-  SaaS onboarding, organization creation API, and web UI remain unimplemented.
+  Organization. The later ADR-0023 auth API slices now add login, refresh,
+  password change, logout, `/v1/me`, and the smallest CLI browser-loopback
+  login code exchange; SaaS onboarding, organization creation API, and web UI
+  beyond the minimal CLI login page remain unimplemented.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -43,15 +44,16 @@
   credentials should live outside `users`, access tokens should be short-lived
   JWTs, refresh tokens should be opaque DB-backed server state, JWTs should not
   carry broad/stale permission state, server-side role checks use
-  `OrganizationMembership`, and future `goalrail login` uses explicit
-  `server_url`, browser localhost loopback, and a selected Organization /
-  Project / RepoBinding profile. The smallest credential/session foundation
+  `OrganizationMembership`, and `goalrail login` uses explicit `server_url`
+  plus browser localhost loopback. The smallest credential/session foundation
   now exists as schema, server-local types, Squirrel-backed store primitives,
   and Argon2id PHC-style password hashing/verification, and
   `goalrail-server bootstrap owner` now implements the smallest self-hosted
-  owner bootstrap command. The smallest server-only auth API lifecycle now
-  exists for login, refresh, password change, logout, and current-user profile;
-  CLI login, browser loopback, and web UI remain unimplemented.
+  owner bootstrap command. The smallest auth API lifecycle now exists for
+  login, refresh, password change, logout, current-user profile, and CLI code
+  exchange with S256 verifier/challenge binding; the CLI now stores token
+  metadata locally after browser-loopback login. Organization / Project /
+  RepoBinding profile selection and web UI remain unimplemented.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -221,6 +223,46 @@ Done means:
 - no organization creation API
 - no billing
 - no SSO/OIDC
+- no runner, gate, proof, or generic queue work
+
+## Completed backend bounded slice
+
+### CLI browser-loopback login slice
+
+Status: **DONE — smallest `goalrail login <server_url>` auth path exists.**
+
+Goal:
+- implement the first real CLI login path on top of the existing server auth
+  lifecycle and Postgres-only persistence boundary, without adding a general
+  web UI or selected Organization / Project / RepoBinding profile.
+
+Done means:
+- ✅ `goalrail login <server_url>` validates an explicit http(s) server URL
+- ✅ the CLI starts a `127.0.0.1` loopback callback listener on a random port
+- ✅ the CLI generates random `state` and `code_verifier`
+- ✅ the CLI opens the server `/cli/login` URL with an S256 `code_challenge` or
+  prints it with `--no-browser`
+- ✅ `GET /cli/login` renders a minimal CLI-only HTML login page
+- ✅ `POST /cli/login` verifies existing email/password credentials through the
+  auth service, rejects credentials still marked `must_change_password`,
+  validates localhost loopback redirect targets, creates a short-lived one-time
+  auth code stored by hash with S256 challenge metadata, and redirects with only
+  `code` and `state`
+- ✅ `POST /v1/auth/cli/exchange` requires the matching `code_verifier`,
+  consumes a valid unused code once, and returns normal access/refresh token
+  metadata
+- ✅ the CLI stores `server_url`, `access_token`, `refresh_token`,
+  `access_token_expires_at`, and `token_type` in a local auth JSON file with
+  0600 permissions
+- no keychain integration
+- no Organization / Project / RepoBinding profile selection
+- no repo binding sync
+- no proof retrieval
+- no public registration
+- no admin user creation endpoint
+- no SaaS onboarding
+- no organization creation API
+- no web console login UI beyond the minimal CLI login page
 - no runner, gate, proof, or generic queue work
 
 ## Completed backend bounded slice

@@ -43,6 +43,107 @@ func TestAuthLoginReturnsAccessAndRefreshTokens(t *testing.T) {
 	}
 }
 
+func TestCLILoginPageRendersMinimalForm(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.CLILoginPage), http.MethodGet, "/cli/login?redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&state=state-1&code_challenge=challenge-1", "", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	if !strings.Contains(response.body, "Goalrail CLI Login") || !strings.Contains(response.body, `name="redirect_uri"`) {
+		t.Fatalf("body = %q, want minimal CLI login form", response.body)
+	}
+}
+
+func TestCLILoginSubmitRejectsInvalidCredentials(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{cliLoginErr: auth.ErrInvalidCredentials})
+
+	response := doFormRequest(t, http.HandlerFunc(handler.CLILoginSubmit), "/cli/login", "email=owner%40example.com&password=wrong&redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&state=state-1&code_challenge=challenge-1")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if !strings.Contains(response.body, "Invalid email or password") {
+		t.Fatalf("body = %q, want invalid credentials message", response.body)
+	}
+}
+
+func TestCLILoginSubmitRejectsNonLocalhostRedirectTarget(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{cliLoginErr: auth.ErrInvalidRedirectURI})
+
+	response := doFormRequest(t, http.HandlerFunc(handler.CLILoginSubmit), "/cli/login", "email=owner%40example.com&password=temporary-password&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&state=state-1&code_challenge=challenge-1")
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+}
+
+func TestCLILoginSubmitShowsPasswordChangeRequiredWithoutRedirect(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{cliLoginErr: auth.ErrPasswordChangeRequired})
+
+	response := doFormRequest(t, http.HandlerFunc(handler.CLILoginSubmit), "/cli/login", "email=owner%40example.com&password=temporary-password&redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&state=state-1&code_challenge=challenge-1")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	if !strings.Contains(response.body, "Password change required before CLI login.") {
+		t.Fatalf("body = %q, want password-change-required message", response.body)
+	}
+	if location := response.header.Get("Location"); location != "" || strings.Contains(response.body, "code=one-time-code") {
+		t.Fatalf("Location = %q body = %q, want no code redirect", location, response.body)
+	}
+}
+
+func TestCLILoginSubmitRedirectsWithCodeAndStateOnly(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{
+		cliLoginResult: auth.CLILoginResult{RedirectURI: "http://127.0.0.1:49152/callback?code=one-time-code&state=state-1"},
+	})
+
+	response := doFormRequest(t, http.HandlerFunc(handler.CLILoginSubmit), "/cli/login", "email=owner%40example.com&password=temporary-password&redirect_uri=http%3A%2F%2F127.0.0.1%3A49152%2Fcallback&state=state-1&code_challenge=challenge-1")
+	if response.code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusSeeOther, response.body)
+	}
+	location := response.header.Get("Location")
+	if !strings.Contains(location, "code=one-time-code") || !strings.Contains(location, "state=state-1") {
+		t.Fatalf("Location = %q, want code and state", location)
+	}
+	if strings.Contains(location, "access_token") || strings.Contains(location, "refresh_token") || strings.Contains(location, "code_verifier") {
+		t.Fatalf("Location = %q, must not include tokens", location)
+	}
+}
+
+func TestCLIExchangeReturnsTokens(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{
+		cliExchangeResult: auth.CLIExchangeResult{
+			UserID:               "018f0000-0000-7000-8000-000000000001",
+			AccessToken:          "access-token",
+			AccessTokenExpiresAt: now.Add(15 * time.Minute),
+			TokenType:            "Bearer",
+			RefreshToken:         "refresh-token",
+		},
+	})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.CLIExchange), http.MethodPost, "/v1/auth/cli/exchange", `{"code":"one-time-code","state":"state-1","code_verifier":"cli-code-verifier"}`, "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var body map[string]any
+	decodeJSON(t, response.body, &body)
+	if body["access_token"] != "access-token" || body["refresh_token"] != "refresh-token" || body["token_type"] != "Bearer" {
+		t.Fatalf("exchange response = %#v, want token metadata", body)
+	}
+}
+
+func TestCLIExchangeRejectsInvalidCode(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{cliExchangeErr: auth.ErrCLIAuthCodeUsed})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.CLIExchange), http.MethodPost, "/v1/auth/cli/exchange", `{"code":"used","state":"state-1","code_verifier":"cli-code-verifier"}`, "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if !strings.Contains(response.body, "invalid_cli_code") {
+		t.Fatalf("body = %q, want invalid_cli_code", response.body)
+	}
+}
+
 func TestAuthRefreshReturnsNewAccessTokenOnly(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{
@@ -274,6 +375,10 @@ func TestAuthLogoutInvalidOrExpiredBearerTokenReturnsUnauthorized(t *testing.T) 
 type fakeHTTPAuthService struct {
 	loginResult          auth.LoginResult
 	loginErr             error
+	cliLoginResult       auth.CLILoginResult
+	cliLoginErr          error
+	cliExchangeResult    auth.CLIExchangeResult
+	cliExchangeErr       error
 	refreshResult        auth.RefreshResult
 	refreshErr           error
 	changePasswordResult auth.ChangePasswordResult
@@ -289,6 +394,20 @@ func (s fakeHTTPAuthService) Login(context.Context, auth.LoginInput) (auth.Login
 		return auth.LoginResult{}, s.loginErr
 	}
 	return s.loginResult, nil
+}
+
+func (s fakeHTTPAuthService) StartCLILogin(context.Context, auth.CLILoginInput) (auth.CLILoginResult, error) {
+	if s.cliLoginErr != nil {
+		return auth.CLILoginResult{}, s.cliLoginErr
+	}
+	return s.cliLoginResult, nil
+}
+
+func (s fakeHTTPAuthService) ExchangeCLIAuthCode(context.Context, auth.CLIExchangeInput) (auth.CLIExchangeResult, error) {
+	if s.cliExchangeErr != nil {
+		return auth.CLIExchangeResult{}, s.cliExchangeErr
+	}
+	return s.cliExchangeResult, nil
 }
 
 func (s fakeHTTPAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
@@ -333,6 +452,21 @@ func doAuthRequest(t *testing.T, handler http.Handler, method string, path strin
 	return routeResponse{
 		code:        recorder.Code,
 		contentType: recorder.Header().Get("Content-Type"),
+		header:      recorder.Header(),
+		body:        recorder.Body.String(),
+	}
+}
+
+func doFormRequest(t *testing.T, handler http.Handler, path string, body string) routeResponse {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handler.ServeHTTP(recorder, request)
+	return routeResponse{
+		code:        recorder.Code,
+		contentType: recorder.Header().Get("Content-Type"),
+		header:      recorder.Header(),
 		body:        recorder.Body.String(),
 	}
 }

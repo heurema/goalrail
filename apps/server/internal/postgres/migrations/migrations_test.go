@@ -60,6 +60,19 @@ func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 		"CONSTRAINT user_sessions_state_check CHECK (state IN ('active', 'revoked', 'expired'))",
 		"CREATE INDEX user_sessions_user_state_idx",
 		"CREATE INDEX user_sessions_expires_at_idx",
+		"CREATE TABLE cli_auth_codes",
+		"code_hash TEXT PRIMARY KEY",
+		"redirect_uri TEXT NOT NULL",
+		"state TEXT NOT NULL",
+		"code_challenge TEXT NOT NULL",
+		"code_challenge_method TEXT NOT NULL DEFAULT 'S256'",
+		"CONSTRAINT cli_auth_codes_code_hash_check CHECK (code_hash <> '')",
+		"CONSTRAINT cli_auth_codes_redirect_uri_check CHECK (redirect_uri <> '')",
+		"CONSTRAINT cli_auth_codes_state_check CHECK (state <> '')",
+		"CONSTRAINT cli_auth_codes_code_challenge_check CHECK (code_challenge <> '')",
+		"CONSTRAINT cli_auth_codes_code_challenge_method_check CHECK (code_challenge_method IN ('S256'))",
+		"CREATE INDEX cli_auth_codes_user_id_idx",
+		"CREATE INDEX cli_auth_codes_expires_at_idx",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("init migration missing %q", want)
@@ -77,6 +90,9 @@ func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	if strings.Index(sql, "CREATE TABLE users") > strings.Index(sql, "CREATE TABLE user_sessions") {
 		t.Fatalf("user_sessions must be created after users")
 	}
+	if strings.Index(sql, "CREATE TABLE user_sessions") > strings.Index(sql, "CREATE TABLE cli_auth_codes") {
+		t.Fatalf("cli_auth_codes must be created after user_sessions")
+	}
 	if strings.Index(sql, "CREATE TABLE user_sessions") > strings.Index(sql, "CREATE TABLE installations") {
 		t.Fatalf("auth session table should stay before installation/project context tables")
 	}
@@ -92,6 +108,9 @@ func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {
 		"DROP INDEX IF EXISTS user_sessions_expires_at_idx;",
 		"DROP INDEX IF EXISTS user_sessions_user_state_idx;",
 		"DROP TABLE IF EXISTS user_sessions;",
+		"DROP INDEX IF EXISTS cli_auth_codes_expires_at_idx;",
+		"DROP INDEX IF EXISTS cli_auth_codes_user_id_idx;",
+		"DROP TABLE IF EXISTS cli_auth_codes;",
 		"DROP INDEX IF EXISTS user_password_credentials_must_change_password_idx;",
 		"DROP TABLE IF EXISTS user_password_credentials;",
 		"DROP TABLE IF EXISTS users;",
@@ -102,6 +121,9 @@ func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {
 	}
 	if strings.Index(sql, "DROP TABLE IF EXISTS user_sessions;") > strings.Index(sql, "DROP TABLE IF EXISTS users;") {
 		t.Fatalf("user_sessions must be dropped before users")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS cli_auth_codes;") > strings.Index(sql, "DROP TABLE IF EXISTS users;") {
+		t.Fatalf("cli_auth_codes must be dropped before users")
 	}
 	if strings.Index(sql, "DROP TABLE IF EXISTS user_password_credentials;") > strings.Index(sql, "DROP TABLE IF EXISTS users;") {
 		t.Fatalf("user_password_credentials must be dropped before users")

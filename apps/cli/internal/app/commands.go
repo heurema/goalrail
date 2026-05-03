@@ -9,6 +9,7 @@ import (
 	"github.com/heurema/goalrail/apps/cli/internal/contractcmd"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
 	"github.com/heurema/goalrail/apps/cli/internal/initcmd"
+	"github.com/heurema/goalrail/apps/cli/internal/logincmd"
 	"github.com/heurema/goalrail/apps/cli/internal/proofcmd"
 	"github.com/heurema/goalrail/apps/cli/internal/readinesscmd"
 	"github.com/heurema/goalrail/apps/cli/internal/term"
@@ -22,6 +23,7 @@ type commandSummary struct {
 
 var rootCommands = []commandSummary{
 	{name: "version", summary: "print the CLI version"},
+	{name: "login", summary: "authenticate to a Goalrail server"},
 	{name: "init", summary: "create a local/demo repo binding draft"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
 	{name: "contract", summary: "validate contract JSON files"},
@@ -52,6 +54,7 @@ func NewRootCommand(env clienv.Env) *cobra.Command {
 
 	cmd.AddCommand(
 		newVersionCommand(),
+		newLoginCommand(),
 		newInitCommand(),
 		newReadinessCommand(env),
 		newContractCommand(env),
@@ -88,6 +91,17 @@ func newVersionCommand() *cobra.Command {
 			}
 			_, err := fmt.Fprintln(cmd.OutOrStdout(), Version)
 			return err
+		},
+	}
+}
+
+func newLoginCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:                "login <server_url>",
+		Short:              "authenticate to a Goalrail server",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return logincmd.Run(cmd.Context(), outputFor(cmd), args, logincmd.Options{})
 		},
 	}
 }
@@ -252,6 +266,8 @@ func helpFor(cmd *cobra.Command) string {
 		return proofcmd.ShowUsage()
 	case "goalrail init":
 		return initcmd.Usage()
+	case "goalrail login":
+		return logincmd.Usage()
 	case "goalrail version":
 		return versionUsage()
 	default:

@@ -91,8 +91,9 @@ temporary_password_already_exists=true
 
 ## Auth API
 
-The smallest server-only auth API is available after migrations and owner
-bootstrap. Configure JWT signing with an operator-owned secret:
+The smallest server auth API is available after migrations and owner bootstrap.
+It also backs the first CLI browser-loopback login flow. Configure JWT signing
+with an operator-owned secret:
 
 ```bash
 export GOALRAIL_AUTH_JWT_SECRET='<operator-managed-secret>'
@@ -166,10 +167,35 @@ curl -sS -X POST http://localhost:8080/v1/auth/logout \
 Logout validates the bearer access token, loads the referenced session, and
 marks that session revoked with `revoked_at`.
 
-There is still no CLI `goalrail login`, browser loopback, web UI, public
-registration, admin user creation endpoint, SaaS onboarding, organization
-creation API, password reset flow, email invite/reset delivery, refresh
-token rotation, or broader session-management API in this slice.
+## CLI browser-loopback login
+
+The server exposes the smallest browser page and code exchange needed for
+`goalrail login <server_url>`:
+
+- `GET /cli/login`
+- `POST /cli/login`
+- `POST /v1/auth/cli/exchange`
+
+The CLI opens or prints `/cli/login` with a localhost loopback callback URL,
+random `state`, and an S256 `code_challenge`. The browser page accepts existing
+Goalrail email/password credentials, validates that the callback target is
+localhost loopback, rejects credentials still marked `must_change_password`,
+creates a short-lived one-time authorization code, and redirects back to the CLI
+callback with only `code` and `state`. Access and refresh tokens are returned
+only from `POST /v1/auth/cli/exchange`, where the CLI must provide the matching
+`code_verifier`.
+
+CLI one-time codes are stored server-side by hash with their S256 challenge,
+expire after roughly five minutes, and are consumed once. These routes require
+the same structured Postgres database configuration as other product/auth
+routes. Without database configuration they return `503 database_not_configured`.
+
+There is still no web console login UI beyond this minimal CLI login page, no
+public registration, admin user creation endpoint, SaaS onboarding,
+organization creation API, password reset flow, email invite/reset delivery,
+refresh-token rotation, keychain integration, Organization / Project /
+RepoBinding profile selection, or broader session-management API in this
+slice.
 
 ## Dev intake flow
 

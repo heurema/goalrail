@@ -94,6 +94,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
 		AuthLogin:                 probeRoute("auth_login"),
+		CLILoginPage:              probeRoute("cli_login_page"),
+		CLILoginSubmit:            probeRoute("cli_login_submit"),
+		AuthCLIExchange:           probeRoute("auth_cli_exchange"),
 		AuthRefresh:               probeRoute("auth_refresh"),
 		AuthChangePassword:        probeRoute("auth_change_password"),
 		AuthLogout:                probeRoute("auth_logout"),
@@ -126,6 +129,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 	}{
 		{name: "intake_submit", method: http.MethodPost, path: "/v1/intakes", wantRoute: "intake_submit"},
 		{name: "auth_login", method: http.MethodPost, path: "/v1/auth/login", wantRoute: "auth_login"},
+		{name: "cli_login_page", method: http.MethodGet, path: "/cli/login", wantRoute: "cli_login_page"},
+		{name: "cli_login_submit", method: http.MethodPost, path: "/cli/login", wantRoute: "cli_login_submit"},
+		{name: "auth_cli_exchange", method: http.MethodPost, path: "/v1/auth/cli/exchange", wantRoute: "auth_cli_exchange"},
 		{name: "auth_refresh", method: http.MethodPost, path: "/v1/auth/refresh", wantRoute: "auth_refresh"},
 		{name: "auth_change_password", method: http.MethodPost, path: "/v1/auth/change-password", wantRoute: "auth_change_password"},
 		{name: "auth_logout", method: http.MethodPost, path: "/v1/auth/logout", wantRoute: "auth_logout"},
@@ -173,6 +179,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
 		AuthLogin:                 probeRoute("auth_login"),
+		CLILoginPage:              probeRoute("cli_login_page"),
+		CLILoginSubmit:            probeRoute("cli_login_submit"),
+		AuthCLIExchange:           probeRoute("auth_cli_exchange"),
 		AuthRefresh:               probeRoute("auth_refresh"),
 		AuthChangePassword:        probeRoute("auth_change_password"),
 		AuthLogout:                probeRoute("auth_logout"),
@@ -253,6 +262,14 @@ func (unavailableAuthService) Login(context.Context, auth.LoginInput) (auth.Logi
 	return auth.LoginResult{}, auth.ErrStoreUnavailable
 }
 
+func (unavailableAuthService) StartCLILogin(context.Context, auth.CLILoginInput) (auth.CLILoginResult, error) {
+	return auth.CLILoginResult{}, auth.ErrStoreUnavailable
+}
+
+func (unavailableAuthService) ExchangeCLIAuthCode(context.Context, auth.CLIExchangeInput) (auth.CLIExchangeResult, error) {
+	return auth.CLIExchangeResult{}, auth.ErrStoreUnavailable
+}
+
 func (unavailableAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
 	return auth.RefreshResult{}, auth.ErrStoreUnavailable
 }
@@ -272,6 +289,7 @@ func (unavailableAuthService) Me(context.Context, string) (auth.Profile, error) 
 type routeResponse struct {
 	code        int
 	contentType string
+	header      http.Header
 	body        string
 }
 
@@ -300,6 +318,7 @@ func doJSON(t *testing.T, handler http.Handler, method string, path string, body
 	return routeResponse{
 		code:        recorder.Code,
 		contentType: contentType,
+		header:      recorder.Header(),
 		body:        recorder.Body.String(),
 	}
 }
@@ -321,6 +340,9 @@ func newRouter(
 		Readyz:                    readyz,
 		Version:                   versionHandler,
 		AuthLogin:                 http.HandlerFunc(authHandler.Login),
+		CLILoginPage:              http.HandlerFunc(authHandler.CLILoginPage),
+		CLILoginSubmit:            http.HandlerFunc(authHandler.CLILoginSubmit),
+		AuthCLIExchange:           http.HandlerFunc(authHandler.CLIExchange),
 		AuthRefresh:               http.HandlerFunc(authHandler.Refresh),
 		AuthChangePassword:        http.HandlerFunc(authHandler.ChangePassword),
 		AuthLogout:                http.HandlerFunc(authHandler.Logout),

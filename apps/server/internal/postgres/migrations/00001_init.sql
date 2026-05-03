@@ -42,6 +42,29 @@ CREATE INDEX user_sessions_user_state_idx
 CREATE INDEX user_sessions_expires_at_idx
     ON user_sessions(expires_at);
 
+CREATE TABLE cli_auth_codes (
+    code_hash TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri TEXT NOT NULL,
+    state TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    code_challenge_method TEXT NOT NULL DEFAULT 'S256',
+    created_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ NULL,
+    CONSTRAINT cli_auth_codes_code_hash_check CHECK (code_hash <> ''),
+    CONSTRAINT cli_auth_codes_redirect_uri_check CHECK (redirect_uri <> ''),
+    CONSTRAINT cli_auth_codes_state_check CHECK (state <> ''),
+    CONSTRAINT cli_auth_codes_code_challenge_check CHECK (code_challenge <> ''),
+    CONSTRAINT cli_auth_codes_code_challenge_method_check CHECK (code_challenge_method IN ('S256'))
+);
+
+CREATE INDEX cli_auth_codes_user_id_idx
+    ON cli_auth_codes(user_id);
+
+CREATE INDEX cli_auth_codes_expires_at_idx
+    ON cli_auth_codes(expires_at);
+
 CREATE TABLE installations (
     id UUID PRIMARY KEY,
     mode TEXT NOT NULL,
@@ -608,6 +631,9 @@ DROP TABLE IF EXISTS projects;
 DROP TABLE IF EXISTS organization_memberships;
 DROP TABLE IF EXISTS organizations;
 DROP TABLE IF EXISTS installations;
+DROP INDEX IF EXISTS cli_auth_codes_expires_at_idx;
+DROP INDEX IF EXISTS cli_auth_codes_user_id_idx;
+DROP TABLE IF EXISTS cli_auth_codes;
 DROP INDEX IF EXISTS user_sessions_expires_at_idx;
 DROP INDEX IF EXISTS user_sessions_user_state_idx;
 DROP TABLE IF EXISTS user_sessions;

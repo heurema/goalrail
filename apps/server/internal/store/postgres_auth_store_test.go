@@ -80,6 +80,59 @@ func TestPostgresAuthStoreUpsertsUserSession(t *testing.T) {
 	}
 }
 
+func TestPostgresAuthStoreCreatesCLIAuthCode(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresAuthStoreWithExecutorAndQuerier(exec, nil)
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+
+	err := store.CreateCLIAuthCode(ctx, spine.CLIAuthCode{
+		CodeHash:            "hashed-code",
+		UserID:              "018f0000-0000-7000-8000-000000000001",
+		RedirectURI:         "http://127.0.0.1:49152/callback",
+		State:               "state-1",
+		CodeChallenge:       "challenge",
+		CodeChallengeMethod: "S256",
+		CreatedAt:           now,
+		ExpiresAt:           now.Add(5 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("CreateCLIAuthCode() error = %v", err)
+	}
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO cli_auth_codes") {
+		t.Fatalf("SQL = %q, want cli_auth_codes insert", call.sql)
+	}
+	if got, want := len(call.args), 9; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	if call.args[4] != "challenge" || call.args[5] != "S256" {
+		t.Fatalf("args = %#v, want stored code challenge metadata", call.args)
+	}
+}
+
+func TestPostgresAuthStoreMarksCLIAuthCodeConsumedOnce(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresAuthStoreWithExecutorAndQuerier(exec, nil)
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+
+	consumed, err := store.MarkCLIAuthCodeConsumed(ctx, "hashed-code", now)
+	if err != nil {
+		t.Fatalf("MarkCLIAuthCodeConsumed() error = %v", err)
+	}
+	if !consumed {
+		t.Fatal("MarkCLIAuthCodeConsumed() consumed = false, want true")
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "UPDATE cli_auth_codes SET consumed_at") || !strings.Contains(call.sql, "consumed_at IS NULL") {
+		t.Fatalf("SQL = %q, want conditional consumed_at update", call.sql)
+	}
+}
+
 func TestPostgresAuthStoreGetsPasswordCredential(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
@@ -113,6 +166,41 @@ func TestPostgresAuthStoreGetsPasswordCredential(t *testing.T) {
 	}
 	if !strings.Contains(query.calls[0].sql, "FROM user_password_credentials") {
 		t.Fatalf("SQL = %q, want user_password_credentials select", query.calls[0].sql)
+	}
+}
+
+func TestPostgresAuthStoreGetsCLIAuthCodeByHash(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"hashed-code",
+				"018f0000-0000-7000-8000-000000000001",
+				"http://127.0.0.1:49152/callback",
+				"state-1",
+				"challenge",
+				"S256",
+				now,
+				now.Add(5 * time.Minute),
+				nil,
+			},
+		},
+	}
+	store := NewPostgresAuthStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	code, ok, err := store.GetCLIAuthCodeByHash(ctx, "hashed-code")
+	if err != nil {
+		t.Fatalf("GetCLIAuthCodeByHash() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetCLIAuthCodeByHash() ok = false, want true")
+	}
+	if code.CodeHash != "hashed-code" || code.UserID != "018f0000-0000-7000-8000-000000000001" || code.CodeChallenge != "challenge" || code.CodeChallengeMethod != "S256" || code.ConsumedAt != nil {
+		t.Fatalf("code = %#v, want persisted CLI auth code", code)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM cli_auth_codes") {
+		t.Fatalf("SQL = %q, want cli_auth_codes select", query.calls[0].sql)
 	}
 }
 

@@ -10,6 +10,9 @@ type RouteHandlers struct {
 	Readyz                    http.Handler
 	Version                   http.Handler
 	AuthLogin                 http.Handler
+	CLILoginPage              http.Handler
+	CLILoginSubmit            http.Handler
+	AuthCLIExchange           http.Handler
 	AuthRefresh               http.Handler
 	AuthChangePassword        http.Handler
 	AuthLogout                http.Handler
@@ -42,6 +45,9 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("GET /readyz", mustHandler("readyz", handlers.Readyz))
 	mux.Handle("GET /version", mustHandler("version", handlers.Version))
 	mux.Handle("POST /v1/auth/login", mustHandler("auth login", handlers.AuthLogin))
+	mux.Handle("GET /cli/login", mustHandler("CLI login page", handlers.CLILoginPage))
+	mux.Handle("POST /cli/login", mustHandler("CLI login submit", handlers.CLILoginSubmit))
+	mux.Handle("POST /v1/auth/cli/exchange", mustHandler("auth CLI exchange", handlers.AuthCLIExchange))
 	mux.Handle("POST /v1/auth/refresh", mustHandler("auth refresh", handlers.AuthRefresh))
 	mux.Handle("POST /v1/auth/change-password", mustHandler("auth change password", handlers.AuthChangePassword))
 	mux.Handle("POST /v1/auth/logout", mustHandler("auth logout", handlers.AuthLogout))

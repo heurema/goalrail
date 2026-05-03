@@ -33,6 +33,18 @@ type UserSession struct {
 	LastUsedAt       *time.Time       `json:"last_used_at,omitempty"`
 }
 
+type CLIAuthCode struct {
+	CodeHash            string     `json:"-"`
+	UserID              UserID     `json:"user_id"`
+	RedirectURI         string     `json:"redirect_uri"`
+	State               string     `json:"state"`
+	CodeChallenge       string     `json:"code_challenge"`
+	CodeChallengeMethod string     `json:"code_challenge_method"`
+	CreatedAt           time.Time  `json:"created_at"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	ConsumedAt          *time.Time `json:"consumed_at,omitempty"`
+}
+
 func NewUserSessionID() (UserSessionID, error) {
 	id, err := newUUIDv7()
 	if err != nil {

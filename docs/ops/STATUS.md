@@ -33,21 +33,27 @@ Installation, and organization slugs are installation-scoped. ADR-0023
 documents the self-hosted user bootstrap, auth token, and browser-loopback CLI
 login direction. The smallest auth credential foundation now exists:
 `user_password_credentials`, `user_sessions`, server-local auth spine types, a
-Squirrel-backed auth store, and Argon2id PHC-style password hashing /
-verification. `goalrail-server bootstrap owner` now creates or reuses the
+Squirrel-backed auth store, short-lived hashed CLI auth codes, and Argon2id
+PHC-style password hashing / verification. `goalrail-server bootstrap owner`
+now creates or reuses the
 self-hosted Installation, primary Organization, first owner User, owner
 membership, and first temporary password credential without rotating existing
-credentials. The smallest server-only auth API lifecycle now exists:
+credentials. The smallest server auth API lifecycle now exists:
 `POST /v1/auth/login`, `POST /v1/auth/refresh`,
-`POST /v1/auth/change-password`, `POST /v1/auth/logout`, and `GET /v1/me`.
+`POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`,
+`GET /cli/login`, `POST /cli/login`, and `POST /v1/auth/cli/exchange`.
 It verifies existing `user_password_credentials`, creates server-owned
 `user_sessions` refresh-token state, signs short-lived JWT access tokens with
 `GOALRAIL_AUTH_JWT_SECRET`, refreshes access tokens from opaque DB-backed
 refresh-token state without refresh-token rotation, revokes the current
 session on bearer-token logout, and resolves current user membership
-server-side instead of trusting role claims in JWTs. No CLI login, browser
-loopback, SaaS onboarding, organization creation API, public registration, or
-web UI is implemented.
+server-side instead of trusting role claims in JWTs. `goalrail login
+<server_url>` now starts a localhost loopback listener, opens or prints the
+server CLI login URL, exchanges a one-time code for tokens, and stores token
+metadata in a local 0600 auth file. SaaS onboarding, organization creation API,
+public registration, keychain integration, Organization / Project /
+RepoBinding profile selection, and web UI beyond the minimal CLI login page
+remain unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
@@ -183,16 +189,16 @@ The project currently has:
   password change is required, email invite/reset delivery is deferred,
   password credentials should live outside `users`, access tokens should be
   short-lived JWTs, refresh tokens should be opaque DB-backed server state, role
-  checks should use server-side `OrganizationMembership`, and future
-  `goalrail login` should use explicit `server_url` plus browser localhost
-  loopback while storing the selected Organization / Project / RepoBinding
-  profile. The first credential/session foundation now exists as schema,
-  server-local types, Squirrel-backed store primitives, and password
-  hashing/verification, the server now has the smallest self-hosted
-  `goalrail-server bootstrap owner` command for initial owner credentials, and
-  the smallest server-only auth API exists for login, refresh, password
-  change, logout, and current-user profile. CLI login and web UI remain
-  unimplemented.
+  checks should use server-side `OrganizationMembership`, and `goalrail login`
+  uses explicit `server_url` plus browser localhost loopback. The first
+  credential/session foundation now exists as schema, server-local types,
+  Squirrel-backed store primitives, and password hashing/verification, the
+  server now has the smallest self-hosted `goalrail-server bootstrap owner`
+  command for initial owner credentials, the smallest server auth API exists
+  for login, refresh, password change, logout, current-user profile, and CLI
+  code exchange, and the CLI now stores token metadata locally after browser
+  loopback login. Organization / Project / RepoBinding profile selection and
+  web UI remain unimplemented.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -231,9 +237,9 @@ The project currently has:
 - `apps/web/console-ru` is the separate Russian console shell for `console.goalrail.ru`, live as a static HTTPS surface with login-only entry, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, and Users add/edit UI in component state only
 - `apps/web/pilot-intake-ru` is the current public React + Vite + Mantine RU business-first pilot landing for `pilot.goalrail.ru` (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result); it includes a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server` for lead capture and digest source, and it supersedes the previous technical interactive walkthrough as the primary public RU landing per D-0055.
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
-- local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, and `proof show`
+- local/demo CLI commands now exist for `version`, `init`, `readiness scan`, `contract validate`, `proof show`, and the first `goalrail login <server_url>` browser-loopback auth path
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
-- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no `GET /v1/plans`, `GET /v1/proposals`, or `GET /v1/tasks` list endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
+- server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `GET /cli/login`, `POST /cli/login`, `POST /v1/auth/cli/exchange`, `POST /v1/auth/refresh`, `POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no `GET /v1/plans`, `GET /v1/proposals`, or `GET /v1/tasks` list endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
 - `POST /v1/contracts/{id}/plans` resolves `{id}` as stable public
   `contract_id`, requires the Contract to be `approved`, and creates a
   server-owned `WorkItemPlan(queued)` without creating WorkItems
@@ -256,10 +262,10 @@ The project currently has:
   and a generated temporary password credential with
   `must_change_password = true`; existing owner credentials are not silently
   rotated
-- the init migration creates `users`, `user_password_credentials`, `user_sessions`, `installations`, `organizations`, `organization_memberships`, `projects`, `repo_bindings`, `intake_records`, `goals`, `clarification_requests`, `clarification_answers`, `contracts`, `contract_seeds`, `contract_drafts`, `approved_contracts`, `work_item_plans`, `work_item_plan_proposals`, `work_items`, and `events` with UUID persisted ID columns for canonical entities
-- `user_password_credentials` stores password hash material outside `users` with first-login `must_change_password` state; `user_sessions` stores opaque refresh-token/session server state with `active`, `revoked`, and `expired` states plus expiry, revocation, and last-used timestamps
+- the init migration creates `users`, `user_password_credentials`, `user_sessions`, `cli_auth_codes`, `installations`, `organizations`, `organization_memberships`, `projects`, `repo_bindings`, `intake_records`, `goals`, `clarification_requests`, `clarification_answers`, `contracts`, `contract_seeds`, `contract_drafts`, `approved_contracts`, `work_item_plans`, `work_item_plan_proposals`, `work_items`, and `events` with UUID persisted ID columns for canonical entities
+- `user_password_credentials` stores password hash material outside `users` with first-login `must_change_password` state; `user_sessions` stores opaque refresh-token/session server state with `active`, `revoked`, and `expired` states plus expiry, revocation, and last-used timestamps; `cli_auth_codes` stores only hashed one-time CLI authorization codes with state, localhost callback URI, S256 code challenge metadata, TTL, and consumption timestamp
 - `apps/server/internal/auth/password` implements Argon2id password hashing and verification using PHC-style encoded strings with algorithm, version, memory, time, parallelism, salt, and derived key fields; empty passwords and malformed or unsupported hashes return errors
-- `apps/server/internal/store/postgres_auth_store.go` provides Squirrel-backed credential/session upsert and lookup primitives only; it does not implement login business logic
+- `apps/server/internal/store/postgres_auth_store.go` provides Squirrel-backed credential/session and CLI auth code upsert/lookup/consume primitives; login business logic stays in `apps/server/internal/auth`
 - the dev seed creates deterministic UUIDv7 IDs: `018f0000-0000-7000-8000-000000000001`, `018f0000-0000-7000-8000-000000000006`, `018f0000-0000-7000-8000-000000000002`, `018f0000-0000-7000-8000-000000000005`, `018f0000-0000-7000-8000-000000000003`, and `018f0000-0000-7000-8000-000000000004`
 - the dev seed creates one `self_hosted` Installation with `public_base_url = http://localhost:8080` before creating the dev Organization linked to it
 - the project-context store builds runtime SQL with Squirrel and executes Installation / Organization / Project / RepoBinding upserts and repo-binding context lookups through pgx/pgxpool
@@ -307,8 +313,8 @@ The project currently has:
 
 - no standalone Project Spine schema package beyond CLI/server-local DTO subsets
 - no runtime registry implementation
-- no production runtime CLI beyond the local/demo `apps/cli` command foundation
-- no server integration for the CLI
+- no production runtime CLI beyond the local/demo `apps/cli` command foundation and first browser-loopback login
+- no server integration for the CLI beyond `goalrail login <server_url>`
 - no server-owned canonical domain implementation beyond the persisted `IntakeRecord` / `Goal` / `ClarificationRequest` / `ClarificationAnswer` / public Contract lifecycle façade / internal `ContractSeed` / `ContractDraft creation/update/ready_for_approval` / `ApprovedContract` / WorkItem planning plan/proposal/acceptance slice yet
 - no automatic readiness re-check after answer application
 - no WorkItem assignment/claiming, `Run`, receipt, GateDecision, or Proof yet
@@ -320,9 +326,10 @@ The project currently has:
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation yet
 - no Installation bootstrap API, setup flow, or public management surface beyond
   the schema foundation and local `goalrail-server bootstrap owner` command yet
-- no refresh-token rotation, CLI login, browser loopback, public registration,
-  SaaS onboarding, organization creation API, admin user creation endpoint, or
-  Goalrail product web UI yet
+- no refresh-token rotation, public registration, SaaS onboarding, organization
+  creation API, admin user creation endpoint, keychain integration,
+  Organization / Project / RepoBinding CLI profile selection, or Goalrail
+  product web UI yet
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
@@ -368,8 +375,8 @@ Current packaging target:
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` provides a verified EN console shell matching the RU login/settings/users structure, and `apps/web/console-ru` provides the verified static RU console shell now live at `https://console.goalrail.ru/`; both now show structured empty states for Contracts / Delivery Readiness / Proof and persist only the visual theme under `goalrail.console.theme`; neither claims backend, server integration, production auth, durable product data, user settings API, sessions/cookies, analytics, or product-loop implementation
-- `apps/cli` provides a verified local/demo Go CLI bootstrap only; it does not claim server integration, hosted execution, production repo auth, real gate decisions, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle façade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, and accepted `WorkItem(planned)` records only, updates Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, and proposal acceptance state only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, auth, workers, or repository checkout
+- `apps/cli` provides a verified local/demo Go CLI bootstrap plus first `goalrail login <server_url>` server auth path with browser loopback, random state, and S256 verifier/challenge exchange; it does not claim hosted execution, production repo auth, real gate decisions, Organization / Project / RepoBinding profile selection, repo binding sync, proof retrieval, or proof generation
+- `apps/server` provides a verified Go server bootstrap plus Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle façade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, session state, and one-time CLI code consumption only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, workers, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, plus `mailto:` fallback. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
