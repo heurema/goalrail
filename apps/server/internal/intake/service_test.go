@@ -5,18 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"testing"
-	"time"
-
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
+	"testing"
+	"time"
 )
 
 func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
-	events := eventlog.NewEventLog()
-	service := intake.NewService(store.NewIntakeStore(), validProjectContextResolver(), events, fixedClock{now: testTime()}, &sequenceIDs{})
+	events := newFakeEventLog()
+	service := intake.NewService(newFakeIntakeStore(), validProjectContextResolver(), events, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	record, err := service.Submit(context.Background(), validSubmission())
 	if err != nil {
@@ -89,9 +86,9 @@ func TestValidateSubmissionRejectsMissingProjectID(t *testing.T) {
 }
 
 func TestServiceSubmitRejectsUnknownRepoBinding(t *testing.T) {
-	events := eventlog.NewEventLog()
+	events := newFakeEventLog()
 	resolver := fakeProjectContextResolver{ok: false}
-	service := intake.NewService(store.NewIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	var validationErr *intake.ValidationError
@@ -107,7 +104,7 @@ func TestServiceSubmitRejectsUnknownRepoBinding(t *testing.T) {
 }
 
 func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
-	events := eventlog.NewEventLog()
+	events := newFakeEventLog()
 	resolver := fakeProjectContextResolver{
 		resolved: spine.ResolvedRepoBindingContext{
 			OrganizationID: "018f0000-0000-7000-8000-000000000002",
@@ -116,7 +113,7 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 		},
 		ok: true,
 	}
-	service := intake.NewService(store.NewIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	var validationErr *intake.ValidationError
@@ -132,8 +129,8 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 }
 
 func TestServiceSubmitRejectsUnavailableProjectContext(t *testing.T) {
-	events := eventlog.NewEventLog()
-	service := intake.NewService(store.NewIntakeStore(), nil, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	events := newFakeEventLog()
+	service := intake.NewService(newFakeIntakeStore(), nil, events, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	if !errors.Is(err, intake.ErrProjectContextUnavailable) {
@@ -181,6 +178,50 @@ type fakeProjectContextResolver struct {
 
 func (r fakeProjectContextResolver) ResolveRepoBinding(context.Context, spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error) {
 	return r.resolved, r.ok, r.err
+}
+
+type fakeIntakeStore struct {
+	records map[spine.IntakeID]spine.IntakeRecord
+}
+
+func newFakeIntakeStore() *fakeIntakeStore {
+	return &fakeIntakeStore{records: map[spine.IntakeID]spine.IntakeRecord{}}
+}
+
+func (s *fakeIntakeStore) Create(_ context.Context, record spine.IntakeRecord) error {
+	s.records[record.ID] = record
+	return nil
+}
+
+func (s *fakeIntakeStore) Get(_ context.Context, id spine.IntakeID) (spine.IntakeRecord, bool, error) {
+	record, ok := s.records[id]
+	return record, ok, nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 type fixedClock struct {

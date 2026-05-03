@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 )
 
 func TestServiceCreateRequestCreatesOpenRequest(t *testing.T) {
@@ -152,10 +150,10 @@ func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
 }
 
 func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
-	goals := store.NewGoalStore()
-	clarifications := store.NewClarificationStore()
-	answers := store.NewClarificationAnswerStore()
-	events := eventlog.NewEventLog()
+	goals := newFakeGoalStore()
+	clarifications := newFakeClarificationStore()
+	answers := newFakeClarificationAnswerStore()
+	events := newFakeEventLog()
 	tx := &requestCreationTransaction{
 		create: func(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
 			if err := clarifications.Create(ctx, request); err != nil {
@@ -202,10 +200,10 @@ func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
 }
 
 func TestServiceCreateRequestTransactionFailureDoesNotUseFallbackStore(t *testing.T) {
-	goals := store.NewGoalStore()
-	clarifications := store.NewClarificationStore()
-	answers := store.NewClarificationAnswerStore()
-	events := eventlog.NewEventLog()
+	goals := newFakeGoalStore()
+	clarifications := newFakeClarificationStore()
+	answers := newFakeClarificationAnswerStore()
+	events := newFakeEventLog()
 	tx := &requestCreationTransaction{err: errors.New("forced transaction failure")}
 	service := clarification.NewService(
 		goals,
@@ -723,15 +721,193 @@ func TestServiceApplyAnswerDoesNotAppendReadinessOrContractEvents(t *testing.T) 
 	}
 }
 
-func requestService(t *testing.T) (*clarification.Service, *store.GoalStore, *store.ClarificationStore, *store.ClarificationAnswerStore, *eventlog.EventLog) {
+func requestService(t *testing.T) (*clarification.Service, *fakeGoalStore, *fakeClarificationStore, *fakeClarificationAnswerStore, *fakeEventLog) {
 	t.Helper()
 
-	goals := store.NewGoalStore()
-	clarifications := store.NewClarificationStore()
-	answers := store.NewClarificationAnswerStore()
-	events := eventlog.NewEventLog()
+	goals := newFakeGoalStore()
+	clarifications := newFakeClarificationStore()
+	answers := newFakeClarificationAnswerStore()
+	events := newFakeEventLog()
 	service := clarification.NewService(goals, clarifications, answers, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, clarifications, answers, events
+}
+
+type fakeGoalStore struct {
+	goals map[spine.GoalID]spine.Goal
+}
+
+func newFakeGoalStore() *fakeGoalStore {
+	return &fakeGoalStore{goals: map[spine.GoalID]spine.Goal{}}
+}
+
+func (s *fakeGoalStore) Create(_ context.Context, goal spine.Goal) error {
+	s.goals[goal.ID] = cloneGoal(goal)
+	return nil
+}
+
+func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	return cloneGoal(goal), ok, nil
+}
+
+func (s *fakeGoalStore) UpdateHints(_ context.Context, id spine.GoalID, update spine.GoalHintUpdate) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	if update.Summary != nil {
+		goal.Summary = *update.Summary
+	}
+	if update.ScopeHint != nil {
+		goal.ScopeHint = *update.ScopeHint
+	}
+	if update.AcceptanceHint != nil {
+		goal.AcceptanceHint = *update.AcceptanceHint
+	}
+	if update.IntentOwner != nil {
+		goal.IntentOwner = *update.IntentOwner
+	}
+	s.goals[id] = cloneGoal(goal)
+	return cloneGoal(goal), true, nil
+}
+
+func cloneGoal(goal spine.Goal) spine.Goal {
+	goal.SourceRefs = append([]spine.SourceRef(nil), goal.SourceRefs...)
+	goal.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), goal.LastReadinessReasonCodes...)
+	return goal
+}
+
+type fakeClarificationStore struct {
+	requests   map[spine.ClarificationRequestID]spine.ClarificationRequest
+	openByGoal map[spine.GoalID]spine.ClarificationRequestID
+}
+
+func newFakeClarificationStore() *fakeClarificationStore {
+	return &fakeClarificationStore{
+		requests:   map[spine.ClarificationRequestID]spine.ClarificationRequest{},
+		openByGoal: map[spine.GoalID]spine.ClarificationRequestID{},
+	}
+}
+
+func (s *fakeClarificationStore) Create(_ context.Context, request spine.ClarificationRequest) error {
+	s.requests[request.ID] = cloneClarificationRequest(request)
+	if request.State == spine.ClarificationRequestStateOpen {
+		s.openByGoal[request.GoalID] = request.ID
+	}
+	return nil
+}
+
+func (s *fakeClarificationStore) Get(_ context.Context, id spine.ClarificationRequestID) (spine.ClarificationRequest, bool, error) {
+	request, ok := s.requests[id]
+	return cloneClarificationRequest(request), ok, nil
+}
+
+func (s *fakeClarificationStore) GetOpenByGoalID(_ context.Context, id spine.GoalID) (spine.ClarificationRequest, bool, error) {
+	requestID, ok := s.openByGoal[id]
+	if !ok {
+		return spine.ClarificationRequest{}, false, nil
+	}
+	request, ok := s.requests[requestID]
+	return cloneClarificationRequest(request), ok, nil
+}
+
+func (s *fakeClarificationStore) UpdateState(_ context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+	request, ok := s.requests[id]
+	if !ok {
+		return spine.ClarificationRequest{}, false, nil
+	}
+	if request.State == spine.ClarificationRequestStateOpen && state != spine.ClarificationRequestStateOpen {
+		delete(s.openByGoal, request.GoalID)
+	}
+	request.State = state
+	s.requests[id] = cloneClarificationRequest(request)
+	if state == spine.ClarificationRequestStateOpen {
+		s.openByGoal[request.GoalID] = id
+	}
+	return cloneClarificationRequest(request), true, nil
+}
+
+func cloneClarificationRequest(request spine.ClarificationRequest) spine.ClarificationRequest {
+	request.ReasonCodes = append([]spine.GoalReadinessReasonCode(nil), request.ReasonCodes...)
+	request.Questions = append([]spine.ClarificationQuestion(nil), request.Questions...)
+	if request.Target.ActorRef != nil {
+		actor := *request.Target.ActorRef
+		request.Target.ActorRef = &actor
+	}
+	return request
+}
+
+type fakeClarificationAnswerStore struct {
+	answers   map[spine.ClarificationAnswerID]spine.ClarificationAnswer
+	byRequest map[spine.ClarificationRequestID]spine.ClarificationAnswerID
+	applied   map[spine.ClarificationAnswerID]bool
+}
+
+func newFakeClarificationAnswerStore() *fakeClarificationAnswerStore {
+	return &fakeClarificationAnswerStore{
+		answers:   map[spine.ClarificationAnswerID]spine.ClarificationAnswer{},
+		byRequest: map[spine.ClarificationRequestID]spine.ClarificationAnswerID{},
+		applied:   map[spine.ClarificationAnswerID]bool{},
+	}
+}
+
+func (s *fakeClarificationAnswerStore) Create(_ context.Context, answer spine.ClarificationAnswer) error {
+	s.answers[answer.ID] = cloneClarificationAnswer(answer)
+	s.byRequest[answer.RequestID] = answer.ID
+	return nil
+}
+
+func (s *fakeClarificationAnswerStore) Get(_ context.Context, id spine.ClarificationAnswerID) (spine.ClarificationAnswer, bool, error) {
+	answer, ok := s.answers[id]
+	return cloneClarificationAnswer(answer), ok, nil
+}
+
+func (s *fakeClarificationAnswerStore) GetByRequestID(_ context.Context, id spine.ClarificationRequestID) (spine.ClarificationAnswer, bool, error) {
+	answerID, ok := s.byRequest[id]
+	if !ok {
+		return spine.ClarificationAnswer{}, false, nil
+	}
+	answer, ok := s.answers[answerID]
+	return cloneClarificationAnswer(answer), ok, nil
+}
+
+func (s *fakeClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID, _ spine.ActorRef, _ time.Time) (bool, error) {
+	if s.applied[id] {
+		return false, nil
+	}
+	s.applied[id] = true
+	return true, nil
+}
+
+func cloneClarificationAnswer(answer spine.ClarificationAnswer) spine.ClarificationAnswer {
+	answer.Answers = append([]spine.ClarificationAnswerItem(nil), answer.Answers...)
+	return answer
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func validGoal(reasons ...spine.GoalReadinessReasonCode) spine.Goal {
@@ -817,7 +993,7 @@ func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 }
 
-func createRequest(t *testing.T, service *clarification.Service, goals *store.GoalStore, reasons ...spine.GoalReadinessReasonCode) spine.ClarificationRequest {
+func createRequest(t *testing.T, service *clarification.Service, goals *fakeGoalStore, reasons ...spine.GoalReadinessReasonCode) spine.ClarificationRequest {
 	t.Helper()
 
 	createdGoal := validGoal(reasons...)

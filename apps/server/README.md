@@ -6,6 +6,9 @@ creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
 WorkItem planning, auth credential/session, and event log flows require
 Postgres-backed state. The production server wiring no longer falls back to
 in-memory product state when database configuration is absent.
+Map-backed in-memory product/auth stores have been removed from
+`apps/server/internal/store`, and the old in-memory event log helper has been
+removed; tests use package-local fakes where needed.
 
 `GET /livez`, `GET /readyz`, and `GET /version` remain lightweight and work
 without database configuration. Product and auth API routes return HTTP 503

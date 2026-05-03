@@ -7,12 +7,11 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 )
 
 func TestServiceGetsPlannedWorkItem(t *testing.T) {
-	workItems := store.NewWorkItemStore()
+	workItems := newFakeWorkItemStore()
 	created := validWorkItem()
 	if err := workItems.Create(context.Background(), created); err != nil {
 		t.Fatalf("workItems.Create() error = %v", err)
@@ -35,7 +34,7 @@ func TestServiceGetsPlannedWorkItem(t *testing.T) {
 }
 
 func TestServiceGetUnknownWorkItemReturnsNotFound(t *testing.T) {
-	service := workitem.NewService(store.NewWorkItemStore())
+	service := workitem.NewService(newFakeWorkItemStore())
 
 	_, err := service.Get(context.Background(), "missing")
 	if !errors.Is(err, workitem.ErrWorkItemNotFound) {
@@ -67,4 +66,22 @@ func validWorkItem() spine.WorkItem {
 		},
 		CreatedAt: time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC),
 	}
+}
+
+type fakeWorkItemStore struct {
+	items map[spine.WorkItemID]spine.WorkItem
+}
+
+func newFakeWorkItemStore() *fakeWorkItemStore {
+	return &fakeWorkItemStore{items: map[spine.WorkItemID]spine.WorkItem{}}
+}
+
+func (s *fakeWorkItemStore) Create(_ context.Context, item spine.WorkItem) error {
+	s.items[item.ID] = item
+	return nil
+}
+
+func (s *fakeWorkItemStore) Get(_ context.Context, id spine.WorkItemID) (spine.WorkItem, bool, error) {
+	item, ok := s.items[id]
+	return item, ok, nil
 }
