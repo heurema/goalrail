@@ -110,6 +110,36 @@ func TestAuthMissingJWTSecretReturnsConfigurationError(t *testing.T) {
 	}
 }
 
+func TestAuthWeakJWTSecretReturnsConfigurationError(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{loginErr: auth.ErrJWTSecretWeak})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Login), http.MethodPost, "/v1/auth/login", `{"email":"owner@example.com","password":"temporary-password"}`, "")
+	if response.code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusServiceUnavailable, response.body)
+	}
+	if !strings.Contains(response.body, "auth_not_configured") {
+		t.Fatalf("body = %s, want auth_not_configured", response.body)
+	}
+}
+
+func TestAuthMeWithoutBearerTokenReturnsUnauthorized(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Me), http.MethodGet, "/v1/me", "", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unauthorized" {
+		t.Fatalf("error code = %q, want unauthorized", body.Error.Code)
+	}
+}
+
 type fakeHTTPAuthService struct {
 	loginResult          auth.LoginResult
 	loginErr             error

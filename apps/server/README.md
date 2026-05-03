@@ -78,7 +78,8 @@ export GOALRAIL_AUTH_JWT_SECRET='<operator-managed-secret>'
 
 Do not commit or auto-generate this secret in the repository. The server can
 start without it, but auth endpoints return a clear auth configuration error
-when signing or validating JWT access tokens without the secret.
+when signing or validating JWT access tokens without the secret. Configured
+JWT secrets must be at least 32 characters after trimming.
 
 Log in with the bootstrapped owner email and temporary password:
 

@@ -11,9 +11,11 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
+const strongTestJWTSecret = "0123456789abcdef0123456789abcdef"
+
 func TestAccessTokenCarriesOnlyIdentityAndSessionClaims(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
-	manager := NewAccessTokenManager("test-secret")
+	manager := NewAccessTokenManager(strongTestJWTSecret)
 
 	token, err := manager.Sign(AccessTokenClaims{
 		UserID:    "018f0000-0000-7000-8000-000000000001",
@@ -63,21 +65,34 @@ func tokenDebugPayload(t *testing.T, token string) map[string]any {
 }
 
 func TestAccessTokenRequiresSecret(t *testing.T) {
-	manager := NewAccessTokenManager("")
-	_, err := manager.Sign(AccessTokenClaims{
-		UserID:    "018f0000-0000-7000-8000-000000000001",
-		SessionID: "018f0000-0000-7000-8000-000000000201",
-		IssuedAt:  time.Now(),
-		ExpiresAt: time.Now().Add(time.Minute),
-	})
-	if !errors.Is(err, ErrJWTSecretMissing) {
-		t.Fatalf("Sign() error = %v, want ErrJWTSecretMissing", err)
+	tests := []struct {
+		name    string
+		secret  string
+		wantErr error
+	}{
+		{name: "empty", secret: "", wantErr: ErrJWTSecretMissing},
+		{name: "blank", secret: "   ", wantErr: ErrJWTSecretMissing},
+		{name: "too_short", secret: "0123456789abcdef0123456789abcde", wantErr: ErrJWTSecretWeak},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := NewAccessTokenManager(tt.secret)
+			_, err := manager.Sign(AccessTokenClaims{
+				UserID:    "018f0000-0000-7000-8000-000000000001",
+				SessionID: "018f0000-0000-7000-8000-000000000201",
+				IssuedAt:  time.Now(),
+				ExpiresAt: time.Now().Add(time.Minute),
+			})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Sign() error = %v, want %v", err, tt.wantErr)
+			}
+		})
 	}
 }
 
 func TestAccessTokenRejectsExpiredToken(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
-	manager := NewAccessTokenManager("test-secret")
+	manager := NewAccessTokenManager(strongTestJWTSecret)
 	token, err := manager.Sign(AccessTokenClaims{
 		UserID:    "018f0000-0000-7000-8000-000000000001",
 		SessionID: "018f0000-0000-7000-8000-000000000201",

@@ -95,7 +95,7 @@ func (h *AuthHandler) respondServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrStoreUnavailable):
 		RespondError(w, http.StatusServiceUnavailable, "auth_store_unavailable", "auth store is not configured")
-	case errors.Is(err, auth.ErrJWTSecretMissing):
+	case errors.Is(err, auth.ErrJWTSecretMissing), errors.Is(err, auth.ErrJWTSecretWeak):
 		RespondError(w, http.StatusServiceUnavailable, "auth_not_configured", "auth JWT secret is not configured")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		RespondError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")

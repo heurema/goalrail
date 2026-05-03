@@ -15,7 +15,7 @@ func TestLoginVerifiesPasswordCreatesSessionAndReturnsTokens(t *testing.T) {
 	store := newFakeAuthStore()
 	service := NewService(
 		store,
-		"test-secret",
+		strongTestJWTSecret,
 		WithClock(fixedClock{now: now}),
 		WithSessionIDGenerator(func() (spine.UserSessionID, error) {
 			return "018f0000-0000-7000-8000-000000000201", nil
@@ -65,6 +65,50 @@ func TestLoginVerifiesPasswordCreatesSessionAndReturnsTokens(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsWrongPassword(t *testing.T) {
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Login(context.Background(), LoginInput{
+		Email:    "owner@example.com",
+		Password: "wrong-password",
+	})
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("Login() error = %v, want ErrInvalidCredentials", err)
+	}
+	if store.lastSession.ID != "" {
+		t.Fatalf("session was persisted after wrong password: %#v", store.lastSession)
+	}
+}
+
+func TestLoginRejectsInactiveUser(t *testing.T) {
+	store := newFakeAuthStore()
+	store.user.State = "inactive"
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Login(context.Background(), LoginInput{
+		Email:    "owner@example.com",
+		Password: "temporary-password",
+	})
+	if !errors.Is(err, ErrInactiveUser) {
+		t.Fatalf("Login() error = %v, want ErrInactiveUser", err)
+	}
+}
+
+func TestLoginRejectsUserWithoutActiveOrganizationMembership(t *testing.T) {
+	store := newFakeAuthStore()
+	store.membership.State = "inactive"
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Login(context.Background(), LoginInput{
+		Email:    "owner@example.com",
+		Password: "temporary-password",
+	})
+	if !errors.Is(err, ErrMembershipRequired) {
+		t.Fatalf("Login() error = %v, want ErrMembershipRequired", err)
+	}
+}
+
 func TestLoginRequiresJWTSecretBeforeSessionCreation(t *testing.T) {
 	store := newFakeAuthStore()
 	service := NewService(
@@ -94,29 +138,31 @@ func TestLoginRequiresJWTSecretBeforeSessionCreation(t *testing.T) {
 	}
 }
 
-func TestChangePasswordVerifiesCurrentPasswordAndClearsMustChange(t *testing.T) {
+func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	store := newFakeAuthStore()
-	service := NewService(
-		store,
-		"test-secret",
-		WithClock(fixedClock{now: now}),
-		WithPasswordHasher(func(input string) (string, error) {
-			return "hash:" + input, nil
-		}, func(input string, hash string) (bool, error) {
-			return hash == "hash:"+input, nil
-		}),
-	)
-	token, err := service.accessTokens.Sign(AccessTokenClaims{
-		UserID:    store.user.ID,
-		SessionID: store.session.ID,
-		IssuedAt:  now.Add(-time.Minute),
-		ExpiresAt: now.Add(15 * time.Minute),
+	service := newFakeAuthService(store, now)
+	token := signTestAccessToken(t, service, store, now)
+
+	_, err := service.ChangePassword(ctx, token, ChangePasswordInput{
+		CurrentPassword: "wrong-password",
+		NewPassword:     "new-password",
 	})
-	if err != nil {
-		t.Fatalf("Sign() error = %v", err)
+	if !errors.Is(err, ErrCurrentPassword) {
+		t.Fatalf("ChangePassword() error = %v, want ErrCurrentPassword", err)
 	}
+	if store.credential.PasswordHash != "hash:temporary-password" {
+		t.Fatalf("PasswordHash = %q, want unchanged old hash", store.credential.PasswordHash)
+	}
+}
+
+func TestChangePasswordStoresNewHashClearsMustChangeAndRejectsOldPassword(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, now)
+	token := signTestAccessToken(t, service, store, now)
 
 	result, err := service.ChangePassword(ctx, token, ChangePasswordInput{
 		CurrentPassword: "temporary-password",
@@ -137,22 +183,29 @@ func TestChangePasswordVerifiesCurrentPasswordAndClearsMustChange(t *testing.T) 
 	if store.credential.PasswordChangedAt == nil || !store.credential.PasswordChangedAt.Equal(now) {
 		t.Fatalf("PasswordChangedAt = %v, want %v", store.credential.PasswordChangedAt, now)
 	}
+
+	_, err = service.Login(ctx, LoginInput{
+		Email:    "owner@example.com",
+		Password: "temporary-password",
+	})
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Fatalf("Login(old password) error = %v, want ErrInvalidCredentials", err)
+	}
+	_, err = service.Login(ctx, LoginInput{
+		Email:    "owner@example.com",
+		Password: "new-password",
+	})
+	if err != nil {
+		t.Fatalf("Login(new password) error = %v", err)
+	}
 }
 
 func TestMeLoadsCurrentMembershipFromStore(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	store := newFakeAuthStore()
-	service := NewService(store, "test-secret", WithClock(fixedClock{now: now}))
-	token, err := service.accessTokens.Sign(AccessTokenClaims{
-		UserID:    store.user.ID,
-		SessionID: store.session.ID,
-		IssuedAt:  now.Add(-time.Minute),
-		ExpiresAt: now.Add(15 * time.Minute),
-	})
-	if err != nil {
-		t.Fatalf("Sign() error = %v", err)
-	}
+	service := NewService(store, strongTestJWTSecret, WithClock(fixedClock{now: now}))
+	token := signTestAccessToken(t, service, store, now)
 
 	profile, err := service.Me(ctx, token)
 	if err != nil {
@@ -163,12 +216,95 @@ func TestMeLoadsCurrentMembershipFromStore(t *testing.T) {
 	}
 }
 
+func TestAuthenticateAccessTokenRejectsExpiredOrRevokedSession(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		mutate  func(*fakeAuthStore)
+		wantErr error
+	}{
+		{
+			name: "expired",
+			mutate: func(store *fakeAuthStore) {
+				store.session.ExpiresAt = now.Add(-time.Minute)
+			},
+			wantErr: ErrSessionInvalid,
+		},
+		{
+			name: "revoked",
+			mutate: func(store *fakeAuthStore) {
+				store.session.State = spine.UserSessionStateRevoked
+			},
+			wantErr: ErrSessionInvalid,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeAuthStore()
+			service := newFakeAuthService(store, now)
+			token := signTestAccessToken(t, service, store, now)
+			tt.mutate(store)
+
+			_, err := service.AuthenticateAccessToken(context.Background(), token)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("AuthenticateAccessToken() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAuthenticateAccessTokenRejectsInactiveUserAfterTokenIssuance(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, now)
+	token := signTestAccessToken(t, service, store, now)
+	store.user.State = "inactive"
+
+	_, err := service.AuthenticateAccessToken(context.Background(), token)
+	if !errors.Is(err, ErrInactiveUser) {
+		t.Fatalf("AuthenticateAccessToken() error = %v, want ErrInactiveUser", err)
+	}
+}
+
 type fixedClock struct {
 	now time.Time
 }
 
 func (c fixedClock) Now() time.Time {
 	return c.now
+}
+
+func newFakeAuthService(store *fakeAuthStore, now time.Time) *Service {
+	return NewService(
+		store,
+		strongTestJWTSecret,
+		WithClock(fixedClock{now: now}),
+		WithSessionIDGenerator(func() (spine.UserSessionID, error) {
+			return "018f0000-0000-7000-8000-000000000201", nil
+		}),
+		WithRefreshTokenGenerator(func() (string, error) {
+			return "opaque-refresh-token", nil
+		}),
+		WithPasswordHasher(func(input string) (string, error) {
+			return "hash:" + input, nil
+		}, func(input string, hash string) (bool, error) {
+			return hash == "hash:"+input, nil
+		}),
+	)
+}
+
+func signTestAccessToken(t *testing.T, service *Service, store *fakeAuthStore, now time.Time) string {
+	t.Helper()
+	token, err := service.accessTokens.Sign(AccessTokenClaims{
+		UserID:    store.user.ID,
+		SessionID: store.session.ID,
+		IssuedAt:  now.Add(-time.Minute),
+		ExpiresAt: now.Add(15 * time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Sign() error = %v", err)
+	}
+	return token
 }
 
 type fakeAuthStore struct {

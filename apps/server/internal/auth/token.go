@@ -15,9 +15,12 @@ import (
 
 var (
 	ErrJWTSecretMissing = errors.New("auth JWT secret is not configured")
+	ErrJWTSecretWeak    = errors.New("auth JWT secret is too weak")
 	ErrInvalidToken     = errors.New("access token is invalid")
 	ErrExpiredToken     = errors.New("access token is expired")
 )
+
+const minJWTSecretLength = 32
 
 type AccessTokenClaims struct {
 	UserID    spine.UserID
@@ -35,8 +38,8 @@ func NewAccessTokenManager(secret string) AccessTokenManager {
 }
 
 func (m AccessTokenManager) Sign(claims AccessTokenClaims) (string, error) {
-	if len(m.secret) == 0 {
-		return "", ErrJWTSecretMissing
+	if err := m.validateSecret(); err != nil {
+		return "", err
 	}
 	if strings.TrimSpace(string(claims.UserID)) == "" || strings.TrimSpace(string(claims.SessionID)) == "" {
 		return "", fmt.Errorf("%w: missing subject or session", ErrInvalidToken)
@@ -64,8 +67,8 @@ func (m AccessTokenManager) Sign(claims AccessTokenClaims) (string, error) {
 }
 
 func (m AccessTokenManager) Validate(token string, now time.Time) (AccessTokenClaims, error) {
-	if len(m.secret) == 0 {
-		return AccessTokenClaims{}, ErrJWTSecretMissing
+	if err := m.validateSecret(); err != nil {
+		return AccessTokenClaims{}, err
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -112,6 +115,17 @@ func (m AccessTokenManager) sign(unsigned string) []byte {
 	mac := hmac.New(sha256.New, m.secret)
 	_, _ = mac.Write([]byte(unsigned))
 	return mac.Sum(nil)
+}
+
+func (m AccessTokenManager) validateSecret() error {
+	switch {
+	case len(m.secret) == 0:
+		return ErrJWTSecretMissing
+	case len(m.secret) < minJWTSecretLength:
+		return ErrJWTSecretWeak
+	default:
+		return nil
+	}
 }
 
 func decodeJWTPart(part string, target any) error {
