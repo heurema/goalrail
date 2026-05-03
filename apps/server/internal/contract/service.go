@@ -204,7 +204,15 @@ func (s *Service) Approve(ctx context.Context, id spine.ContractID, input spine.
 	if err != nil {
 		return spine.Contract{}, err
 	}
-	if _, err := s.Approvals.ApproveDraft(ctx, draftID, input); err != nil {
+	approve := func(approveCtx context.Context) error {
+		_, err := s.Approvals.ApproveDraft(approveCtx, draftID, input)
+		return err
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, approve); err != nil {
+			return spine.Contract{}, err
+		}
+	} else if err := approve(ctx); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
