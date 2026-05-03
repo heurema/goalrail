@@ -8,23 +8,14 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type ContractDraftExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type ContractDraftQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresContractDraftStore struct {
-	exec  ContractDraftExecer
-	query ContractDraftQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -33,7 +24,7 @@ func NewPostgresContractDraftStore(pool *pgxpool.Pool) *PostgresContractDraftSto
 	return NewPostgresContractDraftStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresContractDraftStoreWithExecutorAndQuerier(exec ContractDraftExecer, query ContractDraftQuerier) *PostgresContractDraftStore {
+func NewPostgresContractDraftStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresContractDraftStore {
 	return &PostgresContractDraftStore{
 		exec:  exec,
 		query: query,

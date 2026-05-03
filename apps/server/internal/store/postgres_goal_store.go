@@ -3,29 +3,19 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type GoalExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type GoalQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresGoalStore struct {
-	exec  GoalExecer
-	query GoalQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -34,7 +24,7 @@ func NewPostgresGoalStore(pool *pgxpool.Pool) *PostgresGoalStore {
 	return NewPostgresGoalStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresGoalStoreWithExecutorAndQuerier(exec GoalExecer, query GoalQuerier) *PostgresGoalStore {
+func NewPostgresGoalStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresGoalStore {
 	return &PostgresGoalStore{
 		exec:  exec,
 		query: query,
@@ -328,9 +318,4 @@ func (s *PostgresGoalStore) execSQL(ctx context.Context, op string, sqlizer squi
 		return fmt.Errorf("%s: %w", op, err)
 	}
 	return nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

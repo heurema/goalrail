@@ -8,24 +8,15 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type WorkItemExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type WorkItemQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresWorkItemStore struct {
-	exec  WorkItemExecer
-	query WorkItemQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -34,7 +25,7 @@ func NewPostgresWorkItemStore(pool *pgxpool.Pool) *PostgresWorkItemStore {
 	return NewPostgresWorkItemStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresWorkItemStoreWithExecutorAndQuerier(exec WorkItemExecer, query WorkItemQuerier) *PostgresWorkItemStore {
+func NewPostgresWorkItemStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresWorkItemStore {
 	return &PostgresWorkItemStore{
 		exec:  exec,
 		query: query,

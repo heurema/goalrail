@@ -7,24 +7,15 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type EventLogExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type EventLogQuerier interface {
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-}
-
 type PostgresEventLog struct {
-	exec  EventLogExecer
-	query EventLogQuerier
+	exec  postgresExecer
+	query postgresRowsQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -33,7 +24,7 @@ func NewPostgresEventLog(pool *pgxpool.Pool) *PostgresEventLog {
 	return NewPostgresEventLogWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresEventLogWithExecutorAndQuerier(exec EventLogExecer, query EventLogQuerier) *PostgresEventLog {
+func NewPostgresEventLogWithExecutorAndQuerier(exec postgresExecer, query postgresRowsQuerier) *PostgresEventLog {
 	return &PostgresEventLog{
 		exec:  exec,
 		query: query,

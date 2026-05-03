@@ -8,24 +8,15 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type WorkItemPlanExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type WorkItemPlanQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresWorkItemPlanStore struct {
-	exec  WorkItemPlanExecer
-	query WorkItemPlanQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -34,7 +25,7 @@ func NewPostgresWorkItemPlanStore(pool *pgxpool.Pool) *PostgresWorkItemPlanStore
 	return NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(exec WorkItemPlanExecer, query WorkItemPlanQuerier) *PostgresWorkItemPlanStore {
+func NewPostgresWorkItemPlanStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresWorkItemPlanStore {
 	return &PostgresWorkItemPlanStore{
 		exec:  exec,
 		query: query,
@@ -267,8 +258,8 @@ func (s *PostgresWorkItemPlanStore) execSQL(ctx context.Context, op string, sqli
 }
 
 type PostgresWorkItemPlanProposalStore struct {
-	exec  WorkItemPlanExecer
-	query WorkItemPlanQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -277,7 +268,7 @@ func NewPostgresWorkItemPlanProposalStore(pool *pgxpool.Pool) *PostgresWorkItemP
 	return NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(exec WorkItemPlanExecer, query WorkItemPlanQuerier) *PostgresWorkItemPlanProposalStore {
+func NewPostgresWorkItemPlanProposalStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresWorkItemPlanProposalStore {
 	return &PostgresWorkItemPlanProposalStore{
 		exec:  exec,
 		query: query,

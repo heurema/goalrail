@@ -8,23 +8,14 @@ import (
 
 	squirrel "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-type ApprovedContractExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type ApprovedContractQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresApprovedContractStore struct {
-	exec  ApprovedContractExecer
-	query ApprovedContractQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -33,7 +24,7 @@ func NewPostgresApprovedContractStore(pool *pgxpool.Pool) *PostgresApprovedContr
 	return NewPostgresApprovedContractStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresApprovedContractStoreWithExecutorAndQuerier(exec ApprovedContractExecer, query ApprovedContractQuerier) *PostgresApprovedContractStore {
+func NewPostgresApprovedContractStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresApprovedContractStore {
 	return &PostgresApprovedContractStore{
 		exec:  exec,
 		query: query,
