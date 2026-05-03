@@ -131,9 +131,13 @@ func (s *PostgresIntakeStore) Get(ctx context.Context, id spine.IntakeID) (spine
 		From("intake_records").
 		Where(squirrel.Eq{"id": intakeID})
 
-	sqlText, args, err := stmt.ToSql()
+	return s.queryIntakeRecord(ctx, "get intake record", stmt)
+}
+
+func (s *PostgresIntakeStore) queryIntakeRecord(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.IntakeRecord, bool, error) {
+	sqlText, args, err := sqlizer.ToSql()
 	if err != nil {
-		return spine.IntakeRecord{}, false, fmt.Errorf("get intake record SQL: %w", err)
+		return spine.IntakeRecord{}, false, fmt.Errorf("%s SQL: %w", op, err)
 	}
 
 	record, err := scanIntakeRecord(s.query.QueryRow(ctx, sqlText, args...))
