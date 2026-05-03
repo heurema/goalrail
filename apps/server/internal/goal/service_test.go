@@ -15,7 +15,7 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 	intakes := newFakeIntakeStore()
 	goals := newFakeGoalStore()
 	events := newFakeEventLog()
-	service := goal.NewService(intakes, goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, goals, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
@@ -114,7 +114,7 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 	}
 }
 
-func TestServicePromoteFromIntakeUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServicePromoteFromIntakeUsesRequiredTransactionRunner(t *testing.T) {
 	intakes := newFakeIntakeStore()
 	goals := newFakeGoalStore()
 	events := newFakeEventLog()
@@ -123,9 +123,9 @@ func TestServicePromoteFromIntakeUsesTransactionRunnerWhenConfigured(t *testing.
 		intakes,
 		goals,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		goal.WithTransactionRunner(txRunner),
 	)
 	intakeRecord := validIntakeRecord()
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
@@ -162,7 +162,7 @@ func TestServicePromoteFromIntakeUsesTransactionRunnerWhenConfigured(t *testing.
 
 func TestServicePromoteFromIntakeUsesTitleAsSummaryWhenBodyEmpty(t *testing.T) {
 	intakes := newFakeIntakeStore()
-	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	intakeRecord.Body = ""
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
@@ -182,7 +182,7 @@ func TestServicePromoteFromIntakeRejectsDuplicatePromotion(t *testing.T) {
 	intakes := newFakeIntakeStore()
 	goals := newFakeGoalStore()
 	events := newFakeEventLog()
-	service := goal.NewService(intakes, goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, goals, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
@@ -201,7 +201,7 @@ func TestServicePromoteFromIntakeRejectsDuplicatePromotion(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeUnknownIntake(t *testing.T) {
-	service := goal.NewService(newFakeIntakeStore(), newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(newFakeIntakeStore(), newFakeGoalStore(), newFakeEventLog(), &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), "missing")
 	if !errors.Is(err, goal.ErrIntakeNotFound) {
@@ -216,7 +216,7 @@ func TestServicePromoteFromIntakeRejectsNonReceivedIntake(t *testing.T) {
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
 	}
-	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), intakeRecord.ID)
 	if !errors.Is(err, goal.ErrInvalidIntakeState) {
@@ -231,7 +231,7 @@ func TestServicePromoteFromIntakeValidatesStoredIntake(t *testing.T) {
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
 	}
-	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), intakeRecord.ID)
 	var validationErr *goal.ValidationError
@@ -246,6 +246,7 @@ func TestServicePromoteFromIntakeReturnsErrorWhenStoreFails(t *testing.T) {
 		intakeReader{record: validIntakeRecord(), ok: true},
 		failingGoalStore{err: errors.New("store failed")},
 		events,
+		&fakeTransactionRunner{},
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
 	)
@@ -266,6 +267,7 @@ func TestServicePromoteFromIntakeReturnsErrorWhenSecondEventAppendFails(t *testi
 		intakeReader{record: validIntakeRecord(), ok: true},
 		goals,
 		events,
+		&fakeTransactionRunner{},
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
 	)
@@ -424,7 +426,7 @@ func TestServiceCheckReadinessMarksGoalReadyForContractSeed(t *testing.T) {
 	}
 }
 
-func TestServiceCheckReadinessUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceCheckReadinessUsesRequiredTransactionRunner(t *testing.T) {
 	goals := newFakeGoalStore()
 	events := newFakeEventLog()
 	txRunner := &fakeTransactionRunner{}
@@ -432,9 +434,9 @@ func TestServiceCheckReadinessUsesTransactionRunnerWhenConfigured(t *testing.T) 
 		newFakeIntakeStore(),
 		goals,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		goal.WithTransactionRunner(txRunner),
 	)
 	created := validGoal()
 	if err := goals.Create(context.Background(), created); err != nil {
@@ -563,6 +565,7 @@ func TestServiceCheckReadinessReturnsErrorWhenSecondEventAppendFails(t *testing.
 		intakeReader{},
 		goals,
 		events,
+		&fakeTransactionRunner{},
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
 	)
@@ -630,7 +633,7 @@ func readinessService(t *testing.T) (*goal.Service, *fakeGoalStore, *fakeEventLo
 
 	goals := newFakeGoalStore()
 	events := newFakeEventLog()
-	service := goal.NewService(newFakeIntakeStore(), goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(newFakeIntakeStore(), goals, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, events
 }
 

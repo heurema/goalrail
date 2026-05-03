@@ -1256,20 +1256,21 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	workItemPlanProposalStore := newFakeWorkItemPlanProposalStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
-	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
+	txRunner := &fakeTransactionRunner{}
+	service := intake.NewService(intakeStore, resolver, events, txRunner, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
-	goalService := goal.NewService(intakeStore, goalStore, events, fixedClock{now: testTime()}, ids)
+	goalService := goal.NewService(intakeStore, goalStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	goalHandler := httpserver.NewGoalHandler(goalService)
-	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, fixedClock{now: testTime()}, ids)
+	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
 	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, fixedClock{now: testTime()}, ids)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, fixedClock{now: testTime()}, ids)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, fixedClock{now: testTime()}, ids)
-	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService)
+	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService, txRunner)
 	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
-	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, fixedClock{now: testTime()}, ids)
+	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 
 	return testServerDeps{
@@ -1873,6 +1874,12 @@ type fixedClock struct {
 
 func (c fixedClock) Now() time.Time {
 	return c.now
+}
+
+type fakeTransactionRunner struct{}
+
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
 }
 
 type sequenceIDs struct {

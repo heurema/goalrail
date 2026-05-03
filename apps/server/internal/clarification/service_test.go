@@ -149,7 +149,7 @@ func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
 	}
 }
 
-func TestServiceCreateRequestUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceCreateRequestUsesRequiredTransactionRunner(t *testing.T) {
 	goals := newFakeGoalStore()
 	clarifications := newFakeClarificationStore()
 	answers := newFakeClarificationAnswerStore()
@@ -160,9 +160,9 @@ func TestServiceCreateRequestUsesTransactionRunnerWhenConfigured(t *testing.T) {
 		clarifications,
 		answers,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithTransactionRunner(txRunner),
 	)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
@@ -206,9 +206,9 @@ func TestServiceCreateRequestTransactionRunnerFailureDoesNotUseFallbackStore(t *
 		clarifications,
 		answers,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithTransactionRunner(txRunner),
 	)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
@@ -430,18 +430,19 @@ func TestServiceRecordAnswerAppendsAnswerEvents(t *testing.T) {
 	}
 }
 
-func TestServiceRecordAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceRecordAnswerUsesRequiredTransactionRunner(t *testing.T) {
 	baseService, goals, requests, answers, events := requestService(t)
 	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
+	transactionalAppendsBeforeRecord := events.transactionalAppends
 	txRunner := &fakeTransactionRunner{}
 	service := clarification.NewService(
 		goals,
 		requests,
 		answers,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithTransactionRunner(txRunner),
 	)
 
 	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
@@ -458,8 +459,8 @@ func TestServiceRecordAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !requests.updateStateSawTransaction {
 		t.Fatal("clarification request UpdateState did not run inside transaction runner")
 	}
-	if events.transactionalAppends != 2 {
-		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
+	if got := events.transactionalAppends - transactionalAppendsBeforeRecord; got != 2 {
+		t.Fatalf("transactional event appends = %d, want 2", got)
 	}
 	if _, ok, err := answers.Get(context.Background(), recorded.ID); err != nil {
 		t.Fatalf("answers.Get() error = %v", err)
@@ -665,22 +666,23 @@ func TestServiceApplyAnswerAppendsApplicationEvents(t *testing.T) {
 	}
 }
 
-func TestServiceApplyAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceApplyAnswerUsesRequiredTransactionRunner(t *testing.T) {
 	baseService, goals, requests, answers, events := requestService(t)
 	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
 	recorded, err := baseService.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
 	if err != nil {
 		t.Fatalf("RecordAnswer() error = %v", err)
 	}
+	transactionalAppendsBeforeApply := events.transactionalAppends
 	txRunner := &fakeTransactionRunner{}
 	service := clarification.NewService(
 		goals,
 		requests,
 		answers,
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithTransactionRunner(txRunner),
 	)
 
 	_, updatedGoal, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
@@ -697,8 +699,8 @@ func TestServiceApplyAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !goals.updateHintsSawTransaction {
 		t.Fatal("goal UpdateHints did not run inside transaction runner")
 	}
-	if events.transactionalAppends != 2 {
-		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
+	if got := events.transactionalAppends - transactionalAppendsBeforeApply; got != 2 {
+		t.Fatalf("transactional event appends = %d, want 2", got)
 	}
 	if updatedGoal.ScopeHint == "" {
 		t.Fatal("updated goal scope_hint is empty")
@@ -820,7 +822,7 @@ func requestService(t *testing.T) (*clarification.Service, *fakeGoalStore, *fake
 	clarifications := newFakeClarificationStore()
 	answers := newFakeClarificationAnswerStore()
 	events := newFakeEventLog()
-	service := clarification.NewService(goals, clarifications, answers, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := clarification.NewService(goals, clarifications, answers, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, clarifications, answers, events
 }
 

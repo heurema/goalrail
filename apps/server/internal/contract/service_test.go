@@ -15,7 +15,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
-func TestCreateRollsBackSeededContractWhenDraftCreationFails(t *testing.T) {
+func TestCreateUsesTransactionRunnerRollbackWhenDraftCreationFails(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -33,7 +33,13 @@ func TestCreateRollsBackSeededContractWhenDraftCreationFails(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	failingDraftService := &failingDraftService{err: errors.New("draft create failed")}
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, failingDraftService, approvalService)
+	txRunner := &fakeTransactionRunner{rollback: func() {
+		contractStore.contracts = map[spine.ContractID]spine.Contract{}
+		contractStore.byGoal = map[spine.GoalID]spine.ContractID{}
+		seedStore.seeds = map[spine.ContractSeedID]spine.ContractSeed{}
+		seedStore.byGoal = map[spine.GoalID]spine.ContractSeedID{}
+	}}
+	service := contract.NewService(contractStore, seedService, failingDraftService, approvalService, txRunner)
 
 	if _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}); err == nil {
 		t.Fatal("Create() error = nil, want draft failure")
@@ -50,7 +56,7 @@ func TestCreateRollsBackSeededContractWhenDraftCreationFails(t *testing.T) {
 	}
 
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
-	service = contract.NewService(contractStore, seedService, draftService, approvalService)
+	service = contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
 		t.Fatalf("retry Create() error = %v", err)
@@ -71,7 +77,7 @@ func TestCreateRollsBackSeededContractWhenDraftCreationFails(t *testing.T) {
 	}
 }
 
-func TestCreateUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestCreateUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -90,7 +96,7 @@ func TestCreateUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
 
 	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
@@ -125,7 +131,7 @@ func TestCreateUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestUpdateDraftUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestUpdateDraftUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -143,14 +149,15 @@ func TestUpdateDraftUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService)
+	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
+	transactionalAppendsBeforeUpdate := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
 	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`))
 	if err != nil {
 		t.Fatalf("UpdateDraft() error = %v", err)
@@ -161,8 +168,8 @@ func TestUpdateDraftUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !draftStore.updateSawTransaction {
 		t.Fatal("draft store Update did not run inside transaction runner")
 	}
-	if events.transactionalAppends != 1 {
-		t.Fatalf("transactional event appends = %d, want 1", events.transactionalAppends)
+	if got := events.transactionalAppends - transactionalAppendsBeforeUpdate; got != 1 {
+		t.Fatalf("transactional event appends = %d, want 1", got)
 	}
 	if updated.State != spine.ContractStateDraft {
 		t.Fatalf("contract state = %q, want %q", updated.State, spine.ContractStateDraft)
@@ -185,7 +192,7 @@ func TestUpdateDraftUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestSubmitForApprovalUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestSubmitForApprovalUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -203,14 +210,15 @@ func TestSubmitForApprovalUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService)
+	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
+	transactionalAppendsBeforeSubmit := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
 	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
@@ -224,8 +232,8 @@ func TestSubmitForApprovalUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !contractStore.markReadyForApprovalSawTransaction {
 		t.Fatal("contract store MarkReadyForApproval did not run inside transaction runner")
 	}
-	if events.transactionalAppends != 1 {
-		t.Fatalf("transactional event appends = %d, want 1", events.transactionalAppends)
+	if got := events.transactionalAppends - transactionalAppendsBeforeSubmit; got != 1 {
+		t.Fatalf("transactional event appends = %d, want 1", got)
 	}
 	if updated.State != spine.ContractStateReadyForApproval {
 		t.Fatalf("contract state = %q, want %q", updated.State, spine.ContractStateReadyForApproval)
@@ -248,7 +256,7 @@ func TestSubmitForApprovalUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -266,7 +274,7 @@ func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService)
+	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
@@ -275,9 +283,10 @@ func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
+	transactionalAppendsBeforeApprove := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
 	approved, err := service.Approve(ctx, submitted.ID, approveRequest())
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
@@ -291,8 +300,8 @@ func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !contractStore.markApprovedSawTransaction {
 		t.Fatal("contract store MarkApproved did not run inside transaction runner")
 	}
-	if events.transactionalAppends != 1 {
-		t.Fatalf("transactional event appends = %d, want 1", events.transactionalAppends)
+	if got := events.transactionalAppends - transactionalAppendsBeforeApprove; got != 1 {
+		t.Fatalf("transactional event appends = %d, want 1", got)
 	}
 	if approved.State != spine.ContractStateApproved {
 		t.Fatalf("contract state = %q, want %q", approved.State, spine.ContractStateApproved)
@@ -315,7 +324,7 @@ func TestApproveUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestContractLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) {
+func TestContractLifecycleTransitionsUseRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
 	contractStore := newFakeContractStore()
@@ -333,7 +342,7 @@ func TestContractLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) 
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService)
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 
 	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
 	if err != nil {
@@ -360,23 +369,23 @@ func TestContractLifecycleTransitionsWorkWithoutTransactionRunner(t *testing.T) 
 	if approved.State != spine.ContractStateApproved {
 		t.Fatalf("approved contract state = %q, want %q", approved.State, spine.ContractStateApproved)
 	}
-	if draftStore.updateSawTransaction {
-		t.Fatal("draft store Update unexpectedly saw transaction context")
+	if !draftStore.updateSawTransaction {
+		t.Fatal("draft store Update did not see transaction context")
 	}
-	if draftStore.markReadyForApprovalSawTransaction {
-		t.Fatal("draft store MarkReadyForApproval unexpectedly saw transaction context")
+	if !draftStore.markReadyForApprovalSawTransaction {
+		t.Fatal("draft store MarkReadyForApproval did not see transaction context")
 	}
-	if contractStore.markReadyForApprovalSawTransaction {
-		t.Fatal("contract store MarkReadyForApproval unexpectedly saw transaction context")
+	if !contractStore.markReadyForApprovalSawTransaction {
+		t.Fatal("contract store MarkReadyForApproval did not see transaction context")
 	}
-	if approvedStore.createSawTransaction {
-		t.Fatal("approved contract store Create unexpectedly saw transaction context")
+	if !approvedStore.createSawTransaction {
+		t.Fatal("approved contract store Create did not see transaction context")
 	}
-	if contractStore.markApprovedSawTransaction {
-		t.Fatal("contract store MarkApproved unexpectedly saw transaction context")
+	if !contractStore.markApprovedSawTransaction {
+		t.Fatal("contract store MarkApproved did not see transaction context")
 	}
-	if events.transactionalAppends != 0 {
-		t.Fatalf("transactional event appends = %d, want 0", events.transactionalAppends)
+	if events.transactionalAppends != 5 {
+		t.Fatalf("transactional event appends = %d, want 5", events.transactionalAppends)
 	}
 }
 
@@ -399,12 +408,17 @@ func (s *failingDraftService) MarkReadyForApproval(context.Context, spine.Contra
 type txContextKey struct{}
 
 type fakeTransactionRunner struct {
-	calls int
+	calls    int
+	rollback func()
 }
 
 func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
 	r.calls++
-	return fn(context.WithValue(ctx, txContextKey{}, true))
+	err := fn(context.WithValue(ctx, txContextKey{}, true))
+	if err != nil && r.rollback != nil {
+		r.rollback()
+	}
+	return err
 }
 
 func sawTransaction(ctx context.Context) bool {

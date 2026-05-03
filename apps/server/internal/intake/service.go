@@ -68,26 +68,15 @@ type Service struct {
 	IDs            IDGenerator
 }
 
-type Option func(*Service)
-
-func WithTransactionRunner(runner TransactionRunner) Option {
-	return func(s *Service) {
-		s.TxRunner = runner
-	}
-}
-
-func NewService(store Store, projectContext ProjectContextResolver, events EventLog, clock Clock, ids IDGenerator, opts ...Option) *Service {
-	service := &Service{
+func NewService(store Store, projectContext ProjectContextResolver, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+	return &Service{
 		Store:          store,
 		ProjectContext: projectContext,
 		Events:         events,
+		TxRunner:       txRunner,
 		Clock:          clock,
 		IDs:            ids,
 	}
-	for _, opt := range opts {
-		opt(service)
-	}
-	return service
 }
 
 func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission) (spine.IntakeRecord, error) {
@@ -132,26 +121,16 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 	if err != nil {
 		return spine.IntakeRecord{}, err
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
-			if err := s.Store.Create(txCtx, record); err != nil {
-				return err
-			}
-			if err := s.Events.Append(txCtx, event); err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
-			return spine.IntakeRecord{}, fmt.Errorf("create intake record with event: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Store.Create(txCtx, record); err != nil {
+			return err
 		}
-		return record, nil
-	}
-
-	if err := s.Store.Create(ctx, record); err != nil {
-		return spine.IntakeRecord{}, fmt.Errorf("create intake record: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.IntakeRecord{}, fmt.Errorf("append intake event: %w", err)
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return spine.IntakeRecord{}, fmt.Errorf("create intake record with event: %w", err)
 	}
 
 	return record, nil

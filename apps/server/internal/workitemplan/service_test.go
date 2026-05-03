@@ -102,12 +102,9 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}
 }
 
-func TestServiceAcceptProposalUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	txRunner := &fakeTransactionRunner{}
-	service, _, _, plans, proposals, workItems, events := planningService(
-		t,
-		workitemplan.WithTransactionRunner(txRunner),
-	)
+	service, _, _, plans, proposals, workItems, events := planningService(t, txRunner)
 	approved := validApprovedContract()
 
 	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
@@ -151,8 +148,12 @@ func TestServiceAcceptProposalUsesTransactionRunnerWhenConfigured(t *testing.T) 
 	}
 }
 
-func planningService(t *testing.T, opts ...workitemplan.Option) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
+func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
 	t.Helper()
+	txRunner := workitemplan.TransactionRunner(&fakeTransactionRunner{})
+	if len(runners) > 0 {
+		txRunner = runners[0]
+	}
 	contracts := newFakeContractStore()
 	approvedContracts := newFakeApprovedContractStore()
 	plans := newFakeWorkItemPlanStore()
@@ -164,7 +165,7 @@ func planningService(t *testing.T, opts ...workitemplan.Option) (*workitemplan.S
 	if err := approvedContracts.Create(context.Background(), approved); err != nil {
 		t.Fatalf("approvedContracts.Create() error = %v", err)
 	}
-	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{}, opts...)
+	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, txRunner, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, contracts, approvedContracts, plans, proposals, workItems, events
 }
 

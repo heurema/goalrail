@@ -40,10 +40,6 @@ type SeedCreator interface {
 	Create(context.Context, spine.GoalID) (spine.ContractSeed, error)
 }
 
-type SeedCreateRollbacker interface {
-	RollbackCreate(context.Context, spine.ContractSeed) error
-}
-
 type DraftService interface {
 	Create(context.Context, spine.ContractSeedID) (spine.ContractDraft, error)
 	Update(context.Context, spine.ContractDraftID, spine.ContractDraftUpdateRequest) (spine.ContractDraft, error)
@@ -62,25 +58,14 @@ type Service struct {
 	TxRunner  TransactionRunner
 }
 
-type Option func(*Service)
-
-func WithTransactionRunner(runner TransactionRunner) Option {
-	return func(s *Service) {
-		s.TxRunner = runner
-	}
-}
-
-func NewService(contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, opts ...Option) *Service {
-	service := &Service{
+func NewService(contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, txRunner TransactionRunner) *Service {
+	return &Service{
 		Contracts: contracts,
 		Seeds:     seeds,
 		Drafts:    drafts,
 		Approvals: approvals,
+		TxRunner:  txRunner,
 	}
-	for _, opt := range opts {
-		opt(service)
-	}
-	return service
 }
 
 func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest) (spine.Contract, error) {
@@ -106,16 +91,7 @@ func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest)
 		return nil
 	}
 
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
-			return spine.Contract{}, err
-		}
-	} else if err := create(ctx); err != nil {
-		if seed.ID != "" {
-			if rollbackErr := s.rollbackCreate(ctx, seed); rollbackErr != nil {
-				return spine.Contract{}, fmt.Errorf("%w; rollback contract create: %v", err, rollbackErr)
-			}
-		}
+	if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, draft.ContractID)
@@ -147,11 +123,7 @@ func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input sp
 		_, err := s.Drafts.Update(updateCtx, draftID, input)
 		return err
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, update); err != nil {
-			return spine.Contract{}, err
-		}
-	} else if err := update(ctx); err != nil {
+	if err := s.TxRunner.RunReadCommitted(ctx, update); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
@@ -176,11 +148,7 @@ func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, in
 		_, err := s.Drafts.MarkReadyForApproval(markReadyCtx, draftID, input)
 		return err
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, markReady); err != nil {
-			return spine.Contract{}, err
-		}
-	} else if err := markReady(ctx); err != nil {
+	if err := s.TxRunner.RunReadCommitted(ctx, markReady); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
@@ -208,11 +176,7 @@ func (s *Service) Approve(ctx context.Context, id spine.ContractID, input spine.
 		_, err := s.Approvals.ApproveDraft(approveCtx, draftID, input)
 		return err
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, approve); err != nil {
-			return spine.Contract{}, err
-		}
-	} else if err := approve(ctx); err != nil {
+	if err := s.TxRunner.RunReadCommitted(ctx, approve); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
@@ -234,14 +198,6 @@ func currentDraftID(contract spine.Contract) (spine.ContractDraftID, error) {
 		return "", ErrContractCurrentDraftMissing
 	}
 	return *contract.CurrentDraftID, nil
-}
-
-func (s *Service) rollbackCreate(ctx context.Context, seed spine.ContractSeed) error {
-	rollbacker, ok := s.Seeds.(SeedCreateRollbacker)
-	if !ok {
-		return errors.New("seed service does not support create rollback")
-	}
-	return rollbacker.RollbackCreate(ctx, seed)
 }
 
 func (s *Service) validateDependencies() error {
