@@ -17,17 +17,6 @@ type postgresDBTX interface {
 	postgresRowsQuerier
 }
 
-type postgresTx interface {
-	postgresDBTX
-	Commit(ctx context.Context) error
-	Rollback(ctx context.Context) error
-}
-
-type postgresTransactor interface {
-	RunReadCommitted(ctx context.Context, fn postgresTxFunc) error
-	WithTx(ctx context.Context, opts pgx.TxOptions, fn postgresTxFunc) error
-}
-
 type postgresTxContextKey struct{}
 
 func contextWithPostgresTx(ctx context.Context, tx postgresDBTX) context.Context {

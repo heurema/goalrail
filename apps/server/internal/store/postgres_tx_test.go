@@ -44,6 +44,19 @@ func TestWithPostgresTxReusesExistingTransactionFromContext(t *testing.T) {
 	}
 }
 
+func TestWithPostgresTxNilPoolWithoutExistingTransaction(t *testing.T) {
+	err := withPostgresTx(context.Background(), nil, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(context.Context) error {
+		t.Fatal("transaction callback should not be called")
+		return nil
+	})
+	if err == nil {
+		t.Fatal("withPostgresTx() error = nil, want nil pool error")
+	}
+	if got, want := err.Error(), "postgres transaction pool is nil"; got != want {
+		t.Fatalf("withPostgresTx() error = %q, want %q", got, want)
+	}
+}
+
 type recordingPostgresTx struct {
 	execCalls     []recordedExecCall
 	queryRowCalls []recordedExecCall
