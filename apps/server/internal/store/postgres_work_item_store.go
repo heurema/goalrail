@@ -175,14 +175,11 @@ func (s *PostgresWorkItemStore) getOne(ctx context.Context, op string, where squ
 }
 
 func (s *PostgresWorkItemStore) queryWorkItem(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.WorkItem, bool, error) {
-	if s.query == nil {
-		return spine.WorkItem{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryWorkItemRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.WorkItem{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.WorkItem{}, false, err
 	}
-	item, err := scanWorkItem(s.query.QueryRow(ctx, sqlText, args...))
+	item, err := scanWorkItem(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.WorkItem{}, false, nil
@@ -190,6 +187,17 @@ func (s *PostgresWorkItemStore) queryWorkItem(ctx context.Context, op string, sq
 		return spine.WorkItem{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return item, true, nil
+}
+
+func queryWorkItemRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
+	if query == nil {
+		return nil, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := sqlizer.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	return query.QueryRow(ctx, sqlText, args...), nil
 }
 
 func scanWorkItem(row pgx.Row) (spine.WorkItem, error) {

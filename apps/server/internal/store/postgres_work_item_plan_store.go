@@ -154,14 +154,11 @@ func (s *PostgresWorkItemPlanStore) getOne(ctx context.Context, op string, where
 		Select(workItemPlanColumns()...).
 		From("work_item_plans").
 		Where(where)
-	if s.query == nil {
-		return spine.WorkItemPlan{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryWorkItemRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.WorkItemPlan{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.WorkItemPlan{}, false, err
 	}
-	plan, err := scanWorkItemPlan(s.query.QueryRow(ctx, sqlText, args...))
+	plan, err := scanWorkItemPlan(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.WorkItemPlan{}, false, nil
@@ -393,14 +390,11 @@ func (s *PostgresWorkItemPlanProposalStore) getOne(ctx context.Context, op strin
 		Select(workItemPlanProposalColumns()...).
 		From("work_item_plan_proposals").
 		Where(where)
-	if s.query == nil {
-		return spine.WorkItemPlanProposal{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := stmt.ToSql()
+	row, err := queryWorkItemRow(ctx, s.query, op, stmt)
 	if err != nil {
-		return spine.WorkItemPlanProposal{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.WorkItemPlanProposal{}, false, err
 	}
-	proposal, err := scanWorkItemPlanProposal(s.query.QueryRow(ctx, sqlText, args...))
+	proposal, err := scanWorkItemPlanProposal(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.WorkItemPlanProposal{}, false, nil
