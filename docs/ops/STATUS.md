@@ -88,7 +88,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem `plans` / `proposals` / `acceptance` planning control-plane flow, planned task read-by-ID, EventLog persistence, auth credential/session persistence primitives, Argon2id password hashing primitives, `goalrail-server bootstrap owner`, and transactional canonical write + event append hardening when DB is configured, plus in-memory fallback when DB is not configured for the existing API flows
+- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem `plans` / `proposals` / `acceptance` planning control-plane flow, planned task read-by-ID, EventLog persistence, auth credential/session persistence primitives, Argon2id password hashing primitives, `goalrail-server bootstrap owner`, transactional canonical write + event append hardening when DB is configured, and production product/auth route wiring that returns `503 database_not_configured` instead of falling back to in-memory state when DB config is absent
 
 ## What is real now
 
@@ -238,10 +238,15 @@ The project currently has:
   `contract_id`, requires the Contract to be `approved`, and creates a
   server-owned `WorkItemPlan(queued)` without creating WorkItems
 - `apps/server` now has a Postgres persistence foundation for the Organization / Project / RepoBinding context plus IntakeRecord, Goal, public Contract aggregate, ContractSeed, ContractDraft, ApprovedContract, and EventLog state
-- server config accepts `GOALRAIL_DATABASE_DSN` and
-  `GOALRAIL_AUTH_JWT_SECRET`; the server may start without the JWT secret, but
-  auth endpoints fail with a clear auth configuration error when token signing
-  or validation is needed without it
+- server config uses structured Postgres fields
+  `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_PORT`,
+  `GOALRAIL_DATABASE_NAME`, `GOALRAIL_DATABASE_USER`,
+  `GOALRAIL_DATABASE_PASSWORD`, and `GOALRAIL_DATABASE_SSLMODE`, plus
+  `GOALRAIL_AUTH_JWT_SECRET`; the server may start without database
+  configuration for health/version only, product/auth API routes return
+  `503 database_not_configured` without DB config, and auth endpoints fail with
+  a clear auth configuration error when token signing or validation is needed
+  without the JWT secret
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
 - `goalrail-server bootstrap owner` applies the smallest self-hosted owner

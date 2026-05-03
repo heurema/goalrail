@@ -5,11 +5,15 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
 	"github.com/heurema/goalrail/apps/server/internal/bootstrapowner"
+	"github.com/heurema/goalrail/apps/server/internal/config"
+	"github.com/heurema/goalrail/apps/server/internal/postgres"
 )
 
 func TestRootCommandRunsServerWithoutArgs(t *testing.T) {
@@ -295,6 +299,50 @@ func TestRootCommandValidatesBootstrapOwnerFlagsBeforeAction(t *testing.T) {
 	)
 	if !errors.Is(err, bootstrapowner.ErrInvalidInput) {
 		t.Fatalf("Execute() error = %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestProductionDatabaseCommandsRequireConfiguredDatabase(t *testing.T) {
+	actions := productionCommandActions(config.Config{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	for _, tt := range []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{name: "migrate up", run: actions.migrateUp},
+		{name: "seed dev", run: actions.seedDev},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.run(context.Background())
+			if !errors.Is(err, postgres.ErrDatabaseNotConfigured) {
+				t.Fatalf("error = %v, want ErrDatabaseNotConfigured", err)
+			}
+		})
+	}
+}
+
+func TestRunBootstrapOwnerRequiresConfiguredDatabase(t *testing.T) {
+	err := runBootstrapOwner(context.Background(), config.Config{}, bootstrapowner.Input{}, io.Discard)
+	if !errors.Is(err, postgres.ErrDatabaseNotConfigured) {
+		t.Fatalf("error = %v, want ErrDatabaseNotConfigured", err)
+	}
+}
+
+func TestRunBootstrapOwnerDoesNotLeakDatabasePasswordOnConfigError(t *testing.T) {
+	cfg := config.Config{Database: config.DatabaseConfig{
+		Host:     "localhost",
+		Port:     5432,
+		Name:     "goalrail",
+		User:     "goalrail",
+		Password: "secret-password",
+		SSLMode:  "invalid sslmode",
+	}}
+	err := runBootstrapOwner(context.Background(), cfg, bootstrapowner.Input{}, io.Discard)
+	if err == nil {
+		t.Fatal("error = nil, want invalid database config error")
+	}
+	if strings.Contains(err.Error(), "secret-password") {
+		t.Fatalf("error leaked database password: %v", err)
 	}
 }
 

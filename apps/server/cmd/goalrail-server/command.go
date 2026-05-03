@@ -29,14 +29,14 @@ func productionCommandActions(cfg config.Config, logger *slog.Logger) commandAct
 			return app.Run(ctx, cfg, logger)
 		},
 		migrateUp: func(ctx context.Context) error {
-			if err := postgres.MigrateUp(ctx, cfg.DatabaseDSN); err != nil {
+			if err := postgres.MigrateUp(ctx, cfg.Database); err != nil {
 				return err
 			}
 			logger.Info("postgres migrations applied")
 			return nil
 		},
 		seedDev: func(ctx context.Context) error {
-			pool, err := postgres.OpenPool(ctx, cfg.DatabaseDSN)
+			pool, err := postgres.OpenPool(ctx, cfg.Database)
 			if err != nil {
 				return err
 			}
@@ -145,7 +145,7 @@ func newBootstrapOwnerCommand(actions commandActions) *cobra.Command {
 }
 
 func runBootstrapOwner(ctx context.Context, cfg config.Config, input bootstrapowner.Input, stdout io.Writer) error {
-	pool, err := postgres.OpenPool(ctx, cfg.DatabaseDSN)
+	pool, err := postgres.OpenPool(ctx, cfg.Database)
 	if err != nil {
 		return err
 	}

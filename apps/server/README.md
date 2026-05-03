@@ -3,18 +3,37 @@
 This server is still an early prototype. Existing intake, Goal readiness,
 public Contract lifecycle, ContractSeed creation, ContractDraft
 creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
-WorkItem planning, and event log flows use Postgres when
-`GOALRAIL_DATABASE_DSN` is configured. ClarificationRequest and
-ClarificationAnswer state also use Postgres when configured, with in-memory
-fallback when no database DSN is set.
+WorkItem planning, auth credential/session, and event log flows require
+Postgres-backed state. The production server wiring no longer falls back to
+in-memory product state when database configuration is absent.
+
+`GET /livez`, `GET /readyz`, and `GET /version` remain lightweight and work
+without database configuration. Product and auth API routes return HTTP 503
+with error code `database_not_configured` until the structured Postgres
+configuration is complete.
 
 ## Local Postgres foundation
 
-Configure Postgres with:
+Configure Postgres with structured environment variables:
 
 ```bash
-export GOALRAIL_DATABASE_DSN='postgres://goalrail:goalrail@localhost:5432/goalrail?sslmode=disable'
+export GOALRAIL_DATABASE_HOST=localhost
+export GOALRAIL_DATABASE_PORT=5432
+export GOALRAIL_DATABASE_NAME=goalrail
+export GOALRAIL_DATABASE_USER=goalrail
+export GOALRAIL_DATABASE_PASSWORD='<operator-managed-password>'
+export GOALRAIL_DATABASE_SSLMODE=disable
 ```
+
+`GOALRAIL_DATABASE_PORT` defaults to `5432`.
+`GOALRAIL_DATABASE_SSLMODE` defaults to `disable` for local/self-hosted
+development. `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_NAME`,
+`GOALRAIL_DATABASE_USER`, and `GOALRAIL_DATABASE_PASSWORD` are required for a
+DB-enabled runtime. `GOALRAIL_DATABASE_PASSWORD` is intended for secret-only
+injection and must not be committed.
+
+`GOALRAIL_DATABASE_DSN` is no longer used by the server runtime database
+configuration path.
 
 Apply the editable pre-production init migration:
 
