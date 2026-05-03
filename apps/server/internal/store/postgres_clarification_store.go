@@ -16,8 +16,7 @@ import (
 )
 
 var (
-	errPostgresClarificationGoalNotFound    = errors.New("clarification goal not found")
-	errPostgresClarificationRequestNotFound = errors.New("clarification request not found")
+	errPostgresClarificationGoalNotFound = errors.New("clarification goal not found")
 )
 
 type ClarificationRequestExecer interface {
@@ -491,112 +490,4 @@ func (s *PostgresClarificationAnswerStore) execSQLTag(ctx context.Context, op st
 		return pgconn.CommandTag{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return tag, nil
-}
-
-type PostgresTransactionalClarificationStore struct {
-	requests   *PostgresClarificationRequestStore
-	answers    *PostgresClarificationAnswerStore
-	goals      *PostgresGoalStore
-	events     *PostgresEventLog
-	transactor postgresTransactor
-}
-
-func NewPostgresTransactionalClarificationStore(pool *pgxpool.Pool) *PostgresTransactionalClarificationStore {
-	db := newPostgresDB(pool)
-	return newPostgresTransactionalClarificationStore(
-		NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db),
-		NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db),
-		NewPostgresGoalStoreWithExecutorAndQuerier(db, db),
-		NewPostgresEventLogWithExecutorAndQuerier(db, db),
-		pgxpoolTransactor{pool: pool},
-	)
-}
-
-func newPostgresTransactionalClarificationStore(requests *PostgresClarificationRequestStore, answers *PostgresClarificationAnswerStore, goals *PostgresGoalStore, events *PostgresEventLog, transactor postgresTransactor) *PostgresTransactionalClarificationStore {
-	return &PostgresTransactionalClarificationStore{
-		requests:   requests,
-		answers:    answers,
-		goals:      goals,
-		events:     events,
-		transactor: transactor,
-	}
-}
-
-func (s *PostgresTransactionalClarificationStore) CreateRequestWithEvent(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
-	if s.transactor == nil {
-		return fmt.Errorf("postgres transactor is nil")
-	}
-	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.requests.Create(txCtx, request); err != nil {
-			return err
-		}
-		if err := s.events.Append(txCtx, event); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (s *PostgresTransactionalClarificationStore) RecordAnswerWithEvents(ctx context.Context, answer spine.ClarificationAnswer, eventsToAppend []spine.Event) (bool, error) {
-	if s.transactor == nil {
-		return false, fmt.Errorf("postgres transactor is nil")
-	}
-	requestUpdated := false
-	err := s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.answers.Create(txCtx, answer); err != nil {
-			return err
-		}
-		if _, ok, err := s.requests.UpdateState(txCtx, answer.RequestID, spine.ClarificationRequestStateAnswered); err != nil {
-			return err
-		} else if !ok {
-			return errPostgresClarificationRequestNotFound
-		}
-		requestUpdated = true
-		for _, event := range eventsToAppend {
-			if err := s.events.Append(txCtx, event); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if errors.Is(err, errPostgresClarificationRequestNotFound) {
-		return false, nil
-	}
-	return requestUpdated, err
-}
-
-func (s *PostgresTransactionalClarificationStore) ApplyAnswerWithGoalHintsAndEvents(ctx context.Context, answerID spine.ClarificationAnswerID, goalID spine.GoalID, update spine.GoalHintUpdate, appliedBy spine.ActorRef, appliedAt time.Time, eventsToAppend []spine.Event) (spine.Goal, bool, bool, error) {
-	if s.transactor == nil {
-		return spine.Goal{}, false, false, fmt.Errorf("postgres transactor is nil")
-	}
-	var updated spine.Goal
-	var marked bool
-	var goalOK bool
-	err := s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		var err error
-		marked, err = s.answers.MarkApplied(txCtx, answerID, appliedBy, appliedAt)
-		if err != nil {
-			return err
-		}
-		if !marked {
-			return nil
-		}
-		updated, goalOK, err = s.goals.UpdateHints(txCtx, goalID, update)
-		if err != nil {
-			return err
-		}
-		if !goalOK {
-			return errPostgresClarificationGoalNotFound
-		}
-		for _, event := range eventsToAppend {
-			if err := s.events.Append(txCtx, event); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if errors.Is(err, errPostgresClarificationGoalNotFound) {
-		return spine.Goal{}, marked, false, nil
-	}
-	return updated, marked, goalOK, err
 }

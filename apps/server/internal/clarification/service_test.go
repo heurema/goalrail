@@ -149,19 +149,12 @@ func TestServiceCreateRequestAppendsClarificationRequestedEvent(t *testing.T) {
 	}
 }
 
-func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
+func TestServiceCreateRequestUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	goals := newFakeGoalStore()
 	clarifications := newFakeClarificationStore()
 	answers := newFakeClarificationAnswerStore()
 	events := newFakeEventLog()
-	tx := &requestCreationTransaction{
-		create: func(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
-			if err := clarifications.Create(ctx, request); err != nil {
-				return err
-			}
-			return events.Append(ctx, event)
-		},
-	}
+	txRunner := &fakeTransactionRunner{}
 	service := clarification.NewService(
 		goals,
 		clarifications,
@@ -169,7 +162,7 @@ func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
 		events,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithRequestCreationTransaction(tx),
+		clarification.WithTransactionRunner(txRunner),
 	)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
@@ -181,8 +174,14 @@ func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
 		t.Fatalf("CreateRequest() error = %v", err)
 	}
 
-	if tx.calls != 1 {
-		t.Fatalf("transaction calls = %d, want 1", tx.calls)
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if !clarifications.createSawTransaction {
+		t.Fatal("clarification request Create did not run inside transaction runner")
+	}
+	if events.transactionalAppends != 1 {
+		t.Fatalf("transactional event appends = %d, want 1", events.transactionalAppends)
 	}
 	stored, ok, err := clarifications.GetOpenByGoalID(context.Background(), createdGoal.ID)
 	if err != nil {
@@ -194,17 +193,14 @@ func TestServiceCreateRequestUsesTransactionHook(t *testing.T) {
 	if stored.ID != created.ID {
 		t.Fatalf("stored request id = %q, want %q", stored.ID, created.ID)
 	}
-	if got := len(events.Events()); got != 1 {
-		t.Fatalf("events length = %d, want 1", got)
-	}
 }
 
-func TestServiceCreateRequestTransactionFailureDoesNotUseFallbackStore(t *testing.T) {
+func TestServiceCreateRequestTransactionRunnerFailureDoesNotUseFallbackStore(t *testing.T) {
 	goals := newFakeGoalStore()
 	clarifications := newFakeClarificationStore()
 	answers := newFakeClarificationAnswerStore()
 	events := newFakeEventLog()
-	tx := &requestCreationTransaction{err: errors.New("forced transaction failure")}
+	txRunner := &fakeTransactionRunner{err: errors.New("forced transaction failure")}
 	service := clarification.NewService(
 		goals,
 		clarifications,
@@ -212,7 +208,7 @@ func TestServiceCreateRequestTransactionFailureDoesNotUseFallbackStore(t *testin
 		events,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		clarification.WithRequestCreationTransaction(tx),
+		clarification.WithTransactionRunner(txRunner),
 	)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
 	if err := goals.Create(context.Background(), createdGoal); err != nil {
@@ -223,8 +219,8 @@ func TestServiceCreateRequestTransactionFailureDoesNotUseFallbackStore(t *testin
 	if err == nil {
 		t.Fatal("CreateRequest() error = nil, want transaction failure")
 	}
-	if tx.calls != 1 {
-		t.Fatalf("transaction calls = %d, want 1", tx.calls)
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
 	}
 	if _, ok, err := clarifications.GetOpenByGoalID(context.Background(), createdGoal.ID); err != nil {
 		t.Fatalf("GetOpenByGoalID() error = %v", err)
@@ -434,6 +430,44 @@ func TestServiceRecordAnswerAppendsAnswerEvents(t *testing.T) {
 	}
 }
 
+func TestServiceRecordAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	baseService, goals, requests, answers, events := requestService(t)
+	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
+	txRunner := &fakeTransactionRunner{}
+	service := clarification.NewService(
+		goals,
+		requests,
+		answers,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		clarification.WithTransactionRunner(txRunner),
+	)
+
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if !answers.createSawTransaction {
+		t.Fatal("clarification answer Create did not run inside transaction runner")
+	}
+	if !requests.updateStateSawTransaction {
+		t.Fatal("clarification request UpdateState did not run inside transaction runner")
+	}
+	if events.transactionalAppends != 2 {
+		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
+	}
+	if _, ok, err := answers.Get(context.Background(), recorded.ID); err != nil {
+		t.Fatalf("answers.Get() error = %v", err)
+	} else if !ok {
+		t.Fatal("stored answer not found")
+	}
+}
+
 func TestServiceRecordAnswerRejectsRepeatedAnswer(t *testing.T) {
 	service, goals, _, _, events := requestService(t)
 	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
@@ -451,22 +485,22 @@ func TestServiceRecordAnswerRejectsRepeatedAnswer(t *testing.T) {
 	}
 }
 
-func TestServiceRecordAnswerReturnsNotFoundWhenTransactionLosesRequest(t *testing.T) {
+func TestServiceRecordAnswerReturnsNotFoundWhenRequestUpdateFindsNoRow(t *testing.T) {
 	baseService, goals, requests, answers, events := requestService(t)
 	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
-	service := clarification.NewService(
-		goals,
-		requests,
-		answers,
-		events,
-		fixedClock{now: testTime()},
-		&sequenceIDs{},
-		clarification.WithAnswerRecordingTransaction(answerRecordingTransaction{ok: false}),
-	)
+	requests.updateStateMissing = true
 
-	_, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	_, err := baseService.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
 	if !errors.Is(err, clarification.ErrRequestNotFound) {
 		t.Fatalf("RecordAnswer() error = %v, want ErrRequestNotFound", err)
+	}
+	if got := len(events.Events()); got != 1 {
+		t.Fatalf("events length = %d, want only original request event", got)
+	}
+	if _, ok, err := answers.GetByRequestID(context.Background(), request.ID); err != nil {
+		t.Fatalf("answers.GetByRequestID() error = %v", err)
+	} else if !ok {
+		t.Fatal("answer was not created before request update returned not found")
 	}
 }
 
@@ -631,6 +665,46 @@ func TestServiceApplyAnswerAppendsApplicationEvents(t *testing.T) {
 	}
 }
 
+func TestServiceApplyAnswerUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	baseService, goals, requests, answers, events := requestService(t)
+	request := createRequest(t, baseService, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := baseService.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+	txRunner := &fakeTransactionRunner{}
+	service := clarification.NewService(
+		goals,
+		requests,
+		answers,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		clarification.WithTransactionRunner(txRunner),
+	)
+
+	_, updatedGoal, err := service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if err != nil {
+		t.Fatalf("ApplyAnswer() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if !answers.markAppliedSawTransaction {
+		t.Fatal("clarification answer MarkApplied did not run inside transaction runner")
+	}
+	if !goals.updateHintsSawTransaction {
+		t.Fatal("goal UpdateHints did not run inside transaction runner")
+	}
+	if events.transactionalAppends != 2 {
+		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
+	}
+	if updatedGoal.ScopeHint == "" {
+		t.Fatal("updated goal scope_hint is empty")
+	}
+}
+
 func TestServiceApplyAnswerRejectsRepeatedApplication(t *testing.T) {
 	service, goals, _, _, events := requestService(t)
 	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
@@ -648,6 +722,24 @@ func TestServiceApplyAnswerRejectsRepeatedApplication(t *testing.T) {
 	}
 	if got := len(events.Events()); got != 5 {
 		t.Fatalf("events length = %d, want 5", got)
+	}
+}
+
+func TestServiceApplyAnswerReturnsGoalNotFoundWhenHintUpdateFindsNoRow(t *testing.T) {
+	service, goals, _, _, events := requestService(t)
+	request := createRequest(t, service, goals, spine.GoalReadinessReasonMissingScopeHint)
+	recorded, err := service.RecordAnswer(context.Background(), request.ID, answerSubmission(request))
+	if err != nil {
+		t.Fatalf("RecordAnswer() error = %v", err)
+	}
+	goals.updateHintsMissing = true
+
+	_, _, err = service.ApplyAnswer(context.Background(), recorded.ID, applyRequest())
+	if !errors.Is(err, clarification.ErrGoalNotFound) {
+		t.Fatalf("ApplyAnswer() error = %v, want ErrGoalNotFound", err)
+	}
+	if got := len(events.Events()); got != 3 {
+		t.Fatalf("events length = %d, want pre-application events only", got)
 	}
 }
 
@@ -733,7 +825,9 @@ func requestService(t *testing.T) (*clarification.Service, *fakeGoalStore, *fake
 }
 
 type fakeGoalStore struct {
-	goals map[spine.GoalID]spine.Goal
+	goals                     map[spine.GoalID]spine.Goal
+	updateHintsSawTransaction bool
+	updateHintsMissing        bool
 }
 
 func newFakeGoalStore() *fakeGoalStore {
@@ -750,7 +844,11 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 	return cloneGoal(goal), ok, nil
 }
 
-func (s *fakeGoalStore) UpdateHints(_ context.Context, id spine.GoalID, update spine.GoalHintUpdate) (spine.Goal, bool, error) {
+func (s *fakeGoalStore) UpdateHints(ctx context.Context, id spine.GoalID, update spine.GoalHintUpdate) (spine.Goal, bool, error) {
+	s.updateHintsSawTransaction = s.updateHintsSawTransaction || sawTransaction(ctx)
+	if s.updateHintsMissing {
+		return spine.Goal{}, false, nil
+	}
 	goal, ok := s.goals[id]
 	if !ok {
 		return spine.Goal{}, false, nil
@@ -778,8 +876,11 @@ func cloneGoal(goal spine.Goal) spine.Goal {
 }
 
 type fakeClarificationStore struct {
-	requests   map[spine.ClarificationRequestID]spine.ClarificationRequest
-	openByGoal map[spine.GoalID]spine.ClarificationRequestID
+	requests                  map[spine.ClarificationRequestID]spine.ClarificationRequest
+	openByGoal                map[spine.GoalID]spine.ClarificationRequestID
+	createSawTransaction      bool
+	updateStateSawTransaction bool
+	updateStateMissing        bool
 }
 
 func newFakeClarificationStore() *fakeClarificationStore {
@@ -789,7 +890,8 @@ func newFakeClarificationStore() *fakeClarificationStore {
 	}
 }
 
-func (s *fakeClarificationStore) Create(_ context.Context, request spine.ClarificationRequest) error {
+func (s *fakeClarificationStore) Create(ctx context.Context, request spine.ClarificationRequest) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.requests[request.ID] = cloneClarificationRequest(request)
 	if request.State == spine.ClarificationRequestStateOpen {
 		s.openByGoal[request.GoalID] = request.ID
@@ -811,7 +913,11 @@ func (s *fakeClarificationStore) GetOpenByGoalID(_ context.Context, id spine.Goa
 	return cloneClarificationRequest(request), ok, nil
 }
 
-func (s *fakeClarificationStore) UpdateState(_ context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+func (s *fakeClarificationStore) UpdateState(ctx context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+	s.updateStateSawTransaction = s.updateStateSawTransaction || sawTransaction(ctx)
+	if s.updateStateMissing {
+		return spine.ClarificationRequest{}, false, nil
+	}
 	request, ok := s.requests[id]
 	if !ok {
 		return spine.ClarificationRequest{}, false, nil
@@ -838,9 +944,11 @@ func cloneClarificationRequest(request spine.ClarificationRequest) spine.Clarifi
 }
 
 type fakeClarificationAnswerStore struct {
-	answers   map[spine.ClarificationAnswerID]spine.ClarificationAnswer
-	byRequest map[spine.ClarificationRequestID]spine.ClarificationAnswerID
-	applied   map[spine.ClarificationAnswerID]bool
+	answers                   map[spine.ClarificationAnswerID]spine.ClarificationAnswer
+	byRequest                 map[spine.ClarificationRequestID]spine.ClarificationAnswerID
+	applied                   map[spine.ClarificationAnswerID]bool
+	createSawTransaction      bool
+	markAppliedSawTransaction bool
 }
 
 func newFakeClarificationAnswerStore() *fakeClarificationAnswerStore {
@@ -851,7 +959,8 @@ func newFakeClarificationAnswerStore() *fakeClarificationAnswerStore {
 	}
 }
 
-func (s *fakeClarificationAnswerStore) Create(_ context.Context, answer spine.ClarificationAnswer) error {
+func (s *fakeClarificationAnswerStore) Create(ctx context.Context, answer spine.ClarificationAnswer) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.answers[answer.ID] = cloneClarificationAnswer(answer)
 	s.byRequest[answer.RequestID] = answer.ID
 	return nil
@@ -871,7 +980,8 @@ func (s *fakeClarificationAnswerStore) GetByRequestID(_ context.Context, id spin
 	return cloneClarificationAnswer(answer), ok, nil
 }
 
-func (s *fakeClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID, _ spine.ActorRef, _ time.Time) (bool, error) {
+func (s *fakeClarificationAnswerStore) MarkApplied(ctx context.Context, id spine.ClarificationAnswerID, _ spine.ActorRef, _ time.Time) (bool, error) {
+	s.markAppliedSawTransaction = s.markAppliedSawTransaction || sawTransaction(ctx)
 	if s.applied[id] {
 		return false, nil
 	}
@@ -885,14 +995,18 @@ func cloneClarificationAnswer(answer spine.ClarificationAnswer) spine.Clarificat
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events               []spine.Event
+	transactionalAppends int
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	if sawTransaction(ctx) {
+		l.transactionalAppends++
+	}
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }
@@ -943,30 +1057,24 @@ type sequenceIDs struct {
 	event         int
 }
 
-type answerRecordingTransaction struct {
-	ok  bool
-	err error
+type txContextKey struct{}
+
+type fakeTransactionRunner struct {
+	calls int
+	err   error
 }
 
-func (tx answerRecordingTransaction) RecordAnswerWithEvents(context.Context, spine.ClarificationAnswer, []spine.Event) (bool, error) {
-	return tx.ok, tx.err
-}
-
-type requestCreationTransaction struct {
-	calls  int
-	err    error
-	create func(context.Context, spine.ClarificationRequest, spine.Event) error
-}
-
-func (tx *requestCreationTransaction) CreateRequestWithEvent(ctx context.Context, request spine.ClarificationRequest, event spine.Event) error {
-	tx.calls++
-	if tx.err != nil {
-		return tx.err
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	r.calls++
+	if r.err != nil {
+		return r.err
 	}
-	if tx.create != nil {
-		return tx.create(ctx, request, event)
-	}
-	return nil
+	return fn(context.WithValue(ctx, txContextKey{}, true))
+}
+
+func sawTransaction(ctx context.Context) bool {
+	inTx, _ := ctx.Value(txContextKey{}).(bool)
+	return inTx
 }
 
 func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {

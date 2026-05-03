@@ -75,16 +75,8 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type RequestCreationTransaction interface {
-	CreateRequestWithEvent(context.Context, spine.ClarificationRequest, spine.Event) error
-}
-
-type AnswerRecordingTransaction interface {
-	RecordAnswerWithEvents(context.Context, spine.ClarificationAnswer, []spine.Event) (bool, error)
-}
-
-type AnswerApplicationTransaction interface {
-	ApplyAnswerWithGoalHintsAndEvents(context.Context, spine.ClarificationAnswerID, spine.GoalID, spine.GoalHintUpdate, spine.ActorRef, time.Time, []spine.Event) (spine.Goal, bool, bool, error)
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
 }
 
 type Clock interface {
@@ -106,28 +98,14 @@ type Service struct {
 	Clock   Clock
 	IDs     IDGenerator
 
-	RequestCreationTx   RequestCreationTransaction
-	AnswerRecordingTx   AnswerRecordingTransaction
-	AnswerApplicationTx AnswerApplicationTransaction
+	TxRunner TransactionRunner
 }
 
 type Option func(*Service)
 
-func WithRequestCreationTransaction(tx RequestCreationTransaction) Option {
+func WithTransactionRunner(runner TransactionRunner) Option {
 	return func(s *Service) {
-		s.RequestCreationTx = tx
-	}
-}
-
-func WithAnswerRecordingTransaction(tx AnswerRecordingTransaction) Option {
-	return func(s *Service) {
-		s.AnswerRecordingTx = tx
-	}
-}
-
-func WithAnswerApplicationTransaction(tx AnswerApplicationTransaction) Option {
-	return func(s *Service) {
-		s.AnswerApplicationTx = tx
+		s.TxRunner = runner
 	}
 }
 
@@ -191,23 +169,30 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 		return spine.ClarificationRequest{}, err
 	}
 
-	if s.RequestCreationTx != nil {
-		if err := s.RequestCreationTx.CreateRequestWithEvent(ctx, created, event); err != nil {
+	create := func(createCtx context.Context) error {
+		if err := s.Store.Create(createCtx, created); err != nil {
+			if errors.Is(err, ErrAlreadyOpen) {
+				return ErrAlreadyOpen
+			}
+			return fmt.Errorf("create clarification request: %w", err)
+		}
+		if err := s.Events.Append(createCtx, event); err != nil {
+			return fmt.Errorf("append clarification requested event: %w", err)
+		}
+		return nil
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
 			if errors.Is(err, ErrAlreadyOpen) {
 				return spine.ClarificationRequest{}, ErrAlreadyOpen
 			}
 			return spine.ClarificationRequest{}, fmt.Errorf("create clarification request transaction: %w", err)
 		}
-	} else {
-		if err := s.Store.Create(ctx, created); err != nil {
-			if errors.Is(err, ErrAlreadyOpen) {
-				return spine.ClarificationRequest{}, ErrAlreadyOpen
-			}
-			return spine.ClarificationRequest{}, fmt.Errorf("create clarification request: %w", err)
+	} else if err := create(ctx); err != nil {
+		if errors.Is(err, ErrAlreadyOpen) {
+			return spine.ClarificationRequest{}, ErrAlreadyOpen
 		}
-		if err := s.Events.Append(ctx, event); err != nil {
-			return spine.ClarificationRequest{}, fmt.Errorf("append clarification requested event: %w", err)
-		}
+		return spine.ClarificationRequest{}, err
 	}
 
 	return created, nil
@@ -266,28 +251,31 @@ func (s *Service) RecordAnswer(ctx context.Context, requestID spine.Clarificatio
 	}
 
 	events := []spine.Event{answerRecorded, requestAnswered}
-	if s.AnswerRecordingTx != nil {
-		ok, err := s.AnswerRecordingTx.RecordAnswerWithEvents(ctx, recorded, events)
-		if err != nil {
-			return spine.ClarificationAnswer{}, fmt.Errorf("record clarification answer transaction: %w", err)
+	record := func(recordCtx context.Context) error {
+		if err := s.Answers.Create(recordCtx, recorded); err != nil {
+			return fmt.Errorf("create clarification answer: %w", err)
 		}
-		if !ok {
-			return spine.ClarificationAnswer{}, ErrRequestNotFound
-		}
-	} else {
-		if err := s.Answers.Create(ctx, recorded); err != nil {
-			return spine.ClarificationAnswer{}, fmt.Errorf("create clarification answer: %w", err)
-		}
-		if _, ok, err := s.Store.UpdateState(ctx, request.ID, spine.ClarificationRequestStateAnswered); err != nil {
-			return spine.ClarificationAnswer{}, fmt.Errorf("update clarification request state: %w", err)
+		if _, ok, err := s.Store.UpdateState(recordCtx, request.ID, spine.ClarificationRequestStateAnswered); err != nil {
+			return fmt.Errorf("update clarification request state: %w", err)
 		} else if !ok {
-			return spine.ClarificationAnswer{}, ErrRequestNotFound
+			return ErrRequestNotFound
 		}
 		for _, event := range events {
-			if err := s.Events.Append(ctx, event); err != nil {
-				return spine.ClarificationAnswer{}, fmt.Errorf("append clarification answer event: %w", err)
+			if err := s.Events.Append(recordCtx, event); err != nil {
+				return fmt.Errorf("append clarification answer event: %w", err)
 			}
 		}
+		return nil
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, record); err != nil {
+			if errors.Is(err, ErrRequestNotFound) {
+				return spine.ClarificationAnswer{}, ErrRequestNotFound
+			}
+			return spine.ClarificationAnswer{}, fmt.Errorf("record clarification answer transaction: %w", err)
+		}
+	} else if err := record(ctx); err != nil {
+		return spine.ClarificationAnswer{}, err
 	}
 
 	return recorded, nil
@@ -359,42 +347,48 @@ func (s *Service) ApplyAnswer(ctx context.Context, answerID spine.ClarificationA
 	events := []spine.Event{answerApplied, goalHintsUpdated}
 
 	var updatedGoal spine.Goal
-	if s.AnswerApplicationTx != nil {
-		var marked bool
-		var goalOK bool
-		updatedGoal, marked, goalOK, err = s.AnswerApplicationTx.ApplyAnswerWithGoalHintsAndEvents(ctx, answer.ID, goal.ID, update, input.AppliedBy, appliedAt, events)
+	marked := false
+	goalOK := false
+	apply := func(applyCtx context.Context) error {
+		var err error
+		marked, err = s.Answers.MarkApplied(applyCtx, answer.ID, input.AppliedBy, appliedAt)
 		if err != nil {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("apply clarification answer transaction: %w", err)
+			return fmt.Errorf("mark clarification answer applied: %w", err)
 		}
 		if !marked {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAlreadyApplied
-		}
-		if !goalOK {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
-		}
-	} else {
-		marked, err := s.Answers.MarkApplied(ctx, answer.ID, input.AppliedBy, appliedAt)
-		if err != nil {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("mark clarification answer applied: %w", err)
-		}
-		if !marked {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAlreadyApplied
+			return nil
 		}
 
-		var ok bool
-		updatedGoal, ok, err = s.Goals.UpdateHints(ctx, goal.ID, update)
+		updatedGoal, goalOK, err = s.Goals.UpdateHints(applyCtx, goal.ID, update)
 		if err != nil {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("update goal hints: %w", err)
+			return fmt.Errorf("update goal hints: %w", err)
 		}
-		if !ok {
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
+		if !goalOK {
+			return ErrGoalNotFound
 		}
 
 		for _, event := range events {
-			if err := s.Events.Append(ctx, event); err != nil {
-				return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("append clarification answer application event: %w", err)
+			if err := s.Events.Append(applyCtx, event); err != nil {
+				return fmt.Errorf("append clarification answer application event: %w", err)
 			}
 		}
+		return nil
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, apply); err != nil {
+			if errors.Is(err, ErrGoalNotFound) {
+				return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
+			}
+			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("apply clarification answer transaction: %w", err)
+		}
+	} else if err := apply(ctx); err != nil {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+	}
+	if !marked {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAlreadyApplied
+	}
+	if !goalOK {
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
 	}
 
 	return result, updatedGoal, nil
