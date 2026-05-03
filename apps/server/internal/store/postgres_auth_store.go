@@ -144,6 +144,45 @@ func (s *PostgresAuthStore) GetSessionByRefreshTokenHash(ctx context.Context, re
 	return s.getSession(ctx, "get user session by refresh token hash", stmt)
 }
 
+func (s *PostgresAuthStore) GetUser(ctx context.Context, userID spine.UserID) (spine.User, bool, error) {
+	parsedUserID, err := uuidValue(userID, "user id")
+	if err != nil {
+		return spine.User{}, false, err
+	}
+	stmt := s.psql.
+		Select(userColumns()...).
+		From("users").
+		Where(squirrel.Eq{"id": parsedUserID})
+	return s.getUser(ctx, "get user", stmt)
+}
+
+func (s *PostgresAuthStore) GetUserByEmail(ctx context.Context, email string) (spine.User, bool, error) {
+	stmt := s.psql.
+		Select(userColumns()...).
+		From("users").
+		Where("lower(email) = lower(?)", email).
+		OrderBy("created_at ASC", "id ASC").
+		Limit(1)
+	return s.getUser(ctx, "get user by email", stmt)
+}
+
+func (s *PostgresAuthStore) GetPrimaryOrganizationMembership(ctx context.Context, userID spine.UserID) (spine.OrganizationMembership, bool, error) {
+	parsedUserID, err := uuidValue(userID, "organization membership user id")
+	if err != nil {
+		return spine.OrganizationMembership{}, false, err
+	}
+	stmt := s.psql.
+		Select(organizationMembershipColumns()...).
+		From("organization_memberships").
+		Where(squirrel.Eq{
+			"user_id": parsedUserID,
+			"state":   string(spine.EntityStateActive),
+		}).
+		OrderBy("created_at ASC", "id ASC").
+		Limit(1)
+	return s.getOrganizationMembership(ctx, "get primary organization membership", stmt)
+}
+
 func (s *PostgresAuthStore) getPasswordCredential(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.UserPasswordCredential, bool, error) {
 	if s.query == nil {
 		return spine.UserPasswordCredential{}, false, fmt.Errorf("%s query executor is nil", op)
@@ -178,6 +217,42 @@ func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squi
 		return spine.UserSession{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return session, true, nil
+}
+
+func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.User, bool, error) {
+	if s.query == nil {
+		return spine.User{}, false, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.User{}, false, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	user, err := scanUser(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.User{}, false, nil
+		}
+		return spine.User{}, false, fmt.Errorf("%s: %w", op, err)
+	}
+	return user, true, nil
+}
+
+func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.OrganizationMembership, bool, error) {
+	if s.query == nil {
+		return spine.OrganizationMembership{}, false, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.OrganizationMembership{}, false, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	membership, err := scanOrganizationMembership(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.OrganizationMembership{}, false, nil
+		}
+		return spine.OrganizationMembership{}, false, fmt.Errorf("%s: %w", op, err)
+	}
+	return membership, true, nil
 }
 
 func scanPasswordCredential(row pgx.Row) (spine.UserPasswordCredential, error) {
@@ -232,6 +307,55 @@ func scanUserSession(row pgx.Row) (spine.UserSession, error) {
 	return session, nil
 }
 
+func scanUser(row pgx.Row) (spine.User, error) {
+	var user spine.User
+	var id string
+	var state string
+	if err := row.Scan(
+		&id,
+		&user.DisplayName,
+		&user.Email,
+		&state,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	); err != nil {
+		return spine.User{}, err
+	}
+	user.ID = spine.UserID(id)
+	user.State = spine.EntityState(state)
+	user.CreatedAt = user.CreatedAt.UTC()
+	user.UpdatedAt = user.UpdatedAt.UTC()
+	return user, nil
+}
+
+func scanOrganizationMembership(row pgx.Row) (spine.OrganizationMembership, error) {
+	var membership spine.OrganizationMembership
+	var id string
+	var organizationID string
+	var userID string
+	var role string
+	var state string
+	if err := row.Scan(
+		&id,
+		&organizationID,
+		&userID,
+		&role,
+		&state,
+		&membership.CreatedAt,
+		&membership.UpdatedAt,
+	); err != nil {
+		return spine.OrganizationMembership{}, err
+	}
+	membership.ID = spine.OrganizationMembershipID(id)
+	membership.OrganizationID = spine.OrganizationID(organizationID)
+	membership.UserID = spine.UserID(userID)
+	membership.Role = spine.OrganizationMembershipRole(role)
+	membership.State = spine.EntityState(state)
+	membership.CreatedAt = membership.CreatedAt.UTC()
+	membership.UpdatedAt = membership.UpdatedAt.UTC()
+	return membership, nil
+}
+
 func passwordCredentialColumns() []string {
 	return []string{
 		"user_id",
@@ -254,6 +378,29 @@ func userSessionColumns() []string {
 		"expires_at",
 		"revoked_at",
 		"last_used_at",
+	}
+}
+
+func userColumns() []string {
+	return []string{
+		"id",
+		"display_name",
+		"email",
+		"state",
+		"created_at",
+		"updated_at",
+	}
+}
+
+func organizationMembershipColumns() []string {
+	return []string{
+		"id",
+		"organization_id",
+		"user_id",
+		"role",
+		"state",
+		"created_at",
+		"updated_at",
 	}
 }
 

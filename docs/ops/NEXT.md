@@ -32,8 +32,9 @@
   are the only deployment modes, and the server now has the smallest
   Installation schema foundation: `installations`, installation-scoped
   organization slugs, and a dev `self_hosted` Installation linked to the dev
-  Organization. Auth, JWT, CLI login, SaaS onboarding, organization creation
-  API, and web UI remain unimplemented.
+  Organization. The later ADR-0023 auth API slice now adds server-only login,
+  password change, and `/v1/me`; CLI login, browser loopback, SaaS onboarding,
+  organization creation API, and web UI remain unimplemented.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -48,8 +49,8 @@
   now exists as schema, server-local types, Squirrel-backed store primitives,
   and Argon2id PHC-style password hashing/verification, and
   `goalrail-server bootstrap owner` now implements the smallest self-hosted
-  owner bootstrap command without adding login endpoints, JWTs, CLI login, or
-  web UI.
+  owner bootstrap command. The smallest server-only auth API/login slice now
+  exists; CLI login, browser loopback, and web UI remain unimplemented.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -214,9 +215,11 @@ Done means:
 - no SSO/OIDC
 - no runner, gate, proof, or generic queue work
 
-## Next backend bounded slice
+## Completed backend bounded slice
 
 ### Auth API/login slice
+
+Status: **DONE — smallest server-only auth API/login slice exists.**
 
 Goal:
 - implement the next narrow auth API boundary on top of the credential/session
@@ -224,17 +227,33 @@ Goal:
   or web UI.
 
 Done means:
-- login behavior is bounded to the approved API shape for the selected slice
-- admin-created user / temporary-password flow is represented only if explicitly
-  selected for that slice
-- role checks remain server-side through `OrganizationMembership`
+- ✅ `POST /v1/auth/login` accepts email/password, verifies the existing
+  Argon2id password credential, rejects inactive users, requires an active
+  OrganizationMembership, creates server-owned `user_sessions` refresh-token
+  state, and returns a short-lived JWT access token plus an opaque refresh
+  token
+- ✅ login response includes `must_change_password`
+- ✅ `POST /v1/auth/change-password` requires a valid bearer access token,
+  verifies `current_password`, stores the new password hash, sets
+  `must_change_password = false`, and sets `password_changed_at`
+- ✅ `GET /v1/me` requires a valid bearer access token and loads the current
+  User plus OrganizationMembership server-side
+- ✅ JWT access tokens carry narrow identity/session claims only, not broad
+  role or permission claims
+- ✅ `GOALRAIL_AUTH_JWT_SECRET` config exists; the server may start without it,
+  but auth endpoints fail clearly when token signing/validation is attempted
+  without it
 - no public registration
 - no CLI `goalrail login`
+- no browser loopback
 - no web UI
+- no admin user creation endpoint
 - no SaaS onboarding
 - no organization creation API
 - no billing
 - no SSO/OIDC
+- no password reset or email invite/reset delivery
+- no refresh/logout endpoint
 - no runner, gate, proof, or generic queue work
 
 ## Next public-surface bounded slice

@@ -9,6 +9,9 @@ type RouteHandlers struct {
 	Livez                     http.Handler
 	Readyz                    http.Handler
 	Version                   http.Handler
+	AuthLogin                 http.Handler
+	AuthChangePassword        http.Handler
+	Me                        http.Handler
 	IntakeSubmit              http.Handler
 	IntakeGet                 http.Handler
 	IntakePromote             http.Handler
@@ -36,6 +39,9 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("GET /livez", mustHandler("livez", handlers.Livez))
 	mux.Handle("GET /readyz", mustHandler("readyz", handlers.Readyz))
 	mux.Handle("GET /version", mustHandler("version", handlers.Version))
+	mux.Handle("POST /v1/auth/login", mustHandler("auth login", handlers.AuthLogin))
+	mux.Handle("POST /v1/auth/change-password", mustHandler("auth change password", handlers.AuthChangePassword))
+	mux.Handle("GET /v1/me", mustHandler("me", handlers.Me))
 	mux.Handle("POST /v1/intakes", mustHandler("intake submit", handlers.IntakeSubmit))
 	mux.Handle("GET /v1/intakes/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intakes/{id}/goals", mustHandler("intake promote", handlers.IntakePromote))
