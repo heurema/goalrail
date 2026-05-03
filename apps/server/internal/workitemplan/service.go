@@ -77,10 +77,6 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type AcceptanceTransaction interface {
-	AcceptProposalWithWorkItemsAndEvents(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalID, spine.ActorRef, time.Time, []spine.WorkItem, []spine.Event) error
-}
-
 type TransactionRunner interface {
 	RunReadCommitted(context.Context, func(context.Context) error) error
 }
@@ -97,25 +93,18 @@ type IDGenerator interface {
 }
 
 type Service struct {
-	Contracts             ContractReader
-	ApprovedContracts     ApprovedContractReader
-	Plans                 PlanStore
-	Proposals             ProposalStore
-	WorkItems             WorkItemStore
-	Events                EventLog
-	AcceptanceTransaction AcceptanceTransaction
-	TxRunner              TransactionRunner
-	Clock                 Clock
-	IDs                   IDGenerator
+	Contracts         ContractReader
+	ApprovedContracts ApprovedContractReader
+	Plans             PlanStore
+	Proposals         ProposalStore
+	WorkItems         WorkItemStore
+	Events            EventLog
+	TxRunner          TransactionRunner
+	Clock             Clock
+	IDs               IDGenerator
 }
 
 type Option func(*Service)
-
-func WithAcceptanceTransaction(tx AcceptanceTransaction) Option {
-	return func(s *Service) {
-		s.AcceptanceTransaction = tx
-	}
-}
 
 func WithTransactionRunner(runner TransactionRunner) Option {
 	return func(s *Service) {
@@ -321,10 +310,6 @@ func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemP
 			}
 			return nil
 		}); err != nil {
-			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
-		}
-	} else if s.AcceptanceTransaction != nil {
-		if err := s.AcceptanceTransaction.AcceptProposalWithWorkItemsAndEvents(ctx, plan.ID, proposal.ID, input.AcceptedBy, acceptedAt, items, events); err != nil {
 			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
 		}
 	} else {

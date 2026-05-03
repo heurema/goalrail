@@ -2,7 +2,6 @@ package workitemplan_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -105,11 +104,9 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 
 func TestServiceAcceptProposalUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	txRunner := &fakeTransactionRunner{}
-	fallback := &fakeAcceptanceTransaction{err: errors.New("acceptance transaction fallback called")}
 	service, _, _, plans, proposals, workItems, events := planningService(
 		t,
 		workitemplan.WithTransactionRunner(txRunner),
-		workitemplan.WithAcceptanceTransaction(fallback),
 	)
 	approved := validApprovedContract()
 
@@ -132,9 +129,6 @@ func TestServiceAcceptProposalUsesTransactionRunnerWhenConfigured(t *testing.T) 
 	}
 	if txRunner.calls != 1 {
 		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
-	}
-	if fallback.calls != 0 {
-		t.Fatalf("AcceptanceTransaction calls = %d, want 0", fallback.calls)
 	}
 	if got := len(accepted.CreatedTaskIDs); got != 1 {
 		t.Fatalf("created tasks = %d, want 1", got)
@@ -181,16 +175,6 @@ type fakeTransactionRunner struct {
 func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
 	r.calls++
 	return fn(ctx)
-}
-
-type fakeAcceptanceTransaction struct {
-	calls int
-	err   error
-}
-
-func (tx *fakeAcceptanceTransaction) AcceptProposalWithWorkItemsAndEvents(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalID, spine.ActorRef, time.Time, []spine.WorkItem, []spine.Event) error {
-	tx.calls++
-	return tx.err
 }
 
 type fakeContractStore struct {
