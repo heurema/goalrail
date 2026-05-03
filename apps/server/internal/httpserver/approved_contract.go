@@ -25,18 +25,11 @@ func NewApprovedContractHandler(service ApprovedContractService) *ApprovedContra
 func (h *ApprovedContractHandler) ApproveDraft(w http.ResponseWriter, r *http.Request) {
 	var input spine.ApproveContractDraftRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
-	ctx := r.Context()
-	if _, ok := actor.FromContext(ctx); !ok {
-		ctx = actor.WithActor(ctx, actor.ActorContext{
-			Actor:  input.ApprovedBy,
-			Source: actor.SourcePayloadCompat,
-		})
-	}
-
+	ctx := contextWithApprovalActor(r.Context(), input.ApprovedBy)
 	approved, err := h.service.ApproveDraft(ctx, spine.ContractDraftID(r.PathValue("id")), input)
 	if err != nil {
 		h.respondServiceError(w, err)
@@ -61,6 +54,16 @@ func (h *ApprovedContractHandler) respondServiceError(w http.ResponseWriter, err
 	case errors.Is(err, approvedcontract.ErrAlreadyApproved):
 		RespondError(w, http.StatusConflict, "already_approved", "contract draft already approved")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
+}
+
+func contextWithApprovalActor(ctx context.Context, approvedBy spine.ActorRef) context.Context {
+	if _, ok := actor.FromContext(ctx); ok {
+		return ctx
+	}
+	return actor.WithActor(ctx, actor.ActorContext{
+		Actor:  approvedBy,
+		Source: actor.SourcePayloadCompat,
+	})
 }

@@ -40,7 +40,7 @@ type intakeAcceptedResponse struct {
 func (h *IntakeHandler) Submit(w http.ResponseWriter, r *http.Request) {
 	var submission spine.IntakeSubmission
 	if err := decodeStrictJSON(r.Body, &submission); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
@@ -82,7 +82,7 @@ func (h *IntakeHandler) respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, intake.ErrProjectContextUnavailable):
 		RespondError(w, http.StatusServiceUnavailable, "project_context_unavailable", "project context validation is not configured")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }
 

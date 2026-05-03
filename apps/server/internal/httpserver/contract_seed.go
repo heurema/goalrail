@@ -43,6 +43,6 @@ func (h *ContractSeedHandler) respondServiceError(w http.ResponseWriter, err err
 	case errors.Is(err, contractseed.ErrAlreadySeeded):
 		RespondError(w, http.StatusConflict, "already_seeded", "goal already has contract seed")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }

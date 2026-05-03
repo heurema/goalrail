@@ -36,6 +36,6 @@ func (h *WorkItemHandler) respondServiceError(w http.ResponseWriter, err error) 
 	case errors.Is(err, workitem.ErrWorkItemNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "task not found")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }

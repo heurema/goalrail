@@ -36,7 +36,7 @@ func (h *ClarificationHandler) CreateRequest(w http.ResponseWriter, r *http.Requ
 func (h *ClarificationHandler) RecordAnswer(w http.ResponseWriter, r *http.Request) {
 	var submission spine.ClarificationAnswerSubmission
 	if err := decodeStrictJSON(r.Body, &submission); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *ClarificationHandler) RecordAnswer(w http.ResponseWriter, r *http.Reque
 func (h *ClarificationHandler) ApplyAnswer(w http.ResponseWriter, r *http.Request) {
 	var input spine.ClarificationAnswerApplicationRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *ClarificationHandler) respondServiceError(w http.ResponseWriter, err er
 	case errors.Is(err, clarification.ErrPolicyRejected):
 		RespondError(w, http.StatusConflict, "invalid_state", "policy rejected goals cannot create clarification request")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }
 

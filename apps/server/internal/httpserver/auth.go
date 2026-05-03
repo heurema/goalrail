@@ -63,7 +63,7 @@ type cliExchangeResponse struct {
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var input auth.LoginInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	result, err := h.service.Login(r.Context(), input)
@@ -127,7 +127,7 @@ func (h *AuthHandler) CLILoginSubmit(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) CLIExchange(w http.ResponseWriter, r *http.Request) {
 	var input auth.CLIExchangeInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	result, err := h.service.ExchangeCLIAuthCode(r.Context(), input)
@@ -147,7 +147,7 @@ func (h *AuthHandler) CLIExchange(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	var input auth.RefreshInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	result, err := h.service.Refresh(r.Context(), input)
@@ -167,7 +167,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	var input auth.ChangePasswordInput
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	result, err := h.service.ChangePassword(r.Context(), bearerToken(r.Header.Get("Authorization")), input)
@@ -224,7 +224,7 @@ func (h *AuthHandler) respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, auth.ErrNewPasswordRequired):
 		RespondError(w, http.StatusBadRequest, "validation_failed", "new password is required")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }
 
