@@ -99,6 +99,7 @@ Docs not updated reason:
 - [ ] This PR does not claim unimplemented surfaces exist
 - [ ] This PR does not introduce undocumented public surface
 - [ ] Implementation paths map to `docs/ops/COMPONENTS.yaml` when applicable
+- [ ] For Go changes, I followed `docs/ops/GO_CODE_GUIDE.md`
 - [ ] Status follows reality
 
 ## Validation / proof
