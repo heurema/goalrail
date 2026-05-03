@@ -60,7 +60,7 @@ func (s *PostgresAuthStore) UpsertPasswordCredential(ctx context.Context, creden
 			updatedAt,
 		).
 		Suffix("ON CONFLICT (user_id) DO UPDATE SET password_hash = EXCLUDED.password_hash, must_change_password = EXCLUDED.must_change_password, password_changed_at = EXCLUDED.password_changed_at, updated_at = EXCLUDED.updated_at")
-	return s.execSQL(ctx, "upsert password credential", stmt)
+	return execSQL(ctx, s.exec, "upsert password credential", stmt)
 }
 
 func (s *PostgresAuthStore) UpsertSession(ctx context.Context, session spine.UserSession) error {
@@ -100,7 +100,7 @@ func (s *PostgresAuthStore) UpsertSession(ctx context.Context, session spine.Use
 			nullableTime(session.LastUsedAt),
 		).
 		Suffix("ON CONFLICT (id) DO UPDATE SET refresh_token_hash = EXCLUDED.refresh_token_hash, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at, revoked_at = EXCLUDED.revoked_at, last_used_at = EXCLUDED.last_used_at")
-	return s.execSQL(ctx, "upsert user session", stmt)
+	return execSQL(ctx, s.exec, "upsert user session", stmt)
 }
 
 func (s *PostgresAuthStore) CreateCLIAuthCode(ctx context.Context, code spine.CLIAuthCode) error {
@@ -133,7 +133,7 @@ func (s *PostgresAuthStore) CreateCLIAuthCode(ctx context.Context, code spine.CL
 			code.ExpiresAt.UTC(),
 			nullableTime(code.ConsumedAt),
 		)
-	return s.execSQL(ctx, "create CLI auth code", stmt)
+	return execSQL(ctx, s.exec, "create CLI auth code", stmt)
 }
 
 func (s *PostgresAuthStore) GetPasswordCredential(ctx context.Context, userID spine.UserID) (spine.UserPasswordCredential, bool, error) {
@@ -510,20 +510,6 @@ func organizationMembershipColumns() []string {
 		"created_at",
 		"updated_at",
 	}
-}
-
-func (s *PostgresAuthStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 func nullableTime(value *time.Time) any {

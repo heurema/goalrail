@@ -97,7 +97,7 @@ func (s *PostgresWorkItemPlanStore) Create(ctx context.Context, plan spine.WorkI
 			createdAt,
 			updatedAt,
 		)
-	if err := s.execSQL(ctx, "create work item plan", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create work item plan", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "work_item_plans_contract_id_unique" {
 			return ErrWorkItemPlanAlreadyPlanned
 		}
@@ -146,7 +146,7 @@ func (s *PostgresWorkItemPlanStore) updateState(ctx context.Context, id spine.Wo
 		Set("state", state).
 		Set("updated_at", updatedAt.UTC()).
 		Where(squirrel.Eq{"id": planID})
-	return s.execUpdate(ctx, "update work item plan state", stmt)
+	return execUpdate(ctx, s.exec, "update work item plan state", ErrWorkItemPlanNotFound, stmt)
 }
 
 func (s *PostgresWorkItemPlanStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.WorkItemPlan, bool, error) {
@@ -223,38 +223,6 @@ func workItemPlanColumns() []string {
 		"created_at",
 		"updated_at",
 	}
-}
-
-func (s *PostgresWorkItemPlanStore) execUpdate(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	result, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrWorkItemPlanNotFound
-	}
-	return nil
-}
-
-func (s *PostgresWorkItemPlanStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 type PostgresWorkItemPlanProposalStore struct {
@@ -370,7 +338,7 @@ func (s *PostgresWorkItemPlanProposalStore) Create(ctx context.Context, proposal
 			createdAt,
 			updatedAt,
 		)
-	if err := s.execSQL(ctx, "create work item plan proposal", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create work item plan proposal", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "work_item_plan_proposals_plan_id_unique" {
 			return ErrWorkItemPlanAlreadyHasProposal
 		}
@@ -417,7 +385,7 @@ func (s *PostgresWorkItemPlanProposalStore) MarkAccepted(ctx context.Context, id
 		Set("accepted_at", acceptedAt.UTC()).
 		Set("updated_at", acceptedAt.UTC()).
 		Where(squirrel.Eq{"id": proposalID})
-	return s.execUpdate(ctx, "mark work item plan proposal accepted", stmt)
+	return execUpdate(ctx, s.exec, "mark work item plan proposal accepted", ErrWorkItemPlanProposalNotFound, stmt)
 }
 
 func (s *PostgresWorkItemPlanProposalStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.WorkItemPlanProposal, bool, error) {
@@ -538,38 +506,6 @@ func workItemPlanProposalColumns() []string {
 		"created_at",
 		"updated_at",
 	}
-}
-
-func (s *PostgresWorkItemPlanProposalStore) execUpdate(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	result, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrWorkItemPlanProposalNotFound
-	}
-	return nil
-}
-
-func (s *PostgresWorkItemPlanProposalStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 func nonNilSourceRefs(values []spine.SourceRef) []spine.SourceRef {

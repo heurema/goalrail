@@ -149,7 +149,7 @@ func (s *PostgresContractDraftStore) Create(ctx context.Context, created spine.C
 			createdAt,
 		)
 
-	if err := s.execSQL(ctx, "create contract draft", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create contract draft", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "contract_drafts_contract_seed_id_unique" {
 			return ErrContractDraftAlreadyDrafted
 		}
@@ -404,18 +404,4 @@ func nonNilStrings(values []string) []string {
 		return []string{}
 	}
 	return values
-}
-
-func (s *PostgresContractDraftStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }

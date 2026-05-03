@@ -164,7 +164,7 @@ func (s *PostgresApprovedContractStore) Create(ctx context.Context, approved spi
 			approvedAt,
 		)
 
-	if err := s.execSQL(ctx, "create approved contract", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create approved contract", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "approved_contracts_contract_draft_id_unique" {
 			return ErrApprovedContractAlreadyApproved
 		}
@@ -328,18 +328,4 @@ func approvedContractColumns() []string {
 		"source_refs",
 		"state",
 	}
-}
-
-func (s *PostgresApprovedContractStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }

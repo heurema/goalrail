@@ -99,7 +99,7 @@ func (s *PostgresIntakeStore) Create(ctx context.Context, record spine.IntakeRec
 			createdAt,
 		)
 
-	if err := s.execSQL(ctx, "create intake record", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create intake record", stmt); err != nil {
 		if isUniqueViolation(err) {
 			return ErrAlreadyExists
 		}
@@ -186,18 +186,4 @@ func scanIntakeRecord(row pgx.Row) (spine.IntakeRecord, error) {
 	}
 	record.CreatedAt = record.CreatedAt.UTC()
 	return record, nil
-}
-
-func (s *PostgresIntakeStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }

@@ -121,7 +121,7 @@ func (s *PostgresGoalStore) Create(ctx context.Context, created spine.Goal) erro
 			createdAt,
 		)
 
-	if err := s.execSQL(ctx, "create goal", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create goal", stmt); err != nil {
 		if isUniqueViolation(err) {
 			return ErrGoalAlreadyExists
 		}
@@ -304,18 +304,4 @@ func goalColumns() []string {
 
 func returningGoalColumns() string {
 	return "RETURNING id, organization_id, project_id, repo_binding_id, intake_id, title, summary, scope_hint, acceptance_hint, source_refs, request_author, intent_owner, state, last_readiness_reason_codes, created_at"
-}
-
-func (s *PostgresGoalStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
