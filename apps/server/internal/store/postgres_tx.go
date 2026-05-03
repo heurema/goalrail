@@ -72,6 +72,23 @@ type pgxpoolTransactor struct {
 	pool *pgxpool.Pool
 }
 
+// PostgresTransactionRunner runs service transactions against a Postgres pool.
+type PostgresTransactionRunner struct {
+	transactor pgxpoolTransactor
+}
+
+// NewPostgresTransactionRunner creates a transaction runner backed by pool.
+func NewPostgresTransactionRunner(pool *pgxpool.Pool) *PostgresTransactionRunner {
+	return &PostgresTransactionRunner{
+		transactor: pgxpoolTransactor{pool: pool},
+	}
+}
+
+// RunReadCommitted runs fn in a read committed Postgres transaction.
+func (r *PostgresTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	return r.transactor.RunReadCommitted(ctx, postgresTxFunc(fn))
+}
+
 func (t pgxpoolTransactor) RunReadCommitted(ctx context.Context, fn postgresTxFunc) error {
 	return t.WithTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
 }
