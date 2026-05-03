@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/alexedwards/argon2id"
 )
 
 func TestHashPasswordUsesPHCStyleArgon2idFormat(t *testing.T) {
@@ -96,19 +98,46 @@ func TestVerifyPasswordUnsupportedVersionReturnsError(t *testing.T) {
 	}
 }
 
-func TestVerifyPasswordUnsupportedParamsReturnsError(t *testing.T) {
+func TestNeedsRehashRejectsCurrentParams(t *testing.T) {
 	hash, err := HashPassword("password")
 	if err != nil {
 		t.Fatalf("HashPassword() error = %v", err)
 	}
-	unsupported := strings.Replace(hash, "$m=19456,t=2,p=1$", "$m=32768,t=2,p=1$", 1)
 
-	ok, err := VerifyPassword("password", unsupported)
-	if !errors.Is(err, ErrUnsupportedHash) {
-		t.Fatalf("VerifyPassword() error = %v, want ErrUnsupportedHash", err)
+	needsRehash, err := NeedsRehash(hash)
+	if err != nil {
+		t.Fatalf("NeedsRehash() error = %v", err)
 	}
-	if ok {
-		t.Fatal("VerifyPassword() = true, want false")
+	if needsRehash {
+		t.Fatal("NeedsRehash() = true, want false")
+	}
+}
+
+func TestVerifyPasswordAcceptsDifferentValidParamsAndNeedsRehash(t *testing.T) {
+	hash, err := argon2id.CreateHash("password", &argon2id.Params{
+		Memory:      8 * 1024,
+		Iterations:  1,
+		Parallelism: 1,
+		SaltLength:  16,
+		KeyLength:   32,
+	})
+	if err != nil {
+		t.Fatalf("argon2id.CreateHash() error = %v", err)
+	}
+
+	ok, err := VerifyPassword("password", hash)
+	if err != nil {
+		t.Fatalf("VerifyPassword() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("VerifyPassword() = false, want true")
+	}
+	needsRehash, err := NeedsRehash(hash)
+	if err != nil {
+		t.Fatalf("NeedsRehash() error = %v", err)
+	}
+	if !needsRehash {
+		t.Fatal("NeedsRehash() = false, want true")
 	}
 }
 
