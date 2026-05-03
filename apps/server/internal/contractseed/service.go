@@ -56,14 +56,6 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalSeedStore interface {
-	CreateWithEvent(context.Context, spine.ContractSeed, spine.Event) error
-}
-
-type transactionalContractSeedStore interface {
-	CreateContractWithSeedAndEvent(context.Context, spine.Contract, spine.ContractSeed, spine.Event) error
-}
-
 type seedDeleter interface {
 	Delete(context.Context, spine.ContractSeedID) error
 }
@@ -173,22 +165,6 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	if err != nil {
 		return spine.ContractSeed{}, err
 	}
-	if txSeeds, ok := s.Seeds.(transactionalContractSeedStore); ok {
-		if err := txSeeds.CreateContractWithSeedAndEvent(ctx, contract, created, event); err != nil {
-			if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-				return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractSeed{}, ErrAlreadySeeded
-			}
-			if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-				return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractSeed{}, ErrAlreadySeeded
-			}
-			return spine.ContractSeed{}, fmt.Errorf("create contract seed with contract and event: %w", err)
-		}
-		return created, nil
-	}
 	if err := s.Contracts.Create(ctx, contract); err != nil {
 		if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
 			return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
@@ -196,17 +172,6 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 			return spine.ContractSeed{}, ErrAlreadySeeded
 		}
 		return spine.ContractSeed{}, fmt.Errorf("create contract: %w", err)
-	}
-	if txSeeds, ok := s.Seeds.(transactionalSeedStore); ok {
-		if err := txSeeds.CreateWithEvent(ctx, created, event); err != nil {
-			if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-				return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractSeed{}, ErrAlreadySeeded
-			}
-			return spine.ContractSeed{}, fmt.Errorf("create contract seed with event: %w", err)
-		}
-		return created, nil
 	}
 	if err := s.Seeds.Create(ctx, created); err != nil {
 		if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {

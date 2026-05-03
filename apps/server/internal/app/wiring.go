@@ -72,7 +72,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		clarification.WithAnswerApplicationTransaction(clarificationTransactions),
 	}
 	contracts := store.NewPostgresContractStore(pool)
-	contractSeedStore := store.NewPostgresTransactionalContractSeedStore(pool)
+	contractSeedStore := store.NewPostgresContractSeedStore(pool)
 	contractDraftStore := store.NewPostgresTransactionalContractDraftStore(pool)
 	approvedContractStore := store.NewPostgresTransactionalApprovedContractStore(pool)
 	workItemStore := store.NewPostgresTransactionalWorkItemStore(pool)

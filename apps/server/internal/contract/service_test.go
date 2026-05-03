@@ -70,6 +70,57 @@ func TestCreateRollsBackSeededContractWhenDraftCreationFails(t *testing.T) {
 	}
 }
 
+func TestCreateUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(contractStore, seedService, draftService, approvalService, contract.WithTransactionRunner(txRunner))
+
+	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if !contractStore.createSawTransaction {
+		t.Fatal("contract store Create did not run inside transaction runner")
+	}
+	if !seedStore.createSawTransaction {
+		t.Fatal("seed store Create did not run inside transaction runner")
+	}
+	if !draftStore.createSawTransaction {
+		t.Fatal("draft store Create did not run inside transaction runner")
+	}
+	if events.transactionalAppends != 2 {
+		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
+	}
+	if created.State != spine.ContractStateDraft {
+		t.Fatalf("contract state = %q, want %q", created.State, spine.ContractStateDraft)
+	}
+	if created.CurrentSeedID == nil {
+		t.Fatal("current_seed_id is nil")
+	}
+	if created.CurrentDraftID == nil {
+		t.Fatal("current_draft_id is nil")
+	}
+}
+
 type failingDraftService struct {
 	err error
 }
@@ -84,6 +135,22 @@ func (s *failingDraftService) Update(context.Context, spine.ContractDraftID, spi
 
 func (s *failingDraftService) MarkReadyForApproval(context.Context, spine.ContractDraftID, spine.ContractDraftReadyForApprovalRequest) (spine.ContractDraft, error) {
 	return spine.ContractDraft{}, errors.New("unexpected mark ready")
+}
+
+type txContextKey struct{}
+
+type fakeTransactionRunner struct {
+	calls int
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(context.WithValue(ctx, txContextKey{}, true))
+}
+
+func sawTransaction(ctx context.Context) bool {
+	inTx, _ := ctx.Value(txContextKey{}).(bool)
+	return inTx
 }
 
 type fixedClock struct {
@@ -168,8 +235,9 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 }
 
 type fakeContractStore struct {
-	contracts map[spine.ContractID]spine.Contract
-	byGoal    map[spine.GoalID]spine.ContractID
+	contracts            map[spine.ContractID]spine.Contract
+	byGoal               map[spine.GoalID]spine.ContractID
+	createSawTransaction bool
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -179,7 +247,8 @@ func newFakeContractStore() *fakeContractStore {
 	}
 }
 
-func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+func (s *fakeContractStore) Create(ctx context.Context, contract spine.Contract) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.contracts[contract.ID] = contract
 	s.byGoal[contract.GoalID] = contract.ID
 	return nil
@@ -247,8 +316,9 @@ func (s *fakeContractStore) MarkApproved(_ context.Context, id spine.ContractID,
 }
 
 type fakeContractSeedStore struct {
-	seeds  map[spine.ContractSeedID]spine.ContractSeed
-	byGoal map[spine.GoalID]spine.ContractSeedID
+	seeds                map[spine.ContractSeedID]spine.ContractSeed
+	byGoal               map[spine.GoalID]spine.ContractSeedID
+	createSawTransaction bool
 }
 
 func newFakeContractSeedStore() *fakeContractSeedStore {
@@ -258,7 +328,8 @@ func newFakeContractSeedStore() *fakeContractSeedStore {
 	}
 }
 
-func (s *fakeContractSeedStore) Create(_ context.Context, seed spine.ContractSeed) error {
+func (s *fakeContractSeedStore) Create(ctx context.Context, seed spine.ContractSeed) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.seeds[seed.ID] = seed
 	s.byGoal[seed.GoalID] = seed.ID
 	return nil
@@ -291,8 +362,9 @@ func (s *fakeContractSeedStore) Delete(_ context.Context, id spine.ContractSeedI
 }
 
 type fakeContractDraftStore struct {
-	drafts map[spine.ContractDraftID]spine.ContractDraft
-	bySeed map[spine.ContractSeedID]spine.ContractDraftID
+	drafts               map[spine.ContractDraftID]spine.ContractDraft
+	bySeed               map[spine.ContractSeedID]spine.ContractDraftID
+	createSawTransaction bool
 }
 
 func newFakeContractDraftStore() *fakeContractDraftStore {
@@ -302,7 +374,8 @@ func newFakeContractDraftStore() *fakeContractDraftStore {
 	}
 }
 
-func (s *fakeContractDraftStore) Create(_ context.Context, draft spine.ContractDraft) error {
+func (s *fakeContractDraftStore) Create(ctx context.Context, draft spine.ContractDraft) error {
+	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
 	s.drafts[draft.ID] = draft
 	s.bySeed[draft.ContractSeedID] = draft.ID
 	return nil
@@ -366,14 +439,18 @@ func (s *fakeApprovedContractStore) GetByContractDraftID(_ context.Context, id s
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events               []spine.Event
+	transactionalAppends int
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	if sawTransaction(ctx) {
+		l.transactionalAppends++
+	}
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }
