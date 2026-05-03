@@ -81,26 +81,15 @@ type Service struct {
 	IDs      IDGenerator
 }
 
-type Option func(*Service)
-
-func WithTransactionRunner(runner TransactionRunner) Option {
-	return func(s *Service) {
-		s.TxRunner = runner
+func NewService(intake IntakeReader, goals GoalStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+	return &Service{
+		Intake:   intake,
+		Goals:    goals,
+		Events:   events,
+		TxRunner: txRunner,
+		Clock:    clock,
+		IDs:      ids,
 	}
-}
-
-func NewService(intake IntakeReader, goals GoalStore, events EventLog, clock Clock, ids IDGenerator, opts ...Option) *Service {
-	service := &Service{
-		Intake: intake,
-		Goals:  goals,
-		Events: events,
-		Clock:  clock,
-		IDs:    ids,
-	}
-	for _, opt := range opts {
-		opt(service)
-	}
-	return service
 }
 
 func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID) (spine.Goal, error) {
@@ -159,32 +148,19 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 		return spine.Goal{}, err
 	}
 
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
-			if err := s.Goals.Create(txCtx, created); err != nil {
-				return err
-			}
-			if err := s.Events.Append(txCtx, goalCreated); err != nil {
-				return err
-			}
-			if err := s.Events.Append(txCtx, intakePromoted); err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
-			return spine.Goal{}, fmt.Errorf("create goal with events: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Goals.Create(txCtx, created); err != nil {
+			return err
 		}
-		return created, nil
-	}
-
-	if err := s.Goals.Create(ctx, created); err != nil {
-		return spine.Goal{}, fmt.Errorf("create goal: %w", err)
-	}
-	if err := s.Events.Append(ctx, goalCreated); err != nil {
-		return spine.Goal{}, fmt.Errorf("append goal created event: %w", err)
-	}
-	if err := s.Events.Append(ctx, intakePromoted); err != nil {
-		return spine.Goal{}, fmt.Errorf("append intake promoted event: %w", err)
+		if err := s.Events.Append(txCtx, goalCreated); err != nil {
+			return err
+		}
+		if err := s.Events.Append(txCtx, intakePromoted); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return spine.Goal{}, fmt.Errorf("create goal with events: %w", err)
 	}
 
 	return created, nil
@@ -217,47 +193,29 @@ func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spin
 		return spine.GoalReadinessResult{}, spine.Goal{}, err
 	}
 
-	if s.TxRunner != nil {
-		var updated spine.Goal
-		var ok bool
-		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
-			var err error
-			updated, ok, err = s.Goals.UpdateReadiness(txCtx, current.ID, result.State, result.ReasonCodes)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return nil
-			}
-			if err := s.Events.Append(txCtx, readinessChecked); err != nil {
-				return err
-			}
-			if err := s.Events.Append(txCtx, transition); err != nil {
-				return err
-			}
+	var updated spine.Goal
+	var updateOK bool
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		var err error
+		updated, updateOK, err = s.Goals.UpdateReadiness(txCtx, current.ID, result.State, result.ReasonCodes)
+		if err != nil {
+			return err
+		}
+		if !updateOK {
 			return nil
-		}); err != nil {
-			return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state with events: %w", err)
 		}
-		if !ok {
-			return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
+		if err := s.Events.Append(txCtx, readinessChecked); err != nil {
+			return err
 		}
-		return result, updated, nil
+		if err := s.Events.Append(txCtx, transition); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state with events: %w", err)
 	}
-
-	updated, ok, err := s.Goals.UpdateReadiness(ctx, current.ID, result.State, result.ReasonCodes)
-	if err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state: %w", err)
-	}
-	if !ok {
+	if !updateOK {
 		return spine.GoalReadinessResult{}, spine.Goal{}, ErrGoalNotFound
-	}
-
-	if err := s.Events.Append(ctx, readinessChecked); err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("append goal readiness checked event: %w", err)
-	}
-	if err := s.Events.Append(ctx, transition); err != nil {
-		return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("append goal readiness transition event: %w", err)
 	}
 
 	return result, updated, nil

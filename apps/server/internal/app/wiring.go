@@ -72,23 +72,17 @@ type appServices struct {
 }
 
 func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRunner, authJWTSecret string) appServices {
-	intakeOptions := []intake.Option{intake.WithTransactionRunner(txRunner)}
-	goalOptions := []goal.Option{goal.WithTransactionRunner(txRunner)}
-	clarificationOptions := []clarification.Option{clarification.WithTransactionRunner(txRunner)}
-	contractOptions := []contract.Option{contract.WithTransactionRunner(txRunner)}
-	workItemPlanOptions := []workitemplan.Option{workitemplan.WithTransactionRunner(txRunner)}
-
 	contractSeedService := contractseed.NewService(stores.goals, stores.contracts, stores.contractSeeds, stores.events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
 	contractDraftService := contractdraft.NewService(stores.contractSeeds, stores.contracts, stores.contractDrafts, stores.events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	approvedContractService := approvedcontract.NewService(stores.contractDrafts, stores.contracts, stores.approvedContracts, stores.events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
 
 	return appServices{
-		intake:        intake.NewService(stores.intakes, stores.projectContext, stores.events, intake.SystemClock{}, intake.UUIDGenerator{}, intakeOptions...),
-		goal:          goal.NewService(stores.intakes, stores.goals, stores.events, goal.SystemClock{}, goal.UUIDGenerator{}, goalOptions...),
-		clarification: clarification.NewService(stores.goals, stores.clarificationRequests, stores.clarificationAnswers, stores.events, clarification.SystemClock{}, clarification.UUIDGenerator{}, clarificationOptions...),
-		contract:      contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, contractOptions...),
+		intake:        intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),
+		goal:          goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{}),
+		clarification: clarification.NewService(stores.goals, stores.clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{}),
+		contract:      contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
 		workItem:      workitem.NewService(stores.workItems),
-		workItemPlan:  workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}, workItemPlanOptions...),
+		workItemPlan:  workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
 		auth:          auth.NewService(stores.auth, authJWTSecret),
 	}
 }

@@ -104,29 +104,18 @@ type Service struct {
 	IDs               IDGenerator
 }
 
-type Option func(*Service)
-
-func WithTransactionRunner(runner TransactionRunner) Option {
-	return func(s *Service) {
-		s.TxRunner = runner
-	}
-}
-
-func NewService(contracts ContractReader, approvedContracts ApprovedContractReader, plans PlanStore, proposals ProposalStore, workItems WorkItemStore, events EventLog, clock Clock, ids IDGenerator, opts ...Option) *Service {
-	service := &Service{
+func NewService(contracts ContractReader, approvedContracts ApprovedContractReader, plans PlanStore, proposals ProposalStore, workItems WorkItemStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+	return &Service{
 		Contracts:         contracts,
 		ApprovedContracts: approvedContracts,
 		Plans:             plans,
 		Proposals:         proposals,
 		WorkItems:         workItems,
 		Events:            events,
+		TxRunner:          txRunner,
 		Clock:             clock,
 		IDs:               ids,
 	}
-	for _, opt := range opts {
-		opt(service)
-	}
-	return service
 }
 
 func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, input spine.WorkItemPlanCreateRequest) (spine.WorkItemPlan, error) {
@@ -290,45 +279,26 @@ func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemP
 	if err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
-			for _, item := range items {
-				if err := s.WorkItems.Create(txCtx, item); err != nil {
-					return err
-				}
-			}
-			if err := s.Proposals.MarkAccepted(txCtx, proposal.ID, input.AcceptedBy, acceptedAt); err != nil {
-				return err
-			}
-			if err := s.Plans.MarkAccepted(txCtx, plan.ID, acceptedAt); err != nil {
-				return err
-			}
-			for _, event := range events {
-				if err := s.Events.Append(txCtx, event); err != nil {
-					return err
-				}
-			}
-			return nil
-		}); err != nil {
-			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
-		}
-	} else {
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		for _, item := range items {
-			if err := s.WorkItems.Create(ctx, item); err != nil {
-				return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("create work item: %w", err)
+			if err := s.WorkItems.Create(txCtx, item); err != nil {
+				return err
 			}
 		}
-		if err := s.Proposals.MarkAccepted(ctx, proposal.ID, input.AcceptedBy, acceptedAt); err != nil {
-			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("mark work item plan proposal accepted: %w", err)
+		if err := s.Proposals.MarkAccepted(txCtx, proposal.ID, input.AcceptedBy, acceptedAt); err != nil {
+			return err
 		}
-		if err := s.Plans.MarkAccepted(ctx, plan.ID, acceptedAt); err != nil {
-			return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("mark work item plan accepted: %w", err)
+		if err := s.Plans.MarkAccepted(txCtx, plan.ID, acceptedAt); err != nil {
+			return err
 		}
 		for _, event := range events {
-			if err := s.Events.Append(ctx, event); err != nil {
-				return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("append work item created event: %w", err)
+			if err := s.Events.Append(txCtx, event); err != nil {
+				return err
 			}
 		}
+		return nil
+	}); err != nil {
+		return spine.WorkItemPlanAcceptanceResult{}, fmt.Errorf("accept work item plan proposal transactionally: %w", err)
 	}
 
 	ids := make([]spine.WorkItemID, 0, len(items))

@@ -101,27 +101,16 @@ type Service struct {
 	TxRunner TransactionRunner
 }
 
-type Option func(*Service)
-
-func WithTransactionRunner(runner TransactionRunner) Option {
-	return func(s *Service) {
-		s.TxRunner = runner
+func NewService(goals GoalReader, store Store, answers AnswerStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+	return &Service{
+		Goals:    goals,
+		Store:    store,
+		Answers:  answers,
+		Events:   events,
+		TxRunner: txRunner,
+		Clock:    clock,
+		IDs:      ids,
 	}
-}
-
-func NewService(goals GoalReader, store Store, answers AnswerStore, events EventLog, clock Clock, ids IDGenerator, options ...Option) *Service {
-	service := &Service{
-		Goals:   goals,
-		Store:   store,
-		Answers: answers,
-		Events:  events,
-		Clock:   clock,
-		IDs:     ids,
-	}
-	for _, option := range options {
-		option(service)
-	}
-	return service
 }
 
 func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine.ClarificationRequest, error) {
@@ -181,18 +170,11 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 		}
 		return nil
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
-			if errors.Is(err, ErrAlreadyOpen) {
-				return spine.ClarificationRequest{}, ErrAlreadyOpen
-			}
-			return spine.ClarificationRequest{}, fmt.Errorf("create clarification request transaction: %w", err)
-		}
-	} else if err := create(ctx); err != nil {
+	if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
 		if errors.Is(err, ErrAlreadyOpen) {
 			return spine.ClarificationRequest{}, ErrAlreadyOpen
 		}
-		return spine.ClarificationRequest{}, err
+		return spine.ClarificationRequest{}, fmt.Errorf("create clarification request transaction: %w", err)
 	}
 
 	return created, nil
@@ -267,15 +249,11 @@ func (s *Service) RecordAnswer(ctx context.Context, requestID spine.Clarificatio
 		}
 		return nil
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, record); err != nil {
-			if errors.Is(err, ErrRequestNotFound) {
-				return spine.ClarificationAnswer{}, ErrRequestNotFound
-			}
-			return spine.ClarificationAnswer{}, fmt.Errorf("record clarification answer transaction: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, record); err != nil {
+		if errors.Is(err, ErrRequestNotFound) {
+			return spine.ClarificationAnswer{}, ErrRequestNotFound
 		}
-	} else if err := record(ctx); err != nil {
-		return spine.ClarificationAnswer{}, err
+		return spine.ClarificationAnswer{}, fmt.Errorf("record clarification answer transaction: %w", err)
 	}
 
 	return recorded, nil
@@ -374,15 +352,11 @@ func (s *Service) ApplyAnswer(ctx context.Context, answerID spine.ClarificationA
 		}
 		return nil
 	}
-	if s.TxRunner != nil {
-		if err := s.TxRunner.RunReadCommitted(ctx, apply); err != nil {
-			if errors.Is(err, ErrGoalNotFound) {
-				return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
-			}
-			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("apply clarification answer transaction: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, apply); err != nil {
+		if errors.Is(err, ErrGoalNotFound) {
+			return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrGoalNotFound
 		}
-	} else if err := apply(ctx); err != nil {
-		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, err
+		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, fmt.Errorf("apply clarification answer transaction: %w", err)
 	}
 	if !marked {
 		return spine.ClarificationAnswerApplicationResult{}, spine.Goal{}, ErrAlreadyApplied

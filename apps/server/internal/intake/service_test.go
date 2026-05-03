@@ -13,7 +13,7 @@ import (
 
 func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	events := newFakeEventLog()
-	service := intake.NewService(newFakeIntakeStore(), validProjectContextResolver(), events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), validProjectContextResolver(), events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	record, err := service.Submit(context.Background(), validSubmission())
 	if err != nil {
@@ -71,7 +71,7 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	}
 }
 
-func TestServiceSubmitUsesTransactionRunnerWhenConfigured(t *testing.T) {
+func TestServiceSubmitUsesRequiredTransactionRunner(t *testing.T) {
 	events := newFakeEventLog()
 	store := newFakeIntakeStore()
 	txRunner := &fakeTransactionRunner{}
@@ -79,9 +79,9 @@ func TestServiceSubmitUsesTransactionRunnerWhenConfigured(t *testing.T) {
 		store,
 		validProjectContextResolver(),
 		events,
+		txRunner,
 		fixedClock{now: testTime()},
 		&sequenceIDs{},
-		intake.WithTransactionRunner(txRunner),
 	)
 
 	record, err := service.Submit(context.Background(), validSubmission())
@@ -128,7 +128,7 @@ func TestValidateSubmissionRejectsMissingProjectID(t *testing.T) {
 func TestServiceSubmitRejectsUnknownRepoBinding(t *testing.T) {
 	events := newFakeEventLog()
 	resolver := fakeProjectContextResolver{ok: false}
-	service := intake.NewService(newFakeIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), resolver, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	var validationErr *intake.ValidationError
@@ -153,7 +153,7 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 		},
 		ok: true,
 	}
-	service := intake.NewService(newFakeIntakeStore(), resolver, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), resolver, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	var validationErr *intake.ValidationError
@@ -170,7 +170,7 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 
 func TestServiceSubmitRejectsUnavailableProjectContext(t *testing.T) {
 	events := newFakeEventLog()
-	service := intake.NewService(newFakeIntakeStore(), nil, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := intake.NewService(newFakeIntakeStore(), nil, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.Submit(context.Background(), validSubmission())
 	if !errors.Is(err, intake.ErrProjectContextUnavailable) {
