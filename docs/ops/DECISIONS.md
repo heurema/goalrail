@@ -1769,3 +1769,23 @@ Rationale:
 - Gives later auth schema and CLI work a bounded direction without implementing
   endpoints, tokens, password hashing, CLI changes, web UI, SaaS onboarding,
   organization creation, billing, SSO/OIDC, runner, gate, proof, or queue work.
+
+## D-0070 — Codex review gate does not require a fresh external review artifact
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- `codex-review-gate` remains a required `main` branch status check.
+- The gate blocks unresolved Codex-authored review threads when they exist.
+- The gate does not require a current Codex Review submission for every PR
+  head.
+- The workflow must not wait for an external review artifact before checking
+  unresolved threads.
+
+Rationale:
+- The external Codex Review service may fail to submit a review artifact for a
+  PR head even when normal repository checks have completed.
+- Requiring a current external review artifact turns the gate into a global
+  merge blocker outside the repository's control.
+- Thread enforcement remains useful because actual Codex findings still block
+  until resolved.

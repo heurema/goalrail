@@ -37,6 +37,6 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           review-author-logins: chatgpt-codex-connector
           ignore-outdated: 'true'
-          require-current-review: 'true'
-          wait-seconds: '240'
+          require-current-review: 'false'
+          wait-seconds: '0'
           poll-interval-seconds: '15'
