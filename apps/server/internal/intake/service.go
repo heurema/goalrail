@@ -83,9 +83,6 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 	if err := ValidateSubmission(submission); err != nil {
 		return spine.IntakeRecord{}, err
 	}
-	if err := s.validateDependencies(); err != nil {
-		return spine.IntakeRecord{}, err
-	}
 	resolved, err := s.resolveProjectContext(ctx, submission)
 	if err != nil {
 		return spine.IntakeRecord{}, err
@@ -137,10 +134,6 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 }
 
 func (s *Service) Get(ctx context.Context, id spine.IntakeID) (spine.IntakeRecord, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.IntakeRecord{}, err
-	}
-
 	record, ok, err := s.Store.Get(ctx, id)
 	if err != nil {
 		return spine.IntakeRecord{}, fmt.Errorf("get intake record: %w", err)
@@ -200,22 +193,6 @@ func (s *Service) receivedEvent(record spine.IntakeRecord, timestamp time.Time) 
 		Timestamp:      timestamp,
 		Payload:        payload,
 	}, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Store == nil {
-		return errors.New("intake service store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("intake service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("intake service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("intake service id generator is nil")
-	}
-	return nil
 }
 
 func ValidateSubmission(submission spine.IntakeSubmission) error {

@@ -69,9 +69,6 @@ func NewService(contracts Store, seeds SeedCreator, drafts DraftService, approva
 }
 
 func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest) (spine.Contract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Contract{}, err
-	}
 	if strings.TrimSpace(string(input.GoalID)) == "" {
 		return spine.Contract{}, &ValidationError{Field: "goal_id", Message: "is required"}
 	}
@@ -98,16 +95,10 @@ func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest)
 }
 
 func (s *Service) Get(ctx context.Context, id spine.ContractID) (spine.Contract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Contract{}, err
-	}
 	return s.getContract(ctx, id)
 }
 
 func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input spine.ContractDraftUpdateRequest) (spine.Contract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Contract{}, err
-	}
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
 		return spine.Contract{}, err
@@ -130,9 +121,6 @@ func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input sp
 }
 
 func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, input spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Contract{}, err
-	}
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
 		return spine.Contract{}, err
@@ -155,9 +143,6 @@ func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, in
 }
 
 func (s *Service) Approve(ctx context.Context, id spine.ContractID, input spine.ApproveContractDraftRequest) (spine.Contract, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.Contract{}, err
-	}
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
 		return spine.Contract{}, err
@@ -198,20 +183,4 @@ func currentDraftID(contract spine.Contract) (spine.ContractDraftID, error) {
 		return "", ErrContractCurrentDraftMissing
 	}
 	return *contract.CurrentDraftID, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Contracts == nil {
-		return errors.New("contract service: nil contract store")
-	}
-	if s.Seeds == nil {
-		return errors.New("contract service: nil seed service")
-	}
-	if s.Drafts == nil {
-		return errors.New("contract service: nil draft service")
-	}
-	if s.Approvals == nil {
-		return errors.New("contract service: nil approval service")
-	}
-	return nil
 }

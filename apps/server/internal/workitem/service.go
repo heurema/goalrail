@@ -31,9 +31,6 @@ func NewService(workItems Store) *Service {
 }
 
 func (s *Service) Get(ctx context.Context, id spine.WorkItemID) (spine.WorkItem, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItem{}, err
-	}
 	item, ok, err := s.WorkItems.Get(ctx, id)
 	if err != nil {
 		return spine.WorkItem{}, fmt.Errorf("get work item: %w", err)
@@ -42,11 +39,4 @@ func (s *Service) Get(ctx context.Context, id spine.WorkItemID) (spine.WorkItem,
 		return spine.WorkItem{}, ErrWorkItemNotFound
 	}
 	return item, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.WorkItems == nil {
-		return errors.New("work item service work item store is nil")
-	}
-	return nil
 }

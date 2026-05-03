@@ -129,10 +129,6 @@ func NewService(seeds SeedReader, contracts ContractStore, drafts Store, events 
 }
 
 func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spine.ContractDraft, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ContractDraft{}, err
-	}
-
 	seed, ok, err := s.Seeds.Get(ctx, seedID)
 	if err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("get contract seed: %w", err)
@@ -207,10 +203,6 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 }
 
 func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, input spine.ContractDraftUpdateRequest) (spine.ContractDraft, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ContractDraft{}, err
-	}
-
 	draft, ok, err := s.Drafts.Get(ctx, draftID)
 	if err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("get contract draft: %w", err)
@@ -338,10 +330,6 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 }
 
 func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.ContractDraftID, input spine.ContractDraftReadyForApprovalRequest) (spine.ContractDraft, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ContractDraft{}, err
-	}
-
 	draft, ok, err := s.Drafts.Get(ctx, draftID)
 	if err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("get contract draft: %w", err)
@@ -654,28 +642,6 @@ func (s *Service) contractDraftMarkedReadyForApprovalEvent(updated spine.Contrac
 		Timestamp:      markedAt,
 		Payload:        payload,
 	}, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Seeds == nil {
-		return errors.New("contract draft service seed store is nil")
-	}
-	if s.Contracts == nil {
-		return errors.New("contract draft service contract store is nil")
-	}
-	if s.Drafts == nil {
-		return errors.New("contract draft service draft store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("contract draft service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("contract draft service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("contract draft service id generator is nil")
-	}
-	return nil
 }
 
 type SystemClock struct{}

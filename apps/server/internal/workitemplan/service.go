@@ -119,9 +119,6 @@ func NewService(contracts ContractReader, approvedContracts ApprovedContractRead
 }
 
 func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, input spine.WorkItemPlanCreateRequest) (spine.WorkItemPlan, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItemPlan{}, err
-	}
 	if err := validateActor("requested_by", input.RequestedBy); err != nil {
 		return spine.WorkItemPlan{}, err
 	}
@@ -165,9 +162,6 @@ func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, i
 }
 
 func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItemPlan{}, err
-	}
 	plan, ok, err := s.Plans.Get(ctx, id)
 	if err != nil {
 		return spine.WorkItemPlan{}, fmt.Errorf("get work item plan: %w", err)
@@ -179,9 +173,6 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 }
 
 func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanID, input spine.WorkItemPlanProposalSubmitRequest) (spine.WorkItemPlanProposal, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItemPlanProposal{}, err
-	}
 	plan, err := s.GetPlan(ctx, planID)
 	if err != nil {
 		return spine.WorkItemPlanProposal{}, err
@@ -236,9 +227,6 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 }
 
 func (s *Service) GetProposal(ctx context.Context, id spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItemPlanProposal{}, err
-	}
 	proposal, ok, err := s.Proposals.Get(ctx, id)
 	if err != nil {
 		return spine.WorkItemPlanProposal{}, fmt.Errorf("get work item plan proposal: %w", err)
@@ -250,9 +238,6 @@ func (s *Service) GetProposal(ctx context.Context, id spine.WorkItemPlanProposal
 }
 
 func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemPlanProposalID, input spine.WorkItemPlanAcceptanceRequest) (spine.WorkItemPlanAcceptanceResult, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.WorkItemPlanAcceptanceResult{}, err
-	}
 	if err := validateActor("accepted_by", input.AcceptedBy); err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
@@ -540,34 +525,6 @@ func nonNilPlanner(planner map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Contracts == nil {
-		return errors.New("work item plan service contract store is nil")
-	}
-	if s.ApprovedContracts == nil {
-		return errors.New("work item plan service approved contract store is nil")
-	}
-	if s.Plans == nil {
-		return errors.New("work item plan service plan store is nil")
-	}
-	if s.Proposals == nil {
-		return errors.New("work item plan service proposal store is nil")
-	}
-	if s.WorkItems == nil {
-		return errors.New("work item plan service work item store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("work item plan service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("work item plan service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("work item plan service id generator is nil")
-	}
-	return nil
 }
 
 type SystemClock struct{}

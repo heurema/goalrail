@@ -95,10 +95,6 @@ func NewService(goals GoalReader, contracts ContractStore, seeds Store, events E
 }
 
 func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.ContractSeed, error) {
-	if err := s.validateDependencies(); err != nil {
-		return spine.ContractSeed{}, err
-	}
-
 	goal, ok, err := s.Goals.Get(ctx, goalID)
 	if err != nil {
 		return spine.ContractSeed{}, fmt.Errorf("get goal: %w", err)
@@ -271,28 +267,6 @@ func (s *Service) contractSeedCreatedEvent(created spine.ContractSeed, goal spin
 		Timestamp:      created.CreatedAt,
 		Payload:        payload,
 	}, nil
-}
-
-func (s *Service) validateDependencies() error {
-	if s.Goals == nil {
-		return errors.New("contract seed service goal store is nil")
-	}
-	if s.Contracts == nil {
-		return errors.New("contract seed service contract store is nil")
-	}
-	if s.Seeds == nil {
-		return errors.New("contract seed service seed store is nil")
-	}
-	if s.Events == nil {
-		return errors.New("contract seed service event log is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("contract seed service clock is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("contract seed service id generator is nil")
-	}
-	return nil
 }
 
 type SystemClock struct{}
