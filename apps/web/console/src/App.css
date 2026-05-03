@@ -22,6 +22,102 @@
   --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
+[data-goalrail-theme='goalrail-default'] {
+  --bg: oklch(17.5% 0.008 55);
+  --bg-2: oklch(20.5% 0.008 55);
+  --panel: oklch(22.5% 0.007 55);
+  --panel-2: oklch(25.5% 0.007 55);
+  --panel-3: oklch(28.5% 0.007 55);
+  --line: oklch(30.5% 0.006 55);
+  --line-soft: oklch(25.5% 0.006 55);
+  --ink: oklch(95% 0.008 75);
+  --ink-2: oklch(84% 0.01 72);
+  --mute: oklch(68% 0.01 70);
+  --mute-2: oklch(52% 0.01 70);
+  --accent: oklch(72% 0.045 330);
+  --accent-soft: oklch(40% 0.03 330);
+}
+
+[data-goalrail-theme='catppuccin-mocha'] {
+  --bg: oklch(17.5% 0.045 292);
+  --bg-2: oklch(21% 0.048 292);
+  --panel: oklch(24% 0.045 292);
+  --panel-2: oklch(28% 0.044 292);
+  --panel-3: oklch(32% 0.042 292);
+  --line: oklch(39% 0.042 292);
+  --line-soft: oklch(31% 0.038 292);
+  --ink: oklch(88% 0.035 278);
+  --ink-2: oklch(79% 0.04 278);
+  --mute: oklch(67% 0.04 278);
+  --mute-2: oklch(54% 0.038 278);
+  --accent: oklch(78% 0.105 315);
+  --accent-soft: oklch(44% 0.08 315);
+}
+
+[data-goalrail-theme='dracula'] {
+  --bg: oklch(19% 0.03 285);
+  --bg-2: oklch(23% 0.032 285);
+  --panel: oklch(26% 0.033 285);
+  --panel-2: oklch(31% 0.034 285);
+  --panel-3: oklch(36% 0.035 285);
+  --line: oklch(43% 0.036 285);
+  --line-soft: oklch(34% 0.032 285);
+  --ink: oklch(96% 0.012 103);
+  --ink-2: oklch(86% 0.018 103);
+  --mute: oklch(71% 0.045 285);
+  --mute-2: oklch(56% 0.04 285);
+  --accent: oklch(75% 0.14 310);
+  --accent-soft: oklch(44% 0.105 310);
+}
+
+[data-goalrail-theme='nord'] {
+  --bg: oklch(24% 0.028 260);
+  --bg-2: oklch(28% 0.03 260);
+  --panel: oklch(31% 0.032 260);
+  --panel-2: oklch(35% 0.034 260);
+  --panel-3: oklch(40% 0.036 260);
+  --line: oklch(47% 0.038 260);
+  --line-soft: oklch(37% 0.034 260);
+  --ink: oklch(94% 0.018 250);
+  --ink-2: oklch(84% 0.022 250);
+  --mute: oklch(69% 0.035 250);
+  --mute-2: oklch(55% 0.035 250);
+  --accent: oklch(76% 0.065 220);
+  --accent-soft: oklch(45% 0.05 220);
+}
+
+[data-goalrail-theme='solarized-dark'] {
+  --bg: oklch(20% 0.045 210);
+  --bg-2: oklch(24% 0.05 210);
+  --panel: oklch(27% 0.052 210);
+  --panel-2: oklch(31% 0.054 210);
+  --panel-3: oklch(35% 0.056 210);
+  --line: oklch(42% 0.055 210);
+  --line-soft: oklch(33% 0.052 210);
+  --ink: oklch(92% 0.045 92);
+  --ink-2: oklch(82% 0.04 92);
+  --mute: oklch(65% 0.05 110);
+  --mute-2: oklch(52% 0.045 110);
+  --accent: oklch(60% 0.12 245);
+  --accent-soft: oklch(36% 0.085 245);
+}
+
+[data-goalrail-theme='gruvbox-dark'] {
+  --bg: oklch(21% 0.025 65);
+  --bg-2: oklch(25% 0.027 65);
+  --panel: oklch(28% 0.028 65);
+  --panel-2: oklch(32% 0.03 65);
+  --panel-3: oklch(36% 0.032 65);
+  --line: oklch(43% 0.034 65);
+  --line-soft: oklch(34% 0.03 65);
+  --ink: oklch(88% 0.055 82);
+  --ink-2: oklch(78% 0.05 82);
+  --mute: oklch(63% 0.055 82);
+  --mute-2: oklch(51% 0.05 82);
+  --accent: oklch(72% 0.125 55);
+  --accent-soft: oklch(42% 0.09 55);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -381,6 +477,141 @@ select:focus-visible {
 .settingsContent p {
   margin: 0;
   color: var(--ink-2);
+}
+
+.settingsSectionNav {
+  display: inline-flex;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 4px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: var(--bg-2);
+}
+
+.sectionButton {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--mute);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sectionButton:hover,
+.sectionButton.active {
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  background: color-mix(in oklab, var(--accent) 10%, var(--panel));
+  color: var(--ink);
+}
+
+.appearancePanel {
+  max-width: 980px;
+}
+
+.appearanceHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.themeDisclaimer {
+  max-width: 300px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.themeCard {
+  display: flex;
+  min-height: 154px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms, background 140ms, transform 80ms;
+}
+
+.themeCard:hover,
+.themeCard.active {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, var(--panel));
+}
+
+.themeCardTop,
+.themeSwatches,
+.themePreview {
+  display: flex;
+  align-items: center;
+}
+
+.themeCardTop {
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.themeSelected {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.themeCard.active .themeSelected {
+  color: var(--accent);
+}
+
+.themeSwatches {
+  gap: 6px;
+}
+
+.themeSwatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid color-mix(in oklab, white 18%, transparent);
+  border-radius: 50%;
+}
+
+.themePreview {
+  flex: 1 1 auto;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--panel-2) 75%, transparent) 28%, transparent 28%),
+    var(--bg-2);
+}
+
+.themePreview span {
+  display: block;
+  flex: 1 1 auto;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--accent) 18%, var(--panel-3));
+}
+
+.themePreview span:first-child {
+  max-width: 28%;
+  background: var(--panel-3);
 }
 
 .usersHeader {
@@ -752,9 +983,19 @@ select:focus-visible {
   }
 
   .surfaceHeader,
+  .appearanceHeader,
   .usersHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .themeDisclaimer {
+    max-width: none;
+    text-align: left;
+  }
+
+  .themeGrid {
+    grid-template-columns: 1fr;
   }
 
   .usersToolbar {

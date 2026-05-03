@@ -34,8 +34,10 @@ describe('App', () => {
     login();
 
     const navigation = screen.getByRole('navigation', { name: /product surfaces/i });
+    const productButtons = within(navigation).getAllByRole('button');
 
     expect(navigation).toBeInTheDocument();
+    expect(productButtons).toHaveLength(3);
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /^Delivery Readiness$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Proof$/i })).toBeInTheDocument();
@@ -43,24 +45,55 @@ describe('App', () => {
     expect(screen.queryByText(/trialops-demo|C-0147|readiness score|proof queue/i)).not.toBeInTheDocument();
   });
 
-  it('opens users settings from the bottom utility without making it a product surface', () => {
+  it('opens appearance settings by default without making it a product surface', () => {
     login();
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
 
-    expect(screen.getByLabelText(/settings: users/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/settings: appearance/i)).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: /product surfaces/i })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: /settings sections/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: /settings sections/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Section$/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^Users$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Appearance$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Contracts$/i })).not.toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByText(/preview|local-only|local UI|backend|sessions|cookies|future/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/local-only|local UI|backend|sessions|cookies|future/i)).not.toBeInTheDocument();
+  });
+
+  it('renders all theme presets and applies the selected theme to the shell', () => {
+    login();
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+
+    expect(screen.getByRole('button', { name: /Goalrail Default/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /Catppuccin Mocha/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Dracula/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Nord/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Solarized Dark/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Gruvbox Dark/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Nord/i }));
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-goalrail-theme', 'nord');
+    expect(screen.getByRole('button', { name: /Nord/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('opens users inside settings after theme switching', () => {
+    login();
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Nord/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+
+    expect(screen.getByLabelText(/settings: users/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Users$/i })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: /workspace users/i })).toBeInTheDocument();
   });
 
   it('adds and edits users in the settings drawer', () => {
     login();
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
     fireEvent.click(screen.getByRole('button', { name: /add user/i }));
 
     expect(screen.getByRole('complementary', { name: /add user/i })).toBeInTheDocument();
@@ -84,6 +117,7 @@ describe('App', () => {
     login();
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
     const table = screen.getByRole('table', { name: /workspace users/i });
     expect(table).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: /search users/i })).toBeInTheDocument();
