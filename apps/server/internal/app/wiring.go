@@ -61,8 +61,8 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	cleanup := pool.Close
 
 	projectContext := store.NewProjectContextStore(pool)
-	intakeStore := store.NewPostgresTransactionalIntakeStore(pool)
-	goals := store.NewPostgresTransactionalGoalStore(pool)
+	intakeStore := store.NewPostgresIntakeStore(pool)
+	goals := store.NewPostgresGoalStore(pool)
 	clarificationStore := store.NewPostgresClarificationRequestStore(pool)
 	clarificationAnswerStore := store.NewPostgresClarificationAnswerStore(pool)
 	contracts := store.NewPostgresContractStore(pool)
@@ -75,11 +75,13 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	events := store.NewPostgresEventLog(pool)
 	authStore := store.NewPostgresAuthStore(pool)
 	txRunner := store.NewPostgresTransactionRunner(pool)
+	intakeOptions := []intake.Option{intake.WithTransactionRunner(txRunner)}
+	goalOptions := []goal.Option{goal.WithTransactionRunner(txRunner)}
 	clarificationOptions := []clarification.Option{clarification.WithTransactionRunner(txRunner)}
 
-	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{})
+	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{}, intakeOptions...)
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
-	goalService := goal.NewService(intakeStore, goals, events, goal.SystemClock{}, goal.UUIDGenerator{})
+	goalService := goal.NewService(intakeStore, goals, events, goal.SystemClock{}, goal.UUIDGenerator{}, goalOptions...)
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goals, clarificationStore, clarificationAnswerStore, events, clarification.SystemClock{}, clarification.UUIDGenerator{}, clarificationOptions...)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)

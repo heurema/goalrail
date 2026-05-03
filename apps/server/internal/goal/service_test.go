@@ -114,6 +114,52 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 	}
 }
 
+func TestServicePromoteFromIntakeUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	intakes := newFakeIntakeStore()
+	goals := newFakeGoalStore()
+	events := newFakeEventLog()
+	txRunner := &fakeTransactionRunner{}
+	service := goal.NewService(
+		intakes,
+		goals,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		goal.WithTransactionRunner(txRunner),
+	)
+	intakeRecord := validIntakeRecord()
+	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
+		t.Fatalf("Create intake: %v", err)
+	}
+
+	created, err := service.PromoteFromIntake(context.Background(), intakeRecord.ID)
+	if err != nil {
+		t.Fatalf("PromoteFromIntake() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", txRunner.calls)
+	}
+	if got, want := len(goals.createInTx), 1; got != want {
+		t.Fatalf("goal create calls = %d, want %d", got, want)
+	}
+	if !goals.createInTx[0] {
+		t.Fatal("Goals.Create was not called with transaction context")
+	}
+	if got, want := len(events.appendInTx), 2; got != want {
+		t.Fatalf("event append calls = %d, want %d", got, want)
+	}
+	if !events.appendInTx[0] || !events.appendInTx[1] {
+		t.Fatalf("event append transaction markers = %#v, want all true", events.appendInTx)
+	}
+	if stored, ok, err := goals.Get(context.Background(), created.ID); err != nil || !ok || stored.ID != created.ID {
+		t.Fatalf("stored goal = %#v, ok = %v, err = %v; want created goal", stored, ok, err)
+	}
+	appended := events.Events()
+	if len(appended) != 2 || appended[0].Type != goal.EventTypeGoalCreated || appended[1].Type != goal.EventTypeIntakePromoted {
+		t.Fatalf("events = %#v, want goal.created and intake.promoted_to_goal", appended)
+	}
+}
+
 func TestServicePromoteFromIntakeUsesTitleAsSummaryWhenBodyEmpty(t *testing.T) {
 	intakes := newFakeIntakeStore()
 	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
@@ -378,6 +424,54 @@ func TestServiceCheckReadinessMarksGoalReadyForContractSeed(t *testing.T) {
 	}
 }
 
+func TestServiceCheckReadinessUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	goals := newFakeGoalStore()
+	events := newFakeEventLog()
+	txRunner := &fakeTransactionRunner{}
+	service := goal.NewService(
+		newFakeIntakeStore(),
+		goals,
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		goal.WithTransactionRunner(txRunner),
+	)
+	created := validGoal()
+	if err := goals.Create(context.Background(), created); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	result, updated, err := service.CheckReadiness(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("CheckReadiness() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", txRunner.calls)
+	}
+	if got, want := len(goals.updateReadinessInTx), 1; got != want {
+		t.Fatalf("goal readiness update calls = %d, want %d", got, want)
+	}
+	if !goals.updateReadinessInTx[0] {
+		t.Fatal("Goals.UpdateReadiness was not called with transaction context")
+	}
+	if got, want := len(events.appendInTx), 2; got != want {
+		t.Fatalf("event append calls = %d, want %d", got, want)
+	}
+	if !events.appendInTx[0] || !events.appendInTx[1] {
+		t.Fatalf("event append transaction markers = %#v, want all true", events.appendInTx)
+	}
+	if !result.Ready {
+		t.Fatal("Ready = false, want true")
+	}
+	if updated.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("updated state = %q, want %q", updated.State, spine.GoalStateReadyForContractSeed)
+	}
+	appended := events.Events()
+	if len(appended) != 2 || appended[0].Type != goal.EventTypeGoalReadinessChecked || appended[1].Type != goal.EventTypeGoalMarkedReadyForContractSeed {
+		t.Fatalf("events = %#v, want readiness checked and ready transition events", appended)
+	}
+}
+
 func TestServiceCheckReadinessMarksGoalNeedsClarification(t *testing.T) {
 	service, goals, events := readinessService(t)
 	created := validGoal()
@@ -559,8 +653,10 @@ func (s *fakeIntakeStore) Get(_ context.Context, id spine.IntakeID) (spine.Intak
 }
 
 type fakeGoalStore struct {
-	goals    map[spine.GoalID]spine.Goal
-	byIntake map[spine.IntakeID]spine.GoalID
+	goals               map[spine.GoalID]spine.Goal
+	byIntake            map[spine.IntakeID]spine.GoalID
+	createInTx          []bool
+	updateReadinessInTx []bool
 }
 
 func newFakeGoalStore() *fakeGoalStore {
@@ -570,7 +666,8 @@ func newFakeGoalStore() *fakeGoalStore {
 	}
 }
 
-func (s *fakeGoalStore) Create(_ context.Context, created spine.Goal) error {
+func (s *fakeGoalStore) Create(ctx context.Context, created spine.Goal) error {
+	s.createInTx = append(s.createInTx, isTxContext(ctx))
 	s.goals[created.ID] = cloneGoal(created)
 	s.byIntake[created.IntakeID] = created.ID
 	return nil
@@ -590,7 +687,8 @@ func (s *fakeGoalStore) GetByIntakeID(_ context.Context, id spine.IntakeID) (spi
 	return cloneGoal(created), ok, nil
 }
 
-func (s *fakeGoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+func (s *fakeGoalStore) UpdateReadiness(ctx context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+	s.updateReadinessInTx = append(s.updateReadinessInTx, isTxContext(ctx))
 	updated, ok := s.goals[id]
 	if !ok {
 		return spine.Goal{}, false, nil
@@ -608,14 +706,16 @@ func cloneGoal(created spine.Goal) spine.Goal {
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events     []spine.Event
+	appendInTx []bool
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	l.appendInTx = append(l.appendInTx, isTxContext(ctx))
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }
@@ -667,6 +767,22 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+}
+
+type txContextKey struct{}
+
+func isTxContext(ctx context.Context) bool {
+	inTx, _ := ctx.Value(txContextKey{}).(bool)
+	return inTx
+}
+
+type fakeTransactionRunner struct {
+	calls int
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(context.WithValue(ctx, txContextKey{}, true))
 }
 
 type intakeReader struct {

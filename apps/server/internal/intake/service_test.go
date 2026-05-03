@@ -71,6 +71,46 @@ func TestServiceSubmitAppendsReceivedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitUsesTransactionRunnerWhenConfigured(t *testing.T) {
+	events := newFakeEventLog()
+	store := newFakeIntakeStore()
+	txRunner := &fakeTransactionRunner{}
+	service := intake.NewService(
+		store,
+		validProjectContextResolver(),
+		events,
+		fixedClock{now: testTime()},
+		&sequenceIDs{},
+		intake.WithTransactionRunner(txRunner),
+	)
+
+	record, err := service.Submit(context.Background(), validSubmission())
+	if err != nil {
+		t.Fatalf("Submit() error = %v", err)
+	}
+	if txRunner.calls != 1 {
+		t.Fatalf("transaction calls = %d, want 1", txRunner.calls)
+	}
+	if got, want := len(store.createInTx), 1; got != want {
+		t.Fatalf("store create calls = %d, want %d", got, want)
+	}
+	if !store.createInTx[0] {
+		t.Fatal("Store.Create was not called with transaction context")
+	}
+	if got, want := len(events.appendInTx), 1; got != want {
+		t.Fatalf("event append calls = %d, want %d", got, want)
+	}
+	if !events.appendInTx[0] {
+		t.Fatal("Events.Append was not called with transaction context")
+	}
+	if _, ok, err := store.Get(context.Background(), record.ID); err != nil || !ok {
+		t.Fatalf("stored record lookup ok = %v, err = %v; want stored record", ok, err)
+	}
+	if appended := events.Events(); len(appended) != 1 || appended[0].Type != intake.EventTypeReceived {
+		t.Fatalf("events = %#v, want one intake.received event", appended)
+	}
+}
+
 func TestValidateSubmissionRejectsMissingProjectID(t *testing.T) {
 	submission := validSubmission()
 	submission.ProjectID = ""
@@ -181,14 +221,16 @@ func (r fakeProjectContextResolver) ResolveRepoBinding(context.Context, spine.Re
 }
 
 type fakeIntakeStore struct {
-	records map[spine.IntakeID]spine.IntakeRecord
+	records    map[spine.IntakeID]spine.IntakeRecord
+	createInTx []bool
 }
 
 func newFakeIntakeStore() *fakeIntakeStore {
 	return &fakeIntakeStore{records: map[spine.IntakeID]spine.IntakeRecord{}}
 }
 
-func (s *fakeIntakeStore) Create(_ context.Context, record spine.IntakeRecord) error {
+func (s *fakeIntakeStore) Create(ctx context.Context, record spine.IntakeRecord) error {
+	s.createInTx = append(s.createInTx, isTxContext(ctx))
 	s.records[record.ID] = record
 	return nil
 }
@@ -199,14 +241,16 @@ func (s *fakeIntakeStore) Get(_ context.Context, id spine.IntakeID) (spine.Intak
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events     []spine.Event
+	appendInTx []bool
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	l.appendInTx = append(l.appendInTx, isTxContext(ctx))
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }
@@ -249,4 +293,20 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+}
+
+type txContextKey struct{}
+
+func isTxContext(ctx context.Context) bool {
+	inTx, _ := ctx.Value(txContextKey{}).(bool)
+	return inTx
+}
+
+type fakeTransactionRunner struct {
+	calls int
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(context.WithValue(ctx, txContextKey{}, true))
 }
