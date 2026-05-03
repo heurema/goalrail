@@ -536,12 +536,13 @@ Rationale:
 
 ## D-0042 — ContractSeed and ContractDraft persist in Postgres
 Date: 2026-04-26
-Status: accepted
+Status: accepted; runtime config/fallback details superseded by D-0071
 
 Decision:
 - ContractSeed and ContractDraft creation move from in-memory-only stores to
-  Postgres-backed stores when `GOALRAIL_DATABASE_DSN` is configured
-- in-memory fallback remains available when DB is not configured
+  Postgres-backed stores when database config is present
+- the original no-DB memory path is no longer production route behavior after
+  D-0071; memory stores remain test/dev helpers only
 - `contract_seed.created` and `contract_draft.created` append to the durable
   EventLog
 - ContractSeed create plus event append and ContractDraft create plus event
@@ -1790,3 +1791,31 @@ Rationale:
 
 Review:
 - Review after the first implemented theme picker pass.
+
+## D-0071 — Product API runtime requires structured Postgres config
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- Production server wiring requires Postgres for product and auth API state.
+- `GET /livez`, `GET /readyz`, and `GET /version` remain available without DB
+  config.
+- Product and auth API routes return HTTP 503 with stable error code
+  `database_not_configured` when database config is absent.
+- The server uses structured database env vars:
+  `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_PORT`,
+  `GOALRAIL_DATABASE_NAME`, `GOALRAIL_DATABASE_USER`,
+  `GOALRAIL_DATABASE_PASSWORD`, and `GOALRAIL_DATABASE_SSLMODE`.
+- `GOALRAIL_DATABASE_PORT` defaults to `5432`; `GOALRAIL_DATABASE_SSLMODE`
+  defaults to `disable` for local/self-hosted development.
+- Host, name, user, and password must all be provided for DB-enabled runtime.
+- The raw database DSN is not the primary runtime config path.
+- DB password stays suitable for secret-only injection and is not printed in
+  config errors.
+
+Rationale:
+- Product API state should not appear canonical without durable Postgres state.
+- Structured env vars let operators manage host/name/user separately from the
+  password secret.
+- Health/version can remain lightweight process probes while product APIs
+  clearly report missing persistence.

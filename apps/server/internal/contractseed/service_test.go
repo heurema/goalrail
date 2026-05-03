@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 )
 
 func TestServiceCreatesContractSeedSnapshotFromGoal(t *testing.T) {
@@ -258,15 +256,123 @@ func TestServiceDoesNotAppendContractWorkGateProofEvents(t *testing.T) {
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func seedService(t *testing.T) (*contractseed.Service, *store.GoalStore, *store.ContractStore, *store.ContractSeedStore, *eventlog.EventLog) {
+func seedService(t *testing.T) (*contractseed.Service, *fakeGoalStore, *fakeContractStore, *fakeContractSeedStore, *fakeEventLog) {
 	t.Helper()
 
-	goals := store.NewGoalStore()
-	contracts := store.NewContractStore()
-	seeds := store.NewContractSeedStore()
-	events := eventlog.NewEventLog()
+	goals := newFakeGoalStore()
+	contracts := newFakeContractStore()
+	seeds := newFakeContractSeedStore()
+	events := newFakeEventLog()
 	service := contractseed.NewService(goals, contracts, seeds, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, contracts, seeds, events
+}
+
+type fakeGoalStore struct {
+	goals map[spine.GoalID]spine.Goal
+}
+
+func newFakeGoalStore() *fakeGoalStore {
+	return &fakeGoalStore{goals: map[spine.GoalID]spine.Goal{}}
+}
+
+func (s *fakeGoalStore) Create(_ context.Context, goal spine.Goal) error {
+	s.goals[goal.ID] = goal
+	return nil
+}
+
+func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	return goal, ok, nil
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+	byGoal    map[spine.GoalID]spine.ContractID
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{
+		contracts: map[spine.ContractID]spine.Contract{},
+		byGoal:    map[spine.GoalID]spine.ContractID{},
+	}
+}
+
+func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+	s.contracts[contract.ID] = contract
+	s.byGoal[contract.GoalID] = contract.ID
+	return nil
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spine.Contract, bool, error) {
+	contractID, ok := s.byGoal[id]
+	if !ok {
+		return spine.Contract{}, false, nil
+	}
+	contract, ok := s.contracts[contractID]
+	return contract, ok, nil
+}
+
+type fakeContractSeedStore struct {
+	seeds  map[spine.ContractSeedID]spine.ContractSeed
+	byGoal map[spine.GoalID]spine.ContractSeedID
+}
+
+func newFakeContractSeedStore() *fakeContractSeedStore {
+	return &fakeContractSeedStore{
+		seeds:  map[spine.ContractSeedID]spine.ContractSeed{},
+		byGoal: map[spine.GoalID]spine.ContractSeedID{},
+	}
+}
+
+func (s *fakeContractSeedStore) Create(_ context.Context, seed spine.ContractSeed) error {
+	s.seeds[seed.ID] = seed
+	s.byGoal[seed.GoalID] = seed.ID
+	return nil
+}
+
+func (s *fakeContractSeedStore) Get(_ context.Context, id spine.ContractSeedID) (spine.ContractSeed, bool, error) {
+	seed, ok := s.seeds[id]
+	return seed, ok, nil
+}
+
+func (s *fakeContractSeedStore) GetByGoalID(_ context.Context, id spine.GoalID) (spine.ContractSeed, bool, error) {
+	seedID, ok := s.byGoal[id]
+	if !ok {
+		return spine.ContractSeed{}, false, nil
+	}
+	seed, ok := s.seeds[seedID]
+	return seed, ok, nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func validSeedableGoal() spine.Goal {

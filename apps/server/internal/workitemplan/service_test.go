@@ -2,14 +2,11 @@ package workitemplan_test
 
 import (
 	"context"
-	"testing"
-	"time"
-
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
+	"testing"
+	"time"
 )
 
 func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
@@ -104,14 +101,14 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}
 }
 
-func planningService(t *testing.T) (*workitemplan.Service, *store.ContractStore, *store.ApprovedContractStore, *store.WorkItemPlanStore, *store.WorkItemPlanProposalStore, *store.WorkItemStore, *eventlog.EventLog) {
+func planningService(t *testing.T) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
 	t.Helper()
-	contracts := store.NewContractStore()
-	approvedContracts := store.NewApprovedContractStore()
-	plans := store.NewWorkItemPlanStore()
-	proposals := store.NewWorkItemPlanProposalStore()
-	workItems := store.NewWorkItemStore()
-	events := eventlog.NewEventLog()
+	contracts := newFakeContractStore()
+	approvedContracts := newFakeApprovedContractStore()
+	plans := newFakeWorkItemPlanStore()
+	proposals := newFakeWorkItemPlanProposalStore()
+	workItems := newFakeWorkItemStore()
+	events := newFakeEventLog()
 	approved := validApprovedContract()
 	storeContractForApproved(t, contracts, approved)
 	if err := approvedContracts.Create(context.Background(), approved); err != nil {
@@ -119,6 +116,191 @@ func planningService(t *testing.T) (*workitemplan.Service, *store.ContractStore,
 	}
 	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, contracts, approvedContracts, plans, proposals, workItems, events
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{contracts: map[spine.ContractID]spine.Contract{}}
+}
+
+func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+	s.contracts[contract.ID] = contract
+	return nil
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+type fakeApprovedContractStore struct {
+	approved map[spine.ApprovedContractID]spine.ApprovedContract
+}
+
+func newFakeApprovedContractStore() *fakeApprovedContractStore {
+	return &fakeApprovedContractStore{approved: map[spine.ApprovedContractID]spine.ApprovedContract{}}
+}
+
+func (s *fakeApprovedContractStore) Create(_ context.Context, approved spine.ApprovedContract) error {
+	s.approved[approved.ID] = approved
+	return nil
+}
+
+func (s *fakeApprovedContractStore) Get(_ context.Context, id spine.ApprovedContractID) (spine.ApprovedContract, bool, error) {
+	approved, ok := s.approved[id]
+	return approved, ok, nil
+}
+
+type fakeWorkItemPlanStore struct {
+	plans      map[spine.WorkItemPlanID]spine.WorkItemPlan
+	byContract map[spine.ContractID]spine.WorkItemPlanID
+}
+
+func newFakeWorkItemPlanStore() *fakeWorkItemPlanStore {
+	return &fakeWorkItemPlanStore{
+		plans:      map[spine.WorkItemPlanID]spine.WorkItemPlan{},
+		byContract: map[spine.ContractID]spine.WorkItemPlanID{},
+	}
+}
+
+func (s *fakeWorkItemPlanStore) Create(_ context.Context, plan spine.WorkItemPlan) error {
+	s.plans[plan.ID] = plan
+	s.byContract[plan.ContractID] = plan.ID
+	return nil
+}
+
+func (s *fakeWorkItemPlanStore) Get(_ context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, bool, error) {
+	plan, ok := s.plans[id]
+	return plan, ok, nil
+}
+
+func (s *fakeWorkItemPlanStore) GetByContractID(_ context.Context, id spine.ContractID) (spine.WorkItemPlan, bool, error) {
+	planID, ok := s.byContract[id]
+	if !ok {
+		return spine.WorkItemPlan{}, false, nil
+	}
+	plan, ok := s.plans[planID]
+	return plan, ok, nil
+}
+
+func (s *fakeWorkItemPlanStore) MarkProposalSubmitted(_ context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	plan := s.plans[id]
+	plan.State = spine.WorkItemPlanStateProposalSubmitted
+	plan.UpdatedAt = updatedAt.UTC()
+	s.plans[id] = plan
+	return nil
+}
+
+func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	plan := s.plans[id]
+	plan.State = spine.WorkItemPlanStateAccepted
+	plan.UpdatedAt = updatedAt.UTC()
+	s.plans[id] = plan
+	return nil
+}
+
+type fakeWorkItemPlanProposalStore struct {
+	proposals map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
+	byPlan    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
+}
+
+func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
+	return &fakeWorkItemPlanProposalStore{
+		proposals: map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal{},
+		byPlan:    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID{},
+	}
+}
+
+func (s *fakeWorkItemPlanProposalStore) Create(_ context.Context, proposal spine.WorkItemPlanProposal) error {
+	s.proposals[proposal.ID] = proposal
+	s.byPlan[proposal.PlanID] = proposal.ID
+	return nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) Get(_ context.Context, id spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, bool, error) {
+	proposal, ok := s.proposals[id]
+	return proposal, ok, nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) GetByPlanID(_ context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlanProposal, bool, error) {
+	proposalID, ok := s.byPlan[id]
+	if !ok {
+		return spine.WorkItemPlanProposal{}, false, nil
+	}
+	proposal, ok := s.proposals[proposalID]
+	return proposal, ok, nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) MarkAccepted(_ context.Context, id spine.WorkItemPlanProposalID, acceptedBy spine.ActorRef, acceptedAt time.Time) error {
+	proposal := s.proposals[id]
+	proposal.State = spine.WorkItemProposalStateAccepted
+	proposal.AcceptedBy = &acceptedBy
+	acceptedAt = acceptedAt.UTC()
+	proposal.AcceptedAt = &acceptedAt
+	proposal.UpdatedAt = acceptedAt
+	s.proposals[id] = proposal
+	return nil
+}
+
+type fakeWorkItemStore struct {
+	items              map[spine.WorkItemID]spine.WorkItem
+	byApprovedContract map[spine.ApprovedContractID][]spine.WorkItemID
+}
+
+func newFakeWorkItemStore() *fakeWorkItemStore {
+	return &fakeWorkItemStore{
+		items:              map[spine.WorkItemID]spine.WorkItem{},
+		byApprovedContract: map[spine.ApprovedContractID][]spine.WorkItemID{},
+	}
+}
+
+func (s *fakeWorkItemStore) Create(_ context.Context, item spine.WorkItem) error {
+	s.items[item.ID] = item
+	s.byApprovedContract[item.ApprovedContractID] = append(s.byApprovedContract[item.ApprovedContractID], item.ID)
+	return nil
+}
+
+func (s *fakeWorkItemStore) Get(_ context.Context, id spine.WorkItemID) (spine.WorkItem, bool, error) {
+	item, ok := s.items[id]
+	return item, ok, nil
+}
+
+func (s *fakeWorkItemStore) GetByApprovedContractID(_ context.Context, id spine.ApprovedContractID) (spine.WorkItem, bool, error) {
+	itemIDs := s.byApprovedContract[id]
+	if len(itemIDs) == 0 {
+		return spine.WorkItem{}, false, nil
+	}
+	item, ok := s.items[itemIDs[0]]
+	return item, ok, nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func validApprovedContract() spine.ApprovedContract {
@@ -142,7 +324,7 @@ func validApprovedContract() spine.ApprovedContract {
 	}
 }
 
-func storeContractForApproved(t *testing.T, contracts *store.ContractStore, approved spine.ApprovedContract) {
+func storeContractForApproved(t *testing.T, contracts *fakeContractStore, approved spine.ApprovedContract) {
 	t.Helper()
 	seedID := approved.ContractSeedID
 	draftID := approved.ContractDraftID

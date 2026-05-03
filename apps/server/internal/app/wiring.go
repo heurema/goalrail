@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
@@ -13,7 +12,6 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
@@ -50,53 +48,39 @@ type workItemStore interface {
 func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	healthHandler := health.NewHandler()
 	versionHandler := version.NewHandler()
-	var intakeStore intake.Store = store.NewIntakeStore()
-	var goals goalStore = store.NewGoalStore()
-	var clarificationStore clarification.Store = store.NewClarificationStore()
-	var clarificationAnswerStore clarification.AnswerStore = store.NewClarificationAnswerStore()
-	var clarificationOptions []clarification.Option
-	var contracts contractStore = store.NewContractStore()
-	var contractSeedStore contractseed.Store = store.NewContractSeedStore()
-	var contractDraftStore contractdraft.Store = store.NewContractDraftStore()
-	var approvedContractStore approvedcontract.Store = store.NewApprovedContractStore()
-	var workItemStore workItemStore = store.NewWorkItemStore()
-	var workItemPlanStore workitemplan.PlanStore = store.NewWorkItemPlanStore()
-	var workItemPlanProposalStore workitemplan.ProposalStore = store.NewWorkItemPlanProposalStore()
-	var acceptanceTransaction workitemplan.AcceptanceTransaction
-	var events eventAppender = eventlog.NewEventLog()
-	var authStore auth.Store
 
-	var projectContext intake.ProjectContextResolver
-	cleanup := func() {}
-	if strings.TrimSpace(cfg.DatabaseDSN) != "" {
-		pool, err := postgres.OpenPool(ctx, cfg.DatabaseDSN)
-		if err != nil {
-			return nil, nil, fmt.Errorf("open project context db: %w", err)
-		}
-		projectContext = store.NewProjectContextStore(pool)
-		intakeStore = store.NewPostgresTransactionalIntakeStore(pool)
-		goals = store.NewPostgresTransactionalGoalStore(pool)
-		clarificationStore = store.NewPostgresClarificationRequestStore(pool)
-		clarificationAnswerStore = store.NewPostgresClarificationAnswerStore(pool)
-		clarificationTransactions := store.NewPostgresTransactionalClarificationStore(pool)
-		clarificationOptions = append(
-			clarificationOptions,
-			clarification.WithRequestCreationTransaction(clarificationTransactions),
-			clarification.WithAnswerRecordingTransaction(clarificationTransactions),
-			clarification.WithAnswerApplicationTransaction(clarificationTransactions),
-		)
-		contracts = store.NewPostgresContractStore(pool)
-		contractSeedStore = store.NewPostgresTransactionalContractSeedStore(pool)
-		contractDraftStore = store.NewPostgresTransactionalContractDraftStore(pool)
-		approvedContractStore = store.NewPostgresTransactionalApprovedContractStore(pool)
-		workItemStore = store.NewPostgresTransactionalWorkItemStore(pool)
-		workItemPlanStore = store.NewPostgresWorkItemPlanStore(pool)
-		workItemPlanProposalStore = store.NewPostgresWorkItemPlanProposalStore(pool)
-		acceptanceTransaction = store.NewPostgresTransactionalWorkItemPlanStore(pool)
-		events = store.NewPostgresEventLog(pool)
-		authStore = store.NewPostgresAuthStore(pool)
-		cleanup = pool.Close
+	if !cfg.DatabaseConfigured() {
+		router := httpserver.NewRouter(databaseUnavailableRouteHandlers(healthHandler, versionHandler))
+		return httpserver.NewServer(cfg.Addr, router), func() {}, nil
 	}
+
+	pool, err := postgres.OpenPool(ctx, cfg.Database)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open project context db: %w", err)
+	}
+	cleanup := pool.Close
+
+	projectContext := store.NewProjectContextStore(pool)
+	intakeStore := store.NewPostgresTransactionalIntakeStore(pool)
+	goals := store.NewPostgresTransactionalGoalStore(pool)
+	clarificationStore := store.NewPostgresClarificationRequestStore(pool)
+	clarificationAnswerStore := store.NewPostgresClarificationAnswerStore(pool)
+	clarificationTransactions := store.NewPostgresTransactionalClarificationStore(pool)
+	clarificationOptions := []clarification.Option{
+		clarification.WithRequestCreationTransaction(clarificationTransactions),
+		clarification.WithAnswerRecordingTransaction(clarificationTransactions),
+		clarification.WithAnswerApplicationTransaction(clarificationTransactions),
+	}
+	contracts := store.NewPostgresContractStore(pool)
+	contractSeedStore := store.NewPostgresTransactionalContractSeedStore(pool)
+	contractDraftStore := store.NewPostgresTransactionalContractDraftStore(pool)
+	approvedContractStore := store.NewPostgresTransactionalApprovedContractStore(pool)
+	workItemStore := store.NewPostgresTransactionalWorkItemStore(pool)
+	workItemPlanStore := store.NewPostgresWorkItemPlanStore(pool)
+	workItemPlanProposalStore := store.NewPostgresWorkItemPlanProposalStore(pool)
+	acceptanceTransaction := store.NewPostgresTransactionalWorkItemPlanStore(pool)
+	events := store.NewPostgresEventLog(pool)
+	authStore := store.NewPostgresAuthStore(pool)
 
 	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
@@ -107,10 +91,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	contractSeedService := contractseed.NewService(goals, contracts, contractSeedStore, events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
 	contractDraftService := contractdraft.NewService(contractSeedStore, contracts, contractDraftStore, events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contracts, approvedContractStore, events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
-	contractOptions := []contract.Option{}
-	if runner, ok := contractSeedStore.(contract.TransactionRunner); ok {
-		contractOptions = append(contractOptions, contract.WithTransactionRunner(runner))
-	}
+	contractOptions := []contract.Option{contract.WithTransactionRunner(contractSeedStore)}
 	contractService := contract.NewService(contracts, contractSeedService, contractDraftService, approvedContractService, contractOptions...)
 	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(workItemStore)
@@ -154,4 +135,36 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	})
 
 	return httpserver.NewServer(cfg.Addr, router), cleanup, nil
+}
+
+func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHandler http.Handler) httpserver.RouteHandlers {
+	unavailable := httpserver.DatabaseNotConfiguredHandler()
+	return httpserver.RouteHandlers{
+		Livez:                     http.HandlerFunc(healthHandler.Livez),
+		Readyz:                    http.HandlerFunc(healthHandler.Readyz),
+		Version:                   versionHandler,
+		AuthLogin:                 unavailable,
+		AuthRefresh:               unavailable,
+		AuthChangePassword:        unavailable,
+		AuthLogout:                unavailable,
+		Me:                        unavailable,
+		IntakeSubmit:              unavailable,
+		IntakeGet:                 unavailable,
+		IntakePromote:             unavailable,
+		GoalReadiness:             unavailable,
+		GoalClarificationRequests: unavailable,
+		ContractCreate:            unavailable,
+		ContractGet:               unavailable,
+		ContractUpdate:            unavailable,
+		ContractSubmit:            unavailable,
+		ContractApprove:           unavailable,
+		ContractPlans:             unavailable,
+		PlanGet:                   unavailable,
+		PlanProposals:             unavailable,
+		ProposalGet:               unavailable,
+		ProposalAcceptance:        unavailable,
+		TaskGet:                   unavailable,
+		ClarificationAnswers:      unavailable,
+		ClarificationAnswerApply:  unavailable,
+	}
 }

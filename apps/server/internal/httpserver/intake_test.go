@@ -15,12 +15,10 @@ import (
 	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
@@ -43,18 +41,18 @@ const validIntakeJSON = `{
 
 type testServerDeps struct {
 	router            http.Handler
-	intakes           *store.IntakeStore
-	goals             *store.GoalStore
-	clarifications    *store.ClarificationStore
-	answers           *store.ClarificationAnswerStore
-	contracts         *store.ContractStore
-	contractSeeds     *store.ContractSeedStore
-	contractDrafts    *store.ContractDraftStore
-	approvedContracts *store.ApprovedContractStore
-	workItems         *store.WorkItemStore
-	workItemPlans     *store.WorkItemPlanStore
-	workItemProposals *store.WorkItemPlanProposalStore
-	events            *eventlog.EventLog
+	intakes           *fakeIntakeStore
+	goals             *fakeGoalStore
+	clarifications    *fakeClarificationStore
+	answers           *fakeClarificationAnswerStore
+	contracts         *fakeContractStore
+	contractSeeds     *fakeContractSeedStore
+	contractDrafts    *fakeContractDraftStore
+	approvedContracts *fakeApprovedContractStore
+	workItems         *fakeWorkItemStore
+	workItemPlans     *fakeWorkItemPlanStore
+	workItemProposals *fakeWorkItemPlanProposalStore
+	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
 
@@ -1245,18 +1243,18 @@ func testServer(t *testing.T) testServerDeps {
 func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver) testServerDeps {
 	t.Helper()
 
-	intakeStore := store.NewIntakeStore()
-	goalStore := store.NewGoalStore()
-	clarificationStore := store.NewClarificationStore()
-	answerStore := store.NewClarificationAnswerStore()
-	contractStore := store.NewContractStore()
-	contractSeedStore := store.NewContractSeedStore()
-	contractDraftStore := store.NewContractDraftStore()
-	approvedContractStore := store.NewApprovedContractStore()
-	workItemStore := store.NewWorkItemStore()
-	workItemPlanStore := store.NewWorkItemPlanStore()
-	workItemPlanProposalStore := store.NewWorkItemPlanProposalStore()
-	events := eventlog.NewEventLog()
+	intakeStore := newFakeIntakeStore()
+	goalStore := newFakeGoalStore()
+	clarificationStore := newFakeClarificationStore()
+	answerStore := newFakeClarificationAnswerStore()
+	contractStore := newFakeContractStore()
+	contractSeedStore := newFakeContractSeedStore()
+	contractDraftStore := newFakeContractDraftStore()
+	approvedContractStore := newFakeApprovedContractStore()
+	workItemStore := newFakeWorkItemStore()
+	workItemPlanStore := newFakeWorkItemPlanStore()
+	workItemPlanProposalStore := newFakeWorkItemPlanProposalStore()
+	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	service := intake.NewService(intakeStore, resolver, events, fixedClock{now: testTime()}, ids)
 	intakeHandler := httpserver.NewIntakeHandler(service)
@@ -1290,6 +1288,562 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 		events:            events,
 		idFactory:         ids,
 	}
+}
+
+type fakeIntakeStore struct {
+	records map[spine.IntakeID]spine.IntakeRecord
+}
+
+func newFakeIntakeStore() *fakeIntakeStore {
+	return &fakeIntakeStore{records: map[spine.IntakeID]spine.IntakeRecord{}}
+}
+
+func (s *fakeIntakeStore) Create(_ context.Context, record spine.IntakeRecord) error {
+	s.records[record.ID] = record
+	return nil
+}
+
+func (s *fakeIntakeStore) Get(_ context.Context, id spine.IntakeID) (spine.IntakeRecord, bool, error) {
+	record, ok := s.records[id]
+	return record, ok, nil
+}
+
+type fakeGoalStore struct {
+	goals    map[spine.GoalID]spine.Goal
+	byIntake map[spine.IntakeID]spine.GoalID
+}
+
+func newFakeGoalStore() *fakeGoalStore {
+	return &fakeGoalStore{
+		goals:    map[spine.GoalID]spine.Goal{},
+		byIntake: map[spine.IntakeID]spine.GoalID{},
+	}
+}
+
+func (s *fakeGoalStore) Create(_ context.Context, goal spine.Goal) error {
+	s.goals[goal.ID] = cloneGoal(goal)
+	s.byIntake[goal.IntakeID] = goal.ID
+	return nil
+}
+
+func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	return cloneGoal(goal), ok, nil
+}
+
+func (s *fakeGoalStore) GetByIntakeID(_ context.Context, id spine.IntakeID) (spine.Goal, bool, error) {
+	goalID, ok := s.byIntake[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	goal, ok := s.goals[goalID]
+	return cloneGoal(goal), ok, nil
+}
+
+func (s *fakeGoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	goal.State = state
+	goal.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), reasonCodes...)
+	s.goals[id] = cloneGoal(goal)
+	return cloneGoal(goal), true, nil
+}
+
+func (s *fakeGoalStore) UpdateHints(_ context.Context, id spine.GoalID, update spine.GoalHintUpdate) (spine.Goal, bool, error) {
+	goal, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	if update.Summary != nil {
+		goal.Summary = *update.Summary
+	}
+	if update.ScopeHint != nil {
+		goal.ScopeHint = *update.ScopeHint
+	}
+	if update.AcceptanceHint != nil {
+		goal.AcceptanceHint = *update.AcceptanceHint
+	}
+	if update.IntentOwner != nil {
+		goal.IntentOwner = *update.IntentOwner
+	}
+	s.goals[id] = cloneGoal(goal)
+	return cloneGoal(goal), true, nil
+}
+
+func cloneGoal(goal spine.Goal) spine.Goal {
+	goal.SourceRefs = append([]spine.SourceRef(nil), goal.SourceRefs...)
+	goal.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), goal.LastReadinessReasonCodes...)
+	return goal
+}
+
+type fakeClarificationStore struct {
+	requests   map[spine.ClarificationRequestID]spine.ClarificationRequest
+	openByGoal map[spine.GoalID]spine.ClarificationRequestID
+}
+
+func newFakeClarificationStore() *fakeClarificationStore {
+	return &fakeClarificationStore{
+		requests:   map[spine.ClarificationRequestID]spine.ClarificationRequest{},
+		openByGoal: map[spine.GoalID]spine.ClarificationRequestID{},
+	}
+}
+
+func (s *fakeClarificationStore) Create(_ context.Context, request spine.ClarificationRequest) error {
+	s.requests[request.ID] = cloneClarificationRequest(request)
+	if request.State == spine.ClarificationRequestStateOpen {
+		s.openByGoal[request.GoalID] = request.ID
+	}
+	return nil
+}
+
+func (s *fakeClarificationStore) Get(_ context.Context, id spine.ClarificationRequestID) (spine.ClarificationRequest, bool, error) {
+	request, ok := s.requests[id]
+	return cloneClarificationRequest(request), ok, nil
+}
+
+func (s *fakeClarificationStore) GetOpenByGoalID(_ context.Context, id spine.GoalID) (spine.ClarificationRequest, bool, error) {
+	requestID, ok := s.openByGoal[id]
+	if !ok {
+		return spine.ClarificationRequest{}, false, nil
+	}
+	request, ok := s.requests[requestID]
+	return cloneClarificationRequest(request), ok, nil
+}
+
+func (s *fakeClarificationStore) UpdateState(_ context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+	request, ok := s.requests[id]
+	if !ok {
+		return spine.ClarificationRequest{}, false, nil
+	}
+	if request.State == spine.ClarificationRequestStateOpen && state != spine.ClarificationRequestStateOpen {
+		delete(s.openByGoal, request.GoalID)
+	}
+	request.State = state
+	s.requests[id] = cloneClarificationRequest(request)
+	if state == spine.ClarificationRequestStateOpen {
+		s.openByGoal[request.GoalID] = id
+	}
+	return cloneClarificationRequest(request), true, nil
+}
+
+func cloneClarificationRequest(request spine.ClarificationRequest) spine.ClarificationRequest {
+	request.ReasonCodes = append([]spine.GoalReadinessReasonCode(nil), request.ReasonCodes...)
+	request.Questions = append([]spine.ClarificationQuestion(nil), request.Questions...)
+	if request.Target.ActorRef != nil {
+		actor := *request.Target.ActorRef
+		request.Target.ActorRef = &actor
+	}
+	return request
+}
+
+type fakeClarificationAnswerStore struct {
+	answers   map[spine.ClarificationAnswerID]spine.ClarificationAnswer
+	byRequest map[spine.ClarificationRequestID]spine.ClarificationAnswerID
+	applied   map[spine.ClarificationAnswerID]bool
+}
+
+func newFakeClarificationAnswerStore() *fakeClarificationAnswerStore {
+	return &fakeClarificationAnswerStore{
+		answers:   map[spine.ClarificationAnswerID]spine.ClarificationAnswer{},
+		byRequest: map[spine.ClarificationRequestID]spine.ClarificationAnswerID{},
+		applied:   map[spine.ClarificationAnswerID]bool{},
+	}
+}
+
+func (s *fakeClarificationAnswerStore) Create(_ context.Context, answer spine.ClarificationAnswer) error {
+	s.answers[answer.ID] = cloneClarificationAnswer(answer)
+	s.byRequest[answer.RequestID] = answer.ID
+	return nil
+}
+
+func (s *fakeClarificationAnswerStore) Get(_ context.Context, id spine.ClarificationAnswerID) (spine.ClarificationAnswer, bool, error) {
+	answer, ok := s.answers[id]
+	return cloneClarificationAnswer(answer), ok, nil
+}
+
+func (s *fakeClarificationAnswerStore) GetByRequestID(_ context.Context, id spine.ClarificationRequestID) (spine.ClarificationAnswer, bool, error) {
+	answerID, ok := s.byRequest[id]
+	if !ok {
+		return spine.ClarificationAnswer{}, false, nil
+	}
+	answer, ok := s.answers[answerID]
+	return cloneClarificationAnswer(answer), ok, nil
+}
+
+func (s *fakeClarificationAnswerStore) MarkApplied(_ context.Context, id spine.ClarificationAnswerID, _ spine.ActorRef, _ time.Time) (bool, error) {
+	if s.applied[id] {
+		return false, nil
+	}
+	s.applied[id] = true
+	return true, nil
+}
+
+func cloneClarificationAnswer(answer spine.ClarificationAnswer) spine.ClarificationAnswer {
+	answer.Answers = append([]spine.ClarificationAnswerItem(nil), answer.Answers...)
+	return answer
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+	byGoal    map[spine.GoalID]spine.ContractID
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{
+		contracts: map[spine.ContractID]spine.Contract{},
+		byGoal:    map[spine.GoalID]spine.ContractID{},
+	}
+}
+
+func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+	s.contracts[contract.ID] = contract
+	s.byGoal[contract.GoalID] = contract.ID
+	return nil
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spine.Contract, bool, error) {
+	contractID, ok := s.byGoal[id]
+	if !ok {
+		return spine.Contract{}, false, nil
+	}
+	contract, ok := s.contracts[contractID]
+	return contract, ok, nil
+}
+
+func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	delete(s.contracts, id)
+	if s.byGoal[contract.GoalID] == id {
+		delete(s.byGoal, contract.GoalID)
+	}
+	return nil
+}
+
+func (s *fakeContractStore) MarkDraftCreated(_ context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateDraft
+	contract.CurrentDraftID = &draftID
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+func (s *fakeContractStore) MarkReadyForApproval(_ context.Context, id spine.ContractID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateReadyForApproval
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+func (s *fakeContractStore) MarkApproved(_ context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateApproved
+	contract.ApprovedSnapshotID = &approvedID
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+type fakeContractSeedStore struct {
+	seeds  map[spine.ContractSeedID]spine.ContractSeed
+	byGoal map[spine.GoalID]spine.ContractSeedID
+}
+
+func newFakeContractSeedStore() *fakeContractSeedStore {
+	return &fakeContractSeedStore{
+		seeds:  map[spine.ContractSeedID]spine.ContractSeed{},
+		byGoal: map[spine.GoalID]spine.ContractSeedID{},
+	}
+}
+
+func (s *fakeContractSeedStore) Create(_ context.Context, seed spine.ContractSeed) error {
+	s.seeds[seed.ID] = seed
+	s.byGoal[seed.GoalID] = seed.ID
+	return nil
+}
+
+func (s *fakeContractSeedStore) Get(_ context.Context, id spine.ContractSeedID) (spine.ContractSeed, bool, error) {
+	seed, ok := s.seeds[id]
+	return seed, ok, nil
+}
+
+func (s *fakeContractSeedStore) GetByGoalID(_ context.Context, id spine.GoalID) (spine.ContractSeed, bool, error) {
+	seedID, ok := s.byGoal[id]
+	if !ok {
+		return spine.ContractSeed{}, false, nil
+	}
+	seed, ok := s.seeds[seedID]
+	return seed, ok, nil
+}
+
+func (s *fakeContractSeedStore) Delete(_ context.Context, id spine.ContractSeedID) error {
+	seed, ok := s.seeds[id]
+	if !ok {
+		return nil
+	}
+	delete(s.seeds, id)
+	if s.byGoal[seed.GoalID] == id {
+		delete(s.byGoal, seed.GoalID)
+	}
+	return nil
+}
+
+type fakeContractDraftStore struct {
+	drafts map[spine.ContractDraftID]spine.ContractDraft
+	bySeed map[spine.ContractSeedID]spine.ContractDraftID
+}
+
+func newFakeContractDraftStore() *fakeContractDraftStore {
+	return &fakeContractDraftStore{
+		drafts: map[spine.ContractDraftID]spine.ContractDraft{},
+		bySeed: map[spine.ContractSeedID]spine.ContractDraftID{},
+	}
+}
+
+func (s *fakeContractDraftStore) Create(_ context.Context, draft spine.ContractDraft) error {
+	s.drafts[draft.ID] = draft
+	s.bySeed[draft.ContractSeedID] = draft.ID
+	return nil
+}
+
+func (s *fakeContractDraftStore) Update(_ context.Context, draft spine.ContractDraft) error {
+	existing, ok := s.drafts[draft.ID]
+	if !ok {
+		return nil
+	}
+	draft.ContractID = existing.ContractID
+	draft.ContractSeedID = existing.ContractSeedID
+	draft.GoalID = existing.GoalID
+	draft.RepoBindingID = existing.RepoBindingID
+	draft.State = existing.State
+	draft.CreatedAt = existing.CreatedAt
+	s.drafts[draft.ID] = draft
+	return nil
+}
+
+func (s *fakeContractDraftStore) MarkReadyForApproval(_ context.Context, draft spine.ContractDraft) error {
+	existing, ok := s.drafts[draft.ID]
+	if !ok {
+		return nil
+	}
+	existing.State = spine.ContractDraftStateReadyForApproval
+	s.drafts[draft.ID] = existing
+	return nil
+}
+
+func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID) (spine.ContractDraft, bool, error) {
+	draft, ok := s.drafts[id]
+	return draft, ok, nil
+}
+
+func (s *fakeContractDraftStore) GetByContractSeedID(_ context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
+	draftID, ok := s.bySeed[id]
+	if !ok {
+		return spine.ContractDraft{}, false, nil
+	}
+	draft, ok := s.drafts[draftID]
+	return draft, ok, nil
+}
+
+type fakeApprovedContractStore struct {
+	approved map[spine.ApprovedContractID]spine.ApprovedContract
+	byDraft  map[spine.ContractDraftID]spine.ApprovedContractID
+}
+
+func newFakeApprovedContractStore() *fakeApprovedContractStore {
+	return &fakeApprovedContractStore{
+		approved: map[spine.ApprovedContractID]spine.ApprovedContract{},
+		byDraft:  map[spine.ContractDraftID]spine.ApprovedContractID{},
+	}
+}
+
+func (s *fakeApprovedContractStore) Create(_ context.Context, approved spine.ApprovedContract) error {
+	s.approved[approved.ID] = approved
+	s.byDraft[approved.ContractDraftID] = approved.ID
+	return nil
+}
+
+func (s *fakeApprovedContractStore) Get(_ context.Context, id spine.ApprovedContractID) (spine.ApprovedContract, bool, error) {
+	approved, ok := s.approved[id]
+	return approved, ok, nil
+}
+
+func (s *fakeApprovedContractStore) GetByContractDraftID(_ context.Context, id spine.ContractDraftID) (spine.ApprovedContract, bool, error) {
+	approvedID, ok := s.byDraft[id]
+	if !ok {
+		return spine.ApprovedContract{}, false, nil
+	}
+	approved, ok := s.approved[approvedID]
+	return approved, ok, nil
+}
+
+type fakeWorkItemStore struct {
+	items              map[spine.WorkItemID]spine.WorkItem
+	byApprovedContract map[spine.ApprovedContractID][]spine.WorkItemID
+}
+
+func newFakeWorkItemStore() *fakeWorkItemStore {
+	return &fakeWorkItemStore{
+		items:              map[spine.WorkItemID]spine.WorkItem{},
+		byApprovedContract: map[spine.ApprovedContractID][]spine.WorkItemID{},
+	}
+}
+
+func (s *fakeWorkItemStore) Create(_ context.Context, item spine.WorkItem) error {
+	s.items[item.ID] = item
+	s.byApprovedContract[item.ApprovedContractID] = append(s.byApprovedContract[item.ApprovedContractID], item.ID)
+	return nil
+}
+
+func (s *fakeWorkItemStore) Get(_ context.Context, id spine.WorkItemID) (spine.WorkItem, bool, error) {
+	item, ok := s.items[id]
+	return item, ok, nil
+}
+
+func (s *fakeWorkItemStore) GetByApprovedContractID(_ context.Context, id spine.ApprovedContractID) (spine.WorkItem, bool, error) {
+	itemIDs := s.byApprovedContract[id]
+	if len(itemIDs) == 0 {
+		return spine.WorkItem{}, false, nil
+	}
+	item, ok := s.items[itemIDs[0]]
+	return item, ok, nil
+}
+
+type fakeWorkItemPlanStore struct {
+	plans      map[spine.WorkItemPlanID]spine.WorkItemPlan
+	byContract map[spine.ContractID]spine.WorkItemPlanID
+}
+
+func newFakeWorkItemPlanStore() *fakeWorkItemPlanStore {
+	return &fakeWorkItemPlanStore{
+		plans:      map[spine.WorkItemPlanID]spine.WorkItemPlan{},
+		byContract: map[spine.ContractID]spine.WorkItemPlanID{},
+	}
+}
+
+func (s *fakeWorkItemPlanStore) Create(_ context.Context, plan spine.WorkItemPlan) error {
+	s.plans[plan.ID] = plan
+	s.byContract[plan.ContractID] = plan.ID
+	return nil
+}
+
+func (s *fakeWorkItemPlanStore) Get(_ context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, bool, error) {
+	plan, ok := s.plans[id]
+	return plan, ok, nil
+}
+
+func (s *fakeWorkItemPlanStore) GetByContractID(_ context.Context, id spine.ContractID) (spine.WorkItemPlan, bool, error) {
+	planID, ok := s.byContract[id]
+	if !ok {
+		return spine.WorkItemPlan{}, false, nil
+	}
+	plan, ok := s.plans[planID]
+	return plan, ok, nil
+}
+
+func (s *fakeWorkItemPlanStore) MarkProposalSubmitted(_ context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	plan := s.plans[id]
+	plan.State = spine.WorkItemPlanStateProposalSubmitted
+	plan.UpdatedAt = updatedAt.UTC()
+	s.plans[id] = plan
+	return nil
+}
+
+func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	plan := s.plans[id]
+	plan.State = spine.WorkItemPlanStateAccepted
+	plan.UpdatedAt = updatedAt.UTC()
+	s.plans[id] = plan
+	return nil
+}
+
+type fakeWorkItemPlanProposalStore struct {
+	proposals map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
+	byPlan    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
+}
+
+func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
+	return &fakeWorkItemPlanProposalStore{
+		proposals: map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal{},
+		byPlan:    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID{},
+	}
+}
+
+func (s *fakeWorkItemPlanProposalStore) Create(_ context.Context, proposal spine.WorkItemPlanProposal) error {
+	s.proposals[proposal.ID] = proposal
+	s.byPlan[proposal.PlanID] = proposal.ID
+	return nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) Get(_ context.Context, id spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, bool, error) {
+	proposal, ok := s.proposals[id]
+	return proposal, ok, nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) GetByPlanID(_ context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlanProposal, bool, error) {
+	proposalID, ok := s.byPlan[id]
+	if !ok {
+		return spine.WorkItemPlanProposal{}, false, nil
+	}
+	proposal, ok := s.proposals[proposalID]
+	return proposal, ok, nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) MarkAccepted(_ context.Context, id spine.WorkItemPlanProposalID, acceptedBy spine.ActorRef, acceptedAt time.Time) error {
+	proposal := s.proposals[id]
+	proposal.State = spine.WorkItemProposalStateAccepted
+	proposal.AcceptedBy = &acceptedBy
+	acceptedAt = acceptedAt.UTC()
+	proposal.AcceptedAt = &acceptedAt
+	proposal.UpdatedAt = acceptedAt
+	s.proposals[id] = proposal
+	return nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func validProjectContextResolver() fakeProjectContextResolver {

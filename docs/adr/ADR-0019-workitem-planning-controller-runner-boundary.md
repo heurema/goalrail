@@ -14,8 +14,9 @@ ApprovedContract(approved) -> WorkItem(planned)
 The current server implementation now replaces the earlier simple direct
 planning prototype with public `plans` / `proposals` / `acceptance` API routes.
 The API server owns the state transitions and materializes accepted proposals
-into canonical `WorkItem(planned)` records, using Postgres when configured with
-in-memory fallback otherwise.
+into canonical `WorkItem(planned)` records using Postgres-backed durable state.
+Without database config, production product routes now return
+`database_not_configured` rather than creating in-memory canonical state.
 
 It must not become the final architecture for rich repo-aware planning.
 

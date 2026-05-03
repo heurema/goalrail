@@ -6,26 +6,26 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
+	"github.com/heurema/goalrail/apps/server/internal/config"
 	"github.com/heurema/goalrail/apps/server/internal/postgres/migrations"
 )
 
-var ErrDatabaseDSNRequired = errors.New("database DSN is required")
+var ErrDatabaseNotConfigured = errors.New("database_not_configured")
 
 const migrationsDir = "."
 
-func OpenPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
-	if dsn == "" {
-		return nil, ErrDatabaseDSNRequired
+func OpenPool(ctx context.Context, db config.DatabaseConfig) (*pgxpool.Pool, error) {
+	if !db.Configured() {
+		return nil, ErrDatabaseNotConfigured
 	}
 
-	cfg, err := pgxpool.ParseConfig(dsn)
+	cfg, err := db.PGXPoolConfig()
 	if err != nil {
-		return nil, fmt.Errorf("parse database DSN: %w", err)
+		return nil, err
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
@@ -39,20 +39,20 @@ func OpenPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	return pool, nil
 }
 
-func OpenSQLDB(dsn string) (*sql.DB, error) {
-	if dsn == "" {
-		return nil, ErrDatabaseDSNRequired
+func OpenSQLDB(db config.DatabaseConfig) (*sql.DB, error) {
+	if !db.Configured() {
+		return nil, ErrDatabaseNotConfigured
 	}
 
-	cfg, err := pgx.ParseConfig(dsn)
+	cfg, err := db.PGXConfig()
 	if err != nil {
-		return nil, fmt.Errorf("parse database DSN: %w", err)
+		return nil, err
 	}
 	return stdlib.OpenDB(*cfg), nil
 }
 
-func MigrateUp(ctx context.Context, dsn string) error {
-	db, err := OpenSQLDB(dsn)
+func MigrateUp(ctx context.Context, cfg config.DatabaseConfig) error {
+	db, err := OpenSQLDB(cfg)
 	if err != nil {
 		return err
 	}

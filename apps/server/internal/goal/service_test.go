@@ -5,19 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"testing"
-	"time"
-
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
+	"testing"
+	"time"
 )
 
 func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
-	intakes := store.NewIntakeStore()
-	goals := store.NewGoalStore()
-	events := eventlog.NewEventLog()
+	intakes := newFakeIntakeStore()
+	goals := newFakeGoalStore()
+	events := newFakeEventLog()
 	service := goal.NewService(intakes, goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
@@ -118,8 +115,8 @@ func TestServicePromoteFromIntakeAppendsGoalEvents(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeUsesTitleAsSummaryWhenBodyEmpty(t *testing.T) {
-	intakes := store.NewIntakeStore()
-	service := goal.NewService(intakes, store.NewGoalStore(), eventlog.NewEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	intakes := newFakeIntakeStore()
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	intakeRecord.Body = ""
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
@@ -136,9 +133,9 @@ func TestServicePromoteFromIntakeUsesTitleAsSummaryWhenBodyEmpty(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeRejectsDuplicatePromotion(t *testing.T) {
-	intakes := store.NewIntakeStore()
-	goals := store.NewGoalStore()
-	events := eventlog.NewEventLog()
+	intakes := newFakeIntakeStore()
+	goals := newFakeGoalStore()
+	events := newFakeEventLog()
 	service := goal.NewService(intakes, goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	intakeRecord := validIntakeRecord()
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
@@ -158,7 +155,7 @@ func TestServicePromoteFromIntakeRejectsDuplicatePromotion(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeUnknownIntake(t *testing.T) {
-	service := goal.NewService(store.NewIntakeStore(), store.NewGoalStore(), eventlog.NewEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(newFakeIntakeStore(), newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), "missing")
 	if !errors.Is(err, goal.ErrIntakeNotFound) {
@@ -167,13 +164,13 @@ func TestServicePromoteFromIntakeUnknownIntake(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeRejectsNonReceivedIntake(t *testing.T) {
-	intakes := store.NewIntakeStore()
+	intakes := newFakeIntakeStore()
 	intakeRecord := validIntakeRecord()
 	intakeRecord.State = "rejected"
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
 	}
-	service := goal.NewService(intakes, store.NewGoalStore(), eventlog.NewEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), intakeRecord.ID)
 	if !errors.Is(err, goal.ErrInvalidIntakeState) {
@@ -182,13 +179,13 @@ func TestServicePromoteFromIntakeRejectsNonReceivedIntake(t *testing.T) {
 }
 
 func TestServicePromoteFromIntakeValidatesStoredIntake(t *testing.T) {
-	intakes := store.NewIntakeStore()
+	intakes := newFakeIntakeStore()
 	intakeRecord := validIntakeRecord()
 	intakeRecord.RepoBindingID = ""
 	if err := intakes.Create(context.Background(), intakeRecord); err != nil {
 		t.Fatalf("Create intake: %v", err)
 	}
-	service := goal.NewService(intakes, store.NewGoalStore(), eventlog.NewEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
+	service := goal.NewService(intakes, newFakeGoalStore(), newFakeEventLog(), fixedClock{now: testTime()}, &sequenceIDs{})
 
 	_, err := service.PromoteFromIntake(context.Background(), intakeRecord.ID)
 	var validationErr *goal.ValidationError
@@ -534,13 +531,106 @@ func validGoal() spine.Goal {
 	}
 }
 
-func readinessService(t *testing.T) (*goal.Service, *store.GoalStore, *eventlog.EventLog) {
+func readinessService(t *testing.T) (*goal.Service, *fakeGoalStore, *fakeEventLog) {
 	t.Helper()
 
-	goals := store.NewGoalStore()
-	events := eventlog.NewEventLog()
-	service := goal.NewService(store.NewIntakeStore(), goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	goals := newFakeGoalStore()
+	events := newFakeEventLog()
+	service := goal.NewService(newFakeIntakeStore(), goals, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, events
+}
+
+type fakeIntakeStore struct {
+	records map[spine.IntakeID]spine.IntakeRecord
+}
+
+func newFakeIntakeStore() *fakeIntakeStore {
+	return &fakeIntakeStore{records: map[spine.IntakeID]spine.IntakeRecord{}}
+}
+
+func (s *fakeIntakeStore) Create(_ context.Context, record spine.IntakeRecord) error {
+	s.records[record.ID] = record
+	return nil
+}
+
+func (s *fakeIntakeStore) Get(_ context.Context, id spine.IntakeID) (spine.IntakeRecord, bool, error) {
+	record, ok := s.records[id]
+	return record, ok, nil
+}
+
+type fakeGoalStore struct {
+	goals    map[spine.GoalID]spine.Goal
+	byIntake map[spine.IntakeID]spine.GoalID
+}
+
+func newFakeGoalStore() *fakeGoalStore {
+	return &fakeGoalStore{
+		goals:    map[spine.GoalID]spine.Goal{},
+		byIntake: map[spine.IntakeID]spine.GoalID{},
+	}
+}
+
+func (s *fakeGoalStore) Create(_ context.Context, created spine.Goal) error {
+	s.goals[created.ID] = cloneGoal(created)
+	s.byIntake[created.IntakeID] = created.ID
+	return nil
+}
+
+func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, bool, error) {
+	created, ok := s.goals[id]
+	return cloneGoal(created), ok, nil
+}
+
+func (s *fakeGoalStore) GetByIntakeID(_ context.Context, id spine.IntakeID) (spine.Goal, bool, error) {
+	goalID, ok := s.byIntake[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	created, ok := s.goals[goalID]
+	return cloneGoal(created), ok, nil
+}
+
+func (s *fakeGoalStore) UpdateReadiness(_ context.Context, id spine.GoalID, state spine.GoalState, reasonCodes []spine.GoalReadinessReasonCode) (spine.Goal, bool, error) {
+	updated, ok := s.goals[id]
+	if !ok {
+		return spine.Goal{}, false, nil
+	}
+	updated.State = state
+	updated.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), reasonCodes...)
+	s.goals[id] = cloneGoal(updated)
+	return cloneGoal(updated), true, nil
+}
+
+func cloneGoal(created spine.Goal) spine.Goal {
+	created.SourceRefs = append([]spine.SourceRef(nil), created.SourceRefs...)
+	created.LastReadinessReasonCodes = append([]spine.GoalReadinessReasonCode(nil), created.LastReadinessReasonCodes...)
+	return created
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func hasReason(reasons []spine.GoalReadinessReasonCode, want spine.GoalReadinessReasonCode) bool {

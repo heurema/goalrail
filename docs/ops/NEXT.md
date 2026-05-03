@@ -53,6 +53,13 @@
   exists for login, refresh, password change, logout, and current-user profile;
   CLI login, browser loopback, and web UI remain unimplemented.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
+- `apps/server` product/auth APIs now require structured Postgres database
+  configuration for durable state; health/version stay available without DB,
+  while product/auth routes return `503 database_not_configured` when DB config
+  is absent. Postgres-backed stores are the only real server persistence
+  implementation; obsolete map-backed server stores were removed from
+  `apps/server/internal/store`, the old in-memory event log helper was removed,
+  and tests use package-local fakes where needed.
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
 

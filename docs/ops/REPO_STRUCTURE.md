@@ -60,7 +60,8 @@ Use it together with:
 | Server ContractDraft creation/update/ready_for_approval service logic | `apps/server/internal/contractdraft/` |
 | Server ApprovedContract approval service logic | `apps/server/internal/approvedcontract/` |
 | Server WorkItem planning service logic | `apps/server/internal/workitem/` |
-| Server in-memory stores and event logs | `apps/server/internal/store/` and `apps/server/internal/eventlog/` |
+| Server Postgres stores and store error sentinels | `apps/server/internal/store/` |
+| Server test-local fakes | The relevant `*_test.go` package file |
 | Web workspace package files | `apps/web/` |
 | Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |

@@ -10,9 +10,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 )
 
 func TestServiceCreatesContractDraftFromSeed(t *testing.T) {
@@ -751,15 +749,157 @@ func TestServiceReadyForApprovalDoesNotAppendApprovalWorkGateProofEvents(t *test
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func draftService(t *testing.T) (*contractdraft.Service, *store.ContractSeedStore, *store.ContractStore, *store.ContractDraftStore, *eventlog.EventLog) {
+func draftService(t *testing.T) (*contractdraft.Service, *fakeContractSeedStore, *fakeContractStore, *fakeContractDraftStore, *fakeEventLog) {
 	t.Helper()
 
-	seeds := store.NewContractSeedStore()
-	contracts := store.NewContractStore()
-	drafts := store.NewContractDraftStore()
-	events := eventlog.NewEventLog()
+	seeds := newFakeContractSeedStore()
+	contracts := newFakeContractStore()
+	drafts := newFakeContractDraftStore()
+	events := newFakeEventLog()
 	service := contractdraft.NewService(seeds, contracts, drafts, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, seeds, contracts, drafts, events
+}
+
+type fakeContractSeedStore struct {
+	seeds map[spine.ContractSeedID]spine.ContractSeed
+}
+
+func newFakeContractSeedStore() *fakeContractSeedStore {
+	return &fakeContractSeedStore{seeds: map[spine.ContractSeedID]spine.ContractSeed{}}
+}
+
+func (s *fakeContractSeedStore) Create(_ context.Context, seed spine.ContractSeed) error {
+	s.seeds[seed.ID] = seed
+	return nil
+}
+
+func (s *fakeContractSeedStore) Get(_ context.Context, id spine.ContractSeedID) (spine.ContractSeed, bool, error) {
+	seed, ok := s.seeds[id]
+	return seed, ok, nil
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{contracts: map[spine.ContractID]spine.Contract{}}
+}
+
+func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+	s.contracts[contract.ID] = contract
+	return nil
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+func (s *fakeContractStore) MarkDraftCreated(_ context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateDraft
+	contract.CurrentDraftID = &draftID
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+func (s *fakeContractStore) MarkReadyForApproval(_ context.Context, id spine.ContractID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateReadyForApproval
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+type fakeContractDraftStore struct {
+	drafts map[spine.ContractDraftID]spine.ContractDraft
+	bySeed map[spine.ContractSeedID]spine.ContractDraftID
+}
+
+func newFakeContractDraftStore() *fakeContractDraftStore {
+	return &fakeContractDraftStore{
+		drafts: map[spine.ContractDraftID]spine.ContractDraft{},
+		bySeed: map[spine.ContractSeedID]spine.ContractDraftID{},
+	}
+}
+
+func (s *fakeContractDraftStore) Create(_ context.Context, draft spine.ContractDraft) error {
+	s.drafts[draft.ID] = draft
+	s.bySeed[draft.ContractSeedID] = draft.ID
+	return nil
+}
+
+func (s *fakeContractDraftStore) Update(_ context.Context, draft spine.ContractDraft) error {
+	existing, ok := s.drafts[draft.ID]
+	if !ok {
+		return errors.New("contract draft not found")
+	}
+	draft.ContractID = existing.ContractID
+	draft.ContractSeedID = existing.ContractSeedID
+	draft.GoalID = existing.GoalID
+	draft.RepoBindingID = existing.RepoBindingID
+	draft.State = existing.State
+	draft.CreatedAt = existing.CreatedAt
+	s.drafts[draft.ID] = draft
+	return nil
+}
+
+func (s *fakeContractDraftStore) MarkReadyForApproval(_ context.Context, draft spine.ContractDraft) error {
+	existing, ok := s.drafts[draft.ID]
+	if !ok {
+		return errors.New("contract draft not found")
+	}
+	existing.State = spine.ContractDraftStateReadyForApproval
+	s.drafts[draft.ID] = existing
+	return nil
+}
+
+func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID) (spine.ContractDraft, bool, error) {
+	draft, ok := s.drafts[id]
+	return draft, ok, nil
+}
+
+func (s *fakeContractDraftStore) GetByContractSeedID(_ context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
+	draftID, ok := s.bySeed[id]
+	if !ok {
+		return spine.ContractDraft{}, false, nil
+	}
+	draft, ok := s.drafts[draftID]
+	return draft, ok, nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func updateRequest(t *testing.T, changesJSON string) spine.ContractDraftUpdateRequest {
@@ -829,7 +969,7 @@ func validDraftableSeed() spine.ContractSeed {
 	}
 }
 
-func storeSeedWithContract(t *testing.T, seeds *store.ContractSeedStore, contracts *store.ContractStore, seed spine.ContractSeed) {
+func storeSeedWithContract(t *testing.T, seeds *fakeContractSeedStore, contracts *fakeContractStore, seed spine.ContractSeed) {
 	t.Helper()
 	if err := contracts.Create(context.Background(), contractForSeed(seed)); err != nil {
 		t.Fatalf("Create contract: %v", err)

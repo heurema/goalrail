@@ -10,9 +10,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
-	"github.com/heurema/goalrail/apps/server/internal/eventlog"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
-	"github.com/heurema/goalrail/apps/server/internal/store"
 )
 
 func TestServiceApprovesReadyContractDraft(t *testing.T) {
@@ -344,15 +342,121 @@ func TestServiceDoesNotAppendWorkGateProofEvents(t *testing.T) {
 	assertNoForbiddenEvents(t, events.Events())
 }
 
-func approvalService(t *testing.T) (*approvedcontract.Service, *store.ContractStore, *store.ContractDraftStore, *store.ApprovedContractStore, *eventlog.EventLog) {
+func approvalService(t *testing.T) (*approvedcontract.Service, *fakeContractStore, *fakeContractDraftStore, *fakeApprovedContractStore, *fakeEventLog) {
 	t.Helper()
 
-	contracts := store.NewContractStore()
-	drafts := store.NewContractDraftStore()
-	approved := store.NewApprovedContractStore()
-	events := eventlog.NewEventLog()
+	contracts := newFakeContractStore()
+	drafts := newFakeContractDraftStore()
+	approved := newFakeApprovedContractStore()
+	events := newFakeEventLog()
 	service := approvedcontract.NewService(drafts, contracts, approved, events, fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, contracts, drafts, approved, events
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{contracts: map[spine.ContractID]spine.Contract{}}
+}
+
+func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+	s.contracts[contract.ID] = contract
+	return nil
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+func (s *fakeContractStore) MarkApproved(_ context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+	contract, ok := s.contracts[id]
+	if !ok {
+		return nil
+	}
+	contract.State = spine.ContractStateApproved
+	contract.ApprovedSnapshotID = &approvedID
+	contract.UpdatedAt = updatedAt.UTC()
+	s.contracts[id] = contract
+	return nil
+}
+
+type fakeContractDraftStore struct {
+	drafts map[spine.ContractDraftID]spine.ContractDraft
+}
+
+func newFakeContractDraftStore() *fakeContractDraftStore {
+	return &fakeContractDraftStore{drafts: map[spine.ContractDraftID]spine.ContractDraft{}}
+}
+
+func (s *fakeContractDraftStore) Create(_ context.Context, draft spine.ContractDraft) error {
+	s.drafts[draft.ID] = draft
+	return nil
+}
+
+func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID) (spine.ContractDraft, bool, error) {
+	draft, ok := s.drafts[id]
+	return draft, ok, nil
+}
+
+type fakeApprovedContractStore struct {
+	approved map[spine.ApprovedContractID]spine.ApprovedContract
+	byDraft  map[spine.ContractDraftID]spine.ApprovedContractID
+}
+
+func newFakeApprovedContractStore() *fakeApprovedContractStore {
+	return &fakeApprovedContractStore{
+		approved: map[spine.ApprovedContractID]spine.ApprovedContract{},
+		byDraft:  map[spine.ContractDraftID]spine.ApprovedContractID{},
+	}
+}
+
+func (s *fakeApprovedContractStore) Create(_ context.Context, approved spine.ApprovedContract) error {
+	s.approved[approved.ID] = approved
+	s.byDraft[approved.ContractDraftID] = approved.ID
+	return nil
+}
+
+func (s *fakeApprovedContractStore) Get(_ context.Context, id spine.ApprovedContractID) (spine.ApprovedContract, bool, error) {
+	approved, ok := s.approved[id]
+	return approved, ok, nil
+}
+
+func (s *fakeApprovedContractStore) GetByContractDraftID(_ context.Context, id spine.ContractDraftID) (spine.ApprovedContract, bool, error) {
+	approvedID, ok := s.byDraft[id]
+	if !ok {
+		return spine.ApprovedContract{}, false, nil
+	}
+	approved, ok := s.approved[approvedID]
+	return approved, ok, nil
+}
+
+type fakeEventLog struct {
+	events []spine.Event
+}
+
+func newFakeEventLog() *fakeEventLog {
+	return &fakeEventLog{}
+}
+
+func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+	l.events = append(l.events, cloneEvent(event))
+	return nil
+}
+
+func (l *fakeEventLog) Events() []spine.Event {
+	events := make([]spine.Event, len(l.events))
+	for i, event := range l.events {
+		events[i] = cloneEvent(event)
+	}
+	return events
+}
+
+func cloneEvent(event spine.Event) spine.Event {
+	event.Payload = append([]byte(nil), event.Payload...)
+	return event
 }
 
 func validReadyDraft() spine.ContractDraft {
@@ -383,7 +487,7 @@ func validReadyDraft() spine.ContractDraft {
 	}
 }
 
-func storeDraftWithContract(t *testing.T, drafts *store.ContractDraftStore, contracts *store.ContractStore, draft spine.ContractDraft) {
+func storeDraftWithContract(t *testing.T, drafts *fakeContractDraftStore, contracts *fakeContractStore, draft spine.ContractDraft) {
 	t.Helper()
 	currentSeedID := draft.ContractSeedID
 	currentDraftID := draft.ID
