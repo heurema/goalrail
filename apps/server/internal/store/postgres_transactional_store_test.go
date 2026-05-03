@@ -763,7 +763,7 @@ type recordingPostgresTransactor struct {
 	isoLevels  []pgx.TxIsoLevel
 }
 
-func (t *recordingPostgresTransactor) ExecReadCommitted(ctx context.Context, fn postgresTxFunc) error {
+func (t *recordingPostgresTransactor) RunReadCommitted(ctx context.Context, fn postgresTxFunc) error {
 	return t.WithTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
 }
 

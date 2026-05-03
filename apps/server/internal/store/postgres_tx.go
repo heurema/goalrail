@@ -24,7 +24,7 @@ type postgresTx interface {
 }
 
 type postgresTransactor interface {
-	ExecReadCommitted(ctx context.Context, fn postgresTxFunc) error
+	RunReadCommitted(ctx context.Context, fn postgresTxFunc) error
 	WithTx(ctx context.Context, opts pgx.TxOptions, fn postgresTxFunc) error
 }
 
@@ -72,7 +72,7 @@ type pgxpoolTransactor struct {
 	pool *pgxpool.Pool
 }
 
-func (t pgxpoolTransactor) ExecReadCommitted(ctx context.Context, fn postgresTxFunc) error {
+func (t pgxpoolTransactor) RunReadCommitted(ctx context.Context, fn postgresTxFunc) error {
 	return t.WithTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
 }
 
