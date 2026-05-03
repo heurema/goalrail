@@ -105,7 +105,7 @@ func (s *PostgresClarificationRequestStore) Create(ctx context.Context, created 
 		).
 		Select(selectGoalContext)
 
-	tag, err := s.execSQLTag(ctx, "create clarification request", stmt)
+	tag, err := execClarificationSQLTag(ctx, s.exec, "create clarification request", stmt)
 	if err != nil {
 		if uniqueViolationConstraint(err) == "clarification_requests_one_open_per_goal_idx" {
 			return ErrClarificationRequestAlreadyOpen
@@ -172,14 +172,11 @@ func (s *PostgresClarificationRequestStore) getOne(ctx context.Context, op strin
 }
 
 func (s *PostgresClarificationRequestStore) queryRequest(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ClarificationRequest, bool, error) {
-	if s.query == nil {
-		return spine.ClarificationRequest{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryClarificationRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.ClarificationRequest{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.ClarificationRequest{}, false, err
 	}
-	request, err := scanClarificationRequest(s.query.QueryRow(ctx, sqlText, args...))
+	request, err := scanClarificationRequest(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.ClarificationRequest{}, false, nil
@@ -236,26 +233,6 @@ func clarificationRequestColumns() []string {
 
 func returningClarificationRequestColumns() string {
 	return "RETURNING id, goal_id, state, reason_codes, questions, target, created_at"
-}
-
-func (s *PostgresClarificationRequestStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	_, err := s.execSQLTag(ctx, op, sqlizer)
-	return err
-}
-
-func (s *PostgresClarificationRequestStore) execSQLTag(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (pgconn.CommandTag, error) {
-	if s.exec == nil {
-		return pgconn.CommandTag{}, fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return pgconn.CommandTag{}, fmt.Errorf("%s SQL: %w", op, err)
-	}
-	tag, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return pgconn.CommandTag{}, fmt.Errorf("%s: %w", op, err)
-	}
-	return tag, nil
 }
 
 type PostgresClarificationAnswerStore struct {
@@ -334,7 +311,7 @@ func (s *PostgresClarificationAnswerStore) Create(ctx context.Context, created s
 		).
 		Select(selectRequestContext)
 
-	if err := s.execSQL(ctx, "create clarification answer", stmt); err != nil {
+	if err := execClarificationSQL(ctx, s.exec, "create clarification answer", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "clarification_answers_request_id_unique" {
 			return ErrClarificationAnswerAlreadyRecorded
 		}
@@ -380,7 +357,7 @@ func (s *PostgresClarificationAnswerStore) MarkApplied(ctx context.Context, id s
 		Where(squirrel.Eq{"id": answerID}).
 		Where(squirrel.Eq{"applied": false})
 
-	tag, err := s.execSQLTag(ctx, "mark clarification answer applied", stmt)
+	tag, err := execClarificationSQLTag(ctx, s.exec, "mark clarification answer applied", stmt)
 	if err != nil {
 		return false, err
 	}
@@ -397,14 +374,11 @@ func (s *PostgresClarificationAnswerStore) getOne(ctx context.Context, op string
 }
 
 func (s *PostgresClarificationAnswerStore) queryAnswer(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ClarificationAnswer, bool, error) {
-	if s.query == nil {
-		return spine.ClarificationAnswer{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryClarificationRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.ClarificationAnswer{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.ClarificationAnswer{}, false, err
 	}
-	answer, err := scanClarificationAnswer(s.query.QueryRow(ctx, sqlText, args...))
+	answer, err := scanClarificationAnswer(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.ClarificationAnswer{}, false, nil
@@ -456,20 +430,31 @@ func clarificationAnswerColumns() []string {
 	}
 }
 
-func (s *PostgresClarificationAnswerStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	_, err := s.execSQLTag(ctx, op, sqlizer)
+func queryClarificationRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
+	if query == nil {
+		return nil, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := sqlizer.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	return query.QueryRow(ctx, sqlText, args...), nil
+}
+
+func execClarificationSQL(ctx context.Context, exec postgresExecer, op string, sqlizer squirrel.Sqlizer) error {
+	_, err := execClarificationSQLTag(ctx, exec, op, sqlizer)
 	return err
 }
 
-func (s *PostgresClarificationAnswerStore) execSQLTag(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (pgconn.CommandTag, error) {
-	if s.exec == nil {
+func execClarificationSQLTag(ctx context.Context, exec postgresExecer, op string, sqlizer squirrel.Sqlizer) (pgconn.CommandTag, error) {
+	if exec == nil {
 		return pgconn.CommandTag{}, fmt.Errorf("%s executor is nil", op)
 	}
 	sqlText, args, err := sqlizer.ToSql()
 	if err != nil {
 		return pgconn.CommandTag{}, fmt.Errorf("%s SQL: %w", op, err)
 	}
-	tag, err := s.exec.Exec(ctx, sqlText, args...)
+	tag, err := exec.Exec(ctx, sqlText, args...)
 	if err != nil {
 		return pgconn.CommandTag{}, fmt.Errorf("%s: %w", op, err)
 	}
