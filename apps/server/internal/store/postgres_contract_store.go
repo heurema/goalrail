@@ -202,14 +202,11 @@ func (s *PostgresContractStore) getOne(ctx context.Context, op string, where squ
 }
 
 func (s *PostgresContractStore) queryContract(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.Contract, bool, error) {
-	if s.query == nil {
-		return spine.Contract{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.Contract{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.Contract{}, false, err
 	}
-	contract, err := scanContract(s.query.QueryRow(ctx, sqlText, args...))
+	contract, err := scanContract(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.Contract{}, false, nil
@@ -217,6 +214,17 @@ func (s *PostgresContractStore) queryContract(ctx context.Context, op string, sq
 		return spine.Contract{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return contract, true, nil
+}
+
+func queryContractLifecycleRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
+	if query == nil {
+		return nil, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := sqlizer.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	return query.QueryRow(ctx, sqlText, args...), nil
 }
 
 func scanContract(row pgx.Row) (spine.Contract, error) {
