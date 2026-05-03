@@ -35,7 +35,8 @@
   Organization. The later ADR-0023 auth API slices now add login, refresh,
   password change, logout, `/v1/me`, and the smallest CLI browser-loopback
   login code exchange; SaaS onboarding, organization creation API, and web UI
-  beyond the minimal CLI login page remain unimplemented.
+  remain unimplemented. The current server-rendered `/cli/login` page is a
+  temporary CLI auth bridge only, not the product web console login UI.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -53,7 +54,9 @@
   login, refresh, password change, logout, current-user profile, and CLI code
   exchange with S256 verifier/challenge binding; the CLI now stores token
   metadata locally after browser-loopback login. Organization / Project /
-  RepoBinding profile selection and web UI remain unimplemented.
+  RepoBinding profile selection and product web console login remain
+  unimplemented; future React console login should replace or front the
+  server-rendered CLI auth bridge.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -248,6 +251,8 @@ Done means:
   validates localhost loopback redirect targets, creates a short-lived one-time
   auth code stored by hash with S256 challenge metadata, and redirects with only
   `code` and `state`
+- ✅ the `/cli/login` HTML page is a temporary server-rendered CLI auth bridge
+  only; it is not the product web console login UI
 - ✅ `POST /v1/auth/cli/exchange` requires the matching `code_verifier`,
   consumes a valid unused code once, and returns normal access/refresh token
   metadata
@@ -262,7 +267,8 @@ Done means:
 - no admin user creation endpoint
 - no SaaS onboarding
 - no organization creation API
-- no web console login UI beyond the minimal CLI login page
+- no product web console login UI; future React console login should replace or
+  front the server-rendered CLI auth bridge
 - no runner, gate, proof, or generic queue work
 
 ## Completed backend bounded slice

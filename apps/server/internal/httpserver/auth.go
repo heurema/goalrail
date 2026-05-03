@@ -234,6 +234,10 @@ func respondHTML(w http.ResponseWriter, status int, body string) {
 	_, _ = w.Write([]byte(body))
 }
 
+// /cli/login is a temporary server-rendered CLI auth bridge for
+// `goalrail login <server_url>` localhost loopback before a React console login
+// exists. It is not the product web console login UI; future React console login
+// should replace or front this flow.
 func minimalCLILoginPage(redirectURI string, state string, codeChallenge string, message string) string {
 	messageHTML := ""
 	if strings.TrimSpace(message) != "" {
