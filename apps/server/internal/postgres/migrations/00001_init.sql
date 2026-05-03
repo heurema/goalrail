@@ -8,6 +8,40 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE user_password_credentials (
+    user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    password_hash TEXT NOT NULL,
+    must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+    password_changed_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT user_password_credentials_password_hash_check CHECK (password_hash <> '')
+);
+
+CREATE INDEX user_password_credentials_must_change_password_idx
+    ON user_password_credentials(must_change_password);
+
+CREATE TABLE user_sessions (
+    id UUID PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    refresh_token_hash TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ NULL,
+    last_used_at TIMESTAMPTZ NULL,
+    CONSTRAINT user_sessions_refresh_token_hash_unique UNIQUE (refresh_token_hash),
+    CONSTRAINT user_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> ''),
+    CONSTRAINT user_sessions_state_check CHECK (state IN ('active', 'revoked', 'expired'))
+);
+
+CREATE INDEX user_sessions_user_state_idx
+    ON user_sessions(user_id, state);
+
+CREATE INDEX user_sessions_expires_at_idx
+    ON user_sessions(expires_at);
+
 CREATE TABLE installations (
     id UUID PRIMARY KEY,
     mode TEXT NOT NULL,
@@ -574,4 +608,9 @@ DROP TABLE IF EXISTS projects;
 DROP TABLE IF EXISTS organization_memberships;
 DROP TABLE IF EXISTS organizations;
 DROP TABLE IF EXISTS installations;
+DROP INDEX IF EXISTS user_sessions_expires_at_idx;
+DROP INDEX IF EXISTS user_sessions_user_state_idx;
+DROP TABLE IF EXISTS user_sessions;
+DROP INDEX IF EXISTS user_password_credentials_must_change_password_idx;
+DROP TABLE IF EXISTS user_password_credentials;
 DROP TABLE IF EXISTS users;

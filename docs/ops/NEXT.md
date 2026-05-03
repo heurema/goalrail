@@ -44,7 +44,9 @@
   carry broad/stale permission state, server-side role checks use
   `OrganizationMembership`, and future `goalrail login` uses explicit
   `server_url`, browser localhost loopback, and a selected Organization /
-  Project / RepoBinding profile. This is documentation only.
+  Project / RepoBinding profile. The smallest credential/session foundation
+  now exists as schema, server-local types, Squirrel-backed store primitives,
+  and Argon2id PHC-style password hashing/verification only.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -107,28 +109,58 @@ Current truth:
 - no server config, deployment scripts, secrets, hostnames, IPs, ports,
   usernames, key paths, or DNS provider credentials were committed
 
-## Next backend bounded slice
+## Completed backend bounded slice
 
-### Auth schema foundation
+### Auth credential foundation
+
+Status: **DONE — smallest ADR-0023 credential/session foundation exists.**
 
 Goal:
 - implement the smallest server persistence foundation for the documented
-  ADR-0023 auth/bootstrap boundary after the Installation schema foundation.
+  ADR-0023 auth/bootstrap boundary after the Installation schema foundation,
+  plus password hashing/verification primitives explicitly scoped to this
+  slice.
 
 Done means:
-- `user_password_credentials` exists or an equivalent dedicated password
-  credential table exists outside `users`
-- `user_sessions` exists or an equivalent opaque refresh-token/session store
-  exists
-- bootstrap owner direction is represented without adding public registration
-- first-login password-change state is representable
-- refresh token state is server-owned and revocable
-- role checks remain server-side through `OrganizationMembership`
-- no login endpoints yet unless separately approved
+- ✅ `user_password_credentials` exists as a dedicated password credential
+  table outside `users`
+- ✅ `user_sessions` exists as an opaque DB-backed refresh-token/session store
+- ✅ first-login password-change state is representable
+- ✅ refresh token/session state is server-owned and revocable
+- ✅ server-local password credential, user session, and session-state types
+  exist
+- ✅ Argon2id PHC-style password hashing and verification primitives exist
+- ✅ Squirrel-backed store primitives can upsert and look up credentials and
+  sessions
+- role checks remain server-side through `OrganizationMembership` for later
+  auth API work
+- no login endpoints
 - no JWT implementation
-- no password hashing implementation unless explicitly scoped with the schema
-  slice
 - no CLI changes
+- no web UI
+- no SaaS onboarding
+- no organization creation API
+- no billing
+- no SSO/OIDC
+- no runner, gate, proof, or generic queue work
+
+## Next backend bounded slice
+
+### Auth API/bootstrap slice
+
+Goal:
+- implement the next narrow auth API/bootstrap boundary on top of the
+  credential/session primitives, without broadening into CLI or web UI.
+
+Done means:
+- bootstrap owner creation path is explicit and still maps product super admin
+  language to `OrganizationMembership(owner)`
+- admin-created user / temporary-password flow is narrowly represented if in
+  scope for the selected slice
+- login behavior is bounded to the approved API shape for this slice
+- role checks remain server-side through `OrganizationMembership`
+- no public registration
+- no CLI `goalrail login`
 - no web UI
 - no SaaS onboarding
 - no organization creation API
@@ -172,7 +204,8 @@ Done means:
 - `public_base_url` production bootstrap direction requires a normalized value without a
   trailing slash, with HTTPS except localhost/dev
 - ✅ backend paths remain organization-aware and do not bypass `organization_id`
-- no auth implementation
+- auth credential/session primitives are now covered by the separate completed
+  ADR-0023 credential foundation slice
 - no JWT implementation
 - no CLI login implementation
 - no SaaS onboarding

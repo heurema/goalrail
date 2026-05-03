@@ -34,6 +34,83 @@ func TestInitMigrationCreatesInstallationBoundary(t *testing.T) {
 	}
 }
 
+func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE user_password_credentials",
+		"user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE",
+		"password_hash TEXT NOT NULL",
+		"must_change_password BOOLEAN NOT NULL DEFAULT TRUE",
+		"password_changed_at TIMESTAMPTZ NULL",
+		"CONSTRAINT user_password_credentials_password_hash_check CHECK (password_hash <> '')",
+		"CREATE INDEX user_password_credentials_must_change_password_idx",
+		"CREATE TABLE user_sessions",
+		"id UUID PRIMARY KEY",
+		"user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE",
+		"refresh_token_hash TEXT NOT NULL",
+		"expires_at TIMESTAMPTZ NOT NULL",
+		"revoked_at TIMESTAMPTZ NULL",
+		"last_used_at TIMESTAMPTZ NULL",
+		"CONSTRAINT user_sessions_refresh_token_hash_unique UNIQUE (refresh_token_hash)",
+		"CONSTRAINT user_sessions_refresh_token_hash_check CHECK (refresh_token_hash <> '')",
+		"CONSTRAINT user_sessions_state_check CHECK (state IN ('active', 'revoked', 'expired'))",
+		"CREATE INDEX user_sessions_user_state_idx",
+		"CREATE INDEX user_sessions_expires_at_idx",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "password_hash TEXT") && strings.Contains(sql, "CREATE TABLE users") {
+		usersTable := sql[strings.Index(sql, "CREATE TABLE users"):strings.Index(sql, "CREATE TABLE user_password_credentials")]
+		if strings.Contains(usersTable, "password_hash") {
+			t.Fatalf("users table must not store password_hash")
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE users") > strings.Index(sql, "CREATE TABLE user_password_credentials") {
+		t.Fatalf("user_password_credentials must be created after users")
+	}
+	if strings.Index(sql, "CREATE TABLE users") > strings.Index(sql, "CREATE TABLE user_sessions") {
+		t.Fatalf("user_sessions must be created after users")
+	}
+	if strings.Index(sql, "CREATE TABLE user_sessions") > strings.Index(sql, "CREATE TABLE installations") {
+		t.Fatalf("auth session table should stay before installation/project context tables")
+	}
+}
+
+func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"DROP INDEX IF EXISTS user_sessions_expires_at_idx;",
+		"DROP INDEX IF EXISTS user_sessions_user_state_idx;",
+		"DROP TABLE IF EXISTS user_sessions;",
+		"DROP INDEX IF EXISTS user_password_credentials_must_change_password_idx;",
+		"DROP TABLE IF EXISTS user_password_credentials;",
+		"DROP TABLE IF EXISTS users;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration down missing %q", want)
+		}
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS user_sessions;") > strings.Index(sql, "DROP TABLE IF EXISTS users;") {
+		t.Fatalf("user_sessions must be dropped before users")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS user_password_credentials;") > strings.Index(sql, "DROP TABLE IF EXISTS users;") {
+		t.Fatalf("user_password_credentials must be dropped before users")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS organizations;") > strings.Index(sql, "DROP TABLE IF EXISTS user_sessions;") {
+		t.Fatalf("organization-owned tables must be dropped before auth tables")
+	}
+}
+
 func TestInitMigrationAllowsContractDraftReadyForApprovalState(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
