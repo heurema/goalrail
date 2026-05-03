@@ -34,6 +34,17 @@
   organization slugs, and a dev `self_hosted` Installation linked to the dev
   Organization. Auth, JWT, CLI login, SaaS onboarding, organization creation
   API, and web UI remain unimplemented.
+- ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
+  self-hosted bootstrap creates the first product super admin as
+  `OrganizationMembership(owner)`, public registration is out of MVP, admins
+  create users with backend-generated temporary passwords, first-login password
+  change is required, email invite/reset delivery is deferred, password
+  credentials should live outside `users`, access tokens should be short-lived
+  JWTs, refresh tokens should be opaque DB-backed server state, JWTs should not
+  carry broad/stale permission state, server-side role checks use
+  `OrganizationMembership`, and future `goalrail login` uses explicit
+  `server_url`, browser localhost loopback, and a selected Organization /
+  Project / RepoBinding profile. This is documentation only.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -97,6 +108,33 @@ Current truth:
   usernames, key paths, or DNS provider credentials were committed
 
 ## Next recommended bounded slice
+
+### Auth schema foundation
+
+Goal:
+- implement the smallest server persistence foundation for the documented
+  ADR-0023 auth/bootstrap boundary after the Installation schema foundation.
+
+Done means:
+- `user_password_credentials` exists or an equivalent dedicated password
+  credential table exists outside `users`
+- `user_sessions` exists or an equivalent opaque refresh-token/session store
+  exists
+- bootstrap owner direction is represented without adding public registration
+- first-login password-change state is representable
+- refresh token state is server-owned and revocable
+- role checks remain server-side through `OrganizationMembership`
+- no login endpoints yet unless separately approved
+- no JWT implementation
+- no password hashing implementation unless explicitly scoped with the schema
+  slice
+- no CLI changes
+- no web UI
+- no SaaS onboarding
+- no organization creation API
+- no billing
+- no SSO/OIDC
+- no runner, gate, proof, or generic queue work
 
 ### Pilot intake RU post-live mobile and copy QA
 
