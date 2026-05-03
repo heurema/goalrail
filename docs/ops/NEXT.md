@@ -46,7 +46,10 @@
   `server_url`, browser localhost loopback, and a selected Organization /
   Project / RepoBinding profile. The smallest credential/session foundation
   now exists as schema, server-local types, Squirrel-backed store primitives,
-  and Argon2id PHC-style password hashing/verification only.
+  and Argon2id PHC-style password hashing/verification, and
+  `goalrail-server bootstrap owner` now implements the smallest self-hosted
+  owner bootstrap command without adding login endpoints, JWTs, CLI login, or
+  web UI.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
@@ -144,6 +147,40 @@ Current truth:
 
 ## Completed backend bounded slice
 
+### Self-hosted bootstrap owner command
+
+Status: **DONE — smallest ADR-0023 owner bootstrap command exists.**
+
+Goal:
+- implement the smallest flag-based self-hosted owner bootstrap path on top of
+  the Installation and auth credential foundations.
+
+Done means:
+- ✅ `goalrail-server bootstrap owner` exists
+- ✅ required flag input covers owner email/display name, organization slug/name,
+  and public base URL
+- ✅ one `self_hosted` Installation is created or reused with normalized
+  `public_base_url`
+- ✅ one primary Organization is created or reused under that Installation
+- ✅ the first owner User is created or reused
+- ✅ `OrganizationMembership(owner)` is created or updated for that User
+- ✅ a temporary password is generated with `crypto/rand`, hashed through the
+  existing Argon2id package, stored in `user_password_credentials`, and marked
+  `must_change_password = true`
+- ✅ existing owner password credentials are not silently rotated
+- no login endpoint
+- no JWT implementation
+- no refresh/logout endpoint
+- no CLI `goalrail login`
+- no web UI
+- no SaaS onboarding
+- no organization creation API
+- no billing
+- no SSO/OIDC
+- no runner, gate, proof, or generic queue work
+
+## Completed backend bounded slice
+
 ### Auth credential foundation
 
 Status: **DONE — smallest ADR-0023 credential/session foundation exists.**
@@ -179,18 +216,17 @@ Done means:
 
 ## Next backend bounded slice
 
-### Auth API/bootstrap slice
+### Auth API/login slice
 
 Goal:
-- implement the next narrow auth API/bootstrap boundary on top of the
-  credential/session primitives, without broadening into CLI or web UI.
+- implement the next narrow auth API boundary on top of the credential/session
+  primitives and completed owner bootstrap command, without broadening into CLI
+  or web UI.
 
 Done means:
-- bootstrap owner creation path is explicit and still maps product super admin
-  language to `OrganizationMembership(owner)`
-- admin-created user / temporary-password flow is narrowly represented if in
-  scope for the selected slice
-- login behavior is bounded to the approved API shape for this slice
+- login behavior is bounded to the approved API shape for the selected slice
+- admin-created user / temporary-password flow is represented only if explicitly
+  selected for that slice
 - role checks remain server-side through `OrganizationMembership`
 - no public registration
 - no CLI `goalrail login`

@@ -34,9 +34,12 @@ documents the self-hosted user bootstrap, auth token, and browser-loopback CLI
 login direction. The smallest auth credential foundation now exists:
 `user_password_credentials`, `user_sessions`, server-local auth spine types, a
 Squirrel-backed auth store, and Argon2id PHC-style password hashing /
-verification. No login endpoints, JWT implementation, token issuance,
-refresh/logout endpoint, bootstrap owner command, CLI login, SaaS onboarding,
-organization creation API, or web UI is implemented.
+verification. `goalrail-server bootstrap owner` now creates or reuses the
+self-hosted Installation, primary Organization, first owner User, owner
+membership, and first temporary password credential without rotating existing
+credentials. No login endpoints, JWT implementation, token issuance,
+refresh/logout endpoint, CLI login, SaaS onboarding, organization creation API,
+or web UI is implemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
@@ -77,7 +80,7 @@ The project currently has:
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
-- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem `plans` / `proposals` / `acceptance` planning control-plane flow, planned task read-by-ID, EventLog persistence, auth credential/session persistence primitives, Argon2id password hashing primitives, and transactional canonical write + event append hardening when DB is configured, plus in-memory fallback when DB is not configured for the existing API flows
+- a Go server bootstrap under `apps/server` with Postgres-backed source-neutral intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem `plans` / `proposals` / `acceptance` planning control-plane flow, planned task read-by-ID, EventLog persistence, auth credential/session persistence primitives, Argon2id password hashing primitives, `goalrail-server bootstrap owner`, and transactional canonical write + event append hardening when DB is configured, plus in-memory fallback when DB is not configured for the existing API flows
 
 ## What is real now
 
@@ -175,10 +178,11 @@ The project currently has:
   checks should use server-side `OrganizationMembership`, and future
   `goalrail login` should use explicit `server_url` plus browser localhost
   loopback while storing the selected Organization / Project / RepoBinding
-  profile. The first credential/session foundation is now implemented only as
-  schema, server-local types, Squirrel-backed store primitives, and password
-  hashing/verification; no auth endpoints, JWT/access-token implementation, CLI
-  login, or web UI exists.
+  profile. The first credential/session foundation now exists as schema,
+  server-local types, Squirrel-backed store primitives, and password
+  hashing/verification, and the server now has the smallest self-hosted
+  `goalrail-server bootstrap owner` command for initial owner credentials; no
+  auth endpoints, JWT/access-token implementation, CLI login, or web UI exists.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -227,6 +231,13 @@ The project currently has:
 - server config accepts `GOALRAIL_DATABASE_DSN`
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
+- `goalrail-server bootstrap owner` applies the smallest self-hosted owner
+  bootstrap: explicit flag input, one reused or created `self_hosted`
+  Installation with normalized `public_base_url`, one reused or created primary
+  Organization, one reused or created owner User, `OrganizationMembership(owner)`,
+  and a generated temporary password credential with
+  `must_change_password = true`; existing owner credentials are not silently
+  rotated
 - the init migration creates `users`, `user_password_credentials`, `user_sessions`, `installations`, `organizations`, `organization_memberships`, `projects`, `repo_bindings`, `intake_records`, `goals`, `clarification_requests`, `clarification_answers`, `contracts`, `contract_seeds`, `contract_drafts`, `approved_contracts`, `work_item_plans`, `work_item_plan_proposals`, `work_items`, and `events` with UUID persisted ID columns for canonical entities
 - `user_password_credentials` stores password hash material outside `users` with first-login `must_change_password` state; `user_sessions` stores opaque refresh-token/session server state with `active`, `revoked`, and `expired` states plus expiry, revocation, and last-used timestamps
 - `apps/server/internal/auth/password` implements Argon2id password hashing and verification using PHC-style encoded strings with algorithm, version, memory, time, parallelism, salt, and derived key fields; empty passwords and malformed or unsupported hashes return errors
@@ -289,10 +300,11 @@ The project currently has:
 - no production repo authorization or deploy-key provisioning in the CLI
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation yet
-- no Installation bootstrap API, setup flow, or public management surface beyond the schema foundation yet
+- no Installation bootstrap API, setup flow, or public management surface beyond
+  the schema foundation and local `goalrail-server bootstrap owner` command yet
 - no login endpoints, JWT implementation, access-token issuance,
-  refresh/logout endpoint, bootstrap owner command, CLI login, SaaS onboarding,
-  organization creation API, or Goalrail product web UI yet
+  refresh/logout endpoint, CLI login, SaaS onboarding, organization creation
+  API, or Goalrail product web UI yet
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation

@@ -33,6 +33,40 @@ Installation with `public_base_url` set to `http://localhost:8080`, one linked
 organization, owner membership, project, and repo binding. It is not auth,
 onboarding, or production data.
 
+## Self-hosted owner bootstrap
+
+After applying migrations, create the first self-hosted owner with explicit
+flags:
+
+```bash
+go run ./cmd/goalrail-server bootstrap owner \
+  --email owner@example.com \
+  --display-name "Owner User" \
+  --organization-slug acme \
+  --organization-name "Acme" \
+  --public-base-url https://goalrail.example.com
+```
+
+The command creates or reuses one `self_hosted` Installation, normalizes
+`public_base_url` without a trailing slash, creates or reuses the primary
+Organization, creates or reuses the matching User, ensures an
+`OrganizationMembership(owner)`, and creates `user_password_credentials` with a
+backend-generated temporary password and `must_change_password = true`.
+
+The temporary password is printed to stdout only when a new password credential
+is created:
+
+```text
+temporary_password=<generated-password>
+```
+
+Re-running the command for an owner that already has password credentials does
+not rotate the password and prints:
+
+```text
+temporary_password_already_exists=true
+```
+
 ## Dev intake flow
 
 After migration and dev seed:
