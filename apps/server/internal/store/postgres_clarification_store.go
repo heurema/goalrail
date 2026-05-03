@@ -19,17 +19,9 @@ var (
 	errPostgresClarificationGoalNotFound = errors.New("clarification goal not found")
 )
 
-type ClarificationRequestExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type ClarificationRequestQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresClarificationRequestStore struct {
-	exec  ClarificationRequestExecer
-	query ClarificationRequestQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -38,7 +30,7 @@ func NewPostgresClarificationRequestStore(pool *pgxpool.Pool) *PostgresClarifica
 	return NewPostgresClarificationRequestStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresClarificationRequestStoreWithExecutorAndQuerier(exec ClarificationRequestExecer, query ClarificationRequestQuerier) *PostgresClarificationRequestStore {
+func NewPostgresClarificationRequestStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresClarificationRequestStore {
 	return &PostgresClarificationRequestStore{
 		exec:  exec,
 		query: query,
@@ -266,17 +258,9 @@ func (s *PostgresClarificationRequestStore) execSQLTag(ctx context.Context, op s
 	return tag, nil
 }
 
-type ClarificationAnswerExecer interface {
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
-type ClarificationAnswerQuerier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
 type PostgresClarificationAnswerStore struct {
-	exec  ClarificationAnswerExecer
-	query ClarificationAnswerQuerier
+	exec  postgresExecer
+	query postgresRowQuerier
 	psql  squirrel.StatementBuilderType
 }
 
@@ -285,7 +269,7 @@ func NewPostgresClarificationAnswerStore(pool *pgxpool.Pool) *PostgresClarificat
 	return NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(db, db)
 }
 
-func NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(exec ClarificationAnswerExecer, query ClarificationAnswerQuerier) *PostgresClarificationAnswerStore {
+func NewPostgresClarificationAnswerStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresClarificationAnswerStore {
 	return &PostgresClarificationAnswerStore{
 		exec:  exec,
 		query: query,
