@@ -8,7 +8,7 @@
 - product and deployment canon is now in place
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
-- `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; future cards and detail views should wait until the CLI/server functionality exists
+- `apps/web/console` now exists as the empty real console shell for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; the RU console shell is live as a static HTTPS surface with no backend/API/session behavior, and future cards and detail views should wait until the CLI/server functionality exists
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, and explicit re-check; future server work should stay bounded and avoid fake canonical state claims
@@ -108,6 +108,39 @@ Current truth:
 - public DNS, HTTPS smoke, and public `/api/pilot-lead` smoke passed
 - no server config, deployment scripts, secrets, hostnames, IPs, ports,
   usernames, key paths, or DNS provider credentials were committed
+
+## Completed web bounded slice
+
+### Console RU static deployment and public HTTPS smoke
+
+Status: **DONE — LIVE VIA SSH STATIC SERVER / SMOKE PASSED.**
+
+Goal:
+- publish the static RU console shell at `https://console.goalrail.ru/` next to
+  the existing RU pilot static surface without adding backend behavior.
+
+Done means:
+- `apps/web/console-ru` was tested and built locally
+- `dist/` was uploaded to `/srv/goalrail/console-ru/releases` through the
+  operator-provided deploy SSH target
+- `/srv/goalrail/console-ru/current` was switched to the timestamped release
+- a static-only Nginx vhost and server-side TLS were configured outside repo
+  source control
+- public HTTPS smoke passed for `https://console.goalrail.ru/`
+- console-specific Certbot renewal dry-run passed
+- no server config, deployment scripts, secrets, hostnames, IPs, ports,
+  usernames, key paths, DNS provider credentials, backend routes, analytics,
+  cookies, sessions, LLM/API, repo integration, runtime execution, gate, proof,
+  or product data loop were committed or introduced
+
+Current truth:
+- live status and smoke evidence are recorded in
+  `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+- the console remains a static visual shell; Users changes are component state
+  only and are not persisted
+- a whole-host Certbot renewal dry-run surfaced an unrelated
+  `pilot.goalrail.ru` renewal dry-run failure; console-specific renewal passed,
+  and pilot renewal should be handled as a separate operator follow-up
 
 ## Completed backend bounded slice
 

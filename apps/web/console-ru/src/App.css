@@ -75,43 +75,11 @@ select:focus-visible {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  cursor: default;
 }
 
-.brandMark {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-
-.brandMark::before,
-.brandMark::after,
-.brandMark span {
-  position: absolute;
-  right: 0;
-  left: 0;
-  height: 2px;
-  border-radius: 1px;
-}
-
-.brandMark::before,
-.brandMark::after {
-  content: '';
-  background: var(--ink-2);
-}
-
-.brandMark::before {
-  top: 3px;
-}
-
-.brandMark::after {
-  bottom: 3px;
-}
-
-.brandMark span {
-  top: 8px;
-  background: var(--accent);
+.brandText {
+  pointer-events: none;
 }
 
 .brandText {
@@ -160,27 +128,6 @@ select:focus-visible {
 
 .loginCard .brand {
   margin-bottom: 28px;
-}
-
-.loginCard h1 {
-  margin: 0 0 6px;
-  color: var(--ink);
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.loginSubtitle {
-  margin: 0 0 4px;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-
-.loginHelper {
-  margin: 0 0 24px;
-  color: var(--mute);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.02em;
 }
 
 .field {
@@ -398,8 +345,7 @@ select:focus-visible {
   margin-bottom: 22px;
 }
 
-.kicker,
-.subnavLabel {
+.kicker {
   margin: 0;
   color: var(--mute);
   font-family: var(--font-mono);
@@ -423,54 +369,6 @@ select:focus-visible {
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-
-.settingsLayout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
-}
-
-.subnav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 10px;
-  border: 1px solid var(--line-soft);
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--panel) 40%, transparent);
-}
-
-.subnavLabel {
-  padding: 4px 10px 8px;
-}
-
-.subnavButton {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  color: var(--ink-2);
-  cursor: pointer;
-  text-align: left;
-}
-
-.subnavButton span:last-child {
-  color: var(--mute-2);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.subnavButton.active {
-  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-  background: color-mix(in oklab, var(--accent) 12%, var(--panel));
-  color: var(--ink);
 }
 
 .settingsContent h3 {
@@ -857,11 +755,6 @@ select:focus-visible {
   .usersHeader {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .settingsLayout {
-    grid-template-columns: 1fr;
-    gap: 16px;
   }
 
   .usersToolbar {

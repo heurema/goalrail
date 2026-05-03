@@ -22,14 +22,7 @@ function App() {
   return (
     <main className="consoleShell" data-deployment-target="console.goalrail.dev">
       <aside className="sidebar" aria-label="Goalrail console navigation">
-        <div className="brand" aria-label="Goalrail console">
-          <span className="brandMark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="brandText">Goalrail</span>
-        </div>
+        <Brand />
 
         <nav className="surfaceNav" aria-label="Product surfaces">
           {SURFACES.map((surface) => (
@@ -48,6 +41,14 @@ function App() {
 
       <section className="emptySurface" aria-label={`${activeLabel} surface empty`} />
     </main>
+  );
+}
+
+function Brand() {
+  return (
+    <div className="brand" aria-label="Goalrail console">
+      <span className="brandText">GOALRAIL</span>
+    </div>
   );
 }
 

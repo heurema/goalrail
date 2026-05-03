@@ -3,6 +3,8 @@
 Russian Goalrail console shell.
 
 Target subdomain: `console.goalrail.ru`.
+Deployment status: live static HTTPS surface; wiring and smoke evidence live in
+`docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`.
 
 Current scope:
 - login-only entry screen with no registration path
