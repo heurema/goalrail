@@ -59,9 +59,8 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalGoalStore interface {
-	CreateWithEvents(context.Context, spine.Goal, []spine.Event) error
-	UpdateReadinessWithEvents(context.Context, spine.GoalID, spine.GoalState, []spine.GoalReadinessReasonCode, []spine.Event) (spine.Goal, bool, error)
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
 }
 
 type Clock interface {
@@ -74,21 +73,34 @@ type IDGenerator interface {
 }
 
 type Service struct {
-	Intake IntakeReader
-	Goals  GoalStore
-	Events EventLog
-	Clock  Clock
-	IDs    IDGenerator
+	Intake   IntakeReader
+	Goals    GoalStore
+	Events   EventLog
+	TxRunner TransactionRunner
+	Clock    Clock
+	IDs      IDGenerator
 }
 
-func NewService(intake IntakeReader, goals GoalStore, events EventLog, clock Clock, ids IDGenerator) *Service {
-	return &Service{
+type Option func(*Service)
+
+func WithTransactionRunner(runner TransactionRunner) Option {
+	return func(s *Service) {
+		s.TxRunner = runner
+	}
+}
+
+func NewService(intake IntakeReader, goals GoalStore, events EventLog, clock Clock, ids IDGenerator, opts ...Option) *Service {
+	service := &Service{
 		Intake: intake,
 		Goals:  goals,
 		Events: events,
 		Clock:  clock,
 		IDs:    ids,
 	}
+	for _, opt := range opts {
+		opt(service)
+	}
+	return service
 }
 
 func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID) (spine.Goal, error) {
@@ -147,8 +159,19 @@ func (s *Service) PromoteFromIntake(ctx context.Context, intakeID spine.IntakeID
 		return spine.Goal{}, err
 	}
 
-	if txGoals, ok := s.Goals.(transactionalGoalStore); ok {
-		if err := txGoals.CreateWithEvents(ctx, created, []spine.Event{goalCreated, intakePromoted}); err != nil {
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+			if err := s.Goals.Create(txCtx, created); err != nil {
+				return err
+			}
+			if err := s.Events.Append(txCtx, goalCreated); err != nil {
+				return err
+			}
+			if err := s.Events.Append(txCtx, intakePromoted); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return spine.Goal{}, fmt.Errorf("create goal with events: %w", err)
 		}
 		return created, nil
@@ -194,9 +217,26 @@ func (s *Service) CheckReadiness(ctx context.Context, goalID spine.GoalID) (spin
 		return spine.GoalReadinessResult{}, spine.Goal{}, err
 	}
 
-	if txGoals, ok := s.Goals.(transactionalGoalStore); ok {
-		updated, ok, err := txGoals.UpdateReadinessWithEvents(ctx, current.ID, result.State, result.ReasonCodes, []spine.Event{readinessChecked, transition})
-		if err != nil {
+	if s.TxRunner != nil {
+		var updated spine.Goal
+		var ok bool
+		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+			var err error
+			updated, ok, err = s.Goals.UpdateReadiness(txCtx, current.ID, result.State, result.ReasonCodes)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+			if err := s.Events.Append(txCtx, readinessChecked); err != nil {
+				return err
+			}
+			if err := s.Events.Append(txCtx, transition); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return spine.GoalReadinessResult{}, spine.Goal{}, fmt.Errorf("update goal state with events: %w", err)
 		}
 		if !ok {

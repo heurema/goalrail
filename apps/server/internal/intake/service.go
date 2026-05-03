@@ -46,8 +46,8 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalStore interface {
-	CreateWithEvent(context.Context, spine.IntakeRecord, spine.Event) error
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
 }
 
 type Clock interface {
@@ -63,18 +63,31 @@ type Service struct {
 	Store          Store
 	ProjectContext ProjectContextResolver
 	Events         EventLog
+	TxRunner       TransactionRunner
 	Clock          Clock
 	IDs            IDGenerator
 }
 
-func NewService(store Store, projectContext ProjectContextResolver, events EventLog, clock Clock, ids IDGenerator) *Service {
-	return &Service{
+type Option func(*Service)
+
+func WithTransactionRunner(runner TransactionRunner) Option {
+	return func(s *Service) {
+		s.TxRunner = runner
+	}
+}
+
+func NewService(store Store, projectContext ProjectContextResolver, events EventLog, clock Clock, ids IDGenerator, opts ...Option) *Service {
+	service := &Service{
 		Store:          store,
 		ProjectContext: projectContext,
 		Events:         events,
 		Clock:          clock,
 		IDs:            ids,
 	}
+	for _, opt := range opts {
+		opt(service)
+	}
+	return service
 }
 
 func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission) (spine.IntakeRecord, error) {
@@ -119,8 +132,16 @@ func (s *Service) Submit(ctx context.Context, submission spine.IntakeSubmission)
 	if err != nil {
 		return spine.IntakeRecord{}, err
 	}
-	if txStore, ok := s.Store.(transactionalStore); ok {
-		if err := txStore.CreateWithEvent(ctx, record, event); err != nil {
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+			if err := s.Store.Create(txCtx, record); err != nil {
+				return err
+			}
+			if err := s.Events.Append(txCtx, event); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
 			return spine.IntakeRecord{}, fmt.Errorf("create intake record with event: %w", err)
 		}
 		return record, nil
