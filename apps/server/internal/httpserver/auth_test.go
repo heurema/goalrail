@@ -43,10 +43,89 @@ func TestAuthLoginReturnsAccessAndRefreshTokens(t *testing.T) {
 	}
 }
 
+func TestAuthRefreshReturnsNewAccessTokenOnly(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{
+		refreshResult: auth.RefreshResult{
+			UserID:               "018f0000-0000-7000-8000-000000000001",
+			AccessToken:          "new-access-token",
+			AccessTokenExpiresAt: now.Add(15 * time.Minute),
+			TokenType:            "Bearer",
+		},
+	})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Refresh), http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"refresh-token"}`, "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var body map[string]any
+	decodeJSON(t, response.body, &body)
+	if body["access_token"] != "new-access-token" || body["token_type"] != "Bearer" {
+		t.Fatalf("refresh response = %#v, want access token response", body)
+	}
+	if _, ok := body["refresh_token"]; ok {
+		t.Fatalf("refresh response included refresh_token: %#v", body)
+	}
+}
+
+func TestAuthRefreshRejectsUnknownRefreshToken(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{refreshErr: auth.ErrSessionInvalid})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Refresh), http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"unknown"}`, "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unauthorized" {
+		t.Fatalf("error code = %q, want unauthorized", body.Error.Code)
+	}
+}
+
 func TestAuthChangePasswordRequiresBearerToken(t *testing.T) {
 	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{changePasswordErr: auth.ErrInvalidToken})
 
 	response := doAuthRequest(t, http.HandlerFunc(handler.ChangePassword), http.MethodPost, "/v1/auth/change-password", `{"current_password":"old","new_password":"new"}`, "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unauthorized" {
+		t.Fatalf("error code = %q, want unauthorized", body.Error.Code)
+	}
+}
+
+func TestAuthLogoutRevokesCurrentSession(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{
+		logoutResult: auth.LogoutResult{Revoked: true},
+	})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Logout), http.MethodPost, "/v1/auth/logout", "", "Bearer access-token")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var body struct {
+		Revoked bool `json:"revoked"`
+	}
+	decodeJSON(t, response.body, &body)
+	if !body.Revoked {
+		t.Fatalf("Revoked = false, want true")
+	}
+}
+
+func TestAuthLogoutWithoutBearerTokenReturnsUnauthorized(t *testing.T) {
+	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{logoutErr: auth.ErrInvalidToken})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Logout), http.MethodPost, "/v1/auth/logout", "", "")
 	if response.code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
 	}
@@ -122,6 +201,29 @@ func TestAuthWeakJWTSecretReturnsConfigurationError(t *testing.T) {
 	}
 }
 
+func TestAuthRefreshMissingOrWeakJWTSecretReturnsConfigurationError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "missing", err: auth.ErrJWTSecretMissing},
+		{name: "weak", err: auth.ErrJWTSecretWeak},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := httpserver.NewAuthHandler(fakeHTTPAuthService{refreshErr: tt.err})
+
+			response := doAuthRequest(t, http.HandlerFunc(handler.Refresh), http.MethodPost, "/v1/auth/refresh", `{"refresh_token":"refresh-token"}`, "")
+			if response.code != http.StatusServiceUnavailable {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusServiceUnavailable, response.body)
+			}
+			if !strings.Contains(response.body, "auth_not_configured") {
+				t.Fatalf("body = %s, want auth_not_configured", response.body)
+			}
+		})
+	}
+}
+
 func TestAuthMeWithoutBearerTokenReturnsUnauthorized(t *testing.T) {
 	handler := httpserver.NewAuthHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
 
@@ -140,11 +242,44 @@ func TestAuthMeWithoutBearerTokenReturnsUnauthorized(t *testing.T) {
 	}
 }
 
+func TestAuthLogoutInvalidOrExpiredBearerTokenReturnsUnauthorized(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "invalid", err: auth.ErrInvalidToken},
+		{name: "expired", err: auth.ErrExpiredToken},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := httpserver.NewAuthHandler(fakeHTTPAuthService{logoutErr: tt.err})
+
+			response := doAuthRequest(t, http.HandlerFunc(handler.Logout), http.MethodPost, "/v1/auth/logout", "", "Bearer access-token")
+			if response.code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+			}
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "unauthorized" {
+				t.Fatalf("error code = %q, want unauthorized", body.Error.Code)
+			}
+		})
+	}
+}
+
 type fakeHTTPAuthService struct {
 	loginResult          auth.LoginResult
 	loginErr             error
+	refreshResult        auth.RefreshResult
+	refreshErr           error
 	changePasswordResult auth.ChangePasswordResult
 	changePasswordErr    error
+	logoutResult         auth.LogoutResult
+	logoutErr            error
 	profile              auth.Profile
 	meErr                error
 }
@@ -156,11 +291,25 @@ func (s fakeHTTPAuthService) Login(context.Context, auth.LoginInput) (auth.Login
 	return s.loginResult, nil
 }
 
+func (s fakeHTTPAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
+	if s.refreshErr != nil {
+		return auth.RefreshResult{}, s.refreshErr
+	}
+	return s.refreshResult, nil
+}
+
 func (s fakeHTTPAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
 	if s.changePasswordErr != nil {
 		return auth.ChangePasswordResult{}, s.changePasswordErr
 	}
 	return s.changePasswordResult, nil
+}
+
+func (s fakeHTTPAuthService) Logout(context.Context, string) (auth.LogoutResult, error) {
+	if s.logoutErr != nil {
+		return auth.LogoutResult{}, s.logoutErr
+	}
+	return s.logoutResult, nil
 }
 
 func (s fakeHTTPAuthService) Me(context.Context, string) (auth.Profile, error) {

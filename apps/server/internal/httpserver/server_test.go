@@ -94,7 +94,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
 		AuthLogin:                 probeRoute("auth_login"),
+		AuthRefresh:               probeRoute("auth_refresh"),
 		AuthChangePassword:        probeRoute("auth_change_password"),
+		AuthLogout:                probeRoute("auth_logout"),
 		Me:                        probeRoute("me"),
 		IntakeSubmit:              probeRoute("intake_submit"),
 		IntakeGet:                 probeRoute("intake_get"),
@@ -124,7 +126,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 	}{
 		{name: "intake_submit", method: http.MethodPost, path: "/v1/intakes", wantRoute: "intake_submit"},
 		{name: "auth_login", method: http.MethodPost, path: "/v1/auth/login", wantRoute: "auth_login"},
+		{name: "auth_refresh", method: http.MethodPost, path: "/v1/auth/refresh", wantRoute: "auth_refresh"},
 		{name: "auth_change_password", method: http.MethodPost, path: "/v1/auth/change-password", wantRoute: "auth_change_password"},
+		{name: "auth_logout", method: http.MethodPost, path: "/v1/auth/logout", wantRoute: "auth_logout"},
 		{name: "me", method: http.MethodGet, path: "/v1/me", wantRoute: "me"},
 		{name: "intake_get", method: http.MethodGet, path: "/v1/intakes/intake-1", wantRoute: "intake_get"},
 		{name: "intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/goals", wantRoute: "intake_promote"},
@@ -169,7 +173,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
 		AuthLogin:                 probeRoute("auth_login"),
+		AuthRefresh:               probeRoute("auth_refresh"),
 		AuthChangePassword:        probeRoute("auth_change_password"),
+		AuthLogout:                probeRoute("auth_logout"),
 		Me:                        probeRoute("me"),
 		IntakeSubmit:              probeRoute("intake_submit"),
 		IntakeGet:                 probeRoute("intake_get"),
@@ -221,8 +227,6 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		{name: "plan_list", method: http.MethodGet, path: "/v1/plans"},
 		{name: "proposal_list", method: http.MethodGet, path: "/v1/proposals"},
 		{name: "task_list", method: http.MethodGet, path: "/v1/tasks"},
-		{name: "auth_refresh", method: http.MethodPost, path: "/v1/auth/refresh"},
-		{name: "auth_logout", method: http.MethodPost, path: "/v1/auth/logout"},
 		{name: "public_registration", method: http.MethodPost, path: "/v1/auth/register"},
 		{name: "admin_user_creation", method: http.MethodPost, path: "/v1/users"},
 	}
@@ -249,8 +253,16 @@ func (unavailableAuthService) Login(context.Context, auth.LoginInput) (auth.Logi
 	return auth.LoginResult{}, auth.ErrStoreUnavailable
 }
 
+func (unavailableAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
+	return auth.RefreshResult{}, auth.ErrStoreUnavailable
+}
+
 func (unavailableAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
 	return auth.ChangePasswordResult{}, auth.ErrStoreUnavailable
+}
+
+func (unavailableAuthService) Logout(context.Context, string) (auth.LogoutResult, error) {
+	return auth.LogoutResult{}, auth.ErrStoreUnavailable
 }
 
 func (unavailableAuthService) Me(context.Context, string) (auth.Profile, error) {
@@ -309,7 +321,9 @@ func newRouter(
 		Readyz:                    readyz,
 		Version:                   versionHandler,
 		AuthLogin:                 http.HandlerFunc(authHandler.Login),
+		AuthRefresh:               http.HandlerFunc(authHandler.Refresh),
 		AuthChangePassword:        http.HandlerFunc(authHandler.ChangePassword),
+		AuthLogout:                http.HandlerFunc(authHandler.Logout),
 		Me:                        http.HandlerFunc(authHandler.Me),
 		IntakeSubmit:              http.HandlerFunc(intakeHandler.Submit),
 		IntakeGet:                 http.HandlerFunc(intakeHandler.Get),

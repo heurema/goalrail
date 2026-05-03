@@ -138,6 +138,178 @@ func TestLoginRequiresJWTSecretBeforeSessionCreation(t *testing.T) {
 	}
 }
 
+func TestRefreshWithValidRefreshTokenReturnsNewAccessToken(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	store.session.RefreshTokenHash = hashOpaqueToken("valid-refresh-token")
+	service := newFakeAuthService(store, now)
+
+	result, err := service.Refresh(ctx, RefreshInput{RefreshToken: "valid-refresh-token"})
+	if err != nil {
+		t.Fatalf("Refresh() error = %v", err)
+	}
+	if result.AccessToken == "" {
+		t.Fatal("AccessToken is empty")
+	}
+	if result.TokenType != "Bearer" {
+		t.Fatalf("TokenType = %q, want Bearer", result.TokenType)
+	}
+	if store.session.LastUsedAt == nil || !store.session.LastUsedAt.Equal(now) {
+		t.Fatalf("LastUsedAt = %v, want %v", store.session.LastUsedAt, now)
+	}
+	if store.session.RefreshTokenHash != hashOpaqueToken("valid-refresh-token") {
+		t.Fatalf("refresh token hash changed, want existing refresh token preserved")
+	}
+
+	claims, err := service.accessTokens.Validate(result.AccessToken, now)
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if claims.UserID != store.user.ID || claims.SessionID != store.session.ID {
+		t.Fatalf("claims = %#v, want current user/session identity", claims)
+	}
+}
+
+func TestRefreshRejectsUnknownRefreshToken(t *testing.T) {
+	store := newFakeAuthStore()
+	store.session.RefreshTokenHash = hashOpaqueToken("known-refresh-token")
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Refresh(context.Background(), RefreshInput{RefreshToken: "unknown-refresh-token"})
+	if !errors.Is(err, ErrSessionInvalid) {
+		t.Fatalf("Refresh() error = %v, want ErrSessionInvalid", err)
+	}
+}
+
+func TestRefreshRejectsRevokedSession(t *testing.T) {
+	store := newFakeAuthStore()
+	store.session.RefreshTokenHash = hashOpaqueToken("valid-refresh-token")
+	store.session.State = spine.UserSessionStateRevoked
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Refresh(context.Background(), RefreshInput{RefreshToken: "valid-refresh-token"})
+	if !errors.Is(err, ErrSessionInvalid) {
+		t.Fatalf("Refresh() error = %v, want ErrSessionInvalid", err)
+	}
+}
+
+func TestRefreshRejectsExpiredSession(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	store.session.RefreshTokenHash = hashOpaqueToken("valid-refresh-token")
+	store.session.ExpiresAt = now.Add(-time.Minute)
+	service := newFakeAuthService(store, now)
+
+	_, err := service.Refresh(context.Background(), RefreshInput{RefreshToken: "valid-refresh-token"})
+	if !errors.Is(err, ErrSessionInvalid) {
+		t.Fatalf("Refresh() error = %v, want ErrSessionInvalid", err)
+	}
+}
+
+func TestRefreshRejectsInactiveUser(t *testing.T) {
+	store := newFakeAuthStore()
+	store.session.RefreshTokenHash = hashOpaqueToken("valid-refresh-token")
+	store.user.State = "inactive"
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Refresh(context.Background(), RefreshInput{RefreshToken: "valid-refresh-token"})
+	if !errors.Is(err, ErrInactiveUser) {
+		t.Fatalf("Refresh() error = %v, want ErrInactiveUser", err)
+	}
+}
+
+func TestRefreshRequiresConfiguredJWTSecretBeforeSessionUpdate(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		secret  string
+		wantErr error
+	}{
+		{name: "missing", secret: "", wantErr: ErrJWTSecretMissing},
+		{name: "weak", secret: "0123456789abcdef0123456789abcde", wantErr: ErrJWTSecretWeak},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeAuthStore()
+			store.session.RefreshTokenHash = hashOpaqueToken("valid-refresh-token")
+			service := NewService(store, tt.secret, WithClock(fixedClock{now: now}))
+
+			_, err := service.Refresh(context.Background(), RefreshInput{RefreshToken: "valid-refresh-token"})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Refresh() error = %v, want %v", err, tt.wantErr)
+			}
+			if store.session.LastUsedAt != nil {
+				t.Fatalf("LastUsedAt = %v, want no session update", store.session.LastUsedAt)
+			}
+		})
+	}
+}
+
+func TestLogoutWithBearerTokenRevokesCurrentSession(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, now)
+	token := signTestAccessToken(t, service, store, now)
+
+	result, err := service.Logout(ctx, token)
+	if err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if !result.Revoked {
+		t.Fatalf("Revoked = false, want true")
+	}
+	if store.session.State != spine.UserSessionStateRevoked {
+		t.Fatalf("session state = %q, want revoked", store.session.State)
+	}
+	if store.session.RevokedAt == nil || !store.session.RevokedAt.Equal(now) {
+		t.Fatalf("RevokedAt = %v, want %v", store.session.RevokedAt, now)
+	}
+}
+
+func TestLogoutRejectsMissingBearerToken(t *testing.T) {
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.Logout(context.Background(), "")
+	if !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("Logout() error = %v, want ErrInvalidToken", err)
+	}
+}
+
+func TestLogoutRejectsInvalidOrExpiredAccessToken(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, now)
+	expiredToken, err := service.accessTokens.Sign(AccessTokenClaims{
+		UserID:    store.user.ID,
+		SessionID: store.session.ID,
+		IssuedAt:  now.Add(-30 * time.Minute),
+		ExpiresAt: now.Add(-time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("Sign() error = %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		accessToken string
+		wantErr     error
+	}{
+		{name: "invalid", accessToken: "not-a-jwt", wantErr: ErrInvalidToken},
+		{name: "expired", accessToken: expiredToken, wantErr: ErrExpiredToken},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.Logout(context.Background(), tt.accessToken)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Logout() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestChangePasswordRejectsWrongCurrentPassword(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
@@ -380,6 +552,10 @@ func (s *fakeAuthStore) UpsertSession(_ context.Context, session spine.UserSessi
 
 func (s *fakeAuthStore) GetSession(_ context.Context, sessionID spine.UserSessionID) (spine.UserSession, bool, error) {
 	return s.session, sessionID == s.session.ID, nil
+}
+
+func (s *fakeAuthStore) GetSessionByRefreshTokenHash(_ context.Context, refreshTokenHash string) (spine.UserSession, bool, error) {
+	return s.session, refreshTokenHash == s.session.RefreshTokenHash, nil
 }
 
 func (s *fakeAuthStore) GetPrimaryOrganizationMembership(_ context.Context, userID spine.UserID) (spine.OrganizationMembership, bool, error) {
