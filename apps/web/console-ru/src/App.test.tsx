@@ -1,8 +1,10 @@
 import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import App from './App';
 import { render } from '../test-utils';
+
+const THEME_STORAGE_KEY = 'goalrail.console.theme';
 
 function login() {
   render(<App />);
@@ -13,6 +15,10 @@ function login() {
 }
 
 describe('App', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('renders a login-only entry screen without registration', () => {
     render(<App />);
 
@@ -30,7 +36,7 @@ describe('App', () => {
     expect(screen.queryByText(/регистрация|зарегистрироваться|sign up|sso/i)).not.toBeInTheDocument();
   });
 
-  it('keeps the three product surfaces empty after login', () => {
+  it('keeps exactly three product surfaces with honest structured empty states', () => {
     login();
 
     const navigation = screen.getByRole('navigation', { name: /разделы продукта/i });
@@ -41,8 +47,24 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^Контракты$/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /^Оценка готовности$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Проверка результата$/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/контракты: пустой раздел/i)).toBeInTheDocument();
-    expect(screen.queryByText(/trialops-demo|C-0147|readiness score|proof queue/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/контракты: structured empty state/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Контракты$/i })).toBeInTheDocument();
+    expect(screen.getByText('Goal → Contract → Task → Proof')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Оценка готовности$/i }));
+
+    expect(screen.getByText(/хватает ли контекста/i)).toBeInTheDocument();
+    expect(screen.getByText('НЕ ПРОВЕРЯЛОСЬ')).toBeInTheDocument();
+    expect(screen.getByText(/Открытые вопросы, которые блокируют уверенный handoff/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Проверка результата$/i }));
+
+    expect(screen.getByText(/проверки execution evidence через gate/i)).toBeInTheDocument();
+    expect(screen.getByText('ОЖИДАЕТ VERIFIED EVIDENCE')).toBeInTheDocument();
+    expect(screen.getByText(/Сохранили ли проверки и evidence доверие/i)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(
+      /trialops-demo|C-0147|readiness score|\/100|\bscan\b|proof queue|fake queue|fake pass|fake fail|pass\/fail/i
+    );
   });
 
   it('opens appearance settings by default without making it a product surface', () => {
@@ -62,6 +84,8 @@ describe('App', () => {
   it('renders all theme presets and applies the selected theme to the shell', () => {
     login();
 
+    expect(screen.getByRole('main')).toHaveAttribute('data-goalrail-theme', 'goalrail-default');
+
     fireEvent.click(screen.getByRole('button', { name: /настройки/i }));
 
     expect(screen.getByRole('button', { name: /Goalrail Default/i })).toHaveAttribute('aria-pressed', 'true');
@@ -75,6 +99,31 @@ describe('App', () => {
 
     expect(screen.getByRole('main')).toHaveAttribute('data-goalrail-theme', 'nord');
     expect(screen.getByRole('button', { name: /Nord/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('nord');
+  });
+
+  it('initializes with a stored valid theme', () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'solarized-dark');
+
+    login();
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-goalrail-theme', 'solarized-dark');
+
+    fireEvent.click(screen.getByRole('button', { name: /настройки/i }));
+
+    expect(screen.getByRole('button', { name: /Solarized Dark/i })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('falls back to the default theme when stored theme is invalid', () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'unknown-theme');
+
+    login();
+
+    expect(screen.getByRole('main')).toHaveAttribute('data-goalrail-theme', 'goalrail-default');
+
+    fireEvent.click(screen.getByRole('button', { name: /настройки/i }));
+
+    expect(screen.getByRole('button', { name: /Goalrail Default/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('opens users inside settings after theme switching', () => {

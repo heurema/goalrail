@@ -1778,10 +1778,11 @@ Status: accepted
 Decision:
 - Implement console theme switching as named, terminal-inspired visual presets.
 - Apply themes through CSS variables only.
-- Keep theme selection in frontend component state for v0.
-- Do not add backend preference persistence, localStorage, cookies, sessions,
-  user settings API, analytics, auth integration, theme-specific layouts, or
-  theme-specific components.
+- Keep theme selection in frontend component state, with D-0072 governing the
+  later narrow local visual preference exception.
+- Do not add backend preference persistence, cookies, sessions, user settings
+  API, analytics, auth integration, theme-specific layouts, or theme-specific
+  components.
 
 Rationale:
 - The console shell already uses CSS variables.
@@ -1819,3 +1820,28 @@ Rationale:
   password secret.
 - Health/version can remain lightweight process probes while product APIs
   clearly report missing persistence.
+
+## D-0072 — Console theme preference is local-only
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- Console theme selection may persist in browser localStorage under
+  `goalrail.console.theme`.
+- Only valid `ThemeId` values may be stored.
+- Invalid or missing values fall back to `goalrail-default`.
+- This is a local visual preference only.
+- It is not account settings, server state, session state, analytics, or auth
+  state.
+- Login state, users, product surfaces, and product data must not be persisted
+  in this slice.
+- Structured empty states are allowed for the three console product surfaces,
+  but they must not show fake scores, scans, proof, backend data, execution
+  results, live statuses, run IDs, or gate decisions.
+
+Rationale:
+- Remembering the chosen theme improves console UX.
+- Keeping it local avoids introducing user settings API, auth coupling,
+  backend persistence, cookies, or sessions.
+- Structured empty states make the console less blank without claiming backend
+  or runtime behavior that does not exist.
