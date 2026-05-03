@@ -143,7 +143,15 @@ func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input sp
 	if err != nil {
 		return spine.Contract{}, err
 	}
-	if _, err := s.Drafts.Update(ctx, draftID, input); err != nil {
+	update := func(updateCtx context.Context) error {
+		_, err := s.Drafts.Update(updateCtx, draftID, input)
+		return err
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, update); err != nil {
+			return spine.Contract{}, err
+		}
+	} else if err := update(ctx); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
@@ -164,7 +172,15 @@ func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, in
 	if err != nil {
 		return spine.Contract{}, err
 	}
-	if _, err := s.Drafts.MarkReadyForApproval(ctx, draftID, input); err != nil {
+	markReady := func(markReadyCtx context.Context) error {
+		_, err := s.Drafts.MarkReadyForApproval(markReadyCtx, draftID, input)
+		return err
+	}
+	if s.TxRunner != nil {
+		if err := s.TxRunner.RunReadCommitted(ctx, markReady); err != nil {
+			return spine.Contract{}, err
+		}
+	} else if err := markReady(ctx); err != nil {
 		return spine.Contract{}, err
 	}
 	return s.getContract(ctx, id)
