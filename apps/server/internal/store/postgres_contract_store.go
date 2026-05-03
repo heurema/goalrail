@@ -217,14 +217,7 @@ func (s *PostgresContractStore) queryContract(ctx context.Context, op string, sq
 }
 
 func queryContractLifecycleRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
-	if query == nil {
-		return nil, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("%s SQL: %w", op, err)
-	}
-	return query.QueryRow(ctx, sqlText, args...), nil
+	return queryRow(ctx, query, op, sqlizer)
 }
 
 func scanContract(row pgx.Row) (spine.Contract, error) {

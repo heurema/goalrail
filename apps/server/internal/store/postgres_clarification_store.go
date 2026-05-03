@@ -431,14 +431,7 @@ func clarificationAnswerColumns() []string {
 }
 
 func queryClarificationRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
-	if query == nil {
-		return nil, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return nil, fmt.Errorf("%s SQL: %w", op, err)
-	}
-	return query.QueryRow(ctx, sqlText, args...), nil
+	return queryRow(ctx, query, op, sqlizer)
 }
 
 func execClarificationSQL(ctx context.Context, exec postgresExecer, op string, sqlizer squirrel.Sqlizer) error {
