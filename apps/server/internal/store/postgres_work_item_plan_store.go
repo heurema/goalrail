@@ -154,7 +154,7 @@ func (s *PostgresWorkItemPlanStore) getOne(ctx context.Context, op string, where
 		Select(workItemPlanColumns()...).
 		From("work_item_plans").
 		Where(where)
-	row, err := queryWorkItemRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.WorkItemPlan{}, false, err
 	}
@@ -390,7 +390,7 @@ func (s *PostgresWorkItemPlanProposalStore) getOne(ctx context.Context, op strin
 		Select(workItemPlanProposalColumns()...).
 		From("work_item_plan_proposals").
 		Where(where)
-	row, err := queryWorkItemRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.WorkItemPlanProposal{}, false, err
 	}

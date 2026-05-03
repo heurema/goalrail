@@ -172,7 +172,7 @@ func (s *PostgresClarificationRequestStore) getOne(ctx context.Context, op strin
 }
 
 func (s *PostgresClarificationRequestStore) queryRequest(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ClarificationRequest, bool, error) {
-	row, err := queryClarificationRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.ClarificationRequest{}, false, err
 	}
@@ -374,7 +374,7 @@ func (s *PostgresClarificationAnswerStore) getOne(ctx context.Context, op string
 }
 
 func (s *PostgresClarificationAnswerStore) queryAnswer(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ClarificationAnswer, bool, error) {
-	row, err := queryClarificationRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.ClarificationAnswer{}, false, err
 	}
@@ -428,10 +428,6 @@ func clarificationAnswerColumns() []string {
 		"answers",
 		"created_at",
 	}
-}
-
-func queryClarificationRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
-	return queryRow(ctx, query, op, sqlizer)
 }
 
 func execClarificationSQL(ctx context.Context, exec postgresExecer, op string, sqlizer squirrel.Sqlizer) error {

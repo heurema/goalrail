@@ -149,7 +149,7 @@ func (s *PostgresContractSeedStore) getOne(ctx context.Context, op string, where
 }
 
 func (s *PostgresContractSeedStore) queryContractSeed(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ContractSeed, bool, error) {
-	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.ContractSeed{}, false, err
 	}

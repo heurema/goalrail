@@ -225,21 +225,7 @@ func (s *PostgresContractDraftStore) Update(ctx context.Context, updated spine.C
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"id": id})
 
-	if s.exec == nil {
-		return fmt.Errorf("update contract draft executor is nil")
-	}
-	sqlText, args, err := stmt.ToSql()
-	if err != nil {
-		return fmt.Errorf("update contract draft SQL: %w", err)
-	}
-	result, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return fmt.Errorf("update contract draft: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrContractDraftNotFound
-	}
-	return nil
+	return execUpdate(ctx, s.exec, "update contract draft", ErrContractDraftNotFound, stmt)
 }
 
 func (s *PostgresContractDraftStore) MarkReadyForApproval(ctx context.Context, updated spine.ContractDraft) error {
@@ -254,21 +240,7 @@ func (s *PostgresContractDraftStore) MarkReadyForApproval(ctx context.Context, u
 		Set("updated_at", time.Now().UTC()).
 		Where(squirrel.Eq{"id": id})
 
-	if s.exec == nil {
-		return fmt.Errorf("mark contract draft ready for approval executor is nil")
-	}
-	sqlText, args, err := stmt.ToSql()
-	if err != nil {
-		return fmt.Errorf("mark contract draft ready for approval SQL: %w", err)
-	}
-	result, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return fmt.Errorf("mark contract draft ready for approval: %w", err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrContractDraftNotFound
-	}
-	return nil
+	return execUpdate(ctx, s.exec, "mark contract draft ready for approval", ErrContractDraftNotFound, stmt)
 }
 
 func (s *PostgresContractDraftStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.ContractDraft, bool, error) {
@@ -281,7 +253,7 @@ func (s *PostgresContractDraftStore) getOne(ctx context.Context, op string, wher
 }
 
 func (s *PostgresContractDraftStore) queryContractDraft(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ContractDraft, bool, error) {
-	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.ContractDraft{}, false, err
 	}
