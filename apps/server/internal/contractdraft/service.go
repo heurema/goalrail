@@ -99,18 +99,6 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalDraftUpdateStore interface {
-	UpdateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
-}
-
-type transactionalDraftReadyStore interface {
-	MarkReadyForApprovalWithEvent(context.Context, spine.ContractDraft, spine.Event) error
-}
-
-type transactionalDraftReadyContractStore interface {
-	MarkReadyForApprovalWithContractUpdateAndEvent(context.Context, spine.ContractDraft, spine.Event, time.Time) error
-}
-
 type Clock interface {
 	Now() time.Time
 }
@@ -339,12 +327,6 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
-	if txDrafts, ok := s.Drafts.(transactionalDraftUpdateStore); ok {
-		if err := txDrafts.UpdateWithEvent(ctx, updated, event); err != nil {
-			return spine.ContractDraft{}, fmt.Errorf("update contract draft with event: %w", err)
-		}
-		return updated, nil
-	}
 	if err := s.Drafts.Update(ctx, updated); err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("update contract draft: %w", err)
 	}
@@ -385,18 +367,6 @@ func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.Contra
 	event, err := s.contractDraftMarkedReadyForApprovalEvent(updated, input.MarkedBy, []string{}, now)
 	if err != nil {
 		return spine.ContractDraft{}, err
-	}
-	if txDrafts, ok := s.Drafts.(transactionalDraftReadyContractStore); ok {
-		if err := txDrafts.MarkReadyForApprovalWithContractUpdateAndEvent(ctx, updated, event, now); err != nil {
-			return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval with contract update and event: %w", err)
-		}
-		return updated, nil
-	}
-	if txDrafts, ok := s.Drafts.(transactionalDraftReadyStore); ok {
-		if err := txDrafts.MarkReadyForApprovalWithEvent(ctx, updated, event); err != nil {
-			return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval with event: %w", err)
-		}
-		return updated, nil
 	}
 	if err := s.Drafts.MarkReadyForApproval(ctx, updated); err != nil {
 		return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval: %w", err)
