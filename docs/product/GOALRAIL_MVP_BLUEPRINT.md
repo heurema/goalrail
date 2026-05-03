@@ -22,6 +22,7 @@ related_docs:
   - docs/adr/ADR-0020-public-contract-identity-boundary.md
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
   - docs/adr/ADR-0022-installation-boundary.md
+  - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -146,6 +147,12 @@ Initial Project / repo context:
 - Organization remains the tenant/workspace boundary inside an Installation
 - self_hosted mode has one bootstrapped primary Organization
 - future saas mode may support many Organizations inside one Goalrail service
+- self_hosted MVP bootstrap creates the first product super admin as an
+  `OrganizationMembership(owner)` for the bootstrapped Organization
+- MVP user creation is admin-created inside the Organization, with no public
+  registration; temporary passwords, first-login password change, short-lived
+  JWT access tokens, opaque DB-backed refresh tokens, and browser-loopback
+  `goalrail login` are auth/CLI directions, not implemented product behavior yet
 - Project is a delivery container inside an Organization
 - Project is not a repository
 - RepoBinding stores the repository reference directly in the MVP

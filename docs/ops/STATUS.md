@@ -24,13 +24,16 @@ Last updated: 2026-05-03
 Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete, and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
-Installation boundary note: ADR-0022 documents `Installation` as the running
-Goalrail control-plane boundary above `Organization`, with `self_hosted` and
-`saas` as the only deployment modes. The smallest server schema foundation now
-exists: `installations` stores mode and `public_base_url`,
-`organizations.installation_id` links Organizations to an Installation, and
-organization slugs are installation-scoped. No auth, JWT, CLI login, SaaS
-onboarding, organization creation API, or web UI is implemented.
+Installation/auth boundary note: ADR-0022 documents `Installation` as the
+running Goalrail control-plane boundary above `Organization`, with
+`self_hosted` and `saas` as the only deployment modes. The smallest server
+schema foundation now exists: `installations` stores mode and
+`public_base_url`, `organizations.installation_id` links Organizations to an
+Installation, and organization slugs are installation-scoped. ADR-0023
+documents the self-hosted user bootstrap, auth token, and browser-loopback CLI
+login direction only. No auth schema, JWT implementation, refresh token store,
+password hashing, login endpoints, CLI login, SaaS onboarding, organization
+creation API, or web UI is implemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
@@ -59,7 +62,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-two kernel/CLI/server/domain boundary ADRs
+- twenty-three kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -157,6 +160,18 @@ The project currently has:
   are the only deployment modes, MVP starts with one bootstrapped primary
   Organization in `self_hosted` mode, the backend must remain
   organization-aware, and `public_base_url` belongs to Installation
+- ADR-0023 documents the user bootstrap, auth, and CLI login boundary:
+  self-hosted bootstrap creates the first product super admin as
+  `OrganizationMembership(owner)`, there is no public registration in the MVP,
+  admins create users with backend-generated temporary passwords, first-login
+  password change is required, email invite/reset delivery is deferred,
+  password credentials should live outside `users`, access tokens should be
+  short-lived JWTs, refresh tokens should be opaque DB-backed server state, role
+  checks should use server-side `OrganizationMembership`, and future
+  `goalrail login` should use explicit `server_url` plus browser localhost
+  loopback while storing the selected Organization / Project / RepoBinding
+  profile. This is documentation only; no auth schema, endpoints, token
+  implementation, password hashing, CLI login, or web UI exists.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -178,7 +193,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-two boundary ADRs exist
+- kernel schema note and twenty-three boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -265,8 +280,9 @@ The project currently has:
 - no real RepoBinding state sync
 - no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation yet
 - no Installation bootstrap API, setup flow, or public management surface beyond the schema foundation yet
-- no auth, JWT, CLI login, SaaS onboarding, organization creation API, or
-  Goalrail product web UI yet
+- no auth schema, password credential store, password hashing, refresh token
+  store, login endpoints, JWT implementation, CLI login, SaaS onboarding,
+  organization creation API, or Goalrail product web UI yet
 - no `VcsConnection` implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation

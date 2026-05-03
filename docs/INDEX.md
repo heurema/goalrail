@@ -89,36 +89,37 @@ related_docs:
 50. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
 51. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
 52. `docs/adr/ADR-0022-installation-boundary.md`
+53. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
 
 ### 7. Governance and change control
-53. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-54. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-55. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-56. `docs/product/GOALRAIL_RULE_STACK.md`
+54. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+55. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+56. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+57. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-57. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-58. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-59. `docs/ops/STATUS.md`
-60. `docs/ops/NEXT.md`
-61. `docs/ops/DECISIONS.md`
-62. `docs/ops/COMPONENTS.yaml`
-63. `docs/ops/BRANCH_PROTECTION.md`
-64. `docs/ops/REPO_STRUCTURE.md`
-65. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-66. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+58. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+59. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+60. `docs/ops/STATUS.md`
+61. `docs/ops/NEXT.md`
+62. `docs/ops/DECISIONS.md`
+63. `docs/ops/COMPONENTS.yaml`
+64. `docs/ops/BRANCH_PROTECTION.md`
+65. `docs/ops/REPO_STRUCTURE.md`
+66. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+67. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-67. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-68. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-69. `docs/reference/design/reference_screens/`
-70. `.goalrail/work/`
-71. `.goalrail/knowledge/`
-72. `.punk/publishing.toml`
-73. `.goalrail/flows/`
-74. `.goalrail/evals/`
-75. `docs/ops/PUBLISHING_MIGRATION.md`
-76. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+68. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+69. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+70. `docs/reference/design/reference_screens/`
+71. `.goalrail/work/`
+72. `.goalrail/knowledge/`
+73. `.punk/publishing.toml`
+74. `.goalrail/flows/`
+75. `.goalrail/evals/`
+76. `docs/ops/PUBLISHING_MIGRATION.md`
+77. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -187,6 +188,9 @@ related_docs:
 - `ADR-0021` — WorkItemPlan pull lease boundary; typed planning queue and future lease protocol direction
 - `ADR-0022` — Installation boundary; running control-plane instance above
   Organization, with `self_hosted` and `saas` as the only deployment modes
+- `ADR-0023` — user bootstrap, auth, and CLI login boundary; self-hosted
+  bootstrapped owner, admin-created users, token direction, and browser
+  loopback `goalrail login`
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries

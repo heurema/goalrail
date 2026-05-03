@@ -1739,3 +1739,33 @@ Rationale:
 - Keeps self-hosted MVP bootstrap aligned with future SaaS tenancy.
 - Prevents self-hosted shortcuts from bypassing `organization_id`.
 - Clarifies deployment-mode language before auth and onboarding work begins.
+
+## D-0069 — Self-hosted auth bootstrap and CLI login direction
+Date: 2026-05-03
+Status: accepted
+
+Decision:
+- Goalrail self-hosted MVP uses a bootstrapped first super admin, mapped in the
+  data model to `OrganizationMembership(owner)`.
+- The MVP has no public registration; super admin / admin users create users
+  inside the Organization.
+- Created users receive backend-generated temporary passwords and must change
+  password on first login.
+- Email invite delivery and password reset delivery are deferred.
+- Password credentials should live outside `users`.
+- Access tokens should be simple short-lived JWTs.
+- Refresh tokens should be opaque DB-backed tokens.
+- JWTs should not carry broad or stale permission state; role checks happen
+  server-side through `OrganizationMembership`.
+- The CLI binary remains `goalrail`.
+- `goalrail login` uses explicit `server_url` for self-hosted deployments,
+  browser-based localhost loopback callback, and stores `server_url` plus the
+  selected Organization / Project / RepoBinding profile.
+- SaaS onboarding and organization creation are deferred.
+
+Rationale:
+- Keeps self-hosted bootstrap narrow while preserving organization-aware auth.
+- Separates product/admin language from data roles.
+- Gives later auth schema and CLI work a bounded direction without implementing
+  endpoints, tokens, password hashing, CLI changes, web UI, SaaS onboarding,
+  organization creation, billing, SSO/OIDC, runner, gate, proof, or queue work.
