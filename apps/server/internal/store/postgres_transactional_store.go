@@ -187,42 +187,6 @@ func (s *PostgresTransactionalContractDraftStore) GetByContractSeedID(ctx contex
 	return s.base.GetByContractSeedID(ctx, id)
 }
 
-func (s *PostgresTransactionalContractDraftStore) CreateWithContractUpdateAndEvent(ctx context.Context, created spine.ContractDraft, event spine.Event, updatedAt time.Time) error {
-	if s.transactor == nil {
-		return fmt.Errorf("postgres transactor is nil")
-	}
-	if s.contracts == nil {
-		return fmt.Errorf("postgres contract store is nil")
-	}
-	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.base.Create(txCtx, created); err != nil {
-			return err
-		}
-		if err := s.contracts.MarkDraftCreated(txCtx, created.ContractID, created.ID, updatedAt); err != nil {
-			return err
-		}
-		if err := s.events.Append(txCtx, event); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (s *PostgresTransactionalContractDraftStore) CreateWithEvent(ctx context.Context, created spine.ContractDraft, event spine.Event) error {
-	if s.transactor == nil {
-		return fmt.Errorf("postgres transactor is nil")
-	}
-	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
-		if err := s.base.Create(txCtx, created); err != nil {
-			return err
-		}
-		if err := s.events.Append(txCtx, event); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
 func (s *PostgresTransactionalContractDraftStore) UpdateWithEvent(ctx context.Context, updated spine.ContractDraft, event spine.Event) error {
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")

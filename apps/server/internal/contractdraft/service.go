@@ -99,14 +99,6 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type transactionalDraftStore interface {
-	CreateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
-}
-
-type transactionalDraftContractStore interface {
-	CreateWithContractUpdateAndEvent(context.Context, spine.ContractDraft, spine.Event, time.Time) error
-}
-
 type transactionalDraftUpdateStore interface {
 	UpdateWithEvent(context.Context, spine.ContractDraft, spine.Event) error
 }
@@ -207,28 +199,6 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	event, err := s.contractDraftCreatedEvent(created)
 	if err != nil {
 		return spine.ContractDraft{}, err
-	}
-	if txDrafts, ok := s.Drafts.(transactionalDraftContractStore); ok {
-		if err := txDrafts.CreateWithContractUpdateAndEvent(ctx, created, event, now); err != nil {
-			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
-				return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractDraft{}, ErrAlreadyDrafted
-			}
-			return spine.ContractDraft{}, fmt.Errorf("create contract draft with contract update and event: %w", err)
-		}
-		return created, nil
-	}
-	if txDrafts, ok := s.Drafts.(transactionalDraftStore); ok {
-		if err := txDrafts.CreateWithEvent(ctx, created, event); err != nil {
-			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
-				return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractDraft{}, ErrAlreadyDrafted
-			}
-			return spine.ContractDraft{}, fmt.Errorf("create contract draft with event: %w", err)
-		}
-		return created, nil
 	}
 	if err := s.Drafts.Create(ctx, created); err != nil {
 		if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
