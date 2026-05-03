@@ -107,6 +107,9 @@ func TestCreateUsesTransactionRunnerWhenConfigured(t *testing.T) {
 	if !draftStore.createSawTransaction {
 		t.Fatal("draft store Create did not run inside transaction runner")
 	}
+	if !contractStore.markDraftCreatedSawTransaction {
+		t.Fatal("contract store MarkDraftCreated did not run inside transaction runner")
+	}
 	if events.transactionalAppends != 2 {
 		t.Fatalf("transactional event appends = %d, want 2", events.transactionalAppends)
 	}
@@ -235,9 +238,10 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 }
 
 type fakeContractStore struct {
-	contracts            map[spine.ContractID]spine.Contract
-	byGoal               map[spine.GoalID]spine.ContractID
-	createSawTransaction bool
+	contracts                      map[spine.ContractID]spine.Contract
+	byGoal                         map[spine.GoalID]spine.ContractID
+	createSawTransaction           bool
+	markDraftCreatedSawTransaction bool
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -280,7 +284,8 @@ func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error
 	return nil
 }
 
-func (s *fakeContractStore) MarkDraftCreated(_ context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+func (s *fakeContractStore) MarkDraftCreated(ctx context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+	s.markDraftCreatedSawTransaction = s.markDraftCreatedSawTransaction || sawTransaction(ctx)
 	contract, ok := s.contracts[id]
 	if !ok {
 		return nil
