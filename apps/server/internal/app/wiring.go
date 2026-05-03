@@ -65,12 +65,6 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	goals := store.NewPostgresTransactionalGoalStore(pool)
 	clarificationStore := store.NewPostgresClarificationRequestStore(pool)
 	clarificationAnswerStore := store.NewPostgresClarificationAnswerStore(pool)
-	clarificationTransactions := store.NewPostgresTransactionalClarificationStore(pool)
-	clarificationOptions := []clarification.Option{
-		clarification.WithRequestCreationTransaction(clarificationTransactions),
-		clarification.WithAnswerRecordingTransaction(clarificationTransactions),
-		clarification.WithAnswerApplicationTransaction(clarificationTransactions),
-	}
 	contracts := store.NewPostgresContractStore(pool)
 	contractSeedStore := store.NewPostgresContractSeedStore(pool)
 	contractDraftStore := store.NewPostgresContractDraftStore(pool)
@@ -81,6 +75,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	events := store.NewPostgresEventLog(pool)
 	authStore := store.NewPostgresAuthStore(pool)
 	txRunner := store.NewPostgresTransactionRunner(pool)
+	clarificationOptions := []clarification.Option{clarification.WithTransactionRunner(txRunner)}
 
 	intakeService := intake.NewService(intakeStore, projectContext, events, intake.SystemClock{}, intake.UUIDGenerator{})
 	intakeHandler := httpserver.NewIntakeHandler(intakeService)
