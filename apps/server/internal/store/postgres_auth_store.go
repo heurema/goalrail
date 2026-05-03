@@ -112,6 +112,39 @@ func (s *PostgresAuthStore) UpsertSession(ctx context.Context, session spine.Use
 	return s.execSQL(ctx, "upsert user session", stmt)
 }
 
+func (s *PostgresAuthStore) CreateCLIAuthCode(ctx context.Context, code spine.CLIAuthCode) error {
+	userID, err := uuidValue(code.UserID, "CLI auth code user id")
+	if err != nil {
+		return err
+	}
+	createdAt := utcOrNow(code.CreatedAt)
+	stmt := s.psql.
+		Insert("cli_auth_codes").
+		Columns(
+			"code_hash",
+			"user_id",
+			"redirect_uri",
+			"state",
+			"code_challenge",
+			"code_challenge_method",
+			"created_at",
+			"expires_at",
+			"consumed_at",
+		).
+		Values(
+			code.CodeHash,
+			userID,
+			code.RedirectURI,
+			code.State,
+			code.CodeChallenge,
+			code.CodeChallengeMethod,
+			createdAt,
+			code.ExpiresAt.UTC(),
+			nullableTime(code.ConsumedAt),
+		)
+	return s.execSQL(ctx, "create CLI auth code", stmt)
+}
+
 func (s *PostgresAuthStore) GetPasswordCredential(ctx context.Context, userID spine.UserID) (spine.UserPasswordCredential, bool, error) {
 	parsedUserID, err := uuidValue(userID, "password credential user id")
 	if err != nil {
@@ -142,6 +175,34 @@ func (s *PostgresAuthStore) GetSessionByRefreshTokenHash(ctx context.Context, re
 		From("user_sessions").
 		Where(squirrel.Eq{"refresh_token_hash": refreshTokenHash})
 	return s.getSession(ctx, "get user session by refresh token hash", stmt)
+}
+
+func (s *PostgresAuthStore) GetCLIAuthCodeByHash(ctx context.Context, codeHash string) (spine.CLIAuthCode, bool, error) {
+	stmt := s.psql.
+		Select(cliAuthCodeColumns()...).
+		From("cli_auth_codes").
+		Where(squirrel.Eq{"code_hash": codeHash})
+	return s.getCLIAuthCode(ctx, "get CLI auth code by hash", stmt)
+}
+
+func (s *PostgresAuthStore) MarkCLIAuthCodeConsumed(ctx context.Context, codeHash string, consumedAt time.Time) (bool, error) {
+	if s.exec == nil {
+		return false, fmt.Errorf("consume CLI auth code executor is nil")
+	}
+	stmt := s.psql.
+		Update("cli_auth_codes").
+		Set("consumed_at", consumedAt.UTC()).
+		Where(squirrel.Eq{"code_hash": codeHash}).
+		Where("consumed_at IS NULL")
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return false, fmt.Errorf("consume CLI auth code SQL: %w", err)
+	}
+	tag, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return false, fmt.Errorf("consume CLI auth code: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (s *PostgresAuthStore) GetUser(ctx context.Context, userID spine.UserID) (spine.User, bool, error) {
@@ -217,6 +278,24 @@ func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squi
 		return spine.UserSession{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return session, true, nil
+}
+
+func (s *PostgresAuthStore) getCLIAuthCode(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.CLIAuthCode, bool, error) {
+	if s.query == nil {
+		return spine.CLIAuthCode{}, false, fmt.Errorf("%s query executor is nil", op)
+	}
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.CLIAuthCode{}, false, fmt.Errorf("%s SQL: %w", op, err)
+	}
+	code, err := scanCLIAuthCode(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.CLIAuthCode{}, false, nil
+		}
+		return spine.CLIAuthCode{}, false, fmt.Errorf("%s: %w", op, err)
+	}
+	return code, true, nil
 }
 
 func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.User, bool, error) {
@@ -307,6 +386,30 @@ func scanUserSession(row pgx.Row) (spine.UserSession, error) {
 	return session, nil
 }
 
+func scanCLIAuthCode(row pgx.Row) (spine.CLIAuthCode, error) {
+	var code spine.CLIAuthCode
+	var userID string
+	var consumedAt pgtype.Timestamptz
+	if err := row.Scan(
+		&code.CodeHash,
+		&userID,
+		&code.RedirectURI,
+		&code.State,
+		&code.CodeChallenge,
+		&code.CodeChallengeMethod,
+		&code.CreatedAt,
+		&code.ExpiresAt,
+		&consumedAt,
+	); err != nil {
+		return spine.CLIAuthCode{}, err
+	}
+	code.UserID = spine.UserID(userID)
+	code.ConsumedAt = timeFromPg(consumedAt)
+	code.CreatedAt = code.CreatedAt.UTC()
+	code.ExpiresAt = code.ExpiresAt.UTC()
+	return code, nil
+}
+
 func scanUser(row pgx.Row) (spine.User, error) {
 	var user spine.User
 	var id string
@@ -378,6 +481,20 @@ func userSessionColumns() []string {
 		"expires_at",
 		"revoked_at",
 		"last_used_at",
+	}
+}
+
+func cliAuthCodeColumns() []string {
+	return []string{
+		"code_hash",
+		"user_id",
+		"redirect_uri",
+		"state",
+		"code_challenge",
+		"code_challenge_method",
+		"created_at",
+		"expires_at",
+		"consumed_at",
 	}
 }
 

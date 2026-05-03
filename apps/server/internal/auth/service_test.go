@@ -138,6 +138,189 @@ func TestLoginRequiresJWTSecretBeforeSessionCreation(t *testing.T) {
 	}
 }
 
+func TestStartCLILoginStoresHashedCodeAndRedirectsWithCodeAndState(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	store.credential.MustChangePassword = false
+	service := NewService(
+		store,
+		strongTestJWTSecret,
+		WithClock(fixedClock{now: now}),
+		WithCLIAuthCodeGenerator(func() (string, error) {
+			return "one-time-code", nil
+		}),
+		WithPasswordHasher(nil, func(input string, hash string) (bool, error) {
+			return hash == "hash:"+input, nil
+		}),
+	)
+
+	result, err := service.StartCLILogin(ctx, CLILoginInput{
+		Email:         "owner@example.com",
+		Password:      "temporary-password",
+		RedirectURI:   "http://127.0.0.1:49152/callback",
+		State:         "state-1",
+		CodeChallenge: codeChallengeS256("cli-code-verifier"),
+	})
+	if err != nil {
+		t.Fatalf("StartCLILogin() error = %v", err)
+	}
+	if result.RedirectURI != "http://127.0.0.1:49152/callback?code=one-time-code&state=state-1" {
+		t.Fatalf("RedirectURI = %q, want code/state redirect", result.RedirectURI)
+	}
+	if store.cliCode.CodeHash == "" || store.cliCode.CodeHash == "one-time-code" {
+		t.Fatalf("CodeHash = %q, want hashed one-time code", store.cliCode.CodeHash)
+	}
+	if store.cliCode.UserID != store.user.ID || !store.cliCode.ExpiresAt.Equal(now.Add(5*time.Minute)) {
+		t.Fatalf("stored code = %#v, want user and short TTL", store.cliCode)
+	}
+	if store.cliCode.CodeChallenge != codeChallengeS256("cli-code-verifier") || store.cliCode.CodeChallengeMethod != cliCodeChallengeMethod {
+		t.Fatalf("stored code challenge = %q/%q, want S256 challenge", store.cliCode.CodeChallenge, store.cliCode.CodeChallengeMethod)
+	}
+}
+
+func TestStartCLILoginRejectsMustChangePasswordCredential(t *testing.T) {
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.StartCLILogin(context.Background(), CLILoginInput{
+		Email:         "owner@example.com",
+		Password:      "temporary-password",
+		RedirectURI:   "http://127.0.0.1:49152/callback",
+		State:         "state-1",
+		CodeChallenge: codeChallengeS256("cli-code-verifier"),
+	})
+	if !errors.Is(err, ErrPasswordChangeRequired) {
+		t.Fatalf("StartCLILogin() error = %v, want ErrPasswordChangeRequired", err)
+	}
+	if store.cliCode.CodeHash != "" {
+		t.Fatalf("stored CLI code = %#v, want none", store.cliCode)
+	}
+}
+
+func TestStartCLILoginRejectsNonLocalhostRedirectTarget(t *testing.T) {
+	store := newFakeAuthStore()
+	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
+
+	_, err := service.StartCLILogin(context.Background(), CLILoginInput{
+		Email:         "owner@example.com",
+		Password:      "temporary-password",
+		RedirectURI:   "https://example.com/callback",
+		State:         "state-1",
+		CodeChallenge: codeChallengeS256("cli-code-verifier"),
+	})
+	if !errors.Is(err, ErrInvalidRedirectURI) {
+		t.Fatalf("StartCLILogin() error = %v, want ErrInvalidRedirectURI", err)
+	}
+}
+
+func TestExchangeCLIAuthCodeConsumesCodeAndCreatesTokens(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	store := newFakeAuthStore()
+	store.cliCode = spine.CLIAuthCode{
+		CodeHash:            hashOpaqueToken("one-time-code"),
+		UserID:              store.user.ID,
+		RedirectURI:         "http://127.0.0.1:49152/callback",
+		State:               "state-1",
+		CodeChallenge:       codeChallengeS256("cli-code-verifier"),
+		CodeChallengeMethod: cliCodeChallengeMethod,
+		CreatedAt:           now.Add(-time.Minute),
+		ExpiresAt:           now.Add(4 * time.Minute),
+	}
+	service := NewService(
+		store,
+		strongTestJWTSecret,
+		WithClock(fixedClock{now: now}),
+		WithSessionIDGenerator(func() (spine.UserSessionID, error) {
+			return "018f0000-0000-7000-8000-000000000202", nil
+		}),
+		WithRefreshTokenGenerator(func() (string, error) {
+			return "cli-refresh-token", nil
+		}),
+	)
+
+	result, err := service.ExchangeCLIAuthCode(ctx, CLIExchangeInput{Code: "one-time-code", State: "state-1", CodeVerifier: "cli-code-verifier"})
+	if err != nil {
+		t.Fatalf("ExchangeCLIAuthCode() error = %v", err)
+	}
+	if result.AccessToken == "" || result.RefreshToken != "cli-refresh-token" || result.TokenType != "Bearer" {
+		t.Fatalf("result = %#v, want token response", result)
+	}
+	if store.cliCode.ConsumedAt == nil || !store.cliCode.ConsumedAt.Equal(now) {
+		t.Fatalf("ConsumedAt = %v, want %v", store.cliCode.ConsumedAt, now)
+	}
+	if store.lastSession.ID != "018f0000-0000-7000-8000-000000000202" {
+		t.Fatalf("session ID = %q, want generated session", store.lastSession.ID)
+	}
+}
+
+func TestExchangeCLIAuthCodeRejectsUnknownExpiredAndUsedCode(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	usedAt := now.Add(-time.Minute)
+	tests := []struct {
+		name    string
+		code    spine.CLIAuthCode
+		input   CLIExchangeInput
+		wantErr error
+	}{
+		{name: "unknown", input: CLIExchangeInput{Code: "missing", State: "state-1", CodeVerifier: "cli-code-verifier"}, wantErr: ErrCLIAuthCodeInvalid},
+		{name: "expired", code: spine.CLIAuthCode{CodeHash: hashOpaqueToken("expired"), UserID: "018f0000-0000-7000-8000-000000000001", State: "state-1", CodeChallenge: codeChallengeS256("cli-code-verifier"), CodeChallengeMethod: cliCodeChallengeMethod, ExpiresAt: now.Add(-time.Second)}, input: CLIExchangeInput{Code: "expired", State: "state-1", CodeVerifier: "cli-code-verifier"}, wantErr: ErrCLIAuthCodeExpired},
+		{name: "used", code: spine.CLIAuthCode{CodeHash: hashOpaqueToken("used"), UserID: "018f0000-0000-7000-8000-000000000001", State: "state-1", CodeChallenge: codeChallengeS256("cli-code-verifier"), CodeChallengeMethod: cliCodeChallengeMethod, ExpiresAt: now.Add(time.Minute), ConsumedAt: &usedAt}, input: CLIExchangeInput{Code: "used", State: "state-1", CodeVerifier: "cli-code-verifier"}, wantErr: ErrCLIAuthCodeUsed},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeAuthStore()
+			store.cliCode = tt.code
+			service := newFakeAuthService(store, now)
+
+			_, err := service.ExchangeCLIAuthCode(context.Background(), tt.input)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ExchangeCLIAuthCode() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestExchangeCLIAuthCodeRequiresMatchingVerifier(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		input CLIExchangeInput
+	}{
+		{name: "wrong verifier", input: CLIExchangeInput{Code: "one-time-code", State: "state-1", CodeVerifier: "wrong-verifier"}},
+		{name: "missing verifier", input: CLIExchangeInput{Code: "one-time-code", State: "state-1"}},
+		{name: "code state alone", input: CLIExchangeInput{Code: "one-time-code", State: "state-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeAuthStore()
+			store.cliCode = spine.CLIAuthCode{
+				CodeHash:            hashOpaqueToken("one-time-code"),
+				UserID:              store.user.ID,
+				RedirectURI:         "http://127.0.0.1:49152/callback",
+				State:               "state-1",
+				CodeChallenge:       codeChallengeS256("cli-code-verifier"),
+				CodeChallengeMethod: cliCodeChallengeMethod,
+				CreatedAt:           now.Add(-time.Minute),
+				ExpiresAt:           now.Add(4 * time.Minute),
+			}
+			service := newFakeAuthService(store, now)
+
+			_, err := service.ExchangeCLIAuthCode(context.Background(), tt.input)
+			if !errors.Is(err, ErrCLIAuthCodeInvalid) {
+				t.Fatalf("ExchangeCLIAuthCode() error = %v, want ErrCLIAuthCodeInvalid", err)
+			}
+			if store.cliCode.ConsumedAt != nil {
+				t.Fatalf("ConsumedAt = %v, want nil for rejected verifier", store.cliCode.ConsumedAt)
+			}
+			if store.lastSession.ID != "" {
+				t.Fatalf("session was persisted for rejected verifier: %#v", store.lastSession)
+			}
+		})
+	}
+}
+
 func TestRefreshWithValidRefreshTokenReturnsNewAccessToken(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
@@ -483,6 +666,7 @@ type fakeAuthStore struct {
 	user        spine.User
 	credential  spine.UserPasswordCredential
 	session     spine.UserSession
+	cliCode     spine.CLIAuthCode
 	membership  spine.OrganizationMembership
 	lastSession spine.UserSession
 }
@@ -556,6 +740,23 @@ func (s *fakeAuthStore) GetSession(_ context.Context, sessionID spine.UserSessio
 
 func (s *fakeAuthStore) GetSessionByRefreshTokenHash(_ context.Context, refreshTokenHash string) (spine.UserSession, bool, error) {
 	return s.session, refreshTokenHash == s.session.RefreshTokenHash, nil
+}
+
+func (s *fakeAuthStore) CreateCLIAuthCode(_ context.Context, code spine.CLIAuthCode) error {
+	s.cliCode = code
+	return nil
+}
+
+func (s *fakeAuthStore) GetCLIAuthCodeByHash(_ context.Context, codeHash string) (spine.CLIAuthCode, bool, error) {
+	return s.cliCode, codeHash == s.cliCode.CodeHash, nil
+}
+
+func (s *fakeAuthStore) MarkCLIAuthCodeConsumed(_ context.Context, codeHash string, consumedAt time.Time) (bool, error) {
+	if codeHash != s.cliCode.CodeHash || s.cliCode.ConsumedAt != nil {
+		return false, nil
+	}
+	s.cliCode.ConsumedAt = &consumedAt
+	return true, nil
 }
 
 func (s *fakeAuthStore) GetPrimaryOrganizationMembership(_ context.Context, userID spine.UserID) (spine.OrganizationMembership, bool, error) {
