@@ -419,10 +419,96 @@ select:focus-visible {
 .emptySurface {
   min-width: 0;
   min-height: 100vh;
+  padding: 28px 32px 36px;
+  overflow: auto;
   border-left: 1px solid color-mix(in oklab, white 2%, transparent);
   background:
     linear-gradient(90deg, color-mix(in oklab, var(--panel-2) 40%, transparent), transparent 34%),
     var(--bg);
+}
+
+.emptyStateShell {
+  width: min(980px, 100%);
+}
+
+.emptyStateHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.emptyStateHeader h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.emptyStateStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 10%, var(--panel));
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.emptyStateCopy {
+  max-width: 720px;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.emptyStateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.emptyStateCard {
+  min-height: 132px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 3%, transparent);
+}
+
+.emptyStateCard h3 {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.emptyStateCard p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.emptyStateFooter {
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .settingsSurface {
@@ -881,7 +967,7 @@ select:focus-visible {
 }
 
 .drawerScrim {
-  position: absolute;
+  position: fixed;
   z-index: 20;
   inset: 0;
   background: color-mix(in oklab, black 50%, transparent);
@@ -890,7 +976,7 @@ select:focus-visible {
 }
 
 .drawer {
-  position: absolute;
+  position: fixed;
   z-index: 21;
   top: 0;
   right: 0;
@@ -974,7 +1060,17 @@ select:focus-visible {
 
   .emptySurface {
     min-height: calc(100vh - 183px);
+    padding: 20px 16px 28px;
     border-left: 0;
+  }
+
+  .emptyStateHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .emptyStateGrid {
+    grid-template-columns: 1fr;
   }
 
   .settingsSurface {

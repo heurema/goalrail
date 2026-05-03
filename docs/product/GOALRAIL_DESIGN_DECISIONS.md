@@ -68,21 +68,36 @@ Console v0 includes:
 - bottom-left Settings utility
 - Appearance theme presets inspired by common terminal palettes
 - Users add/edit UI under Settings
+- structured empty states for the three product surfaces
 
 Theme rules:
 
 - theme presets are token-only CSS variable changes
-- theme switching is UI component state in v0
+- theme selection may persist only as a local browser visual preference under
+  `goalrail.console.theme`
+- only valid `ThemeId` values may be stored; invalid or missing values fall
+  back to `goalrail-default`
 - theme presets must not change layout, spacing, navigation, component
   structure, product surfaces, or runtime behavior
 - theme selection must not imply backend preference persistence, user settings
   API, sessions, cookies, analytics, or auth integration
+
+Empty state rules:
+
+- structured empty states are allowed only for Contracts, Delivery Readiness,
+  and Proof
+- empty states must stay honest: no fake scores, scans, proof, backend data,
+  execution results, live statuses, run IDs, or gate decisions
+- empty states must explain the future contour without claiming that runtime,
+  server-backed product flow, or proof generation is implemented
 
 Current boundary:
 
 - UI shell only
 - no production auth
 - no user CRUD backend
+- no persistence except the local-only `goalrail.console.theme` visual
+  preference
 - no sessions/cookies
 - no analytics
 - no repo/runtime execution claims

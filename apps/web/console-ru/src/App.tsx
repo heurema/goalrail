@@ -29,6 +29,20 @@ interface ThemePreset {
   swatches: string[];
 }
 
+interface SurfaceLane {
+  title: string;
+  body: string;
+}
+
+interface SurfaceEmptyState {
+  label: string;
+  kicker: string;
+  copy: string;
+  lanes: SurfaceLane[];
+  status?: string;
+  footer?: string;
+}
+
 const SURFACES: SurfaceItem[] = [
   { id: 'contracts', label: 'Контракты' },
   { id: 'delivery-readiness', label: 'Оценка готовности' },
@@ -43,6 +57,48 @@ const THEMES: ThemePreset[] = [
   { id: 'solarized-dark', label: 'Solarized Dark', swatches: ['#002b36', '#073642', '#eee8d5', '#268bd2', '#859900'] },
   { id: 'gruvbox-dark', label: 'Gruvbox Dark', swatches: ['#282828', '#3c3836', '#ebdbb2', '#fe8019', '#b8bb26'] },
 ];
+
+const THEME_STORAGE_KEY = 'goalrail.console.theme';
+
+const SURFACE_EMPTY_STATES: Record<SurfaceId, SurfaceEmptyState> = {
+  contracts: {
+    label: 'Контракты',
+    kicker: 'contract contour',
+    copy:
+      'Контракты появятся здесь после подключения server-backed flow. Каждый контракт фиксирует границу между бизнес-целью и delivery-работой.',
+    lanes: [
+      { title: 'Намерение', body: 'Нормализованная цель и контекст владельца.' },
+      { title: 'Scope', body: 'Что входит, что не входит, ограничения.' },
+      { title: 'Приемка', body: 'Критерии, без которых работа не должна двигаться дальше.' },
+      { title: 'Handoff', body: 'Ограниченный task packet для delivery.' },
+    ],
+    footer: 'Goal → Contract → Task → Proof',
+  },
+  'delivery-readiness': {
+    label: 'Оценка готовности',
+    kicker: 'readiness contour',
+    copy: 'Здесь будет видно, хватает ли контекста, чтобы превратить цель в delivery contract.',
+    lanes: [
+      { title: 'Контекст', body: 'Что известно о цели и владельце.' },
+      { title: 'Ограничения', body: 'Лимиты, non-goals и policy boundaries.' },
+      { title: 'Приемка', body: 'Ожидаемый результат и proof expectations.' },
+      { title: 'Риски', body: 'Открытые вопросы, которые блокируют уверенный handoff.' },
+    ],
+    status: 'НЕ ПРОВЕРЯЛОСЬ',
+  },
+  proof: {
+    label: 'Проверка результата',
+    kicker: 'verification contour',
+    copy: 'Proof появится здесь после проверки execution evidence через gate.',
+    lanes: [
+      { title: 'Scope', body: 'Осталась ли работа внутри утвержденного контракта?' },
+      { title: 'Integrity', body: 'Сохранили ли проверки и evidence доверие к результату?' },
+      { title: 'Policy', body: 'Соблюдены ли заданные boundaries?' },
+      { title: 'Target', body: 'Достигнут ли ожидаемый outcome?' },
+    ],
+    status: 'ОЖИДАЕТ VERIFIED EVIDENCE',
+  },
+};
 
 const INITIAL_USERS: ConsoleUser[] = [
   { id: 'u1', name: 'Owner', email: 'owner@example.com', role: 'Владелец', status: 'Активен' },
@@ -79,12 +135,39 @@ function statusClass(status: UserStatus) {
   return 'statusDisabled';
 }
 
+function isThemeId(value: string | null): value is ThemeId {
+  return THEMES.some((theme) => theme.id === value);
+}
+
+function readStoredTheme(): ThemeId {
+  try {
+    if (typeof window === 'undefined') {
+      return 'goalrail-default';
+    }
+
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isThemeId(storedTheme) ? storedTheme : 'goalrail-default';
+  } catch {
+    return 'goalrail-default';
+  }
+}
+
+function persistTheme(themeId: ThemeId) {
+  try {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeId);
+    }
+  } catch {
+    // localStorage can be unavailable in restricted browser contexts.
+  }
+}
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
   const [screen, setScreen] = useState<ScreenId>('console');
-  const [activeTheme, setActiveTheme] = useState<ThemeId>('goalrail-default');
+  const [activeTheme, setActiveTheme] = useState<ThemeId>(() => readStoredTheme());
   const [users, setUsers] = useState<ConsoleUser[]>(INITIAL_USERS);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -94,6 +177,7 @@ function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const activeLabel = SURFACES.find((surface) => surface.id === activeSurface)?.label ?? 'Контракты';
+  const activeEmptyState = SURFACE_EMPTY_STATES[activeSurface];
   const drawerTitle = editingId ? 'Редактировать пользователя' : 'Добавить пользователя';
 
   function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -158,6 +242,11 @@ function App() {
     }
 
     setIsDrawerOpen(false);
+  }
+
+  function updateTheme(themeId: ThemeId) {
+    setActiveTheme(themeId);
+    persistTheme(themeId);
   }
 
   const visibleUsers = useMemo(() => {
@@ -282,7 +371,7 @@ function App() {
       </aside>
 
       {screen === 'console' ? (
-        <section className="emptySurface" aria-label={`${activeLabel}: пустой раздел`} />
+        <SurfaceEmptyStatePanel state={activeEmptyState} label={activeLabel} />
       ) : (
         <section
           className="settingsSurface"
@@ -317,7 +406,7 @@ function App() {
 
           <div className="settingsContent">
             {screen === 'settings-appearance' ? (
-              <AppearanceSettings activeTheme={activeTheme} onThemeChange={setActiveTheme} />
+              <AppearanceSettings activeTheme={activeTheme} onThemeChange={updateTheme} />
             ) : (
               <>
                 <div className="usersHeader">
@@ -476,6 +565,35 @@ function App() {
         </>
       ) : null}
     </main>
+  );
+}
+
+function SurfaceEmptyStatePanel({ state, label }: { state: SurfaceEmptyState; label: string }) {
+  return (
+    <section className="emptySurface" aria-label={`${label}: structured empty state`}>
+      <div className="emptyStateShell">
+        <header className="emptyStateHeader">
+          <div>
+            <p className="kicker">{state.kicker}</p>
+            <h2>{state.label}</h2>
+          </div>
+          {state.status ? <span className="emptyStateStatus">{state.status}</span> : null}
+        </header>
+
+        <p className="emptyStateCopy">{state.copy}</p>
+
+        <div className="emptyStateGrid">
+          {state.lanes.map((lane) => (
+            <article className="emptyStateCard" key={lane.title}>
+              <h3>{lane.title}</h3>
+              <p>{lane.body}</p>
+            </article>
+          ))}
+        </div>
+
+        {state.footer ? <p className="emptyStateFooter">{state.footer}</p> : null}
+      </div>
+    </section>
   );
 }
 
