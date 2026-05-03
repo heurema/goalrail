@@ -68,27 +68,13 @@ button:focus-visible {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
   min-height: 34px;
   padding: 0 8px;
+  cursor: default;
 }
 
-.brandMark {
-  display: grid;
-  gap: 4px;
-  width: 20px;
-}
-
-.brandMark span {
-  display: block;
-  width: 18px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: var(--text);
-}
-
-.brandMark span:nth-child(2) {
-  background: var(--violet);
+.brandText {
+  pointer-events: none;
 }
 
 .brandText {

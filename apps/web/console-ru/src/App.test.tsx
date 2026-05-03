@@ -16,10 +16,17 @@ describe('App', () => {
   it('renders a login-only entry screen without registration', () => {
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /^GoalRail Console$/ })).toBeInTheDocument();
+    const brand = screen.getByLabelText(/консоль goalrail/i);
+
+    expect(brand.tagName).toBe('DIV');
+    expect(brand).toHaveTextContent(/^GOALRAIL$/);
+    expect(brand.querySelector('svg.brandMark')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /консоль goalrail/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /^GoalRail Console$/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/вход в рабочее пространство/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/доступ выдает администратор/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^Пароль$/i)).toBeInTheDocument();
-    expect(screen.getByText(/доступ выдает администратор/i)).toBeInTheDocument();
     expect(screen.queryByText(/регистрация|зарегистрироваться|sign up|sso/i)).not.toBeInTheDocument();
   });
 
@@ -43,8 +50,9 @@ describe('App', () => {
 
     expect(screen.getByLabelText(/настройки: пользователи/i)).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: /разделы продукта/i })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: /разделы настроек/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /пользователи\s*access/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByRole('navigation', { name: /разделы настроек/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Раздел$/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Пользователи$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Контракты$/i })).not.toHaveAttribute('aria-current', 'page');
     expect(screen.queryByText(/preview|local-only|local UI|backend|sessions|cookies|будущ/i)).not.toBeInTheDocument();
   });

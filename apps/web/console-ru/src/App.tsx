@@ -196,9 +196,6 @@ function App() {
         <div className="loginRails" aria-hidden="true" />
         <form className="loginCard" onSubmit={handleLogin}>
           <Brand />
-          <h1>GoalRail Console</h1>
-          <p className="loginSubtitle">Вход в рабочее пространство.</p>
-          <p className="loginHelper">Доступ выдает администратор рабочего пространства.</p>
 
           <label className="field">
             <span>Email</span>
@@ -271,91 +268,81 @@ function App() {
             <p className="metaText">{visibleUsers.length} записи</p>
           </header>
 
-          <div className="settingsLayout">
-            <nav className="subnav" aria-label="Разделы настроек">
-              <p className="subnavLabel">Раздел</p>
-              <button aria-current="page" className="subnavButton active" type="button">
-                <span>Пользователи</span>
-                <span>access</span>
+          <div className="settingsContent">
+            <div className="usersHeader">
+              <div>
+                <h3>Пользователи</h3>
+                <p>Управление доступом к рабочему пространству.</p>
+              </div>
+              <button aria-label="Добавить пользователя" className="primaryButton" onClick={openNewUser} type="button">
+                <span aria-hidden="true">+</span>
+                <span>Добавить</span>
               </button>
-            </nav>
-
-            <div className="settingsContent">
-              <div className="usersHeader">
-                <div>
-                  <h3>Пользователи</h3>
-                  <p>Управление доступом к рабочему пространству.</p>
-                </div>
-                <button aria-label="Добавить пользователя" className="primaryButton" onClick={openNewUser} type="button">
-                  <span aria-hidden="true">+</span>
-                  <span>Добавить</span>
-                </button>
-              </div>
-
-              <div className="usersToolbar">
-                <label className="searchBox">
-                  <span aria-hidden="true">⌕</span>
-                  <input
-                    aria-label="Поиск пользователей"
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Поиск по имени или email"
-                    type="search"
-                    value={searchQuery}
-                  />
-                </label>
-                <label className="filterBox">
-                  <span>Роль</span>
-                  <select
-                    aria-label="Фильтр по роли"
-                    onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
-                    value={roleFilter}
-                  >
-                    <option value="all">Все роли</option>
-                    <option value="Владелец">Владелец</option>
-                    <option value="Участник">Участник</option>
-                    <option value="Наблюдатель">Наблюдатель</option>
-                  </select>
-                </label>
-                <label className="filterBox">
-                  <span>Статус</span>
-                  <select
-                    aria-label="Фильтр по статусу"
-                    onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-                    value={statusFilter}
-                  >
-                    <option value="all">Все статусы</option>
-                    <option value="Активен">Активен</option>
-                    <option value="Ожидает">Ожидает</option>
-                    <option value="Отключен">Отключен</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="usersTableFrame">
-                <table className="usersTable" aria-label="Пользователи рабочего пространства">
-                  <thead>
-                    <tr className="userRow userHead">
-                      <th scope="col">Имя</th>
-                      <th scope="col">Email</th>
-                      <th scope="col">Роль</th>
-                      <th scope="col">Статус</th>
-                      <th scope="col" aria-label="Действия" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {userRows}
-                    {visibleUsers.length === 0 ? (
-                      <tr>
-                        <td className="emptyUsers" colSpan={5}>
-                          Нет пользователей по выбранным условиям.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-
             </div>
+
+            <div className="usersToolbar">
+              <label className="searchBox">
+                <span aria-hidden="true">⌕</span>
+                <input
+                  aria-label="Поиск пользователей"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Поиск по имени или email"
+                  type="search"
+                  value={searchQuery}
+                />
+              </label>
+              <label className="filterBox">
+                <span>Роль</span>
+                <select
+                  aria-label="Фильтр по роли"
+                  onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
+                  value={roleFilter}
+                >
+                  <option value="all">Все роли</option>
+                  <option value="Владелец">Владелец</option>
+                  <option value="Участник">Участник</option>
+                  <option value="Наблюдатель">Наблюдатель</option>
+                </select>
+              </label>
+              <label className="filterBox">
+                <span>Статус</span>
+                <select
+                  aria-label="Фильтр по статусу"
+                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                  value={statusFilter}
+                >
+                  <option value="all">Все статусы</option>
+                  <option value="Активен">Активен</option>
+                  <option value="Ожидает">Ожидает</option>
+                  <option value="Отключен">Отключен</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="usersTableFrame">
+              <table className="usersTable" aria-label="Пользователи рабочего пространства">
+                <thead>
+                  <tr className="userRow userHead">
+                    <th scope="col">Имя</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Роль</th>
+                    <th scope="col">Статус</th>
+                    <th scope="col" aria-label="Действия" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {userRows}
+                  {visibleUsers.length === 0 ? (
+                    <tr>
+                      <td className="emptyUsers" colSpan={5}>
+                        Нет пользователей по выбранным условиям.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
           </div>
         </section>
       )}
@@ -443,10 +430,7 @@ function App() {
 function Brand() {
   return (
     <div className="brand" aria-label="Консоль Goalrail">
-      <span className="brandMark" aria-hidden="true">
-        <span />
-      </span>
-      <span className="brandText">Goalrail</span>
+      <span className="brandText">GOALRAIL</span>
     </div>
   );
 }
