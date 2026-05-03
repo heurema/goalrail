@@ -85,7 +85,7 @@ func (l *PostgresEventLog) Append(ctx context.Context, event spine.Event) error 
 			artifactRefs,
 		)
 
-	if err := l.execSQL(ctx, "append event", stmt); err != nil {
+	if err := execSQL(ctx, l.exec, "append event", stmt); err != nil {
 		return err
 	}
 	return nil
@@ -164,18 +164,4 @@ func scanEvent(row pgx.Row) (spine.Event, error) {
 		event.Payload = append([]byte(nil), event.Payload...)
 	}
 	return event, nil
-}
-
-func (l *PostgresEventLog) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if l.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := l.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }

@@ -103,7 +103,7 @@ func (s *PostgresContractStore) Create(ctx context.Context, contract spine.Contr
 			updatedAt,
 		)
 
-	if err := s.execSQL(ctx, "create contract", stmt); err != nil {
+	if err := execSQL(ctx, s.exec, "create contract", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "contracts_goal_id_unique" {
 			return ErrContractAlreadySeeded
 		}
@@ -150,7 +150,7 @@ func (s *PostgresContractStore) MarkDraftCreated(ctx context.Context, contractID
 		Set("current_draft_id", draftUUID).
 		Set("updated_at", updatedAt.UTC()).
 		Where(squirrel.Eq{"id": id})
-	return s.execUpdate(ctx, "mark contract draft created", stmt)
+	return execUpdate(ctx, s.exec, "mark contract draft created", ErrContractNotFound, stmt)
 }
 
 func (s *PostgresContractStore) MarkReadyForApproval(ctx context.Context, contractID spine.ContractID, updatedAt time.Time) error {
@@ -167,7 +167,7 @@ func (s *PostgresContractStore) MarkReadyForApproval(ctx context.Context, contra
 		Set("state", spine.ContractStateReadyForApproval).
 		Set("updated_at", updatedAt.UTC()).
 		Where(squirrel.Eq{"id": id})
-	return s.execUpdate(ctx, "mark contract ready for approval", stmt)
+	return execUpdate(ctx, s.exec, "mark contract ready for approval", ErrContractNotFound, stmt)
 }
 
 func (s *PostgresContractStore) MarkApproved(ctx context.Context, contractID spine.ContractID, approvedSnapshotID spine.ApprovedContractID, updatedAt time.Time) error {
@@ -189,7 +189,7 @@ func (s *PostgresContractStore) MarkApproved(ctx context.Context, contractID spi
 		Set("approved_snapshot_id", approvedUUID).
 		Set("updated_at", updatedAt.UTC()).
 		Where(squirrel.Eq{"id": id})
-	return s.execUpdate(ctx, "mark contract approved", stmt)
+	return execUpdate(ctx, s.exec, "mark contract approved", ErrContractNotFound, stmt)
 }
 
 func (s *PostgresContractStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.Contract, bool, error) {
@@ -282,38 +282,6 @@ func contractColumns() []string {
 		"created_at",
 		"updated_at",
 	}
-}
-
-func (s *PostgresContractStore) execUpdate(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	result, err := s.exec.Exec(ctx, sqlText, args...)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	if result.RowsAffected() == 0 {
-		return ErrContractNotFound
-	}
-	return nil
-}
-
-func (s *PostgresContractStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {
-	if s.exec == nil {
-		return fmt.Errorf("%s executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
-	if err != nil {
-		return fmt.Errorf("%s SQL: %w", op, err)
-	}
-	if _, err := s.exec.Exec(ctx, sqlText, args...); err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 func contractSeedIDPointerValue(value *spine.ContractSeedID) any {
