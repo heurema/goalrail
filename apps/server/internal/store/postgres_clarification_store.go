@@ -526,7 +526,7 @@ func (s *PostgresTransactionalClarificationStore) CreateRequestWithEvent(ctx con
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.requests.Create(txCtx, request); err != nil {
 			return err
 		}
@@ -542,7 +542,7 @@ func (s *PostgresTransactionalClarificationStore) RecordAnswerWithEvents(ctx con
 		return false, fmt.Errorf("postgres transactor is nil")
 	}
 	requestUpdated := false
-	err := s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	err := s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.answers.Create(txCtx, answer); err != nil {
 			return err
 		}
@@ -572,7 +572,7 @@ func (s *PostgresTransactionalClarificationStore) ApplyAnswerWithGoalHintsAndEve
 	var updated spine.Goal
 	var marked bool
 	var goalOK bool
-	err := s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	err := s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		var err error
 		marked, err = s.answers.MarkApplied(txCtx, answerID, appliedBy, appliedAt)
 		if err != nil {

@@ -45,7 +45,7 @@ func (s *PostgresTransactionalIntakeStore) CreateWithEvent(ctx context.Context, 
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, record); err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func (s *PostgresTransactionalGoalStore) CreateWithEvents(ctx context.Context, c
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, created); err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (s *PostgresTransactionalGoalStore) UpdateReadinessWithEvents(ctx context.C
 	}
 	var updated spine.Goal
 	var ok bool
-	err := s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	err := s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		var err error
 		updated, ok, err = s.base.UpdateReadiness(txCtx, id, state, reasonCodes)
 		if err != nil {
@@ -183,7 +183,7 @@ func (s *PostgresTransactionalContractSeedStore) RunReadCommitted(ctx context.Co
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, postgresTxFunc(fn))
+	return s.transactor.RunReadCommitted(ctx, postgresTxFunc(fn))
 }
 
 func (s *PostgresTransactionalContractSeedStore) CreateContractWithSeedAndEvent(ctx context.Context, contract spine.Contract, created spine.ContractSeed, event spine.Event) error {
@@ -193,7 +193,7 @@ func (s *PostgresTransactionalContractSeedStore) CreateContractWithSeedAndEvent(
 	if s.contracts == nil {
 		return fmt.Errorf("postgres contract store is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.contracts.Create(txCtx, contract); err != nil {
 			return err
 		}
@@ -211,7 +211,7 @@ func (s *PostgresTransactionalContractSeedStore) CreateWithEvent(ctx context.Con
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, created); err != nil {
 			return err
 		}
@@ -275,7 +275,7 @@ func (s *PostgresTransactionalContractDraftStore) CreateWithContractUpdateAndEve
 	if s.contracts == nil {
 		return fmt.Errorf("postgres contract store is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, created); err != nil {
 			return err
 		}
@@ -293,7 +293,7 @@ func (s *PostgresTransactionalContractDraftStore) CreateWithEvent(ctx context.Co
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, created); err != nil {
 			return err
 		}
@@ -308,7 +308,7 @@ func (s *PostgresTransactionalContractDraftStore) UpdateWithEvent(ctx context.Co
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Update(txCtx, updated); err != nil {
 			return err
 		}
@@ -323,7 +323,7 @@ func (s *PostgresTransactionalContractDraftStore) MarkReadyForApprovalWithEvent(
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.MarkReadyForApproval(txCtx, updated); err != nil {
 			return err
 		}
@@ -341,7 +341,7 @@ func (s *PostgresTransactionalContractDraftStore) MarkReadyForApprovalWithContra
 	if s.contracts == nil {
 		return fmt.Errorf("postgres contract store is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.MarkReadyForApproval(txCtx, updated); err != nil {
 			return err
 		}
@@ -400,7 +400,7 @@ func (s *PostgresTransactionalApprovedContractStore) CreateWithContractUpdateAnd
 	if s.contracts == nil {
 		return fmt.Errorf("postgres contract store is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, approved); err != nil {
 			return err
 		}
@@ -418,7 +418,7 @@ func (s *PostgresTransactionalApprovedContractStore) CreateWithEvent(ctx context
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, approved); err != nil {
 			return err
 		}
@@ -468,7 +468,7 @@ func (s *PostgresTransactionalWorkItemStore) CreateWithEvent(ctx context.Context
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.base.Create(txCtx, item); err != nil {
 			return err
 		}
@@ -548,7 +548,7 @@ func (s *PostgresTransactionalWorkItemPlanStore) AcceptProposalWithWorkItemsAndE
 	if s.transactor == nil {
 		return fmt.Errorf("postgres transactor is nil")
 	}
-	return s.transactor.ExecReadCommitted(ctx, func(txCtx context.Context) error {
+	return s.transactor.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		for _, item := range items {
 			if err := s.workItems.Create(txCtx, item); err != nil {
 				return err
