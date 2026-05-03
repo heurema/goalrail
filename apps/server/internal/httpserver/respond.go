@@ -30,3 +30,11 @@ func RespondError(w http.ResponseWriter, status int, code string, message string
 		},
 	})
 }
+
+func respondInvalidJSON(w http.ResponseWriter) {
+	RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+}
+
+func respondInternalError(w http.ResponseWriter) {
+	RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+}

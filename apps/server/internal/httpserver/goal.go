@@ -66,6 +66,6 @@ func (h *GoalHandler) respondServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, goal.ErrAlreadyPromoted):
 		RespondError(w, http.StatusConflict, "already_promoted", "intake record already promoted to goal")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }

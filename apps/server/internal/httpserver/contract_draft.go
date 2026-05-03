@@ -36,7 +36,7 @@ func (h *ContractDraftHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *ContractDraftHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var input spine.ContractDraftUpdateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
@@ -52,7 +52,7 @@ func (h *ContractDraftHandler) Update(w http.ResponseWriter, r *http.Request) {
 func (h *ContractDraftHandler) MarkReadyForApproval(w http.ResponseWriter, r *http.Request) {
 	var input spine.ContractDraftReadyForApprovalRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 
@@ -90,6 +90,6 @@ func (h *ContractDraftHandler) respondServiceError(w http.ResponseWriter, err er
 	case errors.Is(err, contractdraft.ErrAlreadyDrafted):
 		RespondError(w, http.StatusConflict, "already_drafted", "contract seed already has contract draft")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }

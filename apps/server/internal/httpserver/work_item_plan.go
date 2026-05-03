@@ -28,7 +28,7 @@ func NewWorkItemPlanHandler(service WorkItemPlanService) *WorkItemPlanHandler {
 func (h *WorkItemPlanHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	var input spine.WorkItemPlanCreateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	created, err := h.service.CreatePlan(r.Context(), spine.ContractID(r.PathValue("id")), input)
@@ -51,7 +51,7 @@ func (h *WorkItemPlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 func (h *WorkItemPlanHandler) SubmitProposal(w http.ResponseWriter, r *http.Request) {
 	var input spine.WorkItemPlanProposalSubmitRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	submitted, err := h.service.SubmitProposal(r.Context(), spine.WorkItemPlanID(r.PathValue("id")), input)
@@ -74,7 +74,7 @@ func (h *WorkItemPlanHandler) GetProposal(w http.ResponseWriter, r *http.Request
 func (h *WorkItemPlanHandler) AcceptProposal(w http.ResponseWriter, r *http.Request) {
 	var input spine.WorkItemPlanAcceptanceRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
-		RespondError(w, http.StatusBadRequest, "invalid_json", "invalid JSON request body")
+		respondInvalidJSON(w)
 		return
 	}
 	accepted, err := h.service.AcceptProposal(r.Context(), spine.WorkItemPlanProposalID(r.PathValue("id")), input)
@@ -115,6 +115,6 @@ func (h *WorkItemPlanHandler) respondServiceError(w http.ResponseWriter, err err
 	case errors.Is(err, workitemplan.ErrAlreadyAccepted):
 		RespondError(w, http.StatusConflict, "already_accepted", "proposal already accepted")
 	default:
-		RespondError(w, http.StatusInternalServerError, "internal_error", "internal server error")
+		respondInternalError(w)
 	}
 }
