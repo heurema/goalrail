@@ -175,7 +175,7 @@ func (s *PostgresWorkItemStore) getOne(ctx context.Context, op string, where squ
 }
 
 func (s *PostgresWorkItemStore) queryWorkItem(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.WorkItem, bool, error) {
-	row, err := queryWorkItemRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.WorkItem{}, false, err
 	}
@@ -187,10 +187,6 @@ func (s *PostgresWorkItemStore) queryWorkItem(ctx context.Context, op string, sq
 		return spine.WorkItem{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return item, true, nil
-}
-
-func queryWorkItemRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
-	return queryRow(ctx, query, op, sqlizer)
 }
 
 func scanWorkItem(row pgx.Row) (spine.WorkItem, error) {

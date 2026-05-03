@@ -202,7 +202,7 @@ func (s *PostgresContractStore) getOne(ctx context.Context, op string, where squ
 }
 
 func (s *PostgresContractStore) queryContract(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.Contract, bool, error) {
-	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.Contract{}, false, err
 	}
@@ -214,10 +214,6 @@ func (s *PostgresContractStore) queryContract(ctx context.Context, op string, sq
 		return spine.Contract{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return contract, true, nil
-}
-
-func queryContractLifecycleRow(ctx context.Context, query postgresRowQuerier, op string, sqlizer squirrel.Sqlizer) (pgx.Row, error) {
-	return queryRow(ctx, query, op, sqlizer)
 }
 
 func scanContract(row pgx.Row) (spine.Contract, error) {

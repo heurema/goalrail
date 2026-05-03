@@ -236,7 +236,7 @@ func (s *PostgresAuthStore) GetPrimaryOrganizationMembership(ctx context.Context
 }
 
 func (s *PostgresAuthStore) getPasswordCredential(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.UserPasswordCredential, bool, error) {
-	row, err := queryAuthRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.UserPasswordCredential{}, false, err
 	}
@@ -251,7 +251,7 @@ func (s *PostgresAuthStore) getPasswordCredential(ctx context.Context, op string
 }
 
 func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.UserSession, bool, error) {
-	row, err := queryAuthRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.UserSession{}, false, err
 	}
@@ -266,7 +266,7 @@ func (s *PostgresAuthStore) getSession(ctx context.Context, op string, stmt squi
 }
 
 func (s *PostgresAuthStore) getCLIAuthCode(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.CLIAuthCode, bool, error) {
-	row, err := queryAuthRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.CLIAuthCode{}, false, err
 	}
@@ -281,7 +281,7 @@ func (s *PostgresAuthStore) getCLIAuthCode(ctx context.Context, op string, stmt 
 }
 
 func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.User, bool, error) {
-	row, err := queryAuthRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.User{}, false, err
 	}
@@ -296,7 +296,7 @@ func (s *PostgresAuthStore) getUser(ctx context.Context, op string, stmt squirre
 }
 
 func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op string, stmt squirrel.SelectBuilder) (spine.OrganizationMembership, bool, error) {
-	row, err := queryAuthRow(ctx, s.query, op, stmt)
+	row, err := queryRow(ctx, s.query, op, stmt)
 	if err != nil {
 		return spine.OrganizationMembership{}, false, err
 	}
@@ -308,10 +308,6 @@ func (s *PostgresAuthStore) getOrganizationMembership(ctx context.Context, op st
 		return spine.OrganizationMembership{}, false, fmt.Errorf("%s: %w", op, err)
 	}
 	return membership, true, nil
-}
-
-func queryAuthRow(ctx context.Context, query postgresRowQuerier, op string, stmt squirrel.SelectBuilder) (pgx.Row, error) {
-	return queryRow(ctx, query, op, stmt)
 }
 
 func scanPasswordCredential(row pgx.Row) (spine.UserPasswordCredential, error) {

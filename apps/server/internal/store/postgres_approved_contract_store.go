@@ -202,7 +202,7 @@ func (s *PostgresApprovedContractStore) getOne(ctx context.Context, op string, w
 }
 
 func (s *PostgresApprovedContractStore) queryApprovedContract(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.ApprovedContract, bool, error) {
-	row, err := queryContractLifecycleRow(ctx, s.query, op, sqlizer)
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
 		return spine.ApprovedContract{}, false, err
 	}

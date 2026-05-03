@@ -214,14 +214,11 @@ func (s *PostgresGoalStore) getOne(ctx context.Context, op string, where squirre
 }
 
 func (s *PostgresGoalStore) queryGoal(ctx context.Context, op string, sqlizer squirrel.Sqlizer) (spine.Goal, bool, error) {
-	if s.query == nil {
-		return spine.Goal{}, false, fmt.Errorf("%s query executor is nil", op)
-	}
-	sqlText, args, err := sqlizer.ToSql()
+	row, err := queryRow(ctx, s.query, op, sqlizer)
 	if err != nil {
-		return spine.Goal{}, false, fmt.Errorf("%s SQL: %w", op, err)
+		return spine.Goal{}, false, err
 	}
-	goal, err := scanGoal(s.query.QueryRow(ctx, sqlText, args...))
+	goal, err := scanGoal(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return spine.Goal{}, false, nil
