@@ -153,3 +153,74 @@ func TestPostgresAuthStoreGetsSessionByRefreshTokenHash(t *testing.T) {
 		t.Fatalf("SQL = %q, want refresh token hash lookup", query.calls[0].sql)
 	}
 }
+
+func TestPostgresAuthStoreGetsUserByEmail(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000001",
+				"Owner",
+				"owner@example.com",
+				string(spine.EntityStateActive),
+				now,
+				now,
+			},
+		},
+	}
+	store := NewPostgresAuthStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	user, ok, err := store.GetUserByEmail(ctx, "owner@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetUserByEmail() ok = false, want true")
+	}
+	if user.Email != "owner@example.com" {
+		t.Fatalf("Email = %q, want persisted email", user.Email)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM users") {
+		t.Fatalf("SQL = %q, want users select", query.calls[0].sql)
+	}
+	if !strings.Contains(query.calls[0].sql, "lower(email) = lower($1)") {
+		t.Fatalf("SQL = %q, want case-insensitive email lookup", query.calls[0].sql)
+	}
+}
+
+func TestPostgresAuthStoreGetsPrimaryOrganizationMembership(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000301",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000001",
+				string(spine.OrganizationMembershipRoleOwner),
+				string(spine.EntityStateActive),
+				now,
+				now,
+			},
+		},
+	}
+	store := NewPostgresAuthStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	membership, ok, err := store.GetPrimaryOrganizationMembership(ctx, "018f0000-0000-7000-8000-000000000001")
+	if err != nil {
+		t.Fatalf("GetPrimaryOrganizationMembership() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetPrimaryOrganizationMembership() ok = false, want true")
+	}
+	if membership.Role != spine.OrganizationMembershipRoleOwner {
+		t.Fatalf("Role = %q, want owner", membership.Role)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM organization_memberships") {
+		t.Fatalf("SQL = %q, want organization_memberships select", query.calls[0].sql)
+	}
+	if !strings.Contains(query.calls[0].sql, "state = $") {
+		t.Fatalf("SQL = %q, want active membership filter", query.calls[0].sql)
+	}
+}

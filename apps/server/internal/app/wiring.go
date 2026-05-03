@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
 	"github.com/heurema/goalrail/apps/server/internal/contract"
@@ -63,6 +64,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	var workItemPlanProposalStore workitemplan.ProposalStore = store.NewWorkItemPlanProposalStore()
 	var acceptanceTransaction workitemplan.AcceptanceTransaction
 	var events eventAppender = eventlog.NewEventLog()
+	var authStore auth.Store
 
 	var projectContext intake.ProjectContextResolver
 	cleanup := func() {}
@@ -92,6 +94,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 		workItemPlanProposalStore = store.NewPostgresWorkItemPlanProposalStore(pool)
 		acceptanceTransaction = store.NewPostgresTransactionalWorkItemPlanStore(pool)
 		events = store.NewPostgresEventLog(pool)
+		authStore = store.NewPostgresAuthStore(pool)
 		cleanup = pool.Close
 	}
 
@@ -118,11 +121,16 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	}
 	workItemPlanService := workitemplan.NewService(contracts, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}, workItemPlanOptions...)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
+	authService := auth.NewService(authStore, cfg.AuthJWTSecret)
+	authHandler := httpserver.NewAuthHandler(authService)
 
 	router := httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                     http.HandlerFunc(healthHandler.Livez),
 		Readyz:                    http.HandlerFunc(healthHandler.Readyz),
 		Version:                   versionHandler,
+		AuthLogin:                 http.HandlerFunc(authHandler.Login),
+		AuthChangePassword:        http.HandlerFunc(authHandler.ChangePassword),
+		Me:                        http.HandlerFunc(authHandler.Me),
 		IntakeSubmit:              http.HandlerFunc(intakeHandler.Submit),
 		IntakeGet:                 http.HandlerFunc(intakeHandler.Get),
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),

@@ -67,6 +67,61 @@ not rotate the password and prints:
 temporary_password_already_exists=true
 ```
 
+## Auth API
+
+The smallest server-only auth API is available after migrations and owner
+bootstrap. Configure JWT signing with an operator-owned secret:
+
+```bash
+export GOALRAIL_AUTH_JWT_SECRET='<operator-managed-secret>'
+```
+
+Do not commit or auto-generate this secret in the repository. The server can
+start without it, but auth endpoints return a clear auth configuration error
+when signing or validating JWT access tokens without the secret.
+
+Log in with the bootstrapped owner email and temporary password:
+
+```bash
+curl -sS http://localhost:8080/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "owner@example.com",
+    "password": "temporary-password"
+  }'
+```
+
+The response includes a short-lived bearer `access_token`, an opaque
+`refresh_token` backed by `user_sessions`, and `must_change_password`.
+
+Change the temporary password with the bearer token:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/auth/change-password \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -d '{
+    "current_password": "temporary-password",
+    "new_password": "new-password"
+  }'
+```
+
+Read the current authenticated profile:
+
+```bash
+curl -sS http://localhost:8080/v1/me \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+`GET /v1/me` loads the current User and active OrganizationMembership
+server-side. JWTs carry only identity/session claims, not broad role or
+permission claims.
+
+There is still no CLI `goalrail login`, browser loopback, web UI, public
+registration, admin user creation endpoint, SaaS onboarding, organization
+creation API, password reset flow, email invite/reset delivery, refresh
+endpoint, or logout endpoint in this slice.
+
 ## Dev intake flow
 
 After migration and dev seed:

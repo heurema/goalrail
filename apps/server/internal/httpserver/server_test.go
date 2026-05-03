@@ -1,12 +1,14 @@
 package httpserver_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/version"
@@ -91,6 +93,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		Livez:                     probeRoute("livez"),
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
+		AuthLogin:                 probeRoute("auth_login"),
+		AuthChangePassword:        probeRoute("auth_change_password"),
+		Me:                        probeRoute("me"),
 		IntakeSubmit:              probeRoute("intake_submit"),
 		IntakeGet:                 probeRoute("intake_get"),
 		IntakePromote:             probeRoute("intake_promote"),
@@ -118,6 +123,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		wantRoute string
 	}{
 		{name: "intake_submit", method: http.MethodPost, path: "/v1/intakes", wantRoute: "intake_submit"},
+		{name: "auth_login", method: http.MethodPost, path: "/v1/auth/login", wantRoute: "auth_login"},
+		{name: "auth_change_password", method: http.MethodPost, path: "/v1/auth/change-password", wantRoute: "auth_change_password"},
+		{name: "me", method: http.MethodGet, path: "/v1/me", wantRoute: "me"},
 		{name: "intake_get", method: http.MethodGet, path: "/v1/intakes/intake-1", wantRoute: "intake_get"},
 		{name: "intake_promote", method: http.MethodPost, path: "/v1/intakes/intake-1/goals", wantRoute: "intake_promote"},
 		{name: "goal_readiness", method: http.MethodPost, path: "/v1/goals/goal-1/readiness", wantRoute: "goal_readiness"},
@@ -160,6 +168,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		Livez:                     probeRoute("livez"),
 		Readyz:                    probeRoute("readyz"),
 		Version:                   probeRoute("version"),
+		AuthLogin:                 probeRoute("auth_login"),
+		AuthChangePassword:        probeRoute("auth_change_password"),
+		Me:                        probeRoute("me"),
 		IntakeSubmit:              probeRoute("intake_submit"),
 		IntakeGet:                 probeRoute("intake_get"),
 		IntakePromote:             probeRoute("intake_promote"),
@@ -210,6 +221,10 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		{name: "plan_list", method: http.MethodGet, path: "/v1/plans"},
 		{name: "proposal_list", method: http.MethodGet, path: "/v1/proposals"},
 		{name: "task_list", method: http.MethodGet, path: "/v1/tasks"},
+		{name: "auth_refresh", method: http.MethodPost, path: "/v1/auth/refresh"},
+		{name: "auth_logout", method: http.MethodPost, path: "/v1/auth/logout"},
+		{name: "public_registration", method: http.MethodPost, path: "/v1/auth/register"},
+		{name: "admin_user_creation", method: http.MethodPost, path: "/v1/users"},
 	}
 
 	for _, tt := range tests {
@@ -226,6 +241,20 @@ func probeRoute(route string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpserver.RespondJSON(w, http.StatusOK, map[string]string{"route": route})
 	})
+}
+
+type unavailableAuthService struct{}
+
+func (unavailableAuthService) Login(context.Context, auth.LoginInput) (auth.LoginResult, error) {
+	return auth.LoginResult{}, auth.ErrStoreUnavailable
+}
+
+func (unavailableAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
+	return auth.ChangePasswordResult{}, auth.ErrStoreUnavailable
+}
+
+func (unavailableAuthService) Me(context.Context, string) (auth.Profile, error) {
+	return auth.Profile{}, auth.ErrStoreUnavailable
 }
 
 type routeResponse struct {
@@ -267,6 +296,7 @@ func newRouter(
 	livez http.Handler,
 	readyz http.Handler,
 	versionHandler http.Handler,
+	authHandler *httpserver.AuthHandler,
 	intakeHandler *httpserver.IntakeHandler,
 	goalHandler *httpserver.GoalHandler,
 	clarificationHandler *httpserver.ClarificationHandler,
@@ -278,6 +308,9 @@ func newRouter(
 		Livez:                     livez,
 		Readyz:                    readyz,
 		Version:                   versionHandler,
+		AuthLogin:                 http.HandlerFunc(authHandler.Login),
+		AuthChangePassword:        http.HandlerFunc(authHandler.ChangePassword),
+		Me:                        http.HandlerFunc(authHandler.Me),
 		IntakeSubmit:              http.HandlerFunc(intakeHandler.Submit),
 		IntakeGet:                 http.HandlerFunc(intakeHandler.Get),
 		IntakePromote:             http.HandlerFunc(goalHandler.PromoteFromIntake),
@@ -308,10 +341,12 @@ func baseHandlers(
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
+	authHandler := httpserver.NewAuthHandler(unavailableAuthService{})
 	return newRouter(
 		http.HandlerFunc(healthHandler.Livez),
 		http.HandlerFunc(healthHandler.Readyz),
 		version.NewHandler(),
+		authHandler,
 		intakeHandler,
 		goalHandler,
 		clarificationHandler,

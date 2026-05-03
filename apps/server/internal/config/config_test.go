@@ -12,6 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 	unsetEnv(t, "GOALRAIL_SERVER_ADDR")
 	unsetEnv(t, "GOALRAIL_LOG_LEVEL")
 	unsetEnv(t, "GOALRAIL_DATABASE_DSN")
+	unsetEnv(t, "GOALRAIL_AUTH_JWT_SECRET")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -27,6 +28,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.DatabaseDSN != "" {
 		t.Fatalf("DatabaseDSN = %q, want empty", cfg.DatabaseDSN)
 	}
+	if cfg.AuthJWTSecret != "" {
+		t.Fatalf("AuthJWTSecret = %q, want empty", cfg.AuthJWTSecret)
+	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)
 	if err != nil {
@@ -41,6 +45,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("GOALRAIL_SERVER_ADDR", "127.0.0.1:9090")
 	t.Setenv("GOALRAIL_LOG_LEVEL", "debug")
 	t.Setenv("GOALRAIL_DATABASE_DSN", "postgres://goalrail:goalrail@localhost:5432/goalrail?sslmode=disable")
+	t.Setenv("GOALRAIL_AUTH_JWT_SECRET", "test-jwt-secret")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -55,6 +60,9 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.DatabaseDSN != "postgres://goalrail:goalrail@localhost:5432/goalrail?sslmode=disable" {
 		t.Fatalf("DatabaseDSN = %q, want configured DSN", cfg.DatabaseDSN)
+	}
+	if cfg.AuthJWTSecret != "test-jwt-secret" {
+		t.Fatalf("AuthJWTSecret = %q, want configured secret", cfg.AuthJWTSecret)
 	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)
