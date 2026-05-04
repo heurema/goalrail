@@ -4,11 +4,11 @@
 
 ## Active phase
 
-- **Phase 0 -> Phase 1 transition**
+- **Phase 1 repo-side console auth source integration complete; Phase 3 API routing remains separate**
 - product and deployment canon is now in place
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
-- `apps/web/console` now mirrors the minimal login-only console shell structure for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; the RU console shell is live as a static HTTPS surface with no backend/API/session behavior, and future cards and detail views should wait until the CLI/server functionality exists
+- `apps/web/console` now mirrors the minimal login-only console shell structure for `console.goalrail.dev`, and `apps/web/console-ru` is its separate Russian copy for `console.goalrail.ru`; RU source now has a bounded auth client over the existing server login / optional password-change / `/v1/me` / logout endpoints with in-memory tokens only, while live `console.goalrail.ru` remains static-only until a separate API routing/proxy/CORS deployment slice
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, and explicit re-check; future server work should stay bounded and avoid fake canonical state claims
@@ -34,9 +34,11 @@
   organization slugs, and a dev `self_hosted` Installation linked to the dev
   Organization. The later ADR-0023 auth API slices now add login, refresh,
   password change, logout, `/v1/me`, and the smallest CLI browser-loopback
-  login code exchange; SaaS onboarding, organization creation API, and web UI
-  remain unimplemented. The current server-rendered `/cli/login` page is a
-  temporary CLI auth bridge only, not the product web console login UI.
+  login code exchange; SaaS onboarding and organization creation API remain
+  unimplemented. The current server-rendered `/cli/login` page is a temporary
+  CLI auth bridge only, not the product web console login UI; `console-ru`
+  source now consumes the server auth API directly, but the live static
+  deployment still needs backend routing before deployed login can work.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -53,10 +55,11 @@
   owner bootstrap command. The smallest auth API lifecycle now exists for
   login, refresh, password change, logout, current-user profile, and CLI code
   exchange with S256 verifier/challenge binding; the CLI now stores token
-  metadata locally after browser-loopback login. Organization / Project /
-  RepoBinding profile selection and product web console login remain
-  unimplemented; future React console login should replace or front the
-  server-rendered CLI auth bridge.
+  metadata locally after browser-loopback login. `apps/web/console-ru` source
+  now implements login, first-login password change, current profile lookup,
+  and logout over those existing endpoints. Organization / Project /
+  RepoBinding profile selection remains unimplemented; the server-rendered CLI
+  auth bridge remains separate.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -153,11 +156,45 @@ Done means:
 Current truth:
 - live status and smoke evidence are recorded in
   `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-- the console remains a static visual shell; Users changes are component state
-  only and are not persisted
+- the live console remains a static visual shell with no `/v1/*` backend route;
+  repo source now has a real auth client for the existing server auth API, but
+  deployed auth still needs a separate Phase 3 routing/proxy/CORS slice
+- Users changes are component state only and are not persisted
 - a whole-host Certbot renewal dry-run surfaced an unrelated
   `pilot.goalrail.ru` renewal dry-run failure; console-specific renewal passed,
   and pilot renewal should be handled as a separate operator follow-up
+
+## Completed frontend bounded slice
+
+### Console RU repo-side auth flow
+
+Status: **DONE — SOURCE ONLY / NOT LIVE-ROUTED.**
+
+Goal:
+- replace the local fake login in `apps/web/console-ru` with a bounded frontend
+  auth flow over the existing `apps/server` auth API.
+
+Done means:
+- `apps/web/console-ru` has a typed fetch auth client for
+  `POST /v1/auth/login`, `POST /v1/auth/change-password`, `GET /v1/me`, and
+  `POST /v1/auth/logout`
+- successful login enters the console only after `/v1/me` succeeds
+- bootstrapped users with `must_change_password = true` are routed through a
+  password-change form before console entry
+- logout calls the server and clears local in-memory auth state even if the
+  request fails
+- access and refresh tokens are kept in React memory only; no cookies, token
+  `localStorage`, token `sessionStorage`, or profile browser persistence exists
+- `goalrail.console.theme` remains the only accepted localStorage key
+- Settings -> Users remains component-state only with no backend admin user API
+- no public registration, signup, SSO, invite/reset email, password reset,
+  admin user creation/list endpoint, SaaS onboarding, organization creation
+  API, analytics, repo integration, runner, gate, proof, CORS, deployment
+  config, hostnames, IPs, ports, credentials, reverse-proxy snippets, or
+  secrets were added
+- live `https://console.goalrail.ru/` remains static-only and cannot use this
+  repo-side auth source until a separate API routing/proxy/CORS deployment
+  slice is completed and smoke-tested
 
 ## Completed backend bounded slice
 
@@ -267,8 +304,9 @@ Done means:
 - no admin user creation endpoint
 - no SaaS onboarding
 - no organization creation API
-- no product web console login UI; future React console login should replace or
-  front the server-rendered CLI auth bridge
+- this CLI slice did not implement product web console login UI; the separate
+  `console-ru` source slice now consumes the server auth API directly while the
+  server-rendered CLI auth bridge remains separate
 - no runner, gate, proof, or generic queue work
 
 ## Completed backend bounded slice

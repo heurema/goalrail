@@ -150,6 +150,12 @@ button {
   background: none;
 }
 
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
@@ -224,6 +230,23 @@ select:focus-visible {
 
 .loginCard .brand {
   margin-bottom: 28px;
+}
+
+.passwordChangeCard .brand {
+  margin-bottom: 22px;
+}
+
+.authStateBlock {
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.authStateLabel {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .field {
@@ -396,6 +419,58 @@ select:focus-visible {
 .settingsDock {
   padding-top: 10px;
   border-top: 1px solid var(--line-soft);
+}
+
+.sessionPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 12px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 70%, transparent);
+}
+
+.sessionName,
+.sessionEmail,
+.sessionRole {
+  margin: 0;
+  min-width: 0;
+}
+
+.sessionName {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionEmail,
+.sessionRole {
+  overflow: hidden;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionEmail {
+  margin-top: 4px;
+}
+
+.sessionRole {
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.logoutButton {
+  width: 100%;
+  min-height: 32px;
 }
 
 .settingsButton {
