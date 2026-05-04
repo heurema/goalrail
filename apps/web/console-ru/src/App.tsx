@@ -1,5 +1,14 @@
 import { FormEvent, useMemo, useState } from 'react';
 
+import {
+  changePassword,
+  isAuthClientError,
+  login as loginWithPassword,
+  logout as logoutSession,
+  me as fetchCurrentProfile,
+} from './authClient';
+import type { AuthClientError, LoginResponse, MeResponse } from './authClient';
+
 import './App.css';
 
 type SurfaceId = 'contracts' | 'delivery-readiness' | 'proof';
@@ -9,6 +18,22 @@ type UserStatus = 'Активен' | 'Ожидает' | 'Отключен';
 type UserRole = 'Владелец' | 'Участник' | 'Наблюдатель';
 type RoleFilter = UserRole | 'all';
 type StatusFilter = UserStatus | 'all';
+type AuthStatus =
+  | 'unauthenticated'
+  | 'logging_in'
+  | 'password_change_required'
+  | 'changing_password'
+  | 'authenticated'
+  | 'logging_out';
+
+interface TokenState {
+  userId: string;
+  accessToken: string;
+  accessTokenExpiresAt: string;
+  tokenType: 'Bearer';
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
+}
 
 interface SurfaceItem {
   id: SurfaceId;
@@ -59,6 +84,18 @@ const THEMES: ThemePreset[] = [
 ];
 
 const THEME_STORAGE_KEY = 'goalrail.console.theme';
+
+const AUTH_ERROR_MESSAGES: Record<string, string> = {
+  invalid_credentials: 'Неверный email или пароль.',
+  invalid_current_password: 'Текущий пароль неверен.',
+  database_not_configured: 'Сервер Goalrail пока не подключен к базе данных. Проверьте конфигурацию backend.',
+  auth_not_configured: 'На сервере не настроена авторизация. Проверьте GOALRAIL_AUTH_JWT_SECRET.',
+  membership_required: 'Для этого пользователя нет активного доступа к организации.',
+  inactive_user: 'Пользователь отключен.',
+  unauthorized: 'Сессия недействительна. Войдите заново.',
+  network_error: 'Не удалось связаться с сервером Goalrail.',
+  response_parse_error: 'Сервер Goalrail вернул нераспознаваемый ответ.',
+};
 
 const SURFACE_EMPTY_STATES: Record<SurfaceId, SurfaceEmptyState> = {
   contracts: {
@@ -162,9 +199,36 @@ function persistTheme(themeId: ThemeId) {
   }
 }
 
+function tokenStateFromLogin(result: LoginResponse): TokenState {
+  return {
+    userId: result.user_id,
+    accessToken: result.access_token,
+    accessTokenExpiresAt: result.access_token_expires_at,
+    tokenType: result.token_type,
+    refreshToken: result.refresh_token,
+    refreshTokenExpiresAt: result.refresh_token_expires_at,
+  };
+}
+
+function authErrorMessage(error: unknown) {
+  if (isAuthClientError(error)) {
+    return AUTH_ERROR_MESSAGES[error.code] ?? operationalErrorMessage(error);
+  }
+
+  return 'Сервер Goalrail вернул ошибку. Проверьте backend и повторите вход.';
+}
+
+function operationalErrorMessage(error: AuthClientError) {
+  const suffix = error.status ? ` Код: ${error.status}.` : '';
+  return `Сервер Goalrail вернул ошибку.${suffix}`;
+}
+
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('unauthenticated');
+  const [authError, setAuthError] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [tokens, setTokens] = useState<TokenState | null>(null);
+  const [profile, setProfile] = useState<MeResponse | null>(null);
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
   const [screen, setScreen] = useState<ScreenId>('console');
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => readStoredTheme());
@@ -179,20 +243,113 @@ function App() {
   const activeLabel = SURFACES.find((surface) => surface.id === activeSurface)?.label ?? 'Контракты';
   const activeEmptyState = SURFACE_EMPTY_STATES[activeSurface];
   const drawerTitle = editingId ? 'Редактировать пользователя' : 'Добавить пользователя';
+  const isLoginPending = authStatus === 'logging_in';
+  const isPasswordChangePending = authStatus === 'changing_password';
+  const isLoggingOut = authStatus === 'logging_out';
+  const sessionDisplayName = profile?.user.display_name.trim() || profile?.user.email || 'Пользователь';
+  const sessionEmail = profile?.user.email;
+  const sessionRole = profile?.organization_membership.role ?? 'member';
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
     const password = String(form.get('password') ?? '').trim();
 
     if (!email || !password) {
-      setLoginError('Введите email и пароль для продолжения.');
+      setAuthError('Введите email и пароль для продолжения.');
       return;
     }
 
-    setLoginError('');
-    setIsLoggedIn(true);
+    setAuthError('');
+    setPasswordChangeError('');
+    setAuthStatus('logging_in');
+
+    try {
+      const loginResult = await loginWithPassword({ email, password });
+      const nextTokens = tokenStateFromLogin(loginResult);
+      setTokens(nextTokens);
+
+      if (loginResult.must_change_password) {
+        setAuthStatus('password_change_required');
+        return;
+      }
+
+      const currentProfile = await fetchCurrentProfile(loginResult.access_token);
+      setProfile(currentProfile);
+      setAuthStatus('authenticated');
+    } catch (error) {
+      setTokens(null);
+      setProfile(null);
+      setAuthStatus('unauthenticated');
+      setAuthError(authErrorMessage(error));
+    }
+  }
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get('currentPassword') ?? '');
+    const newPassword = String(form.get('newPassword') ?? '');
+
+    if (!currentPassword || !newPassword.trim()) {
+      setPasswordChangeError('Введите текущий и новый пароль.');
+      return;
+    }
+
+    if (!tokens) {
+      resetAuthState();
+      setAuthError('Сессия недействительна. Войдите заново.');
+      return;
+    }
+
+    setPasswordChangeError('');
+    setAuthStatus('changing_password');
+
+    try {
+      await changePassword({
+        accessToken: tokens.accessToken,
+        currentPassword,
+        newPassword,
+      });
+      const currentProfile = await fetchCurrentProfile(tokens.accessToken);
+      setProfile(currentProfile);
+      setAuthStatus('authenticated');
+    } catch (error) {
+      if (isAuthClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(authErrorMessage(error));
+        return;
+      }
+
+      setAuthStatus('password_change_required');
+      setPasswordChangeError(authErrorMessage(error));
+    }
+  }
+
+  async function handleLogout() {
+    const accessToken = tokens?.accessToken;
+    if (!accessToken) {
+      resetAuthState();
+      return;
+    }
+
+    setAuthStatus('logging_out');
+    try {
+      await logoutSession(accessToken);
+    } finally {
+      resetAuthState();
+    }
+  }
+
+  function resetAuthState() {
+    setTokens(null);
+    setProfile(null);
+    setAuthStatus('unauthenticated');
+    setAuthError('');
+    setPasswordChangeError('');
+    setScreen('console');
+    setIsDrawerOpen(false);
   }
 
   function openNewUser() {
@@ -296,7 +453,7 @@ function App() {
     [visibleUsers]
   );
 
-  if (!isLoggedIn) {
+  if (authStatus === 'unauthenticated' || authStatus === 'logging_in') {
     return (
       <main
         className="loginScreen"
@@ -309,21 +466,57 @@ function App() {
 
           <label className="field">
             <span>Email</span>
-            <input autoComplete="email" name="email" placeholder="name@example.com" type="email" />
+            <input autoComplete="email" disabled={isLoginPending} name="email" placeholder="name@example.com" type="email" />
           </label>
 
-          <label className={loginError ? 'field fieldError' : 'field'}>
+          <label className={authError ? 'field fieldError' : 'field'}>
             <span>Пароль</span>
-            <input autoComplete="current-password" name="password" type="password" />
+            <input autoComplete="current-password" disabled={isLoginPending} name="password" type="password" />
           </label>
 
-          {loginError ? <p className="fieldMessage">{loginError}</p> : null}
+          {authError ? <p className="fieldMessage" role="alert">{authError}</p> : null}
 
-          <button className="primaryButton fullWidth" type="submit">
-            Войти
+          <button className="primaryButton fullWidth" disabled={isLoginPending} type="submit">
+            {isLoginPending ? 'Входим...' : 'Войти'}
             <span aria-hidden="true">→</span>
           </button>
 
+        </form>
+      </main>
+    );
+  }
+
+  if (authStatus === 'password_change_required' || authStatus === 'changing_password') {
+    return (
+      <main
+        className="loginScreen"
+        data-deployment-target="console.goalrail.ru"
+        data-goalrail-theme={activeTheme}
+      >
+        <div className="loginRails" aria-hidden="true" />
+        <form className="loginCard passwordChangeCard" onSubmit={handlePasswordChange} aria-label="Смена временного пароля">
+          <Brand />
+
+          <div className="authStateBlock">
+            <p className="authStateLabel">Требуется смена пароля</p>
+          </div>
+
+          <label className={passwordChangeError ? 'field fieldError' : 'field'}>
+            <span>Текущий пароль</span>
+            <input autoComplete="current-password" disabled={isPasswordChangePending} name="currentPassword" type="password" />
+          </label>
+
+          <label className={passwordChangeError ? 'field fieldError' : 'field'}>
+            <span>Новый пароль</span>
+            <input autoComplete="new-password" disabled={isPasswordChangePending} name="newPassword" type="password" />
+          </label>
+
+          {passwordChangeError ? <p className="fieldMessage" role="alert">{passwordChangeError}</p> : null}
+
+          <button className="primaryButton fullWidth" disabled={isPasswordChangePending} type="submit">
+            {isPasswordChangePending ? 'Сохраняем...' : 'Сменить пароль'}
+            <span aria-hidden="true">→</span>
+          </button>
         </form>
       </main>
     );
@@ -356,6 +549,17 @@ function App() {
         </nav>
 
         <div className="sidebarSpacer" />
+
+        <section className="sessionPanel" aria-label="Текущий пользователь">
+          <div>
+            <p className="sessionName">{sessionDisplayName}</p>
+            {sessionEmail ? <p className="sessionEmail">{sessionEmail}</p> : null}
+            <p className="sessionRole">role · {sessionRole}</p>
+          </div>
+          <button className="ghostButton logoutButton" disabled={isLoggingOut} onClick={handleLogout} type="button">
+            {isLoggingOut ? 'Выходим...' : 'Выйти'}
+          </button>
+        </section>
 
         <div className="settingsDock">
           <button
