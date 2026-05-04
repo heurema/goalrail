@@ -114,10 +114,6 @@ function isThemeId(value: string | null): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
 
-function isConsoleRole(value: string | undefined): value is UserRole {
-  return CONSOLE_ROLES.includes(value as UserRole);
-}
-
 function isMembershipRole(value: string | undefined): value is MembershipRole {
   return MEMBERSHIP_ROLES.includes(value as MembershipRole);
 }
