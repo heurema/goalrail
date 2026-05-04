@@ -295,6 +295,8 @@ function App() {
     setAuthStatus('logging_out');
     try {
       await logoutSession(accessToken);
+    } catch {
+      // Logout is best-effort in the UI; local auth cleanup still happens below.
     } finally {
       resetAuthState();
     }

@@ -277,6 +277,31 @@ describe('App', () => {
     expect(screen.queryByRole('navigation', { name: /product surfaces/i })).not.toBeInTheDocument();
   });
 
+  it('swallows failed logout requests, clears auth state, and keeps auth storage empty', async () => {
+    await loginSuccessfully();
+    fetchMock.mockRejectedValueOnce(new TypeError('network failure'));
+
+    fireEvent.click(screen.getByRole('button', { name: /log out/i }));
+
+    await screen.findByLabelText(/^Email$/i);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/v1/auth/login', '/v1/me', '/v1/auth/logout']);
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(screen.queryByRole('navigation', { name: /product surfaces/i })).not.toBeInTheDocument();
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.localStorage.length).toBe(0);
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.sessionStorage.length).toBe(0);
+    expect(document.body).not.toHaveTextContent(
+      /registration|register|sign up|sso|invite|reset password|password reset|analytics|chat|file upload|model selector|organization creation|repo integration|runner|gate queue/i
+    );
+  });
+
   it('does not write access tokens, refresh tokens, profile data, or auth state to browser storage', async () => {
     await loginSuccessfully();
 
