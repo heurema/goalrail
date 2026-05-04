@@ -114,8 +114,6 @@ func (h *AuthHandler) CLILoginSubmit(w http.ResponseWriter, r *http.Request) {
 			respondHTML(w, http.StatusForbidden, minimalCLILoginPage(r.FormValue("redirect_uri"), r.FormValue("state"), r.FormValue("code_challenge"), "Password change required before CLI login."))
 		case errors.Is(err, auth.ErrInvalidRedirectURI), errors.Is(err, auth.ErrStateInvalid), errors.Is(err, auth.ErrCLIAuthCodeInvalid):
 			respondHTML(w, http.StatusBadRequest, minimalCLIErrorPage("Invalid CLI login request."))
-		case errors.Is(err, auth.ErrStoreUnavailable):
-			RespondError(w, http.StatusServiceUnavailable, "database_not_configured", "database is not configured")
 		default:
 			h.respondServiceError(w, err)
 		}
@@ -203,8 +201,6 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) respondServiceError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, auth.ErrStoreUnavailable):
-		RespondError(w, http.StatusServiceUnavailable, "database_not_configured", "database is not configured")
 	case errors.Is(err, auth.ErrJWTSecretMissing), errors.Is(err, auth.ErrJWTSecretWeak):
 		RespondError(w, http.StatusServiceUnavailable, "auth_not_configured", "auth JWT secret is not configured")
 	case errors.Is(err, auth.ErrInvalidCredentials):

@@ -256,34 +256,34 @@ func probeRoute(route string) http.Handler {
 	})
 }
 
-type unavailableAuthService struct{}
+type stubAuthService struct{}
 
-func (unavailableAuthService) Login(context.Context, auth.LoginInput) (auth.LoginResult, error) {
-	return auth.LoginResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) Login(context.Context, auth.LoginInput) (auth.LoginResult, error) {
+	return auth.LoginResult{}, auth.ErrInvalidCredentials
 }
 
-func (unavailableAuthService) StartCLILogin(context.Context, auth.CLILoginInput) (auth.CLILoginResult, error) {
-	return auth.CLILoginResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) StartCLILogin(context.Context, auth.CLILoginInput) (auth.CLILoginResult, error) {
+	return auth.CLILoginResult{}, auth.ErrInvalidCredentials
 }
 
-func (unavailableAuthService) ExchangeCLIAuthCode(context.Context, auth.CLIExchangeInput) (auth.CLIExchangeResult, error) {
-	return auth.CLIExchangeResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) ExchangeCLIAuthCode(context.Context, auth.CLIExchangeInput) (auth.CLIExchangeResult, error) {
+	return auth.CLIExchangeResult{}, auth.ErrCLIAuthCodeInvalid
 }
 
-func (unavailableAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
-	return auth.RefreshResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
+	return auth.RefreshResult{}, auth.ErrSessionInvalid
 }
 
-func (unavailableAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
-	return auth.ChangePasswordResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
+	return auth.ChangePasswordResult{}, auth.ErrInvalidToken
 }
 
-func (unavailableAuthService) Logout(context.Context, string) (auth.LogoutResult, error) {
-	return auth.LogoutResult{}, auth.ErrStoreUnavailable
+func (stubAuthService) Logout(context.Context, string) (auth.LogoutResult, error) {
+	return auth.LogoutResult{}, auth.ErrInvalidToken
 }
 
-func (unavailableAuthService) Me(context.Context, string) (auth.Profile, error) {
-	return auth.Profile{}, auth.ErrStoreUnavailable
+func (stubAuthService) Me(context.Context, string) (auth.Profile, error) {
+	return auth.Profile{}, auth.ErrInvalidToken
 }
 
 type routeResponse struct {
@@ -377,7 +377,7 @@ func baseHandlers(
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
-	authHandler := httpserver.NewAuthHandler(unavailableAuthService{})
+	authHandler := httpserver.NewAuthHandler(stubAuthService{})
 	return newRouter(
 		http.HandlerFunc(healthHandler.Livez),
 		http.HandlerFunc(healthHandler.Readyz),

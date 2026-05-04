@@ -79,8 +79,6 @@ func (h *IntakeHandler) respondServiceError(w http.ResponseWriter, err error) {
 		RespondError(w, http.StatusBadRequest, "validation_failed", validationErr.Error())
 	case errors.Is(err, intake.ErrNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "intake record not found")
-	case errors.Is(err, intake.ErrProjectContextUnavailable):
-		RespondError(w, http.StatusServiceUnavailable, "project_context_unavailable", "project context validation is not configured")
 	default:
 		respondInternalError(w)
 	}

@@ -62,6 +62,16 @@ func TestBootstrapOwnerCreatesSelfHostedOwnerAndCredential(t *testing.T) {
 	}
 }
 
+func TestNewServiceRequiresStore(t *testing.T) {
+	defer func() {
+		if recovered := recover(); recovered != "bootstrapowner: store is required" {
+			t.Fatalf("panic = %v, want bootstrap owner store invariant", recovered)
+		}
+	}()
+
+	_ = NewService(nil)
+}
+
 func TestBootstrapOwnerReusesExistingCredentialWithoutRotating(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryStore()
@@ -196,13 +206,12 @@ func TestBootstrapOwnerAllowsLocalhostHTTPAndPath(t *testing.T) {
 }
 
 func testService(store *memoryStore) *Service {
-	return &Service{
-		Store:     store,
-		IDs:       &sequenceIDs{},
-		Passwords: &recordingPasswordGenerator{password: "temporary-password"},
-		Hasher:    &recordingHasher{},
-		Clock:     fixedClock{now: testNow()},
-	}
+	service := NewService(store)
+	service.IDs = &sequenceIDs{}
+	service.Passwords = &recordingPasswordGenerator{password: "temporary-password"}
+	service.Hasher = &recordingHasher{}
+	service.Clock = fixedClock{now: testNow()}
+	return service
 }
 
 func testNow() time.Time {

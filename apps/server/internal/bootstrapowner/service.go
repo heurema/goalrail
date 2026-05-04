@@ -81,6 +81,9 @@ type Result struct {
 }
 
 func NewService(store Store) *Service {
+	if store == nil {
+		panic("bootstrapowner: store is required")
+	}
 	return &Service{
 		Store:     store,
 		IDs:       SpineIDGenerator{},
@@ -91,10 +94,6 @@ func NewService(store Store) *Service {
 }
 
 func (s *Service) BootstrapOwner(ctx context.Context, input Input) (Result, error) {
-	if err := s.validateDeps(); err != nil {
-		return Result{}, err
-	}
-
 	normalized, err := NormalizeInput(input)
 	if err != nil {
 		return Result{}, err
@@ -369,25 +368,6 @@ func isLocalhost(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-func (s *Service) validateDeps() error {
-	if s.Store == nil {
-		return errors.New("bootstrap owner store is nil")
-	}
-	if s.IDs == nil {
-		return errors.New("bootstrap owner id generator is nil")
-	}
-	if s.Passwords == nil {
-		return errors.New("bootstrap owner password generator is nil")
-	}
-	if s.Hasher == nil {
-		return errors.New("bootstrap owner password hasher is nil")
-	}
-	if s.Clock == nil {
-		return errors.New("bootstrap owner clock is nil")
-	}
-	return nil
 }
 
 type SpineIDGenerator struct{}

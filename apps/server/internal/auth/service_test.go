@@ -65,6 +65,16 @@ func TestLoginVerifiesPasswordCreatesSessionAndReturnsTokens(t *testing.T) {
 	}
 }
 
+func TestNewServiceRequiresStore(t *testing.T) {
+	defer func() {
+		if recovered := recover(); recovered != "auth: store is required" {
+			t.Fatalf("panic = %v, want auth store invariant", recovered)
+		}
+	}()
+
+	_ = NewService(nil, strongTestJWTSecret)
+}
+
 func TestLoginRejectsWrongPassword(t *testing.T) {
 	store := newFakeAuthStore()
 	service := newFakeAuthService(store, time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC))
