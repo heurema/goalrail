@@ -8,7 +8,7 @@ import (
 const (
 	DefaultListenAddr            = "127.0.0.1:8090"
 	DefaultLeadLogPath           = "/srv/goalrail/pilot/leads/leads.jsonl"
-	DefaultRecipient             = "hello@goalrail.dev"
+	DefaultRecipient             = "pilot@goalrail.dev"
 	DefaultRecipientOverridePath = "/srv/goalrail/pilot/backend/lead-recipient.local"
 	DefaultResendAPIKeyPath      = "/srv/goalrail/pilot/backend/resend-api-key.local"
 	DefaultResendAPIURL          = "https://api.resend.com/emails"

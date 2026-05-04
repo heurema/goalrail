@@ -5,6 +5,9 @@ import './App.css';
 type LeadSubmitState = 'idle' | 'submitting' | 'success' | 'error';
 
 const topChips = ['2 НЕДЕЛИ', '1 КОМАНДА', '1 УЧАСТОК ПРОДУКТА'];
+const pilotContactEmail = 'pilot@goalrail.dev';
+const telegramChannelUrl = 'https://t.me/goalrail';
+const telegramChannelLabel = '@goalrail';
 
 const readinessFields = [
   ['Готовность репозитория', '74 / 100'],
@@ -237,7 +240,7 @@ function App() {
       setHoneypot('');
     } catch {
       setLeadSubmitState('error');
-      setLeadMessage('Не удалось отправить заявку. Напишите напрямую: hello@goalrail.dev');
+      setLeadMessage(`Не удалось отправить заявку. Напишите напрямую: ${pilotContactEmail}`);
     }
   };
 
@@ -595,8 +598,16 @@ function App() {
               </p>
             ) : null}
             <p className="ctaNote">
-              Прямая почта на случай сбоя:{' '}
-              <a href="mailto:hello@goalrail.dev">hello@goalrail.dev</a>
+              <span>
+                Прямая почта:{' '}
+                <a href={`mailto:${pilotContactEmail}`}>{pilotContactEmail}</a>
+              </span>
+              <span>
+                Telegram-канал:{' '}
+                <a href={telegramChannelUrl} target="_blank" rel="noreferrer">
+                  {telegramChannelLabel}
+                </a>
+              </span>
             </p>
           </section>
         </main>
