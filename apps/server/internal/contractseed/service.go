@@ -56,12 +56,8 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
-type seedDeleter interface {
-	Delete(context.Context, spine.ContractSeedID) error
-}
-
-type contractDeleter interface {
-	Delete(context.Context, spine.ContractID) error
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
 }
 
 type Clock interface {
@@ -79,16 +75,18 @@ type Service struct {
 	Contracts ContractStore
 	Seeds     Store
 	Events    EventLog
+	TxRunner  TransactionRunner
 	Clock     Clock
 	IDs       IDGenerator
 }
 
-func NewService(goals GoalReader, contracts ContractStore, seeds Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(goals GoalReader, contracts ContractStore, seeds Store, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		Goals:     goals,
 		Contracts: contracts,
 		Seeds:     seeds,
 		Events:    events,
+		TxRunner:  txRunner,
 		Clock:     clock,
 		IDs:       ids,
 	}
@@ -161,51 +159,32 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	if err != nil {
 		return spine.ContractSeed{}, err
 	}
-	if err := s.Contracts.Create(ctx, contract); err != nil {
-		if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-			return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
-		} else if ok {
-			return spine.ContractSeed{}, ErrAlreadySeeded
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Contracts.Create(txCtx, contract); err != nil {
+			if _, ok, lookupErr := s.Contracts.GetByGoalID(txCtx, goal.ID); lookupErr != nil {
+				return fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
+			} else if ok {
+				return ErrAlreadySeeded
+			}
+			return fmt.Errorf("create contract: %w", err)
 		}
-		return spine.ContractSeed{}, fmt.Errorf("create contract: %w", err)
-	}
-	if err := s.Seeds.Create(ctx, created); err != nil {
-		if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-			return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
-		} else if ok {
-			return spine.ContractSeed{}, ErrAlreadySeeded
+		if err := s.Seeds.Create(txCtx, created); err != nil {
+			if _, ok, lookupErr := s.Seeds.GetByGoalID(txCtx, goal.ID); lookupErr != nil {
+				return fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
+			} else if ok {
+				return ErrAlreadySeeded
+			}
+			return fmt.Errorf("create contract seed: %w", err)
 		}
-		return spine.ContractSeed{}, fmt.Errorf("create contract seed: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ContractSeed{}, fmt.Errorf("append contract seed created event: %w", err)
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append contract seed created event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ContractSeed{}, err
 	}
 
 	return created, nil
-}
-
-func (s *Service) RollbackCreate(ctx context.Context, seed spine.ContractSeed) error {
-	if strings.TrimSpace(string(seed.ID)) == "" {
-		return nil
-	}
-	seedStore, ok := s.Seeds.(seedDeleter)
-	if !ok {
-		return errors.New("contract seed store does not support rollback delete")
-	}
-	if err := seedStore.Delete(ctx, seed.ID); err != nil {
-		return fmt.Errorf("delete contract seed: %w", err)
-	}
-	if strings.TrimSpace(string(seed.ContractID)) == "" {
-		return nil
-	}
-	contractStore, ok := s.Contracts.(contractDeleter)
-	if !ok {
-		return errors.New("contract store does not support rollback delete")
-	}
-	if err := contractStore.Delete(ctx, seed.ContractID); err != nil {
-		return fmt.Errorf("delete contract: %w", err)
-	}
-	return nil
 }
 
 func validateGoalForSeed(goal spine.Goal) error {

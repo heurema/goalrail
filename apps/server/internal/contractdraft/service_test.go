@@ -152,6 +152,34 @@ func TestServiceAppendsContractDraftCreatedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceCreateUsesRequiredTransactionRunner(t *testing.T) {
+	service, seeds, contracts, drafts, events := draftService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	seed := validDraftableSeed()
+	storeSeedWithContract(t, seeds, contracts, seed)
+
+	if _, err := service.Create(outerCtx, seed.ID); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if drafts.createCtx != txRunner.txCtx {
+		t.Fatal("Drafts.Create did not receive transaction context")
+	}
+	if contracts.markDraftCreatedCtx != txRunner.txCtx {
+		t.Fatal("Contracts.MarkDraftCreated did not receive transaction context")
+	}
+	if events.appendCtx != txRunner.txCtx {
+		t.Fatal("Events.Append did not receive transaction context")
+	}
+	if drafts.createCtx == outerCtx || contracts.markDraftCreatedCtx == outerCtx || events.appendCtx == outerCtx {
+		t.Fatal("transactional create writes used outer context")
+	}
+}
+
 func TestServiceRejectsDuplicateDraftForSeed(t *testing.T) {
 	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
@@ -544,6 +572,37 @@ func TestServiceUpdateDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
 	assertNoForbiddenEvents(t, events.Events())
 }
 
+func TestServiceUpdateUsesRequiredTransactionRunner(t *testing.T) {
+	service, seeds, contracts, drafts, events := draftService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	seed := validDraftableSeed()
+	storeSeedWithContract(t, seeds, contracts, seed)
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	txRunner.calls = 0
+	events.appendCtx = nil
+
+	if _, err := service.Update(outerCtx, created.ID, updateRequest(t, `{"title": "Reviewed"}`)); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if drafts.updateCtx != txRunner.txCtx {
+		t.Fatal("Drafts.Update did not receive transaction context")
+	}
+	if events.appendCtx != txRunner.txCtx {
+		t.Fatal("Events.Append did not receive transaction context")
+	}
+	if drafts.updateCtx == outerCtx || events.appendCtx == outerCtx {
+		t.Fatal("transactional update writes used outer context")
+	}
+}
+
 func TestServiceMarksDraftReadyForApproval(t *testing.T) {
 	service, seeds, contracts, drafts, _ := draftService(t)
 	seed := validDraftableSeed()
@@ -735,6 +794,40 @@ func TestServiceAppendsContractDraftMarkedReadyForApprovalEvent(t *testing.T) {
 	}
 }
 
+func TestServiceMarkReadyForApprovalUsesRequiredTransactionRunner(t *testing.T) {
+	service, seeds, contracts, drafts, events := draftService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	seed := validDraftableSeed()
+	storeSeedWithContract(t, seeds, contracts, seed)
+	created, err := service.Create(context.Background(), seed.ID)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	txRunner.calls = 0
+	events.appendCtx = nil
+
+	if _, err := service.MarkReadyForApproval(outerCtx, created.ID, readyForApprovalRequest()); err != nil {
+		t.Fatalf("MarkReadyForApproval() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if drafts.markReadyForApprovalCtx != txRunner.txCtx {
+		t.Fatal("Drafts.MarkReadyForApproval did not receive transaction context")
+	}
+	if contracts.markReadyForApprovalCtx != txRunner.txCtx {
+		t.Fatal("Contracts.MarkReadyForApproval did not receive transaction context")
+	}
+	if events.appendCtx != txRunner.txCtx {
+		t.Fatal("Events.Append did not receive transaction context")
+	}
+	if drafts.markReadyForApprovalCtx == outerCtx || contracts.markReadyForApprovalCtx == outerCtx || events.appendCtx == outerCtx {
+		t.Fatal("transactional ready-for-approval writes used outer context")
+	}
+}
+
 func TestServiceReadyForApprovalDoesNotAppendApprovalWorkGateProofEvents(t *testing.T) {
 	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
@@ -756,8 +849,24 @@ func draftService(t *testing.T) (*contractdraft.Service, *fakeContractSeedStore,
 	contracts := newFakeContractStore()
 	drafts := newFakeContractDraftStore()
 	events := newFakeEventLog()
-	service := contractdraft.NewService(seeds, contracts, drafts, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := contractdraft.NewService(seeds, contracts, drafts, events, newFakeTransactionRunner(), fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, seeds, contracts, drafts, events
+}
+
+type txContextKey struct{}
+
+type fakeTransactionRunner struct {
+	calls int
+	txCtx context.Context
+}
+
+func newFakeTransactionRunner() *fakeTransactionRunner {
+	return &fakeTransactionRunner{txCtx: context.WithValue(context.Background(), txContextKey{}, "tx")}
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(_ context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(r.txCtx)
 }
 
 type fakeContractSeedStore struct {
@@ -779,7 +888,9 @@ func (s *fakeContractSeedStore) Get(_ context.Context, id spine.ContractSeedID) 
 }
 
 type fakeContractStore struct {
-	contracts map[spine.ContractID]spine.Contract
+	contracts               map[spine.ContractID]spine.Contract
+	markDraftCreatedCtx     context.Context
+	markReadyForApprovalCtx context.Context
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -796,7 +907,8 @@ func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.C
 	return contract, ok, nil
 }
 
-func (s *fakeContractStore) MarkDraftCreated(_ context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+func (s *fakeContractStore) MarkDraftCreated(ctx context.Context, id spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {
+	s.markDraftCreatedCtx = ctx
 	contract, ok := s.contracts[id]
 	if !ok {
 		return nil
@@ -808,7 +920,8 @@ func (s *fakeContractStore) MarkDraftCreated(_ context.Context, id spine.Contrac
 	return nil
 }
 
-func (s *fakeContractStore) MarkReadyForApproval(_ context.Context, id spine.ContractID, updatedAt time.Time) error {
+func (s *fakeContractStore) MarkReadyForApproval(ctx context.Context, id spine.ContractID, updatedAt time.Time) error {
+	s.markReadyForApprovalCtx = ctx
 	contract, ok := s.contracts[id]
 	if !ok {
 		return nil
@@ -820,8 +933,11 @@ func (s *fakeContractStore) MarkReadyForApproval(_ context.Context, id spine.Con
 }
 
 type fakeContractDraftStore struct {
-	drafts map[spine.ContractDraftID]spine.ContractDraft
-	bySeed map[spine.ContractSeedID]spine.ContractDraftID
+	drafts                  map[spine.ContractDraftID]spine.ContractDraft
+	bySeed                  map[spine.ContractSeedID]spine.ContractDraftID
+	createCtx               context.Context
+	updateCtx               context.Context
+	markReadyForApprovalCtx context.Context
 }
 
 func newFakeContractDraftStore() *fakeContractDraftStore {
@@ -831,13 +947,15 @@ func newFakeContractDraftStore() *fakeContractDraftStore {
 	}
 }
 
-func (s *fakeContractDraftStore) Create(_ context.Context, draft spine.ContractDraft) error {
+func (s *fakeContractDraftStore) Create(ctx context.Context, draft spine.ContractDraft) error {
+	s.createCtx = ctx
 	s.drafts[draft.ID] = draft
 	s.bySeed[draft.ContractSeedID] = draft.ID
 	return nil
 }
 
-func (s *fakeContractDraftStore) Update(_ context.Context, draft spine.ContractDraft) error {
+func (s *fakeContractDraftStore) Update(ctx context.Context, draft spine.ContractDraft) error {
+	s.updateCtx = ctx
 	existing, ok := s.drafts[draft.ID]
 	if !ok {
 		return errors.New("contract draft not found")
@@ -852,7 +970,8 @@ func (s *fakeContractDraftStore) Update(_ context.Context, draft spine.ContractD
 	return nil
 }
 
-func (s *fakeContractDraftStore) MarkReadyForApproval(_ context.Context, draft spine.ContractDraft) error {
+func (s *fakeContractDraftStore) MarkReadyForApproval(ctx context.Context, draft spine.ContractDraft) error {
+	s.markReadyForApprovalCtx = ctx
 	existing, ok := s.drafts[draft.ID]
 	if !ok {
 		return errors.New("contract draft not found")
@@ -877,14 +996,16 @@ func (s *fakeContractDraftStore) GetByContractSeedID(_ context.Context, id spine
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events    []spine.Event
+	appendCtx context.Context
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	l.appendCtx = ctx
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }

@@ -74,6 +74,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -88,16 +92,18 @@ type Service struct {
 	Contracts ContractStore
 	Approved  Store
 	Events    EventLog
+	TxRunner  TransactionRunner
 	Clock     Clock
 	IDs       IDGenerator
 }
 
-func NewService(drafts DraftReader, contracts ContractStore, approved Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(drafts DraftReader, contracts ContractStore, approved Store, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		Drafts:    drafts,
 		Contracts: contracts,
 		Approved:  approved,
 		Events:    events,
+		TxRunner:  txRunner,
 		Clock:     clock,
 		IDs:       ids,
 	}
@@ -139,19 +145,24 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		return spine.ApprovedContract{}, err
 	}
 
-	if err := s.Approved.Create(ctx, approved); err != nil {
-		if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
-			return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
-		} else if ok {
-			return spine.ApprovedContract{}, ErrAlreadyApproved
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Approved.Create(txCtx, approved); err != nil {
+			if _, ok, lookupErr := s.Approved.GetByContractDraftID(txCtx, draft.ID); lookupErr != nil {
+				return fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
+			} else if ok {
+				return ErrAlreadyApproved
+			}
+			return fmt.Errorf("create approved contract: %w", err)
 		}
-		return spine.ApprovedContract{}, fmt.Errorf("create approved contract: %w", err)
-	}
-	if err := s.Contracts.MarkApproved(ctx, approved.ContractID, approved.ID, now); err != nil {
-		return spine.ApprovedContract{}, fmt.Errorf("mark contract approved: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ApprovedContract{}, fmt.Errorf("append contract approved event: %w", err)
+		if err := s.Contracts.MarkApproved(txCtx, approved.ContractID, approved.ID, now); err != nil {
+			return fmt.Errorf("mark contract approved: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append contract approved event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ApprovedContract{}, err
 	}
 
 	return approved, nil

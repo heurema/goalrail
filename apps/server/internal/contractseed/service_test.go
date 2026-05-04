@@ -141,6 +141,36 @@ func TestServiceAppendsContractSeedCreatedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceCreateUsesRequiredTransactionRunner(t *testing.T) {
+	service, goals, contracts, seeds, events := seedService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	goal := validSeedableGoal()
+	if err := goals.Create(context.Background(), goal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+
+	if _, err := service.Create(outerCtx, goal.ID); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if contracts.createCtx != txRunner.txCtx {
+		t.Fatal("Contracts.Create did not receive transaction context")
+	}
+	if seeds.createCtx != txRunner.txCtx {
+		t.Fatal("Seeds.Create did not receive transaction context")
+	}
+	if events.appendCtx != txRunner.txCtx {
+		t.Fatal("Events.Append did not receive transaction context")
+	}
+	if contracts.createCtx == outerCtx || seeds.createCtx == outerCtx || events.appendCtx == outerCtx {
+		t.Fatal("transactional writes used outer context")
+	}
+}
+
 func TestServiceRejectsDuplicateSeedForGoal(t *testing.T) {
 	service, goals, _, _, events := seedService(t)
 	goal := validSeedableGoal()
@@ -263,8 +293,24 @@ func seedService(t *testing.T) (*contractseed.Service, *fakeGoalStore, *fakeCont
 	contracts := newFakeContractStore()
 	seeds := newFakeContractSeedStore()
 	events := newFakeEventLog()
-	service := contractseed.NewService(goals, contracts, seeds, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := contractseed.NewService(goals, contracts, seeds, events, newFakeTransactionRunner(), fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, goals, contracts, seeds, events
+}
+
+type txContextKey struct{}
+
+type fakeTransactionRunner struct {
+	calls int
+	txCtx context.Context
+}
+
+func newFakeTransactionRunner() *fakeTransactionRunner {
+	return &fakeTransactionRunner{txCtx: context.WithValue(context.Background(), txContextKey{}, "tx")}
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(_ context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(r.txCtx)
 }
 
 type fakeGoalStore struct {
@@ -288,6 +334,7 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 type fakeContractStore struct {
 	contracts map[spine.ContractID]spine.Contract
 	byGoal    map[spine.GoalID]spine.ContractID
+	createCtx context.Context
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -297,7 +344,8 @@ func newFakeContractStore() *fakeContractStore {
 	}
 }
 
-func (s *fakeContractStore) Create(_ context.Context, contract spine.Contract) error {
+func (s *fakeContractStore) Create(ctx context.Context, contract spine.Contract) error {
+	s.createCtx = ctx
 	s.contracts[contract.ID] = contract
 	s.byGoal[contract.GoalID] = contract.ID
 	return nil
@@ -318,8 +366,9 @@ func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spi
 }
 
 type fakeContractSeedStore struct {
-	seeds  map[spine.ContractSeedID]spine.ContractSeed
-	byGoal map[spine.GoalID]spine.ContractSeedID
+	seeds     map[spine.ContractSeedID]spine.ContractSeed
+	byGoal    map[spine.GoalID]spine.ContractSeedID
+	createCtx context.Context
 }
 
 func newFakeContractSeedStore() *fakeContractSeedStore {
@@ -329,7 +378,8 @@ func newFakeContractSeedStore() *fakeContractSeedStore {
 	}
 }
 
-func (s *fakeContractSeedStore) Create(_ context.Context, seed spine.ContractSeed) error {
+func (s *fakeContractSeedStore) Create(ctx context.Context, seed spine.ContractSeed) error {
+	s.createCtx = ctx
 	s.seeds[seed.ID] = seed
 	s.byGoal[seed.GoalID] = seed.ID
 	return nil
@@ -350,14 +400,16 @@ func (s *fakeContractSeedStore) GetByGoalID(_ context.Context, id spine.GoalID) 
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events    []spine.Event
+	appendCtx context.Context
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	l.appendCtx = ctx
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }

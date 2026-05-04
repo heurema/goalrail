@@ -102,8 +102,47 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
+	txRunner := newFakeTransactionRunner()
+	service, _, _, plans, proposals, _, _ := planningService(t, txRunner)
+	approved := validApprovedContract()
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+
+	proposal, err := service.SubmitProposal(outerCtx, plan.ID, validProposalRequest(string(approved.ID)))
+	if err != nil {
+		t.Fatalf("SubmitProposal() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if proposals.createCtx != txRunner.txCtx {
+		t.Fatal("Proposals.Create did not receive transaction context")
+	}
+	if plans.markProposalSubmittedCtx != txRunner.txCtx {
+		t.Fatal("Plans.MarkProposalSubmitted did not receive transaction context")
+	}
+	if proposals.createCtx == outerCtx || plans.markProposalSubmittedCtx == outerCtx {
+		t.Fatal("proposal submission writes used outer context")
+	}
+	storedPlan, _, _ := plans.Get(context.Background(), plan.ID)
+	if storedPlan.State != spine.WorkItemPlanStateProposalSubmitted {
+		t.Fatalf("plan state = %q, want proposal_submitted", storedPlan.State)
+	}
+	storedProposal, _, _ := proposals.Get(context.Background(), proposal.ID)
+	if storedProposal.State != spine.WorkItemProposalStateSubmitted {
+		t.Fatalf("proposal state = %q, want submitted", storedProposal.State)
+	}
+}
+
 func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
-	txRunner := &fakeTransactionRunner{}
+	txRunner := newFakeTransactionRunner()
 	service, _, _, plans, proposals, workItems, events := planningService(t, txRunner)
 	approved := validApprovedContract()
 
@@ -117,6 +156,7 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SubmitProposal() error = %v", err)
 	}
+	txRunner.calls = 0
 
 	accepted, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
 		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
@@ -150,7 +190,7 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 
 func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
 	t.Helper()
-	txRunner := workitemplan.TransactionRunner(&fakeTransactionRunner{})
+	txRunner := workitemplan.TransactionRunner(newFakeTransactionRunner())
 	if len(runners) > 0 {
 		txRunner = runners[0]
 	}
@@ -171,11 +211,18 @@ func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*
 
 type fakeTransactionRunner struct {
 	calls int
+	txCtx context.Context
 }
 
-func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+type txContextKey struct{}
+
+func newFakeTransactionRunner() *fakeTransactionRunner {
+	return &fakeTransactionRunner{txCtx: context.WithValue(context.Background(), txContextKey{}, "tx")}
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(_ context.Context, fn func(context.Context) error) error {
 	r.calls++
-	return fn(ctx)
+	return fn(r.txCtx)
 }
 
 type fakeContractStore struct {
@@ -215,8 +262,9 @@ func (s *fakeApprovedContractStore) Get(_ context.Context, id spine.ApprovedCont
 }
 
 type fakeWorkItemPlanStore struct {
-	plans      map[spine.WorkItemPlanID]spine.WorkItemPlan
-	byContract map[spine.ContractID]spine.WorkItemPlanID
+	plans                    map[spine.WorkItemPlanID]spine.WorkItemPlan
+	byContract               map[spine.ContractID]spine.WorkItemPlanID
+	markProposalSubmittedCtx context.Context
 }
 
 func newFakeWorkItemPlanStore() *fakeWorkItemPlanStore {
@@ -246,7 +294,8 @@ func (s *fakeWorkItemPlanStore) GetByContractID(_ context.Context, id spine.Cont
 	return plan, ok, nil
 }
 
-func (s *fakeWorkItemPlanStore) MarkProposalSubmitted(_ context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+func (s *fakeWorkItemPlanStore) MarkProposalSubmitted(ctx context.Context, id spine.WorkItemPlanID, updatedAt time.Time) error {
+	s.markProposalSubmittedCtx = ctx
 	plan := s.plans[id]
 	plan.State = spine.WorkItemPlanStateProposalSubmitted
 	plan.UpdatedAt = updatedAt.UTC()
@@ -265,6 +314,7 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 type fakeWorkItemPlanProposalStore struct {
 	proposals map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
 	byPlan    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
+	createCtx context.Context
 }
 
 func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
@@ -274,7 +324,8 @@ func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
 	}
 }
 
-func (s *fakeWorkItemPlanProposalStore) Create(_ context.Context, proposal spine.WorkItemPlanProposal) error {
+func (s *fakeWorkItemPlanProposalStore) Create(ctx context.Context, proposal spine.WorkItemPlanProposal) error {
+	s.createCtx = ctx
 	s.proposals[proposal.ID] = proposal
 	s.byPlan[proposal.PlanID] = proposal.ID
 	return nil

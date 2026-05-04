@@ -149,6 +149,34 @@ func TestServiceAppendsContractApprovedEvent(t *testing.T) {
 	}
 }
 
+func TestServiceApproveDraftUsesRequiredTransactionRunner(t *testing.T) {
+	service, contracts, drafts, approvedStore, events := approvalService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+	draft := validReadyDraft()
+	storeDraftWithContract(t, drafts, contracts, draft)
+
+	if _, err := service.ApproveDraft(outerCtx, draft.ID, approveRequest()); err != nil {
+		t.Fatalf("ApproveDraft() error = %v", err)
+	}
+
+	if txRunner.calls != 1 {
+		t.Fatalf("TxRunner calls = %d, want 1", txRunner.calls)
+	}
+	if approvedStore.createCtx != txRunner.txCtx {
+		t.Fatal("Approved.Create did not receive transaction context")
+	}
+	if contracts.markApprovedCtx != txRunner.txCtx {
+		t.Fatal("Contracts.MarkApproved did not receive transaction context")
+	}
+	if events.appendCtx != txRunner.txCtx {
+		t.Fatal("Events.Append did not receive transaction context")
+	}
+	if approvedStore.createCtx == outerCtx || contracts.markApprovedCtx == outerCtx || events.appendCtx == outerCtx {
+		t.Fatal("transactional approval writes used outer context")
+	}
+}
+
 func TestServiceRejectsDuplicateApproval(t *testing.T) {
 	service, contracts, drafts, _, events := approvalService(t)
 	draft := validReadyDraft()
@@ -349,12 +377,29 @@ func approvalService(t *testing.T) (*approvedcontract.Service, *fakeContractStor
 	drafts := newFakeContractDraftStore()
 	approved := newFakeApprovedContractStore()
 	events := newFakeEventLog()
-	service := approvedcontract.NewService(drafts, contracts, approved, events, fixedClock{now: testTime()}, &sequenceIDs{})
+	service := approvedcontract.NewService(drafts, contracts, approved, events, newFakeTransactionRunner(), fixedClock{now: testTime()}, &sequenceIDs{})
 	return service, contracts, drafts, approved, events
 }
 
+type txContextKey struct{}
+
+type fakeTransactionRunner struct {
+	calls int
+	txCtx context.Context
+}
+
+func newFakeTransactionRunner() *fakeTransactionRunner {
+	return &fakeTransactionRunner{txCtx: context.WithValue(context.Background(), txContextKey{}, "tx")}
+}
+
+func (r *fakeTransactionRunner) RunReadCommitted(_ context.Context, fn func(context.Context) error) error {
+	r.calls++
+	return fn(r.txCtx)
+}
+
 type fakeContractStore struct {
-	contracts map[spine.ContractID]spine.Contract
+	contracts       map[spine.ContractID]spine.Contract
+	markApprovedCtx context.Context
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -371,7 +416,8 @@ func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.C
 	return contract, ok, nil
 }
 
-func (s *fakeContractStore) MarkApproved(_ context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+func (s *fakeContractStore) MarkApproved(ctx context.Context, id spine.ContractID, approvedID spine.ApprovedContractID, updatedAt time.Time) error {
+	s.markApprovedCtx = ctx
 	contract, ok := s.contracts[id]
 	if !ok {
 		return nil
@@ -402,8 +448,9 @@ func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID
 }
 
 type fakeApprovedContractStore struct {
-	approved map[spine.ApprovedContractID]spine.ApprovedContract
-	byDraft  map[spine.ContractDraftID]spine.ApprovedContractID
+	approved  map[spine.ApprovedContractID]spine.ApprovedContract
+	byDraft   map[spine.ContractDraftID]spine.ApprovedContractID
+	createCtx context.Context
 }
 
 func newFakeApprovedContractStore() *fakeApprovedContractStore {
@@ -413,7 +460,8 @@ func newFakeApprovedContractStore() *fakeApprovedContractStore {
 	}
 }
 
-func (s *fakeApprovedContractStore) Create(_ context.Context, approved spine.ApprovedContract) error {
+func (s *fakeApprovedContractStore) Create(ctx context.Context, approved spine.ApprovedContract) error {
+	s.createCtx = ctx
 	s.approved[approved.ID] = approved
 	s.byDraft[approved.ContractDraftID] = approved.ID
 	return nil
@@ -434,14 +482,16 @@ func (s *fakeApprovedContractStore) GetByContractDraftID(_ context.Context, id s
 }
 
 type fakeEventLog struct {
-	events []spine.Event
+	events    []spine.Event
+	appendCtx context.Context
 }
 
 func newFakeEventLog() *fakeEventLog {
 	return &fakeEventLog{}
 }
 
-func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
+func (l *fakeEventLog) Append(ctx context.Context, event spine.Event) error {
+	l.appendCtx = ctx
 	l.events = append(l.events, cloneEvent(event))
 	return nil
 }
