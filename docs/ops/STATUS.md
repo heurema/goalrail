@@ -20,8 +20,8 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-04
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete; `apps/web/console` is now the single canonical multilingual EN/RU console source with the existing server auth API login / optional first-login password change / `/v1/me` / logout flow, static i18next resources, in-memory tokens only, `goalrail.console.theme` as the only browser-storage key, and no locale persistence; live `https://console.goalrail.ru/` remains a legacy/static RU console deployment with no `/v1/*` backend routing until a separate deployment routing slice; and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport on the pilot surface (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
+Last updated: 2026-05-05
+Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; source-level core server CORS allowlist support now exists for the future `https://goalrail.dev` frontend to `https://api.goalrail.dev` API split through exact `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` values, with CORS disabled when unset and wildcard origins rejected; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete; `apps/web/console` is now the single canonical multilingual EN/RU console source with the existing server auth API login / optional first-login password change / `/v1/me` / logout flow, static i18next resources, in-memory tokens only, `goalrail.console.theme` as the only browser-storage key, and no locale persistence; live `https://console.goalrail.ru/` remains a legacy/static RU console deployment with no `/v1/*` backend routing until a separate deployment routing slice; and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport on the pilot surface (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
 Installation/auth boundary note: ADR-0022 documents `Installation` as the
@@ -65,12 +65,13 @@ smoke slice has passed. The public RU pilot surface is live through the
 operator-managed SSH static server, with `/api/pilot-lead` routed to the Go
 sidecar rather than the previous PHP-FPM wiring. The RU console shell is also
 live through the same operator-managed static-server pattern, but remains a
-static visual shell only. This status does not claim repo-side deployment
-automation, committed server config, committed DNS config, required human
-review, signed-commit enforcement, real-device mobile QA, or native-speaker
-copy proofread. It also does not approve analytics, CRM, database, generic
-queue, lease implementation, LLM/API, repo integration, runtime execution,
-gate, proof, or broad backend platform behavior.
+static visual shell only. Core server CORS is source-level configuration only;
+this status does not claim `goalrail.dev` / `api.goalrail.dev` deployment,
+DNS, TLS, reverse-proxy routing, public HTTPS smoke, committed server config,
+required human review, signed-commit enforcement, real-device mobile QA, or
+native-speaker copy proofread. It also does not approve analytics, CRM,
+database, generic queue, lease implementation, LLM/API, repo integration,
+runtime execution, gate, proof, or broad backend platform behavior.
 
 ## Current state
 
@@ -255,11 +256,13 @@ The project currently has:
   `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_PORT`,
   `GOALRAIL_DATABASE_NAME`, `GOALRAIL_DATABASE_USER`,
   `GOALRAIL_DATABASE_PASSWORD`, and `GOALRAIL_DATABASE_SSLMODE`, plus
-  `GOALRAIL_AUTH_JWT_SECRET`; the server may start without database
+  `GOALRAIL_AUTH_JWT_SECRET` and optional exact-origin
+  `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS`; the server may start without database
   configuration for health/version only, product/auth API routes return
-  `503 database_not_configured` without DB config, and auth endpoints fail with
-  a clear auth configuration error when token signing or validation is needed
-  without the JWT secret
+  `503 database_not_configured` without DB config, auth endpoints fail with a
+  clear auth configuration error when token signing or validation is needed
+  without the JWT secret, and CORS is disabled unless explicit origins are
+  configured
 - `goalrail-server migrate up` applies the editable pre-production init migration
 - `goalrail-server seed dev` applies the idempotent dev seed
 - `goalrail-server bootstrap owner` applies the smallest self-hosted owner
