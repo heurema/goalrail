@@ -1920,3 +1920,46 @@ Rationale:
   than the fake EN local login.
 - Keeping locale and auth state out of browser storage preserves the current
   trust boundary while allowing a real multilingual console shell.
+
+## D-0075 — Core server CORS uses an exact frontend origin allowlist
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- `apps/server` may enable source-level browser CORS for the future product
+  frontend/API split where the product frontend target is
+  `https://goalrail.dev` and the API target is `https://api.goalrail.dev`.
+- CORS is configured only through
+  `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS`, a comma-separated allowlist of exact
+  `http` / `https` origins such as `https://goalrail.dev`,
+  `http://localhost:5173`, or both for local testing.
+- Empty or unset `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` disables CORS.
+- Allowed browser requests echo the exact request `Origin` as
+  `Access-Control-Allow-Origin` and set `Vary: Origin`.
+- Preflight `OPTIONS` requests from allowed origins return no-content success
+  with allowed methods `GET`, `POST`, `PATCH`, and `OPTIONS`, and allowed
+  headers `Authorization` and `Content-Type`.
+- Wildcard origins are intentionally unsupported and rejected because the MVP
+  boundary needs explicit browser API origins, not broad cross-origin access.
+- This slice does not set `Access-Control-Allow-Credentials`, add cookies,
+  change frontend code, add public registration, add admin/user APIs, or change
+  token persistence.
+- Deployment, DNS, TLS, reverse proxy routing, hostnames, IPs, ports, SSH
+  paths, credentials, secrets, live smoke, and `goalrail.dev` /
+  `api.goalrail.dev` provisioning are not part of this decision.
+- The pilot lead sidecar under `apps/web/pilot-intake-ru/server` keeps its
+  existing same-origin landing boundary and is not covered by this CORS
+  allowlist.
+- This does not add signup, SSO, invite/reset email, password reset, SaaS
+  onboarding, organization creation API, analytics, repo integration, runner,
+  gate, proof, LLM/API calls, chat UI, file upload, model selector, admin user
+  backend calls, or product data loops.
+
+Rationale:
+- The canonical console source already supports `VITE_GOALRAIL_API_BASE_URL`;
+  the core API server needs the matching source-level browser access boundary
+  before a later deployment/routing slice.
+- Exact origins keep the trust surface reviewable and avoid turning CORS into a
+  broad platform policy.
+- Keeping credentials/cookies out of this slice preserves the current
+  bearer-token, in-memory frontend auth posture.

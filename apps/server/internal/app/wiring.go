@@ -148,7 +148,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	versionHandler := version.NewHandler()
 
 	if !cfg.DatabaseConfigured() {
-		router := httpserver.NewRouter(databaseUnavailableRouteHandlers(healthHandler, versionHandler))
+		router := httpserver.WithCORS(httpserver.NewRouter(databaseUnavailableRouteHandlers(healthHandler, versionHandler)), cfg.CORS.AllowedOrigins)
 		return httpserver.NewServer(cfg.Addr, router), func() {}, nil
 	}
 
@@ -163,7 +163,7 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 	services := newAppServices(stores, txRunner, cfg.AuthJWTSecret)
 	handlers := newAppHandlers(services)
 
-	router := httpserver.NewRouter(handlers.routeHandlers(healthHandler, versionHandler))
+	router := httpserver.WithCORS(httpserver.NewRouter(handlers.routeHandlers(healthHandler, versionHandler)), cfg.CORS.AllowedOrigins)
 
 	return httpserver.NewServer(cfg.Addr, router), cleanup, nil
 }

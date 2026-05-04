@@ -43,7 +43,8 @@ Health and version routes work without database configuration. For DB-enabled
 runtime, pass `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_PORT`,
 `GOALRAIL_DATABASE_NAME`, `GOALRAIL_DATABASE_USER`,
 `GOALRAIL_DATABASE_PASSWORD`, `GOALRAIL_DATABASE_SSLMODE`, and
-`GOALRAIL_AUTH_JWT_SECRET` at `docker run` time.
+`GOALRAIL_AUTH_JWT_SECRET` at `docker run` time. Browser CORS is optional and
+controlled separately by `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS`.
 
 Apply migrations from the image by passing runtime-owned environment:
 
@@ -105,6 +106,38 @@ injection and must not be committed.
 
 `GOALRAIL_DATABASE_DSN` is no longer used by the server runtime database
 configuration path.
+
+## Browser API CORS
+
+CORS is disabled by default. Enable it only for exact browser origins with:
+
+```bash
+export GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS=https://goalrail.dev
+```
+
+For local frontend testing, use an exact local origin:
+
+```bash
+export GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS=http://localhost:5173
+```
+
+Multiple origins are comma-separated:
+
+```bash
+export GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS=https://goalrail.dev,http://localhost:5173
+```
+
+The server rejects wildcard origins such as `*`. The MVP boundary intentionally
+uses an explicit allowlist for the future `https://goalrail.dev` frontend to
+`https://api.goalrail.dev` API split instead of broad cross-origin access.
+
+For allowed origins, the server echoes the exact request `Origin`, sets
+`Vary: Origin`, and handles `OPTIONS` preflights with allowed methods `GET`,
+`POST`, `PATCH`, and `OPTIONS` plus allowed headers `Authorization` and
+`Content-Type`. This server does not set `Access-Control-Allow-Credentials`,
+does not add cookies, and this source slice does not include DNS, TLS, reverse
+proxy routing, deployment config, hostnames, IPs, ports, credentials, or
+secrets.
 
 Apply the editable pre-production init migration:
 

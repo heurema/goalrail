@@ -21,6 +21,7 @@ func TestLoadDefaults(t *testing.T) {
 	unsetEnv(t, "GOALRAIL_DATABASE_PASSWORD")
 	unsetEnv(t, "GOALRAIL_DATABASE_SSLMODE")
 	unsetEnv(t, "GOALRAIL_AUTH_JWT_SECRET")
+	unsetEnv(t, "GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -45,6 +46,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.AuthJWTSecret != "" {
 		t.Fatalf("AuthJWTSecret = %q, want empty", cfg.AuthJWTSecret)
 	}
+	if len(cfg.CORS.AllowedOrigins) != 0 {
+		t.Fatalf("CORS.AllowedOrigins = %#v, want empty", cfg.CORS.AllowedOrigins)
+	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)
 	if err != nil {
@@ -65,6 +69,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("GOALRAIL_DATABASE_PASSWORD", "secret-password")
 	t.Setenv("GOALRAIL_DATABASE_SSLMODE", "require")
 	t.Setenv("GOALRAIL_AUTH_JWT_SECRET", "test-jwt-secret")
+	t.Setenv("GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS", "https://goalrail.dev, http://localhost:5173")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -100,6 +105,10 @@ func TestLoadOverrides(t *testing.T) {
 	}
 	if cfg.AuthJWTSecret != "test-jwt-secret" {
 		t.Fatalf("AuthJWTSecret = %q, want configured secret", cfg.AuthJWTSecret)
+	}
+	wantCORSOrigins := []string{"https://goalrail.dev", "http://localhost:5173"}
+	if strings.Join(cfg.CORS.AllowedOrigins, ",") != strings.Join(wantCORSOrigins, ",") {
+		t.Fatalf("CORS.AllowedOrigins = %#v, want %#v", cfg.CORS.AllowedOrigins, wantCORSOrigins)
 	}
 
 	level, err := config.ParseLogLevel(cfg.LogLevel)
@@ -206,6 +215,30 @@ func TestLoadRejectsUnsupportedLogLevel(t *testing.T) {
 
 	if _, err := config.Load(); err == nil {
 		t.Fatal("Load() error = nil, want unsupported log level error")
+	}
+}
+
+func TestLoadRejectsWildcardCORSOrigin(t *testing.T) {
+	t.Setenv("GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS", "*")
+
+	if _, err := config.Load(); err == nil {
+		t.Fatal("Load() error = nil, want wildcard CORS origin error")
+	}
+}
+
+func TestParseCORSAllowedOriginsTrimsEmptyAndDeduplicates(t *testing.T) {
+	origins, err := config.ParseCORSAllowedOrigins([]string{
+		" https://goalrail.dev ",
+		"",
+		"http://localhost:5173",
+		"https://goalrail.dev",
+	})
+	if err != nil {
+		t.Fatalf("ParseCORSAllowedOrigins() error = %v", err)
+	}
+	want := []string{"https://goalrail.dev", "http://localhost:5173"}
+	if strings.Join(origins, ",") != strings.Join(want, ",") {
+		t.Fatalf("ParseCORSAllowedOrigins() = %#v, want %#v", origins, want)
 	}
 }
 
