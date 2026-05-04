@@ -6,24 +6,33 @@ const { getComputedStyle } = window;
 window.getComputedStyle = (element) => getComputedStyle(element);
 window.HTMLElement.prototype.scrollIntoView = () => {};
 
-const localStorageState = new Map<string, string>();
+function createStorageMock() {
+  const storageState = new Map<string, string>();
+
+  return {
+    get length() {
+      return storageState.size;
+    },
+    clear: vi.fn(() => storageState.clear()),
+    getItem: vi.fn((key: string) => storageState.get(key) ?? null),
+    key: vi.fn((index: number) => Array.from(storageState.keys())[index] ?? null),
+    removeItem: vi.fn((key: string) => {
+      storageState.delete(key);
+    }),
+    setItem: vi.fn((key: string, value: string) => {
+      storageState.set(key, value);
+    }),
+  };
+}
 
 Object.defineProperty(window, 'localStorage', {
   configurable: true,
-  value: {
-    get length() {
-      return localStorageState.size;
-    },
-    clear: vi.fn(() => localStorageState.clear()),
-    getItem: vi.fn((key: string) => localStorageState.get(key) ?? null),
-    key: vi.fn((index: number) => Array.from(localStorageState.keys())[index] ?? null),
-    removeItem: vi.fn((key: string) => {
-      localStorageState.delete(key);
-    }),
-    setItem: vi.fn((key: string, value: string) => {
-      localStorageState.set(key, value);
-    }),
-  },
+  value: createStorageMock(),
+});
+
+Object.defineProperty(window, 'sessionStorage', {
+  configurable: true,
+  value: createStorageMock(),
 });
 
 Object.defineProperty(window, 'matchMedia', {

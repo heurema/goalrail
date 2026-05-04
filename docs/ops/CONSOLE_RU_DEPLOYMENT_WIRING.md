@@ -17,13 +17,20 @@ related_docs:
   - docs/ops/STATUS.md
   - docs/ops/NEXT.md
   - docs/ops/COMPONENTS.yaml
-  - apps/web/console-ru/README.md
+  - apps/web/console/README.md
 ---
 # Console RU — Deployment Wiring
 
 ## Current status
 
 **LIVE VIA SSH STATIC SERVER — SMOKE PASSED.**
+
+Source-truth note, 2026-05-04: canonical console source has moved to the single
+multilingual app at `apps/web/console` per D-0074. The live
+`console.goalrail.ru` deployment may still point to the older static RU release
+until a separate deployment migration / API routing slice is implemented and
+smoke-tested. This document records the historical live static deployment; it
+does not make the removed `apps/web/console-ru` path current source truth.
 
 The RU console shell from `apps/web/console-ru` has been built locally,
 uploaded to the operator-managed SSH static server, exposed through the
@@ -39,8 +46,10 @@ not recorded in this repository.
 
 ## Decision basis
 
-- D-0022 remains in force: the RU console shell lives in
-  `apps/web/console-ru` and targets `console.goalrail.ru`.
+- D-0074 supersedes D-0022 for source layout: canonical console source now
+  lives in `apps/web/console`.
+- The deployed `console.goalrail.ru` static release may remain live until a
+  separate deployment migration slice.
 - The console remains a prototype/public packaging surface only, not a mature
   Goalrail web product loop.
 - Future cards and detail views must wait for underlying CLI/server

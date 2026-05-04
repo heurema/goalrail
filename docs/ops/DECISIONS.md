@@ -202,7 +202,7 @@ Decision:
 
 ## D-0021 — Real console shell is separate from demo surfaces
 Date: 2026-04-25
-Status: accepted
+Status: accepted; target-domain direction updated by D-0074
 
 Decision:
 - the real console shell lives in `apps/web/console`
@@ -212,7 +212,8 @@ Decision:
 
 ## D-0022 — RU console is a separate web resource
 Date: 2026-04-25
-Status: accepted
+Status: superseded by D-0074 for source layout only; live `console.goalrail.ru`
+static deployment history remains valid until a separate deployment migration
 
 Decision:
 - the RU console shell lives in `apps/web/console-ru`
@@ -1869,3 +1870,53 @@ Rationale:
 - Telegram is an explicit public contact/publishing point for Goalrail.
 - Keeping both contact channels visible gives visitors a direct fallback
   without adding analytics, CRM, chat, accounts, or broader backend scope.
+
+## D-0074 — Console source is one multilingual app
+Date: 2026-05-04
+Status: accepted
+
+Decision:
+- The canonical product console source is now one multilingual React / Vite app
+  under `apps/web/console`.
+- `apps/web/console-ru` is removed as a repo workspace source after its useful
+  bounded auth flow and Russian copy are migrated into `apps/web/console`.
+- The canonical package name remains `@goalrail/console-web`.
+- The console uses `react-i18next` + `i18next` with statically bundled `en` and
+  `ru` resources, `fallbackLng: en`, and no browser language-detector package.
+- Locale selection resolves in this order: `?lng=en|ru`,
+  `VITE_GOALRAIL_DEFAULT_LOCALE`, `navigator.language`, then `en`.
+- Runtime language switching updates i18next state, `document.documentElement.lang`,
+  and the URL `lng` query param without storing locale in browser storage.
+- The console auth flow calls the existing server auth API:
+  `POST /v1/auth/login`, optional `POST /v1/auth/change-password`, `GET /v1/me`,
+  and `POST /v1/auth/logout`.
+- Console access tokens, refresh tokens, profile data, and auth state remain in
+  React memory only; no cookies, `localStorage`, or `sessionStorage` auth
+  persistence is introduced.
+- `goalrail.console.theme` remains the only accepted browser-storage key in
+  this source slice.
+- `VITE_GOALRAIL_API_BASE_URL` is the build-time API base URL knob. Empty means
+  same-origin `/v1/...`; non-empty values are trimmed and stripped of trailing
+  slashes, so `https://api.goalrail.dev/` plus `/v1/me` becomes
+  `https://api.goalrail.dev/v1/me`.
+- Target domain direction for later deployment slices is:
+  product frontend `goalrail.dev`, API `api.goalrail.dev`, and demo sandbox
+  `demo.goalrail.dev`.
+- `demo.goalrail.dev` remains separate because it is a sandbox / demo surface,
+  not the canonical product console source.
+- `console.goalrail.ru` may remain a legacy/live static deployment until a
+  separate migration slice updates deployment routing and smoke evidence.
+- This decision supersedes D-0022 for source layout only. It does not claim
+  deployment, backend CORS, live API routing, DNS, proxy, or server-host changes.
+- This does not add public registration, signup, SSO, invite/reset email,
+  password reset, SaaS onboarding, organization creation API, analytics, repo
+  integration, runner, gate, proof, LLM/API calls, chat UI, file upload, model
+  selector, admin user backend calls, or product data loops.
+
+Rationale:
+- One console source prevents EN/RU shell drift while keeping demo surfaces
+  independent.
+- The existing RU auth flow already matched ADR-0023 guardrails and is safer
+  than the fake EN local login.
+- Keeping locale and auth state out of browser storage preserves the current
+  trust boundary while allowing a real multilingual console shell.
