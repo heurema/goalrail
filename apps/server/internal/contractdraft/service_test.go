@@ -180,51 +180,20 @@ func TestServiceCreateUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
-func TestServiceCreateDuplicateLookupAfterFailedCreateUsesOuterContext(t *testing.T) {
-	tests := []struct {
-		name           string
-		duplicateFound bool
-		wantErr        error
-	}{
-		{
-			name:           "returns duplicate found outside transaction",
-			duplicateFound: true,
-			wantErr:        contractdraft.ErrAlreadyDrafted,
-		},
-		{
-			name:           "returns original create error when duplicate not found",
-			duplicateFound: false,
-			wantErr:        nil,
-		},
+func TestServiceCreateFailedCreateDoesNotRunPostFailureDuplicateLookup(t *testing.T) {
+	service, seeds, contracts, drafts, _ := draftService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	createErr := errors.New("create failed")
+	drafts.createErr = createErr
+	seed := validDraftableSeed()
+	storeSeedWithContract(t, seeds, contracts, seed)
+
+	_, err := service.Create(txRunner.txCtx, seed.ID)
+	if !errors.Is(err, createErr) {
+		t.Fatalf("Create() error = %v, want original create error", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			service, seeds, contracts, drafts, _ := draftService(t)
-			txRunner := service.TxRunner.(*fakeTransactionRunner)
-			outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
-			createErr := errors.New("create failed")
-			drafts.createErr = createErr
-			drafts.duplicateAfterCreateFailure = tt.duplicateFound
-			seed := validDraftableSeed()
-			storeSeedWithContract(t, seeds, contracts, seed)
-
-			_, err := service.Create(outerCtx, seed.ID)
-			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("Create() error = %v, want %v", err, tt.wantErr)
-				}
-			} else if !errors.Is(err, createErr) {
-				t.Fatalf("Create() error = %v, want original create error", err)
-			}
-			got := drafts.lastGetBySeedCtx(t)
-			if got != outerCtx {
-				t.Fatal("Drafts.GetByContractSeedID after failed create did not receive outer context")
-			}
-			if got == txRunner.txCtx {
-				t.Fatal("Drafts.GetByContractSeedID after failed create received transaction context")
-			}
-		})
+	if got := len(drafts.getBySeedCtxs); got != 1 {
+		t.Fatalf("Drafts.GetByContractSeedID calls = %d, want preflight only", got)
 	}
 }
 
@@ -981,14 +950,13 @@ func (s *fakeContractStore) MarkReadyForApproval(ctx context.Context, id spine.C
 }
 
 type fakeContractDraftStore struct {
-	drafts                      map[spine.ContractDraftID]spine.ContractDraft
-	bySeed                      map[spine.ContractSeedID]spine.ContractDraftID
-	createCtx                   context.Context
-	updateCtx                   context.Context
-	markReadyForApprovalCtx     context.Context
-	createErr                   error
-	duplicateAfterCreateFailure bool
-	getBySeedCtxs               []context.Context
+	drafts                  map[spine.ContractDraftID]spine.ContractDraft
+	bySeed                  map[spine.ContractSeedID]spine.ContractDraftID
+	createCtx               context.Context
+	updateCtx               context.Context
+	markReadyForApprovalCtx context.Context
+	createErr               error
+	getBySeedCtxs           []context.Context
 }
 
 func newFakeContractDraftStore() *fakeContractDraftStore {
@@ -1042,23 +1010,12 @@ func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID
 
 func (s *fakeContractDraftStore) GetByContractSeedID(ctx context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
 	s.getBySeedCtxs = append(s.getBySeedCtxs, ctx)
-	if s.duplicateAfterCreateFailure && len(s.getBySeedCtxs) > 1 {
-		return spine.ContractDraft{ID: "existing-draft", ContractSeedID: id}, true, nil
-	}
 	draftID, ok := s.bySeed[id]
 	if !ok {
 		return spine.ContractDraft{}, false, nil
 	}
 	draft, ok := s.drafts[draftID]
 	return draft, ok, nil
-}
-
-func (s *fakeContractDraftStore) lastGetBySeedCtx(t *testing.T) context.Context {
-	t.Helper()
-	if len(s.getBySeedCtxs) == 0 {
-		t.Fatal("GetByContractSeedID was not called")
-	}
-	return s.getBySeedCtxs[len(s.getBySeedCtxs)-1]
 }
 
 type fakeEventLog struct {

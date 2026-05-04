@@ -171,80 +171,39 @@ func TestServiceCreateUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
-func TestServiceCreateDuplicateLookupAfterFailedCreateUsesOuterContext(t *testing.T) {
+func TestServiceCreateFailedCreateDoesNotRunPostFailureDuplicateLookup(t *testing.T) {
 	tests := []struct {
 		name      string
 		configure func(*fakeContractStore, *fakeContractSeedStore, error)
-		wantErr   error
-		assertCtx func(*testing.T, *fakeContractStore, *fakeContractSeedStore, context.Context, context.Context)
+		assert    func(*testing.T, *fakeContractStore, *fakeContractSeedStore)
 	}{
 		{
-			name: "contract create failure returns duplicate found outside transaction",
-			configure: func(contracts *fakeContractStore, _ *fakeContractSeedStore, createErr error) {
-				contracts.createErr = createErr
-				contracts.duplicateAfterCreateFailure = true
-			},
-			wantErr: contractseed.ErrAlreadySeeded,
-			assertCtx: func(t *testing.T, contracts *fakeContractStore, _ *fakeContractSeedStore, outerCtx context.Context, txCtx context.Context) {
-				t.Helper()
-				got := contracts.lastGetByGoalCtx(t)
-				if got != outerCtx {
-					t.Fatal("Contracts.GetByGoalID after failed create did not receive outer context")
-				}
-				if got == txCtx {
-					t.Fatal("Contracts.GetByGoalID after failed create received transaction context")
-				}
-			},
-		},
-		{
-			name: "contract create failure returns original create error when duplicate not found",
+			name: "contract create failure",
 			configure: func(contracts *fakeContractStore, _ *fakeContractSeedStore, createErr error) {
 				contracts.createErr = createErr
 			},
-			wantErr: nil,
-			assertCtx: func(t *testing.T, contracts *fakeContractStore, _ *fakeContractSeedStore, outerCtx context.Context, txCtx context.Context) {
+			assert: func(t *testing.T, contracts *fakeContractStore, seeds *fakeContractSeedStore) {
 				t.Helper()
-				got := contracts.lastGetByGoalCtx(t)
-				if got != outerCtx {
-					t.Fatal("Contracts.GetByGoalID after failed create did not receive outer context")
+				if got := len(contracts.getByGoalCtxs); got != 1 {
+					t.Fatalf("Contracts.GetByGoalID calls = %d, want preflight only", got)
 				}
-				if got == txCtx {
-					t.Fatal("Contracts.GetByGoalID after failed create received transaction context")
+				if got := len(seeds.getByGoalCtxs); got != 1 {
+					t.Fatalf("Seeds.GetByGoalID calls = %d, want preflight only", got)
 				}
 			},
 		},
 		{
-			name: "seed create failure returns duplicate found outside transaction",
-			configure: func(_ *fakeContractStore, seeds *fakeContractSeedStore, createErr error) {
-				seeds.createErr = createErr
-				seeds.duplicateAfterCreateFailure = true
-			},
-			wantErr: contractseed.ErrAlreadySeeded,
-			assertCtx: func(t *testing.T, _ *fakeContractStore, seeds *fakeContractSeedStore, outerCtx context.Context, txCtx context.Context) {
-				t.Helper()
-				got := seeds.lastGetByGoalCtx(t)
-				if got != outerCtx {
-					t.Fatal("Seeds.GetByGoalID after failed create did not receive outer context")
-				}
-				if got == txCtx {
-					t.Fatal("Seeds.GetByGoalID after failed create received transaction context")
-				}
-			},
-		},
-		{
-			name: "seed create failure returns original create error when duplicate not found",
+			name: "seed create failure",
 			configure: func(_ *fakeContractStore, seeds *fakeContractSeedStore, createErr error) {
 				seeds.createErr = createErr
 			},
-			wantErr: nil,
-			assertCtx: func(t *testing.T, _ *fakeContractStore, seeds *fakeContractSeedStore, outerCtx context.Context, txCtx context.Context) {
+			assert: func(t *testing.T, contracts *fakeContractStore, seeds *fakeContractSeedStore) {
 				t.Helper()
-				got := seeds.lastGetByGoalCtx(t)
-				if got != outerCtx {
-					t.Fatal("Seeds.GetByGoalID after failed create did not receive outer context")
+				if got := len(contracts.getByGoalCtxs); got != 1 {
+					t.Fatalf("Contracts.GetByGoalID calls = %d, want preflight only", got)
 				}
-				if got == txCtx {
-					t.Fatal("Seeds.GetByGoalID after failed create received transaction context")
+				if got := len(seeds.getByGoalCtxs); got != 1 {
+					t.Fatalf("Seeds.GetByGoalID calls = %d, want preflight only", got)
 				}
 			},
 		},
@@ -254,7 +213,6 @@ func TestServiceCreateDuplicateLookupAfterFailedCreateUsesOuterContext(t *testin
 		t.Run(tt.name, func(t *testing.T) {
 			service, goals, contracts, seeds, _ := seedService(t)
 			txRunner := service.TxRunner.(*fakeTransactionRunner)
-			outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
 			createErr := errors.New("create failed")
 			tt.configure(contracts, seeds, createErr)
 			goal := validSeedableGoal()
@@ -262,15 +220,11 @@ func TestServiceCreateDuplicateLookupAfterFailedCreateUsesOuterContext(t *testin
 				t.Fatalf("Create goal: %v", err)
 			}
 
-			_, err := service.Create(outerCtx, goal.ID)
-			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("Create() error = %v, want %v", err, tt.wantErr)
-				}
-			} else if !errors.Is(err, createErr) {
+			_, err := service.Create(txRunner.txCtx, goal.ID)
+			if !errors.Is(err, createErr) {
 				t.Fatalf("Create() error = %v, want original create error", err)
 			}
-			tt.assertCtx(t, contracts, seeds, outerCtx, txRunner.txCtx)
+			tt.assert(t, contracts, seeds)
 		})
 	}
 }
@@ -436,12 +390,11 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 }
 
 type fakeContractStore struct {
-	contracts                   map[spine.ContractID]spine.Contract
-	byGoal                      map[spine.GoalID]spine.ContractID
-	createCtx                   context.Context
-	createErr                   error
-	duplicateAfterCreateFailure bool
-	getByGoalCtxs               []context.Context
+	contracts     map[spine.ContractID]spine.Contract
+	byGoal        map[spine.GoalID]spine.ContractID
+	createCtx     context.Context
+	createErr     error
+	getByGoalCtxs []context.Context
 }
 
 func newFakeContractStore() *fakeContractStore {
@@ -468,9 +421,6 @@ func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.C
 
 func (s *fakeContractStore) GetByGoalID(ctx context.Context, id spine.GoalID) (spine.Contract, bool, error) {
 	s.getByGoalCtxs = append(s.getByGoalCtxs, ctx)
-	if s.duplicateAfterCreateFailure && len(s.getByGoalCtxs) > 1 {
-		return spine.Contract{ID: "existing-contract", GoalID: id}, true, nil
-	}
 	contractID, ok := s.byGoal[id]
 	if !ok {
 		return spine.Contract{}, false, nil
@@ -479,21 +429,12 @@ func (s *fakeContractStore) GetByGoalID(ctx context.Context, id spine.GoalID) (s
 	return contract, ok, nil
 }
 
-func (s *fakeContractStore) lastGetByGoalCtx(t *testing.T) context.Context {
-	t.Helper()
-	if len(s.getByGoalCtxs) == 0 {
-		t.Fatal("GetByGoalID was not called")
-	}
-	return s.getByGoalCtxs[len(s.getByGoalCtxs)-1]
-}
-
 type fakeContractSeedStore struct {
-	seeds                       map[spine.ContractSeedID]spine.ContractSeed
-	byGoal                      map[spine.GoalID]spine.ContractSeedID
-	createCtx                   context.Context
-	createErr                   error
-	duplicateAfterCreateFailure bool
-	getByGoalCtxs               []context.Context
+	seeds         map[spine.ContractSeedID]spine.ContractSeed
+	byGoal        map[spine.GoalID]spine.ContractSeedID
+	createCtx     context.Context
+	createErr     error
+	getByGoalCtxs []context.Context
 }
 
 func newFakeContractSeedStore() *fakeContractSeedStore {
@@ -520,23 +461,12 @@ func (s *fakeContractSeedStore) Get(_ context.Context, id spine.ContractSeedID) 
 
 func (s *fakeContractSeedStore) GetByGoalID(ctx context.Context, id spine.GoalID) (spine.ContractSeed, bool, error) {
 	s.getByGoalCtxs = append(s.getByGoalCtxs, ctx)
-	if s.duplicateAfterCreateFailure && len(s.getByGoalCtxs) > 1 {
-		return spine.ContractSeed{ID: "existing-seed", GoalID: id}, true, nil
-	}
 	seedID, ok := s.byGoal[id]
 	if !ok {
 		return spine.ContractSeed{}, false, nil
 	}
 	seed, ok := s.seeds[seedID]
 	return seed, ok, nil
-}
-
-func (s *fakeContractSeedStore) lastGetByGoalCtx(t *testing.T) context.Context {
-	t.Helper()
-	if len(s.getByGoalCtxs) == 0 {
-		t.Fatal("GetByGoalID was not called")
-	}
-	return s.getByGoalCtxs[len(s.getByGoalCtxs)-1]
 }
 
 type fakeEventLog struct {

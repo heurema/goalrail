@@ -145,10 +145,8 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		return spine.ApprovedContract{}, err
 	}
 
-	var approvedCreateFailed bool
 	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.Approved.Create(txCtx, approved); err != nil {
-			approvedCreateFailed = true
 			return fmt.Errorf("create approved contract: %w", err)
 		}
 		if err := s.Contracts.MarkApproved(txCtx, approved.ContractID, approved.ID, now); err != nil {
@@ -159,13 +157,6 @@ func (s *Service) ApproveDraft(ctx context.Context, draftID spine.ContractDraftI
 		}
 		return nil
 	}); err != nil {
-		if approvedCreateFailed {
-			if _, ok, lookupErr := s.Approved.GetByContractDraftID(ctx, draft.ID); lookupErr != nil {
-				return spine.ApprovedContract{}, fmt.Errorf("get approved contract by contract draft id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ApprovedContract{}, ErrAlreadyApproved
-			}
-		}
 		return spine.ApprovedContract{}, err
 	}
 

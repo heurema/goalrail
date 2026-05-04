@@ -159,15 +159,11 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 	if err != nil {
 		return spine.ContractSeed{}, err
 	}
-	var contractCreateFailed bool
-	var seedCreateFailed bool
 	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.Contracts.Create(txCtx, contract); err != nil {
-			contractCreateFailed = true
 			return fmt.Errorf("create contract: %w", err)
 		}
 		if err := s.Seeds.Create(txCtx, created); err != nil {
-			seedCreateFailed = true
 			return fmt.Errorf("create contract seed: %w", err)
 		}
 		if err := s.Events.Append(txCtx, event); err != nil {
@@ -175,20 +171,6 @@ func (s *Service) Create(ctx context.Context, goalID spine.GoalID) (spine.Contra
 		}
 		return nil
 	}); err != nil {
-		if contractCreateFailed {
-			if _, ok, lookupErr := s.Contracts.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-				return spine.ContractSeed{}, fmt.Errorf("get contract by goal id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractSeed{}, ErrAlreadySeeded
-			}
-		}
-		if seedCreateFailed {
-			if _, ok, lookupErr := s.Seeds.GetByGoalID(ctx, goal.ID); lookupErr != nil {
-				return spine.ContractSeed{}, fmt.Errorf("get contract seed by goal id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractSeed{}, ErrAlreadySeeded
-			}
-		}
 		return spine.ContractSeed{}, err
 	}
 

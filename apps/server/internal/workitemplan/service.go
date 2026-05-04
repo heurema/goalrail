@@ -212,10 +212,8 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
-	var proposalCreateFailed bool
 	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.Proposals.Create(txCtx, proposal); err != nil {
-			proposalCreateFailed = true
 			return fmt.Errorf("create work item plan proposal: %w", err)
 		}
 		if err := s.Plans.MarkProposalSubmitted(txCtx, plan.ID, now); err != nil {
@@ -223,13 +221,6 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 		}
 		return nil
 	}); err != nil {
-		if proposalCreateFailed {
-			if _, ok, lookupErr := s.Proposals.GetByPlanID(ctx, plan.ID); lookupErr != nil {
-				return spine.WorkItemPlanProposal{}, fmt.Errorf("get work item plan proposal by plan id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.WorkItemPlanProposal{}, ErrAlreadyProposed
-			}
-		}
 		return spine.WorkItemPlanProposal{}, err
 	}
 	return proposal, nil

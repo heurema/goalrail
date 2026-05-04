@@ -190,10 +190,8 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
-	var draftCreateFailed bool
 	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.Drafts.Create(txCtx, created); err != nil {
-			draftCreateFailed = true
 			return fmt.Errorf("create contract draft: %w", err)
 		}
 		if err := s.Contracts.MarkDraftCreated(txCtx, created.ContractID, created.ID, now); err != nil {
@@ -204,13 +202,6 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 		}
 		return nil
 	}); err != nil {
-		if draftCreateFailed {
-			if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
-				return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
-			} else if ok {
-				return spine.ContractDraft{}, ErrAlreadyDrafted
-			}
-		}
 		return spine.ContractDraft{}, err
 	}
 

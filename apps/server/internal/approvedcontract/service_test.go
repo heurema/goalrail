@@ -177,51 +177,20 @@ func TestServiceApproveDraftUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
-func TestServiceApproveDraftDuplicateLookupAfterFailedCreateUsesOuterContext(t *testing.T) {
-	tests := []struct {
-		name           string
-		duplicateFound bool
-		wantErr        error
-	}{
-		{
-			name:           "returns duplicate found outside transaction",
-			duplicateFound: true,
-			wantErr:        approvedcontract.ErrAlreadyApproved,
-		},
-		{
-			name:           "returns original create error when duplicate not found",
-			duplicateFound: false,
-			wantErr:        nil,
-		},
+func TestServiceApproveDraftFailedCreateDoesNotRunPostFailureDuplicateLookup(t *testing.T) {
+	service, contracts, drafts, approvedStore, _ := approvalService(t)
+	txRunner := service.TxRunner.(*fakeTransactionRunner)
+	createErr := errors.New("create failed")
+	approvedStore.createErr = createErr
+	draft := validReadyDraft()
+	storeDraftWithContract(t, drafts, contracts, draft)
+
+	_, err := service.ApproveDraft(txRunner.txCtx, draft.ID, approveRequest())
+	if !errors.Is(err, createErr) {
+		t.Fatalf("ApproveDraft() error = %v, want original create error", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			service, contracts, drafts, approvedStore, _ := approvalService(t)
-			txRunner := service.TxRunner.(*fakeTransactionRunner)
-			outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
-			createErr := errors.New("create failed")
-			approvedStore.createErr = createErr
-			approvedStore.duplicateAfterCreateFailure = tt.duplicateFound
-			draft := validReadyDraft()
-			storeDraftWithContract(t, drafts, contracts, draft)
-
-			_, err := service.ApproveDraft(outerCtx, draft.ID, approveRequest())
-			if tt.wantErr != nil {
-				if !errors.Is(err, tt.wantErr) {
-					t.Fatalf("ApproveDraft() error = %v, want %v", err, tt.wantErr)
-				}
-			} else if !errors.Is(err, createErr) {
-				t.Fatalf("ApproveDraft() error = %v, want original create error", err)
-			}
-			got := approvedStore.lastGetByDraftCtx(t)
-			if got != outerCtx {
-				t.Fatal("Approved.GetByContractDraftID after failed create did not receive outer context")
-			}
-			if got == txRunner.txCtx {
-				t.Fatal("Approved.GetByContractDraftID after failed create received transaction context")
-			}
-		})
+	if got := len(approvedStore.getByDraftCtxs); got != 1 {
+		t.Fatalf("Approved.GetByContractDraftID calls = %d, want preflight only", got)
 	}
 }
 
@@ -496,12 +465,11 @@ func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID
 }
 
 type fakeApprovedContractStore struct {
-	approved                    map[spine.ApprovedContractID]spine.ApprovedContract
-	byDraft                     map[spine.ContractDraftID]spine.ApprovedContractID
-	createCtx                   context.Context
-	createErr                   error
-	duplicateAfterCreateFailure bool
-	getByDraftCtxs              []context.Context
+	approved       map[spine.ApprovedContractID]spine.ApprovedContract
+	byDraft        map[spine.ContractDraftID]spine.ApprovedContractID
+	createCtx      context.Context
+	createErr      error
+	getByDraftCtxs []context.Context
 }
 
 func newFakeApprovedContractStore() *fakeApprovedContractStore {
@@ -528,23 +496,12 @@ func (s *fakeApprovedContractStore) Get(_ context.Context, id spine.ApprovedCont
 
 func (s *fakeApprovedContractStore) GetByContractDraftID(ctx context.Context, id spine.ContractDraftID) (spine.ApprovedContract, bool, error) {
 	s.getByDraftCtxs = append(s.getByDraftCtxs, ctx)
-	if s.duplicateAfterCreateFailure && len(s.getByDraftCtxs) > 1 {
-		return spine.ApprovedContract{ID: "existing-approved", ContractDraftID: id}, true, nil
-	}
 	approvedID, ok := s.byDraft[id]
 	if !ok {
 		return spine.ApprovedContract{}, false, nil
 	}
 	approved, ok := s.approved[approvedID]
 	return approved, ok, nil
-}
-
-func (s *fakeApprovedContractStore) lastGetByDraftCtx(t *testing.T) context.Context {
-	t.Helper()
-	if len(s.getByDraftCtxs) == 0 {
-		t.Fatal("GetByContractDraftID was not called")
-	}
-	return s.getByDraftCtxs[len(s.getByDraftCtxs)-1]
 }
 
 type fakeEventLog struct {
