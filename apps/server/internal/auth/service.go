@@ -26,7 +26,6 @@ const (
 )
 
 var (
-	ErrStoreUnavailable       = errors.New("auth store is not configured")
 	ErrInvalidCredentials     = errors.New("invalid email or password")
 	ErrInactiveUser           = errors.New("user is inactive")
 	ErrMembershipRequired     = errors.New("active organization membership is required")
@@ -81,6 +80,9 @@ type Service struct {
 type Option func(*Service)
 
 func NewService(store Store, jwtSecret string, options ...Option) *Service {
+	if store == nil {
+		panic("auth: store is required")
+	}
 	service := &Service{
 		store:           store,
 		accessTokens:    NewAccessTokenManager(jwtSecret),
@@ -222,9 +224,6 @@ type AuthenticatedUser struct {
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
-	if s.store == nil {
-		return LoginResult{}, ErrStoreUnavailable
-	}
 	now := s.clock.Now().UTC()
 	user, credential, membership, err := s.verifyLoginCredentials(ctx, input.Email, input.Password)
 	if err != nil {
@@ -249,9 +248,6 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 }
 
 func (s *Service) StartCLILogin(ctx context.Context, input CLILoginInput) (CLILoginResult, error) {
-	if s.store == nil {
-		return CLILoginResult{}, ErrStoreUnavailable
-	}
 	if err := ValidateLoopbackRedirectURI(input.RedirectURI); err != nil {
 		return CLILoginResult{}, err
 	}
@@ -297,9 +293,6 @@ func (s *Service) StartCLILogin(ctx context.Context, input CLILoginInput) (CLILo
 }
 
 func (s *Service) ExchangeCLIAuthCode(ctx context.Context, input CLIExchangeInput) (CLIExchangeResult, error) {
-	if s.store == nil {
-		return CLIExchangeResult{}, ErrStoreUnavailable
-	}
 	if strings.TrimSpace(input.Code) == "" || strings.TrimSpace(input.State) == "" {
 		return CLIExchangeResult{}, ErrCLIAuthCodeInvalid
 	}
@@ -372,9 +365,6 @@ func (s *Service) ExchangeCLIAuthCode(ctx context.Context, input CLIExchangeInpu
 }
 
 func (s *Service) Refresh(ctx context.Context, input RefreshInput) (RefreshResult, error) {
-	if s.store == nil {
-		return RefreshResult{}, ErrStoreUnavailable
-	}
 	if strings.TrimSpace(input.RefreshToken) == "" {
 		return RefreshResult{}, ErrSessionInvalid
 	}
@@ -516,9 +506,6 @@ func (s *Service) Me(ctx context.Context, accessToken string) (Profile, error) {
 }
 
 func (s *Service) AuthenticateAccessToken(ctx context.Context, accessToken string) (AuthenticatedUser, error) {
-	if s.store == nil {
-		return AuthenticatedUser{}, ErrStoreUnavailable
-	}
 	claims, err := s.accessTokens.Validate(strings.TrimSpace(accessToken), s.clock.Now().UTC())
 	if err != nil {
 		return AuthenticatedUser{}, err

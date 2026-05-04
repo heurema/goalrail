@@ -19,8 +19,6 @@ const (
 
 var ErrNotFound = errors.New("intake record not found")
 
-var ErrProjectContextUnavailable = errors.New("project context resolver unavailable")
-
 type ValidationError struct {
 	Field   string
 	Message string
@@ -69,6 +67,9 @@ type Service struct {
 }
 
 func NewService(store Store, projectContext ProjectContextResolver, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+	if projectContext == nil {
+		panic("intake: project context resolver is required")
+	}
 	return &Service{
 		Store:          store,
 		ProjectContext: projectContext,
@@ -145,10 +146,6 @@ func (s *Service) Get(ctx context.Context, id spine.IntakeID) (spine.IntakeRecor
 }
 
 func (s *Service) resolveProjectContext(ctx context.Context, submission spine.IntakeSubmission) (spine.ResolvedRepoBindingContext, error) {
-	if s.ProjectContext == nil {
-		return spine.ResolvedRepoBindingContext{}, ErrProjectContextUnavailable
-	}
-
 	resolved, ok, err := s.ProjectContext.ResolveRepoBinding(ctx, submission.RepoBindingID)
 	if err != nil {
 		return spine.ResolvedRepoBindingContext{}, fmt.Errorf("resolve repo binding context: %w", err)

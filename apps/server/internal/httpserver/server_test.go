@@ -259,31 +259,31 @@ func probeRoute(route string) http.Handler {
 type unavailableAuthService struct{}
 
 func (unavailableAuthService) Login(context.Context, auth.LoginInput) (auth.LoginResult, error) {
-	return auth.LoginResult{}, auth.ErrStoreUnavailable
+	return auth.LoginResult{}, auth.ErrInvalidCredentials
 }
 
 func (unavailableAuthService) StartCLILogin(context.Context, auth.CLILoginInput) (auth.CLILoginResult, error) {
-	return auth.CLILoginResult{}, auth.ErrStoreUnavailable
+	return auth.CLILoginResult{}, auth.ErrInvalidCredentials
 }
 
 func (unavailableAuthService) ExchangeCLIAuthCode(context.Context, auth.CLIExchangeInput) (auth.CLIExchangeResult, error) {
-	return auth.CLIExchangeResult{}, auth.ErrStoreUnavailable
+	return auth.CLIExchangeResult{}, auth.ErrCLIAuthCodeInvalid
 }
 
 func (unavailableAuthService) Refresh(context.Context, auth.RefreshInput) (auth.RefreshResult, error) {
-	return auth.RefreshResult{}, auth.ErrStoreUnavailable
+	return auth.RefreshResult{}, auth.ErrSessionInvalid
 }
 
 func (unavailableAuthService) ChangePassword(context.Context, string, auth.ChangePasswordInput) (auth.ChangePasswordResult, error) {
-	return auth.ChangePasswordResult{}, auth.ErrStoreUnavailable
+	return auth.ChangePasswordResult{}, auth.ErrInvalidToken
 }
 
 func (unavailableAuthService) Logout(context.Context, string) (auth.LogoutResult, error) {
-	return auth.LogoutResult{}, auth.ErrStoreUnavailable
+	return auth.LogoutResult{}, auth.ErrInvalidToken
 }
 
 func (unavailableAuthService) Me(context.Context, string) (auth.Profile, error) {
-	return auth.Profile{}, auth.ErrStoreUnavailable
+	return auth.Profile{}, auth.ErrInvalidToken
 }
 
 type routeResponse struct {

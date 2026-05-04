@@ -168,17 +168,14 @@ func TestServiceSubmitRejectsRepoBindingForDifferentProject(t *testing.T) {
 	}
 }
 
-func TestServiceSubmitRejectsUnavailableProjectContext(t *testing.T) {
-	events := newFakeEventLog()
-	service := intake.NewService(newFakeIntakeStore(), nil, events, &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
+func TestNewServiceRequiresProjectContextResolver(t *testing.T) {
+	defer func() {
+		if recovered := recover(); recovered != "intake: project context resolver is required" {
+			t.Fatalf("panic = %v, want intake project context invariant", recovered)
+		}
+	}()
 
-	_, err := service.Submit(context.Background(), validSubmission())
-	if !errors.Is(err, intake.ErrProjectContextUnavailable) {
-		t.Fatalf("Submit() error = %v, want ErrProjectContextUnavailable", err)
-	}
-	if got := len(events.Events()); got != 0 {
-		t.Fatalf("events length = %d, want 0", got)
-	}
+	_ = intake.NewService(newFakeIntakeStore(), nil, newFakeEventLog(), &fakeTransactionRunner{}, fixedClock{now: testTime()}, &sequenceIDs{})
 }
 
 func validSubmission() spine.IntakeSubmission {

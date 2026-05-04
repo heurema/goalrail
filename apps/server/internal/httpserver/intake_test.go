@@ -146,25 +146,6 @@ func TestPostIntakeRejectsRepoBindingForDifferentProject(t *testing.T) {
 	}
 }
 
-func TestPostIntakeReturnsConfigurationErrorWhenProjectContextUnavailable(t *testing.T) {
-	server := testServerWithResolver(t, nil)
-
-	response := doJSON(t, server.router, http.MethodPost, "/v1/intakes", validIntakeJSON)
-	if response.code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want %d", response.code, http.StatusServiceUnavailable)
-	}
-
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
-	decodeJSON(t, response.body, &body)
-	if body.Error.Code != "project_context_unavailable" {
-		t.Fatalf("error code = %q, want project_context_unavailable", body.Error.Code)
-	}
-}
-
 func TestGetIntakeReturnsStoredRecord(t *testing.T) {
 	server := testServer(t)
 
