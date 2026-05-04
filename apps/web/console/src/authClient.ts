@@ -1,3 +1,5 @@
+import { buildAPIURL } from './config';
+
 export interface LoginResponse {
   user_id: string;
   access_token: string;
@@ -25,7 +27,7 @@ export interface MeResponse {
     id: string;
     organization_id: string;
     user_id: string;
-    role: 'owner' | 'admin' | 'member' | 'viewer' | string;
+    role: string;
     state: string;
   };
 }
@@ -52,8 +54,6 @@ interface RequestOptions {
   body?: unknown;
   accessToken?: string;
 }
-
-const apiBaseURL = normalizeAPIBaseURL(import.meta.env.VITE_GOALRAIL_API_BASE_URL);
 
 export class AuthClientRequestError extends Error implements AuthClientError {
   code: string;
@@ -107,10 +107,6 @@ export async function logout(accessToken: string): Promise<LogoutResponse> {
   });
 }
 
-function normalizeAPIBaseURL(value: string | undefined) {
-  return String(value ?? '').trim().replace(/\/+$/, '');
-}
-
 async function request<T>(path: string, options: RequestOptions): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) {
@@ -122,7 +118,7 @@ async function request<T>(path: string, options: RequestOptions): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${apiBaseURL}${path}`, {
+    response = await fetch(buildAPIURL(path), {
       method: options.method,
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),

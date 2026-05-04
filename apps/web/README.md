@@ -36,9 +36,22 @@ Rule:
 
 ## Current resources
 
-- `apps/web/console` is the empty real console shell for `console.goalrail.dev`
-- `apps/web/console-ru` is the separate Russian console shell for `console.goalrail.ru`
+- `apps/web/console` is the canonical multilingual EN/RU console source with
+  bounded auth API client flow and structured empty product surfaces
 - `apps/web/demo-change-packet` is the current EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is a separate RU copy intended for an independent demo domain, not an in-app translation layer
 - `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype
 - `apps/web/reference-designs` stores imported design handoff bundles for later implementation; it is not a runnable workspace
+
+## Console source and targets
+
+- Canonical product console source: `apps/web/console`
+- Product frontend target direction for later deployment slices: `goalrail.dev`
+- API target direction for later deployment slices: `api.goalrail.dev`
+- Demo sandbox remains separate at `demo.goalrail.dev`
+- Legacy/live `console.goalrail.ru` may continue serving an older static release until a separate deployment migration slice
+
+The shared console app does not hard-code deployment-specific canonical
+metadata. Deployment-specific metadata, routing, CORS, DNS, and server-host
+configuration are later deployment concerns, not part of the source
+consolidation slice.

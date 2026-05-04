@@ -63,7 +63,7 @@ Use it together with:
 | Server Postgres stores and store error sentinels | `apps/server/internal/store/` |
 | Server test-local fakes | The relevant `*_test.go` package file |
 | Web workspace package files | `apps/web/` |
-| Real console web shells | `apps/web/console/` and `apps/web/console-ru/` |
+| Real console web shell | `apps/web/console/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |
 | RU pilot landing-owned lead sidecar | `apps/web/pilot-intake-ru/server/` only for the narrow public RU pilot `POST /api/pilot-lead` endpoint and daily digest; this is not the canonical Goalrail server and does not override `apps/server/` |
 | Product canon | `docs/product/` |

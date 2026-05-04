@@ -1,18 +1,42 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import {
+  changePassword,
+  isAuthClientError,
+  login as loginWithPassword,
+  logout as logoutSession,
+  me as fetchCurrentProfile,
+} from './authClient';
+import type { AuthClientError, LoginResponse, MeResponse } from './authClient';
+import { isSupportedLocale, updateLocaleQueryParam } from './i18n/locale';
+import type { ConsoleLocale } from './i18n/resources';
 
 import './App.css';
 
 type SurfaceId = 'contracts' | 'delivery-readiness' | 'proof';
 type ScreenId = 'console' | 'settings-appearance' | 'settings-users';
 type ThemeId = 'goalrail-default' | 'catppuccin-mocha' | 'dracula' | 'nord' | 'solarized-dark' | 'gruvbox-dark';
-type UserStatus = 'Active' | 'Pending' | 'Disabled';
-type UserRole = 'Owner' | 'Member' | 'Observer';
+type UserStatus = 'active' | 'pending' | 'disabled';
+type UserRole = 'owner' | 'member' | 'observer';
+type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
 type RoleFilter = UserRole | 'all';
 type StatusFilter = UserStatus | 'all';
+type AuthStatus =
+  | 'unauthenticated'
+  | 'logging_in'
+  | 'password_change_required'
+  | 'changing_password'
+  | 'authenticated'
+  | 'logging_out';
 
-interface SurfaceItem {
-  id: SurfaceId;
-  label: string;
+interface TokenState {
+  userId: string;
+  accessToken: string;
+  accessTokenExpiresAt: string;
+  tokenType: 'Bearer';
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
 }
 
 interface ConsoleUser {
@@ -29,25 +53,16 @@ interface ThemePreset {
   swatches: string[];
 }
 
-interface SurfaceLane {
-  title: string;
-  body: string;
-}
+const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
+const CONSOLE_ROLES: UserRole[] = ['owner', 'member', 'observer'];
+const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
+const USER_STATUSES: UserStatus[] = ['active', 'pending', 'disabled'];
 
-interface SurfaceEmptyState {
-  label: string;
-  kicker: string;
-  copy: string;
-  lanes: SurfaceLane[];
-  status?: string;
-  footer?: string;
-}
-
-const SURFACES: SurfaceItem[] = [
-  { id: 'contracts', label: 'Contracts' },
-  { id: 'delivery-readiness', label: 'Delivery Readiness' },
-  { id: 'proof', label: 'Proof' },
-];
+const SURFACE_LANES = {
+  contracts: ['intent', 'scope', 'acceptance', 'handoff'],
+  'delivery-readiness': ['context', 'constraints', 'acceptance', 'risks'],
+  proof: ['scope', 'integrity', 'policy', 'target'],
+} as const satisfies Record<SurfaceId, readonly string[]>;
 
 const THEMES: ThemePreset[] = [
   { id: 'goalrail-default', label: 'Goalrail Default', swatches: ['#201f1d', '#2d2b28', '#e8e0d2', '#c783a8', '#92b66f'] },
@@ -60,57 +75,17 @@ const THEMES: ThemePreset[] = [
 
 const THEME_STORAGE_KEY = 'goalrail.console.theme';
 
-const SURFACE_EMPTY_STATES: Record<SurfaceId, SurfaceEmptyState> = {
-  contracts: {
-    label: 'Contracts',
-    kicker: 'contract contour',
-    copy:
-      'Contracts will appear here after the server-backed flow is connected. Each contract fixes the boundary between business intent and delivery work.',
-    lanes: [
-      { title: 'Intent', body: 'Normalized goal and owner context.' },
-      { title: 'Scope', body: 'In-scope, out-of-scope, constraints.' },
-      { title: 'Acceptance', body: 'Criteria expected before work can move forward.' },
-      { title: 'Handoff', body: 'A bounded task packet for delivery.' },
-    ],
-    footer: 'Goal → Contract → Task → Proof',
-  },
-  'delivery-readiness': {
-    label: 'Delivery Readiness',
-    kicker: 'readiness contour',
-    copy: 'This surface will show whether a goal has enough context to become a delivery contract.',
-    lanes: [
-      { title: 'Context', body: 'What is known about the goal and owner.' },
-      { title: 'Constraints', body: 'Limits, non-goals, and policy boundaries.' },
-      { title: 'Acceptance', body: 'Expected outcome and proof expectations.' },
-      { title: 'Risks', body: 'Open questions that block confident handoff.' },
-    ],
-    status: 'NOT CHECKED',
-  },
-  proof: {
-    label: 'Proof',
-    kicker: 'verification contour',
-    copy: 'Proof will appear here after execution evidence has been verified by the gate.',
-    lanes: [
-      { title: 'Scope', body: 'Did the work stay inside the approved contract?' },
-      { title: 'Integrity', body: 'Did checks and evidence preserve trust?' },
-      { title: 'Policy', body: 'Did the result respect configured boundaries?' },
-      { title: 'Target', body: 'Did the change satisfy the intended outcome?' },
-    ],
-    status: 'WAITING FOR VERIFIED EVIDENCE',
-  },
-};
-
 const INITIAL_USERS: ConsoleUser[] = [
-  { id: 'u1', name: 'Owner', email: 'owner@example.com', role: 'Owner', status: 'Active' },
-  { id: 'u2', name: 'Product Lead', email: 'product@example.com', role: 'Member', status: 'Pending' },
-  { id: 'u3', name: 'Reviewer', email: 'reviewer@example.com', role: 'Observer', status: 'Active' },
+  { id: 'u1', name: 'Owner', email: 'owner@example.com', role: 'owner', status: 'active' },
+  { id: 'u2', name: 'Product Lead', email: 'product@example.com', role: 'member', status: 'pending' },
+  { id: 'u3', name: 'Reviewer', email: 'reviewer@example.com', role: 'observer', status: 'active' },
 ];
 
 const EMPTY_DRAFT: Omit<ConsoleUser, 'id'> = {
   name: '',
   email: '',
-  role: 'Member',
-  status: 'Pending',
+  role: 'member',
+  status: 'pending',
 };
 
 function initials(name: string) {
@@ -124,11 +99,11 @@ function initials(name: string) {
 }
 
 function statusClass(status: UserStatus) {
-  if (status === 'Active') {
+  if (status === 'active') {
     return 'statusActive';
   }
 
-  if (status === 'Pending') {
+  if (status === 'pending') {
     return 'statusPending';
   }
 
@@ -137,6 +112,10 @@ function statusClass(status: UserStatus) {
 
 function isThemeId(value: string | null): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
+}
+
+function isMembershipRole(value: string | undefined): value is MembershipRole {
+  return MEMBERSHIP_ROLES.includes(value as MembershipRole);
 }
 
 function readStoredTheme(): ThemeId {
@@ -162,9 +141,41 @@ function persistTheme(themeId: ThemeId) {
   }
 }
 
+function tokenStateFromLogin(result: LoginResponse): TokenState {
+  return {
+    userId: result.user_id,
+    accessToken: result.access_token,
+    accessTokenExpiresAt: result.access_token_expires_at,
+    tokenType: result.token_type,
+    refreshToken: result.refresh_token,
+    refreshTokenExpiresAt: result.refresh_token_expires_at,
+  };
+}
+
+function operationalErrorMessage(error: AuthClientError, t: (key: string, options?: Record<string, unknown>) => string) {
+  return error.status
+    ? t('auth.operationalErrorWithStatus', { status: error.status })
+    : t('auth.operationalError');
+}
+
+function authErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isAuthClientError(error)) {
+    const translated = t(`auth.errors.${error.code}`);
+    return translated === `auth.errors.${error.code}` ? operationalErrorMessage(error, t) : translated;
+  }
+
+  return t('auth.fallbackError');
+}
+
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [loginError, setLoginError] = useState('');
+  const { i18n, t } = useTranslation();
+  const translate = t as unknown as (key: string, options?: Record<string, unknown>) => string;
+  const activeLocale = isSupportedLocale(i18n.resolvedLanguage) ? i18n.resolvedLanguage : 'en';
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('unauthenticated');
+  const [authError, setAuthError] = useState('');
+  const [passwordChangeError, setPasswordChangeError] = useState('');
+  const [tokens, setTokens] = useState<TokenState | null>(null);
+  const [profile, setProfile] = useState<MeResponse | null>(null);
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
   const [screen, setScreen] = useState<ScreenId>('console');
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => readStoredTheme());
@@ -176,23 +187,127 @@ function App() {
   const [draft, setDraft] = useState<Omit<ConsoleUser, 'id'>>(EMPTY_DRAFT);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  const activeLabel = SURFACES.find((surface) => surface.id === activeSurface)?.label ?? 'Contracts';
-  const activeEmptyState = SURFACE_EMPTY_STATES[activeSurface];
-  const drawerTitle = editingId ? 'Edit user' : 'Add user';
+  useEffect(() => {
+    document.documentElement.lang = activeLocale;
+  }, [activeLocale]);
 
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  const activeLabel = translate(`surfaces.${activeSurface}.label`);
+  const drawerTitle = editingId ? translate('users.editUser') : translate('users.addUser');
+  const isLoginPending = authStatus === 'logging_in';
+  const isPasswordChangePending = authStatus === 'changing_password';
+  const isLoggingOut = authStatus === 'logging_out';
+  const sessionDisplayName = profile?.user.display_name.trim() || profile?.user.email || translate('session.fallbackUser');
+  const sessionEmail = profile?.user.email;
+  const sessionRoleValue = profile?.organization_membership.role;
+  const sessionRole = isMembershipRole(sessionRoleValue)
+    ? translate(`membershipRoles.${sessionRoleValue}`)
+    : sessionRoleValue ?? 'member';
+
+  async function handleLanguageChange(locale: ConsoleLocale) {
+    await i18n.changeLanguage(locale);
+    updateLocaleQueryParam(locale);
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = String(form.get('email') ?? '').trim();
     const password = String(form.get('password') ?? '').trim();
 
     if (!email || !password) {
-      setLoginError('Enter email and password to continue.');
+      setAuthError(translate('auth.missingCredentials'));
       return;
     }
 
-    setLoginError('');
-    setIsLoggedIn(true);
+    setAuthError('');
+    setPasswordChangeError('');
+    setAuthStatus('logging_in');
+
+    try {
+      const loginResult = await loginWithPassword({ email, password });
+      const nextTokens = tokenStateFromLogin(loginResult);
+      setTokens(nextTokens);
+
+      if (loginResult.must_change_password) {
+        setAuthStatus('password_change_required');
+        return;
+      }
+
+      const currentProfile = await fetchCurrentProfile(loginResult.access_token);
+      setProfile(currentProfile);
+      setAuthStatus('authenticated');
+    } catch (error) {
+      setTokens(null);
+      setProfile(null);
+      setAuthStatus('unauthenticated');
+      setAuthError(authErrorMessage(error, translate));
+    }
+  }
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const currentPassword = String(form.get('currentPassword') ?? '');
+    const newPassword = String(form.get('newPassword') ?? '');
+
+    if (!currentPassword || !newPassword.trim()) {
+      setPasswordChangeError(translate('auth.missingPasswordChange'));
+      return;
+    }
+
+    if (!tokens) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    setPasswordChangeError('');
+    setAuthStatus('changing_password');
+
+    try {
+      await changePassword({
+        accessToken: tokens.accessToken,
+        currentPassword,
+        newPassword,
+      });
+      const currentProfile = await fetchCurrentProfile(tokens.accessToken);
+      setProfile(currentProfile);
+      setAuthStatus('authenticated');
+    } catch (error) {
+      if (isAuthClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(authErrorMessage(error, translate));
+        return;
+      }
+
+      setAuthStatus('password_change_required');
+      setPasswordChangeError(authErrorMessage(error, translate));
+    }
+  }
+
+  async function handleLogout() {
+    const accessToken = tokens?.accessToken;
+    if (!accessToken) {
+      resetAuthState();
+      return;
+    }
+
+    setAuthStatus('logging_out');
+    try {
+      await logoutSession(accessToken);
+    } finally {
+      resetAuthState();
+    }
+  }
+
+  function resetAuthState() {
+    setTokens(null);
+    setProfile(null);
+    setAuthStatus('unauthenticated');
+    setAuthError('');
+    setPasswordChangeError('');
+    setScreen('console');
+    setIsDrawerOpen(false);
   }
 
   function openNewUser() {
@@ -278,49 +393,85 @@ function App() {
           </td>
           <td className="userEmail">{user.email}</td>
           <td>
-            <span className={user.role === 'Owner' ? 'pill roleOwner' : 'pill'}>{user.role}</span>
+            <span className={user.role === 'owner' ? 'pill roleOwner' : 'pill'}>{translate(`roles.${user.role}`)}</span>
           </td>
           <td>
-            <span className={`pill ${statusClass(user.status)}`}>{user.status}</span>
+            <span className={`pill ${statusClass(user.status)}`}>{translate(`statuses.${user.status}`)}</span>
           </td>
           <td>
             <div className="userActions">
               <button className="iconButton" onClick={() => openExistingUser(user)} type="button">
                 <span aria-hidden="true">✎</span>
-                <span className="srOnly">Edit {user.name}</span>
+                <span className="srOnly">{translate('users.editUserName', { name: user.name })}</span>
               </button>
             </div>
           </td>
         </tr>
       )),
-    [visibleUsers]
+    [translate, visibleUsers]
   );
 
-  if (!isLoggedIn) {
+  if (authStatus === 'unauthenticated' || authStatus === 'logging_in') {
     return (
       <main
         className="loginScreen"
-        data-deployment-target="console.goalrail.dev"
+        data-deployment-target={translate('app.deploymentTarget')}
         data-goalrail-theme={activeTheme}
       >
         <div className="loginRails" aria-hidden="true" />
         <form className="loginCard" onSubmit={handleLogin}>
-          <Brand />
+          <Brand label={translate('app.brandLabel')} />
 
           <label className="field">
-            <span>Email</span>
-            <input autoComplete="email" name="email" placeholder="name@example.com" type="email" />
+            <span>{translate('auth.email')}</span>
+            <input autoComplete="email" disabled={isLoginPending} name="email" placeholder="name@example.com" type="email" />
           </label>
 
-          <label className={loginError ? 'field fieldError' : 'field'}>
-            <span>Password</span>
-            <input autoComplete="current-password" name="password" type="password" />
+          <label className={authError ? 'field fieldError' : 'field'}>
+            <span>{translate('auth.password')}</span>
+            <input autoComplete="current-password" disabled={isLoginPending} name="password" type="password" />
           </label>
 
-          {loginError ? <p className="fieldMessage">{loginError}</p> : null}
+          {authError ? <p className="fieldMessage" role="alert">{authError}</p> : null}
 
-          <button className="primaryButton fullWidth" type="submit">
-            Sign in
+          <button className="primaryButton fullWidth" disabled={isLoginPending} type="submit">
+            {isLoginPending ? translate('auth.signingIn') : translate('auth.signIn')}
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
+      </main>
+    );
+  }
+
+  if (authStatus === 'password_change_required' || authStatus === 'changing_password') {
+    return (
+      <main
+        className="loginScreen"
+        data-deployment-target={translate('app.deploymentTarget')}
+        data-goalrail-theme={activeTheme}
+      >
+        <div className="loginRails" aria-hidden="true" />
+        <form className="loginCard passwordChangeCard" onSubmit={handlePasswordChange} aria-label={translate('auth.passwordChangeForm')}>
+          <Brand label={translate('app.brandLabel')} />
+
+          <div className="authStateBlock">
+            <p className="authStateLabel">{translate('auth.passwordChangeRequired')}</p>
+          </div>
+
+          <label className={passwordChangeError ? 'field fieldError' : 'field'}>
+            <span>{translate('auth.currentPassword')}</span>
+            <input autoComplete="current-password" disabled={isPasswordChangePending} name="currentPassword" type="password" />
+          </label>
+
+          <label className={passwordChangeError ? 'field fieldError' : 'field'}>
+            <span>{translate('auth.newPassword')}</span>
+            <input autoComplete="new-password" disabled={isPasswordChangePending} name="newPassword" type="password" />
+          </label>
+
+          {passwordChangeError ? <p className="fieldMessage" role="alert">{passwordChangeError}</p> : null}
+
+          <button className="primaryButton fullWidth" disabled={isPasswordChangePending} type="submit">
+            {isPasswordChangePending ? translate('auth.changingPassword') : translate('auth.changePassword')}
             <span aria-hidden="true">→</span>
           </button>
         </form>
@@ -331,30 +482,41 @@ function App() {
   return (
     <main
       className="consoleShell"
-      data-deployment-target="console.goalrail.dev"
+      data-deployment-target={translate('app.deploymentTarget')}
       data-goalrail-theme={activeTheme}
     >
-      <aside className="sidebar" aria-label="Goalrail console navigation">
-        <Brand />
+      <aside className="sidebar" aria-label={translate('nav.sidebar')}>
+        <Brand label={translate('app.brandLabel')} />
 
-        <nav className="surfaceNav" aria-label="Product surfaces">
+        <nav className="surfaceNav" aria-label={translate('nav.productSurfaces')}>
           {SURFACES.map((surface) => (
             <button
-              aria-current={screen === 'console' && activeSurface === surface.id ? 'page' : undefined}
-              className={screen === 'console' && activeSurface === surface.id ? 'surfaceButton active' : 'surfaceButton'}
-              key={surface.id}
+              aria-current={screen === 'console' && activeSurface === surface ? 'page' : undefined}
+              className={screen === 'console' && activeSurface === surface ? 'surfaceButton active' : 'surfaceButton'}
+              key={surface}
               onClick={() => {
-                setActiveSurface(surface.id);
+                setActiveSurface(surface);
                 setScreen('console');
               }}
               type="button"
             >
-              {surface.label}
+              {translate(`surfaces.${surface}.nav`)}
             </button>
           ))}
         </nav>
 
         <div className="sidebarSpacer" />
+
+        <section className="sessionPanel" aria-label={translate('session.currentUser')}>
+          <div>
+            <p className="sessionName">{sessionDisplayName}</p>
+            {sessionEmail ? <p className="sessionEmail">{sessionEmail}</p> : null}
+            <p className="sessionRole">{translate('session.role', { role: sessionRole })}</p>
+          </div>
+          <button className="ghostButton logoutButton" disabled={isLoggingOut} onClick={handleLogout} type="button">
+            {isLoggingOut ? translate('session.loggingOut') : translate('session.logout')}
+          </button>
+        </section>
 
         <div className="settingsDock">
           <button
@@ -364,34 +526,38 @@ function App() {
             type="button"
           >
             <span aria-hidden="true">⚙</span>
-            <span>Settings</span>
+            <span>{translate('nav.settings')}</span>
           </button>
         </div>
       </aside>
 
       {screen === 'console' ? (
-        <SurfaceEmptyStatePanel state={activeEmptyState} label={activeLabel} />
+        <SurfaceEmptyStatePanel surface={activeSurface} label={activeLabel} t={translate} />
       ) : (
         <section
           className="settingsSurface"
-          aria-label={screen === 'settings-appearance' ? 'Settings: appearance' : 'Settings: users'}
+          aria-label={screen === 'settings-appearance' ? translate('settings.appearanceLabel') : translate('settings.usersLabel')}
         >
           <header className="surfaceHeader">
             <div>
-              <p className="kicker">{screen === 'settings-appearance' ? 'settings · appearance' : 'settings · users'}</p>
-              <h2>Settings</h2>
+              <p className="kicker">{screen === 'settings-appearance' ? translate('settings.appearanceKicker') : translate('settings.usersKicker')}</p>
+              <h2>{translate('nav.settings')}</h2>
             </div>
-            <p className="metaText">{screen === 'settings-appearance' ? `${THEMES.length} presets` : `${visibleUsers.length} records`}</p>
+            <p className="metaText">
+              {screen === 'settings-appearance'
+                ? translate('settings.presets', { count: THEMES.length })
+                : translate('settings.records', { count: visibleUsers.length })}
+            </p>
           </header>
 
-          <nav className="settingsSectionNav" aria-label="Settings sections">
+          <nav className="settingsSectionNav" aria-label={translate('settings.sections')}>
             <button
               aria-current={screen === 'settings-appearance' ? 'page' : undefined}
               className={screen === 'settings-appearance' ? 'sectionButton active' : 'sectionButton'}
               onClick={() => setScreen('settings-appearance')}
               type="button"
             >
-              Appearance
+              {translate('settings.appearance')}
             </button>
             <button
               aria-current={screen === 'settings-users' ? 'page' : undefined}
@@ -399,23 +565,29 @@ function App() {
               onClick={() => setScreen('settings-users')}
               type="button"
             >
-              Users
+              {translate('settings.users')}
             </button>
           </nav>
 
           <div className="settingsContent">
             {screen === 'settings-appearance' ? (
-              <AppearanceSettings activeTheme={activeTheme} onThemeChange={updateTheme} />
+              <AppearanceSettings
+                activeLocale={activeLocale}
+                activeTheme={activeTheme}
+                onLanguageChange={handleLanguageChange}
+                onThemeChange={updateTheme}
+                t={translate}
+              />
             ) : (
               <>
                 <div className="usersHeader">
                   <div>
-                    <h3>Users</h3>
-                    <p>Manage workspace access.</p>
+                    <h3>{translate('users.title')}</h3>
+                    <p>{translate('users.manage')}</p>
                   </div>
-                  <button aria-label="Add user" className="primaryButton" onClick={openNewUser} type="button">
+                  <button aria-label={translate('users.addUser')} className="primaryButton" onClick={openNewUser} type="button">
                     <span aria-hidden="true">+</span>
-                    <span>Add</span>
+                    <span>{translate('users.add')}</span>
                   </button>
                 </div>
 
@@ -423,50 +595,54 @@ function App() {
                   <label className="searchBox">
                     <span aria-hidden="true">⌕</span>
                     <input
-                      aria-label="Search users"
+                      aria-label={translate('users.searchUsers')}
                       onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search by name or email"
+                      placeholder={translate('users.searchPlaceholder')}
                       type="search"
                       value={searchQuery}
                     />
                   </label>
                   <label className="filterBox">
-                    <span>Role</span>
+                    <span>{translate('users.role')}</span>
                     <select
-                      aria-label="Filter by role"
+                      aria-label={translate('users.filterByRole')}
                       onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}
                       value={roleFilter}
                     >
-                      <option value="all">All roles</option>
-                      <option value="Owner">Owner</option>
-                      <option value="Member">Member</option>
-                      <option value="Observer">Observer</option>
+                      <option value="all">{translate('users.allRoles')}</option>
+                      {CONSOLE_ROLES.map((role) => (
+                        <option key={role} value={role}>
+                          {translate(`roles.${role}`)}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="filterBox">
-                    <span>Status</span>
+                    <span>{translate('users.status')}</span>
                     <select
-                      aria-label="Filter by status"
+                      aria-label={translate('users.filterByStatus')}
                       onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
                       value={statusFilter}
                     >
-                      <option value="all">All statuses</option>
-                      <option value="Active">Active</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Disabled">Disabled</option>
+                      <option value="all">{translate('users.allStatuses')}</option>
+                      {USER_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {translate(`statuses.${status}`)}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>
 
                 <div className="usersTableFrame">
-                  <table className="usersTable" aria-label="Workspace users">
+                  <table className="usersTable" aria-label={translate('users.table')}>
                     <thead>
                       <tr className="userRow userHead">
-                        <th scope="col">Name</th>
-                        <th scope="col">Email</th>
-                        <th scope="col">Role</th>
-                        <th scope="col">Status</th>
-                        <th scope="col" aria-label="Actions" />
+                        <th scope="col">{translate('users.name')}</th>
+                        <th scope="col">{translate('users.email')}</th>
+                        <th scope="col">{translate('users.role')}</th>
+                        <th scope="col">{translate('users.status')}</th>
+                        <th scope="col" aria-label={translate('users.actions')} />
                       </tr>
                     </thead>
                     <tbody>
@@ -474,7 +650,7 @@ function App() {
                       {visibleUsers.length === 0 ? (
                         <tr>
                           <td className="emptyUsers" colSpan={5}>
-                            No users match the selected filters.
+                            {translate('users.empty')}
                           </td>
                         </tr>
                       ) : null}
@@ -489,31 +665,31 @@ function App() {
 
       {isDrawerOpen ? (
         <>
-          <button aria-label="Close user form" className="drawerScrim" onClick={closeDrawer} type="button" />
+          <button aria-label={translate('users.closeForm')} className="drawerScrim" onClick={closeDrawer} type="button" />
           <aside className="drawer" aria-label={drawerTitle}>
             <header className="drawerHeader">
               <div>
-                <p className="kicker">{editingId ? 'access record' : 'workspace user'}</p>
+                <p className="kicker">{editingId ? translate('users.accessRecord') : translate('users.workspaceUser')}</p>
                 <h3>{drawerTitle}</h3>
               </div>
               <button className="iconButton" onClick={closeDrawer} type="button">
                 <span aria-hidden="true">×</span>
-                <span className="srOnly">Close</span>
+                <span className="srOnly">{translate('users.close')}</span>
               </button>
             </header>
 
             <div className="drawerBody">
               <label className="field">
-                <span>Name</span>
+                <span>{translate('users.name')}</span>
                 <input
                   onChange={(event) => setDraft((currentDraft) => ({ ...currentDraft, name: event.target.value }))}
-                  placeholder="User name"
+                  placeholder={translate('users.userNamePlaceholder')}
                   value={draft.name}
                 />
               </label>
 
               <label className="field">
-                <span>Email</span>
+                <span>{translate('users.email')}</span>
                 <input
                   onChange={(event) => setDraft((currentDraft) => ({ ...currentDraft, email: event.target.value }))}
                   placeholder="user@example.com"
@@ -523,40 +699,44 @@ function App() {
               </label>
 
               <label className="field">
-                <span>Role</span>
+                <span>{translate('users.role')}</span>
                 <select
                   onChange={(event) =>
                     setDraft((currentDraft) => ({ ...currentDraft, role: event.target.value as UserRole }))
                   }
                   value={draft.role}
                 >
-                  <option>Owner</option>
-                  <option>Member</option>
-                  <option>Observer</option>
+                  {CONSOLE_ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {translate(`roles.${role}`)}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <label className="field">
-                <span>Status</span>
+                <span>{translate('users.status')}</span>
                 <select
                   onChange={(event) =>
                     setDraft((currentDraft) => ({ ...currentDraft, status: event.target.value as UserStatus }))
                   }
                   value={draft.status}
                 >
-                  <option>Active</option>
-                  <option>Pending</option>
-                  <option>Disabled</option>
+                  {USER_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {translate(`statuses.${status}`)}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
 
             <footer className="drawerFooter">
               <button className="ghostButton" onClick={closeDrawer} type="button">
-                Cancel
+                {translate('users.cancel')}
               </button>
               <button className="primaryButton" onClick={saveUser} type="button">
-                Save
+                {translate('users.save')}
               </button>
             </footer>
           </aside>
@@ -566,50 +746,86 @@ function App() {
   );
 }
 
-function SurfaceEmptyStatePanel({ state, label }: { state: SurfaceEmptyState; label: string }) {
+function SurfaceEmptyStatePanel({
+  label,
+  surface,
+  t,
+}: {
+  label: string;
+  surface: SurfaceId;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const status = t(`surfaces.${surface}.status`);
+  const footer = t(`surfaces.${surface}.footer`);
+
   return (
     <section className="emptySurface" aria-label={`${label}: structured empty state`}>
       <div className="emptyStateShell">
         <header className="emptyStateHeader">
           <div>
-            <p className="kicker">{state.kicker}</p>
-            <h2>{state.label}</h2>
+            <p className="kicker">{t(`surfaces.${surface}.kicker`)}</p>
+            <h2>{t(`surfaces.${surface}.label`)}</h2>
           </div>
-          {state.status ? <span className="emptyStateStatus">{state.status}</span> : null}
+          {status ? <span className="emptyStateStatus">{status}</span> : null}
         </header>
 
-        <p className="emptyStateCopy">{state.copy}</p>
+        <p className="emptyStateCopy">{t(`surfaces.${surface}.copy`)}</p>
 
         <div className="emptyStateGrid">
-          {state.lanes.map((lane) => (
-            <article className="emptyStateCard" key={lane.title}>
-              <h3>{lane.title}</h3>
-              <p>{lane.body}</p>
+          {SURFACE_LANES[surface].map((lane) => (
+            <article className="emptyStateCard" key={lane}>
+              <h3>{t(`surfaces.${surface}.lanes.${lane}.title`)}</h3>
+              <p>{t(`surfaces.${surface}.lanes.${lane}.body`)}</p>
             </article>
           ))}
         </div>
 
-        {state.footer ? <p className="emptyStateFooter">{state.footer}</p> : null}
+        {footer ? <p className="emptyStateFooter">{footer}</p> : null}
       </div>
     </section>
   );
 }
 
 function AppearanceSettings({
+  activeLocale,
   activeTheme,
+  onLanguageChange,
   onThemeChange,
+  t,
 }: {
+  activeLocale: ConsoleLocale;
   activeTheme: ThemeId;
+  onLanguageChange: (locale: ConsoleLocale) => void;
   onThemeChange: (theme: ThemeId) => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   return (
     <div className="appearancePanel">
       <div className="appearanceHeader">
         <div>
-          <h3>Appearance</h3>
-          <p>Choose a visual console preset. This affects only the interface, not delivery logic.</p>
+          <h3>{t('settings.appearance')}</h3>
+          <p>{t('settings.visualPresetCopy')}</p>
         </div>
-        <p className="themeDisclaimer">terminal-inspired visual presets · not affiliated with original palette authors</p>
+        <p className="themeDisclaimer">{t('settings.themeDisclaimer')}</p>
+      </div>
+
+      <div className="languageSwitcher" aria-label={t('settings.language')}>
+        <button
+          aria-pressed={activeLocale === 'en'}
+          className={activeLocale === 'en' ? 'languageButton active' : 'languageButton'}
+          onClick={() => onLanguageChange('en')}
+          type="button"
+        >
+          {t('settings.english')}
+        </button>
+        <button
+          aria-pressed={activeLocale === 'ru'}
+          className={activeLocale === 'ru' ? 'languageButton active' : 'languageButton'}
+          onClick={() => onLanguageChange('ru')}
+          type="button"
+        >
+          {t('settings.russian')}
+        </button>
       </div>
 
       <div className="themeGrid">
@@ -623,7 +839,7 @@ function AppearanceSettings({
           >
             <span className="themeCardTop">
               <span>{theme.label}</span>
-              <span className="themeSelected">{activeTheme === theme.id ? 'Selected' : 'Select'}</span>
+              <span className="themeSelected">{activeTheme === theme.id ? t('settings.selected') : t('settings.select')}</span>
             </span>
             <span className="themeSwatches" aria-hidden="true">
               {theme.swatches.map((swatch) => (
@@ -642,9 +858,9 @@ function AppearanceSettings({
   );
 }
 
-function Brand() {
+function Brand({ label }: { label: string }) {
   return (
-    <div className="brand" aria-label="Goalrail console">
+    <div className="brand" aria-label={label}>
       <span className="brandText">GOALRAIL</span>
     </div>
   );
