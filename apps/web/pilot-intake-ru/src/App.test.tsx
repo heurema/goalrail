@@ -142,7 +142,7 @@ describe('Pilot intake RU business-first landing', () => {
     }
   });
 
-  it('renders final CTA and keeps the existing contact email', () => {
+  it('renders final CTA with pilot contact email and Telegram channel', () => {
     render(<App />);
 
     expect(
@@ -154,9 +154,13 @@ describe('Pilot intake RU business-first landing', () => {
       'action',
       '/api/pilot-lead',
     );
-    expect(screen.getByRole('link', { name: 'hello@goalrail.dev' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'pilot@goalrail.dev' })).toHaveAttribute(
       'href',
-      'mailto:hello@goalrail.dev',
+      'mailto:pilot@goalrail.dev',
+    );
+    expect(screen.getByRole('link', { name: '@goalrail' })).toHaveAttribute(
+      'href',
+      'https://t.me/goalrail',
     );
   });
 
@@ -216,7 +220,7 @@ describe('Pilot intake RU business-first landing', () => {
     await user.click(screen.getByRole('button', { name: 'Отправить заявку' }));
 
     await screen.findByText(/Не удалось отправить заявку/i);
-    expect(screen.getByText(/Напишите напрямую: hello@goalrail.dev/i)).toBeInTheDocument();
+    expect(screen.getByText(/Напишите напрямую: pilot@goalrail.dev/i)).toBeInTheDocument();
   });
 
   it('renders a duplicate-state message for an already submitted email', async () => {
@@ -333,7 +337,7 @@ describe('Pilot intake RU business-first landing', () => {
     expect(source).toContain('/srv/goalrail/pilot/backend/resend-api-key.local');
     expect(source).toContain('/srv/goalrail/pilot/backend/lead-recipient.local');
     expect(source).toContain('GoalRail Pilot <noreply@skill7.dev>');
-    expect(source).toContain('hello@goalrail.dev');
+    expect(source).toContain('pilot@goalrail.dev');
     expect(source).toContain('Authorization');
     expect(source).toContain('reply_to');
     expect(source).toContain('return "resend"');

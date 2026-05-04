@@ -35,8 +35,9 @@ D-0056 allows one narrow lead-capture exception for this surface:
 `POST /api/pilot-lead` validates an email, dedupes already-submitted addresses
 by the local JSONL lead log, sends a notification to the configured
 notification recipient, and records local JSONL notification status. D-0057
-allows a server-local direct recipient override; `hello@goalrail.dev` remains
-the public/manual contact address. D-0058 allows a server-local daily digest
+allows a server-local direct recipient override; D-0073 sets
+`pilot@goalrail.dev` as the public/manual pilot contact address and requires
+the visible Telegram channel `@goalrail`. D-0058 allows a server-local daily digest
 from the same JSONL lead log at 07:00 GMT+3 for the previous local calendar day;
 empty days send no digest. D-0059 allows Resend HTTPS transport through
 `skill7.dev` for the same notification/digest emails; the API key is configured
@@ -92,7 +93,7 @@ config was added.
   recipient override at `/srv/goalrail/pilot/backend/lead-recipient.local`. The
   override is operator-managed server state and the actual recipient address is
   not committed to repo docs/code/tests. If absent, the endpoint falls back to
-  `hello@goalrail.dev`.
+  `pilot@goalrail.dev` per D-0073.
 - D-0058 remains in force: a server-local daily digest may read the existing
   JSONL lead log, send one previous-day digest at `07:00 GMT+3` only when
   leads exist, and send nothing on empty days.
@@ -108,6 +109,10 @@ config was added.
 - D-0065 remains in force: new lead rows omit user-agent, local JSONL retention
   purge is dry-run by default, and abuse rate limiting is an operator-managed
   reverse-proxy guardrail without committed Nginx/Caddy config.
+- D-0073 remains in force: the public/manual pilot contact email is
+  `pilot@goalrail.dev`, the direct `mailto:` fallback uses that address, and
+  the RU pilot landing exposes Telegram channel `@goalrail` at
+  `https://t.me/goalrail`.
 
 ## Target surface
 
@@ -224,7 +229,7 @@ behavior:
 - Invalid email is rejected client-side before calling `fetch`.
 - Duplicate email submissions return success with a distinct duplicate message,
   without appending a new JSONL line or sending another notification.
-- Direct fallback remains `mailto:hello@goalrail.dev`.
+- Direct fallback remains `mailto:pilot@goalrail.dev`.
 - Active repo endpoint/digest source lives in the Go module at
   `apps/web/pilot-intake-ru/server`.
 - The command entrypoint is
@@ -243,12 +248,13 @@ behavior:
   `GOALRAIL_LEAD_RETENTION_DAYS` in the bounded 7–365 day range.
 - Reverse-proxy rate limiting is applied by the operator-managed web server /
   reverse proxy; no concrete Nginx/Caddy config is committed here.
-- Public/manual contact remains `hello@goalrail.dev`.
+- Public/manual contact remains `pilot@goalrail.dev`.
+- Public Telegram channel remains `@goalrail` at `https://t.me/goalrail`.
 - Notification recipient may be a server-local direct override from
   `/srv/goalrail/pilot/backend/lead-recipient.local`; the configured value is
   not stored in repo docs/code/tests.
 - If the override file is absent, notification recipient falls back to
-  `hello@goalrail.dev`.
+  `pilot@goalrail.dev`.
 - Notification subject starts with `Пилот`.
 - The Go sidecar prefers Resend HTTPS transport when
   `/srv/goalrail/pilot/backend/resend-api-key.local` exists and is valid.
@@ -278,9 +284,10 @@ behavior:
 - Previous email send smoke: PHP `mail()` accepted the notification and the
   local mail queue was empty after the smoke. Cloudflare Email Routing
   classified form-generated `noreply@pilot.goalrail.ru` mail to
-  `hello@goalrail.dev` as `unauthenticatedForward`, so D-0057 direct recipient
-  override is used for form notifications while `hello@goalrail.dev` remains
-  the manual address. This is historical server evidence, not a claim that PHP
+  `hello@goalrail.dev` as `unauthenticatedForward`; this used the then-current
+  manual address before D-0073 moved the public/manual pilot contact to
+  `pilot@goalrail.dev`. D-0057 direct recipient override remains available for
+  form notifications. This is historical server evidence, not a claim that PHP
   remains active repo source after D-0062.
 - Direct recipient override status: configured on the operator-managed server
   with a validated operator-provided address; the address is not committed to
@@ -378,7 +385,8 @@ Run from `apps/web`:
 - Hero `ИИ-кодинг без хаоса` visible.
 - Primary CTA `Обсудить пилот` visible.
 - Canonical in DOM is `https://pilot.goalrail.ru/`.
-- Contact email `hello@goalrail.dev` visible.
+- Contact email `pilot@goalrail.dev` visible.
+- Telegram channel `@goalrail` visible.
 - Console errors: 0.
 - Failed requests: 0.
 - Non-static requests on load: 0.
@@ -434,9 +442,9 @@ Source grep against production files passed with the D-0056 exception:
   static resources, sets no cookies, contains no analytics / tracking /
   LLM-provider / repo-provider calls, and submit remains same-origin
   `/api/pilot-lead`.
-- Public deployed asset scan confirms `hello@goalrail.dev` remains present and
-  the primary CTA / lead-form focus behavior remains covered by the existing
-  frontend test suite.
+- Public deployed asset scan confirms `pilot@goalrail.dev` and `@goalrail`
+  remain present and the primary CTA / lead-form focus behavior remains covered
+  by the existing frontend test suite.
 - Public live status: **LIVE VIA SSH STATIC SERVER — SMOKE PASSED**.
 
 ## Rollback note

@@ -133,6 +133,63 @@ Do not unify behavior-sensitive paths when nil checks, error messages,
 Do not use store-specific transaction wrappers. Stores should expose concrete
 persistence operations; service/use-case code owns transaction boundaries.
 
+## Consumer-side interfaces
+
+Go interfaces describe what the consumer needs, not everything an
+implementation can do.
+
+Small consumer-side interfaces in different packages may repeat the same
+method signature. Duplicated tiny consumer contracts are not a code smell by
+themselves. Duplicated implementation should still be cleaned up when it is
+real duplication and behavior matches.
+
+Do not create shared `Store` interfaces only to remove repeated method
+signatures. Do not create broad interfaces that force consumers to depend on
+methods they do not use.
+
+Prefer capability names that describe the consumer need, such as:
+- `UserReader`;
+- `UserEmailReader`;
+- `MembershipReader`;
+- `ContractReader`;
+- `EventAppender`.
+
+`Store` is acceptable when it is the package's primary persistence dependency.
+
+Shared interfaces are allowed only when all of these are true:
+- they represent a stable domain capability;
+- multiple consumers need the same capability with the same semantics;
+- they do not force extra methods on consumers;
+- they are not implementer-side interfaces created only for mocks;
+- they do not create package cycles.
+
+Bad:
+
+```go
+type UserStore interface {
+	GetByID(context.Context, spine.UserID) (spine.User, bool, error)
+	GetByEmail(context.Context, string) (spine.User, bool, error)
+	Update(context.Context, spine.User) error
+	Delete(context.Context, spine.UserID) error
+}
+
+type Service struct {
+	Users UserStore // This service only calls GetByID.
+}
+```
+
+Good:
+
+```go
+type UserReader interface {
+	GetUserByID(context.Context, spine.UserID) (spine.User, bool, error)
+}
+
+type Service struct {
+	Users UserReader
+}
+```
+
 ## Transaction rules
 
 The service/use-case layer owns transaction boundaries.

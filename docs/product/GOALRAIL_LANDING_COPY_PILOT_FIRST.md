@@ -89,7 +89,8 @@ The page should preserve:
 - IBM Plex fonts;
 - inline email submission through the narrow D-0056 lead endpoint, with
   D-0059 Resend HTTPS transport for notification delivery when configured and
-  `mailto:hello@goalrail.dev` as a fallback.
+  `mailto:pilot@goalrail.dev` as a fallback;
+- visible Telegram channel contact through `https://t.me/goalrail`.
 
 The page must remove or demote:
 - `Goal Intake` as hero;
@@ -346,9 +347,10 @@ Primary CTA:
 > Обсудить пилот
 
 Email/contact area:
-- keep `hello@goalrail.dev`;
+- keep `pilot@goalrail.dev`;
 - primary path: email field submits to same-origin `POST /api/pilot-lead`;
-- keep direct `mailto:hello@goalrail.dev` fallback;
+- keep direct `mailto:pilot@goalrail.dev` fallback;
+- expose Telegram channel `@goalrail` as `https://t.me/goalrail`;
 - use honest microcopy such as `Без рассылок, трекинга, CRM и автоматической
   воронки. Если форма не сработает, напишите напрямую.`;
 - success copy: `Спасибо. Получили почту — вернёмся с коротким следующим
@@ -357,7 +359,7 @@ Email/contact area:
   отправляем, чтобы не дублировать письма. Мы вернёмся с коротким следующим
   шагом.`;
 - error copy: `Не удалось отправить заявку. Напишите напрямую:
-  hello@goalrail.dev`;
+  pilot@goalrail.dev`;
 - no analytics.
 
 ## D. Firm boundaries
@@ -398,9 +400,10 @@ suppression applies to successfully notified addresses and legacy rows without
 `notification_status`, which are treated conservatively as already processed.
 D-0057 allows a server-local direct recipient override at
 `/srv/goalrail/pilot/backend/lead-recipient.local`; if it is absent, the
-endpoint falls back to `hello@goalrail.dev`. The public/manual contact email
-remains `hello@goalrail.dev`. Browser-facing mail errors stay generic as
-`mail_unavailable`. These decisions do not approve analytics, tracking, IP
+endpoint falls back to `pilot@goalrail.dev` per D-0073. The public/manual
+contact email is `pilot@goalrail.dev`, and the visible Telegram channel is
+`@goalrail` at `https://t.me/goalrail`. Browser-facing mail errors stay generic
+as `mail_unavailable`. These decisions do not approve analytics, tracking, IP
 logging, fingerprinting, cookies, sessions, CRM, Google Sheets, user accounts,
 LLM/API calls, repo integration, runtime execution, or a broad backend
 platform. Reverse-proxy rate limiting is a deployment guardrail, not
