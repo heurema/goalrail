@@ -63,6 +63,25 @@ func TestCORSDisallowedOriginDoesNotEmitAllowOrigin(t *testing.T) {
 	if got := response.header.Get("Access-Control-Allow-Origin"); got != "" {
 		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
 	}
+	if got := response.header.Get("Vary"); got != "Origin" {
+		t.Fatalf("Vary = %q, want Origin", got)
+	}
+}
+
+func TestCORSEnabledRequestWithoutOriginDoesNotEmitCORSHeaders(t *testing.T) {
+	handler := httpserver.WithCORS(probeRoute("me"), []string{"https://goalrail.dev"})
+
+	response := doRaw(t, handler, http.MethodGet, "/v1/me", "")
+
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	if got := response.header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
+	}
+	if got := response.header.Get("Vary"); got != "" {
+		t.Fatalf("Vary = %q, want empty", got)
+	}
 }
 
 func TestCORSAllowedPreflightReturnsNoContentWithMethodsAndHeaders(t *testing.T) {

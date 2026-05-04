@@ -23,10 +23,12 @@ func WithCORS(next http.Handler, allowedOrigins []string) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		if origin != "" {
+			addVary(w.Header(), "Origin")
+		}
 		if _, ok := allowed[origin]; ok {
 			headers := w.Header()
 			headers.Set("Access-Control-Allow-Origin", origin)
-			addVary(headers, "Origin")
 			if r.Method == http.MethodOptions {
 				headers.Set("Access-Control-Allow-Methods", corsAllowedMethods)
 				headers.Set("Access-Control-Allow-Headers", corsAllowedHeaders)
