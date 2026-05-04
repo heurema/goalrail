@@ -1,0 +1,11 @@
+.DS_Store
+.env
+.env.*
+bin/
+build/
+coverage/
+dist/
+tmp/
+goalrail-server
+*.out
+*.test

@@ -15,6 +15,74 @@ without database configuration. Product and auth API routes return HTTP 503
 with error code `database_not_configured` until the structured Postgres
 configuration is complete.
 
+## Container image
+
+Build the server image from the repository root with `apps/server` as the
+Docker build context:
+
+```bash
+docker build -f apps/server/Dockerfile -t goalrail-server:local apps/server
+```
+
+Run health and version endpoints only. Start the container in one terminal:
+
+```bash
+docker run --rm -p 8080:8080 goalrail-server:local
+```
+
+Then check the lightweight endpoints from another terminal:
+
+```bash
+curl -fsS http://127.0.0.1:8080/livez
+curl -fsS http://127.0.0.1:8080/readyz
+curl -fsS http://127.0.0.1:8080/version
+```
+
+Product and auth routes still require structured Postgres configuration.
+Health and version routes work without database configuration. For DB-enabled
+runtime, pass `GOALRAIL_DATABASE_HOST`, `GOALRAIL_DATABASE_PORT`,
+`GOALRAIL_DATABASE_NAME`, `GOALRAIL_DATABASE_USER`,
+`GOALRAIL_DATABASE_PASSWORD`, `GOALRAIL_DATABASE_SSLMODE`, and
+`GOALRAIL_AUTH_JWT_SECRET` at `docker run` time.
+
+Apply migrations from the image by passing runtime-owned environment:
+
+```bash
+docker run --rm \
+  --env GOALRAIL_DATABASE_HOST='<database-host>' \
+  --env GOALRAIL_DATABASE_PORT=5432 \
+  --env GOALRAIL_DATABASE_NAME=goalrail \
+  --env GOALRAIL_DATABASE_USER=goalrail \
+  --env GOALRAIL_DATABASE_PASSWORD='<runtime-secret>' \
+  --env GOALRAIL_DATABASE_SSLMODE=disable \
+  --env GOALRAIL_AUTH_JWT_SECRET='<runtime-secret-at-least-32-characters>' \
+  goalrail-server:local migrate up
+```
+
+Bootstrap the first self-hosted owner from the image by passing the same
+runtime-owned environment:
+
+```bash
+docker run --rm \
+  --env GOALRAIL_DATABASE_HOST='<database-host>' \
+  --env GOALRAIL_DATABASE_PORT=5432 \
+  --env GOALRAIL_DATABASE_NAME=goalrail \
+  --env GOALRAIL_DATABASE_USER=goalrail \
+  --env GOALRAIL_DATABASE_PASSWORD='<runtime-secret>' \
+  --env GOALRAIL_DATABASE_SSLMODE=disable \
+  --env GOALRAIL_AUTH_JWT_SECRET='<runtime-secret-at-least-32-characters>' \
+  goalrail-server:local bootstrap owner \
+    --email owner@example.com \
+    --display-name "Owner User" \
+    --organization-slug acme \
+    --organization-name "Acme" \
+    --public-base-url https://goalrail.example.com
+```
+
+Secrets are runtime environment only and must not be committed. The image does
+not bake database credentials, JWT secrets, hostnames, deploy scripts, or server
+configuration.
+
 ## Local Postgres foundation
 
 Configure Postgres with structured environment variables:
