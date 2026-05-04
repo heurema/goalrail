@@ -466,7 +466,7 @@ Done means:
 - a server-local static smoke check passed against the manually-uploaded release; server-side TLS provisioning, server-local HTTPS smoke, public `https://pilot.goalrail.ru/` smoke, and public `/api/pilot-lead` smoke passed
 - the canonical URL in the deployed `index.html` is verified to be `https://pilot.goalrail.ru/`
 - canonical copy parity is re-confirmed against `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; any drift is reconciled in a follow-up patch
-- the lead form posts only to same-origin `/api/pilot-lead`, the fallback still resolves to `mailto:hello@goalrail.dev`, and the primary CTA still only focuses the email input with the temporary local highlight
+- the lead form posts only to same-origin `/api/pilot-lead`, the fallback still resolves to `mailto:pilot@goalrail.dev`, the Telegram channel resolves to `https://t.me/goalrail`, and the primary CTA still only focuses the email input with the temporary local highlight
 - DNS now reaches the operator-managed SSH server per D-0051 / D-0053, and public resolver comparison passed without recording server IPs in repo docs. If the DNS zone is in Cloudflare, the record remains outside Cloudflare Pages, Workers, Web Analytics, and repo-side infrastructure config unless a separate decision changes that.
 - server-side HTTPS provisioning is installed on the operator-managed server, and public HTTPS at `https://pilot.goalrail.ru/` is verified live
 - a real-device pass is performed on iOS Safari and Android Chrome against the live URL; any blockers are filed as separate small patches

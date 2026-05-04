@@ -1845,3 +1845,27 @@ Rationale:
   backend persistence, cookies, or sessions.
 - Structured empty states make the console less blank without claiming backend
   or runtime behavior that does not exist.
+
+## D-0073 — RU pilot contact uses pilot mailbox and Telegram channel
+Date: 2026-05-04
+Status: accepted
+
+Decision:
+- The RU pilot landing public/manual contact email is `pilot@goalrail.dev`.
+- The direct `mailto:` fallback uses `mailto:pilot@goalrail.dev`.
+- The landing exposes Telegram channel `@goalrail` as `https://t.me/goalrail`.
+- The landing-owned Go sidecar default notification recipient falls back to
+  `pilot@goalrail.dev` when the server-local D-0057 direct recipient override
+  is absent.
+- This decision supersedes the prior pilot-surface `hello@goalrail.dev`
+  fallback/contact claims in D-0056, D-0057, D-0058, and D-0059.
+- This decision does not change the server-local override path, Resend sender,
+  lead-capture endpoint, JSONL lead log, digest scope, retention posture,
+  analytics boundary, CRM boundary, LLM/API boundary, repo-integration
+  boundary, or runtime-execution boundary.
+
+Rationale:
+- The pilot surface now has a dedicated mailbox.
+- Telegram is an explicit public contact/publishing point for Goalrail.
+- Keeping both contact channels visible gives visitors a direct fallback
+  without adding analytics, CRM, chat, accounts, or broader backend scope.

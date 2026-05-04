@@ -792,6 +792,9 @@ button {
 
 .ctaNote {
   grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
   margin: -10px 0 0;
   color: var(--text-3);
   font-size: 13px;
