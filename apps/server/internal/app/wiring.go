@@ -72,9 +72,9 @@ type appServices struct {
 }
 
 func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRunner, authJWTSecret string) appServices {
-	contractSeedService := contractseed.NewService(stores.goals, stores.contracts, stores.contractSeeds, stores.events, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
-	contractDraftService := contractdraft.NewService(stores.contractSeeds, stores.contracts, stores.contractDrafts, stores.events, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
-	approvedContractService := approvedcontract.NewService(stores.contractDrafts, stores.contracts, stores.approvedContracts, stores.events, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
+	contractSeedService := contractseed.NewService(stores.goals, stores.contracts, stores.contractSeeds, stores.events, txRunner, contractseed.SystemClock{}, contractseed.UUIDGenerator{})
+	contractDraftService := contractdraft.NewService(stores.contractSeeds, stores.contracts, stores.contractDrafts, stores.events, txRunner, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
+	approvedContractService := approvedcontract.NewService(stores.contractDrafts, stores.contracts, stores.approvedContracts, stores.events, txRunner, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
 
 	return appServices{
 		intake:        intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),

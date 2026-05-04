@@ -212,16 +212,16 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
-	if err := s.Proposals.Create(ctx, proposal); err != nil {
-		if _, ok, lookupErr := s.Proposals.GetByPlanID(ctx, plan.ID); lookupErr != nil {
-			return spine.WorkItemPlanProposal{}, fmt.Errorf("get work item plan proposal by plan id after create failure: %w", lookupErr)
-		} else if ok {
-			return spine.WorkItemPlanProposal{}, ErrAlreadyProposed
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Proposals.Create(txCtx, proposal); err != nil {
+			return fmt.Errorf("create work item plan proposal: %w", err)
 		}
-		return spine.WorkItemPlanProposal{}, fmt.Errorf("create work item plan proposal: %w", err)
-	}
-	if err := s.Plans.MarkProposalSubmitted(ctx, plan.ID, now); err != nil {
-		return spine.WorkItemPlanProposal{}, fmt.Errorf("mark work item plan proposal submitted: %w", err)
+		if err := s.Plans.MarkProposalSubmitted(txCtx, plan.ID, now); err != nil {
+			return fmt.Errorf("mark work item plan proposal submitted: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.WorkItemPlanProposal{}, err
 	}
 	return proposal, nil
 }

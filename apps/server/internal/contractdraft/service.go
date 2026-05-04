@@ -99,6 +99,10 @@ type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
 
+type TransactionRunner interface {
+	RunReadCommitted(context.Context, func(context.Context) error) error
+}
+
 type Clock interface {
 	Now() time.Time
 }
@@ -113,16 +117,18 @@ type Service struct {
 	Contracts ContractStore
 	Drafts    Store
 	Events    EventLog
+	TxRunner  TransactionRunner
 	Clock     Clock
 	IDs       IDGenerator
 }
 
-func NewService(seeds SeedReader, contracts ContractStore, drafts Store, events EventLog, clock Clock, ids IDGenerator) *Service {
+func NewService(seeds SeedReader, contracts ContractStore, drafts Store, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		Seeds:     seeds,
 		Contracts: contracts,
 		Drafts:    drafts,
 		Events:    events,
+		TxRunner:  txRunner,
 		Clock:     clock,
 		IDs:       ids,
 	}
@@ -184,19 +190,19 @@ func (s *Service) Create(ctx context.Context, seedID spine.ContractSeedID) (spin
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
-	if err := s.Drafts.Create(ctx, created); err != nil {
-		if _, ok, lookupErr := s.Drafts.GetByContractSeedID(ctx, seed.ID); lookupErr != nil {
-			return spine.ContractDraft{}, fmt.Errorf("get contract draft by contract seed id after create failure: %w", lookupErr)
-		} else if ok {
-			return spine.ContractDraft{}, ErrAlreadyDrafted
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Drafts.Create(txCtx, created); err != nil {
+			return fmt.Errorf("create contract draft: %w", err)
 		}
-		return spine.ContractDraft{}, fmt.Errorf("create contract draft: %w", err)
-	}
-	if err := s.Contracts.MarkDraftCreated(ctx, created.ContractID, created.ID, now); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("mark contract draft created: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("append contract draft created event: %w", err)
+		if err := s.Contracts.MarkDraftCreated(txCtx, created.ContractID, created.ID, now); err != nil {
+			return fmt.Errorf("mark contract draft created: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append contract draft created event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ContractDraft{}, err
 	}
 
 	return created, nil
@@ -319,11 +325,16 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
-	if err := s.Drafts.Update(ctx, updated); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("update contract draft: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("append contract draft updated event: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Drafts.Update(txCtx, updated); err != nil {
+			return fmt.Errorf("update contract draft: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append contract draft updated event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ContractDraft{}, err
 	}
 
 	return updated, nil
@@ -356,14 +367,19 @@ func (s *Service) MarkReadyForApproval(ctx context.Context, draftID spine.Contra
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
-	if err := s.Drafts.MarkReadyForApproval(ctx, updated); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("mark contract draft ready for approval: %w", err)
-	}
-	if err := s.Contracts.MarkReadyForApproval(ctx, updated.ContractID, now); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("mark contract ready for approval: %w", err)
-	}
-	if err := s.Events.Append(ctx, event); err != nil {
-		return spine.ContractDraft{}, fmt.Errorf("append contract draft marked ready for approval event: %w", err)
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Drafts.MarkReadyForApproval(txCtx, updated); err != nil {
+			return fmt.Errorf("mark contract draft ready for approval: %w", err)
+		}
+		if err := s.Contracts.MarkReadyForApproval(txCtx, updated.ContractID, now); err != nil {
+			return fmt.Errorf("mark contract ready for approval: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append contract draft marked ready for approval event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ContractDraft{}, err
 	}
 
 	return updated, nil
