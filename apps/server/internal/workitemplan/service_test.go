@@ -2,6 +2,7 @@ package workitemplan_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -138,6 +139,59 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	storedProposal, _, _ := proposals.Get(context.Background(), proposal.ID)
 	if storedProposal.State != spine.WorkItemProposalStateSubmitted {
 		t.Fatalf("proposal state = %q, want submitted", storedProposal.State)
+	}
+}
+
+func TestServiceSubmitProposalDuplicateLookupAfterFailedCreateUsesOuterContext(t *testing.T) {
+	tests := []struct {
+		name           string
+		duplicateFound bool
+		wantErr        error
+	}{
+		{
+			name:           "returns duplicate found outside transaction",
+			duplicateFound: true,
+			wantErr:        workitemplan.ErrAlreadyProposed,
+		},
+		{
+			name:           "returns original create error when duplicate not found",
+			duplicateFound: false,
+			wantErr:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			txRunner := newFakeTransactionRunner()
+			service, _, _, _, proposals, _, _ := planningService(t, txRunner)
+			approved := validApprovedContract()
+			outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+			createErr := errors.New("create failed")
+			proposals.createErr = createErr
+			proposals.duplicateAfterCreateFailure = tt.duplicateFound
+			plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+				RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+			})
+			if err != nil {
+				t.Fatalf("CreatePlan() error = %v", err)
+			}
+
+			_, err = service.SubmitProposal(outerCtx, plan.ID, validProposalRequest(string(approved.ID)))
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("SubmitProposal() error = %v, want %v", err, tt.wantErr)
+				}
+			} else if !errors.Is(err, createErr) {
+				t.Fatalf("SubmitProposal() error = %v, want original create error", err)
+			}
+			got := proposals.lastGetByPlanCtx(t)
+			if got != outerCtx {
+				t.Fatal("Proposals.GetByPlanID after failed create did not receive outer context")
+			}
+			if got == txRunner.txCtx {
+				t.Fatal("Proposals.GetByPlanID after failed create received transaction context")
+			}
+		})
 	}
 }
 
@@ -312,9 +366,12 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 }
 
 type fakeWorkItemPlanProposalStore struct {
-	proposals map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
-	byPlan    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
-	createCtx context.Context
+	proposals                   map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
+	byPlan                      map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
+	createCtx                   context.Context
+	createErr                   error
+	duplicateAfterCreateFailure bool
+	getByPlanCtxs               []context.Context
 }
 
 func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
@@ -326,6 +383,9 @@ func newFakeWorkItemPlanProposalStore() *fakeWorkItemPlanProposalStore {
 
 func (s *fakeWorkItemPlanProposalStore) Create(ctx context.Context, proposal spine.WorkItemPlanProposal) error {
 	s.createCtx = ctx
+	if s.createErr != nil {
+		return s.createErr
+	}
 	s.proposals[proposal.ID] = proposal
 	s.byPlan[proposal.PlanID] = proposal.ID
 	return nil
@@ -336,13 +396,25 @@ func (s *fakeWorkItemPlanProposalStore) Get(_ context.Context, id spine.WorkItem
 	return proposal, ok, nil
 }
 
-func (s *fakeWorkItemPlanProposalStore) GetByPlanID(_ context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlanProposal, bool, error) {
+func (s *fakeWorkItemPlanProposalStore) GetByPlanID(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlanProposal, bool, error) {
+	s.getByPlanCtxs = append(s.getByPlanCtxs, ctx)
+	if s.duplicateAfterCreateFailure && len(s.getByPlanCtxs) > 1 {
+		return spine.WorkItemPlanProposal{ID: "existing-proposal", PlanID: id}, true, nil
+	}
 	proposalID, ok := s.byPlan[id]
 	if !ok {
 		return spine.WorkItemPlanProposal{}, false, nil
 	}
 	proposal, ok := s.proposals[proposalID]
 	return proposal, ok, nil
+}
+
+func (s *fakeWorkItemPlanProposalStore) lastGetByPlanCtx(t *testing.T) context.Context {
+	t.Helper()
+	if len(s.getByPlanCtxs) == 0 {
+		t.Fatal("GetByPlanID was not called")
+	}
+	return s.getByPlanCtxs[len(s.getByPlanCtxs)-1]
 }
 
 func (s *fakeWorkItemPlanProposalStore) MarkAccepted(_ context.Context, id spine.WorkItemPlanProposalID, acceptedBy spine.ActorRef, acceptedAt time.Time) error {

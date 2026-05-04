@@ -180,6 +180,54 @@ func TestServiceCreateUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceCreateDuplicateLookupAfterFailedCreateUsesOuterContext(t *testing.T) {
+	tests := []struct {
+		name           string
+		duplicateFound bool
+		wantErr        error
+	}{
+		{
+			name:           "returns duplicate found outside transaction",
+			duplicateFound: true,
+			wantErr:        contractdraft.ErrAlreadyDrafted,
+		},
+		{
+			name:           "returns original create error when duplicate not found",
+			duplicateFound: false,
+			wantErr:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service, seeds, contracts, drafts, _ := draftService(t)
+			txRunner := service.TxRunner.(*fakeTransactionRunner)
+			outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
+			createErr := errors.New("create failed")
+			drafts.createErr = createErr
+			drafts.duplicateAfterCreateFailure = tt.duplicateFound
+			seed := validDraftableSeed()
+			storeSeedWithContract(t, seeds, contracts, seed)
+
+			_, err := service.Create(outerCtx, seed.ID)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("Create() error = %v, want %v", err, tt.wantErr)
+				}
+			} else if !errors.Is(err, createErr) {
+				t.Fatalf("Create() error = %v, want original create error", err)
+			}
+			got := drafts.lastGetBySeedCtx(t)
+			if got != outerCtx {
+				t.Fatal("Drafts.GetByContractSeedID after failed create did not receive outer context")
+			}
+			if got == txRunner.txCtx {
+				t.Fatal("Drafts.GetByContractSeedID after failed create received transaction context")
+			}
+		})
+	}
+}
+
 func TestServiceRejectsDuplicateDraftForSeed(t *testing.T) {
 	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
@@ -933,11 +981,14 @@ func (s *fakeContractStore) MarkReadyForApproval(ctx context.Context, id spine.C
 }
 
 type fakeContractDraftStore struct {
-	drafts                  map[spine.ContractDraftID]spine.ContractDraft
-	bySeed                  map[spine.ContractSeedID]spine.ContractDraftID
-	createCtx               context.Context
-	updateCtx               context.Context
-	markReadyForApprovalCtx context.Context
+	drafts                      map[spine.ContractDraftID]spine.ContractDraft
+	bySeed                      map[spine.ContractSeedID]spine.ContractDraftID
+	createCtx                   context.Context
+	updateCtx                   context.Context
+	markReadyForApprovalCtx     context.Context
+	createErr                   error
+	duplicateAfterCreateFailure bool
+	getBySeedCtxs               []context.Context
 }
 
 func newFakeContractDraftStore() *fakeContractDraftStore {
@@ -949,6 +1000,9 @@ func newFakeContractDraftStore() *fakeContractDraftStore {
 
 func (s *fakeContractDraftStore) Create(ctx context.Context, draft spine.ContractDraft) error {
 	s.createCtx = ctx
+	if s.createErr != nil {
+		return s.createErr
+	}
 	s.drafts[draft.ID] = draft
 	s.bySeed[draft.ContractSeedID] = draft.ID
 	return nil
@@ -986,13 +1040,25 @@ func (s *fakeContractDraftStore) Get(_ context.Context, id spine.ContractDraftID
 	return draft, ok, nil
 }
 
-func (s *fakeContractDraftStore) GetByContractSeedID(_ context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
+func (s *fakeContractDraftStore) GetByContractSeedID(ctx context.Context, id spine.ContractSeedID) (spine.ContractDraft, bool, error) {
+	s.getBySeedCtxs = append(s.getBySeedCtxs, ctx)
+	if s.duplicateAfterCreateFailure && len(s.getBySeedCtxs) > 1 {
+		return spine.ContractDraft{ID: "existing-draft", ContractSeedID: id}, true, nil
+	}
 	draftID, ok := s.bySeed[id]
 	if !ok {
 		return spine.ContractDraft{}, false, nil
 	}
 	draft, ok := s.drafts[draftID]
 	return draft, ok, nil
+}
+
+func (s *fakeContractDraftStore) lastGetBySeedCtx(t *testing.T) context.Context {
+	t.Helper()
+	if len(s.getBySeedCtxs) == 0 {
+		t.Fatal("GetByContractSeedID was not called")
+	}
+	return s.getBySeedCtxs[len(s.getBySeedCtxs)-1]
 }
 
 type fakeEventLog struct {
