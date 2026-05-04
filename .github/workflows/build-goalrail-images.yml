@@ -1,0 +1,77 @@
+name: build-goalrail-images
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build-goalrail-images.yml"
+      - "apps/server/**"
+      - "apps/web/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-goalrail-images.yml"
+      - "apps/server/**"
+      - "apps/web/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  SERVER_IMAGE: ghcr.io/heurema/goalrail-server
+  CONSOLE_RU_IMAGE: ghcr.io/heurema/goalrail-console-ru
+  CONSOLE_RU_API_BASE_URL: https://api.goalrail.dev
+
+jobs:
+  build:
+    name: build images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute tags
+        id: tags
+        shell: bash
+        run: |
+          short_sha="${GITHUB_SHA::7}"
+          build_ts="$(date -u +%Y%m%d%H%M%S)"
+          echo "version=dev-${short_sha}-${build_ts}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Goalrail server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/server/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.SERVER_IMAGE }}:${{ steps.tags.outputs.version }}
+            ${{ env.SERVER_IMAGE }}:sha-${{ github.sha }}
+
+      - name: Build Goalrail console RU image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/console-ru/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          build-args: |
+            VITE_GOALRAIL_API_BASE_URL=${{ env.CONSOLE_RU_API_BASE_URL }}
+          tags: |
+            ${{ env.CONSOLE_RU_IMAGE }}:${{ steps.tags.outputs.version }}
+            ${{ env.CONSOLE_RU_IMAGE }}:sha-${{ github.sha }}

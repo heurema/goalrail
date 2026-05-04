@@ -1,0 +1,14 @@
+.git
+.github
+.codex
+.goalrail
+.punk
+docs
+tools
+scripts
+**/node_modules
+**/dist
+**/.DS_Store
+**/coverage
+**/*.log
+

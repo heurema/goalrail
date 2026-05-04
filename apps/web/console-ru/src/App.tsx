@@ -457,7 +457,7 @@ function App() {
     return (
       <main
         className="loginScreen"
-        data-deployment-target="console.goalrail.ru"
+        data-deployment-target="console.goalrail.dev"
         data-goalrail-theme={activeTheme}
       >
         <div className="loginRails" aria-hidden="true" />
@@ -490,7 +490,7 @@ function App() {
     return (
       <main
         className="loginScreen"
-        data-deployment-target="console.goalrail.ru"
+        data-deployment-target="console.goalrail.dev"
         data-goalrail-theme={activeTheme}
       >
         <div className="loginRails" aria-hidden="true" />
@@ -525,7 +525,7 @@ function App() {
   return (
     <main
       className="consoleShell"
-      data-deployment-target="console.goalrail.ru"
+      data-deployment-target="console.goalrail.dev"
       data-goalrail-theme={activeTheme}
     >
       <aside className="sidebar" aria-label="Навигация консоли Goalrail">
