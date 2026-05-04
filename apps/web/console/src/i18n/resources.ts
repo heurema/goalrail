@@ -144,6 +144,12 @@ export const resources = {
         member: 'Member',
         observer: 'Observer',
       },
+      membershipRoles: {
+        owner: 'Owner',
+        admin: 'Admin',
+        member: 'Member',
+        viewer: 'Viewer',
+      },
       statuses: {
         active: 'Active',
         pending: 'Pending',
@@ -293,6 +299,12 @@ export const resources = {
         owner: 'Владелец',
         member: 'Участник',
         observer: 'Наблюдатель',
+      },
+      membershipRoles: {
+        owner: 'Владелец',
+        admin: 'Администратор',
+        member: 'Участник',
+        viewer: 'Наблюдатель',
       },
       statuses: {
         active: 'Активен',

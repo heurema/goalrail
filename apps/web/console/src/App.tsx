@@ -19,6 +19,7 @@ type ScreenId = 'console' | 'settings-appearance' | 'settings-users';
 type ThemeId = 'goalrail-default' | 'catppuccin-mocha' | 'dracula' | 'nord' | 'solarized-dark' | 'gruvbox-dark';
 type UserStatus = 'active' | 'pending' | 'disabled';
 type UserRole = 'owner' | 'member' | 'observer';
+type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
 type RoleFilter = UserRole | 'all';
 type StatusFilter = UserStatus | 'all';
 type AuthStatus =
@@ -54,6 +55,7 @@ interface ThemePreset {
 
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
 const CONSOLE_ROLES: UserRole[] = ['owner', 'member', 'observer'];
+const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
 const USER_STATUSES: UserStatus[] = ['active', 'pending', 'disabled'];
 
 const SURFACE_LANES = {
@@ -114,6 +116,10 @@ function isThemeId(value: string | null): value is ThemeId {
 
 function isConsoleRole(value: string | undefined): value is UserRole {
   return CONSOLE_ROLES.includes(value as UserRole);
+}
+
+function isMembershipRole(value: string | undefined): value is MembershipRole {
+  return MEMBERSHIP_ROLES.includes(value as MembershipRole);
 }
 
 function readStoredTheme(): ThemeId {
@@ -197,7 +203,9 @@ function App() {
   const sessionDisplayName = profile?.user.display_name.trim() || profile?.user.email || translate('session.fallbackUser');
   const sessionEmail = profile?.user.email;
   const sessionRoleValue = profile?.organization_membership.role;
-  const sessionRole = isConsoleRole(sessionRoleValue) ? translate(`roles.${sessionRoleValue}`) : sessionRoleValue ?? 'member';
+  const sessionRole = isMembershipRole(sessionRoleValue)
+    ? translate(`membershipRoles.${sessionRoleValue}`)
+    : sessionRoleValue ?? 'member';
 
   async function handleLanguageChange(locale: ConsoleLocale) {
     await i18n.changeLanguage(locale);

@@ -34,7 +34,7 @@ function loginResponse(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function meResponse() {
+function meResponse(overrides: { role?: string } = {}) {
   return {
     user: {
       id: '018f0000-0000-7000-8000-000000000001',
@@ -46,7 +46,7 @@ function meResponse() {
       id: '018f0000-0000-7000-8000-000000000301',
       organization_id: '018f0000-0000-7000-8000-000000000002',
       user_id: '018f0000-0000-7000-8000-000000000001',
-      role: 'owner',
+      role: overrides.role ?? 'owner',
       state: 'active',
     },
   };
@@ -63,10 +63,10 @@ async function setLocale(locale: 'en' | 'ru') {
   document.documentElement.lang = locale;
 }
 
-async function loginSuccessfully(locale: 'en' | 'ru' = 'en') {
+async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'owner') {
   await setLocale(locale);
   fetchMock.mockResolvedValueOnce(jsonResponse(loginResponse()));
-  fetchMock.mockResolvedValueOnce(jsonResponse(meResponse()));
+  fetchMock.mockResolvedValueOnce(jsonResponse(meResponse({ role: membershipRole })));
   render(<App />);
 
   fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'owner@example.com' } });
@@ -158,6 +158,12 @@ describe('App', () => {
     );
     expect(screen.getByLabelText(/current user/i)).toHaveTextContent('Owner');
     expect(screen.getByLabelText(/current user/i)).toHaveTextContent('owner@example.com');
+  });
+
+  it('renders an EN localized server membership admin role', async () => {
+    await loginSuccessfully('en', 'admin');
+
+    expect(screen.getByLabelText(/current user/i)).toHaveTextContent('role · Admin');
   });
 
   it.each([
@@ -355,6 +361,21 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^Контракты$/i })).toBeInTheDocument();
     expect(document.documentElement.lang).toBe('ru');
     expect(window.location.search).toBe('?lng=ru');
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+  });
+
+  it('localizes server membership admin role after switching to RU without losing the authenticated session', async () => {
+    await loginSuccessfully('en', 'admin');
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Русский$/i }));
+
+    await screen.findByRole('heading', { name: /^Оформление$/i });
+    expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('Owner');
+    expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('role · Администратор');
+    expect(screen.getByRole('button', { name: /^Контракты$/i })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
     expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
   });
