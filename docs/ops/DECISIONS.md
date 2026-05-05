@@ -2187,3 +2187,40 @@ Rationale:
   crossing into audit, runner, provider integration, or verification behavior.
 - Keeping snapshot history server-owned preserves `.goalrail/project.yml` as a
   local marker/cache rather than a competing source of truth.
+
+## D-0083 — Provider-neutral VCS connection boundary precedes GitLab implementation
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Accept `VcsConnection` as a future provider-neutral VCS connection /
+  account authorization / metadata-discovery boundary.
+- Do not implement `VcsConnection` in backend schema, API, provider clients,
+  CLI, or web UI in this phase.
+- GitLab/provider backend implementation is blocked until the provider-neutral
+  boundary in ADR-0024 is accepted and must conform to it afterward.
+- `VcsConnection` is not a checkout credential, raw provider token, repository
+  catalog, or permission to clone.
+- `RepoBinding` remains the current metadata-only Project-to-repository
+  reference and does not grant clone/read/write access.
+- `RepositoryRecord` remains deferred until repository catalog, provider sync,
+  multi-project repository reuse, repository lifecycle, or repo-level policy is
+  necessary.
+- Goalrail `Organization` remains distinct from GitLab Group, GitHub
+  Organization, Bitbucket Workspace, provider account, namespace, repository
+  owner, or installation concepts.
+- Provider-specific concepts and identifiers stay in provider adapters or
+  adapter-owned metadata. GitLab may be the first provider candidate, but
+  GitLab Group and GitLab Project must not become Goalrail Organization or
+  Goalrail Project.
+- This decision does not add GitLab OAuth, provider clients, provider token
+  storage, checkout credentials, repository clone, repository catalog,
+  provider sync jobs, runner jobs, gate, proof, or generic queue behavior.
+
+Rationale:
+- A provider-neutral boundary prevents the first provider candidate from
+  shaping the Goalrail core domain model.
+- Metadata discovery, repository binding, provider credentials, checkout
+  eligibility, and runner checkout need separate trust boundaries.
+- Customer-hosted runner compatibility must remain possible even when Goalrail
+  cloud has no provider-side VCS connection or clone credential.

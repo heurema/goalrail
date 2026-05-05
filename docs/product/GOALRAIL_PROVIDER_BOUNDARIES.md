@@ -112,6 +112,27 @@ The system should be designed so that major slices can be replaced or removed wi
 - no provider assumptions inside shared contract model
 - server-side domain truth independent of one IDE or one model vendor
 
+### VCS provider adapter isolation
+
+VCS provider connections must follow the provider-neutral boundary in
+`docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md`.
+
+Goalrail core may use provider-neutral concepts such as `VcsConnection`,
+`provider_kind`, `provider_account_ref`, `provider_namespace_ref`,
+`repository_external_id`, `repository_full_name`, `repository_url`,
+`default_branch`, `connection_state`, `metadata_state`, and `binding_state`.
+
+Provider-specific concepts stay in adapters or adapter-owned metadata:
+- GitLab Group must not become Goalrail `Organization`
+- GitLab Project must not become Goalrail `Project`
+- GitHub Organization must not become Goalrail `Organization`
+- Bitbucket Workspace must not become Goalrail `Organization`
+- provider tokens must not become `VcsConnection`
+- provider repository access must not become `RepoBinding`
+
+GitLab can be the first provider candidate, but it must be treated as an
+adapter example rather than a source of Goalrail core terminology.
+
 ## 8. Experimental posture
 
 Goalrail should be sold as:

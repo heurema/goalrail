@@ -133,7 +133,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-three kernel/CLI/server/domain boundary ADRs
+- twenty-four kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -251,6 +251,16 @@ The project currently has:
   current profile lookup, and logout. Organization / Project / RepoBinding
   profile selection remains unimplemented; the current `/cli/login` HTML page
   is a temporary CLI auth bridge only.
+- ADR-0024 documents the accepted provider-neutral VCS connection boundary:
+  future `VcsConnection` is a provider connection / account authorization /
+  metadata-discovery boundary, not a checkout credential, raw provider token,
+  repository catalog, or permission to clone. `RepoBinding` remains the current
+  Project-to-repository metadata reference, `RepositoryRecord` remains deferred,
+  provider-specific namespace/account/project concepts stay in adapters, and
+  GitLab may be a first provider candidate without becoming the source of core
+  Goalrail terminology. No `VcsConnection`, provider client, OAuth, checkout,
+  runner, gate, proof, provider sync, repository catalog, or queue
+  implementation exists from this docs boundary.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -272,7 +282,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-three boundary ADRs exist
+- kernel schema note and twenty-four boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -385,7 +395,8 @@ The project currently has:
   Organization / Project / RepoBinding CLI profile selection, or data-backed
   Goalrail web product loop yet; the current server-rendered `/cli/login` page
   is only a temporary CLI auth bridge for `goalrail login <server_url>`
-- no `VcsConnection` implementation yet
+- no `VcsConnection` implementation yet; ADR-0024 is a docs-only accepted
+  provider-neutral boundary, not backend schema/API/provider-client behavior
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
 - no `RepoBinding.access_mode` implementation beyond `metadata_only` init
@@ -435,7 +446,9 @@ Current packaging target:
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
-- next sales-pack, VCS-boundary, and runner-boundary slices are explicit and bounded
+- next sales-pack and runner-boundary slices remain explicit and bounded; the
+  provider-neutral VCS boundary is documented while GitLab/provider
+  implementation remains unimplemented
 
 ## Main current risks
 
