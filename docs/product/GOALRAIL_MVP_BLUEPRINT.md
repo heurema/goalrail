@@ -23,6 +23,7 @@ related_docs:
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
   - docs/adr/ADR-0022-installation-boundary.md
   - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
+  - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -74,8 +75,10 @@ Thin settings surface for:
 - future external checks
 
 Repo binding is initially manual or dev-seeded. GitHub/GitLab/Bitbucket
-integration comes later and is not required for the first server persistence
-slice.
+integration comes later and is not required for the current metadata-only
+repository context slice. Future provider work must follow ADR-0024's
+provider-neutral `VcsConnection` boundary before adding provider-specific
+backend schema/API behavior.
 
 ## 2. Architectural principles
 
@@ -156,10 +159,17 @@ Initial Project / repo context:
 - Project is a delivery container inside an Organization
 - Project is not a repository
 - RepoBinding stores the repository reference directly in the MVP
+- RepoBinding remains a metadata reference and does not grant checkout, clone,
+  read, write, branch, commit, merge request, or pull request permission
 - RepositoryRecord is deferred until repository catalog, repo-level policy, or
   independent provider sync is needed
-- VcsConnection is a future provider connection layer, not required for the
-  first code slice
+- VcsConnection is accepted as a future provider-neutral connection / account
+  authorization / metadata-discovery boundary; it is not a checkout credential,
+  not a raw provider token, not provider repository access, and not required or
+  implemented in the current MVP slice
+- GitLab can be a first provider candidate, but GitLab Group / Project /
+  namespace concepts must stay in provider adapter metadata and must not become
+  Goalrail Organization / Project terminology
 
 ### Layer 2 — Intent Plane
 Produces:
