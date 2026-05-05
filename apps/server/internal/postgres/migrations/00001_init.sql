@@ -103,6 +103,28 @@ CREATE TABLE organization_memberships (
         UNIQUE (organization_id, user_id)
 );
 
+CREATE TABLE vcs_connections (
+    id UUID PRIMARY KEY,
+    installation_id UUID NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    provider_kind TEXT NOT NULL,
+    provider_instance_url TEXT NOT NULL,
+    state TEXT NOT NULL,
+    setup_expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT vcs_connections_provider_kind_check CHECK (provider_kind <> ''),
+    CONSTRAINT vcs_connections_provider_instance_url_check CHECK (provider_instance_url <> ''),
+    CONSTRAINT vcs_connections_state_check CHECK (state IN ('pending_setup'))
+);
+
+CREATE INDEX vcs_connections_organization_created_at_idx
+    ON vcs_connections(organization_id, created_at);
+
+CREATE INDEX vcs_connections_installation_created_at_idx
+    ON vcs_connections(installation_id, created_at);
+
 CREATE TABLE projects (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -666,6 +688,9 @@ DROP INDEX IF EXISTS repo_bindings_one_active_per_org_repository_idx;
 DROP INDEX IF EXISTS repo_bindings_project_id_idx;
 DROP TABLE IF EXISTS repo_bindings;
 DROP TABLE IF EXISTS projects;
+DROP INDEX IF EXISTS vcs_connections_installation_created_at_idx;
+DROP INDEX IF EXISTS vcs_connections_organization_created_at_idx;
+DROP TABLE IF EXISTS vcs_connections;
 DROP TABLE IF EXISTS organization_memberships;
 DROP TABLE IF EXISTS organizations;
 DROP TABLE IF EXISTS installations;

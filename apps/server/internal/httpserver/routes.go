@@ -20,6 +20,8 @@ type RouteHandlers struct {
 	RepositoryContextInit     http.Handler
 	RepositoryContextSnapshot http.Handler
 	ProjectRepoBindingInit    http.Handler
+	VcsConnectionCreate       http.Handler
+	VcsConnectionGet          http.Handler
 	IntakeSubmit              http.Handler
 	IntakeGet                 http.Handler
 	IntakePromote             http.Handler
@@ -58,6 +60,8 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/init/repository-context", mustHandler("repository context init", handlers.RepositoryContextInit))
 	mux.Handle("POST /v1/repo-bindings/{repo_binding_id}/context-snapshots", mustHandler("repository context snapshot", handlers.RepositoryContextSnapshot))
 	mux.Handle("POST /v1/projects/{project_id}/repo-bindings/init", mustHandler("project repo binding init", handlers.ProjectRepoBindingInit))
+	mux.Handle("POST /v1/vcs-connections", mustHandler("VCS connection create", handlers.VcsConnectionCreate))
+	mux.Handle("GET /v1/vcs-connections/{id}", mustHandler("VCS connection get", handlers.VcsConnectionGet))
 	mux.Handle("POST /v1/intakes", mustHandler("intake submit", handlers.IntakeSubmit))
 	mux.Handle("GET /v1/intakes/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intakes/{id}/goals", mustHandler("intake promote", handlers.IntakePromote))

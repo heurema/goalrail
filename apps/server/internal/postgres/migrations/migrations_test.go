@@ -107,6 +107,59 @@ func TestInitMigrationCreatesRepositoryContextSnapshots(t *testing.T) {
 	}
 }
 
+func TestInitMigrationCreatesCredentiallessVcsConnections(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE vcs_connections",
+		"id UUID PRIMARY KEY",
+		"installation_id UUID NOT NULL REFERENCES installations(id) ON DELETE CASCADE",
+		"organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE",
+		"created_by_user_id UUID NOT NULL REFERENCES users(id)",
+		"provider_kind TEXT NOT NULL",
+		"provider_instance_url TEXT NOT NULL",
+		"state TEXT NOT NULL",
+		"setup_expires_at TIMESTAMPTZ NOT NULL",
+		"CONSTRAINT vcs_connections_state_check CHECK (state IN ('pending_setup'))",
+		"CREATE INDEX vcs_connections_organization_created_at_idx",
+		"CREATE INDEX vcs_connections_installation_created_at_idx",
+		"DROP TABLE IF EXISTS vcs_connections;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE organizations") > strings.Index(sql, "CREATE TABLE vcs_connections") {
+		t.Fatalf("vcs_connections must be created after organizations")
+	}
+	if strings.Index(sql, "CREATE TABLE vcs_connections") > strings.Index(sql, "CREATE TABLE projects") {
+		t.Fatalf("vcs_connections should stay in project-context foundation before projects")
+	}
+	tableSQL := tableDefinition(t, sql, "vcs_connections")
+	for _, denied := range []string{
+		"access_token",
+		"refresh_token",
+		" token",
+		"credential",
+		"secret",
+		"oauth",
+		"authorization_code",
+		"code_verifier",
+		"private_key",
+		"deploy_key",
+		"checkout",
+		"gitlab_group_id",
+		"gitlab_project_id",
+	} {
+		if strings.Contains(tableSQL, denied) {
+			t.Fatalf("vcs_connections table contains denied credential/provider-specific marker %q:\n%s", denied, tableSQL)
+		}
+	}
+}
+
 func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
@@ -169,6 +222,19 @@ func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	if strings.Index(sql, "CREATE TABLE user_sessions") > strings.Index(sql, "CREATE TABLE installations") {
 		t.Fatalf("auth session table should stay before installation/project context tables")
 	}
+}
+
+func tableDefinition(t *testing.T, sql string, table string) string {
+	t.Helper()
+	start := strings.Index(sql, "CREATE TABLE "+table)
+	if start < 0 {
+		t.Fatalf("missing CREATE TABLE %s", table)
+	}
+	end := strings.Index(sql[start:], "\n);")
+	if end < 0 {
+		t.Fatalf("missing end of CREATE TABLE %s", table)
+	}
+	return sql[start : start+end]
 }
 
 func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {

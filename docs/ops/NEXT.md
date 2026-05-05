@@ -62,24 +62,22 @@
   RepoBinding profile selection remains unimplemented; the server-rendered CLI
   auth bridge remains separate.
 - ADR-0024 now defines the provider-neutral VCS connection boundary:
-  `VcsConnection` is accepted as a future provider connection / account
+  `VcsConnection` is accepted as a provider connection / account
   authorization / metadata-discovery boundary, not a checkout credential, raw
-  provider token, repository catalog, or permission to clone. The backend
-  implementation order for this boundary is now sequenced in
-  `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`.
+  provider token, repository catalog, or permission to clone. The first backend
+  code slice now exists as credentialless, non-live `pending_setup` setup
+  intent only. The broader backend implementation order for this boundary is
+  still sequenced in `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`.
 - ADR-0025 now defines the provider credential/token storage boundary:
   provider credentials are secrets outside `VcsConnection`; future
   provider-mediated metadata discovery needs accepted encrypted server-side
   storage, redaction, refresh, revocation, deletion, retention, and audit
   behavior before live token handling; GitLab `read_api` requires a strict
-  metadata adapter allowlist and no Repository Files API use. The next safe
-  backend slice is D2: provider-neutral credentialless `VcsConnection`
-  skeleton with inactive `pending_setup` state only. Direct GitLab OAuth,
-  provider token storage, provider clients, and repository metadata listing
-  remain blocked until the provider-neutral backend prerequisites are
-  satisfied. The current slice adds no backend schema/API behavior, provider
-  clients, OAuth, checkout credentials, repository clone, runner, gate, proof,
-  or queue behavior.
+  metadata adapter allowlist and no Repository Files API use. D2 now adds only
+  the provider-neutral credentialless `VcsConnection` skeleton with inactive
+  `pending_setup` state. Direct GitLab OAuth, provider token storage, provider
+  clients, repository metadata listing, checkout credentials, repository clone,
+  runner, gate, proof, and queue behavior remain blocked.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -649,9 +647,10 @@ Done means:
      encryption, redaction, refresh/rotation, revocation/deletion/retention,
      audit, GitLab `read_api` risk, GitLab.com vs self-managed instance
      identity, and credentialless `pending_setup`
-   - next safest backend task: D2 provider-neutral `VcsConnection` skeleton
-     with credentialless, inactive, expirable `pending_setup` state only
-   - later backend sequence: provider-neutral repository metadata contract
+   - D2 is now the first backend code slice: provider-neutral `VcsConnection`
+     skeleton with credentialless, inactive, expirable `pending_setup` state
+     only
+   - next backend sequence: provider-neutral repository metadata contract
      without a provider client; GitLab metadata adapter mapping with fake/test
      fixtures only; GitLab OAuth/token implementation only after D2, D3, D4,
      and concrete encryption/key/token-storage decisions exist

@@ -60,6 +60,8 @@ func TestHTTPServerWithoutDatabaseReturnsUnavailableForProductRoutes(t *testing.
 		{name: "repository context init", method: http.MethodPost, path: "/v1/init/repository-context", body: `{}`},
 		{name: "repository context snapshot", method: http.MethodPost, path: "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots", body: `{}`},
 		{name: "repo binding init", method: http.MethodPost, path: "/v1/projects/018f0000-0000-7000-8000-000000000003/repo-bindings/init", body: `{}`},
+		{name: "vcs connection create", method: http.MethodPost, path: "/v1/vcs-connections", body: `{}`},
+		{name: "vcs connection get", method: http.MethodGet, path: "/v1/vcs-connections/018f0000-0000-7000-8000-000000000010"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			response := doServerRequest(t, server.Handler, tt.method, tt.path, tt.body)

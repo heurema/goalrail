@@ -23,6 +23,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/repositorycontext"
 	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
 	"github.com/heurema/goalrail/apps/server/internal/store"
+	"github.com/heurema/goalrail/apps/server/internal/vcsconnection"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
@@ -43,6 +44,7 @@ type postgresStores struct {
 	workItemProposals     *store.PostgresWorkItemPlanProposalStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
+	vcsConnections        *store.PostgresVcsConnectionStore
 }
 
 func newPostgresStores(pool *pgxpool.Pool) postgresStores {
@@ -61,6 +63,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		workItemProposals:     store.NewPostgresWorkItemPlanProposalStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
+		vcsConnections:        store.NewPostgresVcsConnectionStore(pool),
 	}
 }
 
@@ -75,6 +78,7 @@ type appServices struct {
 	repositoryInit    *repositoryinit.Service
 	repositoryContext *repositorycontext.Service
 	auth              *auth.Service
+	vcsConnection     *vcsconnection.Service
 }
 
 func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRunner, authJWTSecret string) appServices {
@@ -95,6 +99,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
 		auth:              auth.NewService(stores.auth, authJWTSecret),
+		vcsConnection:     vcsconnection.NewService(stores.vcsConnections, stores.events, txRunner, vcsconnection.SystemClock{}, vcsconnection.UUIDGenerator{}),
 	}
 }
 
@@ -109,6 +114,7 @@ type appHandlers struct {
 	repositoryInit    *httpserver.RepositoryInitHandler
 	repositoryContext *httpserver.RepositoryContextSnapshotHandler
 	auth              *httpserver.AuthHandler
+	vcsConnection     *httpserver.VcsConnectionHandler
 }
 
 func newAppHandlers(services appServices) appHandlers {
@@ -123,6 +129,7 @@ func newAppHandlers(services appServices) appHandlers {
 		repositoryInit:    httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
 		repositoryContext: httpserver.NewRepositoryContextSnapshotHandler(services.auth, services.repositoryContext),
 		auth:              httpserver.NewAuthHandler(services.auth),
+		vcsConnection:     httpserver.NewVcsConnectionHandler(services.auth, services.vcsConnection),
 	}
 }
 
@@ -142,6 +149,8 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		RepositoryContextInit:     http.HandlerFunc(h.repositoryInit.Init),
 		RepositoryContextSnapshot: http.HandlerFunc(h.repositoryContext.Record),
 		ProjectRepoBindingInit:    http.HandlerFunc(h.repoBinding.Init),
+		VcsConnectionCreate:       http.HandlerFunc(h.vcsConnection.Create),
+		VcsConnectionGet:          http.HandlerFunc(h.vcsConnection.Get),
 		IntakeSubmit:              http.HandlerFunc(h.intake.Submit),
 		IntakeGet:                 http.HandlerFunc(h.intake.Get),
 		IntakePromote:             http.HandlerFunc(h.goal.PromoteFromIntake),
@@ -205,6 +214,8 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		RepositoryContextInit:     unavailable,
 		RepositoryContextSnapshot: unavailable,
 		ProjectRepoBindingInit:    unavailable,
+		VcsConnectionCreate:       unavailable,
+		VcsConnectionGet:          unavailable,
 		IntakeSubmit:              unavailable,
 		IntakeGet:                 unavailable,
 		IntakePromote:             unavailable,
