@@ -17,6 +17,7 @@ related_docs:
   - docs/product/GOALRAIL_REPOSITORY_CONNECTION_UX.md
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
+  - docs/adr/ADR-0025-provider-credential-storage-boundary.md
   - docs/ops/STATUS.md
   - docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
@@ -97,41 +98,42 @@ related_docs:
 53. `docs/adr/ADR-0022-installation-boundary.md`
 54. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
 55. `docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md`
+56. `docs/adr/ADR-0025-provider-credential-storage-boundary.md`
 
 ### 7. Governance and change control
-56. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-57. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-58. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-59. `docs/product/GOALRAIL_RULE_STACK.md`
+57. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+58. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+59. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+60. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-60. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-61. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-62. `docs/ops/STATUS.md`
-63. `docs/ops/NEXT.md`
-64. `docs/ops/DECISIONS.md`
-65. `docs/ops/COMPONENTS.yaml`
-66. `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`
-67. `docs/ops/BRANCH_PROTECTION.md`
-68. `docs/ops/REPO_STRUCTURE.md`
-69. `docs/ops/GO_CODE_GUIDE.md`
-70. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-71. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-72. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-73. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+61. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+62. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+63. `docs/ops/STATUS.md`
+64. `docs/ops/NEXT.md`
+65. `docs/ops/DECISIONS.md`
+66. `docs/ops/COMPONENTS.yaml`
+67. `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`
+68. `docs/ops/BRANCH_PROTECTION.md`
+69. `docs/ops/REPO_STRUCTURE.md`
+70. `docs/ops/GO_CODE_GUIDE.md`
+71. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+72. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+73. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+74. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-74. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-75. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-76. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
-77. `docs/reference/design/reference_screens/`
-78. `.goalrail/work/`
-79. `.goalrail/knowledge/`
-80. `.punk/publishing.toml`
-81. `.goalrail/flows/`
-82. `.goalrail/evals/`
-83. `docs/ops/PUBLISHING_MIGRATION.md`
-84. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+75. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+76. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+77. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
+78. `docs/reference/design/reference_screens/`
+79. `.goalrail/work/`
+80. `.goalrail/knowledge/`
+81. `.punk/publishing.toml`
+82. `.goalrail/flows/`
+83. `.goalrail/evals/`
+84. `docs/ops/PUBLISHING_MIGRATION.md`
+85. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -207,6 +209,11 @@ related_docs:
 - `ADR-0024` — provider-neutral VCS connection boundary; future
   `VcsConnection`, repository metadata, RepoBinding separation, provider
   namespace anti-corruption, and GitLab-first-without-GitLab-shaped-core rules
+- `ADR-0025` — provider credential and token storage boundary; future
+  provider OAuth grants, access tokens, refresh tokens, encryption, redaction,
+  refresh, revocation, deletion, audit, GitLab `read_api` risk, provider
+  instance identity, and credentialless `pending_setup` rules before
+  VCS/OAuth/provider implementation
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
