@@ -4,14 +4,14 @@
 
 ## Active phase
 
-- **Phase 1 canonical multilingual console source integration complete; Phase 3 API routing/CORS remains source-only until deployment**
+- **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
-- `apps/web/console` is now the single canonical multilingual EN/RU console source with static i18next resources, existing server login / optional password-change / `/v1/me` / logout endpoints, in-memory tokens only, no locale storage, and `goalrail.console.theme` as the only browser-storage key; the old `apps/web/console-ru` workspace source is removed, while live `console.goalrail.ru` may remain static-only on the older release until a separate deployment migration/API routing/proxy/CORS slice
+- `apps/web/console` is now the single canonical multilingual EN/RU console source with static i18next resources, existing server login / optional password-change / `/v1/me` / logout endpoints, in-memory tokens only, no locale storage, and `goalrail.console.theme` as the only browser-storage key; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source is removed and live `console.goalrail.ru` remains separate
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the future `goalrail.dev` -> `api.goalrail.dev` browser API split; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
@@ -37,9 +37,9 @@
   login code exchange; SaaS onboarding and organization creation API remain
   unimplemented. The current server-rendered `/cli/login` page is a temporary
   CLI auth bridge only, not the product web console login UI; the canonical
-  `apps/web/console` source now consumes the server auth API directly, but any
-  live static deployment still needs backend routing before deployed login can
-  work.
+  `apps/web/console` source now consumes the server auth API directly, and the
+  main `https://goalrail.dev` deployment routes it to
+  `https://api.goalrail.dev`; legacy static deployments remain separate.
 - ADR-0023 now defines the user bootstrap, auth, and CLI login boundary:
   self-hosted bootstrap creates the first product super admin as
   `OrganizationMembership(owner)`, public registration is out of MVP, admins
@@ -72,9 +72,11 @@
 - `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` is the source-level CORS knob for
   browser access from exact frontend origins such as `https://goalrail.dev` or
   local `http://localhost:5173`; empty means disabled and wildcard origins are
-  rejected. DNS, TLS, reverse proxy routing, deployment config, hostnames, IPs,
-  ports, SSH paths, credentials, secrets, and live smoke remain separate
-  operator/deployment slices.
+  rejected. The main deployment currently uses nginx ingress CORS as a
+  temporary bridge because the pinned live server image predates the app-level
+  CORS code. The cleanup slice should pin a post-PR-#120 server image, enable
+  app-level CORS, and remove nginx ingress CORS annotations in the same infra
+  PR.
 
 ## Stabilization tranche — source-of-truth and public-surface hardening
 
@@ -135,6 +137,48 @@ Current truth:
 - public DNS, HTTPS smoke, and public `/api/pilot-lead` smoke passed
 - no server config, deployment scripts, secrets, hostnames, IPs, ports,
   usernames, key paths, or DNS provider credentials were committed
+
+### Main console/API Flux GitOps deployment and public smoke
+
+Status: **DONE — LIVE VIA `11me/infra` FLUX GITOPS / SMOKE PASSED.**
+
+Goal:
+- route the canonical `apps/web/console` frontend to `https://goalrail.dev`
+  and the `apps/server` API to `https://api.goalrail.dev` through the external
+  `11me/infra` Flux GitOps path.
+
+Done means:
+- Flux reconciled infra revision
+  `main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7`
+- Flux Kustomization `flux-system/apps-personal` reported `Ready=True`
+- `goalrail-console` and `goalrail-server` rollouts completed successfully
+- `goalrail.dev` and `api.goalrail.dev` resolved publicly
+- `goalrail-dev-tls` and `api-goalrail-dev-tls` reported `Ready=True`
+- frontend HTTP 200 smoke passed with no `Set-Cookie`
+- API `/livez`, `/readyz`, and `/version` smoke passed
+- frontend HTML/bundle contained no `console.goalrail.dev`, and the bundle
+  contained `https://api.goalrail.dev`
+- API CORS preflight for `Origin: https://goalrail.dev` returned HTTP 204 with
+  allowed methods `GET, POST, PATCH, OPTIONS` and headers
+  `Authorization, Content-Type`
+
+Current truth:
+- live status and smoke evidence are recorded in
+  `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+- console source remains `apps/web/console`; API source remains `apps/server`;
+  deployment source of truth remains the external `11me/infra` repo
+- demo sandbox `https://demo.goalrail.dev` remains separate
+- legacy `https://console.goalrail.ru/` remains separate and is not migrated by
+  this slice
+- current live API CORS is a temporary nginx ingress bridge because the pinned
+  live `goalrail-server` image predates the app-level CORS implementation from
+  Goalrail PR #120
+- the later cleanup is to pin a post-PR-#120 server image, enable
+  `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS=https://goalrail.dev`, and remove nginx
+  ingress CORS annotations in the same infra change
+- no kubeconfig, secrets, credentials, private hosts/IPs, SSH details, concrete
+  reverse-proxy snippets, deployment scripts, analytics, CRM, runner, gate,
+  proof, or product data loop were introduced or recorded
 
 ## Completed web bounded slice
 
@@ -204,9 +248,9 @@ Done means:
   API, analytics, repo integration, runner, gate, proof, CORS, deployment
   config, hostnames, IPs, ports, credentials, reverse-proxy snippets, or
   secrets were added
-- live `https://console.goalrail.ru/` may still point to the older static
-  release and cannot use this repo-side auth source until a separate API
-  routing/proxy/CORS deployment migration slice is completed and smoke-tested
+- live `https://goalrail.dev` now uses this repo-side auth source through the
+  external `11me/infra` Flux GitOps path; live `https://console.goalrail.ru/`
+  remains a separate legacy RU static release
 
 ## Completed backend bounded slice
 

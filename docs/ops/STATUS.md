@@ -17,11 +17,51 @@ related_docs:
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
   - docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md
   - docs/ops/COMPONENTS.yaml
+  - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
 ---
 # Goalrail Status
 
 Last updated: 2026-05-05
-Status: planning / product canon and pilot frame active; first local Go CLI and Go server intent-plane / public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem persistence plus `plans` / `proposals` / `acceptance` WorkItem planning control-plane flow exists; public Contract aggregate identity is implemented as a stable `contract_id` boundary and transitional public seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future typed WorkItemPlan pull lease queue direction, but no lease protocol or generic queue implementation exists; source-level core server CORS allowlist support now exists for the future `https://goalrail.dev` frontend to `https://api.goalrail.dev` API split through exact `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` values, with CORS disabled when unset and wildcard origins rejected; pilot-intake-ru is now a business-first public RU pilot landing per D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result) rather than the previous technical interactive walkthrough; active target domain remains `pilot.goalrail.ru` per D-0053, canonical metadata in `apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`, the static hosting path remains operator-managed SSH static server per D-0051, server upload, operator-managed Go sidecar migration from previous PHP-FPM wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058 digest dry-run are complete; `apps/web/console` is now the single canonical multilingual EN/RU console source with the existing server auth API login / optional first-login password change / `/v1/me` / logout flow, static i18next resources, in-memory tokens only, `goalrail.console.theme` as the only browser-storage key, and no locale persistence; live `https://console.goalrail.ru/` remains a legacy/static RU console deployment with no `/v1/*` backend routing until a separate deployment routing slice; and D-0047 boundaries remain intact except for the narrow D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail transport on the pilot surface (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API calls, repo integration, runtime execution, broad backend platform, chat UI, file upload, or model selector).
+Status: planning / product canon and pilot frame active; first local Go CLI and
+Go server intent-plane / public Contract aggregate and `/v1/contracts`
+lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem
+persistence plus `plans` / `proposals` / `acceptance` WorkItem planning
+control-plane flow exists; public Contract aggregate identity is implemented as
+a stable `contract_id` boundary and transitional public
+seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future
+typed WorkItemPlan pull lease queue direction, but no lease protocol or generic
+queue implementation exists; source-level core server CORS allowlist support
+exists through exact `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` values, with CORS
+disabled when unset and wildcard origins rejected; the main console/API
+deployment is now live through `11me/infra` Flux GitOps at
+`https://goalrail.dev` and `https://api.goalrail.dev`, with Flux revision
+`main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7`, Kustomization
+`flux-system/apps-personal` Ready=True, console/server rollouts successful,
+public DNS/TLS ready, frontend/API smoke passed, and the console bundle built
+against `https://api.goalrail.dev`; live API CORS is temporarily handled by
+nginx ingress annotations allowing `https://goalrail.dev` because the deployed
+server image still predates the app-level CORS implementation from Goalrail
+PR #120; pilot-intake-ru is now a business-first public RU pilot landing per
+D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository
+readiness, project context, controlled tasks, verified result) rather than the
+previous technical interactive walkthrough; active target domain remains
+`pilot.goalrail.ru` per D-0053, canonical metadata in
+`apps/web/pilot-intake-ru/index.html` remains `https://pilot.goalrail.ru/`,
+the static hosting path remains operator-managed SSH static server per D-0051,
+server upload, operator-managed Go sidecar migration from previous PHP-FPM
+wiring, server-side TLS provisioning, server-local HTTPS smoke, public DNS
+verification, public HTTPS smoke, public `/api/pilot-lead` smoke, and D-0058
+digest dry-run are complete; `apps/web/console` is now the single canonical
+multilingual EN/RU console source with the existing server auth API login /
+optional first-login password change / `/v1/me` / logout flow, static i18next
+resources, in-memory tokens only, `goalrail.console.theme` as the only
+browser-storage key, and no locale persistence; live `https://console.goalrail.ru/`
+remains a legacy/static RU console deployment separate from the new main
+`goalrail.dev` route; and D-0047 boundaries remain intact except for the narrow
+D-0056 lead-capture endpoint, D-0058 daily digest, and D-0059 Resend mail
+transport on the pilot surface (no analytics, tracking, CRM, Google Sheets,
+cookies, sessions, LLM/API calls, repo integration, runtime execution, broad
+backend platform, chat UI, file upload, or model selector).
 Owner: Vitaly
 
 Installation/auth boundary note: ADR-0022 documents `Installation` as the
@@ -53,21 +93,25 @@ server CLI login URL, exchanges a one-time code for tokens, and stores token
 metadata in a local 0600 auth file. `GET /cli/login` and `POST /cli/login`
 currently use a minimal server-rendered HTML page as a temporary CLI auth bridge
 only; it is not the product web console login UI. `apps/web/console` now has
-the bounded multilingual React auth flow for the existing server endpoints, but
-live console deployment still needs API routing before it can talk to a backend. SaaS
+the bounded multilingual React auth flow for the existing server endpoints, and
+the main `https://goalrail.dev` deployment routes it to
+`https://api.goalrail.dev` through the `11me/infra` Flux GitOps path. The
+legacy `https://console.goalrail.ru/` deployment remains separate. SaaS
 onboarding, organization creation API, public registration, keychain
 integration, Organization / Project / RepoBinding profile selection, and admin
 user management remain unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
-D-0065, and the operator-managed Go sidecar deployment plus public DNS/live
-smoke slice has passed. The public RU pilot surface is live through the
-operator-managed SSH static server, with `/api/pilot-lead` routed to the Go
-sidecar rather than the previous PHP-FPM wiring. The RU console shell is also
-live through the same operator-managed static-server pattern, but remains a
-static visual shell only. Core server CORS is source-level configuration only;
-this status does not claim `goalrail.dev` / `api.goalrail.dev` deployment,
-DNS, TLS, reverse-proxy routing, public HTTPS smoke, committed server config,
+D-0065, the operator-managed Go sidecar deployment plus public DNS/live smoke
+slice has passed, and the main console/API Flux GitOps deployment has passed
+public smoke. The public RU pilot surface is live through the operator-managed
+SSH static server, with `/api/pilot-lead` routed to the Go sidecar rather than
+the previous PHP-FPM wiring. The RU console shell is also live through the same
+operator-managed static-server pattern, but remains a static visual shell only
+and is not the main `goalrail.dev` deployment. Core server app-level CORS is
+source-level configuration only until a post-PR-#120 server image is pinned in
+infra; current live API CORS is a temporary nginx ingress bridge for
+`https://goalrail.dev`. This status does not claim committed server config,
 required human review, signed-commit enforcement, real-device mobile QA, or
 native-speaker copy proofread. It also does not approve analytics, CRM,
 database, generic queue, lease implementation, LLM/API, repo integration,
@@ -95,7 +139,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, Users add/edit UI in component state only, and no user-settings persistence, analytics, or product-loop behavior; the old `apps/web/console-ru` workspace source has been removed, while live `console.goalrail.ru` may remain on the older static release until a separate deployment migration/API routing slice
+- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, Users add/edit UI in component state only, and no user-settings persistence, analytics, or product-loop behavior; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -239,10 +283,10 @@ The project currently has:
 - `.punk/publishing.local.toml` is the ignored local-only manual-bootstrap pointer; resolver/runtime implementation is pending
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
-- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, and Users add/edit UI in component state only
+- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, and Users add/edit UI in component state only; the main deployment is live at `https://goalrail.dev` and uses `https://api.goalrail.dev` through `11me/infra` Flux GitOps
 - `apps/web/demo-change-packet` is the current React + Vite + Mantine EN change-packet demo prototype, deployed through standalone infra at `demo.goalrail.dev`
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, deployed through standalone infra at `demo.goalrail.ru` rather than in-app i18n
-- `apps/web/console-ru` source has been removed. The live `https://console.goalrail.ru/` deployment may still serve the older static RU release until a later API routing/proxy/CORS and deployment migration slice.
+- `apps/web/console-ru` source has been removed. The live `https://console.goalrail.ru/` deployment remains a separate legacy RU static release and is not migrated by the main `goalrail.dev` slice.
 - `apps/web/pilot-intake-ru` is the current public React + Vite + Mantine RU business-first pilot landing for `pilot.goalrail.ru` (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result); it includes a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server` for lead capture and digest source, and it supersedes the previous technical interactive walkthrough as the primary public RU landing per D-0055.
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - local/demo CLI commands now exist for `version`, explicit auth-free `goalrail init --local-demo`, `readiness scan`, `contract validate`, `proof show`, and the first `goalrail login <server_url>` browser-loopback auth path; normal `goalrail init` now uses local Git metadata plus the stored login profile to call the server repository-context init endpoint and writes a non-secret Git-root `.goalrail/project.yml` marker only after server success, while `goalrail init --project <project_id>` remains the low-level Project-scoped RepoBinding init path
@@ -385,9 +429,9 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
-- `apps/web/console` provides the verified canonical multilingual EN/RU console source with existing server login / first-login password change / `/v1/me` / logout before the same structured empty product surfaces; tokens remain in React memory only, locale is not persisted, `goalrail.console.theme` remains the only browser storage key, Users remains component-state only, and live `https://console.goalrail.ru/` still needs a separate migration/API routing slice before deployed auth can work; the console does not claim durable product data, user settings API, analytics, runner, gate, proof, repo integration, or product-loop implementation
+- `apps/web/console` provides the verified canonical multilingual EN/RU console source with existing server login / first-login password change / `/v1/me` / logout before the same structured empty product surfaces; tokens remain in React memory only, locale is not persisted, `goalrail.console.theme` remains the only browser storage key, Users remains component-state only, the main `https://goalrail.dev` deployment is live with API base URL `https://api.goalrail.dev`, and legacy `https://console.goalrail.ru/` remains separate; the console does not claim durable product data, user settings API, analytics, runner, gate, proof, repo integration, or product-loop implementation
 - `apps/cli` provides a verified Go CLI bootstrap plus first `goalrail login <server_url>` server auth path with browser loopback, random state, S256 verifier/challenge exchange, normal server-backed `goalrail init` repository-context bootstrap, low-level `goalrail init --project <project_id>`, and explicit auth-free `goalrail init --local-demo`; server-backed init writes a non-secret Git-root `.goalrail/project.yml` marker after server success; it does not claim hosted execution, production repo auth, real gate decisions, Organization selection UX, public Organization creation, broad repo binding sync, proof retrieval, or proof generation
-- `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle façade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, session state, and one-time CLI code consumption only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, workers, provider integration, public Organization creation, or repository checkout
+- `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle facade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, session state, and one-time CLI code consumption only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness, workers, provider integration, public Organization creation, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
