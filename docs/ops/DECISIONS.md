@@ -2119,3 +2119,38 @@ Rationale:
 - One repo-backed Project per repository keeps multi-repo companies workable
   without introducing a repository catalog or VCS connection model before the
   MVP needs it.
+
+## D-0081 — CLI can start work from the local repository marker
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- `goalrail init --base <branch>` is an explicit workflow base branch override.
+  It does not create branches, change Git state, call provider APIs, or infer
+  the base from the current local branch.
+- When local origin default metadata is available, `goalrail init --base`
+  keeps it as `provider_default_branch` and sends the explicit base as
+  `workflow_base_branch`. If no origin default is available, the server may
+  default provider branch metadata from the explicit workflow base.
+- The deterministic `.goalrail/project.yml` marker reader is shared by init
+  and later CLI commands. The marker remains non-secret and stores only
+  server/project/repo binding identity.
+- `goalrail work start --title <title> [--body <body>]` is the first
+  server-backed command that uses the local marker as default context. It
+  requires the stored login profile, checks expired access tokens locally,
+  reads the Git-root marker, calls `/v1/me`, submits `/v1/intakes`, and then
+  promotes the intake through `/v1/intakes/{id}/goals`.
+- `goalrail work start` creates an IntakeRecord and Goal only. It does not
+  create Contracts, WorkItems, audit requests, runs, receipts, gate decisions,
+  proof, provider integrations, branches, PRs, hooks, clones, deploy keys, or
+  runner jobs.
+
+Rationale:
+- Real CLI use needs an escape hatch for repositories without usable
+  `origin/HEAD` metadata, but that hatch must not become branch strategy or Git
+  mutation.
+- Once server-backed init writes a server-owned marker, later commands should
+  use it instead of asking users to paste Project and RepoBinding IDs.
+- Starting with IntakeRecord plus Goal preserves the existing server lifecycle
+  boundary before contract, work-item planning, audit, runner, gate, and proof
+  slices.

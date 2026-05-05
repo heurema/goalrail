@@ -13,6 +13,7 @@ import (
 	"github.com/heurema/goalrail/apps/cli/internal/proofcmd"
 	"github.com/heurema/goalrail/apps/cli/internal/readinesscmd"
 	"github.com/heurema/goalrail/apps/cli/internal/term"
+	"github.com/heurema/goalrail/apps/cli/internal/workcmd"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,7 @@ var rootCommands = []commandSummary{
 	{name: "version", summary: "print the CLI version"},
 	{name: "login", summary: "authenticate to a Goalrail server"},
 	{name: "init", summary: "initialize repository metadata"},
+	{name: "work", summary: "start server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
 	{name: "contract", summary: "validate contract JSON files"},
 	{name: "proof", summary: "render proof JSON files"},
@@ -56,6 +58,7 @@ func NewRootCommand(env clienv.Env) *cobra.Command {
 		newVersionCommand(),
 		newLoginCommand(),
 		newInitCommand(env),
+		newWorkCommand(env),
 		newReadinessCommand(env),
 		newContractCommand(env),
 		newProofCommand(env),
@@ -67,7 +70,7 @@ func NewRootCommand(env clienv.Env) *cobra.Command {
 func RootUsage() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Usage: goalrail <command> [options]\n\n")
-	b.WriteString("Goalrail local/demo CLI foundation. This CLI does not implement the production server, hosted execution, gate, or proof generation.\n\n")
+	b.WriteString("Goalrail CLI foundation for local repository context, server-backed intake, and local readiness evidence. This CLI does not implement hosted execution, gate, or proof generation.\n\n")
 	b.WriteString("Commands:\n")
 	for _, cmd := range rootCommands {
 		fmt.Fprintf(&b, "  %-10s %s\n", cmd.name, cmd.summary)
@@ -115,6 +118,33 @@ func newInitCommand(env clienv.Env) *cobra.Command {
 			return initcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, args)
 		},
 	}
+}
+
+func newWorkCommand(env clienv.Env) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                "work",
+		Short:              "start server-backed work from a local project marker",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return workcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, args)
+		},
+	}
+	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), workcmd.Usage())
+	})
+	cmd.SetUsageFunc(func(cmd *cobra.Command) error {
+		_, err := fmt.Fprint(cmd.OutOrStdout(), workcmd.Usage())
+		return err
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "start",
+		Short:              "create a server-backed IntakeRecord and Goal",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return workcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"start"}, args...))
+		},
+	})
+	return cmd
 }
 
 func newReadinessCommand(env clienv.Env) *cobra.Command {
@@ -266,6 +296,10 @@ func helpFor(cmd *cobra.Command) string {
 		return proofcmd.ShowUsage()
 	case "goalrail init":
 		return initcmd.Usage()
+	case "goalrail work":
+		return workcmd.Usage()
+	case "goalrail work start":
+		return workcmd.StartUsage()
 	case "goalrail login":
 		return logincmd.Usage()
 	case "goalrail version":

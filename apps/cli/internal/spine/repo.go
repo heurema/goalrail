@@ -3,18 +3,19 @@ package spine
 const RepoBindingStatusPendingServerKeyProvisioning = "pending_server_key_provisioning"
 
 type RepoBindingDraft struct {
-	RepoURL            string   `json:"repo_url"`
-	Status             string   `json:"status"`
-	Message            string   `json:"message"`
-	NextCommand        string   `json:"next_suggested_command"`
-	GitRoot            string   `json:"git_root"`
-	RemoteName         string   `json:"remote_name"`
-	Provider           string   `json:"provider"`
-	ProviderHost       string   `json:"provider_host"`
-	RepositoryFullName string   `json:"repository_full_name"`
-	WorkflowBaseBranch string   `json:"workflow_base_branch"`
-	HeadSHA            string   `json:"head_sha"`
-	Warnings           []string `json:"warnings"`
+	RepoURL               string   `json:"repo_url"`
+	Status                string   `json:"status"`
+	Message               string   `json:"message"`
+	NextCommand           string   `json:"next_suggested_command"`
+	GitRoot               string   `json:"git_root"`
+	RemoteName            string   `json:"remote_name"`
+	Provider              string   `json:"provider"`
+	ProviderHost          string   `json:"provider_host"`
+	RepositoryFullName    string   `json:"repository_full_name"`
+	ProviderDefaultBranch string   `json:"provider_default_branch"`
+	WorkflowBaseBranch    string   `json:"workflow_base_branch"`
+	HeadSHA               string   `json:"head_sha"`
+	Warnings              []string `json:"warnings"`
 }
 
 type RepoBindingInitRequest struct {
