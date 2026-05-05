@@ -25,9 +25,9 @@ func TestRunExplicitRepoOutsideGitJSON(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
-	draft, err := runInitJSON(t, tempDir, "--repo", "git@github.com:acme/payments.git", "--format", "json")
+	draft, err := runInitJSON(t, tempDir, "--local-demo", "--repo", "git@github.com:acme/payments.git", "--format", "json")
 	if err != nil {
-		t.Fatalf("Run(init --repo) error = %v", err)
+		t.Fatalf("Run(init --local-demo --repo) error = %v", err)
 	}
 
 	if draft.RepoURL != "git@github.com:acme/payments.git" {
@@ -58,9 +58,9 @@ func TestRunDiscoversOriginInsideGitRepoJSON(t *testing.T) {
 	runGit(t, repoDir, "init")
 	runGit(t, repoDir, "remote", "add", "origin", "https://github.com/acme/payments.git")
 
-	draft, err := runInitJSON(t, repoDir, "--format", "json")
+	draft, err := runInitJSON(t, repoDir, "--local-demo", "--format", "json")
 	if err != nil {
-		t.Fatalf("Run(init) error = %v", err)
+		t.Fatalf("Run(init --local-demo) error = %v", err)
 	}
 
 	if draft.RepoURL != "https://github.com/acme/payments.git" {
@@ -92,9 +92,9 @@ func TestRunDetectsOriginHeadMainAsWorkflowBaseBranch(t *testing.T) {
 	runGit(t, repoDir, "update-ref", "refs/remotes/origin/main", "HEAD")
 	runGit(t, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
 
-	draft, err := runInitJSON(t, repoDir, "--format", "json")
+	draft, err := runInitJSON(t, repoDir, "--local-demo", "--format", "json")
 	if err != nil {
-		t.Fatalf("Run(init) error = %v", err)
+		t.Fatalf("Run(init --local-demo) error = %v", err)
 	}
 
 	if draft.WorkflowBaseBranch != "main" {
@@ -118,9 +118,9 @@ func TestRunFallsBackToOriginMainRemoteRef(t *testing.T) {
 	runGit(t, repoDir, "remote", "add", "origin", "https://github.com/acme/payments.git")
 	runGit(t, repoDir, "update-ref", "refs/remotes/origin/main", "HEAD")
 
-	draft, err := runInitJSON(t, repoDir, "--format", "json")
+	draft, err := runInitJSON(t, repoDir, "--local-demo", "--format", "json")
 	if err != nil {
-		t.Fatalf("Run(init) error = %v", err)
+		t.Fatalf("Run(init --local-demo) error = %v", err)
 	}
 
 	if draft.WorkflowBaseBranch != "main" {
@@ -138,9 +138,9 @@ func TestRunDoesNotUseCurrentLocalBranchAsWorkflowBase(t *testing.T) {
 	runGit(t, repoDir, "-c", "user.name=Goalrail Test", "-c", "user.email=goalrail@example.test", "commit", "--allow-empty", "-m", "initial")
 	runGit(t, repoDir, "remote", "add", "origin", "https://github.com/acme/payments.git")
 
-	draft, err := runInitJSON(t, repoDir, "--format", "json")
+	draft, err := runInitJSON(t, repoDir, "--local-demo", "--format", "json")
 	if err != nil {
-		t.Fatalf("Run(init) error = %v", err)
+		t.Fatalf("Run(init --local-demo) error = %v", err)
 	}
 
 	if draft.WorkflowBaseBranch != "" {
@@ -164,6 +164,245 @@ func TestRunNoRepoAndNoGitContextReturnsUsageError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing --repo and no git remote origin was detected") {
 		t.Fatalf("error = %q, want helpful missing repo message", err.Error())
+	}
+}
+
+func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, headSHA := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	gitignorePath := filepath.Join(repoDir, ".gitignore")
+	if err := os.WriteFile(gitignorePath, []byte("existing-ignore\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore fixture: %v", err)
+	}
+	var received spine.RepositoryContextInitRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+			http.Error(w, "bad method", http.StatusMethodNotAllowed)
+			return
+		}
+		if r.URL.Path != "/v1/init/repository-context" {
+			t.Errorf("path = %s, want repository context init path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&received); err != nil {
+			t.Errorf("decode request body: %v", err)
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":true,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":true,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"main","workflow_base_branch":"main","state":"active","message":"Repository context initialized."}`))
+	}))
+	defer server.Close()
+
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init) error = %v", err)
+	}
+
+	if output.Mode != "server" || output.ServerURL != server.URL {
+		t.Fatalf("output mode/server = %q/%q, want server/%q", output.Mode, output.ServerURL, server.URL)
+	}
+	if output.ProjectSlug != "github-heurema-goalrail" || output.ProjectDisplayName != "heurema/goalrail" {
+		t.Fatalf("project output = %q/%q, want github-heurema-goalrail/heurema/goalrail", output.ProjectSlug, output.ProjectDisplayName)
+	}
+	if output.ProjectCreated != true || output.RepoBindingCreated != true {
+		t.Fatalf("created flags = %v/%v, want true/true", output.ProjectCreated, output.RepoBindingCreated)
+	}
+	if output.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("repo_binding_id = %q, want server id", output.RepoBindingID)
+	}
+	if output.LocalConfigPath != projectConfigRelativePath || output.LocalConfigStatus != localConfigStatusWritten {
+		t.Fatalf("local config output = %q/%q, want %q/%q", output.LocalConfigPath, output.LocalConfigStatus, projectConfigRelativePath, localConfigStatusWritten)
+	}
+	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
+		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
+	}
+	if received.ProviderDefaultBranch != "main" || received.WorkflowBaseBranch != "main" {
+		t.Fatalf("request branch fields = %#v, want main/main", received)
+	}
+	if received.LocalRemoteName != "origin" || received.LocalHeadSHA != headSHA {
+		t.Fatalf("request local fields = %#v, want origin/%s", received, headSHA)
+	}
+	if received.SuggestedProjectSlug != "github-heurema-goalrail" || received.SuggestedProjectDisplayName != "heurema/goalrail" {
+		t.Fatalf("request suggested project = %q/%q, want slug/display", received.SuggestedProjectSlug, received.SuggestedProjectDisplayName)
+	}
+	config := readProjectConfigFile(t, repoDir)
+	wantConfig := expectedProjectConfigYAML(server.URL)
+	if config != wantConfig {
+		t.Fatalf("project config =\n%s\nwant:\n%s", config, wantConfig)
+	}
+	if strings.Contains(config, "access-token") || strings.Contains(config, "refresh-token") {
+		t.Fatalf("project config contains token material:\n%s", config)
+	}
+	gitignore, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if string(gitignore) != "existing-ignore\n" {
+		t.Fatalf(".gitignore = %q, want unchanged", string(gitignore))
+	}
+}
+
+func TestRunRepositoryContextInitMissingAuthReturnsHelpfulError(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	_, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{err: authstore.ErrSessionNotFound}, "--format", "json")
+	if err == nil {
+		t.Fatal("Run(init) error = nil, want missing auth")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "not logged in; run goalrail login <server_url>") {
+		t.Fatalf("error = %q, want login hint", err.Error())
+	}
+}
+
+func TestRunRepositoryContextInitExpiredTokenFailsBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	session := validSession(server.URL)
+	session.AccessTokenExpiresAt = time.Date(2026, 5, 5, 9, 59, 59, 0, time.UTC)
+	_, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: session}, "--format", "json")
+	if err == nil {
+		t.Fatal("Run(init) error = nil, want expired login")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "login expired; run goalrail login "+server.URL) {
+		t.Fatalf("error = %q, want expired login hint", err.Error())
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 for expired token", got)
+	}
+}
+
+func TestRunRepositoryContextInitPreflightConflictSkipsServer(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	tests := []struct {
+		name   string
+		mutate func(projectConfig) projectConfig
+	}{
+		{
+			name: "server_url",
+			mutate: func(config projectConfig) projectConfig {
+				config.ServerURL = "https://other.example.com"
+				return config
+			},
+		},
+		{
+			name: "repository_full_name",
+			mutate: func(config projectConfig) projectConfig {
+				config.Repository.FullName = "heurema/other"
+				return config
+			},
+		},
+		{
+			name: "repository_url",
+			mutate: func(config projectConfig) projectConfig {
+				config.Repository.URL = "https://github.com/heurema/goalrail.git"
+				return config
+			},
+		},
+		{
+			name: "workflow_base_branch",
+			mutate: func(config projectConfig) projectConfig {
+				config.Repository.WorkflowBaseBranch = "release"
+				return config
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+			var requestCount atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requestCount.Add(1)
+				http.Error(w, "unexpected request", http.StatusInternalServerError)
+			}))
+			defer server.Close()
+
+			original := writeProjectConfigFixture(t, repoDir, tt.mutate(projectConfigFixture(server.URL)))
+			_, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--format", "json")
+			if err == nil {
+				t.Fatal("Run(init) error = nil, want preflight conflict")
+			}
+			if got := exitcode.ForError(err); got != exitcode.Validation {
+				t.Fatalf("exit code = %d, want validation", got)
+			}
+			if !strings.Contains(err.Error(), projectConfigConflictMessage) {
+				t.Fatalf("error = %q, want preflight conflict", err.Error())
+			}
+			if got := requestCount.Load(); got != 0 {
+				t.Fatalf("server requests = %d, want 0 for preflight conflict", got)
+			}
+			if got := readProjectConfigFile(t, repoDir); got != original {
+				t.Fatalf("project config overwritten = %q, want original %q", got, original)
+			}
+		})
+	}
+}
+
+func TestRunRepositoryContextInitDoesNotPreflightProjectIDBeforeServer(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	existing := projectConfigFixture("placeholder")
+	existing.ProjectID = "018f0000-0000-7000-8000-000000000099"
+	existing.RepoBindingID = "018f0000-0000-7000-8000-000000000098"
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount.Add(1)
+		if r.URL.Path != "/v1/init/repository-context" {
+			t.Errorf("path = %s, want repository context init path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000099","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":false,"repo_binding_id":"018f0000-0000-7000-8000-000000000098","repo_binding_created":false,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"main","workflow_base_branch":"main","state":"active","message":"Repository context already initialized."}`))
+	}))
+	defer server.Close()
+	existing.ServerURL = server.URL
+	writeProjectConfigFixture(t, repoDir, existing)
+
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init) error = %v", err)
+	}
+	if got := requestCount.Load(); got != 1 {
+		t.Fatalf("server requests = %d, want 1 because project_id is post-server for plain init", got)
+	}
+	if output.LocalConfigStatus != localConfigStatusUnchanged {
+		t.Fatalf("local_config_status = %q, want unchanged", output.LocalConfigStatus)
 	}
 }
 
@@ -469,8 +708,8 @@ func TestRunLocalDemoDoesNotWriteProjectConfig(t *testing.T) {
 	requireGit(t)
 
 	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
-	if _, err := runInitJSON(t, repoDir, "--repo", "git@github.com:acme/payments.git", "--format", "json"); err != nil {
-		t.Fatalf("Run(init --repo) error = %v", err)
+	if _, err := runInitJSON(t, repoDir, "--local-demo", "--repo", "git@github.com:acme/payments.git", "--format", "json"); err != nil {
+		t.Fatalf("Run(init --local-demo --repo) error = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("project config stat error = %v, want not exist", err)
@@ -483,8 +722,8 @@ func TestRunLocalDemoIgnoresExistingProjectConfig(t *testing.T) {
 
 	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
 	original := writeRawProjectConfigFile(t, repoDir, "not a GoalRail project marker\n")
-	if _, err := runInitJSON(t, repoDir, "--repo", "git@github.com:acme/payments.git", "--format", "json"); err != nil {
-		t.Fatalf("Run(init --repo) error = %v", err)
+	if _, err := runInitJSON(t, repoDir, "--local-demo", "--repo", "git@github.com:acme/payments.git", "--format", "json"); err != nil {
+		t.Fatalf("Run(init --local-demo --repo) error = %v", err)
 	}
 	if got := readProjectConfigFile(t, repoDir); got != original {
 		t.Fatalf("project config changed = %q, want original %q", got, original)
@@ -593,7 +832,7 @@ func TestRunHelpUsage(t *testing.T) {
 	if err := Run(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"--help"}); err != nil {
 		t.Fatalf("Run(init --help) error = %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--format text|json]") {
+	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--local-demo] [--format text|json]") {
 		t.Fatalf("stdout = %q, want init usage", got)
 	}
 }
@@ -633,6 +872,27 @@ func runInitServerJSON(t *testing.T, workDir string, store fakeSessionStore, arg
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode init server JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runRepositoryContextJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.RepositoryContextInitOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, args, Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.RepositoryContextInitOutput{}, err
+	}
+
+	var output spine.RepositoryContextInitOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode repository context JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }

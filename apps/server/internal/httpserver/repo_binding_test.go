@@ -69,6 +69,18 @@ func TestRepoBindingInitMapsConflict(t *testing.T) {
 	}
 }
 
+func TestRepoBindingInitMapsOrganizationRepositoryConflict(t *testing.T) {
+	handler := httpserver.NewRepoBindingHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepoBindingInitService{err: repobinding.ErrRepositoryAlreadyBound})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Init), http.MethodPost, "/v1/projects/018f0000-0000-7000-8000-000000000003/repo-bindings/init", repoBindingInitJSON(), "Bearer access-token")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	if !strings.Contains(response.body, "organization already has active repo binding for this repository") {
+		t.Fatalf("body = %q, want organization repository conflict message", response.body)
+	}
+}
+
 func TestRepoBindingInitMapsValidationError(t *testing.T) {
 	handler := httpserver.NewRepoBindingHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepoBindingInitService{
 		err: &repobinding.ValidationError{Field: "workflow_base_branch", Message: "is required"},

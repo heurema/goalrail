@@ -47,7 +47,7 @@ func preflightProjectConfig(gitRoot string, expected projectConfig) error {
 	}
 
 	if existing.ServerURL != expected.ServerURL ||
-		existing.ProjectID != expected.ProjectID ||
+		(expected.ProjectID != "" && existing.ProjectID != expected.ProjectID) ||
 		existing.Repository.Provider != expected.Repository.Provider ||
 		existing.Repository.FullName != expected.Repository.FullName ||
 		existing.Repository.URL != expected.Repository.URL ||

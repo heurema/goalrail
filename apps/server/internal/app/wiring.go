@@ -20,6 +20,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/postgres"
 	"github.com/heurema/goalrail/apps/server/internal/repobinding"
+	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
@@ -63,14 +64,15 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 }
 
 type appServices struct {
-	intake        *intake.Service
-	goal          *goal.Service
-	clarification *clarification.Service
-	contract      *contract.Service
-	workItem      *workitem.Service
-	workItemPlan  *workitemplan.Service
-	repoBinding   *repobinding.Service
-	auth          *auth.Service
+	intake         *intake.Service
+	goal           *goal.Service
+	clarification  *clarification.Service
+	contract       *contract.Service
+	workItem       *workitem.Service
+	workItemPlan   *workitemplan.Service
+	repoBinding    *repobinding.Service
+	repositoryInit *repositoryinit.Service
+	auth           *auth.Service
 }
 
 func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRunner, authJWTSecret string) appServices {
@@ -78,39 +80,44 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 	contractDraftService := contractdraft.NewService(stores.contractSeeds, stores.contracts, stores.contractDrafts, stores.events, txRunner, contractdraft.SystemClock{}, contractdraft.UUIDGenerator{})
 	approvedContractService := approvedcontract.NewService(stores.contractDrafts, stores.contracts, stores.approvedContracts, stores.events, txRunner, approvedcontract.SystemClock{}, approvedcontract.UUIDGenerator{})
 
+	repoBindingService := repobinding.NewService(stores.projectContext, stores.events, txRunner, repobinding.SystemClock{}, repobinding.UUIDGenerator{})
+
 	return appServices{
-		intake:        intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),
-		goal:          goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{}),
-		clarification: clarification.NewService(stores.goals, stores.clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{}),
-		contract:      contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
-		workItem:      workitem.NewService(stores.workItems),
-		workItemPlan:  workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
-		repoBinding:   repobinding.NewService(stores.projectContext, stores.events, txRunner, repobinding.SystemClock{}, repobinding.UUIDGenerator{}),
-		auth:          auth.NewService(stores.auth, authJWTSecret),
+		intake:         intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),
+		goal:           goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{}),
+		clarification:  clarification.NewService(stores.goals, stores.clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{}),
+		contract:       contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
+		workItem:       workitem.NewService(stores.workItems),
+		workItemPlan:   workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
+		repoBinding:    repoBindingService,
+		repositoryInit: repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
+		auth:           auth.NewService(stores.auth, authJWTSecret),
 	}
 }
 
 type appHandlers struct {
-	intake        *httpserver.IntakeHandler
-	goal          *httpserver.GoalHandler
-	clarification *httpserver.ClarificationHandler
-	contract      *httpserver.ContractHandler
-	workItem      *httpserver.WorkItemHandler
-	workItemPlan  *httpserver.WorkItemPlanHandler
-	repoBinding   *httpserver.RepoBindingHandler
-	auth          *httpserver.AuthHandler
+	intake         *httpserver.IntakeHandler
+	goal           *httpserver.GoalHandler
+	clarification  *httpserver.ClarificationHandler
+	contract       *httpserver.ContractHandler
+	workItem       *httpserver.WorkItemHandler
+	workItemPlan   *httpserver.WorkItemPlanHandler
+	repoBinding    *httpserver.RepoBindingHandler
+	repositoryInit *httpserver.RepositoryInitHandler
+	auth           *httpserver.AuthHandler
 }
 
 func newAppHandlers(services appServices) appHandlers {
 	return appHandlers{
-		intake:        httpserver.NewIntakeHandler(services.intake),
-		goal:          httpserver.NewGoalHandler(services.goal),
-		clarification: httpserver.NewClarificationHandler(services.clarification),
-		contract:      httpserver.NewContractHandler(services.contract),
-		workItem:      httpserver.NewWorkItemHandler(services.workItem),
-		workItemPlan:  httpserver.NewWorkItemPlanHandler(services.workItemPlan),
-		repoBinding:   httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
-		auth:          httpserver.NewAuthHandler(services.auth),
+		intake:         httpserver.NewIntakeHandler(services.intake),
+		goal:           httpserver.NewGoalHandler(services.goal),
+		clarification:  httpserver.NewClarificationHandler(services.clarification),
+		contract:       httpserver.NewContractHandler(services.contract),
+		workItem:       httpserver.NewWorkItemHandler(services.workItem),
+		workItemPlan:   httpserver.NewWorkItemPlanHandler(services.workItemPlan),
+		repoBinding:    httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
+		repositoryInit: httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
+		auth:           httpserver.NewAuthHandler(services.auth),
 	}
 }
 
@@ -127,6 +134,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		AuthChangePassword:        http.HandlerFunc(h.auth.ChangePassword),
 		AuthLogout:                http.HandlerFunc(h.auth.Logout),
 		Me:                        http.HandlerFunc(h.auth.Me),
+		RepositoryContextInit:     http.HandlerFunc(h.repositoryInit.Init),
 		ProjectRepoBindingInit:    http.HandlerFunc(h.repoBinding.Init),
 		IntakeSubmit:              http.HandlerFunc(h.intake.Submit),
 		IntakeGet:                 http.HandlerFunc(h.intake.Get),
@@ -188,6 +196,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		AuthChangePassword:        unavailable,
 		AuthLogout:                unavailable,
 		Me:                        unavailable,
+		RepositoryContextInit:     unavailable,
 		ProjectRepoBindingInit:    unavailable,
 		IntakeSubmit:              unavailable,
 		IntakeGet:                 unavailable,

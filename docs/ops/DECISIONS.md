@@ -1995,15 +1995,18 @@ Rationale:
 
 ## D-0077 — CLI init server mode is explicit
 Date: 2026-05-05
-Status: accepted
+Status: accepted / superseded for normal plain init by D-0080
 
 Decision:
-- `goalrail init` keeps its local/demo mode unless the caller passes
-  `--project <project_id>`.
+- This decision captured the first explicit low-level server-backed init mode.
+  D-0080 later makes plain `goalrail init` the normal server-backed
+  repository-context path while preserving `--project <project_id>` as the
+  low-level Project-scoped path.
 - Server-backed init uses local Git metadata and the stored
   `goalrail login <server_url>` profile to call the D-0076 RepoBinding init
   endpoint.
-- Local/demo init remains auth-free and file-free.
+- Local/demo init remains auth-free and file-free through explicit
+  `--local-demo`.
 - Server-backed init requires a detected `workflow_base_branch`; it does not
   use the current local branch as a fallback and does not mutate Git state.
 - Expired access tokens fail locally before the HTTP request with a login
@@ -2026,8 +2029,8 @@ Date: 2026-05-05
 Status: accepted
 
 Decision:
-- After successful server-backed `goalrail init --project <project_id>`, the
-  CLI writes `<git_root>/.goalrail/project.yml`.
+- After successful server-backed init, the CLI writes
+  `<git_root>/.goalrail/project.yml`.
 - Local/demo init never writes the marker.
 - The marker is a non-secret local cache/marker only. It stores:
   `version`, `server_url`, `organization_id`, `project_id`, `repo_binding_id`,
@@ -2051,11 +2054,12 @@ Date: 2026-05-05
 Status: accepted
 
 Decision:
-- Before the D-0076 HTTP request, server-backed init reads an existing
-  `<git_root>/.goalrail/project.yml` marker if present.
-- Obvious local conflicts in `server_url`, `project_id`, repository provider,
-  repository full name, repository URL, or `workflow_base_branch` fail locally
-  before the server call.
+- Before server-backed init performs a D-0076 or D-0080 HTTP request, it reads
+  an existing `<git_root>/.goalrail/project.yml` marker if present.
+- Obvious local conflicts in `server_url`, repository provider, repository
+  full name, repository URL, or `workflow_base_branch` fail locally before the
+  server call. The low-level `--project` path also preflights `project_id`
+  because it is known before the HTTP request.
 - Unparseable marker content fails locally and is not overwritten.
 - `organization_id` and `repo_binding_id` are still validated after the server
   response because they come from the server.
@@ -2069,3 +2073,49 @@ Rationale:
   obvious local marker conflict is discovered.
 - The local marker remains a cache/marker, not a competing source of truth.
 - Deferring repair keeps the first marker semantics narrow and reviewable.
+
+## D-0080 — Normal CLI init bootstraps repository context in an existing Organization
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Plain `goalrail init` is now the normal server-backed repository-context
+  bootstrap path for authenticated users inside a Git worktree.
+- The CLI uses the existing `goalrail login <server_url>` profile and local Git
+  metadata to call `POST /v1/init/repository-context`.
+- The server resolves the authenticated user's active GoalRail Organization
+  from server-side membership state. It does not accept `organization_id` from
+  the request body, create Organizations, map GitHub/GitLab/Bitbucket owner to
+  GoalRail Organization, or add public Organization creation.
+- The endpoint creates or reuses one repo-backed active Project per repository
+  inside that existing Organization, using deterministic provider plus
+  repository-full-name slugs such as `github-acme-frontend`.
+- The endpoint first reuses an existing active RepoBinding for the same
+  Organization, provider, and repository full name; otherwise it initializes a
+  metadata-only RepoBinding for the resolved Project.
+- Active RepoBindings are unique per Organization, provider, and repository
+  full name. Multiple repositories in the same Organization map to separate
+  repo-backed Projects and do not conflict.
+- `goalrail init --project <project_id>` remains as the low-level explicit
+  Project-scoped path to the D-0076 endpoint.
+- `goalrail init --local-demo` is the explicit auth-free local/demo draft mode
+  and writes no files.
+- Server-backed init still requires a detected `workflow_base_branch`, fails an
+  expired access token locally before HTTP, preflights known marker conflicts,
+  writes the existing non-secret `.goalrail/project.yml` marker only after
+  server success, and does not store auth tokens in the repository.
+- This does not add SaaS onboarding, public registration, Organization
+  selection UX, Project full CRUD, provider APIs, GitHub App, deploy keys,
+  clone, audit queue, runner checkout, work item linking, branch/PR flow,
+  verification, gate, proof, token refresh, keychain, `RepositoryRecord`, or
+  `VcsConnection`.
+
+Rationale:
+- Normal users should not need to paste a raw Project UUID to initialize a
+  repository checkout.
+- For the self-hosted MVP, the first company/tenant remains an operator action
+  through `goalrail-server bootstrap owner`; repository init should only bind
+  repository context inside that existing authenticated Organization.
+- One repo-backed Project per repository keeps multi-repo companies workable
+  without introducing a repository catalog or VCS connection model before the
+  MVP needs it.

@@ -56,6 +56,24 @@ func TestInitMigrationStoresRepoBindingWorkflowBaseBranch(t *testing.T) {
 	}
 }
 
+func TestInitMigrationEnforcesOneActiveRepoBindingPerOrganizationRepository(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE UNIQUE INDEX repo_bindings_one_active_per_org_repository_idx",
+		"ON repo_bindings(organization_id, lower(provider), lower(repository_full_name))",
+		"WHERE state = 'active'",
+		"DROP INDEX IF EXISTS repo_bindings_one_active_per_org_repository_idx;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+}
+
 func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

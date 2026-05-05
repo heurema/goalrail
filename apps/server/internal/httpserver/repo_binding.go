@@ -71,6 +71,8 @@ func (h *RepoBindingHandler) respondServiceError(w http.ResponseWriter, err erro
 		RespondError(w, http.StatusForbidden, "forbidden", "user is not allowed to initialize repo binding for this project")
 	case errors.Is(err, repobinding.ErrDifferentRepoBinding):
 		RespondError(w, http.StatusConflict, "repo_binding_conflict", "project already has active repo binding for a different repository")
+	case errors.Is(err, repobinding.ErrRepositoryAlreadyBound):
+		RespondError(w, http.StatusConflict, "repo_binding_conflict", "organization already has active repo binding for this repository")
 	default:
 		respondInternalError(w)
 	}

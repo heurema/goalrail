@@ -46,6 +46,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	flags.SetOutput(io.Discard)
 	repoURL := flags.String("repo", "", "repository URL")
 	projectID := flags.String("project", "", "server Project ID for authenticated RepoBinding init")
+	localDemo := flags.Bool("local-demo", false, "create a local/demo repo binding draft without auth or server calls")
 	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
 
 	if err := flags.Parse(args); err != nil {
@@ -58,6 +59,9 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 
 	if flags.NArg() != 0 {
 		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	if *localDemo && strings.TrimSpace(*projectID) != "" {
+		return exitcode.UsageError(errors.New("--local-demo cannot be combined with --project"))
 	}
 
 	format, err := term.ParseFormat(*formatValue)
@@ -101,6 +105,10 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runServerBackedInit(ctx, out, draft, strings.TrimSpace(*projectID), format, options)
 	}
 
+	if !*localDemo {
+		return runRepositoryContextInit(ctx, out, draft, format, options)
+	}
+
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, draft)
 	}
@@ -110,7 +118,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 }
 
 func Usage() string {
-	return "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--format text|json]\n\nWithout --project, creates a local/demo repo binding draft. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --project, performs authenticated server-backed RepoBinding metadata init using the stored goalrail login profile and writes a non-secret .goalrail/project.yml marker in the Git root. It does not configure audit, create hooks, create branches, provision deploy keys, or start verification.\n"
+	return "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--local-demo] [--format text|json]\n\nBy default, initializes server-backed repository context using the stored goalrail login profile and writes a non-secret .goalrail/project.yml marker in the Git root. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --project, uses the low-level Project-scoped RepoBinding init endpoint.\n\nWith --local-demo, creates the old auth-free local/demo repo binding draft and writes no files.\n\nInit does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, or start verification.\n"
 }
 
 func renderText(draft spine.RepoBindingDraft) string {

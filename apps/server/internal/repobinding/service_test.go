@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,6 +95,45 @@ func TestInitRejectsDifferentRepositoryForProject(t *testing.T) {
 	_, err := service.Init(context.Background(), validInput())
 	if !errors.Is(err, ErrDifferentRepoBinding) {
 		t.Fatalf("Init() error = %v, want ErrDifferentRepoBinding", err)
+	}
+}
+
+func TestInitRejectsSameRepositoryAlreadyBoundInOrganization(t *testing.T) {
+	store := newFakeStore()
+	existing := existingBinding("github", "heurema/goalrail")
+	existing.ProjectID = "018f0000-0000-7000-8000-000000000099"
+	store.organizationBinding = &existing
+	service := NewService(store, &fakeEventLog{}, &fakeTxRunner{}, fixedClock{now: testNow()}, sequenceIDs{})
+
+	_, err := service.Init(context.Background(), validInput())
+	if !errors.Is(err, ErrRepositoryAlreadyBound) {
+		t.Fatalf("Init() error = %v, want ErrRepositoryAlreadyBound", err)
+	}
+}
+
+func TestInitAllowsDifferentRepositoryWhenOrganizationHasAnotherRepository(t *testing.T) {
+	store := newFakeStore()
+	existing := existingBinding("github", "acme/frontend")
+	existing.ProjectID = "018f0000-0000-7000-8000-000000000099"
+	store.organizationBinding = &existing
+	service := NewService(store, &fakeEventLog{}, &fakeTxRunner{}, fixedClock{now: testNow()}, sequenceIDs{})
+
+	input := validInput()
+	input.RepositoryFullName = "acme/backend"
+	input.RepositoryURL = "git@github.com:acme/backend.git"
+	result, err := service.Init(context.Background(), input)
+	if err != nil {
+		t.Fatalf("Init() error = %v, want nil", err)
+	}
+
+	if !result.Created {
+		t.Fatal("Created = false, want true for different repository")
+	}
+	if got := len(store.created); got != 1 {
+		t.Fatalf("created bindings = %d, want 1", got)
+	}
+	if store.created[0].RepositoryFullName != "acme/backend" {
+		t.Fatalf("created repository_full_name = %q, want acme/backend", store.created[0].RepositoryFullName)
 	}
 }
 
@@ -210,10 +250,11 @@ func newFakeStore() *fakeStore {
 }
 
 type fakeStore struct {
-	project       spine.Project
-	projectOK     bool
-	activeBinding *spine.RepoBinding
-	created       []spine.RepoBinding
+	project             spine.Project
+	projectOK           bool
+	activeBinding       *spine.RepoBinding
+	organizationBinding *spine.RepoBinding
+	created             []spine.RepoBinding
 }
 
 func (s *fakeStore) GetProject(context.Context, spine.ProjectID) (spine.Project, bool, error) {
@@ -225,6 +266,17 @@ func (s *fakeStore) GetActiveRepoBindingForProject(context.Context, spine.Projec
 		return spine.RepoBinding{}, false, nil
 	}
 	return *s.activeBinding, true, nil
+}
+
+func (s *fakeStore) GetActiveRepoBindingByOrganizationAndRepository(_ context.Context, _ spine.OrganizationID, provider string, repositoryFullName string) (spine.RepoBinding, bool, error) {
+	if s.organizationBinding == nil {
+		return spine.RepoBinding{}, false, nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(s.organizationBinding.Provider), strings.TrimSpace(provider)) ||
+		!strings.EqualFold(normalizeRepositoryFullName(s.organizationBinding.RepositoryFullName), normalizeRepositoryFullName(repositoryFullName)) {
+		return spine.RepoBinding{}, false, nil
+	}
+	return *s.organizationBinding, true, nil
 }
 
 func (s *fakeStore) CreateRepoBinding(_ context.Context, binding spine.RepoBinding) error {

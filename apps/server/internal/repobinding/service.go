@@ -21,9 +21,10 @@ const (
 )
 
 var (
-	ErrProjectNotFound      = errors.New("project not found")
-	ErrForbidden            = errors.New("user is not allowed to initialize repo binding for this project")
-	ErrDifferentRepoBinding = errors.New("project already has active repo binding for a different repository")
+	ErrProjectNotFound        = errors.New("project not found")
+	ErrForbidden              = errors.New("user is not allowed to initialize repo binding for this project")
+	ErrDifferentRepoBinding   = errors.New("project already has active repo binding for a different repository")
+	ErrRepositoryAlreadyBound = errors.New("organization already has active repo binding for this repository")
 )
 
 type ValidationError struct {
@@ -41,6 +42,7 @@ func (e *ValidationError) Error() string {
 type Store interface {
 	GetProject(context.Context, spine.ProjectID) (spine.Project, bool, error)
 	GetActiveRepoBindingForProject(context.Context, spine.ProjectID) (spine.RepoBinding, bool, error)
+	GetActiveRepoBindingByOrganizationAndRepository(context.Context, spine.OrganizationID, string, string) (spine.RepoBinding, bool, error)
 	CreateRepoBinding(context.Context, spine.RepoBinding) error
 }
 
@@ -118,6 +120,17 @@ func (s *Service) Init(ctx context.Context, input InitInput) (spine.RepoBindingI
 			return spine.RepoBindingInitResult{}, ErrDifferentRepoBinding
 		}
 		return initResult(existing, false, existingMessage), nil
+	}
+
+	existing, ok, err = s.Store.GetActiveRepoBindingByOrganizationAndRepository(ctx, project.OrganizationID, normalized.Provider, normalized.RepositoryFullName)
+	if err != nil {
+		return spine.RepoBindingInitResult{}, fmt.Errorf("get active repo binding by organization repository: %w", err)
+	}
+	if ok {
+		if existing.ProjectID == project.ID {
+			return initResult(existing, false, existingMessage), nil
+		}
+		return spine.RepoBindingInitResult{}, ErrRepositoryAlreadyBound
 	}
 
 	now := s.Clock.Now().UTC()
