@@ -121,14 +121,15 @@ related_docs:
 ### 9. Advisory research, reference material, and overlay working surfaces
 73. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
 74. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-75. `docs/reference/design/reference_screens/`
-76. `.goalrail/work/`
-77. `.goalrail/knowledge/`
-78. `.punk/publishing.toml`
-79. `.goalrail/flows/`
-80. `.goalrail/evals/`
-81. `docs/ops/PUBLISHING_MIGRATION.md`
-82. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+75. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
+76. `docs/reference/design/reference_screens/`
+77. `.goalrail/work/`
+78. `.goalrail/knowledge/`
+79. `.punk/publishing.toml`
+80. `.goalrail/flows/`
+81. `.goalrail/evals/`
+82. `docs/ops/PUBLISHING_MIGRATION.md`
+83. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -229,6 +230,7 @@ related_docs:
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
+- `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md` — advisory official-docs research behind ADR-0024 and future GitLab metadata adapter planning; not implementation authorization
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
