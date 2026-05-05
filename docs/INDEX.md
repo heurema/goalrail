@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
   - docs/ops/STATUS.md
+  - docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -110,26 +111,27 @@ related_docs:
 63. `docs/ops/NEXT.md`
 64. `docs/ops/DECISIONS.md`
 65. `docs/ops/COMPONENTS.yaml`
-66. `docs/ops/BRANCH_PROTECTION.md`
-67. `docs/ops/REPO_STRUCTURE.md`
-68. `docs/ops/GO_CODE_GUIDE.md`
-69. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-70. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-71. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-72. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+66. `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`
+67. `docs/ops/BRANCH_PROTECTION.md`
+68. `docs/ops/REPO_STRUCTURE.md`
+69. `docs/ops/GO_CODE_GUIDE.md`
+70. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+71. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+72. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+73. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-73. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-74. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-75. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
-76. `docs/reference/design/reference_screens/`
-77. `.goalrail/work/`
-78. `.goalrail/knowledge/`
-79. `.punk/publishing.toml`
-80. `.goalrail/flows/`
-81. `.goalrail/evals/`
-82. `docs/ops/PUBLISHING_MIGRATION.md`
-83. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+74. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+75. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+76. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
+77. `docs/reference/design/reference_screens/`
+78. `.goalrail/work/`
+79. `.goalrail/knowledge/`
+80. `.punk/publishing.toml`
+81. `.goalrail/flows/`
+82. `.goalrail/evals/`
+83. `docs/ops/PUBLISHING_MIGRATION.md`
+84. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -219,6 +221,10 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` — provider-neutral backend VCS /
+  repository connection implementation order and blockers before schema, OAuth,
+  token storage, provider clients, metadata APIs, checkout, runner, gate, or
+  proof work
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style

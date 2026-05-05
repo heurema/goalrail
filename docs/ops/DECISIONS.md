@@ -2224,3 +2224,36 @@ Rationale:
   eligibility, and runner checkout need separate trust boundaries.
 - Customer-hosted runner compatibility must remain possible even when Goalrail
   cloud has no provider-side VCS connection or clone credential.
+
+## D-0084 — Backend VCS implementation starts with credential boundary sequencing
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Accept `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` as the current
+  operational backend implementation order for provider-neutral VCS /
+  repository connection work after ADR-0024, GitLab research, and repository
+  connection UX.
+- The next safest backend task is a docs-only provider credential / token
+  storage boundary ADR before any VcsConnection schema/API, GitLab OAuth,
+  provider token storage, provider clients, or live repository metadata listing.
+- Later backend order is: provider-neutral `VcsConnection` skeleton without
+  credentials; provider-neutral repository metadata contract without a provider
+  client; GitLab metadata adapter mapping with fake/test fixtures only; GitLab
+  OAuth/token implementation only after the credential boundary is accepted.
+- Checkout, runner, gate, proof, branch, commit, merge request, pull request,
+  repository write behavior, and generic queue behavior remain separate later
+  tracks.
+- This decision does not add schema, migrations, API routes, OAuth, token
+  storage, provider clients, live provider calls, repository listing/search,
+  frontend behavior, checkout, runner, gate, or proof.
+
+Rationale:
+- Provider credentials are the highest-risk unresolved boundary, especially
+  encryption, redaction, refresh, revocation, audit, retention, and GitLab
+  `read_api` scope breadth.
+- A schema-first or OAuth-first implementation would harden security choices
+  before Goalrail has accepted the credential boundary.
+- The sequence preserves ADR-0024 provider neutrality, keeps GitLab as a first
+  provider candidate rather than core terminology, and protects
+  customer-hosted runner compatibility.
