@@ -61,6 +61,15 @@
   lookup, and logout over those existing endpoints. Organization / Project /
   RepoBinding profile selection remains unimplemented; the server-rendered CLI
   auth bridge remains separate.
+- ADR-0024 now defines the provider-neutral VCS connection boundary:
+  `VcsConnection` is accepted as a future provider connection / account
+  authorization / metadata-discovery boundary, not a checkout credential, raw
+  provider token, repository catalog, or permission to clone. GitLab/provider
+  backend implementation is blocked until this provider-neutral ADR is accepted
+  through PR review, and any later provider slice must keep provider-specific
+  concepts in adapters. The current slice adds no backend schema/API behavior,
+  provider clients, OAuth, checkout credentials, repository clone, runner,
+  gate, proof, or queue behavior.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -623,10 +632,11 @@ Done means:
 ### Architecture follow-up slices
 
 1. Organization / project / repo binding persistence boundary
-   - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, future `VcsConnection`, and `RepoBinding.access_mode`
+   - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
+   - ADR-0024 documents future provider-neutral `VcsConnection` before GitLab/provider implementation
    - direct `RepoBinding` stores repository reference in the MVP
    - `RepositoryRecord` and `RepositoryEnrollment` are deferred
-   - manual/dev-seeded RepoBinding comes before GitHub integration
+   - manual/dev-seeded and metadata-only RepoBinding remain valid before provider integration
    - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
 2. Runner checkout prototype boundary
    - start with `goalrail_hosted_runner` only as a Goalrail-operated hosted runner pool
