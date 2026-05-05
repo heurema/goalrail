@@ -141,6 +141,13 @@ components:
     implementation_paths: []
     public_claim_allowed: false
     notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. It documents hosted and customer-hosted runner modes; the first prototype direction is hosted-only read-only ephemeral checkout with a checkout receipt, using pull/poll-based job leasing. Customer-hosted runner remains documented but unimplemented. No runner code exists yet.
+  vcs_connection_boundary:
+    name: VCS Connection Boundary
+    status: docs_only
+    truth_owner: docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: ADR-0024 defines VcsConnection as a future provider-neutral VCS connection / account authorization / metadata-discovery boundary before any GitLab/provider implementation. It keeps RepoBinding as the current metadata-only Project-to-repository reference, keeps RepositoryRecord deferred until catalog/sync/reuse/policy pressure exists, separates checkout eligibility from provider connection and repository metadata, and requires provider-specific concepts to stay in adapters or adapter-owned metadata. No backend schema/API, provider client, OAuth, provider token storage, checkout credential, repository clone, runner, gate, proof, provider sync job, repository catalog, or generic queue behavior exists for this boundary.
   advisory_panel:
     name: Advisory Panel
     status: planned
