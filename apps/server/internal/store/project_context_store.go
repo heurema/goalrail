@@ -134,7 +134,10 @@ func (s *ProjectContextStore) CreateProject(ctx context.Context, project spine.P
 	if err != nil {
 		return err
 	}
-	return s.execSQL(ctx, "create project", stmt)
+	if err := s.execSQL(ctx, "create project", stmt); err != nil {
+		return wrapUniqueConstraint(err)
+	}
+	return nil
 }
 
 func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spine.RepoBinding) error {
@@ -152,7 +155,10 @@ func (s *ProjectContextStore) CreateRepoBinding(ctx context.Context, binding spi
 	if err != nil {
 		return err
 	}
-	return s.execSQL(ctx, "create repo binding", stmt)
+	if err := s.execSQL(ctx, "create repo binding", stmt); err != nil {
+		return wrapUniqueConstraint(err)
+	}
+	return nil
 }
 
 func (s *ProjectContextStore) projectInsert(project spine.Project) (squirrel.InsertBuilder, error) {

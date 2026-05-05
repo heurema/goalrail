@@ -137,6 +137,44 @@ func TestInitAllowsDifferentRepositoryWhenOrganizationHasAnotherRepository(t *te
 	}
 }
 
+func TestInitResolvesConcurrentSameProjectRepositoryCreateIdempotently(t *testing.T) {
+	store := newFakeStore()
+	existing := existingBinding("github", "heurema/goalrail")
+	store.activeBindingAfterCreateError = &existing
+	store.createErr = fakeUniqueConstraintError{constraint: "repo_bindings_one_active_per_project_idx"}
+	events := &fakeEventLog{}
+	service := NewService(store, events, &fakeTxRunner{}, fixedClock{now: testNow()}, sequenceIDs{})
+
+	result, err := service.Init(context.Background(), validInput())
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if result.Created {
+		t.Fatal("Created = true, want false after concurrent create resolves to existing binding")
+	}
+	if result.RepoBindingID != existing.ID {
+		t.Fatalf("repo_binding_id = %q, want existing %q", result.RepoBindingID, existing.ID)
+	}
+	if got := len(events.events); got != 0 {
+		t.Fatalf("events = %d, want 0 when create loses race", got)
+	}
+}
+
+func TestInitTranslatesConcurrentOrganizationRepositoryCreateConflict(t *testing.T) {
+	store := newFakeStore()
+	existing := existingBinding("github", "heurema/goalrail")
+	existing.ProjectID = "018f0000-0000-7000-8000-000000000099"
+	store.organizationBindingAfterCreateError = &existing
+	store.createErr = fakeUniqueConstraintError{constraint: "repo_bindings_one_active_per_org_repository_idx"}
+	service := NewService(store, &fakeEventLog{}, &fakeTxRunner{}, fixedClock{now: testNow()}, sequenceIDs{})
+
+	_, err := service.Init(context.Background(), validInput())
+	if !errors.Is(err, ErrRepositoryAlreadyBound) {
+		t.Fatalf("Init() error = %v, want ErrRepositoryAlreadyBound", err)
+	}
+}
+
 func TestInitRequiresWorkflowOrProviderDefaultBranch(t *testing.T) {
 	service := NewService(newFakeStore(), &fakeEventLog{}, &fakeTxRunner{}, fixedClock{now: testNow()}, sequenceIDs{})
 	input := validInput()
@@ -250,11 +288,14 @@ func newFakeStore() *fakeStore {
 }
 
 type fakeStore struct {
-	project             spine.Project
-	projectOK           bool
-	activeBinding       *spine.RepoBinding
-	organizationBinding *spine.RepoBinding
-	created             []spine.RepoBinding
+	project                             spine.Project
+	projectOK                           bool
+	activeBinding                       *spine.RepoBinding
+	organizationBinding                 *spine.RepoBinding
+	activeBindingAfterCreateError       *spine.RepoBinding
+	organizationBindingAfterCreateError *spine.RepoBinding
+	createErr                           error
+	created                             []spine.RepoBinding
 }
 
 func (s *fakeStore) GetProject(context.Context, spine.ProjectID) (spine.Project, bool, error) {
@@ -280,8 +321,29 @@ func (s *fakeStore) GetActiveRepoBindingByOrganizationAndRepository(_ context.Co
 }
 
 func (s *fakeStore) CreateRepoBinding(_ context.Context, binding spine.RepoBinding) error {
+	if s.createErr != nil {
+		if s.activeBindingAfterCreateError != nil {
+			s.activeBinding = s.activeBindingAfterCreateError
+		}
+		if s.organizationBindingAfterCreateError != nil {
+			s.organizationBinding = s.organizationBindingAfterCreateError
+		}
+		return s.createErr
+	}
 	s.created = append(s.created, binding)
 	return nil
+}
+
+type fakeUniqueConstraintError struct {
+	constraint string
+}
+
+func (e fakeUniqueConstraintError) Error() string {
+	return "unique constraint violation"
+}
+
+func (e fakeUniqueConstraintError) ConstraintName() string {
+	return e.constraint
 }
 
 type fakeEventLog struct {

@@ -55,13 +55,9 @@ func Discover(ctx context.Context, workDir string) (Context, error) {
 func detectWorkflowBaseBranch(ctx context.Context, gitRoot string) (string, bool) {
 	originHead, err := gitOutput(ctx, gitRoot, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
 	if err == nil && originHead != "" {
-		switch originHead {
-		case "origin/main":
-			return "main", true
-		case "origin/master":
-			return "master", true
-		default:
-			return "", false
+		branch := strings.TrimPrefix(originHead, "origin/")
+		if branch != originHead && strings.TrimSpace(branch) != "" {
+			return branch, true
 		}
 	}
 

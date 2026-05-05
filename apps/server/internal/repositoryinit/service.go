@@ -165,18 +165,7 @@ func (s *Service) Init(ctx context.Context, input InitInput) (spine.RepositoryCo
 		}
 	}
 
-	repoInput := repobinding.InitInput{
-		ProjectID:             project.ID,
-		AuthenticatedUserID:   normalized.AuthenticatedUserID,
-		Membership:            normalized.Membership,
-		Provider:              normalized.Provider,
-		RepositoryFullName:    normalized.RepositoryFullName,
-		RepositoryURL:         normalized.RepositoryURL,
-		ProviderDefaultBranch: normalized.ProviderDefaultBranch,
-		WorkflowBaseBranch:    normalized.WorkflowBaseBranch,
-		LocalRemoteName:       normalized.LocalRemoteName,
-		LocalHeadSHA:          normalized.LocalHeadSHA,
-	}
+	repoInput := repoBindingInput(project.ID, normalized)
 
 	var bindingResult spine.RepoBindingInitResult
 	if projectCreated {
@@ -198,6 +187,9 @@ func (s *Service) Init(ctx context.Context, input InitInput) (spine.RepositoryCo
 			bindingResult = result
 			return nil
 		}); err != nil {
+			if isUniqueConstraintError(err) {
+				return s.resolveProjectCreateRace(ctx, normalized, projectSlug, err)
+			}
 			return spine.RepositoryContextInitResult{}, err
 		}
 	} else {
@@ -219,6 +211,58 @@ func (s *Service) Init(ctx context.Context, input InitInput) (spine.RepositoryCo
 		State:              bindingResult.State,
 	}
 	return contextResult(project, binding, projectCreated, bindingResult.Created, initMessage), nil
+}
+
+func (s *Service) resolveProjectCreateRace(ctx context.Context, input InitInput, projectSlug string, cause error) (spine.RepositoryContextInitResult, error) {
+	project, ok, err := s.Store.GetProjectByOrganizationAndSlug(ctx, input.Membership.OrganizationID, projectSlug)
+	if err != nil {
+		return spine.RepositoryContextInitResult{}, fmt.Errorf("get project by organization slug after create conflict: %w", err)
+	}
+	if !ok {
+		return spine.RepositoryContextInitResult{}, cause
+	}
+	if project.State != spine.EntityStateActive {
+		return spine.RepositoryContextInitResult{}, ErrProjectSlugUnavailable
+	}
+	if err := s.ensureProjectReusable(ctx, project, input); err != nil {
+		return spine.RepositoryContextInitResult{}, err
+	}
+
+	bindingResult, err := s.RepoBindings.Init(ctx, repoBindingInput(project.ID, input))
+	if err != nil {
+		return spine.RepositoryContextInitResult{}, err
+	}
+	binding := repoBindingFromResult(bindingResult)
+	return contextResult(project, binding, false, bindingResult.Created, bindingResult.Message), nil
+}
+
+func repoBindingInput(projectID spine.ProjectID, input InitInput) repobinding.InitInput {
+	return repobinding.InitInput{
+		ProjectID:             projectID,
+		AuthenticatedUserID:   input.AuthenticatedUserID,
+		Membership:            input.Membership,
+		Provider:              input.Provider,
+		RepositoryFullName:    input.RepositoryFullName,
+		RepositoryURL:         input.RepositoryURL,
+		ProviderDefaultBranch: input.ProviderDefaultBranch,
+		WorkflowBaseBranch:    input.WorkflowBaseBranch,
+		LocalRemoteName:       input.LocalRemoteName,
+		LocalHeadSHA:          input.LocalHeadSHA,
+	}
+}
+
+func repoBindingFromResult(result spine.RepoBindingInitResult) spine.RepoBinding {
+	return spine.RepoBinding{
+		ID:                 result.RepoBindingID,
+		OrganizationID:     result.OrganizationID,
+		ProjectID:          result.ProjectID,
+		Provider:           result.Provider,
+		RepositoryFullName: result.RepositoryFullName,
+		RepositoryURL:      result.RepositoryURL,
+		DefaultBranch:      result.ProviderDefaultBranch,
+		WorkflowBaseBranch: result.WorkflowBaseBranch,
+		State:              result.State,
+	}
 }
 
 func (s *Service) ensureProjectReusable(ctx context.Context, project spine.Project, input InitInput) error {
@@ -311,6 +355,15 @@ func DeriveProjectSlug(provider string, repositoryFullName string) string {
 func sameRepository(binding spine.RepoBinding, provider string, repositoryFullName string) bool {
 	return strings.EqualFold(strings.TrimSpace(binding.Provider), strings.TrimSpace(provider)) &&
 		strings.EqualFold(NormalizeRepositoryFullName(binding.RepositoryFullName), NormalizeRepositoryFullName(repositoryFullName))
+}
+
+type uniqueConstraintError interface {
+	ConstraintName() string
+}
+
+func isUniqueConstraintError(err error) bool {
+	var constraintErr uniqueConstraintError
+	return errors.As(err, &constraintErr)
 }
 
 func contextResult(project spine.Project, binding spine.RepoBinding, projectCreated bool, repoBindingCreated bool, message string) spine.RepositoryContextInitResult {

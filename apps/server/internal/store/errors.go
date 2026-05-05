@@ -39,3 +39,31 @@ var (
 	ErrWorkItemPlanAlreadyHasProposal = errors.New("work item plan already has proposal")
 	ErrWorkItemPlanProposalNotFound   = errors.New("work item plan proposal not found")
 )
+
+type uniqueConstraintError struct {
+	constraint string
+	err        error
+}
+
+func (e uniqueConstraintError) Error() string {
+	return e.err.Error()
+}
+
+func (e uniqueConstraintError) Unwrap() error {
+	return e.err
+}
+
+func (e uniqueConstraintError) ConstraintName() string {
+	return e.constraint
+}
+
+func wrapUniqueConstraint(err error) error {
+	constraint := uniqueViolationConstraint(err)
+	if constraint == "" {
+		return err
+	}
+	return uniqueConstraintError{
+		constraint: constraint,
+		err:        err,
+	}
+}

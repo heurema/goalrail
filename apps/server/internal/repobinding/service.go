@@ -168,10 +168,39 @@ func (s *Service) Init(ctx context.Context, input InitInput) (spine.RepoBindingI
 		}
 		return nil
 	}); err != nil {
+		if isUniqueConstraintError(err) {
+			return s.resolveCreateRepoBindingRace(ctx, project, normalized, err)
+		}
 		return spine.RepoBindingInitResult{}, err
 	}
 
 	return initResult(binding, true, initMessage), nil
+}
+
+func (s *Service) resolveCreateRepoBindingRace(ctx context.Context, project spine.Project, input InitInput, cause error) (spine.RepoBindingInitResult, error) {
+	existing, ok, err := s.Store.GetActiveRepoBindingForProject(ctx, project.ID)
+	if err != nil {
+		return spine.RepoBindingInitResult{}, fmt.Errorf("get active repo binding for project after create conflict: %w", err)
+	}
+	if ok {
+		if !sameRepository(existing, input) {
+			return spine.RepoBindingInitResult{}, ErrDifferentRepoBinding
+		}
+		return initResult(existing, false, existingMessage), nil
+	}
+
+	existing, ok, err = s.Store.GetActiveRepoBindingByOrganizationAndRepository(ctx, project.OrganizationID, input.Provider, input.RepositoryFullName)
+	if err != nil {
+		return spine.RepoBindingInitResult{}, fmt.Errorf("get active repo binding by organization repository after create conflict: %w", err)
+	}
+	if ok {
+		if existing.ProjectID == project.ID {
+			return initResult(existing, false, existingMessage), nil
+		}
+		return spine.RepoBindingInitResult{}, ErrRepositoryAlreadyBound
+	}
+
+	return spine.RepoBindingInitResult{}, cause
 }
 
 func normalizeInput(input InitInput) (InitInput, error) {
@@ -248,6 +277,15 @@ func authorize(project spine.Project, input InitInput) error {
 func sameRepository(existing spine.RepoBinding, input InitInput) bool {
 	return strings.EqualFold(strings.TrimSpace(existing.Provider), input.Provider) &&
 		strings.EqualFold(normalizeRepositoryFullName(existing.RepositoryFullName), input.RepositoryFullName)
+}
+
+type uniqueConstraintError interface {
+	ConstraintName() string
+}
+
+func isUniqueConstraintError(err error) bool {
+	var constraintErr uniqueConstraintError
+	return errors.As(err, &constraintErr)
 }
 
 func initResult(binding spine.RepoBinding, created bool, message string) spine.RepoBindingInitResult {
