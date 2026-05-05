@@ -301,6 +301,53 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	}
 }
 
+func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/init/repository-context":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+		case "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(repositoryContextSnapshotResponseJSON(true)))
+		default:
+			t.Errorf("path = %s, want repository context init or snapshot path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, nil, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(init) error = %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Repository context initialized",
+		"Local config: .goalrail/project.yml (written)",
+		"Repository context snapshot: 018f0000-0000-7000-8000-000000000301 (recorded)",
+		"This initialized GoalRail repository context for your existing organization and recorded a metadata-only repository context snapshot.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+	}
+	if strings.Contains(got, "Project context snapshot") {
+		t.Fatalf("stdout = %q, want repository snapshot wording", got)
+	}
+}
+
 func TestRunRepositoryContextInitBaseOverrideSplitsProviderDefaultAndWorkflowBase(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -973,6 +1020,9 @@ func TestRunHelpUsage(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail init [--repo <repo-url>] [--base <branch>] [--project <project-id>] [--local-demo] [--format text|json]") {
 		t.Fatalf("stdout = %q, want init usage", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "records a metadata-only repository context snapshot") || strings.Contains(got, "project context snapshot") {
+		t.Fatalf("stdout = %q, want repository snapshot wording", got)
 	}
 }
 
