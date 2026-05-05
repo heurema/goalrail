@@ -18,9 +18,11 @@ related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_MVP_BLUEPRINT.md
   - docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md
+  - docs/product/GOALRAIL_REPOSITORY_CONNECTION_UX.md
   - docs/PROJECT_SPINE_SCHEMA.md
   - docs/adr/ADR-0008-runner-checkout-boundary.md
   - docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md
+  - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
   - docs/ops/STATUS.md
   - docs/ops/NEXT.md
   - docs/ops/DECISIONS.md
@@ -28,31 +30,38 @@ related_docs:
 ---
 # Goalrail GitLab VCS Connection Research
 
-> Official-docs-based research note. This document is advisory input for a later
-> provider-neutral VCS connection boundary ADR. It does not authorize GitLab
-> implementation, OAuth routes, token storage, checkout, cloning, runners,
-> gate, proof, or GitLab client code.
+> Official-docs-based research note. This document is advisory background for
+> ADR-0024 and future GitLab metadata adapter planning. It does not override
+> ADR-0024 or authorize GitLab implementation, OAuth routes, token storage,
+> checkout, cloning, runners, gate, proof, or GitLab client code.
 
 Researched on: 2026-05-05.
 
 ## Purpose
 
 This note maps current official GitLab documentation into Goalrail boundary
-inputs for a future VCS connection design.
+inputs for the accepted provider-neutral VCS connection boundary and future
+GitLab metadata adapter planning.
 
-This phase is intentionally limited to research and mapping. It should feed:
+This phase is intentionally limited to research and mapping. It should be read
+as:
 
-1. a provider-neutral VCS connection boundary ADR
+1. background for ADR-0024 as the accepted provider-neutral VCS connection
+   boundary
 2. a later GitLab metadata adapter plan
-3. only then, a bounded implementation slice if the ADR authorizes it
+3. only then, a bounded implementation slice if a later authorized slice adopts
+   ADR-0024's boundary
 
 This note does not define a final schema, API contract, credential store,
-checkout protocol, runner behavior, or provider abstraction.
+checkout protocol, runner behavior, or provider abstraction. Where it differs
+from ADR-0024, ADR-0024 wins.
 
 ## Goalrail boundary recap
 
 Goalrail's current product and architecture truth must remain intact:
 
+- ADR-0024 is the accepted architecture truth for the provider-neutral VCS
+  connection boundary.
 - Goalrail is a productized operating layer for AI-assisted delivery, not a
   Git provider, AI IDE, CI system, or DevOps suite.
 - Goalrail `Organization` is an internal tenant/workspace. It is not a GitLab
@@ -513,7 +522,8 @@ Minimum security posture for the future ADR:
 ## Provider-neutral implications for Goalrail
 
 The GitLab findings point to a provider-neutral VCS boundary with these
-candidate concepts. These are ADR inputs, not final design:
+candidate concepts. These are advisory research inputs; ADR-0024 is the
+accepted boundary where it has already made a decision:
 
 - `VcsProvider`: provider kind plus provider instance, for example GitLab.com or
   a self-managed GitLab base URL.
@@ -528,17 +538,17 @@ candidate concepts. These are ADR inputs, not final design:
 - `ProviderMetadataSnapshot`: bounded metadata evidence with source instance,
   fetched time, and adapter version.
 
-The provider-neutral ADR should define the boundary before any GitLab-specific
+ADR-0024 now defines the provider-neutral boundary before any GitLab-specific
 code because GitLab exposes a broad `read_api` surface and because self-managed
 GitLab makes instance identity first-class.
 
-## Open questions for the future ADR
+## Open questions for future provider slices
 
 1. Is `read_user read_api` acceptable for metadata discovery given that
    `read_api` also enables repository file reads through the Repository Files
    API?
 2. Should Goalrail support only GitLab.com first, or require self-managed GitLab
-   support in the first provider-neutral boundary even if implementation starts
+   support in the first provider slice even if implementation starts
    with GitLab.com smoke tests?
 3. Which OAuth application ownership modes are allowed first: user-owned,
    group-owned, customer-provided instance-wide, or all of them?
@@ -565,23 +575,26 @@ GitLab makes instance identity first-class.
 
 Do not implement GitLab integration next.
 
-The next phase should be a provider-neutral VCS connection boundary ADR that:
+ADR-0024 is now the accepted provider-neutral VCS connection boundary. Any next
+phase should conform to ADR-0024 and stay limited to a bounded GitLab metadata
+adapter plan only if that slice is explicitly authorized. That later plan must:
 
-- keeps Goalrail `Organization`, Goalrail `Project`, `RepoBinding`,
+- keep Goalrail `Organization`, Goalrail `Project`, `RepoBinding`,
   `VcsConnection`, and checkout authority separate
-- explicitly models provider instance identity for GitLab.com and self-managed
+- explicitly model provider instance identity for GitLab.com and self-managed
   GitLab
-- defines a metadata-only connection scope and API allowlist
-- documents the residual risk that GitLab OAuth scopes do not appear to provide
+- define a metadata-only connection scope and API allowlist
+- document the residual risk that GitLab OAuth scopes do not appear to provide
   repository-metadata-only access isolated from repository file reads
-- defines connection state, reconnect, revocation, refresh, pagination,
+- define connection state, reconnect, revocation, refresh, pagination,
   rate-limit, and error semantics
-- defines security requirements before any token persistence
-- keeps checkout credentials and runner instructions out of `VcsConnection`
-- leaves GitLab client implementation for a later bounded metadata adapter plan
+- define security requirements before any token persistence
+- keep checkout credentials and runner instructions out of `VcsConnection`
+- leave GitLab client implementation for a later bounded metadata adapter plan
 
-After that ADR, a GitLab metadata adapter plan can define the exact endpoints,
-fields, tests, mocks, and fixture strategy for repository candidate discovery.
+A GitLab metadata adapter plan can define the exact endpoints, fields, tests,
+mocks, and fixture strategy for repository candidate discovery only after it
+adopts ADR-0024's boundary and non-goals.
 
 ## Sources
 
