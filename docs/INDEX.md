@@ -14,12 +14,8 @@ supersedes: []
 superseded_by: null
 related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
-  - docs/product/GOALRAIL_REPOSITORY_CONNECTION_UX.md
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
-  - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
-  - docs/adr/ADR-0025-provider-credential-storage-boundary.md
   - docs/ops/STATUS.md
-  - docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -66,74 +62,69 @@ related_docs:
 23. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
 24. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
 25. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-26. `docs/product/GOALRAIL_REPOSITORY_CONNECTION_UX.md`
-27. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-28. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+26. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+27. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-29. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-30. `docs/PROJECT_SPINE_SCHEMA.md`
-31. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-32. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-33. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-34. `docs/adr/ADR-0003-go-cli-layout.md`
-35. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
-36. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
-37. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
-38. `docs/adr/ADR-0007-clarification-request-boundary.md`
-39. `docs/adr/ADR-0008-runner-checkout-boundary.md`
-40. `docs/adr/ADR-0009-clarification-answer-boundary.md`
-41. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
-42. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
-43. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
-44. `docs/adr/ADR-0013-contract-seed-boundary.md`
-45. `docs/adr/ADR-0014-contract-draft-boundary.md`
-46. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
-47. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
-48. `docs/adr/ADR-0017-contract-approval-boundary.md`
-49. `docs/adr/ADR-0018-workitem-planning-boundary.md`
-50. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
-51. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
-52. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
-53. `docs/adr/ADR-0022-installation-boundary.md`
-54. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
-55. `docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md`
-56. `docs/adr/ADR-0025-provider-credential-storage-boundary.md`
+28. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+29. `docs/PROJECT_SPINE_SCHEMA.md`
+30. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+31. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+32. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+33. `docs/adr/ADR-0003-go-cli-layout.md`
+34. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
+35. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+36. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
+37. `docs/adr/ADR-0007-clarification-request-boundary.md`
+38. `docs/adr/ADR-0008-runner-checkout-boundary.md`
+39. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+40. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
+41. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
+42. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
+43. `docs/adr/ADR-0013-contract-seed-boundary.md`
+44. `docs/adr/ADR-0014-contract-draft-boundary.md`
+45. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
+46. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
+47. `docs/adr/ADR-0017-contract-approval-boundary.md`
+48. `docs/adr/ADR-0018-workitem-planning-boundary.md`
+49. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
+50. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
+51. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
+52. `docs/adr/ADR-0022-installation-boundary.md`
+53. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
 
 ### 7. Governance and change control
-57. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-58. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-59. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-60. `docs/product/GOALRAIL_RULE_STACK.md`
+54. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+55. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+56. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+57. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-61. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-62. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-63. `docs/ops/STATUS.md`
-64. `docs/ops/NEXT.md`
-65. `docs/ops/DECISIONS.md`
-66. `docs/ops/COMPONENTS.yaml`
-67. `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`
-68. `docs/ops/BRANCH_PROTECTION.md`
-69. `docs/ops/REPO_STRUCTURE.md`
-70. `docs/ops/GO_CODE_GUIDE.md`
-71. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-72. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-73. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-74. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+58. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+59. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+60. `docs/ops/STATUS.md`
+61. `docs/ops/NEXT.md`
+62. `docs/ops/DECISIONS.md`
+63. `docs/ops/COMPONENTS.yaml`
+64. `docs/ops/BRANCH_PROTECTION.md`
+65. `docs/ops/REPO_STRUCTURE.md`
+66. `docs/ops/GO_CODE_GUIDE.md`
+67. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+68. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+69. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+70. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-75. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-76. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-77. `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md`
-78. `docs/reference/design/reference_screens/`
-79. `.goalrail/work/`
-80. `.goalrail/knowledge/`
-81. `.punk/publishing.toml`
-82. `.goalrail/flows/`
-83. `.goalrail/evals/`
-84. `docs/ops/PUBLISHING_MIGRATION.md`
-85. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+71. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+72. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+73. `docs/reference/design/reference_screens/`
+74. `.goalrail/work/`
+75. `.goalrail/knowledge/`
+76. `.punk/publishing.toml`
+77. `.goalrail/flows/`
+78. `.goalrail/evals/`
+79. `docs/ops/PUBLISHING_MIGRATION.md`
+80. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -172,7 +163,6 @@ related_docs:
 - `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — current public RU pilot landing canon and copy/governance reference for the business-first landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
 - `GOALRAIL_LANDING_COPY.md` — historical / superseded technical prompt-handoff landing draft; not current public landing canon and not the source of truth for `apps/web/pilot-intake-ru`
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
-- `GOALRAIL_REPOSITORY_CONNECTION_UX.md` — console Settings -> Integrations -> Repositories UX boundary for provider-backed repository connection, GitLab-first picker language, RepoBinding state, warning copy, and anti-fake-state rules
 - `GOALRAIL_COMPETITOR_MAP.md` — reference market map
 - `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture
 
@@ -206,14 +196,6 @@ related_docs:
 - `ADR-0023` — user bootstrap, auth, and CLI login boundary; self-hosted
   bootstrapped owner, admin-created users, token direction, and browser
   loopback `goalrail login`
-- `ADR-0024` — provider-neutral VCS connection boundary; future
-  `VcsConnection`, repository metadata, RepoBinding separation, provider
-  namespace anti-corruption, and GitLab-first-without-GitLab-shaped-core rules
-- `ADR-0025` — provider credential and token storage boundary; future
-  provider OAuth grants, access tokens, refresh tokens, encryption, redaction,
-  refresh, revocation, deletion, audit, GitLab `read_api` risk, provider
-  instance identity, and credentialless `pending_setup` rules before
-  VCS/OAuth/provider implementation
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
@@ -228,10 +210,6 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
-- `VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` — provider-neutral backend VCS /
-  repository connection implementation order and blockers before schema, OAuth,
-  token storage, provider clients, metadata APIs, checkout, runner, gate, or
-  proof work
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
@@ -243,7 +221,6 @@ related_docs:
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
-- `docs/research/GOALRAIL_GITLAB_VCS_CONNECTION_RESEARCH.md` — advisory official-docs research behind ADR-0024 and future GitLab metadata adapter planning; not implementation authorization
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion

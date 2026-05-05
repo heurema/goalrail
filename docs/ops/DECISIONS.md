@@ -382,13 +382,14 @@ Decision:
   `RepoBinding`
 - `RepoBinding` stores repository reference directly
 - `RepositoryRecord` and `RepositoryEnrollment` are deferred
-- `VcsConnection` remains a future provider layer
-- manual `RepoBinding` is enough before GitHub integration
+- manual or CLI-initialized `RepoBinding` is enough for the repository-context
+  foundation
+- provider UI integrations are not active MVP scope
 
 Rationale:
 - reduces entity count for the first server MVP
 - avoids building a repository catalog before the product contour needs it
-- keeps GitHub/GitLab/Bitbucket integration optional later
+- keeps repository context independent from provider integration
 
 ## D-0034 — Server persistence uses pgx, Squirrel, and goose
 Date: 2026-04-26
@@ -2108,7 +2109,7 @@ Decision:
   selection UX, Project full CRUD, provider APIs, GitHub App, deploy keys,
   clone, audit queue, runner checkout, work item linking, branch/PR flow,
   verification, gate, proof, token refresh, keychain, `RepositoryRecord`, or
-  `VcsConnection`.
+  provider connection object.
 
 Rationale:
 - Normal users should not need to paste a raw Project UUID to initialize a
@@ -2188,122 +2189,68 @@ Rationale:
 - Keeping snapshot history server-owned preserves `.goalrail/project.yml` as a
   local marker/cache rather than a competing source of truth.
 
-## D-0083 — Provider-neutral VCS connection boundary precedes GitLab implementation
+## D-0083 — Provider-neutral VCS connection boundary direction superseded
+Date: 2026-05-05
+Status: superseded by D-0086
+
+Decision:
+- Superseded by D-0086.
+- The former provider-neutral VCS connection direction is removed from active
+  MVP scope.
+- RepoBinding remains canonical repository context and not permission to clone.
+
+Rationale:
+- Product direction changed toward runner-owned repository credentials and
+  API-issued checkout instructions.
+
+## D-0084 — Backend VCS credential-boundary sequencing superseded
+Date: 2026-05-05
+Status: superseded by D-0086
+
+Decision:
+- Superseded by D-0086.
+- The backend VCS/provider implementation sequence is no longer active MVP
+  guidance.
+- Provider UI, OAuth, token storage, provider clients, and live metadata
+  listing require fresh research and a new ADR if reconsidered later.
+
+Rationale:
+- The active repository-access direction is runner-owned credentials, not
+  provider-mediated repository connection.
+
+## D-0085 — Provider credential storage boundary superseded
+Date: 2026-05-05
+Status: superseded by D-0086
+
+Decision:
+- Superseded by D-0086.
+- The MVP does not store repository provider credentials in the API server.
+- Runner-owned local credentials are the intended MVP checkout access direction.
+
+Rationale:
+- The active MVP avoids server-side repository secret storage instead of
+  defining provider-token custody for the API server.
+
+## D-0086 — MVP repository access resets to runner-owned credentials
 Date: 2026-05-05
 Status: accepted
 
 Decision:
-- Accept `VcsConnection` as a future provider-neutral VCS connection /
-  account authorization / metadata-discovery boundary.
-- Do not implement `VcsConnection` in backend schema, API, provider clients,
-  CLI, or web UI in this phase.
-- GitLab/provider backend implementation is blocked until the provider-neutral
-  boundary in ADR-0024 is accepted and must conform to it afterward.
-- `VcsConnection` is not a checkout credential, raw provider token, repository
-  catalog, or permission to clone.
-- `RepoBinding` remains the current metadata-only Project-to-repository
-  reference and does not grant clone/read/write access.
-- `RepositoryRecord` remains deferred until repository catalog, provider sync,
-  multi-project repository reuse, repository lifecycle, or repo-level policy is
-  necessary.
-- Goalrail `Organization` remains distinct from GitLab Group, GitHub
-  Organization, Bitbucket Workspace, provider account, namespace, repository
-  owner, or installation concepts.
-- Provider-specific concepts and identifiers stay in provider adapters or
-  adapter-owned metadata. GitLab may be the first provider candidate, but
-  GitLab Group and GitLab Project must not become Goalrail Organization or
-  Goalrail Project.
-- This decision does not add GitLab OAuth, provider clients, provider token
-  storage, checkout credentials, repository clone, repository catalog,
-  provider sync jobs, runner jobs, gate, proof, or generic queue behavior.
+- VcsConnection/provider UI integration is removed from active MVP docs.
+- MVP repository access uses `RepoBinding` as canonical repo context.
+- The API server stores no repository secrets in the MVP.
+- Runner-owned local credentials are the intended MVP checkout access
+  direction.
+- API-issued `CheckoutInstruction` will provide `repo_binding_id`,
+  `repository_url`, `ref`, and `path_scope` to the runner.
+- Runner startup config provides Goalrail connection and local credential file
+  paths only; it must not hard-code git URL, repo binding id, or checkout mode.
+- Provider UI integrations require fresh research and a new ADR if
+  reconsidered later.
 
 Rationale:
-- A provider-neutral boundary prevents the first provider candidate from
-  shaping the Goalrail core domain model.
-- Metadata discovery, repository binding, provider credentials, checkout
-  eligibility, and runner checkout need separate trust boundaries.
-- Customer-hosted runner compatibility must remain possible even when Goalrail
-  cloud has no provider-side VCS connection or clone credential.
-
-## D-0084 — Backend VCS implementation starts with credential boundary sequencing
-Date: 2026-05-05
-Status: accepted
-
-Decision:
-- Accept `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` as the current
-  operational backend implementation order for provider-neutral VCS /
-  repository connection work after ADR-0024, GitLab research, and repository
-  connection UX.
-- The next safest backend task is a docs-only provider credential / token
-  storage boundary ADR before any VcsConnection schema/API, GitLab OAuth,
-  provider token storage, provider clients, or live repository metadata listing.
-- Later backend order is: provider-neutral `VcsConnection` skeleton without
-  credentials; provider-neutral repository metadata contract without a provider
-  client; GitLab metadata adapter mapping with fake/test fixtures only; GitLab
-  OAuth/token implementation only after the credential boundary is accepted.
-- Checkout, runner, gate, proof, branch, commit, merge request, pull request,
-  repository write behavior, and generic queue behavior remain separate later
-  tracks.
-- This decision does not add schema, migrations, API routes, OAuth, token
-  storage, provider clients, live provider calls, repository listing/search,
-  frontend behavior, checkout, runner, gate, or proof.
-
-Rationale:
-- Provider credentials are the highest-risk unresolved boundary, especially
-  encryption, redaction, refresh, revocation, audit, retention, and GitLab
-  `read_api` scope breadth.
-- A schema-first or OAuth-first implementation would harden security choices
-  before Goalrail has accepted the credential boundary.
-- The sequence preserves ADR-0024 provider neutrality, keeps GitLab as a first
-  provider candidate rather than core terminology, and protects
-  customer-hosted runner compatibility.
-
-## D-0085 — Provider credentials are secrets outside VcsConnection
-Date: 2026-05-05
-Status: accepted
-
-Decision:
-- Accept ADR-0025 as the provider credential / token storage boundary before
-  VCS provider implementation.
-- Provider OAuth grants, access tokens, refresh tokens, provider app/client
-  credentials, installation tokens, deploy keys, checkout credentials, and
-  customer-owned runtime credentials are secrets, not `VcsConnection`,
-  `RepoBinding`, `RepositoryRecord`, checkout eligibility, or proof evidence.
-- Future provider-mediated metadata discovery may store provider credentials
-  only in server-side encrypted storage for the running Goalrail Installation
-  after a later implementation defines encryption, key ownership, redaction,
-  refresh concurrency, revocation, deletion, retention, and audit behavior.
-- Self-hosted deployments own keying and custody for stored provider
-  credentials; future SaaS may use service-owned keying; customer-hosted
-  runners may keep repository credentials outside the Goalrail server.
-- Provider credentials must not be stored in browser storage, frontend bundles,
-  repo files, `.goalrail/project.yml`, docs, generated fixtures, logs,
-  unredacted traces, screenshots, PR bodies, or Git history beyond explicitly
-  accepted encrypted server-side operational storage.
-- GitLab `read_api` is broader than metadata-only behavior; any future GitLab
-  metadata adapter must use a strict endpoint allowlist, must not call
-  Repository Files API, and must not request `read_repository`,
-  `write_repository`, or `api` for the first metadata-only provider
-  connection unless a later ADR changes that.
-- GitLab.com and self-managed GitLab instance identity are first-class provider
-  metadata concerns and must not be hard-coded to GitLab.com only.
-- Future code may create credentialless `pending_setup` `VcsConnection` records
-  only as non-secret, inactive, expirable setup state that cannot list provider
-  metadata, authorize checkout, or imply a connected provider.
-- D2 provider-neutral `VcsConnection` skeleton may start after this ADR only as
-  credentialless, non-live setup state. GitLab OAuth/token storage remains
-  blocked until D2, D3, D4, and concrete encryption/key/token-storage decisions
-  exist.
-- This decision does not add schema, migrations, API routes, OAuth, token
-  storage, encryption, provider clients, live provider calls, repository
-  metadata listing/search, frontend behavior, checkout, runner, gate, proof,
-  or repository write behavior.
-
-Rationale:
-- Provider credentials are the highest-risk VCS boundary and need ownership,
-  storage, redaction, refresh, revocation, and audit rules before code hardens
-  accidental security choices.
-- Keeping credentials outside `VcsConnection` preserves ADR-0024 provider
-  neutrality and ADR-0008 checkout separation.
-- Allowing a credentialless `pending_setup` skeleton gives the next backend
-  slice a bounded path without crossing into OAuth or token handling.
+- This keeps repository identity, checkout authority, and credential custody in
+  separate boundaries.
+- It preserves RepoBinding and repository-context init truth without adding
+  provider OAuth, token storage, provider clients, runner checkout, gate, or
+  proof behavior.

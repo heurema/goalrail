@@ -18,7 +18,6 @@ related_docs:
   - docs/adr/ADR-0001-runtime-neutral-cli-first.md
   - docs/adr/ADR-0002-single-writer-and-advisory-panels.md
   - docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md
-  - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
 ---
 # Project Spine Schema Note
 
@@ -73,17 +72,18 @@ For the MVP, `RepoBinding` stores the repository reference directly. A separate
 `RepositoryRecord` is deferred until Goalrail needs repository catalog,
 multi-project repository reuse, repo-level policy, or independent provider sync.
 
-`VcsConnection` is accepted as a future provider-neutral connection / account
-authorization / metadata-discovery boundary, not a checkout credential and not
-a raw provider token. It is not part of the current MVP schema/API
-implementation. A future `RepoBinding` may reference a `VcsConnection` for
-metadata discovery or refresh, but `RepoBinding` still does not grant
-clone/read/write access.
+The repository-access MVP direction keeps `RepoBinding` as canonical repository
+context and keeps checkout authority separate. API-issued checkout instructions
+are expected to derive from WorkItem and RepoBinding context, while runner-owned
+local credentials provide repository access. The API server stores no repository
+secrets in the MVP.
 
 Provider-specific account, namespace, group, workspace, project, repository
 owner, installation, token, and permission details stay in provider adapters or
 adapter-owned metadata. Goalrail `Organization` and `Project` remain distinct
 from GitHub, GitLab, Bitbucket, self-managed Git, or custom provider concepts.
+Provider UI integrations are not active MVP scope and require fresh research
+plus a new ADR if reconsidered later.
 
 ### Spine objects
 
@@ -246,8 +246,8 @@ Rules:
 6. `Project` is not a repository
 7. `RepoBinding` identifies the repository a Project works with, but does not
    grant checkout permission
-8. `VcsConnection` is a provider connection / metadata-discovery boundary, not
-   a checkout credential
+8. API-issued checkout instructions and runner-owned local credentials are the
+   MVP direction for repository checkout access
 9. `RepositoryRecord` remains deferred until catalog, sync, reuse, lifecycle,
    or repo-level policy pressure exists
 

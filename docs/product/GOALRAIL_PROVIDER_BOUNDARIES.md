@@ -112,26 +112,28 @@ The system should be designed so that major slices can be replaced or removed wi
 - no provider assumptions inside shared contract model
 - server-side domain truth independent of one IDE or one model vendor
 
-### VCS provider adapter isolation
+### Repository access MVP boundary
 
-VCS provider connections must follow the provider-neutral boundary in
-`docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md`.
+Goalrail core uses `RepoBinding` as repository context in the MVP. RepoBinding
+identifies which repository a Goalrail Project works with, but it is not a
+credential, permission to clone, or provider connection.
 
-Goalrail core may use provider-neutral concepts such as `VcsConnection`,
-`provider_kind`, `provider_account_ref`, `provider_namespace_ref`,
-`repository_external_id`, `repository_full_name`, `repository_url`,
-`default_branch`, `connection_state`, `metadata_state`, and `binding_state`.
+MVP checkout access should be runner-owned: the API server issues bounded
+checkout instructions from WorkItem / RepoBinding context, and the runner uses
+local credentials or a mounted workspace. The API server must not store
+repository secrets in the MVP.
 
-Provider-specific concepts stay in adapters or adapter-owned metadata:
+Provider UI integrations, live provider metadata listing/search, GitHub App,
+GitLab OAuth, and Bitbucket OAuth are not active MVP scope. If reconsidered
+later, provider integrations require fresh research and a new ADR with current
+requirements.
+
+Provider-specific concepts must not become Goalrail core terminology:
 - GitLab Group must not become Goalrail `Organization`
 - GitLab Project must not become Goalrail `Project`
 - GitHub Organization must not become Goalrail `Organization`
 - Bitbucket Workspace must not become Goalrail `Organization`
-- provider tokens must not become `VcsConnection`
 - provider repository access must not become `RepoBinding`
-
-GitLab can be the first provider candidate, but it must be treated as an
-adapter example rather than a source of Goalrail core terminology.
 
 ## 8. Experimental posture
 

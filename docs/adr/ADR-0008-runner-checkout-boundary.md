@@ -53,7 +53,7 @@ Goalrail supports two runner modes:
 1. `goalrail_hosted_runner`
    - runner infrastructure operated by Goalrail
    - suitable for early managed pilots and low/safe repository policies
-   - may use provider-issued short-lived clone credentials
+   - repository credential handling remains outside the API server MVP
 
 2. `customer_hosted_runner`
    - runner deployed in the customer's infrastructure
@@ -85,17 +85,17 @@ to see repository contents.
 8. Persistent full-repository mirrors are out of scope for the MVP unless a later
    ADR explicitly authorizes them.
 9. Repository write access is out of scope for the first runner boundary.
-10. Provider-specific credential handling must stay behind provider and runner
-    adapters, not inside the kernel.
+10. Repository credentials are runner-owned/local in the MVP; the API server
+    must not store repository secrets.
 11. VCS provider discovery, repository binding, and checkout permission are
     separate concerns.
-12. `VcsConnection` is not a checkout credential.
+12. Provider UI integrations are not active MVP scope.
 13. `RepositoryRecord` is not repository access.
 14. `RepoBinding` identifies which repository a Project works with; it does not
     itself authorize checkout.
 
-Shorthand: `VcsConnection != CheckoutCredential`, `RepositoryRecord !=
-RepoAccess`, and `RepoBinding != permission to clone`.
+Shorthand: `RepositoryRecord != RepoAccess`, and `RepoBinding != permission to
+clone`.
 
 ## Repository source modes
 
@@ -105,9 +105,9 @@ slice.
 
 ### `provider_discovered`
 
-The repository was found through a VCS adapter such as GitHub, GitLab, Bitbucket,
-or a custom Git provider. For example, a GitHub App installation may sync
-selected repository metadata into Goalrail.
+Deferred. Provider-mediated repository discovery is not active MVP scope. If it
+is reconsidered later, it requires fresh research and a new ADR with current
+requirements before any provider client, OAuth, or live metadata listing work.
 
 ### `manual_declared`
 
@@ -124,18 +124,19 @@ references, not unrestricted repository contents.
 ## Checkout access modes
 
 Checkout authority is determined by runner mode, policy, access mode, and the
-checkout instruction for a bounded run. `VcsConnection`, `RepositoryRecord`, and
-`RepoBinding` may support discovery, catalog, and project mapping, but they do
-not by themselves grant clone permission.
+checkout instruction for a bounded run. `RepositoryRecord` and `RepoBinding` may
+support catalog and project mapping, but they do not by themselves grant clone
+permission.
 
 Future implementation may model checkout access using conceptual modes:
 
-### `provider_token_checkout`
+### `runner_local_credential_checkout` access mode
 
-A runner receives a short-lived provider credential. For example, a
-Goalrail-hosted GitHub flow may use a GitHub App installation token scoped to the
-selected repository and permissions. This is valid only when organization policy
-allows Goalrail-hosted checkout.
+A runner uses locally configured credentials to clone or fetch the repository.
+The API-issued checkout instruction identifies the repository/ref/path scope for
+the bounded job; the runner's startup config provides only Goalrail connection
+details and local credential file paths. This is the matching conceptual
+`RepoBinding.access_mode` value for runner-owned local credential checkout.
 
 ### `customer_runner_checkout`
 
@@ -229,21 +230,18 @@ unbounded repository access.
 
 ## Credential posture
 
-For Goalrail-hosted GitHub access, the preferred future path is GitHub App
-installation credentials with short-lived installation tokens scoped to the
-selected repository and permissions.
-
-For customer-hosted runners, repository access may be entirely customer-owned:
+For the MVP direction, repository access is runner-owned and local:
 
 - local Git credentials
 - CI-provided credentials
 - mounted checkout
 - self-managed Git server credentials
-- provider tokens stored in customer infrastructure
+- Git HTTPS token files
+- SSH key and known_hosts files
 
-Goalrail should avoid storing long-lived repository credentials whenever a
-short-lived token, customer-hosted credential, or delegated checkout can satisfy
-the job.
+Goalrail API stores no repository secrets in the MVP. Runner startup config
+should not hard-code a git URL, repo binding id, or checkout mode; those arrive
+from API-issued checkout instructions for bounded jobs.
 
 ## Artifact minimization
 
@@ -281,47 +279,50 @@ are not required for the next code slice.
 
 ## First runner prototype sequencing
 
-The first runnable runner prototype should start with `goalrail_hosted_runner`.
-This means a Goalrail-operated hosted runner pool, not a broad hosted execution
-platform.
+The first runnable checkout prototype should use a universal runner as a
+separate binary/process. Runner startup config should include only Goalrail
+connection and local credential file paths, for example:
 
-Workers in the hosted runner pool should use a pull-based or poll-based lease
-protocol with the API server. The API server should not push jobs into inbound
-runner servers, and hosted runners should not require inbound callbacks from the
-API server.
+- server URL
+- runner token file
+- Git HTTPS token file
+- SSH key file
+- known_hosts file
 
-Customer-hosted runners remain first-class in the architecture model, but are
-deferred from the first implementation slice. Customer-hosted runner
-registration, installer, auth handshake, attestation, and customer-owned
-credential flow are later slices.
+The API server should issue a bounded `CheckoutJob` / `CheckoutInstruction`
+derived from WorkItem and RepoBinding context. The runner receives checkout
+metadata such as `repository_url`, `repo_binding_id`, `ref`, `path_scope`, and
+an optional auth hint from the API, then uses local credentials to clone/fetch
+or use a mounted workspace.
 
-The first hosted runner prototype should be read-only and intentionally narrow:
+The first checkout prototype should be read-only and intentionally narrow:
 
 - perform ephemeral checkout only
-- return a checkout receipt only
+- support Git HTTPS token file, SSH key file, and mounted workspace modes
+- return a checkout receipt / bounded metadata snapshot only
 - not run arbitrary customer commands
 - not create branches, commits, or pull requests
 - not create Proof
 - not write Gate decisions
 - not implement persistent mirrors
-- not implement customer-hosted runner registration, installer, or auth
+- not implement provider OAuth, provider token storage, or provider clients
 
-Conceptual first hosted runner flow:
+Conceptual first runner checkout flow:
 
 1. API server creates a bounded `CheckoutJob`.
-2. `CheckoutJob` references a `Run` and `RepoBinding`.
-3. Hosted runner worker starts as part of the hosted runner pool.
-4. Hosted runner worker identifies itself with runner id, token, and config.
-5. Hosted runner worker polls the API server for a job.
+2. `CheckoutJob` references a WorkItem / future Run context and `RepoBinding`.
+3. Runner starts with Goalrail connection and local credential file paths.
+4. Runner identifies itself with runner id and token.
+5. Runner polls the API server for a job.
 6. API server leases one bounded `CheckoutJob` to the runner.
-7. API / provider layer provides checkout instruction.
-8. A future GitHub path may use a short-lived GitHub App installation token.
-9. Runner performs read-only ephemeral clone of the selected repository and ref.
-10. Runner resolves `commit_sha`.
-11. Runner may confirm path scope exists.
-12. Runner records checkout metadata and submits a checkout receipt.
-13. Runner cleans workspace.
-14. Gate may later consume the receipt as evidence, but runner does not write the
+7. API provides checkout instruction with repository URL, repo binding, ref,
+   path scope, and optional auth hint.
+8. Runner uses local credentials or mounted workspace to prepare the workspace.
+9. Runner resolves `commit_sha`.
+10. Runner may confirm path scope exists.
+11. Runner records checkout metadata and submits a checkout receipt.
+12. Runner cleans workspace when applicable.
+13. Gate may later consume the receipt as evidence, but runner does not write the
     final decision.
 
 This section is conceptual for this ADR. It is not implemented in this PR and is
@@ -382,7 +383,7 @@ Rejected. Runners produce receipts and artifacts. Gate writes the final decision
 This ADR does not implement or define final details for:
 
 - GitHub, GitLab, Bitbucket, or custom Git connector implementation
-- organization/user/VCS connection schema
+- provider connection schema
 - `RepositoryRecord.source_kind`
 - `RepoBinding.access_mode`
 - durable storage
@@ -401,39 +402,37 @@ This ADR does not implement or define final details for:
 
 ## Implementation implications
 
-The next bounded work should document Organization, User, Membership,
-`VcsConnection`, `RepositoryRecord`, `RepositoryRecord.source_kind`,
-`RepoBinding`, and `RepoBinding.access_mode` boundaries before building real
-GitHub integration. GitHub can be the first implementation target without making
-GitHub App concepts part of the core domain model. GitLab, Bitbucket,
-self-managed Git, and custom Git should remain representable later.
+The next bounded docs work should define the runner-owned repository checkout
+credential boundary: runner startup flags, API-issued checkout instruction,
+checkout receipt, and supported credential modes.
 
 A later runner prototype should be its own slice and should start with the
 smallest safe behavior:
 
-- first implementation target is `goalrail_hosted_runner`
-- hosted runner workers use pull-based / poll-based job leasing
-- server creates a bounded checkout request
-- hosted runner performs an ephemeral read-only checkout
+- runner starts as a separate binary/process
+- runner workers use pull-based / poll-based job leasing
+- server creates a bounded checkout instruction from WorkItem / RepoBinding
+- runner performs an ephemeral read-only checkout or uses a mounted workspace
 - runner returns a deterministic checkout receipt with minimum evidence fields
 - no repository writes
 - no arbitrary customer command execution
-- no customer-hosted runner installer, registration, or auth in the first slice
+- no provider OAuth, token storage, provider client, or live metadata listing
 - no gate decision
 - no proof generation
 - no persistent mirror
 
 ## Open questions
 
-1. What is the minimum hosted runner leasing handshake?
-2. What is the minimum customer-hosted runner authentication handshake for a later
-   slice?
-3. Should runner assignment be stored as a canonical object before durable
+1. What is the minimum runner leasing handshake?
+2. What exact fields belong in CheckoutInstruction and CheckoutReceipt v0?
+3. How should HTTPS token file, SSH key file, and mounted workspace modes be
+   represented without storing repository secrets in the API server?
+4. Should runner assignment be stored as a canonical object before durable
    storage exists?
-4. Which artifact shape should represent a checkout receipt?
-5. How should customer-hosted runners upload artifacts without exposing full
+5. Which artifact shape should represent a checkout receipt?
+6. How should customer-hosted runners upload artifacts without exposing full
    repository contents?
-6. Should runner policy live with organization policy, project policy, or
+7. Should runner policy live with organization policy, project policy, or
    RepoBinding policy first?
-7. Should manually declared repositories require a separate approval object later,
+8. Should manually declared repositories require a separate approval object later,
    or can `RepoBinding.access_mode` and policy cover v0?

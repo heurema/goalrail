@@ -133,7 +133,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-four kernel/CLI/server/domain boundary ADRs
+- twenty-three kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -251,31 +251,17 @@ The project currently has:
   current profile lookup, and logout. Organization / Project / RepoBinding
   profile selection remains unimplemented; the current `/cli/login` HTML page
   is a temporary CLI auth bridge only.
-- ADR-0024 documents the accepted provider-neutral VCS connection boundary:
-  future `VcsConnection` is a provider connection / account authorization /
-  metadata-discovery boundary, not a checkout credential, raw provider token,
-  repository catalog, or permission to clone. `RepoBinding` remains the current
-  Project-to-repository metadata reference, `RepositoryRecord` remains deferred,
-  provider-specific namespace/account/project concepts stay in adapters, and
-  GitLab may be a first provider candidate without becoming the source of core
-  Goalrail terminology. No `VcsConnection`, provider client, OAuth, checkout,
-  runner, gate, proof, provider sync, repository catalog, or queue
-  implementation exists from this docs boundary.
-- `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` documents the backend
-  VCS / repository connection implementation order after ADR-0024, the GitLab
-  research note, and repository connection UX. It recommends a docs-only
-  provider credential / token storage boundary before any schema, API, OAuth,
-  token persistence, provider client, repository metadata API, checkout,
-  runner, gate, or proof work; this is sequencing only, not implementation.
-- ADR-0025 documents the accepted provider credential / token storage boundary:
-  provider credentials are secrets outside `VcsConnection`; future
-  provider-mediated metadata discovery requires accepted encrypted server-side
-  storage, key ownership, redaction, refresh, revocation, deletion, retention,
-  and audit behavior before live token handling; GitLab `read_api` requires a
-  strict metadata adapter allowlist and no Repository Files API use. No provider
-  credential storage, token encryption, OAuth route, provider client, or
-  repository metadata listing exists. The next backend slice may be a
-  provider-neutral credentialless `pending_setup` `VcsConnection` skeleton only.
+- Repository access MVP is reset to runner-owned credentials plus RepoBinding
+  context. Existing RepoBinding / repository-context init remains real:
+  RepoBinding identifies which repository a Project works with, remains
+  metadata/context only, and does not grant checkout permission.
+- The intended next repository-access direction is API-issued checkout
+  instructions derived from WorkItem / RepoBinding context and runner-owned
+  local credentials, with no repository secrets stored by the API server in the
+  MVP.
+- No checkout job, checkout instruction, checkout receipt, runner clone/fetch,
+  mounted-workspace checkout flow, provider credential storage, VcsConnection,
+  OAuth, provider client, gate, or proof exists yet.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics
@@ -297,7 +283,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-four boundary ADRs exist
+- kernel schema note and twenty-three boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -402,7 +388,7 @@ The project currently has:
   broker, or runtime registry yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no broad RepoBinding state sync beyond repository-context and explicit metadata-only init
-- no production organization/user/VCS connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation and metadata-only RepoBinding init yet
+- no production organization/user/provider connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation and metadata-only RepoBinding init yet
 - no Installation bootstrap API, setup flow, or public management surface beyond
   the schema foundation and local `goalrail-server bootstrap owner` command yet
 - no refresh-token rotation, public registration, SaaS onboarding, organization
@@ -410,8 +396,8 @@ The project currently has:
   Organization / Project / RepoBinding CLI profile selection, or data-backed
   Goalrail web product loop yet; the current server-rendered `/cli/login` page
   is only a temporary CLI auth bridge for `goalrail login <server_url>`
-- no `VcsConnection` implementation yet; ADR-0024 is a docs-only accepted
-  provider-neutral boundary, not backend schema/API/provider-client behavior
+- no VcsConnection, provider UI integration, OAuth, provider client, or provider
+  credential storage implementation yet
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
 - no `RepoBinding.access_mode` implementation beyond `metadata_only` init
@@ -462,8 +448,10 @@ Current packaging target:
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
 - next sales-pack and runner-boundary slices remain explicit and bounded; the
-  provider-neutral VCS boundary is documented while GitLab/provider
-  implementation remains unimplemented
+  next repository-access docs slice is runner-owned checkout credential
+  boundary, while checkout jobs, checkout instructions, checkout receipts,
+  provider integrations, runner implementation, gate, and proof remain
+  unimplemented
 
 ## Main current risks
 

@@ -45,11 +45,11 @@ For the MVP, `RepoBinding` stores the repository reference directly. A separate
 catalog, multi-project repository reuse, repo-level policy, or independent
 provider sync.
 
-`VcsConnection` remains a future provider connection layer for GitHub App
-installations, GitLab OAuth/token flows, Bitbucket OAuth/token flows, and
-self-managed/custom Git support. It is not required for the first code slice.
-Manual `RepoBinding` is enough before GitHub integration. Customer-hosted runner
-paths must remain possible without Goalrail cloud having VCS provider access.
+Provider UI integrations such as GitHub App, GitLab OAuth, and Bitbucket OAuth
+are not active MVP scope. Manual or CLI-initialized `RepoBinding` is enough for
+the repository-context foundation. Runner-owned local credentials must remain
+possible without Goalrail cloud having VCS provider access or storing repository
+secrets.
 
 Server persistence uses:
 
@@ -108,7 +108,6 @@ Conceptual fields:
 - `id`
 - `organization_id`
 - `project_id`
-- optional `vcs_connection_id`
 - `provider`
 - optional `repository_external_id`
 - `repository_full_name`
@@ -125,7 +124,7 @@ policy, access mode, and bounded checkout instructions.
 
 Future-compatible `access_mode` values:
 
-- `provider_token_checkout`
+- `runner_local_credential_checkout`
 - `customer_runner_checkout`
 - `customer_mounted_workspace`
 - `metadata_only`
@@ -243,7 +242,9 @@ raw SQL because they are schema DDL.
 ### GitHub App integration before project/repo binding foundation
 
 Rejected. Goalrail needs the Project and RepoBinding contour before provider
-integration. Manual/dev-seeded RepoBinding is enough for the next slice.
+integration. Manual/dev-seeded RepoBinding is enough for the next slice. Current
+MVP direction also keeps provider UI integrations out of active scope unless
+fresh research and a new ADR accept them later.
 
 ## Non-goals
 
@@ -255,7 +256,7 @@ This ADR does not define or implement:
 - UI
 - full CRUD API
 - GitHub/GitLab/Bitbucket integration
-- `VcsConnection` implementation
+- provider connection implementation
 - runner implementation
 - checkout jobs
 - contract/gate/proof
