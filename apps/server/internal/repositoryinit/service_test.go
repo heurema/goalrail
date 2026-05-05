@@ -190,6 +190,43 @@ func TestInitRollsBackProjectAndEventWhenRepoBindingInitFails(t *testing.T) {
 	}
 }
 
+func TestInitResolvesConcurrentProjectSlugCreateRaceIdempotently(t *testing.T) {
+	store := newFakeStore()
+	project := projectFixture("018f0000-0000-7000-8000-000000000111", "github-acme-frontend", "acme/frontend")
+	binding := repoBindingFixture("018f0000-0000-7000-8000-000000000222", project.ID, "github", "acme/frontend")
+	store.projectAfterCreateError = &project
+	store.bindingAfterCreateError = &binding
+	store.createProjectErr = fakeUniqueConstraintError{constraint: "projects_org_slug_unique"}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.Init(context.Background(), validInput("acme/frontend"))
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	if result.ProjectCreated || result.RepoBindingCreated {
+		t.Fatalf("created flags = %v/%v, want false/false after concurrent existing context", result.ProjectCreated, result.RepoBindingCreated)
+	}
+	if result.ProjectID != project.ID || result.RepoBindingID != binding.ID {
+		t.Fatalf("ids = %q/%q, want existing %q/%q", result.ProjectID, result.RepoBindingID, project.ID, binding.ID)
+	}
+}
+
+func TestInitTranslatesConcurrentProjectSlugCreateRaceConflict(t *testing.T) {
+	store := newFakeStore()
+	project := projectFixture("018f0000-0000-7000-8000-000000000111", "github-acme-frontend", "acme/other")
+	binding := repoBindingFixture("018f0000-0000-7000-8000-000000000222", project.ID, "github", "acme/other")
+	store.projectAfterCreateError = &project
+	store.bindingAfterCreateError = &binding
+	store.createProjectErr = fakeUniqueConstraintError{constraint: "projects_org_slug_unique"}
+	service := newTestService(store, &fakeEventLog{})
+
+	_, err := service.Init(context.Background(), validInput("acme/frontend"))
+	if !errors.Is(err, ErrProjectSlugConflict) {
+		t.Fatalf("Init() error = %v, want ErrProjectSlugConflict", err)
+	}
+}
+
 func TestInitRejectsViewer(t *testing.T) {
 	service := newTestService(newFakeStore(), &fakeEventLog{})
 	input := validInput("acme/frontend")
@@ -346,12 +383,15 @@ func newFakeStore() *fakeStore {
 }
 
 type fakeStore struct {
-	projects          map[spine.ProjectID]spine.Project
-	projectsBySlug    map[string]spine.ProjectID
-	bindingsByProject map[spine.ProjectID]spine.RepoBinding
-	bindingsByRepo    map[string]spine.RepoBinding
-	createdProjects   []spine.Project
-	createdBindings   []spine.RepoBinding
+	projects                map[spine.ProjectID]spine.Project
+	projectsBySlug          map[string]spine.ProjectID
+	bindingsByProject       map[spine.ProjectID]spine.RepoBinding
+	bindingsByRepo          map[string]spine.RepoBinding
+	createdProjects         []spine.Project
+	createdBindings         []spine.RepoBinding
+	createProjectErr        error
+	projectAfterCreateError *spine.Project
+	bindingAfterCreateError *spine.RepoBinding
 }
 
 func (s *fakeStore) GetProject(_ context.Context, projectID spine.ProjectID) (spine.Project, bool, error) {
@@ -379,6 +419,15 @@ func (s *fakeStore) GetActiveRepoBindingByOrganizationAndRepository(_ context.Co
 }
 
 func (s *fakeStore) CreateProject(_ context.Context, project spine.Project) error {
+	if s.createProjectErr != nil {
+		if s.projectAfterCreateError != nil {
+			s.putProject(*s.projectAfterCreateError)
+		}
+		if s.bindingAfterCreateError != nil {
+			s.putBinding(*s.bindingAfterCreateError)
+		}
+		return s.createProjectErr
+	}
 	s.createdProjects = append(s.createdProjects, project)
 	s.putProject(project)
 	return nil
@@ -415,6 +464,18 @@ func repoKey(organizationID spine.OrganizationID, provider string, repositoryFul
 
 type fakeEventLog struct {
 	events []spine.Event
+}
+
+type fakeUniqueConstraintError struct {
+	constraint string
+}
+
+func (e fakeUniqueConstraintError) Error() string {
+	return "unique constraint violation"
+}
+
+func (e fakeUniqueConstraintError) ConstraintName() string {
+	return e.constraint
 }
 
 func (l *fakeEventLog) Append(_ context.Context, event spine.Event) error {
