@@ -61,25 +61,16 @@
   lookup, and logout over those existing endpoints. Organization / Project /
   RepoBinding profile selection remains unimplemented; the server-rendered CLI
   auth bridge remains separate.
-- ADR-0024 now defines the provider-neutral VCS connection boundary:
-  `VcsConnection` is accepted as a future provider connection / account
-  authorization / metadata-discovery boundary, not a checkout credential, raw
-  provider token, repository catalog, or permission to clone. The backend
-  implementation order for this boundary is now sequenced in
-  `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`.
-- ADR-0025 now defines the provider credential/token storage boundary:
-  provider credentials are secrets outside `VcsConnection`; future
-  provider-mediated metadata discovery needs accepted encrypted server-side
-  storage, redaction, refresh, revocation, deletion, retention, and audit
-  behavior before live token handling; GitLab `read_api` requires a strict
-  metadata adapter allowlist and no Repository Files API use. The next safe
-  backend slice is D2: provider-neutral credentialless `VcsConnection`
-  skeleton with inactive `pending_setup` state only. Direct GitLab OAuth,
-  provider token storage, provider clients, and repository metadata listing
-  remain blocked until the provider-neutral backend prerequisites are
-  satisfied. The current slice adds no backend schema/API behavior, provider
-  clients, OAuth, checkout credentials, repository clone, runner, gate, proof,
-  or queue behavior.
+- Repository access MVP is reset to RepoBinding context plus runner-owned
+  local credentials. RepoBinding remains canonical repository context and not
+  permission to clone; the API server stores no repository secrets in the MVP.
+- Next bounded docs slice: runner-owned repository checkout credential
+  boundary. It should define runner startup flags, API-issued
+  `CheckoutInstruction`, `CheckoutReceipt`, and supported credential modes:
+  Git HTTPS token file, SSH key file, and mounted workspace.
+- This cleanup adds no provider OAuth, VcsConnection, token storage, provider
+  clients, live metadata listing, checkout implementation, runner
+  implementation, gate, or proof.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -641,37 +632,35 @@ Done means:
 
 ### Architecture follow-up slices
 
-1. Backend VCS / repository connection implementation sequence
-   - `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` is the current ops
-     plan for backend VCS implementation order after ADR-0024, GitLab research,
-     and repository connection UX
-   - ADR-0025 accepts the provider credential / token storage boundary covering
-     encryption, redaction, refresh/rotation, revocation/deletion/retention,
-     audit, GitLab `read_api` risk, GitLab.com vs self-managed instance
-     identity, and credentialless `pending_setup`
-   - next safest backend task: D2 provider-neutral `VcsConnection` skeleton
-     with credentialless, inactive, expirable `pending_setup` state only
-   - later backend sequence: provider-neutral repository metadata contract
-     without a provider client; GitLab metadata adapter mapping with fake/test
-     fixtures only; GitLab OAuth/token implementation only after D2, D3, D4,
-     and concrete encryption/key/token-storage decisions exist
-   - GitLab remains a first provider candidate only; provider-specific concepts
-     stay in adapters and GitLab metadata discovery must not call Repository
-     Files API
-   - clone URLs are metadata only, checkout eligibility is separate, and
-     customer-hosted runner compatibility must remain preserved
+1. Runner-owned repository checkout credential boundary
+   - define runner startup flags for Goalrail connection and local credential
+     file paths only
+   - define API-issued `CheckoutInstruction` fields, including
+     `repo_binding_id`, `repository_url`, `ref`, `path_scope`, and optional auth
+     hint
+   - define `CheckoutReceipt` / bounded metadata snapshot fields returned by
+     the runner
+   - define supported credential modes: Git HTTPS token file, SSH key file, and
+     mounted workspace
+   - add no provider OAuth, VcsConnection, token storage, provider clients, live
+     metadata listing, checkout implementation, runner implementation, gate, or
+     proof
 2. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
-   - ADR-0024 documents future provider-neutral `VcsConnection` before GitLab/provider implementation
    - direct `RepoBinding` stores repository reference in the MVP
    - `RepositoryRecord` and `RepositoryEnrollment` are deferred
-   - manual/dev-seeded and metadata-only RepoBinding remain valid before provider integration
-   - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
+   - normal CLI repository-context init and metadata-only RepoBinding init
+     remain valid
+   - support the runner-owned credential path without requiring GitHub App,
+     GitLab, or Bitbucket cloud connection
 3. Runner checkout prototype boundary
-   - start with `goalrail_hosted_runner` only as a Goalrail-operated hosted runner pool
+   - start with a universal runner as a separate binary/process
    - use pull-based / poll-based job leasing from the API server
-   - perform read-only ephemeral checkout and produce a checkout receipt with minimum evidence fields
-   - do not implement customer-hosted runner installer/registration/auth, persistent mirrors, repository writes, arbitrary command execution, gate, or proof
+   - perform read-only ephemeral checkout or use a mounted workspace and
+     produce a checkout receipt with minimum evidence fields
+   - do not implement provider OAuth, token storage, provider clients,
+     persistent mirrors, repository writes, arbitrary command execution, gate,
+     or proof
 4. Customer-hosted runner protocol boundary
    - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
    - keep clone access inside customer infrastructure and return bounded artifacts only

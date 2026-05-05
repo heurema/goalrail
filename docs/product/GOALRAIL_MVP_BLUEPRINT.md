@@ -23,7 +23,6 @@ related_docs:
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
   - docs/adr/ADR-0022-installation-boundary.md
   - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
-  - docs/adr/ADR-0024-provider-neutral-vcs-connection-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -74,11 +73,11 @@ Thin settings surface for:
 - sync status
 - future external checks
 
-Repo binding is initially manual or dev-seeded. GitHub/GitLab/Bitbucket
-integration comes later and is not required for the current metadata-only
-repository context slice. Future provider work must follow ADR-0024's
-provider-neutral `VcsConnection` boundary before adding provider-specific
-backend schema/API behavior.
+Repo binding is initialized from local Git metadata through `goalrail init` and
+stored as server-side repository context. Provider UI integrations such as
+GitHub App, GitLab OAuth, or Bitbucket OAuth are not active MVP scope. If they
+are reconsidered later, they require fresh research and a new ADR with current
+requirements.
 
 ## 2. Architectural principles
 
@@ -163,13 +162,17 @@ Initial Project / repo context:
   read, write, branch, commit, merge request, or pull request permission
 - RepositoryRecord is deferred until repository catalog, repo-level policy, or
   independent provider sync is needed
-- VcsConnection is accepted as a future provider-neutral connection / account
-  authorization / metadata-discovery boundary; it is not a checkout credential,
-  not a raw provider token, not provider repository access, and not required or
-  implemented in the current MVP slice
-- GitLab can be a first provider candidate, but GitLab Group / Project /
-  namespace concepts must stay in provider adapter metadata and must not become
-  Goalrail Organization / Project terminology
+- MVP repository access uses RepoBinding as canonical repository context and
+  keeps checkout authority outside RepoBinding
+- API-issued checkout instructions are expected to derive from WorkItem and
+  RepoBinding context and provide the runner with bounded checkout metadata
+  such as `repo_binding_id`, `repository_url`, `ref`, and `path_scope`
+- Runner-owned local credentials are the intended MVP checkout access
+  direction; runner startup config carries Goalrail connection and local
+  credential file paths only
+- The API server stores no repository secrets in the MVP
+- Provider UI integrations and provider-mediated repository discovery are not
+  active MVP scope
 
 ### Layer 2 — Intent Plane
 Produces:
