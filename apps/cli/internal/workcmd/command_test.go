@@ -213,6 +213,52 @@ func TestRunStartExpiredTokenFailsBeforeHTTP(t *testing.T) {
 	}
 }
 
+func TestRunStartOrganizationMismatchFailsBeforeIntake(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, intakeCount, promoteCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000999","role":"member"}}`))
+		case "/v1/intakes":
+			intakeCount.Add(1)
+			http.Error(w, "unexpected intake request", http.StatusInternalServerError)
+		case "/v1/intakes/018f0000-0000-7000-8000-000000000005/goals":
+			promoteCount.Add(1)
+			http.Error(w, "unexpected promotion request", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runStartJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--title", "Wrong organization", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start) error = nil, want organization mismatch")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if !strings.Contains(err.Error(), "different GoalRail organization") {
+		t.Fatalf("error = %q, want organization mismatch", err.Error())
+	}
+	if meCount.Load() != 1 || intakeCount.Load() != 0 || promoteCount.Load() != 0 {
+		t.Fatalf("request counts me/intake/promote = %d/%d/%d, want 1/0/0", meCount.Load(), intakeCount.Load(), promoteCount.Load())
+	}
+}
+
 func TestRunStartHelpUsage(t *testing.T) {
 	t.Parallel()
 
