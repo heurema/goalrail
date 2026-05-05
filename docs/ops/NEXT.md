@@ -355,6 +355,9 @@ Done means:
 - ✅ normal `goalrail init` calls the server repository-context init endpoint
   using local Git metadata and the stored login profile, then prints the
   server-owned Project and RepoBinding context
+- ✅ normal `goalrail init` records a bounded metadata-only repository context
+  snapshot on the server after repository-context init; this is inventory only,
+  not readiness/audit scoring
 - ✅ `goalrail init --base <branch>` can set `workflow_base_branch` explicitly
   without creating branches or changing Git state
 - ✅ low-level `goalrail init --project <project_id>` still calls the

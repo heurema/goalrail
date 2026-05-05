@@ -346,6 +346,121 @@ func TestProjectContextStoreGetsActiveRepoBindingByOrganizationRepository(t *tes
 	}
 }
 
+func TestProjectContextStoreGetsRepoBinding(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000004",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000001",
+				"",
+				"github",
+				"",
+				"heurema/goalrail",
+				"git@github.com:heurema/goalrail.git",
+				"main",
+				"main",
+				".",
+				"metadata_only",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	binding, ok, err := store.GetRepoBinding(ctx, "018f0000-0000-7000-8000-000000000004")
+	if err != nil {
+		t.Fatalf("GetRepoBinding() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetRepoBinding() ok = false, want true")
+	}
+	if binding.ID != "018f0000-0000-7000-8000-000000000004" || binding.RepositoryFullName != "heurema/goalrail" {
+		t.Fatalf("binding = %#v, want persisted repo binding", binding)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM repo_bindings") {
+		t.Fatalf("SQL = %q, want repo_bindings select", query.calls[0].sql)
+	}
+}
+
+func TestProjectContextStoreBuildsRepositoryContextSnapshotCreate(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewProjectContextStoreWithExecutor(exec)
+
+	err := store.CreateRepositoryContextSnapshot(ctx, spine.RepositoryContextSnapshotRecord{
+		ID:             "018f0000-0000-7000-8000-000000000301",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		Source:         "goalrail_cli_init",
+		SchemaVersion:  1,
+		Fingerprint:    "sha256:abc123",
+		Snapshot:       []byte(`{"schema_version":1}`),
+		CreatedAt:      time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("CreateRepositoryContextSnapshot() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO repository_context_snapshots") {
+		t.Fatalf("SQL = %q, want repository_context_snapshots insert", call.sql)
+	}
+	if strings.Contains(call.sql, "ON CONFLICT") {
+		t.Fatalf("SQL = %q, want create without upsert conflict clause", call.sql)
+	}
+	if got, want := len(call.args), 9; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreGetsRepositoryContextSnapshotByFingerprint(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000301",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000004",
+				"goalrail_cli_init",
+				1,
+				"sha256:abc123",
+				[]byte(`{"schema_version":1}`),
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	record, ok, err := store.GetRepositoryContextSnapshotByFingerprint(ctx, "018f0000-0000-7000-8000-000000000004", "sha256:abc123")
+	if err != nil {
+		t.Fatalf("GetRepositoryContextSnapshotByFingerprint() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetRepositoryContextSnapshotByFingerprint() ok = false, want true")
+	}
+	if record.ID != "018f0000-0000-7000-8000-000000000301" || record.Fingerprint != "sha256:abc123" {
+		t.Fatalf("record = %#v, want persisted snapshot", record)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM repository_context_snapshots") {
+		t.Fatalf("SQL = %q, want repository_context_snapshots select", query.calls[0].sql)
+	}
+	if got, want := len(query.calls[0].args), 2; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
 func TestProjectContextStoreResolvesRepoBindingContext(t *testing.T) {
 	ctx := context.Background()
 	query := &recordingProjectContextQuerier{
@@ -464,6 +579,12 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 			value, ok := r.values[i].(bool)
 			if !ok {
 				return errors.New("bool value is not bool")
+			}
+			*target = value
+		case *int:
+			value, ok := r.values[i].(int)
+			if !ok {
+				return errors.New("int value is not int")
 			}
 			*target = value
 		case *time.Time:

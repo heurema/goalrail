@@ -74,6 +74,39 @@ func TestInitMigrationEnforcesOneActiveRepoBindingPerOrganizationRepository(t *t
 	}
 }
 
+func TestInitMigrationCreatesRepositoryContextSnapshots(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE repository_context_snapshots",
+		"repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE",
+		"snapshot JSONB NOT NULL",
+		"CONSTRAINT repository_context_snapshots_schema_version_check CHECK (schema_version = 1)",
+		"CREATE UNIQUE INDEX repository_context_snapshots_repo_binding_fingerprint_idx",
+		"ON repository_context_snapshots(repo_binding_id, fingerprint)",
+		"CREATE INDEX repository_context_snapshots_organization_created_at_idx",
+		"CREATE INDEX repository_context_snapshots_project_created_at_idx",
+		"CREATE INDEX repository_context_snapshots_repo_binding_created_at_idx",
+		"DROP TABLE IF EXISTS repository_context_snapshots;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE repo_bindings") > strings.Index(sql, "CREATE TABLE repository_context_snapshots") {
+		t.Fatalf("repository_context_snapshots must be created after repo_bindings")
+	}
+	if strings.Index(sql, "CREATE TABLE repository_context_snapshots") > strings.Index(sql, "CREATE TABLE intake_records") {
+		t.Fatalf("repository_context_snapshots should stay in project-context foundation before intake")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS intake_records;") > strings.Index(sql, "DROP TABLE IF EXISTS repository_context_snapshots;") {
+		t.Fatalf("repository_context_snapshots must be dropped after intake_records")
+	}
+}
+
 func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

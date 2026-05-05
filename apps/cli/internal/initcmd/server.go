@@ -23,7 +23,7 @@ const (
 	serverMode             = "server"
 	nextSuggestedCommand   = "goalrail readiness scan --path ."
 	serverRegistrationNote = "This registered repository metadata on the GoalRail server and wrote a non-secret local GoalRail marker.\nNo audit, hooks, branch creation, deploy keys, or verification were configured."
-	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization.\nNo audit, hooks, branch creation, deploy keys, provider integration, or verification were configured."
+	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization and recorded a metadata-only project context snapshot.\nNo audit, hooks, branch creation, deploy keys, provider integration, or verification were configured."
 )
 
 type serverErrorResponse struct {
@@ -179,6 +179,22 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 		Message:               responsePayload.Message,
 		NextCommand:           nextSuggestedCommand,
 	}
+	snapshotRequest, err := buildRepositoryContextSnapshot(draft.GitRoot, output, draft)
+	if err != nil {
+		return exitcode.RuntimeError(fmt.Errorf("collect repository context snapshot: %w", err))
+	}
+	snapshotResponse, err := postRepositoryContextSnapshot(ctx, client, session, output.RepoBindingID, snapshotRequest)
+	if err != nil {
+		return err
+	}
+	if snapshotResponse.Created {
+		output.ContextSnapshotStatus = "recorded"
+	} else {
+		output.ContextSnapshotStatus = "unchanged"
+	}
+	output.ContextSnapshotID = snapshotResponse.ContextSnapshotID
+	output.ContextFingerprint = snapshotResponse.Fingerprint
+
 	configStatus, err := writeProjectConfig(draft.GitRoot, projectConfig{
 		ServerURL:      output.ServerURL,
 		OrganizationID: output.OrganizationID,
@@ -335,6 +351,48 @@ func postRepositoryContextInit(ctx context.Context, client HTTPClient, session a
 	}
 }
 
+func postRepositoryContextSnapshot(ctx context.Context, client HTTPClient, session authstore.Session, repoBindingID string, payload spine.RepositoryContextSnapshotRequest) (spine.RepositoryContextSnapshotResponse, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("encode repository context snapshot request: %w", err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	endpoint := serverURL + "/v1/repo-bindings/" + url.PathEscape(repoBindingID) + "/context-snapshots"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("build repository context snapshot request: %w", err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("record repository context snapshot on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	switch response.StatusCode {
+	case http.StatusOK, http.StatusCreated:
+		var decoded spine.RepositoryContextSnapshotResponse
+		if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+			return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("decode repository context snapshot response: %w", err))
+		}
+		return decoded, nil
+	case http.StatusUnauthorized, http.StatusForbidden:
+		message := decodeServerErrorMessage(response.Body, response.StatusCode)
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.UsageError(fmt.Errorf("authenticated request failed: %s; run goalrail login %s", message, serverURL))
+	case http.StatusBadRequest:
+		message := decodeServerErrorMessage(response.Body, response.StatusCode)
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.ValidationError(fmt.Errorf("server validation failed: %s", message))
+	case http.StatusConflict:
+		message := decodeServerErrorMessage(response.Body, response.StatusCode)
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.ValidationError(fmt.Errorf("repository context snapshot conflict: %s", message))
+	default:
+		message := decodeServerErrorMessage(response.Body, response.StatusCode)
+		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("repository context snapshot failed: %s", message))
+	}
+}
+
 func decodeServerErrorMessage(body io.Reader, statusCode int) string {
 	raw, err := io.ReadAll(io.LimitReader(body, 1<<20))
 	if err != nil {
@@ -418,6 +476,9 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 	}
 	if output.LocalConfigPath != "" {
 		fmt.Fprintf(&b, "Local config: %s (%s)\n", output.LocalConfigPath, output.LocalConfigStatus)
+	}
+	if output.ContextSnapshotID != "" {
+		fmt.Fprintf(&b, "Project context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
 	return b.String()

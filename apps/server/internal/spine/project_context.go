@@ -17,6 +17,8 @@ type OrganizationMembershipID string
 
 type ProjectID string
 
+type RepositoryContextSnapshotID string
+
 type EntityState string
 
 const EntityStateActive EntityState = "active"
@@ -167,6 +169,50 @@ type RepositoryContextInitResult struct {
 	Message               string         `json:"message"`
 }
 
+type RepositoryContextSnapshotRequest struct {
+	Source                  string                              `json:"source"`
+	SchemaVersion           int                                 `json:"schema_version"`
+	Repository              RepositoryContextSnapshotRepository `json:"repository"`
+	DetectedPaths           []string                            `json:"detected_paths"`
+	DetectedToolchains      []string                            `json:"detected_toolchains"`
+	DetectedPackageManagers []string                            `json:"detected_package_managers"`
+	WorkspaceCandidates     []string                            `json:"workspace_candidates"`
+}
+
+type RepositoryContextSnapshotRepository struct {
+	Provider              string `json:"provider"`
+	FullName              string `json:"full_name"`
+	URL                   string `json:"url"`
+	ProviderDefaultBranch string `json:"provider_default_branch"`
+	WorkflowBaseBranch    string `json:"workflow_base_branch"`
+	RemoteName            string `json:"remote_name"`
+	HeadSHA               string `json:"head_sha"`
+}
+
+type RepositoryContextSnapshotRecord struct {
+	ID             RepositoryContextSnapshotID `json:"id"`
+	OrganizationID OrganizationID              `json:"organization_id"`
+	ProjectID      ProjectID                   `json:"project_id"`
+	RepoBindingID  RepoBindingID               `json:"repo_binding_id"`
+	Source         string                      `json:"source"`
+	SchemaVersion  int                         `json:"schema_version"`
+	Fingerprint    string                      `json:"fingerprint"`
+	Snapshot       []byte                      `json:"snapshot"`
+	CreatedAt      time.Time                   `json:"created_at"`
+}
+
+type RepositoryContextSnapshotResult struct {
+	ContextSnapshotID RepositoryContextSnapshotID `json:"context_snapshot_id"`
+	OrganizationID    OrganizationID              `json:"organization_id"`
+	ProjectID         ProjectID                   `json:"project_id"`
+	RepoBindingID     RepoBindingID               `json:"repo_binding_id"`
+	Source            string                      `json:"source"`
+	SchemaVersion     int                         `json:"schema_version"`
+	Fingerprint       string                      `json:"fingerprint"`
+	Created           bool                        `json:"created"`
+	Message           string                      `json:"message"`
+}
+
 type ResolvedRepoBindingContext struct {
 	OrganizationID OrganizationID `json:"organization_id"`
 	ProjectID      ProjectID      `json:"project_id"`
@@ -211,6 +257,14 @@ func NewProjectID() (ProjectID, error) {
 		return "", err
 	}
 	return ProjectID(id), nil
+}
+
+func NewRepositoryContextSnapshotID() (RepositoryContextSnapshotID, error) {
+	id, err := newUUIDv7()
+	if err != nil {
+		return "", err
+	}
+	return RepositoryContextSnapshotID(id), nil
 }
 
 func NewRepoBindingID() (RepoBindingID, error) {
