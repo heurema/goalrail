@@ -23,7 +23,7 @@ const (
 	serverMode             = "server"
 	nextSuggestedCommand   = "goalrail readiness scan --path ."
 	serverRegistrationNote = "This registered repository metadata on the GoalRail server and wrote a non-secret local GoalRail marker.\nNo audit, hooks, branch creation, deploy keys, or verification were configured."
-	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization and recorded a metadata-only project context snapshot.\nNo audit, hooks, branch creation, deploy keys, provider integration, or verification were configured."
+	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization and recorded a metadata-only repository context snapshot.\nNo audit, hooks, branch creation, deploy keys, provider integration, or verification were configured."
 )
 
 type serverErrorResponse struct {
@@ -478,7 +478,7 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 		fmt.Fprintf(&b, "Local config: %s (%s)\n", output.LocalConfigPath, output.LocalConfigStatus)
 	}
 	if output.ContextSnapshotID != "" {
-		fmt.Fprintf(&b, "Project context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
+		fmt.Fprintf(&b, "Repository context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
 	return b.String()
