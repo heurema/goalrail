@@ -267,6 +267,15 @@ The project currently has:
   provider credential / token storage boundary before any schema, API, OAuth,
   token persistence, provider client, repository metadata API, checkout,
   runner, gate, or proof work; this is sequencing only, not implementation.
+- ADR-0025 documents the accepted provider credential / token storage boundary:
+  provider credentials are secrets outside `VcsConnection`; future
+  provider-mediated metadata discovery requires accepted encrypted server-side
+  storage, key ownership, redaction, refresh, revocation, deletion, retention,
+  and audit behavior before live token handling; GitLab `read_api` requires a
+  strict metadata adapter allowlist and no Repository Files API use. No provider
+  credential storage, token encryption, OAuth route, provider client, or
+  repository metadata listing exists. The next backend slice may be a
+  provider-neutral credentialless `pending_setup` `VcsConnection` skeleton only.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics

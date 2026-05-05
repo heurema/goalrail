@@ -2257,3 +2257,53 @@ Rationale:
 - The sequence preserves ADR-0024 provider neutrality, keeps GitLab as a first
   provider candidate rather than core terminology, and protects
   customer-hosted runner compatibility.
+
+## D-0085 — Provider credentials are secrets outside VcsConnection
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Accept ADR-0025 as the provider credential / token storage boundary before
+  VCS provider implementation.
+- Provider OAuth grants, access tokens, refresh tokens, provider app/client
+  credentials, installation tokens, deploy keys, checkout credentials, and
+  customer-owned runtime credentials are secrets, not `VcsConnection`,
+  `RepoBinding`, `RepositoryRecord`, checkout eligibility, or proof evidence.
+- Future provider-mediated metadata discovery may store provider credentials
+  only in server-side encrypted storage for the running Goalrail Installation
+  after a later implementation defines encryption, key ownership, redaction,
+  refresh concurrency, revocation, deletion, retention, and audit behavior.
+- Self-hosted deployments own keying and custody for stored provider
+  credentials; future SaaS may use service-owned keying; customer-hosted
+  runners may keep repository credentials outside the Goalrail server.
+- Provider credentials must not be stored in browser storage, frontend bundles,
+  repo files, `.goalrail/project.yml`, docs, generated fixtures, logs,
+  unredacted traces, screenshots, PR bodies, or Git history beyond explicitly
+  accepted encrypted server-side operational storage.
+- GitLab `read_api` is broader than metadata-only behavior; any future GitLab
+  metadata adapter must use a strict endpoint allowlist, must not call
+  Repository Files API, and must not request `read_repository`,
+  `write_repository`, or `api` for the first metadata-only provider
+  connection unless a later ADR changes that.
+- GitLab.com and self-managed GitLab instance identity are first-class provider
+  metadata concerns and must not be hard-coded to GitLab.com only.
+- Future code may create credentialless `pending_setup` `VcsConnection` records
+  only as non-secret, inactive, expirable setup state that cannot list provider
+  metadata, authorize checkout, or imply a connected provider.
+- D2 provider-neutral `VcsConnection` skeleton may start after this ADR only as
+  credentialless, non-live setup state. GitLab OAuth/token storage remains
+  blocked until D2, D3, D4, and concrete encryption/key/token-storage decisions
+  exist.
+- This decision does not add schema, migrations, API routes, OAuth, token
+  storage, encryption, provider clients, live provider calls, repository
+  metadata listing/search, frontend behavior, checkout, runner, gate, proof,
+  or repository write behavior.
+
+Rationale:
+- Provider credentials are the highest-risk VCS boundary and need ownership,
+  storage, redaction, refresh, revocation, and audit rules before code hardens
+  accidental security choices.
+- Keeping credentials outside `VcsConnection` preserves ADR-0024 provider
+  neutrality and ADR-0008 checkout separation.
+- Allowing a credentialless `pending_setup` skeleton gives the next backend
+  slice a bounded path without crossing into OAuth or token handling.

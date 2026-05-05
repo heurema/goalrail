@@ -66,13 +66,20 @@
   authorization / metadata-discovery boundary, not a checkout credential, raw
   provider token, repository catalog, or permission to clone. The backend
   implementation order for this boundary is now sequenced in
-  `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`: direct GitLab OAuth,
+  `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`.
+- ADR-0025 now defines the provider credential/token storage boundary:
+  provider credentials are secrets outside `VcsConnection`; future
+  provider-mediated metadata discovery needs accepted encrypted server-side
+  storage, redaction, refresh, revocation, deletion, retention, and audit
+  behavior before live token handling; GitLab `read_api` requires a strict
+  metadata adapter allowlist and no Repository Files API use. The next safe
+  backend slice is D2: provider-neutral credentialless `VcsConnection`
+  skeleton with inactive `pending_setup` state only. Direct GitLab OAuth,
   provider token storage, provider clients, and repository metadata listing
-  remain blocked until the provider credential/token storage boundary is
-  accepted and the provider-neutral backend prerequisites are satisfied. The
-  current slice adds no backend schema/API behavior, provider clients, OAuth,
-  checkout credentials, repository clone, runner, gate, proof, or queue
-  behavior.
+  remain blocked until the provider-neutral backend prerequisites are
+  satisfied. The current slice adds no backend schema/API behavior, provider
+  clients, OAuth, checkout credentials, repository clone, runner, gate, proof,
+  or queue behavior.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -638,14 +645,16 @@ Done means:
    - `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` is the current ops
      plan for backend VCS implementation order after ADR-0024, GitLab research,
      and repository connection UX
-   - next safest backend task: docs-only provider credential / token storage
-     boundary ADR before schema, API, OAuth, token persistence, provider
-     clients, live metadata APIs, checkout, runner, gate, or proof
-   - later backend sequence: provider-neutral `VcsConnection` skeleton without
-     credentials; provider-neutral repository metadata contract without a
-     provider client; GitLab metadata adapter mapping with fake/test fixtures
-     only; GitLab OAuth/token implementation only after the credential boundary
-     is accepted
+   - ADR-0025 accepts the provider credential / token storage boundary covering
+     encryption, redaction, refresh/rotation, revocation/deletion/retention,
+     audit, GitLab `read_api` risk, GitLab.com vs self-managed instance
+     identity, and credentialless `pending_setup`
+   - next safest backend task: D2 provider-neutral `VcsConnection` skeleton
+     with credentialless, inactive, expirable `pending_setup` state only
+   - later backend sequence: provider-neutral repository metadata contract
+     without a provider client; GitLab metadata adapter mapping with fake/test
+     fixtures only; GitLab OAuth/token implementation only after D2, D3, D4,
+     and concrete encryption/key/token-storage decisions exist
    - GitLab remains a first provider candidate only; provider-specific concepts
      stay in adapters and GitLab metadata discovery must not call Repository
      Files API
