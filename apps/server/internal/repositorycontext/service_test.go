@@ -106,6 +106,22 @@ func TestRecordSnapshotRejectsOtherOrganizationBinding(t *testing.T) {
 	}
 }
 
+func TestRecordSnapshotRejectsMalformedRepoBindingIDBeforeStore(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store, &fakeEventLog{})
+	input := validInput()
+	input.RepoBindingID = "not-a-uuid"
+
+	_, err := service.RecordSnapshot(context.Background(), input)
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) || validationErr.Field != "repo_binding_id" {
+		t.Fatalf("RecordSnapshot() error = %v, want repo_binding_id validation", err)
+	}
+	if store.getBindingCalls != 0 {
+		t.Fatalf("GetRepoBinding calls = %d, want 0 before valid repo_binding_id", store.getBindingCalls)
+	}
+}
+
 func TestRecordSnapshotRejectsSnapshotMismatch(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -273,6 +289,7 @@ func repoBindingFixture() spine.RepoBinding {
 type fakeStore struct {
 	binding                  spine.RepoBinding
 	bindingOK                bool
+	getBindingCalls          int
 	snapshotsByFingerprint   map[string]spine.RepositoryContextSnapshotRecord
 	createdSnapshots         []spine.RepositoryContextSnapshotRecord
 	createSnapshotErr        error
@@ -284,6 +301,7 @@ func newFakeStore() *fakeStore {
 }
 
 func (s *fakeStore) GetRepoBinding(_ context.Context, _ spine.RepoBindingID) (spine.RepoBinding, bool, error) {
+	s.getBindingCalls++
 	return s.binding, s.bindingOK, nil
 }
 
