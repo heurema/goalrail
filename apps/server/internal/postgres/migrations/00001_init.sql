@@ -126,6 +126,7 @@ CREATE TABLE repo_bindings (
     repository_full_name TEXT NOT NULL,
     repository_url TEXT NOT NULL,
     default_branch TEXT NOT NULL,
+    workflow_base_branch TEXT NOT NULL,
     path_scope TEXT NOT NULL,
     access_mode TEXT NOT NULL,
     state TEXT NOT NULL,
@@ -144,6 +145,10 @@ CREATE INDEX repo_bindings_project_id_idx ON repo_bindings(project_id);
 
 CREATE UNIQUE INDEX repo_bindings_one_active_per_project_idx
     ON repo_bindings(project_id)
+    WHERE state = 'active';
+
+CREATE UNIQUE INDEX repo_bindings_one_active_per_org_repository_idx
+    ON repo_bindings(organization_id, lower(provider), lower(repository_full_name))
     WHERE state = 'active';
 
 CREATE TABLE intake_records (
@@ -625,6 +630,7 @@ DROP INDEX IF EXISTS intake_records_project_created_at_idx;
 DROP INDEX IF EXISTS intake_records_organization_created_at_idx;
 DROP TABLE IF EXISTS intake_records;
 DROP INDEX IF EXISTS repo_bindings_one_active_per_project_idx;
+DROP INDEX IF EXISTS repo_bindings_one_active_per_org_repository_idx;
 DROP INDEX IF EXISTS repo_bindings_project_id_idx;
 DROP TABLE IF EXISTS repo_bindings;
 DROP TABLE IF EXISTS projects;

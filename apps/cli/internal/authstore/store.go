@@ -2,11 +2,14 @@ package authstore
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 )
+
+var ErrSessionNotFound = errors.New("auth session not found")
 
 type Session struct {
 	ServerURL            string    `json:"server_url"`
@@ -30,6 +33,28 @@ func DefaultPath() (string, error) {
 		return "", fmt.Errorf("resolve user config dir: %w", err)
 	}
 	return filepath.Join(configDir, "goalrail", "auth.json"), nil
+}
+
+func (s FileStore) Load() (Session, error) {
+	file, err := os.Open(s.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Session{}, ErrSessionNotFound
+		}
+		return Session{}, fmt.Errorf("open auth file: %w", err)
+	}
+	defer file.Close()
+
+	var session Session
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&session); err != nil {
+		return Session{}, fmt.Errorf("decode auth file: %w", err)
+	}
+	if session.ServerURL == "" || session.AccessToken == "" || session.TokenType == "" || session.AccessTokenExpiresAt.IsZero() {
+		return Session{}, fmt.Errorf("auth session is incomplete")
+	}
+	return session, nil
 }
 
 func (s FileStore) Save(session Session) error {

@@ -34,6 +34,46 @@ func TestInitMigrationCreatesInstallationBoundary(t *testing.T) {
 	}
 }
 
+func TestInitMigrationStoresRepoBindingWorkflowBaseBranch(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE repo_bindings",
+		"default_branch TEXT NOT NULL",
+		"workflow_base_branch TEXT NOT NULL",
+		"CONSTRAINT repo_bindings_access_mode_check",
+		"'metadata_only'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "default_branch TEXT NOT NULL") > strings.Index(sql, "workflow_base_branch TEXT NOT NULL") {
+		t.Fatalf("workflow_base_branch should be stored next to default_branch")
+	}
+}
+
+func TestInitMigrationEnforcesOneActiveRepoBindingPerOrganizationRepository(t *testing.T) {
+	contents, err := FS.ReadFile("00001_init.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE UNIQUE INDEX repo_bindings_one_active_per_org_repository_idx",
+		"ON repo_bindings(organization_id, lower(provider), lower(repository_full_name))",
+		"WHERE state = 'active'",
+		"DROP INDEX IF EXISTS repo_bindings_one_active_per_org_repository_idx;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init migration missing %q", want)
+		}
+	}
+}
+
 func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

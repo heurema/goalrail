@@ -99,6 +99,7 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 		RepositoryFullName: "heurema/goalrail",
 		RepositoryURL:      "https://example.invalid/heurema/goalrail.git",
 		DefaultBranch:      "main",
+		WorkflowBaseBranch: "main",
 		PathScope:          ".",
 		AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
 		State:              spine.EntityStateActive,
@@ -122,7 +123,225 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 	if !strings.Contains(call.sql, "$1") {
 		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
 	}
-	if got, want := len(call.args), 15; got != want {
+	if !strings.Contains(call.sql, "workflow_base_branch") {
+		t.Fatalf("SQL = %q, want workflow_base_branch column", call.sql)
+	}
+	if got, want := len(call.args), 16; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreBuildsCreateProject(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewProjectContextStoreWithExecutor(exec)
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+
+	err := store.CreateProject(ctx, spine.Project{
+		ID:              "018f0000-0000-7000-8000-000000000003",
+		OrganizationID:  "018f0000-0000-7000-8000-000000000002",
+		CreatedByUserID: "018f0000-0000-7000-8000-000000000001",
+		Slug:            "github-acme-frontend",
+		DisplayName:     "acme/frontend",
+		State:           spine.EntityStateActive,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+	if err != nil {
+		t.Fatalf("CreateProject() error = %v", err)
+	}
+
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO projects") {
+		t.Fatalf("SQL = %q, want projects insert", call.sql)
+	}
+	if strings.Contains(call.sql, "ON CONFLICT") {
+		t.Fatalf("SQL = %q, want create without upsert conflict clause", call.sql)
+	}
+	if got, want := len(call.args), 8; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreGetsProject(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000001",
+				"default",
+				"Default Project",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	project, ok, err := store.GetProject(ctx, "018f0000-0000-7000-8000-000000000003")
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetProject() ok = false, want true")
+	}
+	if project.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("organization_id = %q, want 018f0000-0000-7000-8000-000000000002", project.OrganizationID)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM projects") {
+		t.Fatalf("SQL = %q, want projects select", call.sql)
+	}
+	if !strings.Contains(call.sql, "$1") {
+		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
+	}
+}
+
+func TestProjectContextStoreGetsProjectByOrganizationAndSlug(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000001",
+				"github-acme-frontend",
+				"acme/frontend",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	project, ok, err := store.GetProjectByOrganizationAndSlug(ctx, "018f0000-0000-7000-8000-000000000002", "github-acme-frontend")
+	if err != nil {
+		t.Fatalf("GetProjectByOrganizationAndSlug() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetProjectByOrganizationAndSlug() ok = false, want true")
+	}
+	if project.Slug != "github-acme-frontend" || project.DisplayName != "acme/frontend" {
+		t.Fatalf("project = %#v, want repo-backed project", project)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM projects") || !strings.Contains(call.sql, "organization_id") || !strings.Contains(call.sql, "slug") {
+		t.Fatalf("SQL = %q, want organization slug project lookup", call.sql)
+	}
+	if got, want := len(call.args), 2; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreGetsActiveRepoBindingForProject(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000004",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000001",
+				"",
+				"github",
+				"",
+				"heurema/goalrail",
+				"git@github.com:heurema/goalrail.git",
+				"main",
+				"main",
+				".",
+				"metadata_only",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	binding, ok, err := store.GetActiveRepoBindingForProject(ctx, "018f0000-0000-7000-8000-000000000003")
+	if err != nil {
+		t.Fatalf("GetActiveRepoBindingForProject() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetActiveRepoBindingForProject() ok = false, want true")
+	}
+	if binding.WorkflowBaseBranch != "main" {
+		t.Fatalf("workflow_base_branch = %q, want main", binding.WorkflowBaseBranch)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM repo_bindings") {
+		t.Fatalf("SQL = %q, want repo_bindings select", call.sql)
+	}
+	if !strings.Contains(call.sql, "workflow_base_branch") {
+		t.Fatalf("SQL = %q, want workflow_base_branch column", call.sql)
+	}
+}
+
+func TestProjectContextStoreGetsActiveRepoBindingByOrganizationRepository(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000004",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000001",
+				"",
+				"github",
+				"",
+				"acme/frontend",
+				"git@github.com:acme/frontend.git",
+				"main",
+				"main",
+				".",
+				"metadata_only",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	binding, ok, err := store.GetActiveRepoBindingByOrganizationAndRepository(ctx, "018f0000-0000-7000-8000-000000000002", "GitHub", "ACME/frontend")
+	if err != nil {
+		t.Fatalf("GetActiveRepoBindingByOrganizationAndRepository() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetActiveRepoBindingByOrganizationAndRepository() ok = false, want true")
+	}
+	if binding.RepositoryFullName != "acme/frontend" {
+		t.Fatalf("repository_full_name = %q, want acme/frontend", binding.RepositoryFullName)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "lower(provider)") || !strings.Contains(call.sql, "lower(repository_full_name)") {
+		t.Fatalf("SQL = %q, want lower-case repository identity lookup", call.sql)
+	}
+	if got, want := len(call.args), 4; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
 	}
 }

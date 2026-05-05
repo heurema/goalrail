@@ -106,11 +106,65 @@ type RepoBinding struct {
 	RepositoryFullName   string                `json:"repository_full_name"`
 	RepositoryURL        string                `json:"repository_url"`
 	DefaultBranch        string                `json:"default_branch"`
+	WorkflowBaseBranch   string                `json:"workflow_base_branch"`
 	PathScope            string                `json:"path_scope"`
 	AccessMode           RepoBindingAccessMode `json:"access_mode"`
 	State                EntityState           `json:"state"`
 	CreatedAt            time.Time             `json:"created_at"`
 	UpdatedAt            time.Time             `json:"updated_at"`
+}
+
+type RepoBindingInitRequest struct {
+	Provider              string `json:"provider"`
+	RepositoryFullName    string `json:"repository_full_name"`
+	RepositoryURL         string `json:"repository_url"`
+	ProviderDefaultBranch string `json:"provider_default_branch"`
+	WorkflowBaseBranch    string `json:"workflow_base_branch"`
+	LocalRemoteName       string `json:"local_remote_name"`
+	LocalHeadSHA          string `json:"local_head_sha"`
+}
+
+type RepoBindingInitResult struct {
+	RepoBindingID         RepoBindingID  `json:"repo_binding_id"`
+	ProjectID             ProjectID      `json:"project_id"`
+	OrganizationID        OrganizationID `json:"organization_id"`
+	Provider              string         `json:"provider"`
+	RepositoryFullName    string         `json:"repository_full_name"`
+	RepositoryURL         string         `json:"repository_url"`
+	ProviderDefaultBranch string         `json:"provider_default_branch"`
+	WorkflowBaseBranch    string         `json:"workflow_base_branch"`
+	State                 EntityState    `json:"state"`
+	Created               bool           `json:"created"`
+	Message               string         `json:"message"`
+}
+
+type RepositoryContextInitRequest struct {
+	Provider                    string `json:"provider"`
+	RepositoryFullName          string `json:"repository_full_name"`
+	RepositoryURL               string `json:"repository_url"`
+	ProviderDefaultBranch       string `json:"provider_default_branch"`
+	WorkflowBaseBranch          string `json:"workflow_base_branch"`
+	LocalRemoteName             string `json:"local_remote_name"`
+	LocalHeadSHA                string `json:"local_head_sha"`
+	SuggestedProjectSlug        string `json:"suggested_project_slug"`
+	SuggestedProjectDisplayName string `json:"suggested_project_display_name"`
+}
+
+type RepositoryContextInitResult struct {
+	OrganizationID        OrganizationID `json:"organization_id"`
+	ProjectID             ProjectID      `json:"project_id"`
+	ProjectSlug           string         `json:"project_slug"`
+	ProjectDisplayName    string         `json:"project_display_name"`
+	ProjectCreated        bool           `json:"project_created"`
+	RepoBindingID         RepoBindingID  `json:"repo_binding_id"`
+	RepoBindingCreated    bool           `json:"repo_binding_created"`
+	Provider              string         `json:"provider"`
+	RepositoryFullName    string         `json:"repository_full_name"`
+	RepositoryURL         string         `json:"repository_url"`
+	ProviderDefaultBranch string         `json:"provider_default_branch"`
+	WorkflowBaseBranch    string         `json:"workflow_base_branch"`
+	State                 EntityState    `json:"state"`
+	Message               string         `json:"message"`
 }
 
 type ResolvedRepoBindingContext struct {

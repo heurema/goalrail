@@ -19,7 +19,8 @@ type ProjectContextStore struct {
 }
 
 func NewProjectContextStore(pool *pgxpool.Pool) *ProjectContextStore {
-	return newProjectContextStore(pool, pool)
+	db := newPostgresDB(pool)
+	return newProjectContextStore(db, db)
 }
 
 func NewProjectContextStoreWithExecutor(exec postgresExecer) *ProjectContextStore {
@@ -128,22 +129,180 @@ func (s *ProjectContextStore) UpsertProject(ctx context.Context, project spine.P
 	return s.execSQL(ctx, "upsert project", stmt)
 }
 
-func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spine.RepoBinding) error {
-	bindingID, err := uuidValue(binding.ID, "repo binding id")
+func (s *ProjectContextStore) CreateProject(ctx context.Context, project spine.Project) error {
+	stmt, err := s.projectInsert(project)
 	if err != nil {
 		return err
+	}
+	return s.execSQL(ctx, "create project", stmt)
+}
+
+func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spine.RepoBinding) error {
+	stmt, err := s.repoBindingInsert(binding)
+	if err != nil {
+		return err
+	}
+	stmt = stmt.Suffix("ON CONFLICT (id) DO UPDATE SET provider = EXCLUDED.provider, repository_external_id = EXCLUDED.repository_external_id, repository_full_name = EXCLUDED.repository_full_name, repository_url = EXCLUDED.repository_url, default_branch = EXCLUDED.default_branch, workflow_base_branch = EXCLUDED.workflow_base_branch, path_scope = EXCLUDED.path_scope, access_mode = EXCLUDED.access_mode, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
+
+	return s.execSQL(ctx, "upsert repo binding", stmt)
+}
+
+func (s *ProjectContextStore) CreateRepoBinding(ctx context.Context, binding spine.RepoBinding) error {
+	stmt, err := s.repoBindingInsert(binding)
+	if err != nil {
+		return err
+	}
+	return s.execSQL(ctx, "create repo binding", stmt)
+}
+
+func (s *ProjectContextStore) projectInsert(project spine.Project) (squirrel.InsertBuilder, error) {
+	projectID, err := uuidValue(project.ID, "project id")
+	if err != nil {
+		return squirrel.InsertBuilder{}, err
+	}
+	orgID, err := uuidValue(project.OrganizationID, "project organization id")
+	if err != nil {
+		return squirrel.InsertBuilder{}, err
+	}
+	createdByUserID, err := uuidValue(project.CreatedByUserID, "project created by user id")
+	if err != nil {
+		return squirrel.InsertBuilder{}, err
+	}
+	stmt := s.psql.
+		Insert("projects").
+		Columns("id", "organization_id", "created_by_user_id", "slug", "display_name", "state", "created_at", "updated_at").
+		Values(projectID, orgID, createdByUserID, project.Slug, project.DisplayName, project.State, project.CreatedAt, project.UpdatedAt)
+	return stmt, nil
+}
+
+func (s *ProjectContextStore) GetProject(ctx context.Context, projectID spine.ProjectID) (spine.Project, bool, error) {
+	if s.query == nil {
+		return spine.Project{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	id, err := uuidValue(projectID, "project id")
+	if err != nil {
+		return spine.Project{}, false, err
+	}
+	stmt := s.psql.
+		Select(projectColumns()...).
+		From("projects").
+		Where(squirrel.Eq{"id": id})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.Project{}, false, fmt.Errorf("get project SQL: %w", err)
+	}
+
+	project, err := scanProject(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Project{}, false, nil
+		}
+		return spine.Project{}, false, fmt.Errorf("get project: %w", err)
+	}
+	return project, true, nil
+}
+
+func (s *ProjectContextStore) GetProjectByOrganizationAndSlug(ctx context.Context, organizationID spine.OrganizationID, slug string) (spine.Project, bool, error) {
+	if s.query == nil {
+		return spine.Project{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	orgID, err := uuidValue(organizationID, "project organization id")
+	if err != nil {
+		return spine.Project{}, false, err
+	}
+	stmt := s.psql.
+		Select(projectColumns()...).
+		From("projects").
+		Where(squirrel.Eq{"organization_id": orgID, "slug": slug})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.Project{}, false, fmt.Errorf("get project by organization and slug SQL: %w", err)
+	}
+
+	project, err := scanProject(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Project{}, false, nil
+		}
+		return spine.Project{}, false, fmt.Errorf("get project by organization and slug: %w", err)
+	}
+	return project, true, nil
+}
+
+func (s *ProjectContextStore) GetActiveRepoBindingForProject(ctx context.Context, projectID spine.ProjectID) (spine.RepoBinding, bool, error) {
+	if s.query == nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	id, err := uuidValue(projectID, "repo binding project id")
+	if err != nil {
+		return spine.RepoBinding{}, false, err
+	}
+	stmt := s.psql.
+		Select(repoBindingColumns()...).
+		From("repo_bindings").
+		Where(squirrel.Eq{"project_id": id, "state": spine.EntityStateActive})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("get active repo binding SQL: %w", err)
+	}
+
+	binding, err := scanRepoBinding(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.RepoBinding{}, false, nil
+		}
+		return spine.RepoBinding{}, false, fmt.Errorf("get active repo binding: %w", err)
+	}
+	return binding, true, nil
+}
+
+func (s *ProjectContextStore) GetActiveRepoBindingByOrganizationAndRepository(ctx context.Context, organizationID spine.OrganizationID, provider string, repositoryFullName string) (spine.RepoBinding, bool, error) {
+	if s.query == nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	orgID, err := uuidValue(organizationID, "repo binding organization id")
+	if err != nil {
+		return spine.RepoBinding{}, false, err
+	}
+	stmt := s.psql.
+		Select(repoBindingColumns()...).
+		From("repo_bindings").
+		Where(squirrel.Expr("organization_id = ? AND lower(provider) = lower(?) AND lower(repository_full_name) = lower(?) AND state = ?", orgID, provider, repositoryFullName, spine.EntityStateActive))
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("get active repo binding by organization repository SQL: %w", err)
+	}
+
+	binding, err := scanRepoBinding(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.RepoBinding{}, false, nil
+		}
+		return spine.RepoBinding{}, false, fmt.Errorf("get active repo binding by organization repository: %w", err)
+	}
+	return binding, true, nil
+}
+
+func (s *ProjectContextStore) repoBindingInsert(binding spine.RepoBinding) (squirrel.InsertBuilder, error) {
+	bindingID, err := uuidValue(binding.ID, "repo binding id")
+	if err != nil {
+		return squirrel.InsertBuilder{}, err
 	}
 	orgID, err := uuidValue(binding.OrganizationID, "repo binding organization id")
 	if err != nil {
-		return err
+		return squirrel.InsertBuilder{}, err
 	}
 	projectID, err := uuidValue(binding.ProjectID, "repo binding project id")
 	if err != nil {
-		return err
+		return squirrel.InsertBuilder{}, err
 	}
 	createdByUserID, err := uuidValue(binding.CreatedByUserID, "repo binding created by user id")
 	if err != nil {
-		return err
+		return squirrel.InsertBuilder{}, err
 	}
 	stmt := s.psql.
 		Insert("repo_bindings").
@@ -158,6 +317,7 @@ func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spi
 			"repository_full_name",
 			"repository_url",
 			"default_branch",
+			"workflow_base_branch",
 			"path_scope",
 			"access_mode",
 			"state",
@@ -175,15 +335,14 @@ func (s *ProjectContextStore) UpsertRepoBinding(ctx context.Context, binding spi
 			binding.RepositoryFullName,
 			binding.RepositoryURL,
 			binding.DefaultBranch,
+			binding.WorkflowBaseBranch,
 			binding.PathScope,
 			binding.AccessMode,
 			binding.State,
 			binding.CreatedAt,
 			binding.UpdatedAt,
-		).
-		Suffix("ON CONFLICT (id) DO UPDATE SET provider = EXCLUDED.provider, repository_external_id = EXCLUDED.repository_external_id, repository_full_name = EXCLUDED.repository_full_name, repository_url = EXCLUDED.repository_url, default_branch = EXCLUDED.default_branch, path_scope = EXCLUDED.path_scope, access_mode = EXCLUDED.access_mode, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
-
-	return s.execSQL(ctx, "upsert repo binding", stmt)
+		)
+	return stmt, nil
 }
 
 func (s *ProjectContextStore) ResolveRepoBinding(ctx context.Context, repoBindingID spine.RepoBindingID) (spine.ResolvedRepoBindingContext, bool, error) {
@@ -224,6 +383,106 @@ func (s *ProjectContextStore) ResolveRepoBinding(ctx context.Context, repoBindin
 		ProjectID:      spine.ProjectID(projectID),
 		RepoBindingID:  spine.RepoBindingID(resolvedRepoBindingID),
 	}, true, nil
+}
+
+func repoBindingColumns() []string {
+	return []string{
+		"id",
+		"organization_id",
+		"project_id",
+		"created_by_user_id",
+		"vcs_connection_id",
+		"provider",
+		"repository_external_id",
+		"repository_full_name",
+		"repository_url",
+		"default_branch",
+		"workflow_base_branch",
+		"path_scope",
+		"access_mode",
+		"state",
+		"created_at",
+		"updated_at",
+	}
+}
+
+func projectColumns() []string {
+	return []string{
+		"id",
+		"organization_id",
+		"created_by_user_id",
+		"slug",
+		"display_name",
+		"state",
+		"created_at",
+		"updated_at",
+	}
+}
+
+func scanProject(row pgx.Row) (spine.Project, error) {
+	var id string
+	var organizationID string
+	var createdByUserID string
+	var state string
+	var project spine.Project
+	if err := row.Scan(
+		&id,
+		&organizationID,
+		&createdByUserID,
+		&project.Slug,
+		&project.DisplayName,
+		&state,
+		&project.CreatedAt,
+		&project.UpdatedAt,
+	); err != nil {
+		return spine.Project{}, err
+	}
+	project.ID = spine.ProjectID(id)
+	project.OrganizationID = spine.OrganizationID(organizationID)
+	project.CreatedByUserID = spine.UserID(createdByUserID)
+	project.State = spine.EntityState(state)
+	project.CreatedAt = project.CreatedAt.UTC()
+	project.UpdatedAt = project.UpdatedAt.UTC()
+	return project, nil
+}
+
+func scanRepoBinding(row pgx.Row) (spine.RepoBinding, error) {
+	var binding spine.RepoBinding
+	var id string
+	var organizationID string
+	var projectID string
+	var createdByUserID string
+	var accessMode string
+	var state string
+	if err := row.Scan(
+		&id,
+		&organizationID,
+		&projectID,
+		&createdByUserID,
+		&binding.VcsConnectionID,
+		&binding.Provider,
+		&binding.RepositoryExternalID,
+		&binding.RepositoryFullName,
+		&binding.RepositoryURL,
+		&binding.DefaultBranch,
+		&binding.WorkflowBaseBranch,
+		&binding.PathScope,
+		&accessMode,
+		&state,
+		&binding.CreatedAt,
+		&binding.UpdatedAt,
+	); err != nil {
+		return spine.RepoBinding{}, err
+	}
+	binding.ID = spine.RepoBindingID(id)
+	binding.OrganizationID = spine.OrganizationID(organizationID)
+	binding.ProjectID = spine.ProjectID(projectID)
+	binding.CreatedByUserID = spine.UserID(createdByUserID)
+	binding.AccessMode = spine.RepoBindingAccessMode(accessMode)
+	binding.State = spine.EntityState(state)
+	binding.CreatedAt = binding.CreatedAt.UTC()
+	binding.UpdatedAt = binding.UpdatedAt.UTC()
+	return binding, nil
 }
 
 func (s *ProjectContextStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {

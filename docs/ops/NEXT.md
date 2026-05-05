@@ -11,7 +11,7 @@
 - `apps/web/console` is now the single canonical multilingual EN/RU console source with static i18next resources, existing server login / optional password-change / `/v1/me` / logout endpoints, in-memory tokens only, no locale storage, and `goalrail.console.theme` as the only browser-storage key; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source is removed and live `console.goalrail.ru` remains separate
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
@@ -352,9 +352,23 @@ Done means:
 - ✅ the CLI stores `server_url`, `access_token`, `refresh_token`,
   `access_token_expires_at`, and `token_type` in a local auth JSON file with
   0600 permissions
+- ✅ normal `goalrail init` calls the server repository-context init endpoint
+  using local Git metadata and the stored login profile, then prints the
+  server-owned Project and RepoBinding context
+- ✅ low-level `goalrail init --project <project_id>` still calls the
+  Project-scoped RepoBinding init endpoint
+- ✅ explicit `goalrail init --local-demo` preserves the auth-free local/demo
+  draft and writes no files
+- ✅ after successful server-backed init, the CLI writes a non-secret
+  Git-root `.goalrail/project.yml` marker/cache with server/project/repo binding
+  identity only
+- ✅ server-backed init preflights an existing `.goalrail/project.yml` before
+  the server call and fails locally on server/project/repo/base conflicts
 - no keychain integration
-- no Organization / Project / RepoBinding profile selection
-- no repo binding sync
+- no Organization selection UX or public Organization creation
+- no auth token, contract, work item, audit, proof, diff, memory, or runtime
+  cache storage in `.goalrail/project.yml`
+- no audit/hook/branch/verification setup from init
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint
@@ -619,9 +633,11 @@ Done means:
 1. Server-side repo key provisioning API/client
    - define the smallest server-owned provisioning boundary for repo access
    - keep production private-key generation and storage outside the local CLI
-2. Real RepoBinding state sync
-   - connect `goalrail init` output to server-backed RepoBinding state
-   - keep local draft output until server state exists
+2. Explicit workflow base override for init
+   - add a narrow `--base <branch>` only for server-backed init when local
+     origin default metadata is unavailable or intentionally different
+   - keep provider default detection and workflow base selection distinct
+   - do not create branches or mutate Git state
 3. Contract draft/approval flow integration
    - connect `goalrail contract validate` to real contract draft and approval state
    - preserve field-level validation findings
