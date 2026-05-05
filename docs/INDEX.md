@@ -16,6 +16,7 @@ related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/ops/STATUS.md
+  - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
 # Goalrail Docs Index
@@ -108,21 +109,22 @@ related_docs:
 64. `docs/ops/BRANCH_PROTECTION.md`
 65. `docs/ops/REPO_STRUCTURE.md`
 66. `docs/ops/GO_CODE_GUIDE.md`
-67. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-68. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-69. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+67. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+68. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+69. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+70. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-70. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-71. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-72. `docs/reference/design/reference_screens/`
-73. `.goalrail/work/`
-74. `.goalrail/knowledge/`
-75. `.punk/publishing.toml`
-76. `.goalrail/flows/`
-77. `.goalrail/evals/`
-78. `docs/ops/PUBLISHING_MIGRATION.md`
-79. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+71. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+72. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+73. `docs/reference/design/reference_screens/`
+74. `.goalrail/work/`
+75. `.goalrail/knowledge/`
+76. `.punk/publishing.toml`
+77. `.goalrail/flows/`
+78. `.goalrail/evals/`
+79. `docs/ops/PUBLISHING_MIGRATION.md`
+80. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -211,6 +213,7 @@ related_docs:
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
+- `CONSOLE_MAIN_DEPLOYMENT_WIRING.md` — operational record for the main `goalrail.dev` console and `api.goalrail.dev` API Flux GitOps deployment and smoke status
 - `CONSOLE_RU_DEPLOYMENT_WIRING.md` — operational record for the static `console.goalrail.ru` deployment wiring and smoke status
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
