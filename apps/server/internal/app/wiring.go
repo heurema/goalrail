@@ -19,6 +19,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/postgres"
+	"github.com/heurema/goalrail/apps/server/internal/repobinding"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
@@ -68,6 +69,7 @@ type appServices struct {
 	contract      *contract.Service
 	workItem      *workitem.Service
 	workItemPlan  *workitemplan.Service
+	repoBinding   *repobinding.Service
 	auth          *auth.Service
 }
 
@@ -83,6 +85,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		contract:      contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
 		workItem:      workitem.NewService(stores.workItems),
 		workItemPlan:  workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
+		repoBinding:   repobinding.NewService(stores.projectContext, stores.events, txRunner, repobinding.SystemClock{}, repobinding.UUIDGenerator{}),
 		auth:          auth.NewService(stores.auth, authJWTSecret),
 	}
 }
@@ -94,6 +97,7 @@ type appHandlers struct {
 	contract      *httpserver.ContractHandler
 	workItem      *httpserver.WorkItemHandler
 	workItemPlan  *httpserver.WorkItemPlanHandler
+	repoBinding   *httpserver.RepoBindingHandler
 	auth          *httpserver.AuthHandler
 }
 
@@ -105,6 +109,7 @@ func newAppHandlers(services appServices) appHandlers {
 		contract:      httpserver.NewContractHandler(services.contract),
 		workItem:      httpserver.NewWorkItemHandler(services.workItem),
 		workItemPlan:  httpserver.NewWorkItemPlanHandler(services.workItemPlan),
+		repoBinding:   httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
 		auth:          httpserver.NewAuthHandler(services.auth),
 	}
 }
@@ -122,6 +127,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		AuthChangePassword:        http.HandlerFunc(h.auth.ChangePassword),
 		AuthLogout:                http.HandlerFunc(h.auth.Logout),
 		Me:                        http.HandlerFunc(h.auth.Me),
+		ProjectRepoBindingInit:    http.HandlerFunc(h.repoBinding.Init),
 		IntakeSubmit:              http.HandlerFunc(h.intake.Submit),
 		IntakeGet:                 http.HandlerFunc(h.intake.Get),
 		IntakePromote:             http.HandlerFunc(h.goal.PromoteFromIntake),
@@ -182,6 +188,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		AuthChangePassword:        unavailable,
 		AuthLogout:                unavailable,
 		Me:                        unavailable,
+		ProjectRepoBindingInit:    unavailable,
 		IntakeSubmit:              unavailable,
 		IntakeGet:                 unavailable,
 		IntakePromote:             unavailable,

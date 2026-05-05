@@ -24,7 +24,7 @@ type commandSummary struct {
 var rootCommands = []commandSummary{
 	{name: "version", summary: "print the CLI version"},
 	{name: "login", summary: "authenticate to a Goalrail server"},
-	{name: "init", summary: "create a local/demo repo binding draft"},
+	{name: "init", summary: "initialize repository metadata"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
 	{name: "contract", summary: "validate contract JSON files"},
 	{name: "proof", summary: "render proof JSON files"},
@@ -55,7 +55,7 @@ func NewRootCommand(env clienv.Env) *cobra.Command {
 	cmd.AddCommand(
 		newVersionCommand(),
 		newLoginCommand(),
-		newInitCommand(),
+		newInitCommand(env),
 		newReadinessCommand(env),
 		newContractCommand(env),
 		newProofCommand(env),
@@ -106,13 +106,13 @@ func newLoginCommand() *cobra.Command {
 	}
 }
 
-func newInitCommand() *cobra.Command {
+func newInitCommand(env clienv.Env) *cobra.Command {
 	return &cobra.Command{
 		Use:                "init",
-		Short:              "create a local/demo repo binding draft",
+		Short:              "initialize repository metadata",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return initcmd.Run(cmd.Context(), outputFor(cmd), args)
+			return initcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, args)
 		},
 	}
 }

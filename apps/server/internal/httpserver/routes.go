@@ -17,6 +17,7 @@ type RouteHandlers struct {
 	AuthChangePassword        http.Handler
 	AuthLogout                http.Handler
 	Me                        http.Handler
+	ProjectRepoBindingInit    http.Handler
 	IntakeSubmit              http.Handler
 	IntakeGet                 http.Handler
 	IntakePromote             http.Handler
@@ -52,6 +53,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/auth/change-password", mustHandler("auth change password", handlers.AuthChangePassword))
 	mux.Handle("POST /v1/auth/logout", mustHandler("auth logout", handlers.AuthLogout))
 	mux.Handle("GET /v1/me", mustHandler("me", handlers.Me))
+	mux.Handle("POST /v1/projects/{project_id}/repo-bindings/init", mustHandler("project repo binding init", handlers.ProjectRepoBindingInit))
 	mux.Handle("POST /v1/intakes", mustHandler("intake submit", handlers.IntakeSubmit))
 	mux.Handle("GET /v1/intakes/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intakes/{id}/goals", mustHandler("intake promote", handlers.IntakePromote))

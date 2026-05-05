@@ -99,6 +99,7 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 		RepositoryFullName: "heurema/goalrail",
 		RepositoryURL:      "https://example.invalid/heurema/goalrail.git",
 		DefaultBranch:      "main",
+		WorkflowBaseBranch: "main",
 		PathScope:          ".",
 		AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
 		State:              spine.EntityStateActive,
@@ -122,8 +123,101 @@ func TestProjectContextStoreBuildsRepoBindingUpsertWithSquirrelPlaceholders(t *t
 	if !strings.Contains(call.sql, "$1") {
 		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
 	}
-	if got, want := len(call.args), 15; got != want {
+	if !strings.Contains(call.sql, "workflow_base_branch") {
+		t.Fatalf("SQL = %q, want workflow_base_branch column", call.sql)
+	}
+	if got, want := len(call.args), 16; got != want {
 		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
+func TestProjectContextStoreGetsProject(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000001",
+				"default",
+				"Default Project",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	project, ok, err := store.GetProject(ctx, "018f0000-0000-7000-8000-000000000003")
+	if err != nil {
+		t.Fatalf("GetProject() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetProject() ok = false, want true")
+	}
+	if project.OrganizationID != "018f0000-0000-7000-8000-000000000002" {
+		t.Fatalf("organization_id = %q, want 018f0000-0000-7000-8000-000000000002", project.OrganizationID)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM projects") {
+		t.Fatalf("SQL = %q, want projects select", call.sql)
+	}
+	if !strings.Contains(call.sql, "$1") {
+		t.Fatalf("SQL = %q, want PostgreSQL placeholders", call.sql)
+	}
+}
+
+func TestProjectContextStoreGetsActiveRepoBindingForProject(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000004",
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000003",
+				"018f0000-0000-7000-8000-000000000001",
+				"",
+				"github",
+				"",
+				"heurema/goalrail",
+				"git@github.com:heurema/goalrail.git",
+				"main",
+				"main",
+				".",
+				"metadata_only",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	binding, ok, err := store.GetActiveRepoBindingForProject(ctx, "018f0000-0000-7000-8000-000000000003")
+	if err != nil {
+		t.Fatalf("GetActiveRepoBindingForProject() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetActiveRepoBindingForProject() ok = false, want true")
+	}
+	if binding.WorkflowBaseBranch != "main" {
+		t.Fatalf("workflow_base_branch = %q, want main", binding.WorkflowBaseBranch)
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("QueryRow calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "FROM repo_bindings") {
+		t.Fatalf("SQL = %q, want repo_bindings select", call.sql)
+	}
+	if !strings.Contains(call.sql, "workflow_base_branch") {
+		t.Fatalf("SQL = %q, want workflow_base_branch column", call.sql)
 	}
 }
 

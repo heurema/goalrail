@@ -104,6 +104,7 @@ func RunDev(ctx context.Context, projectContext ProjectContextStore, now time.Ti
 		RepositoryFullName: "heurema/goalrail",
 		RepositoryURL:      "https://example.invalid/heurema/goalrail.git",
 		DefaultBranch:      "main",
+		WorkflowBaseBranch: "main",
 		PathScope:          ".",
 		AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
 		State:              spine.EntityStateActive,

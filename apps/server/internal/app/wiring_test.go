@@ -57,6 +57,7 @@ func TestHTTPServerWithoutDatabaseReturnsUnavailableForProductRoutes(t *testing.
 		{name: "auth refresh", method: http.MethodPost, path: "/v1/auth/refresh", body: `{}`},
 		{name: "auth logout", method: http.MethodPost, path: "/v1/auth/logout"},
 		{name: "me", method: http.MethodGet, path: "/v1/me"},
+		{name: "repo binding init", method: http.MethodPost, path: "/v1/projects/018f0000-0000-7000-8000-000000000003/repo-bindings/init", body: `{}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			response := doServerRequest(t, server.Handler, tt.method, tt.path, tt.body)

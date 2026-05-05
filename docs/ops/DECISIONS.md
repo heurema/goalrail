@@ -1963,3 +1963,109 @@ Rationale:
   broad platform policy.
 - Keeping credentials/cookies out of this slice preserves the current
   bearer-token, in-memory frontend auth posture.
+
+## D-0076 — RepoBinding init starts from server-owned metadata state
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Add the first authenticated server-owned RepoBinding init endpoint:
+  `POST /v1/projects/{project_id}/repo-bindings/init`.
+- `project_id` is authoritative from the path; `organization_id` is derived
+  server-side from the Project and is not accepted from the request body.
+- The endpoint creates a primary active RepoBinding for the Project when none
+  exists, returns the same binding idempotently for the same normalized
+  repository identity, and rejects a different active repository with conflict.
+- `workflow_base_branch` is required as request semantics. If it is empty, the
+  server may use `provider_default_branch`; if both are empty, validation fails.
+- The MVP access mode for this slice is `metadata_only`.
+- On create, `repo_binding.initialized` is appended transactionally with the
+  RepoBinding write where the current Postgres store supports it.
+- The endpoint does not add GitHub App, provider API, deploy key provisioning,
+  repository clone, audit queue, runner checkout, gate, proof, full CRUD, VCS
+  connection, or repository catalog behavior.
+
+Rationale:
+- Server state is the canonical project/repository truth, so CLI-local init
+  must not become the source of truth before the server owns RepoBinding state.
+- A metadata-only RepoBinding boundary lets later CLI and local marker slices
+  bind to a real server object without introducing checkout or provider access.
+- Keeping identity comparison on provider plus repository full name makes init
+  idempotent across common remote URL forms.
+
+## D-0077 — CLI init server mode is explicit
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- `goalrail init` keeps its local/demo mode unless the caller passes
+  `--project <project_id>`.
+- Server-backed init uses local Git metadata and the stored
+  `goalrail login <server_url>` profile to call the D-0076 RepoBinding init
+  endpoint.
+- Local/demo init remains auth-free and file-free.
+- Server-backed init requires a detected `workflow_base_branch`; it does not
+  use the current local branch as a fallback and does not mutate Git state.
+- Expired access tokens fail locally before the HTTP request with a login
+  renewal message. Token refresh remains deferred.
+- This mode does not add `.goalrail/project.yml` writing by itself, keychain
+  integration, Organization / Project / RepoBinding profile selection, audit,
+  hooks, branch creation, provider API, deploy keys, clone, runner, gate, or
+  proof.
+
+Rationale:
+- Explicit `--project` prevents local/demo init from silently becoming a server
+  registration flow.
+- Reusing the existing login profile keeps the slice narrow and avoids adding a
+  second credential mechanism.
+- Local expiry checks produce deterministic operator feedback without adding a
+  refresh framework.
+
+## D-0078 — CLI writes a non-secret project marker after server-backed init
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- After successful server-backed `goalrail init --project <project_id>`, the
+  CLI writes `<git_root>/.goalrail/project.yml`.
+- Local/demo init never writes the marker.
+- The marker is a non-secret local cache/marker only. It stores:
+  `version`, `server_url`, `organization_id`, `project_id`, `repo_binding_id`,
+  and repository `provider`, `full_name`, `url`, and `workflow_base_branch`.
+- The marker never stores access tokens, refresh tokens, auth/session material,
+  contracts, work items, audit status, proof, memory, diffs, or runtime cache.
+- Identical existing content reports unchanged. Different existing content is
+  not overwritten and fails without adding force or repair behavior.
+- The CLI does not modify `.gitignore`.
+
+Rationale:
+- The local checkout needs a durable marker only after the server returns a
+  real RepoBinding identity.
+- Keeping the file non-secret preserves the server as source of truth and keeps
+  repository checkout state reviewable.
+- Refusing silent overwrite prevents accidental rebinding of a checkout to a
+  different server/project/repository context.
+
+## D-0079 — CLI preflights the local project marker before server-backed init
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Before the D-0076 HTTP request, server-backed init reads an existing
+  `<git_root>/.goalrail/project.yml` marker if present.
+- Obvious local conflicts in `server_url`, `project_id`, repository provider,
+  repository full name, repository URL, or `workflow_base_branch` fail locally
+  before the server call.
+- Unparseable marker content fails locally and is not overwritten.
+- `organization_id` and `repo_binding_id` are still validated after the server
+  response because they come from the server.
+- Local/demo init does not treat the marker as canonical behavior and remains
+  file-free.
+- No `--force`, repair command, audit, provider integration, runner, gate,
+  proof, branch, or PR flow is introduced.
+
+Rationale:
+- Preflight prevents a server-side init/create/find from succeeding before an
+  obvious local marker conflict is discovered.
+- The local marker remains a cache/marker, not a competing source of truth.
+- Deferring repair keeps the first marker semantics narrow and reviewable.

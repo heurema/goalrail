@@ -126,6 +126,7 @@ CREATE TABLE repo_bindings (
     repository_full_name TEXT NOT NULL,
     repository_url TEXT NOT NULL,
     default_branch TEXT NOT NULL,
+    workflow_base_branch TEXT NOT NULL,
     path_scope TEXT NOT NULL,
     access_mode TEXT NOT NULL,
     state TEXT NOT NULL,

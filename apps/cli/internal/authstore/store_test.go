@@ -2,6 +2,7 @@ package authstore
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,5 +45,25 @@ func TestFileStoreWritesSessionWithRestrictedPermissions(t *testing.T) {
 	}
 	if !session.AccessTokenExpiresAt.Equal(expiresAt) {
 		t.Fatalf("AccessTokenExpiresAt = %v, want %v", session.AccessTokenExpiresAt, expiresAt)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if loaded.ServerURL != session.ServerURL || loaded.AccessToken != session.AccessToken || loaded.RefreshToken != session.RefreshToken || loaded.TokenType != session.TokenType {
+		t.Fatalf("loaded session = %#v, want saved session %#v", loaded, session)
+	}
+	if !loaded.AccessTokenExpiresAt.Equal(expiresAt) {
+		t.Fatalf("loaded AccessTokenExpiresAt = %v, want %v", loaded.AccessTokenExpiresAt, expiresAt)
+	}
+}
+
+func TestFileStoreLoadMissingSession(t *testing.T) {
+	store := NewFileStore(filepath.Join(t.TempDir(), "missing", "auth.json"))
+
+	_, err := store.Load()
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("Load() error = %v, want ErrSessionNotFound", err)
 	}
 }
