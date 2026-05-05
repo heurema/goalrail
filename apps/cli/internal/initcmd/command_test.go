@@ -176,16 +176,19 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if err := os.WriteFile(gitignorePath, []byte("existing-ignore\n"), 0o644); err != nil {
 		t.Fatalf("write .gitignore fixture: %v", err)
 	}
+	writeFile(t, repoDir, "go.mod", "module github.com/heurema/goalrail\n")
+	writeFile(t, repoDir, "package.json", `{"name":"goalrail"}`)
+	writeFile(t, repoDir, "pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
+	writeFile(t, repoDir, ".github/workflows/ci.yml", "name: ci\n")
+	if err := os.MkdirAll(filepath.Join(repoDir, "apps", "cli"), 0o755); err != nil {
+		t.Fatalf("create workspace fixture: %v", err)
+	}
 	var received spine.RepositoryContextInitRequest
+	var snapshotReceived spine.RepositoryContextSnapshotRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 			http.Error(w, "bad method", http.StatusMethodNotAllowed)
-			return
-		}
-		if r.URL.Path != "/v1/init/repository-context" {
-			t.Errorf("path = %s, want repository context init path", r.URL.Path)
-			http.Error(w, "bad path", http.StatusNotFound)
 			return
 		}
 		if r.Header.Get("Authorization") != "Bearer access-token" {
@@ -193,16 +196,33 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 			http.Error(w, "bad auth", http.StatusUnauthorized)
 			return
 		}
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&received); err != nil {
-			t.Errorf("decode request body: %v", err)
-			http.Error(w, "bad json", http.StatusBadRequest)
-			return
+		switch r.URL.Path {
+		case "/v1/init/repository-context":
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&received); err != nil {
+				t.Errorf("decode request body: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+		case "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots":
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&snapshotReceived); err != nil {
+				t.Errorf("decode snapshot request body: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(repositoryContextSnapshotResponseJSON(true)))
+		default:
+			t.Errorf("path = %s, want repository context init or snapshot path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":true,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":true,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"main","workflow_base_branch":"main","state":"active","message":"Repository context initialized."}`))
 	}))
 	defer server.Close()
 
@@ -226,6 +246,9 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.LocalConfigPath != projectConfigRelativePath || output.LocalConfigStatus != localConfigStatusWritten {
 		t.Fatalf("local config output = %q/%q, want %q/%q", output.LocalConfigPath, output.LocalConfigStatus, projectConfigRelativePath, localConfigStatusWritten)
 	}
+	if output.ContextSnapshotID != "018f0000-0000-7000-8000-000000000301" || output.ContextSnapshotStatus != "recorded" {
+		t.Fatalf("context snapshot output = %q/%q, want recorded snapshot", output.ContextSnapshotID, output.ContextSnapshotStatus)
+	}
 	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
 		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
 	}
@@ -237,6 +260,29 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	}
 	if received.SuggestedProjectSlug != "github-heurema-goalrail" || received.SuggestedProjectDisplayName != "heurema/goalrail" {
 		t.Fatalf("request suggested project = %q/%q, want slug/display", received.SuggestedProjectSlug, received.SuggestedProjectDisplayName)
+	}
+	if snapshotReceived.Source != repositoryContextSnapshotSource || snapshotReceived.SchemaVersion != 1 {
+		t.Fatalf("snapshot source/schema = %q/%d, want CLI init v1", snapshotReceived.Source, snapshotReceived.SchemaVersion)
+	}
+	if snapshotReceived.Repository.Provider != "github" || snapshotReceived.Repository.FullName != "heurema/goalrail" || snapshotReceived.Repository.URL != "git@github.com:heurema/goalrail.git" {
+		t.Fatalf("snapshot repository = %#v, want output repository", snapshotReceived.Repository)
+	}
+	if snapshotReceived.Repository.RemoteName != "origin" || snapshotReceived.Repository.HeadSHA != headSHA {
+		t.Fatalf("snapshot local Git fields = %#v, want origin/%s", snapshotReceived.Repository, headSHA)
+	}
+	for _, want := range []string{".github/workflows/ci.yml", "apps/cli/", "go.mod", "package.json", "pnpm-lock.yaml"} {
+		if !stringSliceContains(snapshotReceived.DetectedPaths, want) {
+			t.Fatalf("snapshot detected paths = %#v, want %q", snapshotReceived.DetectedPaths, want)
+		}
+	}
+	if !stringSliceContains(snapshotReceived.DetectedToolchains, "go") || !stringSliceContains(snapshotReceived.DetectedToolchains, "node") {
+		t.Fatalf("snapshot toolchains = %#v, want go and node", snapshotReceived.DetectedToolchains)
+	}
+	if !stringSliceContains(snapshotReceived.DetectedPackageManagers, "pnpm") {
+		t.Fatalf("snapshot package managers = %#v, want pnpm", snapshotReceived.DetectedPackageManagers)
+	}
+	if !stringSliceContains(snapshotReceived.WorkspaceCandidates, "apps/cli") {
+		t.Fatalf("snapshot workspace candidates = %#v, want apps/cli", snapshotReceived.WorkspaceCandidates)
 	}
 	config := readProjectConfigFile(t, repoDir)
 	wantConfig := expectedProjectConfigYAML(server.URL)
@@ -262,6 +308,11 @@ func TestRunRepositoryContextInitBaseOverrideSplitsProviderDefaultAndWorkflowBas
 	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
 	var received spine.RepositoryContextInitRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(repositoryContextSnapshotResponseJSON(true)))
+			return
+		}
 		if r.URL.Path != "/v1/init/repository-context" {
 			t.Errorf("path = %s, want repository context init path", r.URL.Path)
 			http.Error(w, "bad path", http.StatusNotFound)
@@ -276,7 +327,7 @@ func TestRunRepositoryContextInitBaseOverrideSplitsProviderDefaultAndWorkflowBas
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":true,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":true,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"main","workflow_base_branch":"release/2026-05","state":"active","message":"Repository context initialized."}`))
+		_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "release/2026-05")))
 	}))
 	defer server.Close()
 
@@ -307,6 +358,11 @@ func TestRunRepositoryContextInitBaseOverrideWorksWithoutDetectedOriginDefault(t
 	runGit(t, repoDir, "remote", "add", "origin", "git@github.com:heurema/goalrail.git")
 	var received spine.RepositoryContextInitRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(repositoryContextSnapshotResponseJSON(true)))
+			return
+		}
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&received); err != nil {
@@ -460,6 +516,11 @@ func TestRunRepositoryContextInitDoesNotPreflightProjectIDBeforeServer(t *testin
 	var requestCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount.Add(1)
+		if strings.HasPrefix(r.URL.Path, "/v1/repo-bindings/") && strings.HasSuffix(r.URL.Path, "/context-snapshots") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(repositoryContextSnapshotResponseJSON(false)))
+			return
+		}
 		if r.URL.Path != "/v1/init/repository-context" {
 			t.Errorf("path = %s, want repository context init path", r.URL.Path)
 			http.Error(w, "bad path", http.StatusNotFound)
@@ -476,8 +537,8 @@ func TestRunRepositoryContextInitDoesNotPreflightProjectIDBeforeServer(t *testin
 	if err != nil {
 		t.Fatalf("Run(init) error = %v", err)
 	}
-	if got := requestCount.Load(); got != 1 {
-		t.Fatalf("server requests = %d, want 1 because project_id is post-server for plain init", got)
+	if got := requestCount.Load(); got != 2 {
+		t.Fatalf("server requests = %d, want init plus snapshot because project_id is post-server for plain init", got)
 	}
 	if output.LocalConfigStatus != localConfigStatusUnchanged {
 		t.Fatalf("local_config_status = %q, want unchanged", output.LocalConfigStatus)
@@ -990,6 +1051,35 @@ func repoBindingInitHandler(t *testing.T, projectID string) http.HandlerFunc {
 	}
 }
 
+func repositoryContextInitResponseJSON(projectCreated bool, repoBindingCreated bool, workflowBaseBranch string) string {
+	providerDefaultBranch := "main"
+	if workflowBaseBranch != "main" {
+		providerDefaultBranch = "main"
+	}
+	return `{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":` +
+		boolJSON(projectCreated) +
+		`,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":` +
+		boolJSON(repoBindingCreated) +
+		`,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"` +
+		providerDefaultBranch +
+		`","workflow_base_branch":"` +
+		workflowBaseBranch +
+		`","state":"active","message":"Repository context initialized."}`
+}
+
+func repositoryContextSnapshotResponseJSON(created bool) string {
+	return `{"context_snapshot_id":"018f0000-0000-7000-8000-000000000301","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","source":"goalrail_cli_init","schema_version":1,"fingerprint":"sha256:abc123","created":` +
+		boolJSON(created) +
+		`,"message":"Repository context snapshot recorded."}`
+}
+
+func boolJSON(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
 func projectConfigFixture(serverURL string) projectConfig {
 	return projectConfig{
 		Version:        projectConfigVersion,
@@ -1010,6 +1100,27 @@ func writeProjectConfigFixture(t *testing.T, repoDir string, config projectConfi
 	t.Helper()
 
 	return writeRawProjectConfigFile(t, repoDir, renderProjectConfigYAML(config))
+}
+
+func writeFile(t *testing.T, repoDir string, relative string, content string) {
+	t.Helper()
+
+	path := filepath.Join(repoDir, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create parent for %s: %v", relative, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", relative, err)
+	}
+}
+
+func stringSliceContains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func writeRawProjectConfigFile(t *testing.T, repoDir string, content string) string {

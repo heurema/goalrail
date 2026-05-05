@@ -151,6 +151,33 @@ CREATE UNIQUE INDEX repo_bindings_one_active_per_org_repository_idx
     ON repo_bindings(organization_id, lower(provider), lower(repository_full_name))
     WHERE state = 'active';
 
+CREATE TABLE repository_context_snapshots (
+    id UUID PRIMARY KEY,
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    schema_version INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    snapshot JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT repository_context_snapshots_source_check CHECK (source <> ''),
+    CONSTRAINT repository_context_snapshots_schema_version_check CHECK (schema_version = 1),
+    CONSTRAINT repository_context_snapshots_fingerprint_check CHECK (fingerprint <> '')
+);
+
+CREATE UNIQUE INDEX repository_context_snapshots_repo_binding_fingerprint_idx
+    ON repository_context_snapshots(repo_binding_id, fingerprint);
+
+CREATE INDEX repository_context_snapshots_organization_created_at_idx
+    ON repository_context_snapshots(organization_id, created_at);
+
+CREATE INDEX repository_context_snapshots_project_created_at_idx
+    ON repository_context_snapshots(project_id, created_at);
+
+CREATE INDEX repository_context_snapshots_repo_binding_created_at_idx
+    ON repository_context_snapshots(repo_binding_id, created_at);
+
 CREATE TABLE intake_records (
     id UUID PRIMARY KEY,
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -629,6 +656,11 @@ DROP INDEX IF EXISTS intake_records_repo_binding_created_at_idx;
 DROP INDEX IF EXISTS intake_records_project_created_at_idx;
 DROP INDEX IF EXISTS intake_records_organization_created_at_idx;
 DROP TABLE IF EXISTS intake_records;
+DROP INDEX IF EXISTS repository_context_snapshots_repo_binding_created_at_idx;
+DROP INDEX IF EXISTS repository_context_snapshots_project_created_at_idx;
+DROP INDEX IF EXISTS repository_context_snapshots_organization_created_at_idx;
+DROP INDEX IF EXISTS repository_context_snapshots_repo_binding_fingerprint_idx;
+DROP TABLE IF EXISTS repository_context_snapshots;
 DROP INDEX IF EXISTS repo_bindings_one_active_per_project_idx;
 DROP INDEX IF EXISTS repo_bindings_one_active_per_org_repository_idx;
 DROP INDEX IF EXISTS repo_bindings_project_id_idx;

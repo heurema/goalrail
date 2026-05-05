@@ -2154,3 +2154,36 @@ Rationale:
 - Starting with IntakeRecord plus Goal preserves the existing server lifecycle
   boundary before contract, work-item planning, audit, runner, gate, and proof
   slices.
+
+## D-0082 — Init records a metadata-only repository context snapshot
+Date: 2026-05-05
+Status: accepted
+
+Decision:
+- Normal server-backed `goalrail init` now records a bounded server-side
+  repository context snapshot after `POST /v1/init/repository-context`
+  succeeds.
+- The new snapshot endpoint is
+  `POST /v1/repo-bindings/{repo_binding_id}/context-snapshots`.
+- The snapshot is linked to the existing Organization, Project, and
+  RepoBinding, and is idempotent by RepoBinding plus deterministic fingerprint.
+- The CLI snapshot is limited to local metadata inventory: repository identity,
+  branch metadata, HEAD SHA, detected marker paths, toolchains, package
+  managers, and bounded workspace candidates.
+- The local `.goalrail/project.yml` marker remains unchanged and non-secret;
+  dynamic project inventory stays server-side.
+- The low-level `goalrail init --project <project_id>` path remains the
+  metadata-only RepoBinding init path and does not grow into a broader context
+  bootstrap flow.
+- This does not run tests, evaluate readiness, score the repository, queue
+  audit, clone repositories, call provider APIs, connect GitHub App, create
+  branches/PRs, assign work, create WorkItems, start runners, write gates, or
+  generate proof.
+
+Rationale:
+- Repository binding alone tells Goalrail which repository a Project uses, but
+  not the initial shape of the local checkout.
+- A metadata-only snapshot makes `init` a more complete first step without
+  crossing into audit, runner, provider integration, or verification behavior.
+- Keeping snapshot history server-owned preserves `.goalrail/project.yml` as a
+  local marker/cache rather than a competing source of truth.

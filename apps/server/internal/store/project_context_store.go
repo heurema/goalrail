@@ -293,6 +293,109 @@ func (s *ProjectContextStore) GetActiveRepoBindingByOrganizationAndRepository(ct
 	return binding, true, nil
 }
 
+func (s *ProjectContextStore) GetRepoBinding(ctx context.Context, repoBindingID spine.RepoBindingID) (spine.RepoBinding, bool, error) {
+	if s.query == nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	id, err := uuidValue(repoBindingID, "repo binding id")
+	if err != nil {
+		return spine.RepoBinding{}, false, err
+	}
+	stmt := s.psql.
+		Select(repoBindingColumns()...).
+		From("repo_bindings").
+		Where(squirrel.Eq{"id": id})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.RepoBinding{}, false, fmt.Errorf("get repo binding SQL: %w", err)
+	}
+
+	binding, err := scanRepoBinding(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.RepoBinding{}, false, nil
+		}
+		return spine.RepoBinding{}, false, fmt.Errorf("get repo binding: %w", err)
+	}
+	return binding, true, nil
+}
+
+func (s *ProjectContextStore) CreateRepositoryContextSnapshot(ctx context.Context, record spine.RepositoryContextSnapshotRecord) error {
+	snapshotID, err := uuidValue(record.ID, "repository context snapshot id")
+	if err != nil {
+		return err
+	}
+	orgID, err := uuidValue(record.OrganizationID, "repository context snapshot organization id")
+	if err != nil {
+		return err
+	}
+	projectID, err := uuidValue(record.ProjectID, "repository context snapshot project id")
+	if err != nil {
+		return err
+	}
+	repoBindingID, err := uuidValue(record.RepoBindingID, "repository context snapshot repo binding id")
+	if err != nil {
+		return err
+	}
+	stmt := s.psql.
+		Insert("repository_context_snapshots").
+		Columns(
+			"id",
+			"organization_id",
+			"project_id",
+			"repo_binding_id",
+			"source",
+			"schema_version",
+			"fingerprint",
+			"snapshot",
+			"created_at",
+		).
+		Values(
+			snapshotID,
+			orgID,
+			projectID,
+			repoBindingID,
+			record.Source,
+			record.SchemaVersion,
+			record.Fingerprint,
+			record.Snapshot,
+			record.CreatedAt.UTC(),
+		)
+	if err := s.execSQL(ctx, "create repository context snapshot", stmt); err != nil {
+		return wrapUniqueConstraint(err)
+	}
+	return nil
+}
+
+func (s *ProjectContextStore) GetRepositoryContextSnapshotByFingerprint(ctx context.Context, repoBindingID spine.RepoBindingID, fingerprint string) (spine.RepositoryContextSnapshotRecord, bool, error) {
+	if s.query == nil {
+		return spine.RepositoryContextSnapshotRecord{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	id, err := uuidValue(repoBindingID, "repository context snapshot repo binding id")
+	if err != nil {
+		return spine.RepositoryContextSnapshotRecord{}, false, err
+	}
+	stmt := s.psql.
+		Select(repositoryContextSnapshotColumns()...).
+		From("repository_context_snapshots").
+		Where(squirrel.Eq{"repo_binding_id": id, "fingerprint": fingerprint})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.RepositoryContextSnapshotRecord{}, false, fmt.Errorf("get repository context snapshot by fingerprint SQL: %w", err)
+	}
+
+	record, err := scanRepositoryContextSnapshot(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.RepositoryContextSnapshotRecord{}, false, nil
+		}
+		return spine.RepositoryContextSnapshotRecord{}, false, fmt.Errorf("get repository context snapshot by fingerprint: %w", err)
+	}
+	return record, true, nil
+}
+
 func (s *ProjectContextStore) repoBindingInsert(binding spine.RepoBinding) (squirrel.InsertBuilder, error) {
 	bindingID, err := uuidValue(binding.ID, "repo binding id")
 	if err != nil {
@@ -425,6 +528,20 @@ func projectColumns() []string {
 	}
 }
 
+func repositoryContextSnapshotColumns() []string {
+	return []string{
+		"id",
+		"organization_id",
+		"project_id",
+		"repo_binding_id",
+		"source",
+		"schema_version",
+		"fingerprint",
+		"snapshot",
+		"created_at",
+	}
+}
+
 func scanProject(row pgx.Row) (spine.Project, error) {
 	var id string
 	var organizationID string
@@ -489,6 +606,36 @@ func scanRepoBinding(row pgx.Row) (spine.RepoBinding, error) {
 	binding.CreatedAt = binding.CreatedAt.UTC()
 	binding.UpdatedAt = binding.UpdatedAt.UTC()
 	return binding, nil
+}
+
+func scanRepositoryContextSnapshot(row pgx.Row) (spine.RepositoryContextSnapshotRecord, error) {
+	var record spine.RepositoryContextSnapshotRecord
+	var id string
+	var organizationID string
+	var projectID string
+	var repoBindingID string
+	if err := row.Scan(
+		&id,
+		&organizationID,
+		&projectID,
+		&repoBindingID,
+		&record.Source,
+		&record.SchemaVersion,
+		&record.Fingerprint,
+		&record.Snapshot,
+		&record.CreatedAt,
+	); err != nil {
+		return spine.RepositoryContextSnapshotRecord{}, err
+	}
+	record.ID = spine.RepositoryContextSnapshotID(id)
+	record.OrganizationID = spine.OrganizationID(organizationID)
+	record.ProjectID = spine.ProjectID(projectID)
+	record.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	record.CreatedAt = record.CreatedAt.UTC()
+	if record.Snapshot != nil {
+		record.Snapshot = append([]byte(nil), record.Snapshot...)
+	}
+	return record, nil
 }
 
 func (s *ProjectContextStore) execSQL(ctx context.Context, op string, sqlizer squirrel.Sqlizer) error {

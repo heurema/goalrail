@@ -109,5 +109,40 @@ type RepositoryContextInitOutput struct {
 	Message               string `json:"message"`
 	LocalConfigPath       string `json:"local_config_path"`
 	LocalConfigStatus     string `json:"local_config_status"`
+	ContextSnapshotID     string `json:"context_snapshot_id"`
+	ContextSnapshotStatus string `json:"context_snapshot_status"`
+	ContextFingerprint    string `json:"context_fingerprint"`
 	NextCommand           string `json:"next_suggested_command"`
+}
+
+type RepositoryContextSnapshotRequest struct {
+	Source                  string                              `json:"source"`
+	SchemaVersion           int                                 `json:"schema_version"`
+	Repository              RepositoryContextSnapshotRepository `json:"repository"`
+	DetectedPaths           []string                            `json:"detected_paths"`
+	DetectedToolchains      []string                            `json:"detected_toolchains"`
+	DetectedPackageManagers []string                            `json:"detected_package_managers"`
+	WorkspaceCandidates     []string                            `json:"workspace_candidates"`
+}
+
+type RepositoryContextSnapshotRepository struct {
+	Provider              string `json:"provider"`
+	FullName              string `json:"full_name"`
+	URL                   string `json:"url"`
+	ProviderDefaultBranch string `json:"provider_default_branch"`
+	WorkflowBaseBranch    string `json:"workflow_base_branch"`
+	RemoteName            string `json:"remote_name"`
+	HeadSHA               string `json:"head_sha"`
+}
+
+type RepositoryContextSnapshotResponse struct {
+	ContextSnapshotID string `json:"context_snapshot_id"`
+	OrganizationID    string `json:"organization_id"`
+	ProjectID         string `json:"project_id"`
+	RepoBindingID     string `json:"repo_binding_id"`
+	Source            string `json:"source"`
+	SchemaVersion     int    `json:"schema_version"`
+	Fingerprint       string `json:"fingerprint"`
+	Created           bool   `json:"created"`
+	Message           string `json:"message"`
 }
