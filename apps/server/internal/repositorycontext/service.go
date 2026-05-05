@@ -183,6 +183,9 @@ func normalizeInput(input RecordInput) (RecordInput, error) {
 	if strings.TrimSpace(string(input.RepoBindingID)) == "" {
 		return RecordInput{}, &ValidationError{Field: "repo_binding_id", Message: "is required"}
 	}
+	if err := validateUUIDv7("repo_binding_id", string(input.RepoBindingID)); err != nil {
+		return RecordInput{}, err
+	}
 	snapshot := input.Snapshot
 	snapshot.Source = strings.TrimSpace(snapshot.Source)
 	if snapshot.Source == "" {
@@ -243,6 +246,17 @@ func normalizeRepositoryFullName(value string) string {
 	value = strings.TrimSuffix(value, ".git")
 	value = strings.Trim(value, "/")
 	return value
+}
+
+func validateUUIDv7(field string, value string) error {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return &ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: field, Message: "must be a UUIDv7"}
+	}
+	return nil
 }
 
 func normalizeStringList(values []string) []string {

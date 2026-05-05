@@ -60,48 +60,6 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 		}
 	}
 
-	if _, ok := pathSet["go.mod"]; ok {
-		toolchains["go"] = struct{}{}
-	}
-	if _, ok := pathSet["go.work"]; ok {
-		toolchains["go"] = struct{}{}
-	}
-	if _, ok := pathSet["package.json"]; ok {
-		toolchains["node"] = struct{}{}
-	}
-	if _, ok := pathSet["Cargo.toml"]; ok {
-		toolchains["rust"] = struct{}{}
-	}
-	if _, ok := pathSet["pyproject.toml"]; ok {
-		toolchains["python"] = struct{}{}
-	}
-	if _, ok := pathSet["requirements.txt"]; ok {
-		toolchains["python"] = struct{}{}
-	}
-	if _, ok := pathSet["Dockerfile"]; ok {
-		toolchains["docker"] = struct{}{}
-	}
-	if _, ok := pathSet["docker-compose.yml"]; ok {
-		toolchains["docker"] = struct{}{}
-	}
-	if _, ok := pathSet["compose.yml"]; ok {
-		toolchains["docker"] = struct{}{}
-	}
-
-	for path, manager := range map[string]string{
-		"pnpm-lock.yaml":    "pnpm",
-		"package-lock.json": "npm",
-		"yarn.lock":         "yarn",
-		"bun.lock":          "bun",
-		"bun.lockb":         "bun",
-		"poetry.lock":       "poetry",
-		"uv.lock":           "uv",
-	} {
-		if _, ok := pathSet[path]; ok {
-			packageManagers[manager] = struct{}{}
-		}
-	}
-
 	for _, parent := range []string{"apps", "packages", "services"} {
 		children, err := immediateChildDirectories(gitRoot, parent, 25)
 		if err != nil {
@@ -110,6 +68,9 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 		for _, child := range children {
 			pathSet[child+"/"] = struct{}{}
 			workspaces[child] = struct{}{}
+			if err := collectWorkspaceManifestPaths(gitRoot, child, pathSet); err != nil {
+				return repositoryInventory{}, err
+			}
 		}
 	}
 
@@ -120,6 +81,8 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 	for _, workflow := range workflowFiles {
 		pathSet[workflow] = struct{}{}
 	}
+
+	addInventorySignals(pathSet, toolchains, packageManagers)
 
 	return repositoryInventory{
 		detectedPaths:           sortedKeys(pathSet),
@@ -154,6 +117,78 @@ func knownRepositoryPaths() []string {
 		"Makefile",
 		"Taskfile.yml",
 		filepath.Join(".github", "workflows"),
+	}
+}
+
+func collectWorkspaceManifestPaths(root string, workspace string, pathSet map[string]struct{}) error {
+	for _, manifest := range workspaceManifestPaths() {
+		path := filepath.ToSlash(filepath.Join(workspace, manifest))
+		exists, isDir, err := relativePathExists(root, path)
+		if err != nil {
+			return err
+		}
+		if exists && !isDir {
+			pathSet[path] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func workspaceManifestPaths() []string {
+	return []string{
+		"go.mod",
+		"go.work",
+		"package.json",
+		"pnpm-lock.yaml",
+		"package-lock.json",
+		"yarn.lock",
+		"bun.lock",
+		"bun.lockb",
+		"Cargo.toml",
+		"pyproject.toml",
+		"requirements.txt",
+		"poetry.lock",
+		"uv.lock",
+		"Gemfile",
+		"composer.json",
+		"Dockerfile",
+		"docker-compose.yml",
+		"compose.yml",
+		"Makefile",
+		"Taskfile.yml",
+	}
+}
+
+func addInventorySignals(pathSet map[string]struct{}, toolchains map[string]struct{}, packageManagers map[string]struct{}) {
+	for path := range pathSet {
+		name := filepath.Base(strings.TrimSuffix(path, "/"))
+		switch name {
+		case "go.mod", "go.work":
+			toolchains["go"] = struct{}{}
+		case "package.json":
+			toolchains["node"] = struct{}{}
+		case "Cargo.toml":
+			toolchains["rust"] = struct{}{}
+		case "pyproject.toml", "requirements.txt":
+			toolchains["python"] = struct{}{}
+		case "Dockerfile", "docker-compose.yml", "compose.yml":
+			toolchains["docker"] = struct{}{}
+		}
+
+		switch name {
+		case "pnpm-lock.yaml":
+			packageManagers["pnpm"] = struct{}{}
+		case "package-lock.json":
+			packageManagers["npm"] = struct{}{}
+		case "yarn.lock":
+			packageManagers["yarn"] = struct{}{}
+		case "bun.lock", "bun.lockb":
+			packageManagers["bun"] = struct{}{}
+		case "poetry.lock":
+			packageManagers["poetry"] = struct{}{}
+		case "uv.lock":
+			packageManagers["uv"] = struct{}{}
+		}
 	}
 }
 

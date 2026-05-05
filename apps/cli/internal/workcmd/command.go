@@ -134,6 +134,9 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	if err != nil {
 		return err
 	}
+	if err := validateMarkerMembership(config, profile); err != nil {
+		return err
+	}
 	intake, err := postIntake(ctx, client, session, intakeSubmission{
 		ProjectID:     config.ProjectID,
 		RepoBindingID: config.RepoBindingID,
@@ -268,6 +271,21 @@ func getCurrentProfile(ctx context.Context, client HTTPClient, session authstore
 	return decoded, nil
 }
 
+func validateMarkerMembership(config projectconfig.Config, profile meResponse) error {
+	markerOrganizationID := strings.TrimSpace(config.OrganizationID)
+	if markerOrganizationID == "" {
+		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is missing organization_id; run goalrail init again"))
+	}
+	currentOrganizationID := strings.TrimSpace(profile.OrganizationMembership.OrganizationID)
+	if currentOrganizationID == "" {
+		return exitcode.RuntimeError(errors.New("current user response did not include organization_membership.organization_id"))
+	}
+	if currentOrganizationID != markerOrganizationID {
+		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail organization; run goalrail login for the active organization or re-initialize this repository"))
+	}
+	return nil
+}
+
 func postIntake(ctx context.Context, client HTTPClient, session authstore.Session, payload intakeSubmission) (intakeAcceptedResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -375,6 +393,11 @@ type meResponse struct {
 		ID          string `json:"id"`
 		DisplayName string `json:"display_name"`
 	} `json:"user"`
+	OrganizationMembership struct {
+		OrganizationID string `json:"organization_id"`
+		Role           string `json:"role"`
+		State          string `json:"state"`
+	} `json:"organization_membership"`
 }
 
 type intakeSubmission struct {
