@@ -261,6 +261,12 @@ The project currently has:
   Goalrail terminology. No `VcsConnection`, provider client, OAuth, checkout,
   runner, gate, proof, provider sync, repository catalog, or queue
   implementation exists from this docs boundary.
+- `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` documents the backend
+  VCS / repository connection implementation order after ADR-0024, the GitLab
+  research note, and repository connection UX. It recommends a docs-only
+  provider credential / token storage boundary before any schema, API, OAuth,
+  token persistence, provider client, repository metadata API, checkout,
+  runner, gate, or proof work; this is sequencing only, not implementation.
 - D-0041 documents transactional Postgres-backed intake create, Goal promotion,
   and Goal readiness write/event boundaries without adding queue, outbox, or
   Unit of Work framework semantics

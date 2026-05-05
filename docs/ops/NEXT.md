@@ -64,12 +64,15 @@
 - ADR-0024 now defines the provider-neutral VCS connection boundary:
   `VcsConnection` is accepted as a future provider connection / account
   authorization / metadata-discovery boundary, not a checkout credential, raw
-  provider token, repository catalog, or permission to clone. GitLab/provider
-  backend implementation is blocked until this provider-neutral ADR is accepted
-  through PR review, and any later provider slice must keep provider-specific
-  concepts in adapters. The current slice adds no backend schema/API behavior,
-  provider clients, OAuth, checkout credentials, repository clone, runner,
-  gate, proof, or queue behavior.
+  provider token, repository catalog, or permission to clone. The backend
+  implementation order for this boundary is now sequenced in
+  `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md`: direct GitLab OAuth,
+  provider token storage, provider clients, and repository metadata listing
+  remain blocked until the provider credential/token storage boundary is
+  accepted and the provider-neutral backend prerequisites are satisfied. The
+  current slice adds no backend schema/API behavior, provider clients, OAuth,
+  checkout credentials, repository clone, runner, gate, proof, or queue
+  behavior.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -631,19 +634,36 @@ Done means:
 
 ### Architecture follow-up slices
 
-1. Organization / project / repo binding persistence boundary
+1. Backend VCS / repository connection implementation sequence
+   - `docs/ops/VCS_BACKEND_IMPLEMENTATION_SEQUENCING.md` is the current ops
+     plan for backend VCS implementation order after ADR-0024, GitLab research,
+     and repository connection UX
+   - next safest backend task: docs-only provider credential / token storage
+     boundary ADR before schema, API, OAuth, token persistence, provider
+     clients, live metadata APIs, checkout, runner, gate, or proof
+   - later backend sequence: provider-neutral `VcsConnection` skeleton without
+     credentials; provider-neutral repository metadata contract without a
+     provider client; GitLab metadata adapter mapping with fake/test fixtures
+     only; GitLab OAuth/token implementation only after the credential boundary
+     is accepted
+   - GitLab remains a first provider candidate only; provider-specific concepts
+     stay in adapters and GitLab metadata discovery must not call Repository
+     Files API
+   - clone URLs are metadata only, checkout eligibility is separate, and
+     customer-hosted runner compatibility must remain preserved
+2. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
    - ADR-0024 documents future provider-neutral `VcsConnection` before GitLab/provider implementation
    - direct `RepoBinding` stores repository reference in the MVP
    - `RepositoryRecord` and `RepositoryEnrollment` are deferred
    - manual/dev-seeded and metadata-only RepoBinding remain valid before provider integration
    - support the customer-hosted runner path without requiring GitHub App, GitLab, or Bitbucket cloud connection
-2. Runner checkout prototype boundary
+3. Runner checkout prototype boundary
    - start with `goalrail_hosted_runner` only as a Goalrail-operated hosted runner pool
    - use pull-based / poll-based job leasing from the API server
    - perform read-only ephemeral checkout and produce a checkout receipt with minimum evidence fields
    - do not implement customer-hosted runner installer/registration/auth, persistent mirrors, repository writes, arbitrary command execution, gate, or proof
-3. Customer-hosted runner protocol boundary
+4. Customer-hosted runner protocol boundary
    - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
    - keep clone access inside customer infrastructure and return bounded artifacts only
    - leave optional attestation or receipt signatures for a later trust-hardening slice
