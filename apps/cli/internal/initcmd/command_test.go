@@ -255,6 +255,84 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	}
 }
 
+func TestRunRepositoryContextInitBaseOverrideSplitsProviderDefaultAndWorkflowBase(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	var received spine.RepositoryContextInitRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/init/repository-context" {
+			t.Errorf("path = %s, want repository context init path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+			return
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&received); err != nil {
+			t.Errorf("decode request body: %v", err)
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":true,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":true,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"main","workflow_base_branch":"release/2026-05","state":"active","message":"Repository context initialized."}`))
+	}))
+	defer server.Close()
+
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--base", "release/2026-05", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init --base) error = %v", err)
+	}
+
+	if received.ProviderDefaultBranch != "main" || received.WorkflowBaseBranch != "release/2026-05" {
+		t.Fatalf("request branch fields = %#v, want main/release override", received)
+	}
+	if output.ProviderDefaultBranch != "main" || output.WorkflowBaseBranch != "release/2026-05" {
+		t.Fatalf("output branch fields = %#v, want main/release override", output)
+	}
+	config := readProjectConfigFile(t, repoDir)
+	if !strings.Contains(config, `workflow_base_branch: "release/2026-05"`) {
+		t.Fatalf("project config =\n%s\nwant release workflow base", config)
+	}
+}
+
+func TestRunRepositoryContextInitBaseOverrideWorksWithoutDetectedOriginDefault(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := t.TempDir()
+	runGit(t, repoDir, "init")
+	runGit(t, repoDir, "-c", "user.name=Goalrail Test", "-c", "user.email=goalrail@example.test", "commit", "--allow-empty", "-m", "initial")
+	runGit(t, repoDir, "remote", "add", "origin", "git@github.com:heurema/goalrail.git")
+	var received spine.RepositoryContextInitRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&received); err != nil {
+			t.Errorf("decode request body: %v", err)
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","project_slug":"github-heurema-goalrail","project_display_name":"heurema/goalrail","project_created":true,"repo_binding_id":"018f0000-0000-7000-8000-000000000004","repo_binding_created":true,"provider":"github","repository_full_name":"heurema/goalrail","repository_url":"git@github.com:heurema/goalrail.git","provider_default_branch":"release/2026-05","workflow_base_branch":"release/2026-05","state":"active","message":"Repository context initialized."}`))
+	}))
+	defer server.Close()
+
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--base", "release/2026-05", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init --base without origin default) error = %v", err)
+	}
+
+	if received.ProviderDefaultBranch != "" || received.WorkflowBaseBranch != "release/2026-05" {
+		t.Fatalf("request branch fields = %#v, want empty provider default/release workflow", received)
+	}
+	if output.WorkflowBaseBranch != "release/2026-05" {
+		t.Fatalf("workflow_base_branch = %q, want release override", output.WorkflowBaseBranch)
+	}
+}
+
 func TestRunRepositoryContextInitMissingAuthReturnsHelpfulError(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -832,7 +910,7 @@ func TestRunHelpUsage(t *testing.T) {
 	if err := Run(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"--help"}); err != nil {
 		t.Fatalf("Run(init --help) error = %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--local-demo] [--format text|json]") {
+	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail init [--repo <repo-url>] [--base <branch>] [--project <project-id>] [--local-demo] [--format text|json]") {
 		t.Fatalf("stdout = %q, want init usage", got)
 	}
 }

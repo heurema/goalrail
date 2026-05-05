@@ -46,6 +46,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	flags.SetOutput(io.Discard)
 	repoURL := flags.String("repo", "", "repository URL")
 	projectID := flags.String("project", "", "server Project ID for authenticated RepoBinding init")
+	baseBranch := flags.String("base", "", "workflow base branch for init")
 	localDemo := flags.Bool("local-demo", false, "create a local/demo repo binding draft without auth or server calls")
 	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
 
@@ -63,6 +64,12 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	if *localDemo && strings.TrimSpace(*projectID) != "" {
 		return exitcode.UsageError(errors.New("--local-demo cannot be combined with --project"))
 	}
+	baseBranchProvided := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "base" {
+			baseBranchProvided = true
+		}
+	})
 
 	format, err := term.ParseFormat(*formatValue)
 	if err != nil {
@@ -72,6 +79,17 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	discovered, discoverErr := gitctx.Discover(ctx, workDir)
 	if discoverErr != nil && !errors.Is(discoverErr, gitctx.ErrNotGitRepository) {
 		return exitcode.RuntimeError(discoverErr)
+	}
+	providerDefaultBranch := discovered.WorkflowBaseBranch
+	workflowBaseBranch := discovered.WorkflowBaseBranch
+	warnings := discovered.Warnings
+	if baseBranchProvided {
+		normalizedBaseBranch, err := normalizeBaseBranch(*baseBranch)
+		if err != nil {
+			return exitcode.UsageError(err)
+		}
+		workflowBaseBranch = normalizedBaseBranch
+		warnings = warningsForBaseOverride(discovered.Warnings)
 	}
 
 	resolvedRepoURL := strings.TrimSpace(*repoURL)
@@ -84,18 +102,19 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 
 	remoteInfo := gitctx.ParseRemoteURL(resolvedRepoURL)
 	draft := spine.RepoBindingDraft{
-		RepoURL:            resolvedRepoURL,
-		Status:             spine.RepoBindingStatusPendingServerKeyProvisioning,
-		Message:            localDemoMessage,
-		NextCommand:        nextSuggestedCommand,
-		GitRoot:            discovered.GitRoot,
-		RemoteName:         discovered.RemoteName,
-		Provider:           remoteInfo.Provider,
-		ProviderHost:       remoteInfo.ProviderHost,
-		RepositoryFullName: remoteInfo.RepositoryFullName,
-		WorkflowBaseBranch: discovered.WorkflowBaseBranch,
-		HeadSHA:            discovered.HeadSHA,
-		Warnings:           discovered.Warnings,
+		RepoURL:               resolvedRepoURL,
+		Status:                spine.RepoBindingStatusPendingServerKeyProvisioning,
+		Message:               localDemoMessage,
+		NextCommand:           nextSuggestedCommand,
+		GitRoot:               discovered.GitRoot,
+		RemoteName:            discovered.RemoteName,
+		Provider:              remoteInfo.Provider,
+		ProviderHost:          remoteInfo.ProviderHost,
+		RepositoryFullName:    remoteInfo.RepositoryFullName,
+		ProviderDefaultBranch: providerDefaultBranch,
+		WorkflowBaseBranch:    workflowBaseBranch,
+		HeadSHA:               discovered.HeadSHA,
+		Warnings:              warnings,
 	}
 	if draft.Warnings == nil {
 		draft.Warnings = []string{}
@@ -118,7 +137,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 }
 
 func Usage() string {
-	return "Usage: goalrail init [--repo <repo-url>] [--project <project-id>] [--local-demo] [--format text|json]\n\nBy default, initializes server-backed repository context using the stored goalrail login profile and writes a non-secret .goalrail/project.yml marker in the Git root. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --project, uses the low-level Project-scoped RepoBinding init endpoint.\n\nWith --local-demo, creates the old auth-free local/demo repo binding draft and writes no files.\n\nInit does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, or start verification.\n"
+	return "Usage: goalrail init [--repo <repo-url>] [--base <branch>] [--project <project-id>] [--local-demo] [--format text|json]\n\nBy default, initializes server-backed repository context using the stored goalrail login profile and writes a non-secret .goalrail/project.yml marker in the Git root. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --base, sets workflow_base_branch explicitly without creating branches or changing Git state. When local origin default metadata is available, it remains provider_default_branch.\n\nWith --project, uses the low-level Project-scoped RepoBinding init endpoint.\n\nWith --local-demo, creates the old auth-free local/demo repo binding draft and writes no files.\n\nInit does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, or start verification.\n"
 }
 
 func renderText(draft spine.RepoBindingDraft) string {
@@ -133,6 +152,9 @@ func renderText(draft spine.RepoBindingDraft) string {
 	}
 	if draft.RepositoryFullName != "" {
 		fmt.Fprintf(&b, "Repository: %s\n", draft.RepositoryFullName)
+	}
+	if draft.ProviderDefaultBranch != "" {
+		fmt.Fprintf(&b, "Provider default branch: %s\n", draft.ProviderDefaultBranch)
 	}
 	if draft.GitRoot != "" {
 		fmt.Fprintf(&b, "Git root: %s\n", draft.GitRoot)
@@ -155,4 +177,30 @@ func renderText(draft spine.RepoBindingDraft) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", draft.Message, draft.NextCommand)
 	return b.String()
+}
+
+func normalizeBaseBranch(value string) (string, error) {
+	branch := strings.TrimSpace(value)
+	if branch == "" {
+		return "", errors.New("--base requires a branch name")
+	}
+	if strings.ContainsAny(branch, " \t\r\n") {
+		return "", errors.New("--base branch name must not contain whitespace")
+	}
+	return branch, nil
+}
+
+func warningsForBaseOverride(warnings []string) []string {
+	if len(warnings) == 0 {
+		return warnings
+	}
+	out := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		if warning == "workflow base branch could not be detected from local origin metadata" {
+			out = append(out, "provider default branch could not be detected from local origin metadata")
+			continue
+		}
+		out = append(out, warning)
+	}
+	return out
 }

@@ -355,6 +355,8 @@ Done means:
 - ✅ normal `goalrail init` calls the server repository-context init endpoint
   using local Git metadata and the stored login profile, then prints the
   server-owned Project and RepoBinding context
+- ✅ `goalrail init --base <branch>` can set `workflow_base_branch` explicitly
+  without creating branches or changing Git state
 - ✅ low-level `goalrail init --project <project_id>` still calls the
   Project-scoped RepoBinding init endpoint
 - ✅ explicit `goalrail init --local-demo` preserves the auth-free local/demo
@@ -364,11 +366,16 @@ Done means:
   identity only
 - ✅ server-backed init preflights an existing `.goalrail/project.yml` before
   the server call and fails locally on server/project/repo/base conflicts
+- ✅ `goalrail work start --title <title> [--body <body>]` reads the Git-root
+  marker plus stored login profile, calls `/v1/me`, creates `/v1/intakes`, and
+  promotes through `/v1/intakes/{id}/goals`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
   cache storage in `.goalrail/project.yml`
 - no audit/hook/branch/verification setup from init
+- no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
+  integration, branch, PR, hook, clone, or deploy-key setup from `work start`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint
@@ -633,11 +640,10 @@ Done means:
 1. Server-side repo key provisioning API/client
    - define the smallest server-owned provisioning boundary for repo access
    - keep production private-key generation and storage outside the local CLI
-2. Explicit workflow base override for init
-   - add a narrow `--base <branch>` only for server-backed init when local
-     origin default metadata is unavailable or intentionally different
-   - keep provider default detection and workflow base selection distinct
-   - do not create branches or mutate Git state
+2. Marker-backed work command hardening
+   - decide whether later work-start UX needs a server-owned composite endpoint
+     for Intake + Goal atomicity before adding audit
+   - keep Contract, WorkItem, audit, runner, gate, and proof deferred
 3. Contract draft/approval flow integration
    - connect `goalrail contract validate` to real contract draft and approval state
    - preserve field-level validation findings
