@@ -774,6 +774,262 @@ func TestPostGoalContinuationReturnsRejectedGoalAsBlockedState(t *testing.T) {
 	}
 }
 
+func TestPostClarificationAnswersContinuationReturnsReadyNextAction(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequest(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", workAnswerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalScopeHint:      "CSV export filter duplicate handling",
+		spine.ClarificationMapsToGoalAcceptanceHint: "Existing CSV export behavior is preserved",
+	}))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var body spine.GoalContinuation
+	decodeJSON(t, response.body, &body)
+	if body.GoalID != request.GoalID {
+		t.Fatalf("goal_id = %q, want %q", body.GoalID, request.GoalID)
+	}
+	if body.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("state = %q, want %q", body.State, spine.GoalStateReadyForContractSeed)
+	}
+	if body.Readiness == nil || !body.Readiness.Ready {
+		t.Fatalf("readiness = %#v, want ready result", body.Readiness)
+	}
+	if body.ClarificationRequest != nil {
+		t.Fatalf("clarification_request = %#v, want nil", body.ClarificationRequest)
+	}
+
+	storedGoal, ok, err := server.goals.Get(context.Background(), request.GoalID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if storedGoal.ScopeHint != "CSV export filter duplicate handling" {
+		t.Fatalf("scope_hint = %q, want applied answer", storedGoal.ScopeHint)
+	}
+	if storedGoal.AcceptanceHint != "Existing CSV export behavior is preserved" {
+		t.Fatalf("acceptance_hint = %q, want applied answer", storedGoal.AcceptanceHint)
+	}
+	if len(server.answers.answers) != 1 {
+		t.Fatalf("answers = %d, want 1", len(server.answers.answers))
+	}
+	for answerID := range server.answers.answers {
+		if !server.answers.applied[answerID] {
+			t.Fatalf("answer %q was not marked applied", answerID)
+		}
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationReturnsAskUserWhenStillIncomplete(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequestForReasons(t, server, spine.GoalReadinessReasonMissingScopeHint)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", workAnswerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalScopeHint: "Bounded answer bridge only",
+	}))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var body spine.GoalContinuation
+	decodeJSON(t, response.body, &body)
+	if body.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("state = %q, want %q", body.State, spine.GoalStateNeedsClarification)
+	}
+	if body.Readiness == nil || body.Readiness.Ready {
+		t.Fatalf("readiness = %#v, want not ready result", body.Readiness)
+	}
+	if body.ClarificationRequest == nil {
+		t.Fatal("clarification_request = nil, want next open request")
+	}
+	if body.ClarificationRequest.ID == request.ID {
+		t.Fatalf("clarification_request.id = %q, want a new open request after answered request", body.ClarificationRequest.ID)
+	}
+	if body.ClarificationRequest.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("clarification_request.state = %q, want open", body.ClarificationRequest.State)
+	}
+	if !hasClarificationQuestion(body.ClarificationRequest.Questions, spine.ClarificationMapsToGoalAcceptanceHint) {
+		t.Fatalf("questions = %#v, want acceptance_hint question", body.ClarificationRequest.Questions)
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationRejectsAlreadyAnsweredRequest(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequest(t, server)
+	body := workAnswerSubmissionJSON(request)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", body)
+	if first.code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusOK, first.body)
+	}
+
+	second := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", body)
+	if second.code != http.StatusConflict {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusConflict, second.body)
+	}
+
+	var responseBody struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, second.body, &responseBody)
+	if responseBody.Error.Code != "already_answered" {
+		t.Fatalf("error code = %q, want already_answered", responseBody.Error.Code)
+	}
+	if len(server.answers.answers) != 1 {
+		t.Fatalf("answers = %d, want 1", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationInvalidRequestIDReturnsValidationError(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/not-a-uuid/answers/continuation", `{"answers":[]}`)
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "validation_failed" {
+		t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+	}
+	if len(server.answers.answers) != 0 {
+		t.Fatalf("answers = %d, want 0", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationRejectsUnsupportedMappingBeforeMutation(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequestForReasons(t, server, spine.GoalReadinessReasonMissingIntentOwner)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", workAnswerSubmissionJSONWithValues(request, map[spine.ClarificationMapsTo]string{
+		spine.ClarificationMapsToGoalIntentOwner: "dev_2",
+	}))
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unsupported_mapping" {
+		t.Fatalf("error code = %q, want unsupported_mapping", body.Error.Code)
+	}
+	storedRequest, ok, err := server.clarifications.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("clarifications.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("clarification request missing after unsupported mapping")
+	}
+	if storedRequest.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("request state = %q, want open", storedRequest.State)
+	}
+	if len(server.answers.answers) != 0 {
+		t.Fatalf("answers = %d, want 0", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationAppliesActorShapedIntentOwner(t *testing.T) {
+	server := testServer(t)
+	request := createClarificationRequestForReasons(t, server, spine.GoalReadinessReasonMissingIntentOwner)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", fmt.Sprintf(`{"answers":[{"question_id":%q,"value":"","actor_ref":{"kind":"user","id":"018f0000-0000-7000-8000-000000000099","display_name":"Dev 2"}}]}`, request.Questions[0].ID))
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	storedGoal, ok, err := server.goals.Get(context.Background(), request.GoalID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("stored goal not found")
+	}
+	if storedGoal.IntentOwner.ID != "018f0000-0000-7000-8000-000000000099" || storedGoal.IntentOwner.DisplayName != "Dev 2" {
+		t.Fatalf("intent_owner = %#v, want actor-shaped answer", storedGoal.IntentOwner)
+	}
+	if len(server.answers.answers) != 1 {
+		t.Fatalf("answers = %d, want 1", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationRequiresAuthenticationBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	request := createClarificationRequest(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", workAnswerSubmissionJSON(request))
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+
+	storedRequest, ok, err := server.clarifications.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("clarifications.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("clarification request missing after unauthorized answer")
+	}
+	if storedRequest.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("request state = %q, want open", storedRequest.State)
+	}
+	if len(server.answers.answers) != 0 {
+		t.Fatalf("answers = %d, want 0", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostClarificationAnswersContinuationRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	request := createClarificationRequest(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/clarifications/"+string(request.ID)+"/answers/continuation", workAnswerSubmissionJSON(request))
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+
+	storedRequest, ok, err := server.clarifications.Get(context.Background(), request.ID)
+	if err != nil {
+		t.Fatalf("clarifications.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("clarification request missing after forbidden answer")
+	}
+	if storedRequest.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("request state = %q, want open", storedRequest.State)
+	}
+	if len(server.answers.answers) != 0 {
+		t.Fatalf("answers = %d, want 0", len(server.answers.answers))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
 func TestPostGoalClarificationRequestsReturnsOpenRequest(t *testing.T) {
 	server := testServer(t)
 	created := createClarificationReadyGoal(t, server)
@@ -2159,17 +2415,17 @@ func (g *sequenceIDs) NewGoalID() (spine.GoalID, error) {
 
 func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {
 	g.clarification++
-	return spine.ClarificationRequestID(fmt.Sprintf("clarification-%d", g.clarification)), nil
+	return spine.ClarificationRequestID(fmt.Sprintf("018f0000-0000-7000-8100-%012d", g.clarification)), nil
 }
 
 func (g *sequenceIDs) NewClarificationQuestionID() (spine.ClarificationQuestionID, error) {
 	g.question++
-	return spine.ClarificationQuestionID(fmt.Sprintf("question-%d", g.question)), nil
+	return spine.ClarificationQuestionID(fmt.Sprintf("018f0000-0000-7000-8200-%012d", g.question)), nil
 }
 
 func (g *sequenceIDs) NewClarificationAnswerID() (spine.ClarificationAnswerID, error) {
 	g.answer++
-	return spine.ClarificationAnswerID(fmt.Sprintf("answer-%d", g.answer)), nil
+	return spine.ClarificationAnswerID(fmt.Sprintf("018f0000-0000-7000-8300-%012d", g.answer)), nil
 }
 
 func (g *sequenceIDs) NewContractID() (spine.ContractID, error) {
@@ -2337,7 +2593,7 @@ func createClarificationRequestForReasons(t *testing.T, server testServerDeps, r
 	t.Helper()
 
 	created := spine.Goal{
-		ID:             "direct-goal-1",
+		ID:             "018f0000-0000-7000-8000-000000000201",
 		IntakeID:       "direct-intake-1",
 		OrganizationID: "018f0000-0000-7000-8000-000000000002",
 		ProjectID:      "018f0000-0000-7000-8000-000000000003",
@@ -2405,6 +2661,24 @@ func answerSubmissionJSONWithValues(request spine.ClarificationRequest, values m
 		answers = append(answers, fmt.Sprintf(`{"question_id":%q,"value":%q}`, question.ID, value))
 	}
 	return fmt.Sprintf(`{"submitted_by":{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"},"answers":[%s]}`, strings.Join(answers, ","))
+}
+
+func workAnswerSubmissionJSON(request spine.ClarificationRequest) string {
+	return workAnswerSubmissionJSONWithValues(request, nil)
+}
+
+func workAnswerSubmissionJSONWithValues(request spine.ClarificationRequest, values map[spine.ClarificationMapsTo]string) string {
+	answers := make([]string, 0, len(request.Questions))
+	for i, question := range request.Questions {
+		value := fmt.Sprintf("Answer %d", i+1)
+		if values != nil {
+			if mapped, ok := values[question.MapsTo]; ok {
+				value = mapped
+			}
+		}
+		answers = append(answers, fmt.Sprintf(`{"question_id":%q,"value":%q}`, question.ID, value))
+	}
+	return fmt.Sprintf(`{"answers":[%s]}`, strings.Join(answers, ","))
 }
 
 func applyRequestJSON() string {

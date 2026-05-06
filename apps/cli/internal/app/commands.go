@@ -220,6 +220,14 @@ func newWorkCommand(env clienv.Env) *cobra.Command {
 			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"continue"}, args...), workcmd.Options{Stdin: env.Stdin})
 		},
 	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "answer",
+		Short:              "submit clarification answers and return the next action",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"answer"}, args...), workcmd.Options{Stdin: env.Stdin})
+		},
+	})
 	return cmd
 }
 
@@ -388,6 +396,8 @@ func helpFor(cmd *cobra.Command) string {
 		return workcmd.StartUsage()
 	case "goalrail work continue":
 		return workcmd.ContinueUsage()
+	case "goalrail work answer":
+		return workcmd.AnswerUsage()
 	case "goalrail login":
 		return logincmd.Usage()
 	case "goalrail version":

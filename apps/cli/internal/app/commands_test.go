@@ -101,6 +101,28 @@ func TestRootCommandWorkContinueHelpUsesCobraArgsAndWriters(t *testing.T) {
 	}
 }
 
+func TestRootCommandWorkAnswerHelpUsesCobraArgsAndWriters(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	cmd := NewRootCommand(clienv.Env{WorkDir: "."})
+	cmd.SetArgs([]string{"work", "answer", "--help"})
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext(work answer --help) error = %v", err)
+	}
+
+	want := "Usage: goalrail work answer --clarification-request-id <id> --answers-file <path|-> [--format text|json]"
+	if got := stdout.String(); !strings.Contains(got, want) {
+		t.Fatalf("stdout = %q, want usage containing %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestRootCommandProjectStatusHelpUsesCobraArgsAndWriters(t *testing.T) {
 	t.Parallel()
 

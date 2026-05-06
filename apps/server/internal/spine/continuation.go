@@ -7,3 +7,7 @@ type GoalContinuation struct {
 	Goal                 *Goal                 `json:"goal,omitempty"`
 	ClarificationRequest *ClarificationRequest `json:"clarification_request,omitempty"`
 }
+
+type WorkAnswerSubmission struct {
+	Answers []ClarificationAnswerItem `json:"answers"`
+}

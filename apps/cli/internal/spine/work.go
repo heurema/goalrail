@@ -54,3 +54,18 @@ type WorkContinueOutput struct {
 	Display         DisplaySummary `json:"display"`
 	NextAction      NextAction     `json:"next_action"`
 }
+
+type WorkAnswerOutput struct {
+	SchemaVersion          string         `json:"schema_version"`
+	Mode                   string         `json:"mode"`
+	ServerURL              string         `json:"server_url"`
+	OrganizationID         string         `json:"organization_id"`
+	ProjectID              string         `json:"project_id"`
+	RepoBindingID          string         `json:"repo_binding_id"`
+	GoalID                 string         `json:"goal_id"`
+	State                  string         `json:"state"`
+	ClarificationRequestID string         `json:"clarification_request_id"`
+	LocalConfigPath        string         `json:"local_config_path"`
+	Display                DisplaySummary `json:"display"`
+	NextAction             NextAction     `json:"next_action"`
+}

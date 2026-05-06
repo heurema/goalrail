@@ -85,6 +85,7 @@ type ClarificationAnswer struct {
 type ClarificationAnswerItem struct {
 	QuestionID ClarificationQuestionID `json:"question_id"`
 	Value      string                  `json:"value"`
+	ActorRef   *ActorRef               `json:"actor_ref,omitempty"`
 }
 
 type ClarificationAnswerSubmission struct {

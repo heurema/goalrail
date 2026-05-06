@@ -305,6 +305,8 @@ If a Goalrail JSON response contains ` + "`next_action.available=false`" + `, do
 
 If a Goalrail JSON response contains ` + "`next_action.available=true`" + ` and a ` + "`next_action.command`" + `, you may call that command to continue the current Goalrail flow.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=ask_user`" + `, render the returned questions to the user. Submit answers with ` + "`goalrail work answer`" + ` using question_id-bound structured JSON. Do not submit free-form answers without mapping them to returned ` + "`question_id`" + ` values.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -349,6 +351,26 @@ func commandsJSONContent() string {
         "goalrail_init",
         "git_worktree",
         "goal_id"
+      ],
+      "does_not_create": [
+        "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "answer_clarification": {
+      "command": "goalrail work answer --clarification-request-id <id> --answers-file - --format json",
+      "stdin": "structured_answers_json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "clarification_request_id"
+      ],
+      "creates": [
+        "ClarificationAnswer"
       ],
       "does_not_create": [
         "Contract",

@@ -63,13 +63,15 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runStart(ctx, out, workDir, args[1:], options)
 	case "continue":
 		return runContinue(ctx, out, workDir, args[1:], options)
+	case "answer":
+		return runAnswer(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown work command %q", args[0]))
 	}
 }
 
 func Usage() string {
-	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n\nRun goalrail work <command> --help for command usage.\n"
+	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n\nRun goalrail work <command> --help for command usage.\n"
 }
 
 func StartUsage() string {
@@ -78,6 +80,10 @@ func StartUsage() string {
 
 func ContinueUsage() string {
 	return "Usage: goalrail work continue --goal-id <goal_id> [--format text|json]\n\nReconciles Goal readiness through the Goalrail server using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not answer clarifications, draft contracts, generate context packs, run workers, gates, proof, or verification.\n"
+}
+
+func AnswerUsage() string {
+	return "Usage: goalrail work answer --clarification-request-id <id> --answers-file <path|-> [--format text|json]\n\nSubmits structured answers for an open ClarificationRequest through the Goalrail server using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nUse --answers-file - to read answer JSON from stdin.\n\nThis command does not draft contracts, generate context packs, run workers, gates, proof, or verification.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -308,6 +314,95 @@ func runContinue(ctx context.Context, out *term.Output, workDir string, args []s
 	return err
 }
 
+func runAnswer(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work answer", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	requestID := flags.String("clarification-request-id", "", "ClarificationRequest ID")
+	answersFile := flags.String("answers-file", "", "path to answer JSON file, or - for stdin")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, AnswerUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedRequestID := strings.TrimSpace(*requestID)
+	if normalizedRequestID == "" {
+		return exitcode.UsageError(errors.New("--clarification-request-id is required"))
+	}
+	if strings.TrimSpace(*answersFile) == "" {
+		return exitcode.UsageError(errors.New("--answers-file is required"))
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	discovered, err := gitctx.Discover(ctx, workDir)
+	if err != nil {
+		if errors.Is(err, gitctx.ErrNotGitRepository) {
+			return exitcode.UsageError(errors.New("goalrail work answer requires a Git worktree with .goalrail/project.yml; run goalrail init first"))
+		}
+		return exitcode.RuntimeError(err)
+	}
+	config, ok, err := projectconfig.Read(discovered.GitRoot)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
+	}
+
+	session, serverURL, err := loadUsableSession(options)
+	if err != nil {
+		return err
+	}
+	if strings.TrimRight(config.ServerURL, "/") != serverURL {
+		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
+	}
+
+	client := options.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	profile, err := getCurrentProfile(ctx, client, session)
+	if err != nil {
+		return err
+	}
+	if err := validateMarkerMembership(config, profile); err != nil {
+		return err
+	}
+
+	submission, err := resolveAnswerSubmission(*answersFile, options.Stdin)
+	if err != nil {
+		return err
+	}
+	continuation, err := postClarificationContinuation(ctx, client, session, normalizedRequestID, submission)
+	if err != nil {
+		return err
+	}
+	continued, err := buildContinueOutput(config, serverURL, continuation)
+	if err != nil {
+		return err
+	}
+	output := buildAnswerOutput(continued, normalizedRequestID)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderAnswerText(output))
+	return err
+}
+
 func renderStartText(output spine.WorkStartOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work intake started\n\n")
@@ -330,6 +425,23 @@ func renderStartText(output spine.WorkStartOutput) string {
 		fmt.Fprintf(&b, "Planned continuation, not available yet: %s\n", output.NextAction.Command)
 	}
 	return b.String()
+}
+
+func buildAnswerOutput(continued spine.WorkContinueOutput, requestID string) spine.WorkAnswerOutput {
+	return spine.WorkAnswerOutput{
+		SchemaVersion:          continued.SchemaVersion,
+		Mode:                   continued.Mode,
+		ServerURL:              continued.ServerURL,
+		OrganizationID:         continued.OrganizationID,
+		ProjectID:              continued.ProjectID,
+		RepoBindingID:          continued.RepoBindingID,
+		GoalID:                 continued.GoalID,
+		State:                  continued.State,
+		ClarificationRequestID: requestID,
+		LocalConfigPath:        continued.LocalConfigPath,
+		Display:                continued.Display,
+		NextAction:             continued.NextAction,
+	}
 }
 
 func buildContinueOutput(config projectconfig.Config, serverURL string, continuation goalContinuationResponse) (spine.WorkContinueOutput, error) {
@@ -418,6 +530,37 @@ func buildContinueOutput(config projectconfig.Config, serverURL string, continua
 	return output, nil
 }
 
+func renderAnswerText(output spine.WorkAnswerOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Work answer submitted\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Goal: %s\n", output.GoalID)
+	fmt.Fprintf(&b, "Clarification request: %s\n", output.ClarificationRequestID)
+	fmt.Fprintf(&b, "State: %s\n", output.State)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+
+	switch output.NextAction.Kind {
+	case "ask_user":
+		fmt.Fprintf(&b, "\nNext clarification request: %s\n", output.NextAction.RequestID)
+		for i, question := range output.NextAction.Questions {
+			fmt.Fprintf(&b, "%d. %s\n", i+1, question.Text)
+		}
+	case "draft_contract":
+		fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
+		if output.NextAction.PlannedSlice != "" {
+			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		}
+	case "blocked":
+		fmt.Fprintf(&b, "\nNext action: blocked\n")
+	}
+	return b.String()
+}
+
 func renderContinueText(output spine.WorkContinueOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work continuation\n\n")
@@ -446,6 +589,46 @@ func renderContinueText(output spine.WorkContinueOutput) string {
 		fmt.Fprintf(&b, "\nNext action: blocked\n")
 	}
 	return b.String()
+}
+
+func resolveAnswerSubmission(answersFile string, stdin io.Reader) (workAnswerSubmission, error) {
+	if answersFile == "" {
+		return workAnswerSubmission{}, exitcode.UsageError(errors.New("--answers-file requires a path or -"))
+	}
+
+	var raw []byte
+	var err error
+	if answersFile == "-" {
+		if stdin == nil {
+			stdin = os.Stdin
+		}
+		raw, err = readLimitedBody(stdin, "--answers-file - from stdin")
+		if err != nil {
+			return workAnswerSubmission{}, err
+		}
+	} else {
+		file, err := os.Open(answersFile)
+		if err != nil {
+			return workAnswerSubmission{}, exitcode.RuntimeError(fmt.Errorf("read --answers-file %s: %w", answersFile, err))
+		}
+		defer file.Close()
+		raw, err = readLimitedBody(file, "--answers-file "+answersFile)
+		if err != nil {
+			return workAnswerSubmission{}, err
+		}
+	}
+
+	var submission workAnswerSubmission
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&submission); err != nil {
+		return workAnswerSubmission{}, exitcode.ValidationError(fmt.Errorf("decode --answers-file JSON: %w", err))
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return workAnswerSubmission{}, exitcode.ValidationError(errors.New("decode --answers-file JSON: multiple JSON values"))
+	}
+	return submission, nil
 }
 
 func resolveBody(body string, bodyFile string, bodyFileSet bool, stdin io.Reader) (string, error) {
@@ -657,6 +840,39 @@ func postGoalContinuation(ctx context.Context, client HTTPClient, session authst
 	return decoded, nil
 }
 
+func postClarificationContinuation(ctx context.Context, client HTTPClient, session authstore.Session, requestID string, payload workAnswerSubmission) (goalContinuationResponse, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("encode clarification answer request: %w", err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	endpoint := serverURL + "/v1/clarifications/" + url.PathEscape(requestID) + "/answers/continuation"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("build clarification answer request: %w", err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("submit clarification answer on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return goalContinuationResponse{}, mapHTTPError("clarification answer request", response, serverURL)
+	}
+	var decoded goalContinuationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("decode clarification answer response: %w", err))
+	}
+	if strings.TrimSpace(decoded.GoalID) == "" {
+		return goalContinuationResponse{}, exitcode.RuntimeError(errors.New("clarification answer response did not include goal_id"))
+	}
+	return decoded, nil
+}
+
 func mapHTTPError(operation string, response *http.Response, serverURL string) error {
 	message := decodeServerErrorMessage(response.Body, response.StatusCode)
 	switch response.StatusCode {
@@ -783,4 +999,14 @@ type clarificationQuestionResponse struct {
 	WhyNeeded  string `json:"why_needed"`
 	AnswerType string `json:"answer_type"`
 	MapsTo     string `json:"maps_to"`
+}
+
+type workAnswerSubmission struct {
+	Answers []workAnswerItem `json:"answers"`
+}
+
+type workAnswerItem struct {
+	QuestionID string    `json:"question_id"`
+	Value      string    `json:"value"`
+	ActorRef   *actorRef `json:"actor_ref,omitempty"`
 }
