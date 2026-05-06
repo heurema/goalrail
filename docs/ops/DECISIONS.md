@@ -1989,7 +1989,7 @@ Decision:
 Rationale:
 - Server state is the canonical project/repository truth, so CLI-local init
   must not become the source of truth before the server owns RepoBinding state.
-- A metadata-only RepoBinding boundary lets later CLI and local marker slices
+- A metadata-only RepoBinding boundary lets later CLI and repository marker slices
   bind to a real server object without introducing checkout or provider access.
 - Keeping identity comparison on provider plus repository full name makes init
   idempotent across common remote URL forms.
@@ -2033,14 +2033,15 @@ Decision:
 - After successful server-backed init, the CLI writes
   `<git_root>/.goalrail/project.yml`.
 - Local/demo init never writes the marker.
-- The marker is a non-secret local cache/marker only. It stores:
+- The marker is a non-secret committed repository/team marker. It stores:
   `version`, `server_url`, `organization_id`, `project_id`, `repo_binding_id`,
   and repository `provider`, `full_name`, `url`, and `workflow_base_branch`.
 - The marker never stores access tokens, refresh tokens, auth/session material,
   contracts, work items, audit status, proof, memory, diffs, or runtime cache.
 - Identical existing content reports unchanged. Different existing content is
   not overwritten and fails without adding force or repair behavior.
-- The CLI does not modify `.gitignore`.
+- The CLI does not modify the root `.gitignore`. D-0088 adds a scoped
+  `.goalrail/.gitignore` for Goalrail-owned machine-local state.
 
 Rationale:
 - The local checkout needs a durable marker only after the server returns a
@@ -2071,8 +2072,9 @@ Decision:
 
 Rationale:
 - Preflight prevents a server-side init/create/find from succeeding before an
-  obvious local marker conflict is discovered.
-- The local marker remains a cache/marker, not a competing source of truth.
+  obvious repository marker conflict is discovered.
+- The repository marker remains non-secret, not a competing
+  server or inventory source of truth.
 - Deferring repair keeps the first marker semantics narrow and reviewable.
 
 ## D-0080 — Normal CLI init bootstraps repository context in an existing Organization
@@ -2137,7 +2139,7 @@ Decision:
   and later CLI commands. The marker remains non-secret and stores only
   server/project/repo binding identity.
 - `goalrail work start --title <title> [--body <body>]` is the first
-  server-backed command that uses the local marker as default context. It
+  server-backed command that uses the repository marker as default context. It
   requires the stored login profile, checks expired access tokens locally,
   reads the Git-root marker, calls `/v1/me`, submits `/v1/intakes`, and then
   promotes the intake through `/v1/intakes/{id}/goals`.
@@ -2187,7 +2189,7 @@ Rationale:
 - A metadata-only snapshot makes `init` a more complete first step without
   crossing into audit, runner, provider integration, or verification behavior.
 - Keeping snapshot history server-owned preserves `.goalrail/project.yml` as a
-  local marker/cache rather than a competing source of truth.
+  committed repository marker rather than a competing inventory store.
 
 ## D-0083 — Provider-neutral VCS connection boundary direction superseded
 Date: 2026-05-05
@@ -2254,3 +2256,76 @@ Rationale:
 - It preserves RepoBinding and repository-context init truth without adding
   provider OAuth, token storage, provider clients, runner checkout, gate, or
   proof behavior.
+
+## D-0087 — Repository baseline is immutable and overlay is separate
+Date: 2026-05-06
+Status: accepted
+
+Decision:
+- Adopt immutable local `RepositoryBaselineProfile` per committed repository
+  state.
+- Represent dirty, unmerged, partial, ignored/untracked visibility, submodule,
+  sparse-checkout, shallow-clone, and worktree-specific state as a separate
+  `WorkspaceOverlay`.
+- Future `ContractContextPack` records must be task-specific and reference
+  exact baseline and overlay versions.
+- Do not key the deep baseline directly by dirty state. Dirty state is
+  freshness-relevant, but it does not create a new deep baseline version by
+  itself.
+- Background scans are convenience only and must never bypass synchronous
+  freshness checks.
+- The server may store summaries and receipts by default, not raw source bodies;
+  the API server does not clone repositories or run checks in-process for this
+  boundary.
+- This decision does not add server-side repository clone, provider OAuth,
+  runner checkout, file watcher / daemon, mutable latest baseline, embeddings
+  or LLM summaries as truth, raw source upload by default, gate, proof, or broad
+  indexing behavior.
+
+Rationale:
+- Immutable committed-state baselines keep Project Scan deterministic and
+  privacy-preserving.
+- A separate overlay avoids stale maps, deep baseline churn on every edit, and
+  background-race reliability failures.
+- Task-specific context packs keep repository understanding tied to the
+  approved contract/task instead of turning it into hidden reusable memory.
+
+## D-0088 — CLI Project Scan v0 starts as local cache and freshness commands
+Date: 2026-05-06
+Status: accepted
+
+Decision:
+- Implement the first local CLI Project Scan v0 foundation under
+  `apps/cli/internal/projectscan`.
+- Store immutable `RepositoryBaselineProfile` JSON and current
+  `WorkspaceOverlay` JSON in the user cache directory keyed by RepoBinding and
+  canonical repository root.
+- Add `goalrail project scan` to build or refresh the baseline for the current
+  committed HEAD and refresh overlay.
+- Add `goalrail project status` to refresh overlay and report freshness without
+  rebuilding the baseline by default.
+- Run a best-effort quick local Project Scan after server-backed `goalrail init`
+  writes or verifies `.goalrail/project.yml`.
+- Keep `.goalrail/project.yml` as the canonical committed Goalrail project
+  marker. It is a team/repository artifact, not machine-local state, and is not
+  moved under `.goalrail/local/`.
+- Server-backed init also ensures `.goalrail/.gitignore` contains the standard
+  Goalrail-owned machine-local ignores: `/local/`, `/cache/`, `/state/`,
+  `/tmp/`, `*.local.yml`, `*.local.toml`, and `*.local.json`.
+- Keep Project Scan cache artifacts in the OS user cache directory and out of
+  tracked repo files. Do not add broad `.goalrail/` rules to the root
+  `.gitignore`.
+- This does not add server-side baseline persistence, server clone, raw source
+  upload, provider OAuth, runner checkout, background daemon, file watcher,
+  embeddings, LLM summaries, ContractContextPack generation, gate, proof, or
+  broad indexing behavior.
+
+Rationale:
+- The CLI already owns local Git context and the non-secret project marker, so
+  the first freshness substrate can be deterministic and local without changing
+  server boundaries.
+- Separating `project scan` from `project status` makes rebuild behavior
+  explicit and keeps status checks cheap.
+- Running the quick scan after init gives future contract/task commands a local
+  baseline substrate while preserving the server no-clone and no-source-upload
+  boundary.

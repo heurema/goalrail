@@ -32,7 +32,7 @@ Delivery rule:
 - console cards and detail views should appear only after the underlying functionality exists
 - Settings / Users is intended to become the API-backed Organization
   user-management surface for the future
-  `/v1/organizations/{organization_id}/users` routes documented in ADR-0026
+  `/v1/organizations/{organization_id}/users` routes documented in ADR-0027
 - users UI currently stores changes in component state; no API persistence yet
 - future Users persistence must use backend-aligned roles only:
   `owner`, `admin`, `member`, and `viewer`; `observer` is not a documented

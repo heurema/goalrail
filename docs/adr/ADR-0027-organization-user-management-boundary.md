@@ -1,4 +1,4 @@
-# ADR-0026 — Organization user management boundary
+# ADR-0027 — Organization user management boundary
 
 Status: accepted
 Date: 2026-05-06

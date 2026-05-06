@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -23,9 +24,10 @@ import (
 
 const (
 	serverMode           = "server"
-	nextSuggestedCommand = "goalrail readiness scan --path ."
+	nextSuggestedCommand = "goalrail project status"
 	workStartedMessage   = "Work intake started."
 	workStartedNote      = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
+	maxWorkBodyBytes     = 1 << 20
 )
 
 type SessionStore interface {
@@ -40,6 +42,7 @@ type Options struct {
 	Store      SessionStore
 	HTTPClient HTTPClient
 	Now        func() time.Time
+	Stdin      io.Reader
 }
 
 func Run(ctx context.Context, out *term.Output, workDir string, args []string) error {
@@ -68,7 +71,7 @@ func Usage() string {
 }
 
 func StartUsage() string {
-	return "Usage: goalrail work start --title <title> [--body <body>] [--format text|json]\n\nCreates an IntakeRecord and promotes it to a Goal using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, run workers, gates, proof, or verification.\n"
+	return "Usage: goalrail work start --title <title> [--body <body> | --body-file <path|->] [--format text|json]\n\nCreates an IntakeRecord and promotes it to a Goal using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nUse --body-file - to read the work body from stdin.\n\nThis command does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, run workers, gates, proof, or verification.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -80,6 +83,7 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	flags.SetOutput(io.Discard)
 	title := flags.String("title", "", "work title")
 	body := flags.String("body", "", "work body")
+	bodyFile := flags.String("body-file", "", "path to work body file, or - for stdin")
 	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
 
 	if err := flags.Parse(args); err != nil {
@@ -92,6 +96,19 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	if flags.NArg() != 0 {
 		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
 	}
+	bodySet := false
+	bodyFileSet := false
+	flags.Visit(func(flag *flag.Flag) {
+		switch flag.Name {
+		case "body":
+			bodySet = true
+		case "body-file":
+			bodyFileSet = true
+		}
+	})
+	if bodySet && bodyFileSet {
+		return exitcode.UsageError(errors.New("--body and --body-file cannot be used together"))
+	}
 
 	normalizedTitle := strings.TrimSpace(*title)
 	if normalizedTitle == "" {
@@ -101,7 +118,6 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	if err != nil {
 		return exitcode.UsageError(err)
 	}
-
 	discovered, err := gitctx.Discover(ctx, workDir)
 	if err != nil {
 		if errors.Is(err, gitctx.ErrNotGitRepository) {
@@ -137,6 +153,10 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	if err := validateMarkerMembership(config, profile); err != nil {
 		return err
 	}
+	normalizedBody, err := resolveBody(*body, *bodyFile, bodyFileSet, options.Stdin)
+	if err != nil {
+		return err
+	}
 	intake, err := postIntake(ctx, client, session, intakeSubmission{
 		ProjectID:     config.ProjectID,
 		RepoBindingID: config.RepoBindingID,
@@ -145,7 +165,7 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 			ExternalID: "work start",
 		},
 		Title: strings.TrimSpace(*title),
-		Body:  strings.TrimSpace(*body),
+		Body:  normalizedBody,
 		RequestAuthor: actorRef{
 			Kind:        "user",
 			ID:          profile.User.ID,
@@ -208,6 +228,51 @@ func renderStartText(output spine.WorkStartOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", workStartedNote, output.NextSuggestedCommand)
 	return b.String()
+}
+
+func resolveBody(body string, bodyFile string, bodyFileSet bool, stdin io.Reader) (string, error) {
+	if !bodyFileSet {
+		return strings.TrimSpace(body), nil
+	}
+	if bodyFile == "" {
+		return "", exitcode.UsageError(errors.New("--body-file requires a path or -"))
+	}
+
+	var raw []byte
+	var err error
+	if bodyFile == "-" {
+		if stdin == nil {
+			stdin = os.Stdin
+		}
+		raw, err = readLimitedBody(stdin, "--body-file - from stdin")
+		if err != nil {
+			return "", err
+		}
+	} else {
+		file, err := os.Open(bodyFile)
+		if err != nil {
+			return "", exitcode.RuntimeError(fmt.Errorf("read --body-file %s: %w", bodyFile, err))
+		}
+		defer file.Close()
+		raw, err = readLimitedBody(file, "--body-file "+bodyFile)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Keep --body-file consistent with --body: surrounding paste/file
+	// whitespace is not part of the intake body.
+	return strings.TrimSpace(string(raw)), nil
+}
+
+func readLimitedBody(reader io.Reader, source string) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(reader, maxWorkBodyBytes+1))
+	if err != nil {
+		return nil, exitcode.RuntimeError(fmt.Errorf("read %s: %w", source, err))
+	}
+	if len(raw) > maxWorkBodyBytes {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s exceeds %d bytes", source, maxWorkBodyBytes))
+	}
+	return raw, nil
 }
 
 func loadUsableSession(options Options) (authstore.Session, string, error) {

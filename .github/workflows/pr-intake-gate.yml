@@ -9,6 +9,7 @@ on:
       - synchronize
       - labeled
       - unlabeled
+      - ready_for_review
 
 permissions:
   contents: read
@@ -31,7 +32,10 @@ jobs:
       - name: Run PR intake gate
         # Pinned from repo-governance main.
         # pull_request_target must not execute mutable tags.
-        uses: heurema/repo-governance/actions/pr-intake-gate@25de0a4c5b2f7316e90b3c373c9b4170c3ebcb4c
+        uses: heurema/repo-governance/actions/pr-intake-gate@2413ba8db779a431d46505003870766b35b3ea57
         with:
           policy-path: .github/pr-intake-gate.yml
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          codex-review-require-current-review: 'true'
+          codex-review-wait-seconds: '480'
+          codex-review-poll-interval-seconds: '10'

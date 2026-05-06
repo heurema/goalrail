@@ -61,7 +61,7 @@
   lookup, and logout over those existing endpoints. Organization / Project /
   RepoBinding profile selection remains unimplemented; the server-rendered CLI
   auth bridge remains separate.
-- ADR-0026 now defines the Organization user management boundary:
+- ADR-0027 now defines the Organization user management boundary:
   regular Organization users are a future Console-backed server API workflow,
   not CLI user creation; canonical identity is `User`, Organization access is
   `OrganizationMembership`, v0 user management is owner-only, temporary
@@ -393,21 +393,31 @@ Done means:
   Project-scoped RepoBinding init endpoint
 - ✅ explicit `goalrail init --local-demo` preserves the auth-free local/demo
   draft and writes no files
-- ✅ after successful server-backed init, the CLI writes a non-secret
-  Git-root `.goalrail/project.yml` marker/cache with server/project/repo binding
-  identity only
+- ✅ after successful server-backed init, the CLI writes the non-secret
+  Git-root `.goalrail/project.yml` repository marker with server/project/repo
+  binding identity only and ensures `.goalrail/.gitignore` ignores
+  Goalrail-owned machine-local state directories/files
 - ✅ server-backed init preflights an existing `.goalrail/project.yml` before
   the server call and fails locally on server/project/repo/base conflicts
-- ✅ `goalrail work start --title <title> [--body <body>]` reads the Git-root
-  marker plus stored login profile, calls `/v1/me`, creates `/v1/intakes`, and
-  promotes through `/v1/intakes/{id}/goals`
+- ✅ `goalrail work start --title <title> [--body <body> | --body-file
+  <path|->]` reads the Git-root marker plus stored login profile, calls
+  `/v1/me`, creates `/v1/intakes`, and promotes through
+  `/v1/intakes/{id}/goals`
+- ✅ `goalrail agent install` explicitly installs provider-neutral repo-local
+  Agent Pack v0 files under `.goalrail/agent/` for local coding agents; it does
+  not install Codex, Claude, Gemini, Cursor, Windsurf, Gravity, or other
+  provider-specific adapters
+- ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
+  bodies from a file or stdin while preserving stable JSON output
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
   cache storage in `.goalrail/project.yml`
+- no root `.gitignore` mutation for Goalrail local-state ignores
 - no audit/hook/branch/verification setup from init
 - no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
-  integration, branch, PR, hook, clone, or deploy-key setup from `work start`
+  integration, provider shim, branch, PR, hook, clone, or deploy-key setup from
+  `work start` or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint
@@ -649,9 +659,43 @@ Done means:
 - `.gitignore` blocks secrets/sessions and the legacy directory path
 - Next: implement or verify the resolver; perform semantic review of styles/prompts in the external workspace
 
+### Slice — Project Scan / Repository Baseline lifecycle docs
+Status: DONE — architecture boundary recorded.
+
+Goal:
+- document the local Project Scan, immutable `RepositoryBaselineProfile`,
+  separate `WorkspaceOverlay`, and future task-specific `ContractContextPack`
+  freshness model before implementation.
+
+Done means:
+- ADR-0025 defines baseline lifecycle, rebuild triggers, overlay handling,
+  partiality states, background-scan limits, and the server/no-clone boundary
+- `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md` defines Project
+  Scan v0, `RepositoryBaselineProfile`, `WorkspaceOverlay`,
+  `ContractContextPack`, freshness gates, and v0 non-goals
+- `docs/INDEX.md`, `docs/ops/DECISIONS.md`, and `docs/ops/NEXT.md` are aligned
+- no implementation code, server clone, provider OAuth, runner checkout,
+  watcher/daemon, embeddings, raw source upload, gate, or proof is added in this
+  docs slice
+
 ### Architecture follow-up slices
 
-1. Runner-owned repository checkout credential boundary
+1. Project Scan v0 implementation boundary
+   - Status: DONE — local CLI baseline / overlay foundation exists.
+   - `apps/cli/internal/projectscan` builds immutable local
+     `RepositoryBaselineProfile` JSON for committed HEAD, refreshes cheap
+     `WorkspaceOverlay` JSON, evaluates freshness, and writes cache artifacts
+     under the user cache directory
+   - `goalrail project scan/status` are the explicit local freshness commands
+   - server-backed `goalrail init` runs the quick local Project Scan after the
+     non-secret `.goalrail/project.yml` marker is written or verified
+   - start from ADR-0025 and `GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
+   - keep scanning local CLI / runner owned and deterministic
+   - persist summaries/receipts only, not raw source bodies by default
+   - separate `RepositoryBaselineProfile` from `WorkspaceOverlay`
+   - do not add server-side clone, provider OAuth, runner checkout,
+     watcher/daemon, embeddings, ContractContextPack generation, gate, or proof
+2. Runner-owned repository checkout credential boundary
    - define runner startup flags for Goalrail connection and local credential
      file paths only
    - define API-issued `CheckoutInstruction` fields, including
@@ -664,7 +708,7 @@ Done means:
    - add no provider OAuth, VcsConnection, token storage, provider clients, live
      metadata listing, checkout implementation, runner implementation, gate, or
      proof
-2. Organization / project / repo binding persistence boundary
+3. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
    - direct `RepoBinding` stores repository reference in the MVP
    - `RepositoryRecord` and `RepositoryEnrollment` are deferred
@@ -672,7 +716,7 @@ Done means:
      remain valid
    - support the runner-owned credential path without requiring GitHub App,
      GitLab, or Bitbucket cloud connection
-3. Runner checkout prototype boundary
+4. Runner checkout prototype boundary
    - start with a universal runner as a separate binary/process
    - use pull-based / poll-based job leasing from the API server
    - perform read-only ephemeral checkout or use a mounted workspace and
@@ -680,7 +724,7 @@ Done means:
    - do not implement provider OAuth, token storage, provider clients,
      persistent mirrors, repository writes, arbitrary command execution, gate,
      or proof
-4. Customer-hosted runner protocol boundary
+5. Customer-hosted runner protocol boundary
    - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
    - keep clone access inside customer infrastructure and return bounded artifacts only
    - leave optional attestation or receipt signatures for a later trust-hardening slice

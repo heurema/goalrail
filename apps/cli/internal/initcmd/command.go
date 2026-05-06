@@ -17,7 +17,10 @@ import (
 	"github.com/heurema/goalrail/apps/cli/internal/term"
 )
 
-const localDemoMessage = "Local demo only. Production repository registration belongs server-side; this CLI does not create a server RepoBinding, connect Git apps, queue audits, or provision deploy keys."
+const (
+	localDemoMessage     = "Local demo only. Production repository registration belongs server-side; this CLI does not create a server RepoBinding, connect Git apps, queue audits, or provision deploy keys."
+	localDemoNextCommand = "goalrail readiness scan --path ."
+)
 
 type SessionStore interface {
 	Load() (authstore.Session, error)
@@ -28,9 +31,10 @@ type HTTPClient interface {
 }
 
 type Options struct {
-	Store      SessionStore
-	HTTPClient HTTPClient
-	Now        func() time.Time
+	Store                SessionStore
+	HTTPClient           HTTPClient
+	Now                  func() time.Time
+	ProjectScanCacheRoot string
 }
 
 func Run(ctx context.Context, out *term.Output, workDir string, args []string) error {
@@ -105,7 +109,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		RepoURL:               resolvedRepoURL,
 		Status:                spine.RepoBindingStatusPendingServerKeyProvisioning,
 		Message:               localDemoMessage,
-		NextCommand:           nextSuggestedCommand,
+		NextCommand:           localDemoNextCommand,
 		GitRoot:               discovered.GitRoot,
 		RemoteName:            discovered.RemoteName,
 		Provider:              remoteInfo.Provider,
@@ -137,7 +141,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 }
 
 func Usage() string {
-	return "Usage: goalrail init [--repo <repo-url>] [--base <branch>] [--project <project-id>] [--local-demo] [--format text|json]\n\nBy default, initializes server-backed repository context using the stored goalrail login profile, records a metadata-only repository context snapshot, and writes a non-secret .goalrail/project.yml marker in the Git root. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --base, sets workflow_base_branch explicitly without creating branches or changing Git state. When local origin default metadata is available, it remains provider_default_branch.\n\nWith --project, uses the low-level Project-scoped RepoBinding init endpoint.\n\nWith --local-demo, creates the old auth-free local/demo repo binding draft and writes no files.\n\nInit does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, or start verification.\n"
+	return "Usage: goalrail init [--repo <repo-url>] [--base <branch>] [--project <project-id>] [--local-demo] [--format text|json]\n\nBy default, initializes server-backed repository context using the stored goalrail login profile, records a metadata-only repository context snapshot, writes a non-secret .goalrail/project.yml marker in the Git root, ensures .goalrail/.gitignore for Goalrail-owned local state, and runs a local Project Scan. Without --repo, the command reads local Git metadata and remote.origin.url when run inside a Git worktree.\n\nWith --base, sets workflow_base_branch explicitly without creating branches or changing Git state. When local origin default metadata is available, it remains provider_default_branch.\n\nWith --project, uses the low-level Project-scoped RepoBinding init endpoint.\n\nWith --local-demo, creates the old auth-free local/demo repo binding draft and writes no files or Project Scan artifacts.\n\nInit does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, create a context pack, run workers, gates, proof, or start verification.\n"
 }
 
 func renderText(draft spine.RepoBindingDraft) string {
