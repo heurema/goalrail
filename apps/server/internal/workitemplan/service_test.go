@@ -150,6 +150,26 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceRenewLeaseMissReturnsSpecificLeaseConflict(t *testing.T) {
+	service, _, _, _, leases, _, _, _ := planningService(t)
+	approved := validApprovedContract()
+	if _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	}); err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	lease := acquireLease(t, service)
+
+	leases.renewMiss = true
+	leases.renewMissMode = spine.WorkItemPlanLeaseStateCompleted
+	_, err := service.RenewLease(context.Background(), lease.ID, spine.WorkItemPlanLeaseRenewRequest{
+		LeaseToken: lease.LeaseToken,
+	})
+	if !errors.Is(err, workitemplan.ErrLeaseCompleted) {
+		t.Fatalf("RenewLease() error = %v, want %v", err, workitemplan.ErrLeaseCompleted)
+	}
+}
+
 func TestServiceSubmitProposalLeaseCompletionMissReturnsLeaseConflict(t *testing.T) {
 	service, _, _, _, leases, _, _, _ := planningService(t)
 	approved := validApprovedContract()
@@ -367,6 +387,8 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 type fakeLeaseStore struct {
 	plans                 *fakeWorkItemPlanStore
 	leases                map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease
+	renewMiss             bool
+	renewMissMode         spine.WorkItemPlanLeaseState
 	markCompletedMiss     bool
 	markCompletedMissMode spine.WorkItemPlanLeaseState
 }
@@ -429,6 +451,13 @@ func (s *fakeLeaseStore) Get(_ context.Context, id spine.WorkItemPlanLeaseID) (s
 func (s *fakeLeaseStore) Renew(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, expiresAt time.Time, updatedAt time.Time) (spine.WorkItemPlanLease, bool, error) {
 	lease, ok := s.leases[id]
 	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(updatedAt) {
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	if s.renewMiss {
+		if s.renewMissMode != "" {
+			lease.State = s.renewMissMode
+			s.leases[id] = lease
+		}
 		return spine.WorkItemPlanLease{}, false, nil
 	}
 	lease.ExpiresAt = expiresAt

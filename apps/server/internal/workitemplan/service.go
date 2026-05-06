@@ -282,14 +282,28 @@ func (s *Service) RenewLease(ctx context.Context, id spine.WorkItemPlanLeaseID, 
 		if renewErr != nil {
 			return fmt.Errorf("renew work item plan lease: %w", renewErr)
 		}
+		if !ok {
+			return s.resolveLeaseRenewMiss(txCtx, id, leaseTokenHash(input.LeaseToken), now)
+		}
 		return nil
 	}); err != nil {
 		return spine.WorkItemPlanLease{}, err
 	}
-	if !ok {
-		return spine.WorkItemPlanLease{}, ErrInvalidLease
-	}
 	return renewed, nil
+}
+
+func (s *Service) resolveLeaseRenewMiss(ctx context.Context, leaseID spine.WorkItemPlanLeaseID, tokenHash string, now time.Time) error {
+	lease, ok, err := s.Leases.Get(ctx, leaseID)
+	if err != nil {
+		return fmt.Errorf("get work item plan lease after renew miss: %w", err)
+	}
+	if !ok {
+		return ErrInvalidLease
+	}
+	if err := validateLeaseProof(lease, "", tokenHash, now); err != nil {
+		return err
+	}
+	return ErrInvalidLease
 }
 
 func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanID, input spine.WorkItemPlanProposalSubmitRequest) (spine.WorkItemPlanProposal, error) {
