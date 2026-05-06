@@ -22,11 +22,12 @@ related_docs:
 # Goalrail Status
 
 Last updated: 2026-05-06
-Status: planning / product canon and pilot frame active; first local Go CLI and
-Go server intent-plane / public Contract aggregate and `/v1/contracts`
-lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem
-persistence plus `plans` / `proposals` / `acceptance` WorkItem planning
-control-plane flow exists; public Contract aggregate identity is implemented as
+Status: planning / product canon and pilot frame active; first local Go CLI with
+local Project Scan baseline / overlay commands and Go server intent-plane /
+public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed /
+ContractDraft / ApprovedContract / WorkItem persistence plus `plans` /
+`proposals` / `acceptance` WorkItem planning control-plane flow exists; public
+Contract aggregate identity is implemented as
 a stable `contract_id` boundary and transitional public
 seed/draft/approval/direct-task routes are removed; ADR-0021 accepts the future
 typed WorkItemPlan pull lease queue direction, but no lease protocol or generic
@@ -269,6 +270,18 @@ The project currently has:
   only and cannot bypass synchronous freshness checks. The API server remains
   outside repository clone, source upload by default, in-process checks, gate,
   and proof for this boundary.
+- The CLI now implements the first local Project Scan v0 foundation:
+  `apps/cli/internal/projectscan` builds and caches immutable
+  `RepositoryBaselineProfile` JSON plus cheap `WorkspaceOverlay` JSON under the
+  user cache directory, `goalrail project scan/status` report freshness, and
+  server-backed `goalrail init` runs a best-effort quick local Project Scan
+  after `.goalrail/project.yml` is written or verified. `.goalrail/project.yml`
+  remains the committed repository/team marker, while `.goalrail/.gitignore`
+  keeps Goalrail-owned machine-local `.goalrail/local`, `.goalrail/cache`,
+  `.goalrail/state`, `.goalrail/tmp`, and `*.local.*` files out of Git. This
+  remains local-only and does not add server baseline persistence, server clone,
+  source upload, background daemon, runner, context-pack generation, gate, or
+  proof.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,
   mounted-workspace checkout flow, provider credential storage, VcsConnection,
   OAuth, provider client, gate, or proof exists yet.
@@ -310,7 +323,7 @@ The project currently has:
 - `apps/web/console-ru` source has been removed. The live `https://console.goalrail.ru/` deployment remains a separate legacy RU static release and is not migrated by the main `goalrail.dev` slice.
 - `apps/web/pilot-intake-ru` is the current public React + Vite + Mantine RU business-first pilot landing for `pilot.goalrail.ru` (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result); it includes a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server` for lead capture and digest source, and it supersedes the previous technical interactive walkthrough as the primary public RU landing per D-0055.
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
-- CLI commands now exist for `version`, normal server-backed `goalrail init`, optional `goalrail init --base <branch>` workflow base override, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, server-backed `goalrail work start`, `readiness scan`, `contract validate`, `proof show`, and the first `goalrail login <server_url>` browser-loopback auth path; normal `goalrail init` uses local Git metadata plus the stored login profile to call the server repository-context init endpoint, records a bounded metadata-only repository context snapshot on the server, and writes a non-secret Git-root `.goalrail/project.yml` marker only after server success, while `goalrail init --project <project_id>` remains the low-level Project-scoped RepoBinding init path
+- CLI commands now exist for `version`, normal server-backed `goalrail init`, optional `goalrail init --base <branch>` workflow base override, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, local `goalrail project scan/status`, server-backed `goalrail work start`, `readiness scan`, `contract validate`, `proof show`, and the first `goalrail login <server_url>` browser-loopback auth path; normal `goalrail init` uses local Git metadata plus the stored login profile to call the server repository-context init endpoint, records a bounded metadata-only repository context snapshot on the server, writes a non-secret Git-root `.goalrail/project.yml` marker only after server success, ensures `.goalrail/.gitignore` for Goalrail-owned machine-local state, and runs a local Project Scan cache write, while `goalrail init --project <project_id>` remains the low-level Project-scoped RepoBinding init path
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
 - server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `GET /cli/login`, `POST /cli/login`, `POST /v1/auth/cli/exchange`, `POST /v1/auth/refresh`, `POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`, `POST /v1/init/repository-context`, `POST /v1/repo-bindings/{repo_binding_id}/context-snapshots`, `POST /v1/projects/{project_id}/repo-bindings/init`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no full RepoBinding CRUD endpoint, `GET /v1/plans`, `GET /v1/proposals`, or `GET /v1/tasks` list endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
 - `POST /v1/contracts/{id}/plans` resolves `{id}` as stable public
@@ -408,10 +421,10 @@ The project currently has:
   is only a temporary CLI auth bridge for `goalrail login <server_url>`
 - no VcsConnection, provider UI integration, OAuth, provider client, or provider
   credential storage implementation yet
-- no `RepositoryBaselineProfile`, `WorkspaceOverlay`, or `ContractContextPack`
-  implementation yet; ADR-0025 is a docs-only accepted boundary, not scanner
-  storage, background worker, raw source upload, server clone, gate, or proof
-  behavior
+- no `ContractContextPack` implementation yet; the local
+  `RepositoryBaselineProfile` / `WorkspaceOverlay` CLI foundation exists, but
+  there is still no server baseline persistence, background worker, raw source
+  upload, server clone, gate, or proof behavior
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
 - no `RepoBinding.access_mode` implementation beyond `metadata_only` init
@@ -456,16 +469,15 @@ Current packaging target:
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
 - `apps/web/console` provides the verified canonical multilingual EN/RU console source with existing server login / first-login password change / `/v1/me` / logout before the same structured empty product surfaces; tokens remain in React memory only, locale is not persisted, `goalrail.console.theme` remains the only browser storage key, Users remains component-state only, the main `https://goalrail.dev` deployment is live with API base URL `https://api.goalrail.dev`, and legacy `https://console.goalrail.ru/` remains separate; the console does not claim durable product data, user settings API, analytics, runner, gate, proof, repo integration, or product-loop implementation
-- `apps/cli` provides a verified Go CLI bootstrap plus first `goalrail login <server_url>` server auth path with browser loopback, random state, S256 verifier/challenge exchange, normal server-backed `goalrail init` repository-context bootstrap, optional `goalrail init --base <branch>` workflow base override without Git mutation, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, and marker-backed `goalrail work start`; normal server-backed init records a bounded server-side metadata inventory snapshot after repository-context init and writes a non-secret Git-root `.goalrail/project.yml` marker after server success, while `work start` reads that marker to create an IntakeRecord and Goal through existing server endpoints; it does not claim hosted execution, production repo auth, real gate decisions, Organization selection UX, public Organization creation, broad repo binding sync, proof retrieval, or proof generation
+- `apps/cli` provides a verified Go CLI bootstrap plus first `goalrail login <server_url>` server auth path with browser loopback, random state, S256 verifier/challenge exchange, normal server-backed `goalrail init` repository-context bootstrap, optional `goalrail init --base <branch>` workflow base override without Git mutation, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, local `goalrail project scan/status` freshness commands, and marker-backed `goalrail work start`; normal server-backed init records a bounded server-side metadata inventory snapshot after repository-context init, writes the non-secret Git-root `.goalrail/project.yml` repository marker after server success, ensures `.goalrail/.gitignore` for Goalrail-owned machine-local state, and runs a local Project Scan cache write, while `work start` reads that marker to create an IntakeRecord and Goal through existing server endpoints; it does not claim hosted execution, production repo auth, real gate decisions, Organization selection UX, public Organization creation, broad repo binding sync, context-pack generation, proof retrieval, or proof generation
 - `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepositoryContextSnapshot recording, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle facade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `RepositoryContextSnapshot`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, session state, and one-time CLI code consumption only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness scoring, workers, provider integration, public Organization creation, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
-- next sales-pack, Project Scan baseline, and runner-boundary slices remain
-  explicit and bounded; repository baseline lifecycle is documented while
-  Project Scan implementation, checkout jobs, checkout instructions, checkout
-  receipts, provider integrations, runner implementation, gate, and proof remain
-  unimplemented
+- next sales-pack, ContractContextPack, and runner-boundary slices remain
+  explicit and bounded; local Project Scan baseline / overlay implementation
+  exists while checkout jobs, checkout instructions, checkout receipts, provider
+  integrations, runner implementation, gate, and proof remain unimplemented
 
 ## Main current risks
 

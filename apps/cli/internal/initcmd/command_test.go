@@ -246,8 +246,17 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.LocalConfigPath != projectConfigRelativePath || output.LocalConfigStatus != localConfigStatusWritten {
 		t.Fatalf("local config output = %q/%q, want %q/%q", output.LocalConfigPath, output.LocalConfigStatus, projectConfigRelativePath, localConfigStatusWritten)
 	}
+	if output.LocalIgnorePath != projectConfigIgnoreRelativePath || output.LocalIgnoreStatus != localConfigStatusWritten {
+		t.Fatalf("local ignore output = %q/%q, want %q/%q", output.LocalIgnorePath, output.LocalIgnoreStatus, projectConfigIgnoreRelativePath, localConfigStatusWritten)
+	}
+	if !strings.Contains(output.LocalConfigMessage, "Commit .goalrail/project.yml and .goalrail/.gitignore") {
+		t.Fatalf("local config message = %q, want commit hint", output.LocalConfigMessage)
+	}
 	if output.ContextSnapshotID != "018f0000-0000-7000-8000-000000000301" || output.ContextSnapshotStatus != "recorded" {
 		t.Fatalf("context snapshot output = %q/%q, want recorded snapshot", output.ContextSnapshotID, output.ContextSnapshotStatus)
+	}
+	if output.ProjectScanStatus != "quick" || output.ProjectScanBaselineID == "" || output.ProjectScanOverlayID == "" || output.ProjectScanFreshness != "fresh" {
+		t.Fatalf("project scan output = %#v, want quick/fresh with ids", output)
 	}
 	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
 		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
@@ -292,6 +301,7 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if strings.Contains(config, "access-token") || strings.Contains(config, "refresh-token") {
 		t.Fatalf("project config contains token material:\n%s", config)
 	}
+	assertGoalrailLocalIgnoreRules(t, repoDir)
 	gitignore, err := os.ReadFile(gitignorePath)
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
@@ -325,8 +335,9 @@ func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, nil, Options{
-		Store: fakeSessionStore{session: validSession(server.URL)},
-		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		Store:                fakeSessionStore{session: validSession(server.URL)},
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("Run(init) error = %v", err)
@@ -336,8 +347,12 @@ func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
 	for _, want := range []string{
 		"Repository context initialized",
 		"Local config: .goalrail/project.yml (written)",
+		"Local state ignore rules: .goalrail/.gitignore (written)",
+		"Commit .goalrail/project.yml and .goalrail/.gitignore with this repository.",
 		"Repository context snapshot: 018f0000-0000-7000-8000-000000000301 (recorded)",
-		"This initialized GoalRail repository context for your existing organization and recorded a metadata-only repository context snapshot.",
+		"Project scan: quick",
+		"This initialized GoalRail repository context for your existing organization, recorded a metadata-only repository context snapshot, and ran a local Project Scan.",
+		"No server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want %q", got, want)
@@ -590,6 +605,12 @@ func TestRunRepositoryContextInitDoesNotPreflightProjectIDBeforeServer(t *testin
 	if output.LocalConfigStatus != localConfigStatusUnchanged {
 		t.Fatalf("local_config_status = %q, want unchanged", output.LocalConfigStatus)
 	}
+	if output.LocalIgnoreStatus != localConfigStatusWritten {
+		t.Fatalf("local_ignore_status = %q, want written when missing", output.LocalIgnoreStatus)
+	}
+	if !strings.Contains(output.LocalConfigMessage, "Existing Goalrail project marker found and verified") {
+		t.Fatalf("local_config_message = %q, want verified marker", output.LocalConfigMessage)
+	}
 }
 
 func TestRunServerBackedInitSendsExpectedRequestJSON(t *testing.T) {
@@ -646,6 +667,9 @@ func TestRunServerBackedInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.LocalConfigPath != projectConfigRelativePath || output.LocalConfigStatus != localConfigStatusWritten {
 		t.Fatalf("local config output = %q/%q, want %q/%q", output.LocalConfigPath, output.LocalConfigStatus, projectConfigRelativePath, localConfigStatusWritten)
 	}
+	if output.LocalIgnorePath != projectConfigIgnoreRelativePath || output.LocalIgnoreStatus != localConfigStatusWritten {
+		t.Fatalf("local ignore output = %q/%q, want %q/%q", output.LocalIgnorePath, output.LocalIgnoreStatus, projectConfigIgnoreRelativePath, localConfigStatusWritten)
+	}
 	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
 		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
 	}
@@ -663,6 +687,7 @@ func TestRunServerBackedInitSendsExpectedRequestJSON(t *testing.T) {
 	if strings.Contains(config, "access-token") || strings.Contains(config, "refresh-token") {
 		t.Fatalf("project config contains token material:\n%s", config)
 	}
+	assertGoalrailLocalIgnoreRules(t, repoDir)
 	gitignore, err := os.ReadFile(gitignorePath)
 	if err != nil {
 		t.Fatalf("read .gitignore: %v", err)
@@ -695,8 +720,14 @@ func TestRunServerBackedInitFromNestedDirectoryWritesGitRootConfig(t *testing.T)
 	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
 		t.Fatalf("git root project config not written: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(repoDir, projectConfigIgnoreRelativePath)); err != nil {
+		t.Fatalf("git root local-state gitignore not written: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(nestedDir, projectConfigRelativePath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("nested project config stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(nestedDir, projectConfigIgnoreRelativePath)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("nested local-state gitignore stat error = %v, want not exist", err)
 	}
 }
 
@@ -718,6 +749,46 @@ func TestRunServerBackedInitIdenticalConfigReportsUnchanged(t *testing.T) {
 	if output.LocalConfigStatus != localConfigStatusUnchanged {
 		t.Fatalf("local_config_status = %q, want unchanged", output.LocalConfigStatus)
 	}
+	if output.LocalIgnoreStatus != localConfigStatusUnchanged {
+		t.Fatalf("local_ignore_status = %q, want unchanged", output.LocalIgnoreStatus)
+	}
+	if !strings.Contains(output.LocalConfigMessage, "Existing Goalrail project marker found and verified") {
+		t.Fatalf("local_config_message = %q, want verified marker", output.LocalConfigMessage)
+	}
+	assertGoalrailIgnoreBehavior(t, repoDir)
+}
+
+func TestRunServerBackedInitUpdatesExistingGoalrailGitignore(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	rootGitignorePath := filepath.Join(repoDir, ".gitignore")
+	if err := os.WriteFile(rootGitignorePath, []byte("existing-ignore\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore fixture: %v", err)
+	}
+	writeGoalrailGitignoreFile(t, repoDir, "# existing local state rules\n/local/\n")
+	server := httptest.NewServer(repoBindingInitHandler(t, "018f0000-0000-7000-8000-000000000003"))
+	defer server.Close()
+
+	output, err := runInitServerJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--project", "018f0000-0000-7000-8000-000000000003", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init --project) error = %v", err)
+	}
+
+	if output.LocalIgnoreStatus != localConfigStatusUpdated {
+		t.Fatalf("local_ignore_status = %q, want updated", output.LocalIgnoreStatus)
+	}
+	got := readGoalrailGitignoreFile(t, repoDir)
+	for _, want := range strings.Split(strings.TrimSpace(renderProjectConfigGitignore()), "\n") {
+		if !strings.Contains(got, want+"\n") {
+			t.Fatalf(".goalrail/.gitignore = %q, want rule %q", got, want)
+		}
+	}
+	if got := readFile(t, rootGitignorePath); got != "existing-ignore\n" {
+		t.Fatalf(".gitignore = %q, want unchanged", got)
+	}
+	assertGoalrailIgnoreBehavior(t, repoDir)
 }
 
 func TestRunServerBackedInitDifferentExistingFullConfigFails(t *testing.T) {
@@ -884,6 +955,9 @@ func TestRunServerBackedInitMatchingExistingConfigContinuesAndReportsUnchanged(t
 	if output.LocalConfigStatus != localConfigStatusUnchanged {
 		t.Fatalf("local_config_status = %q, want unchanged", output.LocalConfigStatus)
 	}
+	if output.LocalIgnoreStatus != localConfigStatusWritten {
+		t.Fatalf("local_ignore_status = %q, want written when missing", output.LocalIgnoreStatus)
+	}
 	if got := requestCount.Load(); got != 1 {
 		t.Fatalf("server requests = %d, want 1 for matching config", got)
 	}
@@ -899,6 +973,9 @@ func TestRunLocalDemoDoesNotWriteProjectConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("project config stat error = %v, want not exist", err)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, projectConfigIgnoreRelativePath)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("local-state gitignore stat error = %v, want not exist", err)
 	}
 }
 
@@ -1049,8 +1126,9 @@ func runInitServerJSON(t *testing.T, workDir string, store fakeSessionStore, arg
 
 	var stdout, stderr bytes.Buffer
 	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, args, Options{
-		Store: store,
-		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		Store:                store,
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: t.TempDir(),
 	})
 	if err != nil {
 		return spine.RepoBindingInitOutput{}, err
@@ -1070,8 +1148,9 @@ func runRepositoryContextJSON(t *testing.T, workDir string, store fakeSessionSto
 
 	var stdout, stderr bytes.Buffer
 	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, args, Options{
-		Store: store,
-		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		Store:                store,
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: t.TempDir(),
 	})
 	if err != nil {
 		return spine.RepositoryContextInitOutput{}, err
@@ -1186,6 +1265,19 @@ func writeRawProjectConfigFile(t *testing.T, repoDir string, content string) str
 	return content
 }
 
+func writeGoalrailGitignoreFile(t *testing.T, repoDir string, content string) string {
+	t.Helper()
+
+	path := filepath.Join(repoDir, projectConfigIgnoreRelativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create .goalrail dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write .goalrail/.gitignore: %v", err)
+	}
+	return content
+}
+
 func readProjectConfigFile(t *testing.T, repoDir string) string {
 	t.Helper()
 
@@ -1194,6 +1286,65 @@ func readProjectConfigFile(t *testing.T, repoDir string) string {
 		t.Fatalf("read project config: %v", err)
 	}
 	return string(raw)
+}
+
+func readGoalrailGitignoreFile(t *testing.T, repoDir string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(filepath.Join(repoDir, projectConfigIgnoreRelativePath))
+	if err != nil {
+		t.Fatalf("read .goalrail/.gitignore: %v", err)
+	}
+	return string(raw)
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(raw)
+}
+
+func assertGoalrailLocalIgnoreRules(t *testing.T, repoDir string) {
+	t.Helper()
+
+	if got, want := readGoalrailGitignoreFile(t, repoDir), renderProjectConfigGitignore(); got != want {
+		t.Fatalf(".goalrail/.gitignore =\n%s\nwant:\n%s", got, want)
+	}
+	assertGoalrailIgnoreBehavior(t, repoDir)
+}
+
+func assertGoalrailIgnoreBehavior(t *testing.T, repoDir string) {
+	t.Helper()
+
+	assertGitIgnoreState(t, repoDir, ".goalrail/project.yml", false)
+	assertGitIgnoreState(t, repoDir, ".goalrail/local/current.json", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/cache/current.json", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/state/current.json", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/tmp/current.json", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/project.local.yml", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/project.local.toml", true)
+	assertGitIgnoreState(t, repoDir, ".goalrail/project.local.json", true)
+}
+
+func assertGitIgnoreState(t *testing.T, repoDir string, relativePath string, wantIgnored bool) {
+	t.Helper()
+
+	cmd := exec.Command("git", "-C", filepath.Clean(repoDir), "check-ignore", "--quiet", "--", filepath.ToSlash(relativePath))
+	err := cmd.Run()
+	gotIgnored := err == nil
+	if err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+			t.Fatalf("git check-ignore %s failed: %v", relativePath, err)
+		}
+	}
+	if gotIgnored != wantIgnored {
+		t.Fatalf("git ignore state for %s = %v, want %v", relativePath, gotIgnored, wantIgnored)
+	}
 }
 
 func expectedProjectConfigYAML(serverURL string) string {

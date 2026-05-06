@@ -23,7 +23,7 @@ import (
 
 const (
 	serverMode           = "server"
-	nextSuggestedCommand = "goalrail readiness scan --path ."
+	nextSuggestedCommand = "goalrail project status"
 	workStartedMessage   = "Work intake started."
 	workStartedNote      = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 )
