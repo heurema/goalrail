@@ -21,7 +21,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 Status: planning / product canon and pilot frame active; first local Go CLI and
 Go server intent-plane / public Contract aggregate and `/v1/contracts`
 lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem
@@ -87,7 +87,10 @@ It verifies existing `user_password_credentials`, creates server-owned
 `GOALRAIL_AUTH_JWT_SECRET`, refreshes access tokens from opaque DB-backed
 refresh-token state without refresh-token rotation, revokes the current
 session on bearer-token logout, and resolves current user membership
-server-side instead of trusting role claims in JWTs. `goalrail login
+server-side instead of trusting role claims in JWTs. ADR-0026 documents the
+future Organization user-management boundary as Console-backed server API
+routes, not CLI user creation; the backend admin user API and persisted Console
+Users UI remain unimplemented. `goalrail login
 <server_url>` now starts a localhost loopback listener, opens or prints the
 server CLI login URL, exchanges a one-time code for tokens, and stores token
 metadata in a local 0600 auth file. `GET /cli/login` and `POST /cli/login`
@@ -98,8 +101,8 @@ the main `https://goalrail.dev` deployment routes it to
 `https://api.goalrail.dev` through the `11me/infra` Flux GitOps path. The
 legacy `https://console.goalrail.ru/` deployment remains separate. SaaS
 onboarding, organization creation API, public registration, keychain
-integration, Organization / Project / RepoBinding profile selection, and admin
-user management remain unimplemented.
+integration, Organization / Project / RepoBinding profile selection, backend
+admin user-management API, and persisted Console Users UI remain unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, the operator-managed Go sidecar deployment plus public DNS/live smoke
@@ -133,7 +136,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-three kernel/CLI/server/domain boundary ADRs
+- twenty-four kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -251,6 +254,19 @@ The project currently has:
   current profile lookup, and logout. Organization / Project / RepoBinding
   profile selection remains unimplemented; the current `/cli/login` HTML page
   is a temporary CLI auth bridge only.
+- ADR-0026 documents the Organization user management boundary:
+  future regular Organization users are created through Console UI backed by
+  server API, not through CLI user creation; canonical identity is `User`,
+  access is `OrganizationMembership`, password credentials stay separate from
+  `users`, temporary passwords are backend-generated and shown once, v0
+  user-management authorization is owner-only, role checks load current
+  membership server-side, cross-organization attempts are rejected, and the
+  last active owner cannot be disabled or demoted. The documented future routes
+  are `GET /v1/organizations/{organization_id}/users`,
+  `POST /v1/organizations/{organization_id}/users`, and
+  `PATCH /v1/organizations/{organization_id}/users/{user_id}`. These routes
+  are not implemented, Settings / Users remains component-state only, and
+  there is no `goalrail users create` command.
 - Repository access MVP is reset to runner-owned credentials plus RepoBinding
   context. Existing RepoBinding / repository-context init remains real:
   RepoBinding identifies which repository a Project works with, remains
@@ -283,7 +299,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-three boundary ADRs exist
+- kernel schema note and twenty-four boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -392,7 +408,8 @@ The project currently has:
 - no Installation bootstrap API, setup flow, or public management surface beyond
   the schema foundation and local `goalrail-server bootstrap owner` command yet
 - no refresh-token rotation, public registration, SaaS onboarding, organization
-  creation API, admin user creation endpoint, keychain integration,
+  creation API, backend admin Organization user-management API, persisted
+  Console Users UI, `goalrail users create` command, keychain integration,
   Organization / Project / RepoBinding CLI profile selection, or data-backed
   Goalrail web product loop yet; the current server-rendered `/cli/login` page
   is only a temporary CLI auth bridge for `goalrail login <server_url>`
@@ -441,7 +458,7 @@ Current packaging target:
 - repo overlay boundaries keep Goalrail and Punk working artifacts out of the root
 - `GOALRAIL_OFFER.md` exists as the current sellable package source
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` provide verified frontend change-packet walkthrough prototypes; EN and RU demo domains are wired independently through standalone infra without changing product phase order
-- `apps/web/console` provides the verified canonical multilingual EN/RU console source with existing server login / first-login password change / `/v1/me` / logout before the same structured empty product surfaces; tokens remain in React memory only, locale is not persisted, `goalrail.console.theme` remains the only browser storage key, Users remains component-state only, the main `https://goalrail.dev` deployment is live with API base URL `https://api.goalrail.dev`, and legacy `https://console.goalrail.ru/` remains separate; the console does not claim durable product data, user settings API, analytics, runner, gate, proof, repo integration, or product-loop implementation
+- `apps/web/console` provides the verified canonical multilingual EN/RU console source with existing server login / first-login password change / `/v1/me` / logout before the same structured empty product surfaces; tokens remain in React memory only, locale is not persisted, `goalrail.console.theme` remains the only browser storage key, Users remains component-state only and is only the intended future API-backed Organization user-management surface, the main `https://goalrail.dev` deployment is live with API base URL `https://api.goalrail.dev`, and legacy `https://console.goalrail.ru/` remains separate; the console does not claim durable product data, persisted Users behavior, user settings API, analytics, runner, gate, proof, repo integration, or product-loop implementation
 - `apps/cli` provides a verified Go CLI bootstrap plus first `goalrail login <server_url>` server auth path with browser loopback, random state, S256 verifier/challenge exchange, normal server-backed `goalrail init` repository-context bootstrap, optional `goalrail init --base <branch>` workflow base override without Git mutation, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, and marker-backed `goalrail work start`; normal server-backed init records a bounded server-side metadata inventory snapshot after repository-context init and writes a non-secret Git-root `.goalrail/project.yml` marker after server success, while `work start` reads that marker to create an IntakeRecord and Goal through existing server endpoints; it does not claim hosted execution, production repo auth, real gate decisions, Organization selection UX, public Organization creation, broad repo binding sync, proof retrieval, or proof generation
 - `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepositoryContextSnapshot recording, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle facade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `RepositoryContextSnapshot`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, session state, and one-time CLI code consumption only, exposes single task read by ID, and does not claim automatic readiness re-check, repo-aware planning computation, WorkItem assignment/claiming, execution, `Run`, receipt, gate, proof, repo readiness scoring, workers, provider integration, public Organization creation, or repository checkout
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
