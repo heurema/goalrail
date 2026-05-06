@@ -2157,6 +2157,71 @@ select:focus-visible {
   margin-bottom: 18px;
 }
 
+.temporaryPasswordPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--warn) 45%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--warn-soft) 24%, var(--panel));
+}
+
+.temporaryPasswordPanel h4,
+.temporaryPasswordPanel p {
+  margin: 0;
+}
+
+.temporaryPasswordPanel h4 {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.temporaryPasswordPanel p {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.temporaryPasswordPanel code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--warn);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.usersNotice {
+  margin: 0 0 14px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.usersNoticeError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--danger-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--danger-soft) 18%, var(--panel));
+  color: var(--danger);
+}
+
+.usersNoticeError p {
+  margin: 0;
+}
+
 .usersToolbar {
   display: flex;
   align-items: center;
@@ -2248,18 +2313,23 @@ select:focus-visible {
 
 .userRow > th:first-child,
 .userRow > td:first-child {
-  width: 26%;
+  width: 24%;
 }
 
 .userRow > th:nth-child(2),
 .userRow > td:nth-child(2) {
-  width: 32%;
+  width: 27%;
 }
 
 .userRow > th:nth-child(3),
 .userRow > td:nth-child(3),
 .userRow > th:nth-child(4),
 .userRow > td:nth-child(4) {
+  width: 14%;
+}
+
+.userRow > th:nth-child(5),
+.userRow > td:nth-child(5) {
   width: 17%;
 }
 
@@ -2389,22 +2459,26 @@ select:focus-visible {
   background: var(--pass);
 }
 
-.statusPending {
-  border-color: var(--warn-soft);
-  color: var(--warn);
-}
-
-.statusPending::before {
-  background: var(--warn);
-}
-
-.statusDisabled {
+.statusInactive {
   border-color: var(--danger-soft);
   color: var(--danger);
 }
 
-.statusDisabled::before {
+.statusInactive::before {
   background: var(--danger);
+}
+
+.credentialWarning {
+  border-color: var(--warn-soft);
+  color: var(--warn);
+}
+
+.credentialWarning::before {
+  background: var(--warn);
+}
+
+.credentialReady {
+  color: var(--mute);
 }
 
 .settingsNote {
@@ -2436,6 +2510,13 @@ select:focus-visible {
   border-left: 1px solid var(--line);
   background: var(--bg-2);
   box-shadow: -20px 0 60px color-mix(in oklab, black 50%, transparent);
+}
+
+.drawerForm {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .drawerHeader {

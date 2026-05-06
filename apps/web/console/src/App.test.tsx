@@ -61,6 +61,43 @@ function meResponse(overrides: { role?: string } = {}) {
   };
 }
 
+function organizationUserRecord(overrides: Partial<Record<string, unknown>> = {}) {
+  const userId = String(overrides.userId ?? '018f0000-0000-7000-8000-000000000010');
+  const displayName = String(overrides.displayName ?? 'Dev User');
+  const email = overrides.email === null ? undefined : String(overrides.email ?? 'dev@example.com');
+  const role = String(overrides.role ?? 'member');
+  const state = String(overrides.state ?? 'active');
+  const mustChangePassword = Boolean(overrides.mustChangePassword ?? false);
+
+  return {
+    user: {
+      id: userId,
+      display_name: displayName,
+      ...(email === undefined ? {} : { email }),
+      state: String(overrides.userState ?? state),
+      created_at: '2026-05-06T10:00:00Z',
+      updated_at: '2026-05-06T10:15:00Z',
+    },
+    organization_membership: {
+      id: String(overrides.membershipId ?? '018f0000-0000-7000-8000-000000000310'),
+      organization_id: '018f0000-0000-7000-8000-000000000002',
+      user_id: userId,
+      role,
+      state,
+      created_at: '2026-05-06T10:00:00Z',
+      updated_at: '2026-05-06T10:15:00Z',
+    },
+    credential: {
+      must_change_password: mustChangePassword,
+      password_changed_at: mustChangePassword ? null : '2026-05-06T10:20:00Z',
+    },
+  };
+}
+
+function organizationUsersResponse(users = [organizationUserRecord()]) {
+  return { users };
+}
+
 function contractResponse(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: '018f0000-0000-7000-8000-000000000101',
@@ -501,26 +538,322 @@ describe('App', () => {
     expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
   });
 
-  it('renders users from /v1/me only and does not expose local add/edit demo data', async () => {
+  it('users screen calls GET with the organization_id from /v1/me', async () => {
     await loginSuccessfully();
-    const callsBeforeUsersEdit = fetchMock.mock.calls.length;
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Owner', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }),
+    ])));
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
 
-    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
-    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
-    expect(screen.queryByText(/No additional real user records/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /add user/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
     expect(screen.queryByText('Product Lead')).not.toBeInTheDocument();
     expect(screen.queryByText('Reviewer')).not.toBeInTheDocument();
     expect(screen.queryByText('qa@example.com')).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(callsBeforeUsersEdit);
+  });
 
-    fireEvent.change(screen.getByLabelText(/filter by role/i), { target: { value: 'observer' } });
+  it('ignores stale user-list responses after auth state changes', async () => {
+    await loginSuccessfully();
+    const usersLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => usersLookup.promise);
 
-    expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('Owner');
-    expect(screen.getByText(/No additional real user records/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByRole('status');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ revoked: true }));
+    fireEvent.click(screen.getByRole('button', { name: /log out/i }));
+    await screen.findByLabelText(/^Email$/i);
+
+    await act(async () => {
+      usersLookup.resolve(jsonResponse(organizationUsersResponse([
+        organizationUserRecord({ displayName: 'Stale User', email: 'stale@example.com' }),
+      ])));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stale User')).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
+    });
+  });
+
+  it('ignores stale user mutation responses after auth state changes', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText(/No organization users returned/i);
+
+    const createUser = deferredResponse();
+    fetchMock.mockImplementationOnce(() => createUser.promise);
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Stale Created User' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'stale-created@example.com' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ revoked: true }));
+    fireEvent.click(screen.getByRole('button', { name: /log out/i }));
+    await screen.findByLabelText(/^Email$/i);
+
+    await act(async () => {
+      createUser.resolve(
+        jsonResponse({
+          ...organizationUserRecord({ displayName: 'Stale Created User', email: 'stale-created@example.com' }),
+          temporary_password: 'stale-created-secret',
+        }, 201)
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stale Created User')).not.toBeInTheDocument();
+      expect(screen.queryByText('stale-created-secret')).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
+    });
+  });
+
+  it('keeps an in-flight users list load after a failed create', async () => {
+    await loginSuccessfully();
+    const usersLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => usersLookup.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByRole('status');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('organization_user_exists', 'organization user already exists'), 409));
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Existing User' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'existing@example.com' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This organization user already exists.');
+
+    await act(async () => {
+      usersLookup.resolve(jsonResponse(organizationUsersResponse([
+        organizationUserRecord({ displayName: 'Loaded User', email: 'loaded@example.com' }),
+      ])));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Loaded User');
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
+  it('prevents stale in-flight users list responses from clobbering successful creates', async () => {
+    await loginSuccessfully();
+    const usersLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => usersLookup.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByRole('status');
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...organizationUserRecord({ displayName: 'Created User', email: 'created@example.com', userId: '018f0000-0000-7000-8000-000000000012' }),
+        temporary_password: 'created-secret',
+      }, 201)
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Created User' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'created@example.com' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByText('Created User')).toBeInTheDocument();
+
+    await act(async () => {
+      usersLookup.resolve(jsonResponse(organizationUsersResponse([
+        organizationUserRecord({ displayName: 'Stale List User', email: 'stale-list@example.com' }),
+      ])));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Created User');
+      expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('Stale List User');
+    });
+  });
+
+  it('role options are owner, admin, member, and viewer only', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse()));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText('Dev User');
+
+    const roleFilter = screen.getByLabelText(/filter by role/i) as HTMLSelectElement;
+    expect(Array.from(roleFilter.options).map((option) => option.value)).toEqual(['all', 'owner', 'admin', 'member', 'viewer']);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    const roleSelect = within(drawer).getByLabelText(/^Role$/i) as HTMLSelectElement;
+    expect(Array.from(roleSelect.options).map((option) => option.value)).toEqual(['owner', 'admin', 'member', 'viewer']);
+    expect(document.body).not.toHaveTextContent(/Observer/);
+    expect(screen.queryByRole('option', { name: /observer/i })).not.toBeInTheDocument();
+  });
+
+  it('add user calls POST, displays a one-time temporary password, and does not persist it', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText(/No organization users returned/i);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...organizationUserRecord({ displayName: 'New Admin', email: 'new@example.com', role: 'admin', mustChangePassword: true }),
+        temporary_password: 'shown-once-secret',
+      }, 201)
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'New Admin' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'new@example.com' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Role$/i), { target: { value: 'admin' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByText('shown-once-secret')).toBeInTheDocument();
+    expect(screen.getByText(/shown once/i)).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer access-token',
+        },
+        body: JSON.stringify({
+          email: 'new@example.com',
+          display_name: 'New Admin',
+          role: 'admin',
+        }),
+      })
+    );
+    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('New Admin');
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.localStorage.length).toBe(0);
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.sessionStorage.length).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(screen.queryByText('shown-once-secret')).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('shown-once-secret');
+  });
+
+  it('conflict create shows the conflict error and does not display a temporary password', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText(/No organization users returned/i);
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('organization_user_exists', 'organization user already exists'), 409));
+
+    fireEvent.click(screen.getByRole('button', { name: /^Add/i }));
+    const drawer = screen.getByLabelText(/add user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Existing User' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'existing@example.com' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('This organization user already exists.');
+    expect(screen.queryByText(/Temporary password shown once/i)).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/shown-once-secret/);
+  });
+
+  it('edit user calls PATCH with backend role and state vocabulary', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Dev User', email: 'dev@example.com', role: 'member', userId: '018f0000-0000-7000-8000-000000000010' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText('Dev User');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(organizationUserRecord({ displayName: 'Dev Lead', email: 'dev@example.com', role: 'viewer', state: 'inactive', userId: '018f0000-0000-7000-8000-000000000010' }))
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /edit dev user/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Dev Lead' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Role$/i), { target: { value: 'viewer' } });
+    fireEvent.change(within(drawer).getByLabelText(/^Status$/i), { target: { value: 'inactive' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    await screen.findByText('Dev Lead');
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010'
+    );
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'PATCH',
+        credentials: 'omit',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer access-token',
+        },
+        body: JSON.stringify({
+          display_name: 'Dev Lead',
+          role: 'viewer',
+          state: 'inactive',
+        }),
+      })
+    );
+    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Inactive');
+  });
+
+  it('edit user does not require email because PATCH does not update email', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'No Email User', email: null, role: 'member', userId: '018f0000-0000-7000-8000-000000000011' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText('No Email User');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(organizationUserRecord({ displayName: 'No Email User', email: null, role: 'admin', userId: '018f0000-0000-7000-8000-000000000011' }))
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /edit no email user/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    expect(within(drawer).getByLabelText(/^Email$/i)).toHaveValue('');
+    fireEvent.change(within(drawer).getByLabelText(/^Role$/i), { target: { value: 'admin' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Admin');
+    });
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000011'
+    );
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({
+          display_name: 'No Email User',
+          role: 'admin',
+          state: 'active',
+        }),
+      })
+    );
   });
 
   it('does not render disallowed product or platform features', async () => {

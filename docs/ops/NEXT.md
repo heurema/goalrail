@@ -76,11 +76,14 @@
   safe attachment of already existing active users that are not yet members of
   the target Organization without credential rotation, membership-scoped
   active/inactive updates, and last-active-owner protection.
-- Next bounded Organization user-management implementation slices:
-  1. console Users API-backed persistence replacing component-state Users
-     data, without storing temporary passwords or tokens in browser storage
-  2. ops docs update after console persistence lands to align STATUS, NEXT,
-     COMPONENTS.yaml, and console docs with actual code reality
+- The canonical `apps/web/console` Settings / Users surface now uses `/v1/me`
+  to determine `organization_id`, calls the ADR-0027 Organization
+  user-management API for list/create/patch, uses backend roles
+  `owner` / `admin` / `member` / `viewer`, shows `must_change_password` as
+  credential status, and keeps temporary passwords in one-time React state only.
+- Next bounded Organization user-management implementation slices should stay
+  outside CLI user creation, invite/reset email, public registration, SaaS
+  onboarding, SSO/OIDC, runner, gate, and proof.
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
@@ -241,7 +244,8 @@ Current truth:
   canonical repo source now lives in `apps/web/console`, and deployed auth
   still needs a separate Phase 3 routing/proxy/CORS plus deployment migration
   slice
-- Users changes are component state only and are not persisted
+- this legacy static deployment does not expose the canonical API-backed Users
+  behavior now present in `apps/web/console`
 - a whole-host Certbot renewal dry-run surfaced an unrelated
   `pilot.goalrail.ru` renewal dry-run failure; console-specific renewal passed,
   and pilot renewal should be handled as a separate operator follow-up
@@ -272,8 +276,9 @@ Done means:
 - access and refresh tokens are kept in React memory only; no cookies, token
   `localStorage`, token `sessionStorage`, or profile browser persistence exists
 - `goalrail.console.theme` remains the only accepted localStorage key
-- Settings -> Users remains component-state only and does not call the backend
-  admin user-management API
+- Settings -> Users uses the backend Organization user-management API and keeps
+  only fetched view, form state, filters, and one-time create response secrets
+  in React memory
 - no public registration, signup, SSO, invite/reset email, password reset,
   SaaS onboarding, organization creation API, analytics, repo integration,
   runner, gate, proof, CORS, deployment

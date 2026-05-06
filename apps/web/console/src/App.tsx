@@ -12,17 +12,23 @@ import {
 import type { AuthClientError, ContractResponse, LoginResponse, MeResponse } from './authClient';
 import { isSupportedLocale, updateLocaleQueryParam } from './i18n/locale';
 import type { ConsoleLocale } from './i18n/resources';
+import {
+  createOrganizationUser,
+  isUsersClientError,
+  listOrganizationUsers,
+  patchOrganizationUser,
+} from './usersClient';
+import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 
 import './App.css';
 
 type SurfaceId = 'contracts' | 'delivery-readiness' | 'proof';
 type ScreenId = 'console' | 'settings-appearance' | 'settings-users';
 type ThemeId = 'goalrail-default' | 'catppuccin-mocha' | 'dracula' | 'nord' | 'solarized-dark' | 'gruvbox-dark';
-type UserStatus = 'active' | 'pending' | 'disabled';
-type UserRole = 'owner' | 'member' | 'observer';
 type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
-type RoleFilter = UserRole | 'all';
-type StatusFilter = UserStatus | 'all';
+type RoleFilter = OrganizationUserRole | 'all';
+type StatusFilter = OrganizationUserState | 'all';
+type UsersLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type AuthStatus =
   | 'unauthenticated'
@@ -41,12 +47,16 @@ interface TokenState {
   refreshTokenExpiresAt: string;
 }
 
-interface ConsoleUser {
-  id: string;
+interface UserDraft {
   name: string;
   email: string;
-  role: UserRole;
-  status: UserStatus;
+  role: OrganizationUserRole;
+  state: OrganizationUserState;
+}
+
+interface OneTimeTemporaryPassword {
+  email: string;
+  password: string;
 }
 
 interface ThemePreset {
@@ -56,9 +66,9 @@ interface ThemePreset {
 }
 
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
-const CONSOLE_ROLES: UserRole[] = ['owner', 'member', 'observer'];
+const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
 const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
-const USER_STATUSES: UserStatus[] = ['active', 'pending', 'disabled'];
+const USER_STATUSES: OrganizationUserState[] = ['active', 'inactive'];
 
 const SURFACE_LANES = {
   contracts: ['intent', 'scope', 'acceptance', 'handoff'],
@@ -77,14 +87,11 @@ const THEMES: ThemePreset[] = [
 
 const THEME_STORAGE_KEY = 'goalrail.console.theme';
 
-const INITIAL_USERS: ConsoleUser[] = [
-];
-
-const EMPTY_DRAFT: Omit<ConsoleUser, 'id'> = {
+const EMPTY_DRAFT: UserDraft = {
   name: '',
   email: '',
   role: 'member',
-  status: 'pending',
+  state: 'active',
 };
 
 function initials(name: string) {
@@ -97,16 +104,20 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function statusClass(status: UserStatus) {
+function statusClass(status: OrganizationUserState) {
   if (status === 'active') {
     return 'statusActive';
   }
 
-  if (status === 'pending') {
-    return 'statusPending';
+  return 'statusInactive';
+}
+
+function displayUserState(record: OrganizationUserRecord): OrganizationUserState {
+  if (record.user.state === 'inactive' || record.organization_membership.state === 'inactive') {
+    return 'inactive';
   }
 
-  return 'statusDisabled';
+  return 'active';
 }
 
 function isThemeId(value: string | null): value is ThemeId {
@@ -115,30 +126,6 @@ function isThemeId(value: string | null): value is ThemeId {
 
 function isMembershipRole(value: string | undefined): value is MembershipRole {
   return MEMBERSHIP_ROLES.includes(value as MembershipRole);
-}
-
-function profileConsoleRole(profile: MeResponse): UserRole {
-  if (profile.organization_membership.role === 'member') {
-    return 'member';
-  }
-
-  if (profile.organization_membership.role === 'viewer') {
-    return 'observer';
-  }
-
-  return 'owner';
-}
-
-function profileConsoleStatus(profile: MeResponse): UserStatus {
-  if (profile.user.state === 'pending' || profile.organization_membership.state === 'pending') {
-    return 'pending';
-  }
-
-  if (profile.user.state === 'disabled' || profile.organization_membership.state === 'disabled') {
-    return 'disabled';
-  }
-
-  return 'active';
 }
 
 function readStoredTheme(): ThemeId {
@@ -190,6 +177,19 @@ function authErrorMessage(error: unknown, t: (key: string, options?: Record<stri
   return t('auth.fallbackError');
 }
 
+function usersErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isUsersClientError(error)) {
+    const translated = t(`users.errors.${error.code}`);
+    if (translated !== `users.errors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status ? t('users.errors.genericWithStatus', { status: error.status }) : t('users.errors.generic');
+  }
+
+  return t('users.errors.generic');
+}
+
 function App() {
   const { i18n, t } = useTranslation();
   const translate = t as unknown as (key: string, options?: Record<string, unknown>) => string;
@@ -202,7 +202,11 @@ function App() {
   const [activeSurface, setActiveSurface] = useState<SurfaceId>('contracts');
   const [screen, setScreen] = useState<ScreenId>('console');
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => readStoredTheme());
-  const [users, setUsers] = useState<ConsoleUser[]>(INITIAL_USERS);
+  const [users, setUsers] = useState<OrganizationUserRecord[]>([]);
+  const [usersLoadStatus, setUsersLoadStatus] = useState<UsersLoadStatus>('idle');
+  const [usersError, setUsersError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [temporaryPassword, setTemporaryPassword] = useState<OneTimeTemporaryPassword | null>(null);
   const [contractIdInput, setContractIdInput] = useState('');
   const [contractLoadStatus, setContractLoadStatus] = useState<ContractLoadStatus>('idle');
   const [contractError, setContractError] = useState('');
@@ -211,13 +215,29 @@ function App() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Omit<ConsoleUser, 'id'>>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<UserDraft>(EMPTY_DRAFT);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const contractLookupSequence = useRef(0);
+  const usersLoadSequence = useRef(0);
+  const authSessionSequence = useRef(0);
 
   useEffect(() => {
     document.documentElement.lang = activeLocale;
   }, [activeLocale]);
+
+  useEffect(() => {
+    if (screen !== 'settings-users' || authStatus !== 'authenticated') {
+      return;
+    }
+
+    void loadUsers();
+  }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (screen !== 'settings-users') {
+      setTemporaryPassword(null);
+    }
+  }, [screen]);
 
   const activeLabel = translate(`surfaces.${activeSurface}.label`);
   const drawerTitle = editingId ? translate('users.editUser') : translate('users.addUser');
@@ -331,7 +351,9 @@ function App() {
   }
 
   function resetAuthState() {
+    authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
+    usersLoadSequence.current += 1;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -339,6 +361,11 @@ function App() {
     setPasswordChangeError('');
     setScreen('console');
     setIsDrawerOpen(false);
+    setUsers([]);
+    setUsersLoadStatus('idle');
+    setUsersError('');
+    setFormError('');
+    setTemporaryPassword(null);
     setContractIdInput('');
     setContractLoadStatus('idle');
     setContractError('');
@@ -397,20 +424,61 @@ function App() {
     }
   }
 
+  async function loadUsers() {
+    const accessToken = tokens?.accessToken;
+    const organizationId = profile?.organization_membership.organization_id;
+
+    if (!accessToken || !organizationId) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    setUsersLoadStatus('loading');
+    setUsersError('');
+    const loadSequence = usersLoadSequence.current + 1;
+    usersLoadSequence.current = loadSequence;
+
+    try {
+      const result = await listOrganizationUsers({ accessToken, organizationId });
+      if (usersLoadSequence.current !== loadSequence) {
+        return;
+      }
+      setUsers(result.users);
+      setUsersLoadStatus('loaded');
+    } catch (error) {
+      if (usersLoadSequence.current !== loadSequence) {
+        return;
+      }
+      if (isUsersClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setUsersLoadStatus('error');
+      setUsersError(usersErrorMessage(error, translate));
+    }
+  }
+
   function openNewUser() {
     setEditingId(null);
-    setDraft(EMPTY_DRAFT);
+    setDraft({ ...EMPTY_DRAFT });
+    setFormError('');
+    setTemporaryPassword(null);
     setIsDrawerOpen(true);
   }
 
-  function openExistingUser(user: ConsoleUser) {
-    setEditingId(user.id);
+  function openExistingUser(record: OrganizationUserRecord) {
+    setEditingId(record.user.id);
     setDraft({
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      status: user.status,
+      name: record.user.display_name,
+      email: record.user.email ?? '',
+      role: record.organization_membership.role,
+      state: displayUserState(record),
     });
+    setFormError('');
+    setTemporaryPassword(null);
     setIsDrawerOpen(true);
   }
 
@@ -418,32 +486,83 @@ function App() {
     setIsDrawerOpen(false);
   }
 
-  function saveUser() {
+  async function saveUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     const nextDraft = {
       ...draft,
       name: draft.name.trim(),
       email: draft.email.trim(),
     };
 
-    if (!nextDraft.name || !nextDraft.email) {
+    if (!nextDraft.name || (!editingId && !nextDraft.email)) {
+      setFormError(translate('users.validation.nameAndEmail'));
       return;
     }
 
-    if (editingId) {
-      setUsers((currentUsers) =>
-        currentUsers.map((user) => (user.id === editingId ? { ...user, ...nextDraft } : user))
-      );
-    } else {
-      setUsers((currentUsers) => [
-        ...currentUsers,
-        {
-          id: `u${currentUsers.length + 1}`,
-          ...nextDraft,
-        },
-      ]);
+    const accessToken = tokens?.accessToken;
+    const organizationId = profile?.organization_membership.organization_id;
+    if (!accessToken || !organizationId) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
     }
 
-    setIsDrawerOpen(false);
+    setFormError('');
+    const mutationSessionSequence = authSessionSequence.current;
+
+    try {
+      if (editingId) {
+        const result = await patchOrganizationUser({
+          accessToken,
+          organizationId,
+          userId: editingId,
+          displayName: nextDraft.name,
+          role: nextDraft.role,
+          state: nextDraft.state,
+        });
+        if (authSessionSequence.current !== mutationSessionSequence) {
+          return;
+        }
+        usersLoadSequence.current += 1;
+        setUsers((currentUsers) => currentUsers.map((record) => (record.user.id === editingId ? result : record)));
+      } else {
+        const result = await createOrganizationUser({
+          accessToken,
+          organizationId,
+          email: nextDraft.email,
+          displayName: nextDraft.name,
+          role: nextDraft.role,
+        });
+        if (authSessionSequence.current !== mutationSessionSequence) {
+          return;
+        }
+        usersLoadSequence.current += 1;
+        setUsers((currentUsers) => [...currentUsers.filter((record) => record.user.id !== result.user.id), result]);
+        if (result.temporary_password) {
+          setTemporaryPassword({
+            email: result.user.email ?? nextDraft.email,
+            password: result.temporary_password,
+          });
+        } else {
+          setTemporaryPassword(null);
+        }
+      }
+
+      setUsersLoadStatus('loaded');
+      setUsersError('');
+      setIsDrawerOpen(false);
+    } catch (error) {
+      if (authSessionSequence.current !== mutationSessionSequence) {
+        return;
+      }
+      if (isUsersClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setFormError(usersErrorMessage(error, translate));
+    }
   }
 
   function updateTheme(themeId: ThemeId) {
@@ -454,67 +573,67 @@ function App() {
   const visibleUsers = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return users.filter((user) => {
+    return users.filter((record) => {
+      const displayName = record.user.display_name.trim() || record.user.email || record.user.id;
+      const email = record.user.email ?? '';
+      const state = displayUserState(record);
       const matchesQuery =
         !normalizedQuery ||
-        user.name.toLowerCase().includes(normalizedQuery) ||
-        user.email.toLowerCase().includes(normalizedQuery);
-      const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-      const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
+        displayName.toLowerCase().includes(normalizedQuery) ||
+        email.toLowerCase().includes(normalizedQuery);
+      const matchesRole = roleFilter === 'all' || record.organization_membership.role === roleFilter;
+      const matchesStatus = statusFilter === 'all' || state === statusFilter;
 
       return matchesQuery && matchesRole && matchesStatus;
     });
   }, [roleFilter, searchQuery, statusFilter, users]);
 
-  const visibleCurrentProfile = useMemo(() => {
-    if (!profile) {
-      return null;
-    }
-
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    const displayName = profile.user.display_name.trim() || profile.user.email || profile.user.id;
-    const email = profile.user.email ?? '';
-    const matchesQuery =
-      !normalizedQuery ||
-      displayName.toLowerCase().includes(normalizedQuery) ||
-      email.toLowerCase().includes(normalizedQuery);
-    const matchesRole = roleFilter === 'all' || profileConsoleRole(profile) === roleFilter;
-    const matchesStatus = statusFilter === 'all' || profileConsoleStatus(profile) === statusFilter;
-
-    return matchesQuery && matchesRole && matchesStatus ? profile : null;
-  }, [profile, roleFilter, searchQuery, statusFilter]);
-
-  const visibleUserCount = visibleUsers.length + (visibleCurrentProfile ? 1 : 0);
+  const visibleUserCount = visibleUsers.length;
 
   const userRows = useMemo(
     () =>
-      visibleUsers.map((user) => (
-        <tr className="userRow" key={user.id}>
-          <td>
-            <div className="userName">
-              <span className="avatar" aria-hidden="true">
-                {initials(user.name)}
+      visibleUsers.map((record) => {
+        const displayName = record.user.display_name.trim() || record.user.email || record.user.id;
+        const email = record.user.email ?? translate('users.emptyValue');
+        const state = displayUserState(record);
+        const role = record.organization_membership.role;
+        const credential = record.credential.must_change_password
+          ? translate('users.credentialMustChange')
+          : translate('users.credentialReady');
+
+        return (
+          <tr className="userRow" key={record.user.id}>
+            <td>
+              <div className="userName">
+                <span className="avatar" aria-hidden="true">
+                  {initials(displayName)}
+                </span>
+                <span>{displayName}</span>
+              </div>
+            </td>
+            <td className="userEmail">{email}</td>
+            <td>
+              <span className={role === 'owner' ? 'pill roleOwner' : 'pill'}>{translate(`roles.${role}`)}</span>
+            </td>
+            <td>
+              <span className={`pill ${statusClass(state)}`}>{translate(`statuses.${state}`)}</span>
+            </td>
+            <td>
+              <span className={record.credential.must_change_password ? 'pill credentialWarning' : 'pill credentialReady'}>
+                {credential}
               </span>
-              <span>{user.name}</span>
-            </div>
-          </td>
-          <td className="userEmail">{user.email}</td>
-          <td>
-            <span className={user.role === 'owner' ? 'pill roleOwner' : 'pill'}>{translate(`roles.${user.role}`)}</span>
-          </td>
-          <td>
-            <span className={`pill ${statusClass(user.status)}`}>{translate(`statuses.${user.status}`)}</span>
-          </td>
-          <td>
-            <div className="userActions">
-              <button className="iconButton" onClick={() => openExistingUser(user)} type="button">
-                <span aria-hidden="true">✎</span>
-                <span className="srOnly">{translate('users.editUserName', { name: user.name })}</span>
-              </button>
-            </div>
-          </td>
-        </tr>
-      )),
+            </td>
+            <td>
+              <div className="userActions">
+                <button className="iconButton" onClick={() => openExistingUser(record)} type="button">
+                  <span aria-hidden="true">✎</span>
+                  <span className="srOnly">{translate('users.editUserName', { name: displayName })}</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        );
+      }),
     [translate, visibleUsers]
   );
 
@@ -712,7 +831,24 @@ function App() {
                     <h3>{translate('users.title')}</h3>
                     <p>{translate('users.manage')}</p>
                   </div>
+                  <button className="primaryButton" onClick={openNewUser} type="button">
+                    {translate('users.add')}
+                    <span aria-hidden="true">＋</span>
+                  </button>
                 </div>
+
+                {temporaryPassword ? (
+                  <section className="temporaryPasswordPanel" aria-label={translate('users.temporaryPasswordLabel')}>
+                    <div>
+                      <h4>{translate('users.temporaryPasswordTitle')}</h4>
+                      <p>{translate('users.temporaryPasswordCopy', { email: temporaryPassword.email })}</p>
+                    </div>
+                    <code>{temporaryPassword.password}</code>
+                    <button className="ghostButton" onClick={() => setTemporaryPassword(null)} type="button">
+                      {translate('users.dismissTemporaryPassword')}
+                    </button>
+                  </section>
+                ) : null}
 
                 <div className="usersToolbar">
                   <label className="searchBox">
@@ -757,6 +893,18 @@ function App() {
                   </label>
                 </div>
 
+                {usersLoadStatus === 'loading' ? (
+                  <p className="usersNotice" role="status">{translate('users.loading')}</p>
+                ) : null}
+                {usersLoadStatus === 'error' ? (
+                  <div className="usersNotice usersNoticeError" role="alert">
+                    <p>{usersError}</p>
+                    <button className="ghostButton" onClick={loadUsers} type="button">
+                      {translate('users.retry')}
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="usersTableFrame">
                   <table className="usersTable" aria-label={translate('users.table')}>
                     <thead>
@@ -765,16 +913,16 @@ function App() {
                         <th scope="col">{translate('users.email')}</th>
                         <th scope="col">{translate('users.role')}</th>
                         <th scope="col">{translate('users.status')}</th>
+                        <th scope="col">{translate('users.credential')}</th>
                         <th scope="col" aria-label={translate('users.actions')} />
                       </tr>
                     </thead>
                     <tbody>
-                      <CurrentUserRow profile={visibleCurrentProfile} t={translate} />
                       {userRows}
-                      {visibleUserCount === 0 ? (
+                      {usersLoadStatus === 'loaded' && visibleUserCount === 0 ? (
                         <tr>
-                          <td className="emptyUsers" colSpan={5}>
-                            {translate('users.emptyRealOnly')}
+                          <td className="emptyUsers" colSpan={6}>
+                            {users.length === 0 ? translate('users.empty') : translate('users.emptyFiltered')}
                           </td>
                         </tr>
                       ) : null}
@@ -802,6 +950,7 @@ function App() {
               </button>
             </header>
 
+            <form className="drawerForm" onSubmit={saveUser}>
             <div className="drawerBody">
               <label className="field">
                 <span>{translate('users.name')}</span>
@@ -815,6 +964,7 @@ function App() {
               <label className="field">
                 <span>{translate('users.email')}</span>
                 <input
+                  disabled={Boolean(editingId)}
                   onChange={(event) => setDraft((currentDraft) => ({ ...currentDraft, email: event.target.value }))}
                   placeholder="user@example.com"
                   type="email"
@@ -826,7 +976,7 @@ function App() {
                 <span>{translate('users.role')}</span>
                 <select
                   onChange={(event) =>
-                    setDraft((currentDraft) => ({ ...currentDraft, role: event.target.value as UserRole }))
+                    setDraft((currentDraft) => ({ ...currentDraft, role: event.target.value as OrganizationUserRole }))
                   }
                   value={draft.role}
                 >
@@ -838,13 +988,14 @@ function App() {
                 </select>
               </label>
 
+              {editingId ? (
               <label className="field">
                 <span>{translate('users.status')}</span>
                 <select
                   onChange={(event) =>
-                    setDraft((currentDraft) => ({ ...currentDraft, status: event.target.value as UserStatus }))
+                    setDraft((currentDraft) => ({ ...currentDraft, state: event.target.value as OrganizationUserState }))
                   }
-                  value={draft.status}
+                  value={draft.state}
                 >
                   {USER_STATUSES.map((status) => (
                     <option key={status} value={status}>
@@ -853,16 +1004,20 @@ function App() {
                   ))}
                 </select>
               </label>
+              ) : null}
+
+              {formError ? <p className="fieldMessage" role="alert">{formError}</p> : null}
             </div>
 
             <footer className="drawerFooter">
               <button className="ghostButton" onClick={closeDrawer} type="button">
                 {translate('users.cancel')}
               </button>
-              <button className="primaryButton" onClick={saveUser} type="button">
+              <button className="primaryButton" type="submit">
                 {translate('users.save')}
               </button>
             </footer>
+            </form>
           </aside>
         </>
       ) : null}
@@ -1149,46 +1304,6 @@ function FieldRow({ label, value }: { label: string; value: string }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
-  );
-}
-
-function CurrentUserRow({
-  profile,
-  t,
-}: {
-  profile: MeResponse | null;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
-  if (!profile) {
-    return null;
-  }
-
-  const displayName = profile.user.display_name.trim() || profile.user.email || profile.user.id;
-  const consoleRole = profileConsoleRole(profile);
-  const status = profileConsoleStatus(profile);
-  const role = isMembershipRole(profile.organization_membership.role)
-    ? t(`membershipRoles.${profile.organization_membership.role}`)
-    : profile.organization_membership.role;
-
-  return (
-    <tr className="userRow">
-      <td>
-        <div className="userName">
-          <span className="avatar" aria-hidden="true">
-            {initials(displayName)}
-          </span>
-          <span>{displayName}</span>
-        </div>
-      </td>
-      <td className="userEmail">{profile.user.email ?? t('users.emptyValue')}</td>
-      <td>
-        <span className={consoleRole === 'owner' ? 'pill roleOwner' : 'pill'}>{role}</span>
-      </td>
-      <td>
-        <span className={`pill ${statusClass(status)}`}>{t(`statuses.${status}`)}</span>
-      </td>
-      <td />
-    </tr>
   );
 }
 
