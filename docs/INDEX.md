@@ -96,39 +96,40 @@ related_docs:
 53. `docs/adr/ADR-0022-installation-boundary.md`
 54. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
 55. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
+56. `docs/adr/ADR-0026-agent-pack-boundary.md`
 
 ### 7. Governance and change control
-56. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-57. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-58. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-59. `docs/product/GOALRAIL_RULE_STACK.md`
+57. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+58. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+59. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+60. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-60. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-61. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-62. `docs/ops/STATUS.md`
-63. `docs/ops/NEXT.md`
-64. `docs/ops/DECISIONS.md`
-65. `docs/ops/COMPONENTS.yaml`
-66. `docs/ops/BRANCH_PROTECTION.md`
-67. `docs/ops/REPO_STRUCTURE.md`
-68. `docs/ops/GO_CODE_GUIDE.md`
-69. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-70. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-71. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-72. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+61. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+62. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+63. `docs/ops/STATUS.md`
+64. `docs/ops/NEXT.md`
+65. `docs/ops/DECISIONS.md`
+66. `docs/ops/COMPONENTS.yaml`
+67. `docs/ops/BRANCH_PROTECTION.md`
+68. `docs/ops/REPO_STRUCTURE.md`
+69. `docs/ops/GO_CODE_GUIDE.md`
+70. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+71. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+72. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+73. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-73. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-74. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-75. `docs/reference/design/reference_screens/`
-76. `.goalrail/work/`
-77. `.goalrail/knowledge/`
-78. `.punk/publishing.toml`
-79. `.goalrail/flows/`
-80. `.goalrail/evals/`
-81. `docs/ops/PUBLISHING_MIGRATION.md`
-82. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+74. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+75. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+76. `docs/reference/design/reference_screens/`
+77. `.goalrail/work/`
+78. `.goalrail/knowledge/`
+79. `.punk/publishing.toml`
+80. `.goalrail/flows/`
+81. `.goalrail/evals/`
+82. `docs/ops/PUBLISHING_MIGRATION.md`
+83. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -204,6 +205,9 @@ related_docs:
 - `ADR-0025` — repository baseline profile lifecycle; local Project Scan,
   immutable committed-state baseline, separate workspace overlay, and
   task-specific context packs without server-side clone or checks
+- `ADR-0026` — provider-neutral repo-local Agent Pack boundary; explicit
+  `goalrail agent install`, no provider-specific files by default, server-owned
+  canonical state
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries

@@ -155,6 +155,20 @@ func TestRunStartMissingProjectConfigFailsBeforeHTTP(t *testing.T) {
 	}
 }
 
+func TestRunStartMissingProjectConfigDoesNotReadBodyFileStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	_, err := runStartJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession("http://localhost:8080")}, Options{Stdin: failOnRead{t: t}}, "--title", "Missing marker", "--body-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start) error = nil, want missing marker")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+}
+
 func TestRunStartMissingAuthFailsBeforeHTTP(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -180,6 +194,21 @@ func TestRunStartMissingAuthFailsBeforeHTTP(t *testing.T) {
 	}
 	if got := requestCount.Load(); got != 0 {
 		t.Fatalf("server requests = %d, want 0 without auth", got)
+	}
+}
+
+func TestRunStartMissingAuthDoesNotReadBodyFileStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	writeProjectConfigFixture(t, repoDir, "http://localhost:8080")
+	_, err := runStartJSONWithOptions(t, repoDir, fakeSessionStore{err: authstore.ErrSessionNotFound}, Options{Stdin: failOnRead{t: t}}, "--title", "Missing login", "--body-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start) error = nil, want missing auth")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
 	}
 }
 
@@ -271,13 +300,131 @@ func TestRunStartHelpUsage(t *testing.T) {
 	}
 }
 
+func TestRunStartBodyFilePathTrimsLikeBodyFlag(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	bodyPath := filepath.Join(repoDir, "task.txt")
+	if err := os.WriteFile(bodyPath, []byte("\nFile body\n\n"), 0o644); err != nil {
+		t.Fatalf("write body file: %v", err)
+	}
+	var intakeRequest intakeSubmission
+	server := newWorkStartFakeServerWithIntake(t, &intakeRequest)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	if _, err := runStartJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--title", "File body", "--body-file", bodyPath, "--format", "json"); err != nil {
+		t.Fatalf("Run(work start --body-file path) error = %v", err)
+	}
+	if intakeRequest.Body != "File body" {
+		t.Fatalf("intake body = %q, want trimmed file body", intakeRequest.Body)
+	}
+}
+
+func TestRunStartBodyFileDashTrimsLikeBodyFlag(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var intakeRequest intakeSubmission
+	server := newWorkStartFakeServerWithIntake(t, &intakeRequest)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	if _, err := runStartJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, Options{Stdin: strings.NewReader("\nstdin body\n")}, "--title", "Stdin body", "--body-file", "-", "--format", "json"); err != nil {
+		t.Fatalf("Run(work start --body-file -) error = %v", err)
+	}
+	if intakeRequest.Body != "stdin body" {
+		t.Fatalf("intake body = %q, want trimmed stdin body", intakeRequest.Body)
+	}
+}
+
+func TestRunStartRejectsBodyWithBodyFile(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := newWorkStartFakeServer(t)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runStartJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--title", "Conflict", "--body", "inline", "--body-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start --body --body-file) error = nil, want usage error")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "--body and --body-file cannot be used together") {
+		t.Fatalf("error = %q, want body conflict", err.Error())
+	}
+}
+
+func TestRunStartRejectsOversizedBodyFileStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := newWorkStartFakeServer(t)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	stdin := strings.NewReader(strings.Repeat("x", maxWorkBodyBytes+1))
+	_, err := runStartJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, Options{Stdin: stdin}, "--title", "Oversized stdin", "--body-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start oversized stdin) error = nil, want validation error")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if !strings.Contains(err.Error(), "--body-file - from stdin exceeds") {
+		t.Fatalf("error = %q, want oversized stdin error", err.Error())
+	}
+}
+
+func TestRunStartRejectsOversizedBodyFilePath(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	bodyPath := filepath.Join(repoDir, "large-task.txt")
+	if err := os.WriteFile(bodyPath, []byte(strings.Repeat("x", maxWorkBodyBytes+1)), 0o644); err != nil {
+		t.Fatalf("write oversized body file: %v", err)
+	}
+	server := newWorkStartFakeServer(t)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runStartJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--title", "Oversized file", "--body-file", bodyPath, "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work start oversized file) error = nil, want validation error")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if !strings.Contains(err.Error(), "--body-file "+bodyPath+" exceeds") {
+		t.Fatalf("error = %q, want oversized file error", err.Error())
+	}
+}
+
 func runStartJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkStartOutput, error) {
 	t.Helper()
 
+	return runStartJSONWithOptions(t, workDir, store, Options{}, args...)
+}
+
+func runStartJSONWithOptions(t *testing.T, workDir string, store fakeSessionStore, extra Options, args ...string) (spine.WorkStartOutput, error) {
+	t.Helper()
+
 	var stdout, stderr bytes.Buffer
+	extra.Store = store
+	extra.Now = func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) }
 	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"start"}, args...), Options{
-		Store: store,
-		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		Store:      extra.Store,
+		HTTPClient: extra.HTTPClient,
+		Now:        extra.Now,
+		Stdin:      extra.Stdin,
 	})
 	if err != nil {
 		return spine.WorkStartOutput{}, err
@@ -295,6 +442,12 @@ func runStartJSON(t *testing.T, workDir string, store fakeSessionStore, args ...
 func newWorkStartFakeServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
+	return newWorkStartFakeServerWithIntake(t, nil)
+}
+
+func newWorkStartFakeServerWithIntake(t *testing.T, intakeRequest *intakeSubmission) *httptest.Server {
+	t.Helper()
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer access-token" {
 			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
@@ -306,6 +459,15 @@ func newWorkStartFakeServer(t *testing.T) *httptest.Server {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
 		case "/v1/intakes":
+			if intakeRequest != nil {
+				decoder := json.NewDecoder(r.Body)
+				decoder.DisallowUnknownFields()
+				if err := decoder.Decode(intakeRequest); err != nil {
+					t.Errorf("decode intake request: %v", err)
+					http.Error(w, "bad json", http.StatusBadRequest)
+					return
+				}
+			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusAccepted)
 			_, _ = w.Write([]byte(`{"intake_id":"018f0000-0000-7000-8000-000000000005","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"received","canonical_contract_created":false,"next":"server will validate and may promote intake to goal"}`))
@@ -384,6 +546,16 @@ func (s fakeSessionStore) Load() (authstore.Session, error) {
 		return authstore.Session{}, s.err
 	}
 	return s.session, nil
+}
+
+type failOnRead struct {
+	t *testing.T
+}
+
+func (reader failOnRead) Read([]byte) (int, error) {
+	reader.t.Helper()
+	reader.t.Fatal("stdin was read before command prerequisites were validated")
+	return 0, errors.New("unexpected stdin read")
 }
 
 func requireGit(t *testing.T) {

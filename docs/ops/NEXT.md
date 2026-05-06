@@ -380,9 +380,16 @@ Done means:
   Goalrail-owned machine-local state directories/files
 - ✅ server-backed init preflights an existing `.goalrail/project.yml` before
   the server call and fails locally on server/project/repo/base conflicts
-- ✅ `goalrail work start --title <title> [--body <body>]` reads the Git-root
-  marker plus stored login profile, calls `/v1/me`, creates `/v1/intakes`, and
-  promotes through `/v1/intakes/{id}/goals`
+- ✅ `goalrail work start --title <title> [--body <body> | --body-file
+  <path|->]` reads the Git-root marker plus stored login profile, calls
+  `/v1/me`, creates `/v1/intakes`, and promotes through
+  `/v1/intakes/{id}/goals`
+- ✅ `goalrail agent install` explicitly installs provider-neutral repo-local
+  Agent Pack v0 files under `.goalrail/agent/` for local coding agents; it does
+  not install Codex, Claude, Gemini, Cursor, Windsurf, Gravity, or other
+  provider-specific adapters
+- ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
+  bodies from a file or stdin while preserving stable JSON output
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -390,7 +397,8 @@ Done means:
 - no root `.gitignore` mutation for Goalrail local-state ignores
 - no audit/hook/branch/verification setup from init
 - no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
-  integration, branch, PR, hook, clone, or deploy-key setup from `work start`
+  integration, provider shim, branch, PR, hook, clone, or deploy-key setup from
+  `work start` or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint

@@ -8,14 +8,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,21 +58,19 @@ func Run(ctx context.Context, out *term.Output, args []string, options Options) 
 		return exitcode.RuntimeError(err)
 	}
 
-	flags := flag.NewFlagSet("goalrail login", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	noBrowser := flags.Bool("no-browser", false, "print browser URL instead of opening it")
-	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			_, writeErr := fmt.Fprint(out.Stdout, Usage())
-			return writeErr
-		}
-		return exitcode.UsageError(err)
+	parsed, err := parseLoginArgs(args)
+	if err != nil {
+		return err
 	}
-	if flags.NArg() != 1 {
+	if parsed.help {
+		_, writeErr := fmt.Fprint(out.Stdout, Usage())
+		return writeErr
+	}
+	if parsed.serverURL == "" {
 		return exitcode.UsageError(errors.New("missing required server_url"))
 	}
 
-	serverURL, err := NormalizeServerURL(flags.Arg(0))
+	serverURL, err := NormalizeServerURL(parsed.serverURL)
 	if err != nil {
 		return exitcode.UsageError(err)
 	}
@@ -113,7 +110,7 @@ func Run(ctx context.Context, out *term.Output, args []string, options Options) 
 	browserURL := BuildBrowserURL(serverURL, callbackURL, state, codeChallenge)
 	callbackCh := serveCallback(listener, state)
 
-	if *noBrowser {
+	if parsed.noBrowser {
 		if _, err := fmt.Fprintf(out.Stdout, "Open this URL in your browser:\n%s\n", browserURL); err != nil {
 			return err
 		}
@@ -153,6 +150,51 @@ func Run(ctx context.Context, out *term.Output, args []string, options Options) 
 
 func Usage() string {
 	return "Usage: goalrail login <server_url> [--no-browser]\n\nStarts a browser localhost-loopback login and stores tokens in the local Goalrail auth file. Organization, Project, and RepoBinding selection are not implemented yet.\n"
+}
+
+type loginArgs struct {
+	serverURL string
+	noBrowser bool
+	help      bool
+}
+
+func parseLoginArgs(args []string) (loginArgs, error) {
+	parsed := loginArgs{}
+	for _, arg := range args {
+		switch {
+		case arg == "--help" || arg == "-h":
+			parsed.help = true
+		case arg == "--no-browser" || arg == "-no-browser":
+			parsed.noBrowser = true
+		case strings.HasPrefix(arg, "--no-browser="):
+			noBrowser, err := parseBoolFlagValue(arg, strings.TrimPrefix(arg, "--no-browser="))
+			if err != nil {
+				return loginArgs{}, err
+			}
+			parsed.noBrowser = noBrowser
+		case strings.HasPrefix(arg, "-no-browser="):
+			noBrowser, err := parseBoolFlagValue(arg, strings.TrimPrefix(arg, "-no-browser="))
+			if err != nil {
+				return loginArgs{}, err
+			}
+			parsed.noBrowser = noBrowser
+		case strings.HasPrefix(arg, "-"):
+			return loginArgs{}, exitcode.UsageError(fmt.Errorf("unknown login flag %q", arg))
+		case parsed.serverURL == "":
+			parsed.serverURL = arg
+		default:
+			return loginArgs{}, exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", args))
+		}
+	}
+	return parsed, nil
+}
+
+func parseBoolFlagValue(flag string, rawValue string) (bool, error) {
+	value, err := strconv.ParseBool(rawValue)
+	if err != nil {
+		return false, exitcode.UsageError(fmt.Errorf("invalid login flag %q", flag))
+	}
+	return value, nil
 }
 
 func NormalizeServerURL(raw string) (string, error) {
