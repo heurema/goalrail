@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/heurema/goalrail/apps/cli/internal/agentcmd"
 	"github.com/heurema/goalrail/apps/cli/internal/clienv"
 	"github.com/heurema/goalrail/apps/cli/internal/contractcmd"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
@@ -27,6 +28,7 @@ var rootCommands = []commandSummary{
 	{name: "version", summary: "print the CLI version"},
 	{name: "login", summary: "authenticate to a Goalrail server"},
 	{name: "init", summary: "initialize repository metadata"},
+	{name: "agent", summary: "install provider-neutral repo-local agent guidance"},
 	{name: "project", summary: "scan and report local project freshness"},
 	{name: "work", summary: "start server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
@@ -60,6 +62,7 @@ func NewRootCommand(env clienv.Env) *cobra.Command {
 		newVersionCommand(),
 		newLoginCommand(),
 		newInitCommand(env),
+		newAgentCommand(env),
 		newProjectCommand(env),
 		newWorkCommand(env),
 		newReadinessCommand(env),
@@ -123,6 +126,33 @@ func newInitCommand(env clienv.Env) *cobra.Command {
 	}
 }
 
+func newAgentCommand(env clienv.Env) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:                "agent",
+		Short:              "install provider-neutral repo-local agent guidance",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return agentcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, args)
+		},
+	}
+	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), agentcmd.Usage())
+	})
+	cmd.SetUsageFunc(func(cmd *cobra.Command) error {
+		_, err := fmt.Fprint(cmd.OutOrStdout(), agentcmd.Usage())
+		return err
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "install",
+		Short:              "install provider-neutral repo-local Goalrail Agent Pack files",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return agentcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"install"}, args...))
+		},
+	})
+	return cmd
+}
+
 func newProjectCommand(env clienv.Env) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "project",
@@ -164,7 +194,7 @@ func newWorkCommand(env clienv.Env) *cobra.Command {
 		Short:              "start server-backed work from a local project marker",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return workcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, args)
+			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, args, workcmd.Options{Stdin: env.Stdin})
 		},
 	}
 	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
@@ -179,7 +209,7 @@ func newWorkCommand(env clienv.Env) *cobra.Command {
 		Short:              "create a server-backed IntakeRecord and Goal",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return workcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"start"}, args...))
+			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"start"}, args...), workcmd.Options{Stdin: env.Stdin})
 		},
 	})
 	return cmd
@@ -340,6 +370,10 @@ func helpFor(cmd *cobra.Command) string {
 		return proofcmd.ShowUsage()
 	case "goalrail init":
 		return initcmd.Usage()
+	case "goalrail agent":
+		return agentcmd.Usage()
+	case "goalrail agent install":
+		return agentcmd.InstallUsage()
 	case "goalrail work":
 		return workcmd.Usage()
 	case "goalrail work start":
