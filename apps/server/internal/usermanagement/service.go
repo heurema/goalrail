@@ -34,11 +34,11 @@ type Store interface {
 	GetUserByEmail(context.Context, string) (spine.User, bool, error)
 	UpsertUser(context.Context, spine.User) error
 	GetOrganizationMembership(context.Context, spine.OrganizationID, spine.UserID) (spine.OrganizationMembership, bool, error)
+	CreateOrganizationMembership(context.Context, spine.OrganizationMembership) error
 	UpsertOrganizationMembership(context.Context, spine.OrganizationMembership) error
 	GetPasswordCredential(context.Context, spine.UserID) (spine.UserPasswordCredential, bool, error)
 	UpsertPasswordCredential(context.Context, spine.UserPasswordCredential) error
 	CountActiveOwners(context.Context, spine.OrganizationID) (int, error)
-	RevokeActiveSessionsForUser(context.Context, spine.UserID, time.Time) error
 }
 
 type TransactionRunner interface {
@@ -103,7 +103,7 @@ type CreateUserResult struct {
 	User                   spine.User                   `json:"user"`
 	OrganizationMembership spine.OrganizationMembership `json:"organization_membership"`
 	Credential             CredentialSummary            `json:"credential"`
-	TemporaryPassword      string                       `json:"temporary_password"`
+	TemporaryPassword      string                       `json:"temporary_password,omitempty"`
 }
 
 type PatchUserInput struct {
@@ -200,8 +200,28 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			return fmt.Errorf("get user by email: %w", err)
 		}
 		if ok {
-			return ErrUserExists
+			if user.State != spine.EntityStateActive {
+				return ErrUserExists
+			}
+			membership, created, err := s.createMembershipForExistingUser(txCtx, user, normalized, now)
+			if err != nil {
+				return err
+			}
+			if !created {
+				return ErrUserExists
+			}
+			credential, credentialOK, err := s.Store.GetPasswordCredential(txCtx, user.ID)
+			if err != nil {
+				return fmt.Errorf("get password credential summary: %w", err)
+			}
+			result = CreateUserResult{
+				User:                   user,
+				OrganizationMembership: membership,
+				Credential:             credentialSummary(credential, credentialOK),
+			}
+			return nil
 		}
+
 		id, err := s.IDs.NewUserID()
 		if err != nil {
 			return fmt.Errorf("new user id: %w", err)
@@ -215,9 +235,11 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			UpdatedAt:   now,
 		}
 		if err := s.Store.UpsertUser(txCtx, user); err != nil {
+			if _, exists, lookupErr := s.Store.GetUserByEmail(txCtx, normalized.Email); lookupErr == nil && exists {
+				return ErrUserExists
+			}
 			return fmt.Errorf("upsert user: %w", err)
 		}
-
 		membershipID, err := s.IDs.NewOrganizationMembershipID()
 		if err != nil {
 			return fmt.Errorf("new organization membership id: %w", err)
@@ -231,8 +253,11 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			CreatedAt:      now,
 			UpdatedAt:      now,
 		}
-		if err := s.Store.UpsertOrganizationMembership(txCtx, membership); err != nil {
-			return fmt.Errorf("upsert organization membership: %w", err)
+		if err := s.Store.CreateOrganizationMembership(txCtx, membership); err != nil {
+			if _, exists, lookupErr := s.Store.GetOrganizationMembership(txCtx, normalized.OrganizationID, user.ID); lookupErr == nil && exists {
+				return ErrUserExists
+			}
+			return fmt.Errorf("create organization membership: %w", err)
 		}
 
 		temporaryPassword, err := s.Passwords.NewPassword()
@@ -308,25 +333,20 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 		}
 		if normalized.State != nil {
 			state := spine.EntityState(*normalized.State)
-			nextUser.State = state
 			nextMembership.State = state
-			nextUser.UpdatedAt = now
 			nextMembership.UpdatedAt = now
 		}
 
 		if err := s.guardLastActiveOwner(txCtx, normalized.OrganizationID, user, membership, nextUser, nextMembership); err != nil {
 			return err
 		}
-		if err := s.Store.UpsertUser(txCtx, nextUser); err != nil {
-			return fmt.Errorf("upsert user: %w", err)
+		if nextUser != user {
+			if err := s.Store.UpsertUser(txCtx, nextUser); err != nil {
+				return fmt.Errorf("upsert user: %w", err)
+			}
 		}
 		if err := s.Store.UpsertOrganizationMembership(txCtx, nextMembership); err != nil {
 			return fmt.Errorf("upsert organization membership: %w", err)
-		}
-		if nextUser.State != spine.EntityStateActive || nextMembership.State != spine.EntityStateActive {
-			if err := s.Store.RevokeActiveSessionsForUser(txCtx, nextUser.ID, now); err != nil {
-				return fmt.Errorf("revoke active user sessions: %w", err)
-			}
 		}
 		credential, ok, err := s.Store.GetPasswordCredential(txCtx, nextUser.ID)
 		if err != nil {
@@ -343,6 +363,35 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 		return PatchUserResult{}, err
 	}
 	return result, nil
+}
+
+func (s *Service) createMembershipForExistingUser(ctx context.Context, user spine.User, input CreateUserInput, now time.Time) (spine.OrganizationMembership, bool, error) {
+	if _, ok, err := s.Store.GetOrganizationMembership(ctx, input.OrganizationID, user.ID); err != nil {
+		return spine.OrganizationMembership{}, false, fmt.Errorf("get existing organization membership: %w", err)
+	} else if ok {
+		return spine.OrganizationMembership{}, false, nil
+	}
+
+	membershipID, err := s.IDs.NewOrganizationMembershipID()
+	if err != nil {
+		return spine.OrganizationMembership{}, false, fmt.Errorf("new organization membership id: %w", err)
+	}
+	membership := spine.OrganizationMembership{
+		ID:             membershipID,
+		OrganizationID: input.OrganizationID,
+		UserID:         user.ID,
+		Role:           spine.OrganizationMembershipRole(input.Role),
+		State:          spine.EntityStateActive,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := s.Store.CreateOrganizationMembership(ctx, membership); err != nil {
+		if _, exists, lookupErr := s.Store.GetOrganizationMembership(ctx, input.OrganizationID, user.ID); lookupErr == nil && exists {
+			return spine.OrganizationMembership{}, false, ErrUserExists
+		}
+		return spine.OrganizationMembership{}, false, fmt.Errorf("create organization membership: %w", err)
+	}
+	return membership, true, nil
 }
 
 func (s *Service) requireOwner(ctx context.Context, organizationID spine.OrganizationID, userID spine.UserID) error {

@@ -296,7 +296,10 @@ The project currently has:
   `GET /v1/organizations/{organization_id}/users`,
   `POST /v1/organizations/{organization_id}/users`, and
   `PATCH /v1/organizations/{organization_id}/users/{user_id}` with owner-only
-  v0 authorization and one-time temporary password return on create.
+  v0 authorization, one-time temporary password return for newly created users,
+  safe attachment of existing active users that are not yet members of the
+  target Organization without credential rotation, and membership-scoped
+  active/inactive updates.
   Settings / Users remains component-state only, and there is no
   `goalrail users create` command.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,

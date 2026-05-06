@@ -72,8 +72,10 @@
   `POST /v1/organizations/{organization_id}/users`, and
   `PATCH /v1/organizations/{organization_id}/users/{user_id}` with owner-only
   v0 authorization, server-side membership loading, cross-organization
-  rejection, one-time temporary password generation, and last-active-owner
-  protection.
+  rejection, one-time temporary password generation for newly created users,
+  safe attachment of already existing active users that are not yet members of
+  the target Organization without credential rotation, membership-scoped
+  active/inactive updates, and last-active-owner protection.
 - Next bounded Organization user-management implementation slices:
   1. console Users API-backed persistence replacing component-state Users
      data, without storing temporary passwords or tokens in browser storage

@@ -164,6 +164,74 @@ func TestCreateUserWithExistingEmailReturnsConflictWithoutMutatingExistingRecord
 	}
 }
 
+func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *testing.T) {
+	store := newFakeStore()
+	originalUser := user(otherExistingUserID, "Existing Other", "other-existing@example.com", spine.EntityStateActive)
+	originalCredential := spine.UserPasswordCredential{
+		UserID:             otherExistingUserID,
+		PasswordHash:       "hash:existing-other-password",
+		MustChangePassword: false,
+		PasswordChangedAt:  ptrTime(testNow.Add(-2 * time.Hour)),
+		CreatedAt:          testNow.Add(-3 * time.Hour),
+		UpdatedAt:          testNow.Add(-2 * time.Hour),
+	}
+	store.users[otherExistingUserID] = originalUser
+	store.memberships[key(otherOrgID, otherExistingUserID)] = membership(otherExistingMembershipID, otherOrgID, otherExistingUserID, spine.OrganizationMembershipRoleViewer, spine.EntityStateActive)
+	store.credentials[otherExistingUserID] = originalCredential
+	service := newTestService(store)
+
+	result, err := service.CreateUser(context.Background(), CreateUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		Email:               " OTHER-EXISTING@EXAMPLE.COM ",
+		DisplayName:         "Ignored Name",
+		Role:                "admin",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	if result.TemporaryPassword != "" {
+		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user", result.TemporaryPassword)
+	}
+	if got := store.users[otherExistingUserID]; got != originalUser {
+		t.Fatalf("existing user mutated:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("existing credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
+	}
+	membership := store.memberships[key(orgID, otherExistingUserID)]
+	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleAdmin || membership.State != spine.EntityStateActive {
+		t.Fatalf("attached membership = %#v, want active admin membership", membership)
+	}
+	if encoded := mustJSON(t, result); strings.Contains(encoded, "temporary_password") || strings.Contains(encoded, "existing-other-password") || strings.Contains(encoded, "password_hash") {
+		t.Fatalf("attach response leaked temporary password or credential material: %s", encoded)
+	}
+}
+
+func TestCreateUserDuplicateEmailInsertRaceReturnsConflict(t *testing.T) {
+	store := newFakeStore()
+	store.upsertUserErr = errors.New("duplicate email")
+	store.upsertUserConflict = user(otherExistingUserID, "Race", "race@example.com", spine.EntityStateActive)
+	service := newTestService(store)
+
+	result, err := service.CreateUser(context.Background(), CreateUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		Email:               "race@example.com",
+		DisplayName:         "Race",
+		Role:                "member",
+	})
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
+	}
+	if result.TemporaryPassword != "" {
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
+	}
+	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
+		t.Fatalf("membership was created despite duplicate-email conflict")
+	}
+}
+
 func TestListUsersDoesNotExposeTemporaryPasswordOrCredentialMaterial(t *testing.T) {
 	store := newFakeStore()
 	store.credentials[memberUserID] = spine.UserPasswordCredential{
@@ -253,14 +321,15 @@ func TestCannotDisableLastActiveOwner(t *testing.T) {
 	}
 }
 
-func TestDisablingUserRevokesActiveSessionsWhenAllowed(t *testing.T) {
+func TestDisablingOrganizationMembershipDoesNotDisableGlobalUserOrRevokeSessions(t *testing.T) {
 	store := newFakeStore()
 	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
 	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive)
 	nextState := "inactive"
+	originalUser := store.users[secondOwnerUserID]
 	service := newTestService(store)
 
-	_, err := service.PatchUser(context.Background(), PatchUserInput{
+	result, err := service.PatchUser(context.Background(), PatchUserInput{
 		AuthenticatedUserID: ownerUserID,
 		OrganizationID:      orgID,
 		UserID:              secondOwnerUserID,
@@ -269,8 +338,14 @@ func TestDisablingUserRevokesActiveSessionsWhenAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PatchUser() error = %v", err)
 	}
-	if !store.revoked[secondOwnerUserID] {
-		t.Fatalf("sessions for %q were not revoked", secondOwnerUserID)
+	if got := store.users[secondOwnerUserID]; got != originalUser {
+		t.Fatalf("global user mutated on membership disable:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if result.User.State != spine.EntityStateActive || result.OrganizationMembership.State != spine.EntityStateInactive {
+		t.Fatalf("result = %#v, want active user and inactive membership", result)
+	}
+	if store.revoked[secondOwnerUserID] {
+		t.Fatalf("sessions for %q were revoked for membership-only disable", secondOwnerUserID)
 	}
 }
 
@@ -284,10 +359,12 @@ func newTestService(store *fakeStore) *Service {
 }
 
 type fakeStore struct {
-	users       map[spine.UserID]spine.User
-	memberships map[string]spine.OrganizationMembership
-	credentials map[spine.UserID]spine.UserPasswordCredential
-	revoked     map[spine.UserID]bool
+	users              map[spine.UserID]spine.User
+	memberships        map[string]spine.OrganizationMembership
+	credentials        map[spine.UserID]spine.UserPasswordCredential
+	revoked            map[spine.UserID]bool
+	upsertUserErr      error
+	upsertUserConflict spine.User
 }
 
 func newFakeStore() *fakeStore {
@@ -339,6 +416,12 @@ func (s *fakeStore) GetUserByEmail(_ context.Context, email string) (spine.User,
 }
 
 func (s *fakeStore) UpsertUser(_ context.Context, user spine.User) error {
+	if s.upsertUserErr != nil {
+		if s.upsertUserConflict.ID != "" {
+			s.users[s.upsertUserConflict.ID] = s.upsertUserConflict
+		}
+		return s.upsertUserErr
+	}
 	s.users[user.ID] = user
 	return nil
 }
@@ -346,6 +429,15 @@ func (s *fakeStore) UpsertUser(_ context.Context, user spine.User) error {
 func (s *fakeStore) GetOrganizationMembership(_ context.Context, organizationID spine.OrganizationID, userID spine.UserID) (spine.OrganizationMembership, bool, error) {
 	membership, ok := s.memberships[key(organizationID, userID)]
 	return membership, ok, nil
+}
+
+func (s *fakeStore) CreateOrganizationMembership(_ context.Context, membership spine.OrganizationMembership) error {
+	membershipKey := key(membership.OrganizationID, membership.UserID)
+	if _, ok := s.memberships[membershipKey]; ok {
+		return errors.New("organization membership already exists")
+	}
+	s.memberships[membershipKey] = membership
+	return nil
 }
 
 func (s *fakeStore) UpsertOrganizationMembership(_ context.Context, membership spine.OrganizationMembership) error {
@@ -479,16 +571,18 @@ func sameTimePtr(a *time.Time, b *time.Time) bool {
 }
 
 const (
-	orgID                   spine.OrganizationID           = "018f0000-0000-7000-8000-000000000002"
-	otherOrgID              spine.OrganizationID           = "018f0000-0000-7000-8000-000000000099"
-	ownerUserID             spine.UserID                   = "018f0000-0000-7000-8000-000000000001"
-	memberUserID            spine.UserID                   = "018f0000-0000-7000-8000-000000000003"
-	secondOwnerUserID       spine.UserID                   = "018f0000-0000-7000-8000-000000000004"
-	newUserID               spine.UserID                   = "018f0000-0000-7000-8000-000000000005"
-	ownerMembershipID       spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000011"
-	memberMembershipID      spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000012"
-	secondOwnerMembershipID spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000013"
-	newMembershipID         spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000014"
+	orgID                     spine.OrganizationID           = "018f0000-0000-7000-8000-000000000002"
+	otherOrgID                spine.OrganizationID           = "018f0000-0000-7000-8000-000000000099"
+	ownerUserID               spine.UserID                   = "018f0000-0000-7000-8000-000000000001"
+	memberUserID              spine.UserID                   = "018f0000-0000-7000-8000-000000000003"
+	secondOwnerUserID         spine.UserID                   = "018f0000-0000-7000-8000-000000000004"
+	newUserID                 spine.UserID                   = "018f0000-0000-7000-8000-000000000005"
+	otherExistingUserID       spine.UserID                   = "018f0000-0000-7000-8000-000000000006"
+	ownerMembershipID         spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000011"
+	memberMembershipID        spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000012"
+	secondOwnerMembershipID   spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000013"
+	newMembershipID           spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000014"
+	otherExistingMembershipID spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000015"
 )
 
 var testNow = time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)

@@ -123,27 +123,43 @@ func (s *PostgresUserManagementStore) GetOrganizationMembership(ctx context.Cont
 	return s.getOrganizationMembership(ctx, "get organization membership", stmt)
 }
 
-func (s *PostgresUserManagementStore) UpsertOrganizationMembership(ctx context.Context, membership spine.OrganizationMembership) error {
-	membershipID, err := uuidValue(membership.ID, "organization membership id")
+func (s *PostgresUserManagementStore) CreateOrganizationMembership(ctx context.Context, membership spine.OrganizationMembership) error {
+	stmt, err := s.organizationMembershipInsert(membership)
 	if err != nil {
 		return err
+	}
+	return execSQL(ctx, s.exec, "create organization membership", stmt)
+}
+
+func (s *PostgresUserManagementStore) UpsertOrganizationMembership(ctx context.Context, membership spine.OrganizationMembership) error {
+	stmt, err := s.organizationMembershipInsert(membership)
+	if err != nil {
+		return err
+	}
+	stmt = stmt.Suffix("ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
+	return execSQL(ctx, s.exec, "upsert organization membership", stmt)
+}
+
+func (s *PostgresUserManagementStore) organizationMembershipInsert(membership spine.OrganizationMembership) (squirrel.InsertBuilder, error) {
+	membershipID, err := uuidValue(membership.ID, "organization membership id")
+	if err != nil {
+		return squirrel.InsertBuilder{}, err
 	}
 	orgID, err := uuidValue(membership.OrganizationID, "organization membership organization id")
 	if err != nil {
-		return err
+		return squirrel.InsertBuilder{}, err
 	}
 	userID, err := uuidValue(membership.UserID, "organization membership user id")
 	if err != nil {
-		return err
+		return squirrel.InsertBuilder{}, err
 	}
 	createdAt := utcOrNow(membership.CreatedAt)
 	updatedAt := utcOrDefault(membership.UpdatedAt, createdAt)
 	stmt := s.psql.
 		Insert("organization_memberships").
 		Columns("id", "organization_id", "user_id", "role", "state", "created_at", "updated_at").
-		Values(membershipID, orgID, userID, membership.Role, membership.State, createdAt, updatedAt).
-		Suffix("ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
-	return execSQL(ctx, s.exec, "upsert organization membership", stmt)
+		Values(membershipID, orgID, userID, membership.Role, membership.State, createdAt, updatedAt)
+	return stmt, nil
 }
 
 func (s *PostgresUserManagementStore) GetPasswordCredential(ctx context.Context, userID spine.UserID) (spine.UserPasswordCredential, bool, error) {
