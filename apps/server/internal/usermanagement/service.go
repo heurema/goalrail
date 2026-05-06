@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/heurema/goalrail/apps/server/internal/auth/password"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -38,6 +40,7 @@ type Store interface {
 	UpsertOrganizationMembership(context.Context, spine.OrganizationMembership) error
 	GetPasswordCredential(context.Context, spine.UserID) (spine.UserPasswordCredential, bool, error)
 	UpsertPasswordCredential(context.Context, spine.UserPasswordCredential) error
+	LockActiveOwnerMemberships(context.Context, spine.OrganizationID) error
 	CountActiveOwners(context.Context, spine.OrganizationID) (int, error)
 }
 
@@ -139,10 +142,10 @@ func NewService(store Store, txRunner TransactionRunner) *Service {
 }
 
 func (s *Service) ListUsers(ctx context.Context, input ListUsersInput) (ListUsersResult, error) {
-	if err := validateRequiredID(input.OrganizationID, "organization_id"); err != nil {
+	if err := validateRequiredUUID(input.OrganizationID, "organization_id"); err != nil {
 		return ListUsersResult{}, err
 	}
-	if err := validateRequiredID(input.AuthenticatedUserID, "authenticated_user_id"); err != nil {
+	if err := validateRequiredUUID(input.AuthenticatedUserID, "authenticated_user_id"); err != nil {
 		return ListUsersResult{}, err
 	}
 
@@ -415,6 +418,9 @@ func (s *Service) guardLastActiveOwner(ctx context.Context, organizationID spine
 	if stillActiveOwner {
 		return nil
 	}
+	if err := s.Store.LockActiveOwnerMemberships(ctx, organizationID); err != nil {
+		return fmt.Errorf("lock active owners: %w", err)
+	}
 	count, err := s.Store.CountActiveOwners(ctx, organizationID)
 	if err != nil {
 		return fmt.Errorf("count active owners: %w", err)
@@ -433,10 +439,10 @@ func normalizeCreateInput(input CreateUserInput) (CreateUserInput, error) {
 		DisplayName:         strings.TrimSpace(input.DisplayName),
 		Role:                strings.TrimSpace(input.Role),
 	}
-	if err := validateRequiredID(normalized.OrganizationID, "organization_id"); err != nil {
+	if err := validateRequiredUUID(normalized.OrganizationID, "organization_id"); err != nil {
 		return CreateUserInput{}, err
 	}
-	if err := validateRequiredID(normalized.AuthenticatedUserID, "authenticated_user_id"); err != nil {
+	if err := validateRequiredUUID(normalized.AuthenticatedUserID, "authenticated_user_id"); err != nil {
 		return CreateUserInput{}, err
 	}
 	if normalized.Email == "" || !strings.Contains(normalized.Email, "@") {
@@ -453,13 +459,13 @@ func normalizeCreateInput(input CreateUserInput) (CreateUserInput, error) {
 
 func normalizePatchInput(input PatchUserInput) (PatchUserInput, error) {
 	normalized := input
-	if err := validateRequiredID(normalized.OrganizationID, "organization_id"); err != nil {
+	if err := validateRequiredUUID(normalized.OrganizationID, "organization_id"); err != nil {
 		return PatchUserInput{}, err
 	}
-	if err := validateRequiredID(normalized.AuthenticatedUserID, "authenticated_user_id"); err != nil {
+	if err := validateRequiredUUID(normalized.AuthenticatedUserID, "authenticated_user_id"); err != nil {
 		return PatchUserInput{}, err
 	}
-	if err := validateRequiredID(normalized.UserID, "user_id"); err != nil {
+	if err := validateRequiredUUID(normalized.UserID, "user_id"); err != nil {
 		return PatchUserInput{}, err
 	}
 	if normalized.DisplayName != nil {
@@ -489,9 +495,13 @@ func normalizePatchInput(input PatchUserInput) (PatchUserInput, error) {
 	return normalized, nil
 }
 
-func validateRequiredID(value any, field string) error {
-	if strings.TrimSpace(fmt.Sprint(value)) == "" {
+func validateRequiredUUID(value any, field string) error {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" {
 		return &ValidationError{Message: field + " is required"}
+	}
+	if _, err := uuid.Parse(text); err != nil {
+		return &ValidationError{Message: field + " must be a valid UUID"}
 	}
 	return nil
 }

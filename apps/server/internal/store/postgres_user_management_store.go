@@ -189,6 +189,43 @@ func (s *PostgresUserManagementStore) UpsertPasswordCredential(ctx context.Conte
 	return execSQL(ctx, s.exec, "upsert password credential", stmt)
 }
 
+func (s *PostgresUserManagementStore) LockActiveOwnerMemberships(ctx context.Context, organizationID spine.OrganizationID) error {
+	orgID, err := uuidValue(organizationID, "organization id")
+	if err != nil {
+		return err
+	}
+	stmt := s.psql.
+		Select("id::text").
+		From("organization_memberships").
+		Where(squirrel.Eq{
+			"organization_id": orgID,
+			"role":            string(spine.OrganizationMembershipRoleOwner),
+			"state":           string(spine.EntityStateActive),
+		}).
+		OrderBy("id ASC").
+		Suffix("FOR UPDATE")
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return fmt.Errorf("lock active owner memberships SQL: %w", err)
+	}
+	rows, err := s.rows.Query(ctx, sqlText, args...)
+	if err != nil {
+		return fmt.Errorf("lock active owner memberships: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan active owner membership lock: %w", err)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate active owner membership locks: %w", err)
+	}
+	return nil
+}
+
 func (s *PostgresUserManagementStore) CountActiveOwners(ctx context.Context, organizationID spine.OrganizationID) (int, error) {
 	orgID, err := uuidValue(organizationID, "organization id")
 	if err != nil {

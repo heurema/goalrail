@@ -321,6 +321,27 @@ func TestCannotDisableLastActiveOwner(t *testing.T) {
 	}
 }
 
+func TestLastActiveOwnerGuardLocksOwnersBeforeCounting(t *testing.T) {
+	store := newFakeStore()
+	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
+	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive)
+	nextRole := "member"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              secondOwnerUserID,
+		Role:                &nextRole,
+	})
+	if err != nil {
+		t.Fatalf("PatchUser() error = %v", err)
+	}
+	if got := strings.Join(store.calls, ","); got != "lock_active_owners,count_active_owners" {
+		t.Fatalf("store calls = %q, want lock before count", got)
+	}
+}
+
 func TestDisablingOrganizationMembershipDoesNotDisableGlobalUserOrRevokeSessions(t *testing.T) {
 	store := newFakeStore()
 	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
@@ -349,6 +370,31 @@ func TestDisablingOrganizationMembershipDoesNotDisableGlobalUserOrRevokeSessions
 	}
 }
 
+func TestPathIDsMustBeValidUUIDs(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	_, err := service.ListUsers(context.Background(), ListUsersInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      "not-a-uuid",
+	})
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("ListUsers() error = %v, want ValidationError", err)
+	}
+
+	role := "member"
+	_, err = service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              "not-a-uuid",
+		Role:                &role,
+	})
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("PatchUser() error = %v, want ValidationError", err)
+	}
+}
+
 func newTestService(store *fakeStore) *Service {
 	service := NewService(store, fakeTransactionRunner{})
 	service.Clock = fixedClock{now: testNow}
@@ -365,6 +411,7 @@ type fakeStore struct {
 	revoked            map[spine.UserID]bool
 	upsertUserErr      error
 	upsertUserConflict spine.User
+	calls              []string
 }
 
 func newFakeStore() *fakeStore {
@@ -455,7 +502,13 @@ func (s *fakeStore) UpsertPasswordCredential(_ context.Context, credential spine
 	return nil
 }
 
+func (s *fakeStore) LockActiveOwnerMemberships(_ context.Context, _ spine.OrganizationID) error {
+	s.calls = append(s.calls, "lock_active_owners")
+	return nil
+}
+
 func (s *fakeStore) CountActiveOwners(_ context.Context, organizationID spine.OrganizationID) (int, error) {
+	s.calls = append(s.calls, "count_active_owners")
 	count := 0
 	for _, membership := range s.memberships {
 		user := s.users[membership.UserID]
