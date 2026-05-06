@@ -5,11 +5,21 @@ type DisplaySummary struct {
 }
 
 type NextAction struct {
-	Kind         string `json:"kind"`
-	Blocking     bool   `json:"blocking"`
-	Command      string `json:"command,omitempty"`
-	Available    bool   `json:"available"`
-	PlannedSlice string `json:"planned_slice,omitempty"`
+	Kind         string                     `json:"kind"`
+	Blocking     bool                       `json:"blocking"`
+	Command      string                     `json:"command,omitempty"`
+	Available    bool                       `json:"available"`
+	PlannedSlice string                     `json:"planned_slice,omitempty"`
+	RequestID    string                     `json:"request_id,omitempty"`
+	Questions    []ClarificationQuestionRef `json:"questions,omitempty"`
+}
+
+type ClarificationQuestionRef struct {
+	ID         string `json:"id"`
+	Text       string `json:"text"`
+	WhyNeeded  string `json:"why_needed,omitempty"`
+	AnswerType string `json:"answer_type"`
+	MapsTo     string `json:"maps_to"`
 }
 
 type WorkStartOutput struct {
@@ -29,4 +39,18 @@ type WorkStartOutput struct {
 	NextAction           NextAction     `json:"next_action"`
 	Message              string         `json:"message"`
 	NextSuggestedCommand string         `json:"next_suggested_command"`
+}
+
+type WorkContinueOutput struct {
+	SchemaVersion   string         `json:"schema_version"`
+	Mode            string         `json:"mode"`
+	ServerURL       string         `json:"server_url"`
+	OrganizationID  string         `json:"organization_id"`
+	ProjectID       string         `json:"project_id"`
+	RepoBindingID   string         `json:"repo_binding_id"`
+	GoalID          string         `json:"goal_id"`
+	State           string         `json:"state"`
+	LocalConfigPath string         `json:"local_config_path"`
+	Display         DisplaySummary `json:"display"`
+	NextAction      NextAction     `json:"next_action"`
 }

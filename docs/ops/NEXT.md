@@ -405,6 +405,12 @@ Done means:
   <path|->]` reads the Git-root marker plus stored login profile, calls
   `/v1/me`, creates `/v1/intakes`, and promotes through
   `/v1/intakes/{id}/goals`
+- ✅ `goalrail work continue --goal-id <goal_id>` reads the same marker plus
+  stored login profile, validates `/v1/me` organization membership before
+  mutation, calls the authenticated `/v1/goals/{id}/continuation` endpoint,
+  and returns the next agent-facing action from server-reconciled Goal
+  readiness; the server also rejects OrganizationMembership / Goal
+  organization mismatches before readiness mutation
 - ✅ `goalrail agent install` explicitly installs provider-neutral repo-local
   Agent Pack v0 files under `.goalrail/agent/` for local coding agents and may
   create a tiny root `AGENTS.md` shim only when missing; it does not overwrite
@@ -412,7 +418,12 @@ Done means:
   Windsurf, Gravity, or other provider-specific adapters
 - ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
   bodies from a file or stdin while returning a `goalrail.cli.v1` JSON envelope
-  with `display.summary` and a planned unavailable Slice B continuation action
+  with `display.summary` and an available continuation command
+- ✅ `goalrail work continue --format json` returns a `goalrail.cli.v1`
+  envelope with `schema_version`, `display.summary`, `state`, `goal_id`, and
+  `next_action`; ready Goals return planned/unavailable `draft_contract`,
+  incomplete Goals return blocking available `ask_user`, and rejected/blocked
+  Goals return `blocked`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -421,8 +432,8 @@ Done means:
 - no audit/hook/branch/verification setup from init
 - no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
   integration, provider shim, branch, PR, hook, clone, deploy-key setup,
-  readiness reconciliation, `work continue`, `work answer`, or contract draft
-  CLI from `work start` or `agent install`
+  `work answer`, or contract draft CLI from `work start`, `work continue`, or
+  `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint

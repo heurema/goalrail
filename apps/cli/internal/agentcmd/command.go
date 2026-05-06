@@ -303,6 +303,8 @@ Pass pasted task text through stdin as the work body.
 
 If a Goalrail JSON response contains ` + "`next_action.available=false`" + `, do not call ` + "`next_action.command`" + `. Treat it as a planned future command and explain the current available next step to the user.
 
+If a Goalrail JSON response contains ` + "`next_action.available=true`" + ` and a ` + "`next_action.command`" + `, you may call that command to continue the current Goalrail flow.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -331,6 +333,22 @@ func commandsJSONContent() string {
       "creates": [
         "IntakeRecord",
         "Goal"
+      ],
+      "does_not_create": [
+        "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "continue_work": {
+      "command": "goalrail work continue --goal-id <goal_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "goal_id"
       ],
       "does_not_create": [
         "Contract",

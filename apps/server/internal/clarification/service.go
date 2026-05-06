@@ -176,6 +176,33 @@ func (s *Service) CreateRequest(ctx context.Context, goalID spine.GoalID) (spine
 	return created, nil
 }
 
+func (s *Service) GetOrCreateOpenRequest(ctx context.Context, goalID spine.GoalID) (spine.ClarificationRequest, error) {
+	existing, ok, err := s.Store.GetOpenByGoalID(ctx, goalID)
+	if err != nil {
+		return spine.ClarificationRequest{}, fmt.Errorf("get open clarification request: %w", err)
+	}
+	if ok {
+		return existing, nil
+	}
+
+	created, err := s.CreateRequest(ctx, goalID)
+	if err == nil {
+		return created, nil
+	}
+	if !errors.Is(err, ErrAlreadyOpen) {
+		return spine.ClarificationRequest{}, err
+	}
+
+	existing, ok, getErr := s.Store.GetOpenByGoalID(ctx, goalID)
+	if getErr != nil {
+		return spine.ClarificationRequest{}, fmt.Errorf("get open clarification request after conflict: %w", getErr)
+	}
+	if !ok {
+		return spine.ClarificationRequest{}, ErrAlreadyOpen
+	}
+	return existing, nil
+}
+
 func (s *Service) RecordAnswer(ctx context.Context, requestID spine.ClarificationRequestID, input spine.ClarificationAnswerSubmission) (spine.ClarificationAnswer, error) {
 	request, ok, err := s.Store.Get(ctx, requestID)
 	if err != nil {

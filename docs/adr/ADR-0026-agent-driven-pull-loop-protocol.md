@@ -23,6 +23,8 @@ Current implemented state:
   RepoBinding context and writes `.goalrail/project.yml`.
 - `goalrail agent install` installs provider-neutral Agent Pack guidance.
 - `goalrail work start` creates an IntakeRecord and promotes it to a Goal.
+- `goalrail work continue` reconciles Goal readiness and returns the next
+  agent-facing action.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -111,12 +113,41 @@ endpoints and returns an agent-facing JSON envelope with a planned Slice B
 continuation action. It does not run readiness reconciliation and does not
 implement `work continue`.
 
-Target direction after Slice A:
+Slice B updates `work start` so the returned continuation command is available:
 
-- `work start` returns the first real `next_action` after initial readiness
-  reconciliation.
-- `work answer` records structured answers and returns the next `next_action`.
-- `work continue` is the universal resume/reconcile command.
+- `work start` returns `next_action.kind=continue_goal` with
+  `available=true`.
+- `work continue` is the universal resume/reconcile command for current Goal
+  readiness.
+- `work answer` remains deferred.
+
+### `goalrail work continue`
+
+`work continue` resumes a Goal through the local pull-loop:
+
+```bash
+goalrail work continue --goal-id "<goal_id>" --format json
+```
+
+It must load the local `.goalrail/project.yml` marker, validate the stored CLI
+login/session, validate the marker Organization against `/v1/me`, then ask the
+server to reconcile Goal readiness.
+
+Server reconciliation must validate the bearer token, load the active
+OrganizationMembership server-side, and verify that the Goal belongs to that
+Organization before mutating readiness or clarification state. Reconciliation
+may materialize missing derived state, but it must not create duplicate open
+ClarificationRequests. If the Goal needs clarification, the server returns or
+creates exactly one open ClarificationRequest.
+
+Continuation `next_action` mapping:
+
+- `ready_for_contract_seed` returns `next_action.kind=draft_contract` with
+  `available=false`, `planned_slice=D`, and the planned
+  `goalrail contract draft --goal-id <goal_id> --format json` command.
+- `needs_clarification` returns `next_action.kind=ask_user` with
+  `available=true`, `blocking=true`, `request_id`, and questions.
+- rejected or blocked states return `next_action.kind=blocked`.
 
 ### Clarification and contracts
 

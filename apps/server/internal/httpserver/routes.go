@@ -27,6 +27,7 @@ type RouteHandlers struct {
 	IntakeGet                 http.Handler
 	IntakePromote             http.Handler
 	GoalReadiness             http.Handler
+	GoalContinuation          http.Handler
 	GoalClarificationRequests http.Handler
 	ContractCreate            http.Handler
 	ContractGet               http.Handler
@@ -68,6 +69,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("GET /v1/intakes/{id}", mustHandler("intake get", handlers.IntakeGet))
 	mux.Handle("POST /v1/intakes/{id}/goals", mustHandler("intake promote", handlers.IntakePromote))
 	mux.Handle("POST /v1/goals/{id}/readiness", mustHandler("goal readiness", handlers.GoalReadiness))
+	mux.Handle("POST /v1/goals/{id}/continuation", mustHandler("goal continuation", handlers.GoalContinuation))
 	mux.Handle("POST /v1/goals/{id}/clarifications", mustHandler("goal clarification requests", handlers.GoalClarificationRequests))
 	mux.Handle("POST /v1/contracts", mustHandler("contract create", handlers.ContractCreate))
 	mux.Handle("GET /v1/contracts/{id}", mustHandler("contract get", handlers.ContractGet))

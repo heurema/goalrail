@@ -30,7 +30,7 @@ var rootCommands = []commandSummary{
 	{name: "init", summary: "initialize repository metadata"},
 	{name: "agent", summary: "install provider-neutral repo-local agent guidance"},
 	{name: "project", summary: "scan and report local project freshness"},
-	{name: "work", summary: "start server-backed work from a local project marker"},
+	{name: "work", summary: "start and continue server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
 	{name: "contract", summary: "validate contract JSON files"},
 	{name: "proof", summary: "render proof JSON files"},
@@ -191,7 +191,7 @@ func newProjectCommand(env clienv.Env) *cobra.Command {
 func newWorkCommand(env clienv.Env) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "work",
-		Short:              "start server-backed work from a local project marker",
+		Short:              "start and continue server-backed work from a local project marker",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, args, workcmd.Options{Stdin: env.Stdin})
@@ -210,6 +210,14 @@ func newWorkCommand(env clienv.Env) *cobra.Command {
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"start"}, args...), workcmd.Options{Stdin: env.Stdin})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "continue",
+		Short:              "reconcile Goal readiness and return the next action",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return workcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"continue"}, args...), workcmd.Options{Stdin: env.Stdin})
 		},
 	})
 	return cmd
@@ -378,6 +386,8 @@ func helpFor(cmd *cobra.Command) string {
 		return workcmd.Usage()
 	case "goalrail work start":
 		return workcmd.StartUsage()
+	case "goalrail work continue":
+		return workcmd.ContinueUsage()
 	case "goalrail login":
 		return logincmd.Usage()
 	case "goalrail version":

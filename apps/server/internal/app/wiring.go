@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
+	"github.com/heurema/goalrail/apps/server/internal/continuation"
 	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
@@ -22,6 +24,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/repobinding"
 	"github.com/heurema/goalrail/apps/server/internal/repositorycontext"
 	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
+	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/store"
 	"github.com/heurema/goalrail/apps/server/internal/usermanagement"
 	"github.com/heurema/goalrail/apps/server/internal/version"
@@ -71,6 +74,7 @@ type appServices struct {
 	intake            *intake.Service
 	goal              *goal.Service
 	clarification     *clarification.Service
+	continuation      *continuation.Service
 	contract          *contract.Service
 	workItem          *workitem.Service
 	workItemPlan      *workitemplan.Service
@@ -88,10 +92,15 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 
 	repoBindingService := repobinding.NewService(stores.projectContext, stores.events, txRunner, repobinding.SystemClock{}, repobinding.UUIDGenerator{})
 
+	goalService := goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{})
+	clarificationRequests := clarificationRequestStoreAdapter{store: stores.clarificationRequests}
+	clarificationService := clarification.NewService(stores.goals, clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{})
+
 	return appServices{
 		intake:            intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),
-		goal:              goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{}),
-		clarification:     clarification.NewService(stores.goals, stores.clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{}),
+		goal:              goalService,
+		clarification:     clarificationService,
+		continuation:      continuation.NewService(stores.goals, goalService, clarificationService),
 		contract:          contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
@@ -107,6 +116,7 @@ type appHandlers struct {
 	intake            *httpserver.IntakeHandler
 	goal              *httpserver.GoalHandler
 	clarification     *httpserver.ClarificationHandler
+	continuation      *httpserver.ContinuationHandler
 	contract          *httpserver.ContractHandler
 	workItem          *httpserver.WorkItemHandler
 	workItemPlan      *httpserver.WorkItemPlanHandler
@@ -122,6 +132,7 @@ func newAppHandlers(services appServices) appHandlers {
 		intake:            httpserver.NewIntakeHandler(services.intake),
 		goal:              httpserver.NewGoalHandler(services.goal),
 		clarification:     httpserver.NewClarificationHandler(services.clarification),
+		continuation:      httpserver.NewContinuationHandler(services.auth, services.continuation),
 		contract:          httpserver.NewContractHandler(services.contract),
 		workItem:          httpserver.NewWorkItemHandler(services.workItem),
 		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.workItemPlan),
@@ -131,6 +142,34 @@ func newAppHandlers(services appServices) appHandlers {
 		auth:              httpserver.NewAuthHandler(services.auth),
 		userManagement:    httpserver.NewOrganizationUsersHandler(services.auth, services.userManagement),
 	}
+}
+
+type clarificationRequestStoreAdapter struct {
+	store *store.PostgresClarificationRequestStore
+}
+
+func (s clarificationRequestStoreAdapter) Create(ctx context.Context, request spine.ClarificationRequest) error {
+	err := s.store.Create(ctx, request)
+	if errors.Is(err, store.ErrClarificationRequestAlreadyOpen) {
+		return clarification.ErrAlreadyOpen
+	}
+	return err
+}
+
+func (s clarificationRequestStoreAdapter) Get(ctx context.Context, id spine.ClarificationRequestID) (spine.ClarificationRequest, bool, error) {
+	return s.store.Get(ctx, id)
+}
+
+func (s clarificationRequestStoreAdapter) GetOpenByGoalID(ctx context.Context, goalID spine.GoalID) (spine.ClarificationRequest, bool, error) {
+	return s.store.GetOpenByGoalID(ctx, goalID)
+}
+
+func (s clarificationRequestStoreAdapter) UpdateState(ctx context.Context, id spine.ClarificationRequestID, state spine.ClarificationRequestState) (spine.ClarificationRequest, bool, error) {
+	request, ok, err := s.store.UpdateState(ctx, id, state)
+	if errors.Is(err, store.ErrClarificationRequestAlreadyOpen) {
+		return request, ok, clarification.ErrAlreadyOpen
+	}
+	return request, ok, err
 }
 
 func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler http.Handler) httpserver.RouteHandlers {
@@ -156,6 +195,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		IntakeGet:                 http.HandlerFunc(h.intake.Get),
 		IntakePromote:             http.HandlerFunc(h.goal.PromoteFromIntake),
 		GoalReadiness:             http.HandlerFunc(h.goal.CheckReadiness),
+		GoalContinuation:          http.HandlerFunc(h.continuation.ReconcileGoal),
 		GoalClarificationRequests: http.HandlerFunc(h.clarification.CreateRequest),
 		ContractCreate:            http.HandlerFunc(h.contract.Create),
 		ContractGet:               http.HandlerFunc(h.contract.Get),
@@ -222,6 +262,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		IntakeGet:                 unavailable,
 		IntakePromote:             unavailable,
 		GoalReadiness:             unavailable,
+		GoalContinuation:          unavailable,
 		GoalClarificationRequests: unavailable,
 		ContractCreate:            unavailable,
 		ContractGet:               unavailable,
