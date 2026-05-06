@@ -203,6 +203,14 @@ func (s *Service) GetOrCreateOpenRequest(ctx context.Context, goalID spine.GoalI
 	return existing, nil
 }
 
+func (s *Service) Get(ctx context.Context, requestID spine.ClarificationRequestID) (spine.ClarificationRequest, bool, error) {
+	request, ok, err := s.Store.Get(ctx, requestID)
+	if err != nil {
+		return spine.ClarificationRequest{}, false, fmt.Errorf("get clarification request: %w", err)
+	}
+	return request, ok, nil
+}
+
 func (s *Service) RecordAnswer(ctx context.Context, requestID spine.ClarificationRequestID, input spine.ClarificationAnswerSubmission) (spine.ClarificationAnswer, error) {
 	request, ok, err := s.Store.Get(ctx, requestID)
 	if err != nil {
@@ -471,9 +479,6 @@ func applicationUpdate(goal spine.Goal, request spine.ClarificationRequest, answ
 			return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.question_id", Message: "unknown question_id"}
 		}
 		value := strings.TrimSpace(item.Value)
-		if value == "" {
-			return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.value", Message: "mapped value is required"}
-		}
 
 		mapping := spine.ClarificationAnswerAppliedMapping{
 			QuestionID: item.QuestionID,
@@ -482,16 +487,31 @@ func applicationUpdate(goal spine.Goal, request spine.ClarificationRequest, answ
 		}
 		switch question.MapsTo {
 		case spine.ClarificationMapsToGoalSummary:
+			if value == "" {
+				return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.value", Message: "mapped value is required"}
+			}
 			mapping.OldValue = goal.Summary
 			update.Summary = stringPtr(value)
 		case spine.ClarificationMapsToGoalScopeHint:
+			if value == "" {
+				return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.value", Message: "mapped value is required"}
+			}
 			mapping.OldValue = goal.ScopeHint
 			update.ScopeHint = stringPtr(value)
 		case spine.ClarificationMapsToGoalAcceptanceHint:
+			if value == "" {
+				return spine.GoalHintUpdate{}, nil, &ValidationError{Field: "answers.value", Message: "mapped value is required"}
+			}
 			mapping.OldValue = goal.AcceptanceHint
 			update.AcceptanceHint = stringPtr(value)
 		case spine.ClarificationMapsToGoalIntentOwner:
-			return spine.GoalHintUpdate{}, nil, fmt.Errorf("%w: %s requires actor-shaped value", ErrUnsupportedMapping, question.MapsTo)
+			if item.ActorRef == nil || strings.TrimSpace(item.ActorRef.Kind) == "" || strings.TrimSpace(item.ActorRef.ID) == "" {
+				return spine.GoalHintUpdate{}, nil, fmt.Errorf("%w: %s requires actor-shaped value", ErrUnsupportedMapping, question.MapsTo)
+			}
+			actor := *item.ActorRef
+			mapping.OldValue = actorRefValue(goal.IntentOwner)
+			mapping.NewValue = actorRefValue(actor)
+			update.IntentOwner = &actor
 		default:
 			return spine.GoalHintUpdate{}, nil, fmt.Errorf("%w: %s", ErrUnsupportedMapping, question.MapsTo)
 		}
@@ -699,11 +719,34 @@ func cloneAnswerItems(answers []spine.ClarificationAnswerItem) []spine.Clarifica
 	if answers == nil {
 		return nil
 	}
-	return append([]spine.ClarificationAnswerItem(nil), answers...)
+	cloned := make([]spine.ClarificationAnswerItem, len(answers))
+	for i, answer := range answers {
+		cloned[i] = answer
+		if answer.ActorRef != nil {
+			actor := *answer.ActorRef
+			cloned[i].ActorRef = &actor
+		}
+	}
+	return cloned
 }
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func actorRefValue(actor spine.ActorRef) string {
+	kind := strings.TrimSpace(actor.Kind)
+	id := strings.TrimSpace(actor.ID)
+	if kind == "" && id == "" {
+		return ""
+	}
+	if kind == "" {
+		return id
+	}
+	if id == "" {
+		return kind
+	}
+	return kind + ":" + id
 }
 
 type clarificationQuestionSpec struct {

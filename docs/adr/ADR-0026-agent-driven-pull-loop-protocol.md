@@ -25,6 +25,8 @@ Current implemented state:
 - `goalrail work start` creates an IntakeRecord and promotes it to a Goal.
 - `goalrail work continue` reconciles Goal readiness and returns the next
   agent-facing action.
+- `goalrail work answer` submits structured clarification answers and returns
+  the next agent-facing action.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -119,7 +121,8 @@ Slice B updates `work start` so the returned continuation command is available:
   `available=true`.
 - `work continue` is the universal resume/reconcile command for current Goal
   readiness.
-- `work answer` remains deferred.
+- Slice C adds `work answer` as the clarification answer bridge after
+  `next_action.kind=ask_user`.
 
 ### `goalrail work continue`
 
@@ -149,6 +152,45 @@ Continuation `next_action` mapping:
   `available=true`, `blocking=true`, `request_id`, and questions.
 - rejected or blocked states return `next_action.kind=blocked`.
 
+### `goalrail work answer`
+
+`work answer` submits structured answers for one open ClarificationRequest:
+
+```bash
+goalrail work answer \
+  --clarification-request-id "<clarification_request_id>" \
+  --answers-file - \
+  --format json
+```
+
+The answer file uses question-bound structured answers:
+
+```json
+{
+  "answers": [
+    {
+      "question_id": "...",
+      "value": "..."
+    }
+  ]
+}
+```
+
+The CLI must load the local `.goalrail/project.yml` marker, validate the stored
+CLI login/session, validate the marker Organization against `/v1/me`, then send
+the answer payload to the server.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, resolve
+`ClarificationRequest -> Goal -> Organization`, and verify that the Goal
+belongs to that Organization before recording an answer. The server records the
+canonical ClarificationAnswer, applies allowed answer mappings to Goal hints,
+runs explicit readiness reconciliation, and returns the same agent-facing
+`next_action` mapping as `work continue`.
+
+Repeated answer submission for an already answered request returns an explicit
+conflict instead of creating an ambiguous duplicate canonical answer.
+
 ### Clarification and contracts
 
 Clarification remains server-owned. The server creates ClarificationRequest and
@@ -157,7 +199,7 @@ questions and answers.
 
 No standalone `work context prepare` command is introduced in the MVP. Future
 local code context belongs inside a bounded `contract draft` helper, but no
-contract draft CLI is implemented in Slice A.
+contract draft CLI is implemented by this pull-loop slice.
 
 ## Non-goals
 
@@ -171,9 +213,7 @@ This ADR does not implement:
 - server-side repository clone
 - raw source upload by default
 - standalone `work context prepare`
-- `work continue` implementation in Slice A
-- `work answer`
-- contract draft CLI in Slice A
+- contract draft CLI
 - runner checkout
 - execution
 - gate
@@ -191,8 +231,8 @@ pretending a universal server push channel exists.
 The server remains canonical and auditable. The CLI becomes the local bridge for
 repository context, auth, and transport. The agent remains a UX layer.
 
-Slice A prepares the JSON protocol shape without implying unimplemented
-continuation commands are executable.
+Slices A-C establish the first usable start -> continue -> answer pull-loop
+without implying contract drafting, runner, gate, or proof are available.
 
 ## Rejected alternatives
 

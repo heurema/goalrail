@@ -546,6 +546,271 @@ func TestRunContinueTextDoesNotClaimUnavailableRuntimeWork(t *testing.T) {
 	}
 }
 
+func TestRunAnswerFileSubmitsStructuredAnswers(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	answersPath := filepath.Join(repoDir, "answers.json")
+	if err := os.WriteFile(answersPath, []byte(`{"answers":[{"question_id":"q_scope","value":"Bounded answer bridge"}]}`), 0o644); err != nil {
+		t.Fatalf("write answers file: %v", err)
+	}
+
+	var answerRequest workAnswerSubmission
+	var meCount, answerCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/clarifications/018f0000-0000-7000-8000-000000000101/answers/continuation":
+			answerCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/clarifications/{id}/answers/continuation method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&answerRequest); err != nil {
+				t.Errorf("decode answer request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_contract_seed","readiness":{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_contract_seed","ready":true,"reason_codes":[],"message":"goal is ready for contract seed"},"goal":{"id":"018f0000-0000-7000-8000-000000000006","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"ready_for_contract_seed"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runAnswerJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", answersPath, "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work answer) error = %v", err)
+	}
+
+	if output.SchemaVersion != "goalrail.cli.v1" {
+		t.Fatalf("schema_version = %q, want goalrail.cli.v1", output.SchemaVersion)
+	}
+	if output.ClarificationRequestID != "018f0000-0000-7000-8000-000000000101" {
+		t.Fatalf("clarification_request_id = %q, want request id", output.ClarificationRequestID)
+	}
+	if output.GoalID != "018f0000-0000-7000-8000-000000000006" || output.State != "ready_for_contract_seed" {
+		t.Fatalf("goal/state = %q/%q, want ready goal", output.GoalID, output.State)
+	}
+	if output.Display.Summary == "" {
+		t.Fatal("display.summary is empty")
+	}
+	if output.NextAction.Kind != "draft_contract" || output.NextAction.Available || output.NextAction.PlannedSlice != "D" {
+		t.Fatalf("next_action = %#v, want unavailable draft_contract planned for D", output.NextAction)
+	}
+	if len(answerRequest.Answers) != 1 || answerRequest.Answers[0].QuestionID != "q_scope" || answerRequest.Answers[0].Value != "Bounded answer bridge" {
+		t.Fatalf("answer request = %#v, want structured answer payload", answerRequest)
+	}
+	if meCount.Load() != 1 || answerCount.Load() != 1 {
+		t.Fatalf("request counts me/answer = %d/%d, want 1/1", meCount.Load(), answerCount.Load())
+	}
+}
+
+func TestRunAnswerDashReadsStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/clarifications/018f0000-0000-7000-8000-000000000101/answers/continuation":
+			var request workAnswerSubmission
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&request); err != nil {
+				t.Errorf("decode answer request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			if len(request.Answers) != 1 || request.Answers[0].Value != "Need one more constraint" {
+				t.Errorf("answer request = %#v, want stdin answer", request)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"needs_clarification","readiness":{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"needs_clarification","ready":false,"reason_codes":["missing_acceptance_hint"],"message":"goal needs clarification before contract seed"},"goal":{"id":"018f0000-0000-7000-8000-000000000006","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"needs_clarification"},"clarification_request":{"id":"018f0000-0000-7000-8000-000000000201","goal_id":"018f0000-0000-7000-8000-000000000006","reason_codes":["missing_acceptance_hint"],"state":"open","questions":[{"id":"018f0000-0000-7000-8000-000000000202","text":"What outcome would make this goal acceptable?","why_needed":"An acceptance hint is required before contract seed readiness.","answer_type":"text","maps_to":"goal.acceptance_hint"}]}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runAnswerJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, Options{Stdin: strings.NewReader(`{"answers":[{"question_id":"q_scope","value":"Need one more constraint"}]}`)}, "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", "-", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work answer --answers-file -) error = %v", err)
+	}
+	if output.NextAction.Kind != "ask_user" || !output.NextAction.Available || !output.NextAction.Blocking {
+		t.Fatalf("next_action = %#v, want available ask_user", output.NextAction)
+	}
+	if output.NextAction.RequestID != "018f0000-0000-7000-8000-000000000201" {
+		t.Fatalf("request_id = %q, want next clarification request", output.NextAction.RequestID)
+	}
+}
+
+func TestRunAnswerMissingProjectConfigFailsBeforeHTTPAndStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, err := runAnswerJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, Options{Stdin: failOnRead{t: t}}, "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work answer) error = nil, want missing marker")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "missing .goalrail/project.yml") {
+		t.Fatalf("error = %q, want missing marker hint", err.Error())
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 without marker", got)
+	}
+}
+
+func TestRunAnswerExpiredTokenFailsBeforeHTTPAndStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	session := validSession(server.URL)
+	session.AccessTokenExpiresAt = time.Date(2026, 5, 5, 9, 59, 59, 0, time.UTC)
+	_, err := runAnswerJSONWithOptions(t, repoDir, fakeSessionStore{session: session}, Options{Stdin: failOnRead{t: t}}, "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work answer) error = nil, want expired login")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 for expired token", got)
+	}
+}
+
+func TestRunAnswerOrganizationMismatchFailsBeforeAnswerRequestAndStdin(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, answerCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000999","role":"member"}}`))
+		case "/v1/clarifications/018f0000-0000-7000-8000-000000000101/answers/continuation":
+			answerCount.Add(1)
+			http.Error(w, "unexpected answer request", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runAnswerJSONWithOptions(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, Options{Stdin: failOnRead{t: t}}, "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", "-", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work answer) error = nil, want organization mismatch")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if meCount.Load() != 1 || answerCount.Load() != 0 {
+		t.Fatalf("request counts me/answer = %d/%d, want 1/0", meCount.Load(), answerCount.Load())
+	}
+}
+
+func TestRunAnswerTextDoesNotClaimUnavailableRuntimeWork(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	answersPath := filepath.Join(repoDir, "answers.json")
+	if err := os.WriteFile(answersPath, []byte(`{"answers":[{"question_id":"q_scope","value":"Bounded answer bridge"}]}`), 0o644); err != nil {
+		t.Fatalf("write answers file: %v", err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/clarifications/018f0000-0000-7000-8000-000000000101/answers/continuation":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_contract_seed","goal":{"id":"018f0000-0000-7000-8000-000000000006","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"ready_for_contract_seed"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"answer", "--clarification-request-id", "018f0000-0000-7000-8000-000000000101", "--answers-file", answersPath}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work answer text) error = %v", err)
+	}
+	got := stdout.String()
+	for _, forbidden := range []string{"created a contract", "runner", "proof"} {
+		if strings.Contains(strings.ToLower(got), forbidden) {
+			t.Fatalf("stdout = %q, want no %q claim", got, forbidden)
+		}
+	}
+	if !strings.Contains(got, "Next planned command, not available yet") {
+		t.Fatalf("stdout = %q, want planned command availability warning", got)
+	}
+}
+
 func TestRunStartHelpUsage(t *testing.T) {
 	t.Parallel()
 
@@ -741,6 +1006,37 @@ func runContinueJSON(t *testing.T, workDir string, store fakeSessionStore, args 
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work continue JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runAnswerJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkAnswerOutput, error) {
+	t.Helper()
+
+	return runAnswerJSONWithOptions(t, workDir, store, Options{}, args...)
+}
+
+func runAnswerJSONWithOptions(t *testing.T, workDir string, store fakeSessionStore, extra Options, args ...string) (spine.WorkAnswerOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	extra.Store = store
+	extra.Now = func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) }
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"answer"}, args...), Options{
+		Store:      extra.Store,
+		HTTPClient: extra.HTTPClient,
+		Now:        extra.Now,
+		Stdin:      extra.Stdin,
+	})
+	if err != nil {
+		return spine.WorkAnswerOutput{}, err
+	}
+
+	var output spine.WorkAnswerOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work answer JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }
