@@ -17,12 +17,14 @@ superseded_by: null
 related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_OPERATING_MODEL.md
+  - docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md
   - docs/PROJECT_SPINE_SCHEMA.md
   - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
   - docs/adr/ADR-0020-public-contract-identity-boundary.md
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
   - docs/adr/ADR-0022-installation-boundary.md
   - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
+  - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint

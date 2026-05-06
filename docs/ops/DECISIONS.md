@@ -2254,3 +2254,36 @@ Rationale:
 - It preserves RepoBinding and repository-context init truth without adding
   provider OAuth, token storage, provider clients, runner checkout, gate, or
   proof behavior.
+
+## D-0087 — Repository baseline is immutable and overlay is separate
+Date: 2026-05-06
+Status: accepted
+
+Decision:
+- Adopt immutable local `RepositoryBaselineProfile` per committed repository
+  state.
+- Represent dirty, unmerged, partial, ignored/untracked visibility, submodule,
+  sparse-checkout, shallow-clone, and worktree-specific state as a separate
+  `WorkspaceOverlay`.
+- Future `ContractContextPack` records must be task-specific and reference
+  exact baseline and overlay versions.
+- Do not key the deep baseline directly by dirty state. Dirty state is
+  freshness-relevant, but it does not create a new deep baseline version by
+  itself.
+- Background scans are convenience only and must never bypass synchronous
+  freshness checks.
+- The server may store summaries and receipts by default, not raw source bodies;
+  the API server does not clone repositories or run checks in-process for this
+  boundary.
+- This decision does not add server-side repository clone, provider OAuth,
+  runner checkout, file watcher / daemon, mutable latest baseline, embeddings
+  or LLM summaries as truth, raw source upload by default, gate, proof, or broad
+  indexing behavior.
+
+Rationale:
+- Immutable committed-state baselines keep Project Scan deterministic and
+  privacy-preserving.
+- A separate overlay avoids stale maps, deep baseline churn on every edit, and
+  background-race reliability failures.
+- Task-specific context packs keep repository understanding tied to the
+  approved contract/task instead of turning it into hidden reusable memory.

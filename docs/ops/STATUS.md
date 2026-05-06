@@ -21,7 +21,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-05
+Last updated: 2026-05-06
 Status: planning / product canon and pilot frame active; first local Go CLI and
 Go server intent-plane / public Contract aggregate and `/v1/contracts`
 lifecycle façade / ContractSeed / ContractDraft / ApprovedContract / WorkItem
@@ -133,7 +133,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-three kernel/CLI/server/domain boundary ADRs
+- twenty-four kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -259,6 +259,16 @@ The project currently has:
   instructions derived from WorkItem / RepoBinding context and runner-owned
   local credentials, with no repository secrets stored by the API server in the
   MVP.
+- ADR-0025 documents the accepted local Project Scan and repository baseline
+  lifecycle boundary: `RepositoryBaselineProfile` is an immutable committed
+  repository-shape profile keyed by RepoBinding, canonical repo root, HEAD SHA,
+  and scanner schema; `WorkspaceOverlay` separately records dirty, unmerged,
+  partial, submodule, sparse-checkout, shallow-clone, and worktree-specific
+  state; and future `ContractContextPack` records are task-specific cuts that
+  reference exact baseline and overlay versions. Background scans are best-effort
+  only and cannot bypass synchronous freshness checks. The API server remains
+  outside repository clone, source upload by default, in-process checks, gate,
+  and proof for this boundary.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,
   mounted-workspace checkout flow, provider credential storage, VcsConnection,
   OAuth, provider client, gate, or proof exists yet.
@@ -283,7 +293,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-three boundary ADRs exist
+- kernel schema note and twenty-four boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -398,6 +408,10 @@ The project currently has:
   is only a temporary CLI auth bridge for `goalrail login <server_url>`
 - no VcsConnection, provider UI integration, OAuth, provider client, or provider
   credential storage implementation yet
+- no `RepositoryBaselineProfile`, `WorkspaceOverlay`, or `ContractContextPack`
+  implementation yet; ADR-0025 is a docs-only accepted boundary, not scanner
+  storage, background worker, raw source upload, server clone, gate, or proof
+  behavior
 - no `RepositoryRecord` implementation; it is intentionally deferred for the MVP
 - no `RepositoryRecord.source_kind` implementation
 - no `RepoBinding.access_mode` implementation beyond `metadata_only` init
@@ -447,10 +461,10 @@ Current packaging target:
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable
-- next sales-pack and runner-boundary slices remain explicit and bounded; the
-  next repository-access docs slice is runner-owned checkout credential
-  boundary, while checkout jobs, checkout instructions, checkout receipts,
-  provider integrations, runner implementation, gate, and proof remain
+- next sales-pack, Project Scan baseline, and runner-boundary slices remain
+  explicit and bounded; repository baseline lifecycle is documented while
+  Project Scan implementation, checkout jobs, checkout instructions, checkout
+  receipts, provider integrations, runner implementation, gate, and proof remain
   unimplemented
 
 ## Main current risks
@@ -462,4 +476,5 @@ Current packaging target:
 5. MVP scope could widen into a generic agent or tooling platform too early
 6. repository checkout could leak into the API server instead of staying behind runner boundaries
 7. customer-hosted runner support could be treated as a late enterprise add-on instead of a first-class architecture mode
-8. reference screenshots or brand assets could be relicensed accidentally without a provenance audit
+8. repository baseline or context-pack work could drift into hidden mutable memory, raw source upload, or background-scan truth
+9. reference screenshots or brand assets could be relicensed accidentally without a provenance audit
