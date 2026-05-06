@@ -630,9 +630,35 @@ Done means:
 - `.gitignore` blocks secrets/sessions and the legacy directory path
 - Next: implement or verify the resolver; perform semantic review of styles/prompts in the external workspace
 
+### Slice — Project Scan / Repository Baseline lifecycle docs
+Status: DONE — architecture boundary recorded.
+
+Goal:
+- document the local Project Scan, immutable `RepositoryBaselineProfile`,
+  separate `WorkspaceOverlay`, and future task-specific `ContractContextPack`
+  freshness model before implementation.
+
+Done means:
+- ADR-0025 defines baseline lifecycle, rebuild triggers, overlay handling,
+  partiality states, background-scan limits, and the server/no-clone boundary
+- `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md` defines Project
+  Scan v0, `RepositoryBaselineProfile`, `WorkspaceOverlay`,
+  `ContractContextPack`, freshness gates, and v0 non-goals
+- `docs/INDEX.md`, `docs/ops/DECISIONS.md`, and `docs/ops/NEXT.md` are aligned
+- no implementation code, server clone, provider OAuth, runner checkout,
+  watcher/daemon, embeddings, raw source upload, gate, or proof is added in this
+  docs slice
+
 ### Architecture follow-up slices
 
-1. Runner-owned repository checkout credential boundary
+1. Project Scan v0 implementation boundary
+   - start from ADR-0025 and `GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
+   - keep scanning local CLI / runner owned and deterministic
+   - persist summaries/receipts only, not raw source bodies by default
+   - separate `RepositoryBaselineProfile` from `WorkspaceOverlay`
+   - do not add server-side clone, provider OAuth, runner checkout,
+     watcher/daemon, embeddings, gate, or proof
+2. Runner-owned repository checkout credential boundary
    - define runner startup flags for Goalrail connection and local credential
      file paths only
    - define API-issued `CheckoutInstruction` fields, including
@@ -645,7 +671,7 @@ Done means:
    - add no provider OAuth, VcsConnection, token storage, provider clients, live
      metadata listing, checkout implementation, runner implementation, gate, or
      proof
-2. Organization / project / repo binding persistence boundary
+3. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
    - direct `RepoBinding` stores repository reference in the MVP
    - `RepositoryRecord` and `RepositoryEnrollment` are deferred
@@ -653,7 +679,7 @@ Done means:
      remain valid
    - support the runner-owned credential path without requiring GitHub App,
      GitLab, or Bitbucket cloud connection
-3. Runner checkout prototype boundary
+4. Runner checkout prototype boundary
    - start with a universal runner as a separate binary/process
    - use pull-based / poll-based job leasing from the API server
    - perform read-only ephemeral checkout or use a mounted workspace and
@@ -661,7 +687,7 @@ Done means:
    - do not implement provider OAuth, token storage, provider clients,
      persistent mirrors, repository writes, arbitrary command execution, gate,
      or proof
-4. Customer-hosted runner protocol boundary
+5. Customer-hosted runner protocol boundary
    - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
    - keep clone access inside customer infrastructure and return bounded artifacts only
    - leave optional attestation or receipt signatures for a later trust-hardening slice
