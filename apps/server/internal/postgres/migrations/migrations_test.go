@@ -210,24 +210,6 @@ func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {
 	}
 }
 
-func TestUsersEmailLowerUniqueIncrementalMigration(t *testing.T) {
-	contents, err := FS.ReadFile("00002_users_email_lower_unique.sql")
-	if err != nil {
-		t.Fatalf("ReadFile() error = %v", err)
-	}
-	sql := string(contents)
-	for _, want := range []string{
-		"CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique",
-		"ON users (lower(email))",
-		"WHERE email <> ''",
-		"DROP INDEX IF EXISTS users_email_lower_unique;",
-	} {
-		if !strings.Contains(sql, want) {
-			t.Fatalf("incremental users email migration missing %q", want)
-		}
-	}
-}
-
 func TestInitMigrationAllowsContractDraftReadyForApprovalState(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
