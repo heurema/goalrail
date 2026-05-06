@@ -1,0 +1,7 @@
+/local/
+/cache/
+/state/
+/tmp/
+*.local.yml
+*.local.toml
+*.local.json

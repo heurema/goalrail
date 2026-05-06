@@ -374,9 +374,10 @@ Done means:
   Project-scoped RepoBinding init endpoint
 - ✅ explicit `goalrail init --local-demo` preserves the auth-free local/demo
   draft and writes no files
-- ✅ after successful server-backed init, the CLI writes a non-secret
-  Git-root `.goalrail/project.yml` marker/cache with server/project/repo binding
-  identity only
+- ✅ after successful server-backed init, the CLI writes the non-secret
+  Git-root `.goalrail/project.yml` repository marker with server/project/repo
+  binding identity only and ensures `.goalrail/.gitignore` ignores
+  Goalrail-owned machine-local state directories/files
 - ✅ server-backed init preflights an existing `.goalrail/project.yml` before
   the server call and fails locally on server/project/repo/base conflicts
 - ✅ `goalrail work start --title <title> [--body <body>]` reads the Git-root
@@ -386,6 +387,7 @@ Done means:
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
   cache storage in `.goalrail/project.yml`
+- no root `.gitignore` mutation for Goalrail local-state ignores
 - no audit/hook/branch/verification setup from init
 - no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
   integration, branch, PR, hook, clone, or deploy-key setup from `work start`
@@ -652,12 +654,20 @@ Done means:
 ### Architecture follow-up slices
 
 1. Project Scan v0 implementation boundary
+   - Status: DONE — local CLI baseline / overlay foundation exists.
+   - `apps/cli/internal/projectscan` builds immutable local
+     `RepositoryBaselineProfile` JSON for committed HEAD, refreshes cheap
+     `WorkspaceOverlay` JSON, evaluates freshness, and writes cache artifacts
+     under the user cache directory
+   - `goalrail project scan/status` are the explicit local freshness commands
+   - server-backed `goalrail init` runs the quick local Project Scan after the
+     non-secret `.goalrail/project.yml` marker is written or verified
    - start from ADR-0025 and `GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
    - keep scanning local CLI / runner owned and deterministic
    - persist summaries/receipts only, not raw source bodies by default
    - separate `RepositoryBaselineProfile` from `WorkspaceOverlay`
    - do not add server-side clone, provider OAuth, runner checkout,
-     watcher/daemon, embeddings, gate, or proof
+     watcher/daemon, embeddings, ContractContextPack generation, gate, or proof
 2. Runner-owned repository checkout credential boundary
    - define runner startup flags for Goalrail connection and local credential
      file paths only

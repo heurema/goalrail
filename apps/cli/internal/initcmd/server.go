@@ -15,15 +15,16 @@ import (
 
 	"github.com/heurema/goalrail/apps/cli/internal/authstore"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
+	"github.com/heurema/goalrail/apps/cli/internal/projectscan"
 	"github.com/heurema/goalrail/apps/cli/internal/spine"
 	"github.com/heurema/goalrail/apps/cli/internal/term"
 )
 
 const (
 	serverMode             = "server"
-	nextSuggestedCommand   = "goalrail readiness scan --path ."
-	serverRegistrationNote = "This registered repository metadata on the GoalRail server and wrote a non-secret local GoalRail marker.\nNo audit, hooks, branch creation, deploy keys, or verification were configured."
-	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization and recorded a metadata-only repository context snapshot.\nNo audit, hooks, branch creation, deploy keys, provider integration, or verification were configured."
+	nextSuggestedCommand   = "goalrail work start --title <title>"
+	serverRegistrationNote = "This registered repository metadata on the GoalRail server, wrote a non-secret GoalRail repository marker, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
+	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization, recorded a metadata-only repository context snapshot, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 )
 
 type serverErrorResponse struct {
@@ -108,8 +109,16 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 	if err != nil {
 		return err
 	}
+	ignoreStatus, err := ensureProjectConfigGitignore(draft.GitRoot)
+	if err != nil {
+		return err
+	}
 	output.LocalConfigPath = projectConfigRelativePath
 	output.LocalConfigStatus = configStatus
+	output.LocalConfigMessage = localConfigMessage(configStatus)
+	output.LocalIgnorePath = projectConfigIgnoreRelativePath
+	output.LocalIgnoreStatus = ignoreStatus
+	applyRepoBindingProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
 
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
@@ -210,8 +219,16 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 	if err != nil {
 		return err
 	}
+	ignoreStatus, err := ensureProjectConfigGitignore(draft.GitRoot)
+	if err != nil {
+		return err
+	}
 	output.LocalConfigPath = projectConfigRelativePath
 	output.LocalConfigStatus = configStatus
+	output.LocalConfigMessage = localConfigMessage(configStatus)
+	output.LocalIgnorePath = projectConfigIgnoreRelativePath
+	output.LocalIgnoreStatus = ignoreStatus
+	applyRepositoryContextProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
 
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
@@ -439,6 +456,8 @@ func renderServerText(output spine.RepoBindingInitOutput) string {
 	if output.LocalConfigPath != "" {
 		fmt.Fprintf(&b, "Local config: %s (%s)\n", output.LocalConfigPath, output.LocalConfigStatus)
 	}
+	writeLocalConfigText(&b, output.LocalConfigMessage, output.LocalIgnorePath, output.LocalIgnoreStatus)
+	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", serverRegistrationNote, output.NextCommand)
 	return b.String()
 }
@@ -477,11 +496,97 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 	if output.LocalConfigPath != "" {
 		fmt.Fprintf(&b, "Local config: %s (%s)\n", output.LocalConfigPath, output.LocalConfigStatus)
 	}
+	writeLocalConfigText(&b, output.LocalConfigMessage, output.LocalIgnorePath, output.LocalIgnoreStatus)
 	if output.ContextSnapshotID != "" {
 		fmt.Fprintf(&b, "Repository context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
 	}
+	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
 	return b.String()
+}
+
+type initProjectScanResult struct {
+	Status     string
+	BaselineID string
+	OverlayID  string
+	Freshness  string
+	Warning    string
+}
+
+func runInitProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options) initProjectScanResult {
+	cache := projectscan.NewCache(options.ProjectScanCacheRoot)
+	baseline, err := projectscan.BuildBaseline(ctx, gitRoot, repoBindingID, projectscan.DefaultBuildOptions())
+	if err != nil {
+		return initProjectScanResult{Status: projectscan.BaselineStatusError, Warning: err.Error()}
+	}
+	if err := cache.WriteBaseline(baseline); err != nil {
+		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, Warning: err.Error()}
+	}
+	overlay, rawStatus, err := projectscan.BuildOverlay(ctx, gitRoot, repoBindingID, &baseline, projectscan.OverlayOptions{Now: options.Now})
+	if err != nil {
+		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, Warning: err.Error()}
+	}
+	if err := cache.WriteOverlay(overlay, rawStatus); err != nil {
+		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, OverlayID: overlay.WorkspaceOverlayID, Warning: err.Error()}
+	}
+	freshness := projectscan.EvaluateFreshness(baseline.HeadSHA, &baseline, overlay)
+	return initProjectScanResult{
+		Status:     baseline.Status,
+		BaselineID: baseline.RepositoryBaselineProfileID,
+		OverlayID:  overlay.WorkspaceOverlayID,
+		Freshness:  freshness.Status,
+	}
+}
+
+func applyRepoBindingProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepoBindingInitOutput) {
+	result := runInitProjectScan(ctx, gitRoot, repoBindingID, options)
+	output.ProjectScanStatus = result.Status
+	output.ProjectScanBaselineID = result.BaselineID
+	output.ProjectScanOverlayID = result.OverlayID
+	output.ProjectScanFreshness = result.Freshness
+	output.ProjectScanWarning = result.Warning
+}
+
+func applyRepositoryContextProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepositoryContextInitOutput) {
+	result := runInitProjectScan(ctx, gitRoot, repoBindingID, options)
+	output.ProjectScanStatus = result.Status
+	output.ProjectScanBaselineID = result.BaselineID
+	output.ProjectScanOverlayID = result.OverlayID
+	output.ProjectScanFreshness = result.Freshness
+	output.ProjectScanWarning = result.Warning
+}
+
+func writeProjectScanText(b *strings.Builder, status string, baselineID string, freshness string, warning string) {
+	if status == "" {
+		return
+	}
+	fmt.Fprintf(b, "Project scan: %s", status)
+	if baselineID != "" {
+		fmt.Fprintf(b, " (%s)", baselineID)
+	}
+	if freshness != "" {
+		fmt.Fprintf(b, ", freshness: %s", freshness)
+	}
+	b.WriteByte('\n')
+	if warning != "" {
+		fmt.Fprintf(b, "Project scan warning: %s\n", warning)
+	}
+}
+
+func localConfigMessage(status string) string {
+	if status == localConfigStatusUnchanged {
+		return "Existing Goalrail project marker found and verified."
+	}
+	return "Commit .goalrail/project.yml and .goalrail/.gitignore with this repository."
+}
+
+func writeLocalConfigText(b *strings.Builder, message string, ignorePath string, ignoreStatus string) {
+	if ignorePath != "" {
+		fmt.Fprintf(b, "Local state ignore rules: %s (%s)\n", ignorePath, ignoreStatus)
+	}
+	if message != "" {
+		fmt.Fprintf(b, "%s\n", message)
+	}
 }
 
 func deriveSuggestedProjectSlug(provider string, repositoryFullName string) string {

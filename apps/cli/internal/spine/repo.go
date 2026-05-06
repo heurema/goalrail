@@ -88,6 +88,14 @@ type RepoBindingInitOutput struct {
 	NextCommand           string `json:"next_suggested_command"`
 	LocalConfigPath       string `json:"local_config_path"`
 	LocalConfigStatus     string `json:"local_config_status"`
+	LocalConfigMessage    string `json:"local_config_message,omitempty"`
+	LocalIgnorePath       string `json:"local_ignore_path"`
+	LocalIgnoreStatus     string `json:"local_ignore_status"`
+	ProjectScanStatus     string `json:"project_scan_status"`
+	ProjectScanBaselineID string `json:"project_scan_baseline_id,omitempty"`
+	ProjectScanOverlayID  string `json:"project_scan_overlay_id,omitempty"`
+	ProjectScanFreshness  string `json:"project_scan_freshness,omitempty"`
+	ProjectScanWarning    string `json:"project_scan_warning,omitempty"`
 }
 
 type RepositoryContextInitOutput struct {
@@ -109,9 +117,17 @@ type RepositoryContextInitOutput struct {
 	Message               string `json:"message"`
 	LocalConfigPath       string `json:"local_config_path"`
 	LocalConfigStatus     string `json:"local_config_status"`
+	LocalConfigMessage    string `json:"local_config_message,omitempty"`
+	LocalIgnorePath       string `json:"local_ignore_path"`
+	LocalIgnoreStatus     string `json:"local_ignore_status"`
 	ContextSnapshotID     string `json:"context_snapshot_id"`
 	ContextSnapshotStatus string `json:"context_snapshot_status"`
 	ContextFingerprint    string `json:"context_fingerprint"`
+	ProjectScanStatus     string `json:"project_scan_status"`
+	ProjectScanBaselineID string `json:"project_scan_baseline_id,omitempty"`
+	ProjectScanOverlayID  string `json:"project_scan_overlay_id,omitempty"`
+	ProjectScanFreshness  string `json:"project_scan_freshness,omitempty"`
+	ProjectScanWarning    string `json:"project_scan_warning,omitempty"`
 	NextCommand           string `json:"next_suggested_command"`
 }
 

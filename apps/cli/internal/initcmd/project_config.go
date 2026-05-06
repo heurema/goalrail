@@ -5,10 +5,12 @@ import "github.com/heurema/goalrail/apps/cli/internal/projectconfig"
 const (
 	projectConfigVersion            = projectconfig.Version
 	projectConfigRelativePath       = projectconfig.RelativePath
+	projectConfigIgnoreRelativePath = projectconfig.IgnoreRelativePath
 	projectConfigConflictMessage    = projectconfig.ConflictMessage
 	projectConfigUnparseableMessage = projectconfig.UnparseableMessage
 	localConfigStatusWritten        = projectconfig.StatusWritten
 	localConfigStatusUnchanged      = projectconfig.StatusUnchanged
+	localConfigStatusUpdated        = projectconfig.StatusUpdated
 )
 
 type projectConfig = projectconfig.Config
@@ -26,8 +28,16 @@ func writeProjectConfig(gitRoot string, config projectConfig) (string, error) {
 	return projectconfig.Write(gitRoot, config)
 }
 
+func ensureProjectConfigGitignore(gitRoot string) (string, error) {
+	return projectconfig.EnsureLocalStateGitignore(gitRoot)
+}
+
 func renderProjectConfigYAML(config projectConfig) string {
 	return projectconfig.RenderYAML(config)
+}
+
+func renderProjectConfigGitignore() string {
+	return projectconfig.RenderLocalStateGitignore()
 }
 
 func parseProjectConfigYAML(raw string) (projectConfig, error) {

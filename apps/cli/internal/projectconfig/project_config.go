@@ -15,11 +15,23 @@ import (
 const (
 	Version            = 1
 	RelativePath       = ".goalrail/project.yml"
+	IgnoreRelativePath = ".goalrail/.gitignore"
 	ConflictMessage    = "local .goalrail/project.yml is bound to a different GoalRail project or repository; remove it or use a future repair command"
 	UnparseableMessage = "local .goalrail/project.yml could not be parsed as a GoalRail project marker; remove it or use a future repair command"
 	StatusWritten      = "written"
 	StatusUnchanged    = "unchanged"
+	StatusUpdated      = "updated"
 )
+
+var localStateIgnoreRules = []string{
+	"/local/",
+	"/cache/",
+	"/state/",
+	"/tmp/",
+	"*.local.yml",
+	"*.local.toml",
+	"*.local.json",
+}
 
 type Config struct {
 	Version        int
@@ -105,6 +117,42 @@ func Write(gitRoot string, config Config) (string, error) {
 	return StatusWritten, nil
 }
 
+func EnsureLocalStateGitignore(gitRoot string) (string, error) {
+	if strings.TrimSpace(gitRoot) == "" {
+		return "", exitcode.UsageError(errors.New("server-backed init requires a Git root to write .goalrail/.gitignore"))
+	}
+
+	path := filepath.Join(gitRoot, IgnoreRelativePath)
+	desired := RenderLocalStateGitignore()
+	existing, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return "", exitcode.RuntimeError(fmt.Errorf("create .goalrail directory: %w", err))
+		}
+		if err := os.WriteFile(path, []byte(desired), 0o644); err != nil {
+			return "", exitcode.RuntimeError(fmt.Errorf("write local .goalrail/.gitignore: %w", err))
+		}
+		return StatusWritten, nil
+	}
+	if err != nil {
+		return "", exitcode.RuntimeError(fmt.Errorf("read local .goalrail/.gitignore: %w", err))
+	}
+
+	missing := missingLocalStateIgnoreRules(string(existing))
+	if len(missing) == 0 {
+		return StatusUnchanged, nil
+	}
+	updated := appendMissingIgnoreRules(string(existing), missing)
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return "", exitcode.RuntimeError(fmt.Errorf("write local .goalrail/.gitignore: %w", err))
+	}
+	return StatusUpdated, nil
+}
+
+func RenderLocalStateGitignore() string {
+	return strings.Join(localStateIgnoreRules, "\n") + "\n"
+}
+
 func RenderYAML(config Config) string {
 	version := config.Version
 	if version == 0 {
@@ -122,6 +170,37 @@ func RenderYAML(config Config) string {
 	fmt.Fprintf(&b, "  full_name: %s\n", QuoteYAMLString(config.Repository.FullName))
 	fmt.Fprintf(&b, "  url: %s\n", QuoteYAMLString(config.Repository.URL))
 	fmt.Fprintf(&b, "  workflow_base_branch: %s\n", QuoteYAMLString(config.Repository.WorkflowBaseBranch))
+	return b.String()
+}
+
+func missingLocalStateIgnoreRules(raw string) []string {
+	present := map[string]struct{}{}
+	for _, line := range strings.Split(raw, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		present[trimmed] = struct{}{}
+	}
+	missing := []string{}
+	for _, rule := range localStateIgnoreRules {
+		if _, ok := present[rule]; !ok {
+			missing = append(missing, rule)
+		}
+	}
+	return missing
+}
+
+func appendMissingIgnoreRules(raw string, missing []string) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(raw, "\n"))
+	if b.Len() > 0 {
+		b.WriteString("\n")
+	}
+	for _, rule := range missing {
+		b.WriteString(rule)
+		b.WriteString("\n")
+	}
 	return b.String()
 }
 
