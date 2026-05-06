@@ -8,6 +8,10 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE UNIQUE INDEX users_email_lower_unique
+    ON users (lower(email))
+    WHERE email <> '';
+
 CREATE TABLE user_password_credentials (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     password_hash TEXT NOT NULL,
@@ -677,4 +681,5 @@ DROP INDEX IF EXISTS user_sessions_user_state_idx;
 DROP TABLE IF EXISTS user_sessions;
 DROP INDEX IF EXISTS user_password_credentials_must_change_password_idx;
 DROP TABLE IF EXISTS user_password_credentials;
+DROP INDEX IF EXISTS users_email_lower_unique;
 DROP TABLE IF EXISTS users;

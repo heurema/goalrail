@@ -17,6 +17,9 @@ type RouteHandlers struct {
 	AuthChangePassword        http.Handler
 	AuthLogout                http.Handler
 	Me                        http.Handler
+	OrganizationUsersList     http.Handler
+	OrganizationUsersCreate   http.Handler
+	OrganizationUsersPatch    http.Handler
 	RepositoryContextInit     http.Handler
 	RepositoryContextSnapshot http.Handler
 	ProjectRepoBindingInit    http.Handler
@@ -55,6 +58,9 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/auth/change-password", mustHandler("auth change password", handlers.AuthChangePassword))
 	mux.Handle("POST /v1/auth/logout", mustHandler("auth logout", handlers.AuthLogout))
 	mux.Handle("GET /v1/me", mustHandler("me", handlers.Me))
+	mux.Handle("GET /v1/organizations/{organization_id}/users", mustHandler("organization users list", handlers.OrganizationUsersList))
+	mux.Handle("POST /v1/organizations/{organization_id}/users", mustHandler("organization users create", handlers.OrganizationUsersCreate))
+	mux.Handle("PATCH /v1/organizations/{organization_id}/users/{user_id}", mustHandler("organization users patch", handlers.OrganizationUsersPatch))
 	mux.Handle("POST /v1/init/repository-context", mustHandler("repository context init", handlers.RepositoryContextInit))
 	mux.Handle("POST /v1/repo-bindings/{repo_binding_id}/context-snapshots", mustHandler("repository context snapshot", handlers.RepositoryContextSnapshot))
 	mux.Handle("POST /v1/projects/{project_id}/repo-bindings/init", mustHandler("project repo binding init", handlers.ProjectRepoBindingInit))

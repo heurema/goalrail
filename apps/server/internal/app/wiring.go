@@ -23,6 +23,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/repositorycontext"
 	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
 	"github.com/heurema/goalrail/apps/server/internal/store"
+	"github.com/heurema/goalrail/apps/server/internal/usermanagement"
 	"github.com/heurema/goalrail/apps/server/internal/version"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
@@ -43,6 +44,7 @@ type postgresStores struct {
 	workItemProposals     *store.PostgresWorkItemPlanProposalStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
+	userManagement        *store.PostgresUserManagementStore
 }
 
 func newPostgresStores(pool *pgxpool.Pool) postgresStores {
@@ -61,6 +63,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		workItemProposals:     store.NewPostgresWorkItemPlanProposalStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
+		userManagement:        store.NewPostgresUserManagementStore(pool),
 	}
 }
 
@@ -75,6 +78,7 @@ type appServices struct {
 	repositoryInit    *repositoryinit.Service
 	repositoryContext *repositorycontext.Service
 	auth              *auth.Service
+	userManagement    *usermanagement.Service
 }
 
 func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRunner, authJWTSecret string) appServices {
@@ -95,6 +99,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
 		auth:              auth.NewService(stores.auth, authJWTSecret),
+		userManagement:    usermanagement.NewService(stores.userManagement, txRunner),
 	}
 }
 
@@ -109,6 +114,7 @@ type appHandlers struct {
 	repositoryInit    *httpserver.RepositoryInitHandler
 	repositoryContext *httpserver.RepositoryContextSnapshotHandler
 	auth              *httpserver.AuthHandler
+	userManagement    *httpserver.OrganizationUsersHandler
 }
 
 func newAppHandlers(services appServices) appHandlers {
@@ -123,6 +129,7 @@ func newAppHandlers(services appServices) appHandlers {
 		repositoryInit:    httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
 		repositoryContext: httpserver.NewRepositoryContextSnapshotHandler(services.auth, services.repositoryContext),
 		auth:              httpserver.NewAuthHandler(services.auth),
+		userManagement:    httpserver.NewOrganizationUsersHandler(services.auth, services.userManagement),
 	}
 }
 
@@ -139,6 +146,9 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		AuthChangePassword:        http.HandlerFunc(h.auth.ChangePassword),
 		AuthLogout:                http.HandlerFunc(h.auth.Logout),
 		Me:                        http.HandlerFunc(h.auth.Me),
+		OrganizationUsersList:     http.HandlerFunc(h.userManagement.List),
+		OrganizationUsersCreate:   http.HandlerFunc(h.userManagement.Create),
+		OrganizationUsersPatch:    http.HandlerFunc(h.userManagement.Patch),
 		RepositoryContextInit:     http.HandlerFunc(h.repositoryInit.Init),
 		RepositoryContextSnapshot: http.HandlerFunc(h.repositoryContext.Record),
 		ProjectRepoBindingInit:    http.HandlerFunc(h.repoBinding.Init),
@@ -202,6 +212,9 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		AuthChangePassword:        unavailable,
 		AuthLogout:                unavailable,
 		Me:                        unavailable,
+		OrganizationUsersList:     unavailable,
+		OrganizationUsersCreate:   unavailable,
+		OrganizationUsersPatch:    unavailable,
 		RepositoryContextInit:     unavailable,
 		RepositoryContextSnapshot: unavailable,
 		ProjectRepoBindingInit:    unavailable,

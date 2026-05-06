@@ -37,6 +37,57 @@ func TestPostgresIntakeStoreCreateBuildsDurableInsert(t *testing.T) {
 	}
 }
 
+func TestPostgresUserManagementStoreCreateUserBuildsPlainInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresUserManagementStoreWithExecutorAndQuerier(exec, nil, nil)
+
+	created, err := store.CreateUser(ctx, spine.User{
+		ID:          "018f0000-0000-7000-8000-000000000201",
+		DisplayName: "Dev",
+		Email:       "dev@example.com",
+		State:       spine.EntityStateActive,
+		CreatedAt:   testStoreTime(),
+		UpdatedAt:   testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	if !created {
+		t.Fatal("CreateUser() created = false, want true")
+	}
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO users") {
+		t.Fatalf("SQL = %q, want users insert", call.sql)
+	}
+	if strings.Contains(call.sql, "ON CONFLICT") {
+		t.Fatalf("SQL = %q, should not require expression-index conflict handling", call.sql)
+	}
+}
+
+func TestPostgresUserManagementStoreCreateUserTreatsLowerEmailUniqueViolationAsNotCreated(t *testing.T) {
+	ctx := context.Background()
+	store := NewPostgresUserManagementStoreWithExecutorAndQuerier(uniqueViolationExecer{constraint: "users_email_lower_unique"}, nil, nil)
+
+	created, err := store.CreateUser(ctx, spine.User{
+		ID:          "018f0000-0000-7000-8000-000000000201",
+		DisplayName: "Dev",
+		Email:       "dev@example.com",
+		State:       spine.EntityStateActive,
+		CreatedAt:   testStoreTime(),
+		UpdatedAt:   testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	if created {
+		t.Fatal("CreateUser() created = true, want false")
+	}
+}
+
 func TestPostgresIntakeStoreGetScansRecord(t *testing.T) {
 	ctx := context.Background()
 	now := testStoreTime()

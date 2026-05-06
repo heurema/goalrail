@@ -21,7 +21,10 @@ type RepositoryContextSnapshotID string
 
 type EntityState string
 
-const EntityStateActive EntityState = "active"
+const (
+	EntityStateActive   EntityState = "active"
+	EntityStateInactive EntityState = "inactive"
+)
 
 type InstallationMode string
 
