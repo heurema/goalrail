@@ -99,14 +99,16 @@ func (s *PostgresUserManagementStore) CreateUser(ctx context.Context, user spine
 	stmt := s.psql.
 		Insert("users").
 		Columns("id", "display_name", "email", "state", "created_at", "updated_at").
-		Values(userID, user.DisplayName, user.Email, user.State, createdAt, updatedAt).
-		Suffix("ON CONFLICT (lower(email)) WHERE email <> '' DO NOTHING")
+		Values(userID, user.DisplayName, user.Email, user.State, createdAt, updatedAt)
 	sqlText, args, err := stmt.ToSql()
 	if err != nil {
 		return false, fmt.Errorf("create user SQL: %w", err)
 	}
 	tag, err := s.exec.Exec(ctx, sqlText, args...)
 	if err != nil {
+		if uniqueViolationConstraint(err) == "users_email_lower_unique" {
+			return false, nil
+		}
 		return false, fmt.Errorf("create user: %w", err)
 	}
 	return tag.RowsAffected() == 1, nil
