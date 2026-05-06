@@ -94,6 +94,58 @@ func TestNoBrowserPrintsURLInsteadOfOpeningBrowser(t *testing.T) {
 	}
 }
 
+func TestNoBrowserAfterServerURLMatchesUsage(t *testing.T) {
+	var stdout, stderr strings.Builder
+	opened := false
+	err := Run(context.Background(), term.New(&stdout, &stderr), []string{"http://localhost:8080", "--no-browser"}, Options{
+		Store:           fakeStore{},
+		HTTPClient:      fakeHTTPClient{},
+		OpenBrowser:     func(string) error { opened = true; return nil },
+		skipWaitForTest: true,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if opened {
+		t.Fatal("OpenBrowser was called with --no-browser")
+	}
+	if !strings.Contains(stdout.String(), "http://localhost:8080/cli/login") {
+		t.Fatalf("stdout = %q, want printed browser URL", stdout.String())
+	}
+}
+
+func TestNoBrowserLegacyFlagFormsMatchFlagSet(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantOpened bool
+	}{
+		{name: "single dash before server", args: []string{"-no-browser", "http://localhost:8080"}},
+		{name: "single dash after server", args: []string{"http://localhost:8080", "-no-browser"}},
+		{name: "single dash true value", args: []string{"-no-browser=true", "http://localhost:8080"}},
+		{name: "double dash true value", args: []string{"http://localhost:8080", "--no-browser=true"}},
+		{name: "double dash false value", args: []string{"--no-browser=false", "http://localhost:8080"}, wantOpened: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr strings.Builder
+			opened := false
+			err := Run(context.Background(), term.New(&stdout, &stderr), tt.args, Options{
+				Store:           fakeStore{},
+				HTTPClient:      fakeHTTPClient{},
+				OpenBrowser:     func(string) error { opened = true; return nil },
+				skipWaitForTest: true,
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if opened != tt.wantOpened {
+				t.Fatalf("OpenBrowser called = %v, want %v", opened, tt.wantOpened)
+			}
+		})
+	}
+}
+
 func TestCodeChallengeS256(t *testing.T) {
 	got := CodeChallengeS256("cli-code-verifier")
 	if got == "" || strings.Contains(got, "=") {
