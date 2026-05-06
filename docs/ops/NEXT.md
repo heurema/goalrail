@@ -406,11 +406,13 @@ Done means:
   `/v1/me`, creates `/v1/intakes`, and promotes through
   `/v1/intakes/{id}/goals`
 - ✅ `goalrail agent install` explicitly installs provider-neutral repo-local
-  Agent Pack v0 files under `.goalrail/agent/` for local coding agents; it does
-  not install Codex, Claude, Gemini, Cursor, Windsurf, Gravity, or other
-  provider-specific adapters
+  Agent Pack v0 files under `.goalrail/agent/` for local coding agents and may
+  create a tiny root `AGENTS.md` shim only when missing; it does not overwrite
+  existing root agent instructions and does not install Claude, Gemini, Cursor,
+  Windsurf, Gravity, or other provider-specific adapters
 - ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
-  bodies from a file or stdin while preserving stable JSON output
+  bodies from a file or stdin while returning a `goalrail.cli.v1` JSON envelope
+  with `display.summary` and a planned unavailable Slice B continuation action
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -418,8 +420,9 @@ Done means:
 - no root `.gitignore` mutation for Goalrail local-state ignores
 - no audit/hook/branch/verification setup from init
 - no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
-  integration, provider shim, branch, PR, hook, clone, or deploy-key setup from
-  `work start` or `agent install`
+  integration, provider shim, branch, PR, hook, clone, deploy-key setup,
+  readiness reconciliation, `work continue`, `work answer`, or contract draft
+  CLI from `work start` or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint

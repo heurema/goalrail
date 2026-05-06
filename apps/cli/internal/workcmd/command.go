@@ -24,6 +24,7 @@ import (
 
 const (
 	serverMode           = "server"
+	cliSchemaVersion     = "goalrail.cli.v1"
 	nextSuggestedCommand = "goalrail project status"
 	workStartedMessage   = "Work intake started."
 	workStartedNote      = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
@@ -181,17 +182,28 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	}
 
 	output := spine.WorkStartOutput{
-		Mode:                 serverMode,
-		ServerURL:            serverURL,
-		OrganizationID:       intake.OrganizationID,
-		ProjectID:            intake.ProjectID,
-		RepoBindingID:        intake.RepoBindingID,
-		IntakeID:             intake.IntakeID,
-		IntakeState:          intake.State,
-		GoalID:               goal.ID,
-		GoalState:            goal.State,
-		Title:                normalizedTitle,
-		LocalConfigPath:      projectconfig.RelativePath,
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  intake.OrganizationID,
+		ProjectID:       intake.ProjectID,
+		RepoBindingID:   intake.RepoBindingID,
+		IntakeID:        intake.IntakeID,
+		IntakeState:     intake.State,
+		GoalID:          goal.ID,
+		GoalState:       goal.State,
+		Title:           normalizedTitle,
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Created an IntakeRecord and promoted it to a Goal. Work continuation is planned for Slice B and is not available yet.",
+		},
+		NextAction: spine.NextAction{
+			Kind:         "continue_goal",
+			Blocking:     false,
+			Command:      fmt.Sprintf("goalrail work continue --goal-id %s --format json", goal.ID),
+			Available:    false,
+			PlannedSlice: "B",
+		},
 		Message:              workStartedMessage,
 		NextSuggestedCommand: nextSuggestedCommand,
 	}
@@ -227,6 +239,9 @@ func renderStartText(output spine.WorkStartOutput) string {
 		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", workStartedNote, output.NextSuggestedCommand)
+	if output.NextAction.Command != "" && !output.NextAction.Available {
+		fmt.Fprintf(&b, "Planned continuation, not available yet: %s\n", output.NextAction.Command)
+	}
 	return b.String()
 }
 
