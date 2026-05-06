@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
@@ -19,6 +19,15 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function deferredResponse() {
+  let resolve!: (response: Response) => void;
+  const promise = new Promise<Response>((next) => {
+    resolve = next;
+  });
+
+  return { promise, resolve };
 }
 
 function loginResponse(overrides: Partial<Record<string, unknown>> = {}) {
@@ -386,6 +395,45 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Contract was not found.');
     expect(screen.getAllByText('Check the ID and try again.').length).toBeGreaterThan(0);
     expect(document.body).not.toHaveTextContent(/C-0147|trialops-demo|billing-api|frontend-console/i);
+  });
+
+  it('keeps the latest contract lookup when an earlier response resolves last', async () => {
+    await loginSuccessfully();
+    const firstLookup = deferredResponse();
+    const secondLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => firstLookup.promise);
+    fetchMock.mockImplementationOnce(() => secondLookup.promise);
+    const contractIdInput = screen.getByLabelText(/^Contract ID$/i);
+    const contractForm = contractIdInput.closest('form');
+
+    expect(contractForm).not.toBeNull();
+
+    fireEvent.change(contractIdInput, {
+      target: { value: 'contract-A' },
+    });
+    fireEvent.submit(contractForm as HTMLFormElement);
+
+    fireEvent.change(contractIdInput, {
+      target: { value: 'contract-B' },
+    });
+    fireEvent.submit(contractForm as HTMLFormElement);
+
+    await act(async () => {
+      secondLookup.resolve(jsonResponse(contractResponse({ id: 'contract-B', current_draft_id: 'draft-B' })));
+    });
+
+    await screen.findByText('draft-B');
+
+    await act(async () => {
+      firstLookup.resolve(jsonResponse(contractResponse({ id: 'contract-A', current_draft_id: 'draft-A' })));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('draft-B')).toBeInTheDocument();
+      expect(screen.queryByText('draft-A')).not.toBeInTheDocument();
+    });
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts/contract-A');
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-B');
   });
 
   it('theme storage remains exactly goalrail.console.theme', async () => {

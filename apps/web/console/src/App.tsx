@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -213,6 +213,7 @@ function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Omit<ConsoleUser, 'id'>>(EMPTY_DRAFT);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const contractLookupSequence = useRef(0);
 
   useEffect(() => {
     document.documentElement.lang = activeLocale;
@@ -330,6 +331,7 @@ function App() {
   }
 
   function resetAuthState() {
+    contractLookupSequence.current += 1;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -349,6 +351,7 @@ function App() {
     const accessToken = tokens?.accessToken;
 
     if (!contractId) {
+      contractLookupSequence.current += 1;
       setContractError(translate('surfaces.contracts.lookupMissing'));
       setContractLoadStatus('error');
       setContract(null);
@@ -361,15 +364,23 @@ function App() {
       return;
     }
 
+    const lookupSequence = contractLookupSequence.current + 1;
+    contractLookupSequence.current = lookupSequence;
     setContractLoadStatus('loading');
     setContractError('');
     setContract(null);
 
     try {
       const found = await getContract(accessToken, contractId);
+      if (contractLookupSequence.current !== lookupSequence) {
+        return;
+      }
       setContract(found);
       setContractLoadStatus('loaded');
     } catch (error) {
+      if (contractLookupSequence.current !== lookupSequence) {
+        return;
+      }
       setContract(null);
       if (isAuthClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
