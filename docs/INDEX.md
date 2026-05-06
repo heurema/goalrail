@@ -96,7 +96,7 @@ related_docs:
 53. `docs/adr/ADR-0022-installation-boundary.md`
 54. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
 55. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
-56. `docs/adr/ADR-0026-agent-pack-boundary.md`
+56. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
 57. `docs/adr/ADR-0027-organization-user-management-boundary.md`
 
 ### 7. Governance and change control
@@ -206,9 +206,9 @@ related_docs:
 - `ADR-0025` — repository baseline profile lifecycle; local Project Scan,
   immutable committed-state baseline, separate workspace overlay, and
   task-specific context packs without server-side clone or checks
-- `ADR-0026` — provider-neutral repo-local Agent Pack boundary; explicit
-  `goalrail agent install`, no provider-specific files by default, server-owned
-  canonical state
+- `ADR-0026` — agent-driven pull-loop protocol through Goalrail CLI;
+  server-owned canonical state, CLI as local repo/transport bridge, local agent
+  as UX layer, and Agent Pack as bootstrap guidance
 - `ADR-0027` — Organization user management boundary; future
   Console-backed server API, owner-only v0 authorization, canonical `User` plus
   `OrganizationMembership`, one-time temporary password handling, and no CLI

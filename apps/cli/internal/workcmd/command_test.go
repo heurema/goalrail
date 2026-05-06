@@ -85,6 +85,22 @@ func TestRunStartCreatesIntakeAndPromotesGoal(t *testing.T) {
 	if output.IntakeID != "018f0000-0000-7000-8000-000000000005" || output.GoalID != "018f0000-0000-7000-8000-000000000006" {
 		t.Fatalf("output intake/goal = %q/%q, want server ids", output.IntakeID, output.GoalID)
 	}
+	if output.SchemaVersion != "goalrail.cli.v1" {
+		t.Fatalf("schema_version = %q, want goalrail.cli.v1", output.SchemaVersion)
+	}
+	if output.Display.Summary == "" {
+		t.Fatal("display.summary is empty")
+	}
+	if output.NextAction.Kind != "continue_goal" || output.NextAction.Blocking || output.NextAction.Available {
+		t.Fatalf("next_action = %#v, want unavailable continue_goal", output.NextAction)
+	}
+	wantCommand := "goalrail work continue --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
+	if output.NextAction.Command != wantCommand {
+		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
+	}
+	if output.NextAction.PlannedSlice != "B" {
+		t.Fatalf("next_action.planned_slice = %q, want B", output.NextAction.PlannedSlice)
+	}
 	if intakeRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || intakeRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("intake project context = %#v, want marker IDs", intakeRequest)
 	}
@@ -297,6 +313,33 @@ func TestRunStartHelpUsage(t *testing.T) {
 	}
 	if got := stdout.String(); !strings.Contains(got, "Usage: goalrail work start --title <title>") {
 		t.Fatalf("stdout = %q, want work start usage", got)
+	}
+}
+
+func TestRunStartTextKeepsAvailableNextAndMarksPlannedContinuation(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := newWorkStartFakeServer(t)
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"start", "--title", "Text output"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work start text) error = %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Next: goalrail project status") {
+		t.Fatalf("stdout = %q, want real project status next command", got)
+	}
+	wantPlanned := "Planned continuation, not available yet: goalrail work continue --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
+	if !strings.Contains(got, wantPlanned) {
+		t.Fatalf("stdout = %q, want planned continuation", got)
 	}
 }
 
