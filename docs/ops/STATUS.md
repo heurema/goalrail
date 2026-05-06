@@ -90,8 +90,9 @@ refresh-token state without refresh-token rotation, revokes the current
 session on bearer-token logout, and resolves current user membership
 server-side instead of trusting role claims in JWTs. ADR-0027 documents the
 Organization user-management boundary as Console-backed server API routes, not
-CLI user creation; the backend admin user API now exists, while persisted
-Console Users UI remains unimplemented. `goalrail login
+CLI user creation; the backend admin user API exists, and the canonical
+Console Users UI now consumes it for Organization user list/create/patch.
+`goalrail login
 <server_url>` now starts a localhost loopback listener, opens or prints the
 server CLI login URL, exchanges a one-time code for tokens, and stores token
 metadata in a local 0600 auth file. `GET /cli/login` and `POST /cli/login`
@@ -102,8 +103,8 @@ the main `https://goalrail.dev` deployment routes it to
 `https://api.goalrail.dev` through the `11me/infra` Flux GitOps path. The
 legacy `https://console.goalrail.ru/` deployment remains separate. SaaS
 onboarding, organization creation API, public registration, keychain
-integration, Organization / Project / RepoBinding profile selection, backend
-admin user-management API, and persisted Console Users UI remain unimplemented.
+integration, Organization / Project / RepoBinding profile selection, and CLI
+user creation remain unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, the operator-managed Go sidecar deployment plus public DNS/live smoke
@@ -143,7 +144,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, Users add/edit UI in component state only, and no user-settings persistence, analytics, or product-loop behavior; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
+- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, and API-backed Organization Users list/create/edit using `/v1/me` organization context plus the ADR-0027 Organization user-management routes; temporary passwords are shown only from the immediate create response and are not persisted in browser storage; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -337,7 +338,7 @@ The project currently has:
 - `.punk/publishing.local.toml` is the ignored local-only manual-bootstrap pointer; resolver/runtime implementation is pending
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
-- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, an ops-style Contracts surface that can load one real public Contract aggregate by explicit `contract_id` through `GET /v1/contracts/{id}`, structured empty Delivery Readiness and Proof surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, and Users table rendering `/v1/me` only; the main deployment is live at `https://goalrail.dev` and uses `https://api.goalrail.dev` through `11me/infra` Flux GitOps
+- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, an ops-style Contracts surface that can load one real public Contract aggregate by explicit `contract_id` through `GET /v1/contracts/{id}`, structured empty Delivery Readiness and Proof surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, and API-backed Organization Users list/create/edit using `/v1/me` organization context plus the ADR-0027 routes; the main deployment is live at `https://goalrail.dev` and uses `https://api.goalrail.dev` through `11me/infra` Flux GitOps
 - `apps/web/demo-change-packet` is the current React + Vite + Mantine EN change-packet demo prototype, deployed through standalone infra at `demo.goalrail.dev`
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, deployed through standalone infra at `demo.goalrail.ru` rather than in-app i18n
 - `apps/web/console-ru` source has been removed. The live `https://console.goalrail.ru/` deployment remains a separate legacy RU static release and is not migrated by the main `goalrail.dev` slice.
@@ -464,8 +465,8 @@ The project currently has:
 - no runnable eval harness yet
 - no gate/proof implementation; `proof show` only renders provided local JSON, and the server does not create decisions or proof
 - no advisory panel implementation
-- no persisted Console Users UI, `goalrail users create` command, data-backed
-  Goalrail web UI, or goal-to-proof product loop yet
+- no `goalrail users create` command, data-backed Goalrail goal-to-proof web
+  UI, or goal-to-proof product loop yet
 - RU pilot landing static files are uploaded to the operator-managed SSH server; the repository source for D-0056/D-0057/D-0058/D-0059/D-0061 lead capture and digest is now a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, replacing the transitional PHP source in repo; on 2026-04-30 the operator-managed server wiring moved from the earlier PHP-FPM endpoint to the Go sidecar; the server-local Resend HTTPS mail transport uses `skill7.dev` sender and server-local API key, with local sendmail/Postfix fallback where available, server-local direct notification override configured outside the repo, fallback to `pilot@goalrail.dev`, public/manual pilot contact `pilot@goalrail.dev`, visible Telegram channel `@goalrail`, JSONL-based duplicate suppression, daily previous-day digest cron at 07:00 GMT+3 when leads exist, local JSONL lead log with UTC and GMT+3 submission fields for new rows, no user-agent storage for new rows, and D-0061 notification status so failed mail notifications remain retryable while in-flight attempts do not start duplicate mail delivery; D-0065 adds a local dry-run-first purge command for JSONL retention, and reverse-proxy rate limiting is applied as an operator-managed deployment guardrail without committed config; server-local Go sidecar, digest dry-run, purge dry-run, public DNS, public HTTPS, and public `/api/pilot-lead` smoke passed
 - no tracker sync
 - no proof-producing demo
