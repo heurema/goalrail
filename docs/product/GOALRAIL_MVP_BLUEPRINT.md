@@ -25,6 +25,7 @@ related_docs:
   - docs/adr/ADR-0022-installation-boundary.md
   - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
+  - docs/adr/ADR-0027-organization-user-management-boundary.md
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
 ---
 # Goalrail MVP Blueprint
@@ -157,6 +158,14 @@ Initial Project / repo context:
   registration; temporary passwords, first-login password change, short-lived
   JWT access tokens, opaque DB-backed refresh tokens, and browser-loopback
   `goalrail login` are auth/CLI directions, not implemented product behavior yet
+- Organization user management is a future Console-backed server API boundary,
+  not CLI user creation. The canonical identity remains `User`; Organization
+  access remains `OrganizationMembership`; password credentials stay separate
+  from `users`; temporary passwords are backend-generated, shown once, never
+  persisted in plaintext or stored in browser storage, and require first-login
+  password change. The CLI is for login and delivery/runtime commands after a
+  user already exists; there is no separate CLI-user entity and no
+  `goalrail users create` command in v0.
 - Project is a delivery container inside an Organization
 - Project is not a repository
 - RepoBinding stores the repository reference directly in the MVP

@@ -88,7 +88,10 @@ It verifies existing `user_password_credentials`, creates server-owned
 `GOALRAIL_AUTH_JWT_SECRET`, refreshes access tokens from opaque DB-backed
 refresh-token state without refresh-token rotation, revokes the current
 session on bearer-token logout, and resolves current user membership
-server-side instead of trusting role claims in JWTs. `goalrail login
+server-side instead of trusting role claims in JWTs. ADR-0027 documents the
+future Organization user-management boundary as Console-backed server API
+routes, not CLI user creation; the backend admin user API and persisted Console
+Users UI remain unimplemented. `goalrail login
 <server_url>` now starts a localhost loopback listener, opens or prints the
 server CLI login URL, exchanges a one-time code for tokens, and stores token
 metadata in a local 0600 auth file. `GET /cli/login` and `POST /cli/login`
@@ -99,8 +102,8 @@ the main `https://goalrail.dev` deployment routes it to
 `https://api.goalrail.dev` through the `11me/infra` Flux GitOps path. The
 legacy `https://console.goalrail.ru/` deployment remains separate. SaaS
 onboarding, organization creation API, public registration, keychain
-integration, Organization / Project / RepoBinding profile selection, and admin
-user management remain unimplemented.
+integration, Organization / Project / RepoBinding profile selection, backend
+admin user-management API, and persisted Console Users UI remain unimplemented.
 
 Current risk note: the stabilization tranche is complete repo-side through
 D-0065, the operator-managed Go sidecar deployment plus public DNS/live smoke
@@ -134,7 +137,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-four kernel/CLI/server/domain boundary ADRs
+- twenty-six kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -282,6 +285,19 @@ The project currently has:
   remains local-only and does not add server baseline persistence, server clone,
   source upload, background daemon, runner, context-pack generation, gate, or
   proof.
+- ADR-0027 documents the Organization user management boundary:
+  future regular Organization users are created through Console UI backed by
+  server API, not through CLI user creation; canonical identity is `User`,
+  access is `OrganizationMembership`, password credentials stay separate from
+  `users`, temporary passwords are backend-generated and shown once, v0
+  user-management authorization is owner-only, role checks load current
+  membership server-side, cross-organization attempts are rejected, and the
+  last active owner cannot be disabled or demoted. The documented future routes
+  are `GET /v1/organizations/{organization_id}/users`,
+  `POST /v1/organizations/{organization_id}/users`, and
+  `PATCH /v1/organizations/{organization_id}/users/{user_id}`. These routes
+  are not implemented, Settings / Users remains component-state only, and
+  there is no `goalrail users create` command.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,
   mounted-workspace checkout flow, provider credential storage, VcsConnection,
   OAuth, provider client, gate, or proof exists yet.
@@ -306,7 +322,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-four boundary ADRs exist
+- kernel schema note and twenty-six boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -444,7 +460,9 @@ The project currently has:
 - no runnable eval harness yet
 - no gate/proof implementation; `proof show` only renders provided local JSON, and the server does not create decisions or proof
 - no advisory panel implementation
-- no data-backed Goalrail web UI or goal-to-proof product loop yet
+- no backend admin Organization user-management API, persisted Console Users UI,
+  `goalrail users create` command, data-backed Goalrail web UI, or goal-to-proof
+  product loop yet
 - RU pilot landing static files are uploaded to the operator-managed SSH server; the repository source for D-0056/D-0057/D-0058/D-0059/D-0061 lead capture and digest is now a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, replacing the transitional PHP source in repo; on 2026-04-30 the operator-managed server wiring moved from the earlier PHP-FPM endpoint to the Go sidecar; the server-local Resend HTTPS mail transport uses `skill7.dev` sender and server-local API key, with local sendmail/Postfix fallback where available, server-local direct notification override configured outside the repo, fallback to `pilot@goalrail.dev`, public/manual pilot contact `pilot@goalrail.dev`, visible Telegram channel `@goalrail`, JSONL-based duplicate suppression, daily previous-day digest cron at 07:00 GMT+3 when leads exist, local JSONL lead log with UTC and GMT+3 submission fields for new rows, no user-agent storage for new rows, and D-0061 notification status so failed mail notifications remain retryable while in-flight attempts do not start duplicate mail delivery; D-0065 adds a local dry-run-first purge command for JSONL retention, and reverse-proxy rate limiting is applied as an operator-managed deployment guardrail without committed config; server-local Go sidecar, digest dry-run, purge dry-run, public DNS, public HTTPS, and public `/api/pilot-lead` smoke passed
 - no tracker sync
 - no proof-producing demo
