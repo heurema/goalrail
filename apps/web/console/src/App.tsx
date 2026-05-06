@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next';
 
 import {
   changePassword,
+  getContract,
   isAuthClientError,
   login as loginWithPassword,
   logout as logoutSession,
   me as fetchCurrentProfile,
 } from './authClient';
-import type { AuthClientError, LoginResponse, MeResponse } from './authClient';
+import type { AuthClientError, ContractResponse, LoginResponse, MeResponse } from './authClient';
 import { isSupportedLocale, updateLocaleQueryParam } from './i18n/locale';
 import type { ConsoleLocale } from './i18n/resources';
 
@@ -22,6 +23,7 @@ type UserRole = 'owner' | 'member' | 'observer';
 type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
 type RoleFilter = UserRole | 'all';
 type StatusFilter = UserStatus | 'all';
+type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type AuthStatus =
   | 'unauthenticated'
   | 'logging_in'
@@ -76,9 +78,6 @@ const THEMES: ThemePreset[] = [
 const THEME_STORAGE_KEY = 'goalrail.console.theme';
 
 const INITIAL_USERS: ConsoleUser[] = [
-  { id: 'u1', name: 'Owner', email: 'owner@example.com', role: 'owner', status: 'active' },
-  { id: 'u2', name: 'Product Lead', email: 'product@example.com', role: 'member', status: 'pending' },
-  { id: 'u3', name: 'Reviewer', email: 'reviewer@example.com', role: 'observer', status: 'active' },
 ];
 
 const EMPTY_DRAFT: Omit<ConsoleUser, 'id'> = {
@@ -180,6 +179,10 @@ function App() {
   const [screen, setScreen] = useState<ScreenId>('console');
   const [activeTheme, setActiveTheme] = useState<ThemeId>(() => readStoredTheme());
   const [users, setUsers] = useState<ConsoleUser[]>(INITIAL_USERS);
+  const [contractIdInput, setContractIdInput] = useState('');
+  const [contractLoadStatus, setContractLoadStatus] = useState<ContractLoadStatus>('idle');
+  const [contractError, setContractError] = useState('');
+  const [contract, setContract] = useState<ContractResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -310,6 +313,53 @@ function App() {
     setPasswordChangeError('');
     setScreen('console');
     setIsDrawerOpen(false);
+    setContractIdInput('');
+    setContractLoadStatus('idle');
+    setContractError('');
+    setContract(null);
+  }
+
+  async function handleContractLookup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const contractId = contractIdInput.trim();
+    const accessToken = tokens?.accessToken;
+
+    if (!contractId) {
+      setContractError(translate('surfaces.contracts.lookupMissing'));
+      setContractLoadStatus('error');
+      setContract(null);
+      return;
+    }
+
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    setContractLoadStatus('loading');
+    setContractError('');
+    setContract(null);
+
+    try {
+      const found = await getContract(accessToken, contractId);
+      setContract(found);
+      setContractLoadStatus('loaded');
+    } catch (error) {
+      setContract(null);
+      if (isAuthClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(authErrorMessage(error, translate));
+        return;
+      }
+      if (isAuthClientError(error) && error.code === 'not_found') {
+        setContractLoadStatus('not_found');
+        setContractError(translate('surfaces.contracts.notFound'));
+        return;
+      }
+      setContractLoadStatus('error');
+      setContractError(authErrorMessage(error, translate));
+    }
   }
 
   function openNewUser() {
@@ -483,7 +533,7 @@ function App() {
 
   return (
     <main
-      className="consoleShell"
+      className={screen === 'console' && activeSurface === 'contracts' ? 'consoleShell consoleShellContract' : 'consoleShell'}
       data-deployment-target={translate('app.deploymentTarget')}
       data-goalrail-theme={activeTheme}
     >
@@ -506,6 +556,18 @@ function App() {
             </button>
           ))}
         </nav>
+
+        {screen === 'console' && activeSurface === 'contracts' ? (
+          <ContractRailPanel
+            contract={contract}
+            contractError={contractError}
+            contractIdInput={contractIdInput}
+            loadStatus={contractLoadStatus}
+            onContractIdChange={setContractIdInput}
+            onLookup={handleContractLookup}
+            t={translate}
+          />
+        ) : null}
 
         <div className="sidebarSpacer" />
 
@@ -534,7 +596,15 @@ function App() {
       </aside>
 
       {screen === 'console' ? (
-        <SurfaceEmptyStatePanel surface={activeSurface} label={activeLabel} t={translate} />
+        activeSurface === 'contracts' ? (
+          <ContractSurfacePanel
+            contract={contract}
+            loadStatus={contractLoadStatus}
+            t={translate}
+          />
+        ) : (
+          <SurfaceEmptyStatePanel surface={activeSurface} label={activeLabel} t={translate} />
+        )
       ) : (
         <section
           className="settingsSurface"
@@ -587,10 +657,6 @@ function App() {
                     <h3>{translate('users.title')}</h3>
                     <p>{translate('users.manage')}</p>
                   </div>
-                  <button aria-label={translate('users.addUser')} className="primaryButton" onClick={openNewUser} type="button">
-                    <span aria-hidden="true">+</span>
-                    <span>{translate('users.add')}</span>
-                  </button>
                 </div>
 
                 <div className="usersToolbar">
@@ -648,11 +714,12 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
+                      <CurrentUserRow profile={profile} t={translate} />
                       {userRows}
                       {visibleUsers.length === 0 ? (
                         <tr>
                           <td className="emptyUsers" colSpan={5}>
-                            {translate('users.empty')}
+                            {translate('users.emptyRealOnly')}
                           </td>
                         </tr>
                       ) : null}
@@ -746,6 +813,334 @@ function App() {
       ) : null}
     </main>
   );
+}
+
+function ContractRailPanel({
+  contract,
+  contractError,
+  contractIdInput,
+  loadStatus,
+  onContractIdChange,
+  onLookup,
+  t,
+}: {
+  contract: ContractResponse | null;
+  contractError: string;
+  contractIdInput: string;
+  loadStatus: ContractLoadStatus;
+  onContractIdChange: (value: string) => void;
+  onLookup: (event: FormEvent<HTMLFormElement>) => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const isLoading = loadStatus === 'loading';
+  const stateLabel = contract ? t(`contractStates.${contract.state}`) : t('surfaces.contracts.notSelected');
+  const statusTone = contract?.state === 'approved' ? 'pass' : contract?.state === 'ready_for_approval' ? 'amber' : contract ? 'mauve' : 'muted';
+
+  return (
+    <section className="contractRailPanel" aria-label={t('surfaces.contracts.ops.surfaceContext')}>
+      <div className="opsGroupLabel">{t('surfaces.contracts.ops.surfaceContext')}</div>
+      <div className="opsRailSection">
+        <h3>{t('surfaces.contracts.nav')}</h3>
+        <p>{contract ? t('surfaces.contracts.ops.repoScoped') : t('surfaces.contracts.ops.selectById')}</p>
+      </div>
+
+      <form className="opsContractSearch" onSubmit={onLookup}>
+        <label>
+          <span>{t('surfaces.contracts.lookupLabel')}</span>
+          <input
+            autoComplete="off"
+            name="contractId"
+            onChange={(event) => onContractIdChange(event.target.value)}
+            placeholder={t('surfaces.contracts.lookupPlaceholder')}
+            value={contractIdInput}
+          />
+        </label>
+        <button disabled={isLoading} type="submit">
+          {isLoading ? t('surfaces.contracts.loading') : t('surfaces.contracts.lookupAction')}
+          <span aria-hidden="true">→</span>
+        </button>
+      </form>
+      {contractError ? <p className="fieldMessage contractMessage" role="alert">{contractError}</p> : null}
+
+      <div className="opsGroupLabel">{t('surfaces.contracts.ops.activeContracts')}</div>
+      <div className="opsFilterChips">
+        <span>{t('surfaces.contracts.ops.active')}</span>
+        <span>{t('surfaces.contracts.ops.executing')}</span>
+        <span>{t('surfaces.contracts.ops.approval')}</span>
+      </div>
+      <div className="opsContractList" aria-label={t('surfaces.contracts.ops.activeContracts')}>
+        {contract ? (
+          <div className="opsContractRow active">
+            <div>
+              <span className="opsMono">{contract.id}</span>
+              <b>{t('surfaces.contracts.currentRecord')}</b>
+            </div>
+            <span className={`opsPill ${statusTone}`}>{stateLabel}</span>
+            <p>{t('surfaces.contracts.ops.loadedSummary')}</p>
+            <div className="opsRowMeta">
+              <span>{contract.repo_binding_id}</span>
+              <span>{formatDateTime(contract.updated_at)}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="opsRailEmpty">{t('surfaces.contracts.ops.noActiveContract')}</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ContractSurfacePanel({
+  contract,
+  loadStatus,
+  t,
+}: {
+  contract: ContractResponse | null;
+  loadStatus: ContractLoadStatus;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const stateLabel = contract ? t(`contractStates.${contract.state}`) : t('surfaces.contracts.notSelected');
+  const sectionIds = ['intent', 'scope', 'acceptance', 'proof'] as const;
+  const stageIds = ['goalIntake', 'clarification', 'workingContract', 'workItems', 'executionEvidence', 'verification', 'proof', 'approval'] as const;
+  const stateStageIndex = contract?.state === 'approved'
+    ? 7
+    : contract?.state === 'ready_for_approval'
+      ? 6
+      : contract?.state === 'draft'
+        ? 2
+        : contract?.state === 'seeded'
+          ? 2
+          : -1;
+  const contractPercent = contract ? Math.max(18, Math.round(((stateStageIndex + 1) / stageIds.length) * 100)) : 0;
+  const executionPercent = contract?.state === 'approved' ? 72 : contract ? 18 : 0;
+  const proofPercent = contract?.state === 'approved' ? 100 : contract?.state === 'ready_for_approval' ? 64 : 0;
+  const statusTone = contract?.state === 'approved' ? 'pass' : contract?.state === 'ready_for_approval' ? 'amber' : contract ? 'mauve' : 'muted';
+  const activeStageId = stageIds.find((_, index) => index === stateStageIndex);
+
+  return (
+    <section className="contractSurface opsContractSurface" aria-label={t('surfaces.contracts.ariaLabel')}>
+      <div className="opsContractTopbar">
+        <div className="opsMeters" aria-label={t('surfaces.contracts.ops.meters')}>
+          <ContractMeter tone="amber" label={t('surfaces.contracts.ops.contractMeter')} value={stateLabel} percent={contractPercent} />
+          <ContractMeter tone="mauve" label={t('surfaces.contracts.ops.executionMeter')} value={contract ? t('surfaces.contracts.ops.executionQueued') : t('surfaces.contracts.ops.queued')} percent={executionPercent} />
+          <ContractMeter tone="pass" label={t('surfaces.contracts.ops.proofMeter')} value={contract?.state === 'approved' ? t('surfaces.contracts.ops.proofReady') : t('surfaces.contracts.ops.queued')} percent={proofPercent} />
+        </div>
+
+        <div className="opsTopbarState">
+          <div className="opsStateChip">
+            <span>{t('surfaces.contracts.ops.surface')}</span>
+            <b>{t('surfaces.contracts.nav')}</b>
+          </div>
+          <div className="opsStateChip">
+            <span>{t('surfaces.contracts.ops.status')}</span>
+            <b>{stateLabel}</b>
+          </div>
+        </div>
+      </div>
+
+      <div className="opsContractLayout">
+        <div className="opsContractCanvas">
+          <section className="opsSpine">
+            <div className="opsPanelHead">
+              <div>
+                <div className="opsPanelKicker">{contract ? t('surfaces.contracts.ops.contractLoaded') : t('surfaces.contracts.ops.contractNotSelected')}</div>
+                <div className="opsPanelId">{contract ? contract.id : t('surfaces.contracts.emptyValue')}</div>
+              </div>
+              <div className="opsTags">
+                <span className="opsTag mauve">{contract?.repo_binding_id ?? t('surfaces.contracts.ops.noRepo')}</span>
+                <span className={`opsTag ${statusTone}`}>{stateLabel}</span>
+              </div>
+            </div>
+
+            <div className="opsStageRail" aria-label={t('surfaces.contracts.lifecycle')}>
+              {stageIds.map((stage, index) => {
+                const stageClass = stateStageIndex < 0 ? 'queued' : index < stateStageIndex ? 'done' : index === stateStageIndex ? 'active' : 'queued';
+                return (
+                  <div className={`opsStage ${stageClass}`} key={stage}>
+                    <span className="opsStageNode" />
+                    <span className="opsStageConnector" />
+                    <b>{t(`surfaces.contracts.ops.stages.${stage}`)}</b>
+                    <small>{t(`surfaces.contracts.ops.stageStates.${stageClass}`)}</small>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="opsActiveSummary">
+              <span>{t('surfaces.contracts.ops.activeStage')}</span>
+              <b>{activeStageId ? t(`surfaces.contracts.ops.stages.${activeStageId}`) : t('surfaces.contracts.ops.none')}</b>
+              <small>{contract ? `${t('surfaces.contracts.fields.goalId')} ${contract.goal_id}` : t('surfaces.contracts.emptyBody')}</small>
+            </div>
+          </section>
+
+          <section className="opsObject">
+            <div className="opsPanelHead">
+              <div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.ops.selectedContract')}</div>
+                <h2>{contract ? contract.id : t('surfaces.contracts.notSelected')}</h2>
+              </div>
+              <div className="opsTags">
+                <span className="opsTag">{t('surfaces.contracts.ops.liveConsole')}</span>
+                <span className={`opsTag ${statusTone}`}>{stateLabel}</span>
+              </div>
+            </div>
+
+            <div className="opsObjectBody">
+              <div className="opsSectionLead">
+                <span>{t('surfaces.contracts.sectionsTitle')}</span>
+                <b>{contract ? t('surfaces.contracts.calloutLoaded') : loadStatus === 'not_found' ? t('surfaces.contracts.notFoundBody') : t('surfaces.contracts.emptyBody')}</b>
+              </div>
+              <div className="opsDetailGrid">
+                {sectionIds.map((section) => (
+                  <article className="opsDetailBlock" key={section}>
+                    <span>{t(`surfaces.contracts.sections.${section}.title`)}</span>
+                    <h4>{t(`surfaces.contracts.sections.${section}.title`)}</h4>
+                    <p>{contract ? t('surfaces.contracts.sectionPending') : t('surfaces.contracts.sectionEmpty')}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside className="opsContractSide">
+          <section className="opsSideCard">
+            <div className="opsPanelHead compact">
+              <div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.ops.projectContext')}</div>
+                <div className="opsPanelId">{contract?.repo_binding_id ?? t('surfaces.contracts.emptyValue')}</div>
+              </div>
+            </div>
+            <dl className="opsKeyGrid">
+              <FieldRow label={t('surfaces.contracts.fields.repoBindingId')} value={contract?.repo_binding_id ?? t('surfaces.contracts.emptyValue')} />
+              <FieldRow label={t('surfaces.contracts.fields.goalId')} value={contract?.goal_id ?? t('surfaces.contracts.emptyValue')} />
+              <FieldRow label={t('surfaces.contracts.fields.seedId')} value={contract?.current_seed_id ?? t('surfaces.contracts.emptyValue')} />
+              <FieldRow label={t('surfaces.contracts.fields.draftId')} value={contract?.current_draft_id ?? t('surfaces.contracts.emptyValue')} />
+            </dl>
+            <div className="opsSelectionStrip">
+              <span>{contract?.id ?? t('surfaces.contracts.notSelected')}</span>
+              <span>{stateLabel}</span>
+              <span>{contract ? t('surfaces.contracts.ops.liveData') : t('surfaces.contracts.ops.noSelection')}</span>
+            </div>
+          </section>
+
+          <section className="opsSideCard muted">
+            <div className="opsPanelHead compact">
+              <div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.ops.ambiguityInspector')}</div>
+                <div className="opsPanelId">{t('surfaces.contracts.ops.inputs')}</div>
+              </div>
+            </div>
+            <div className="opsInspectorList">
+              {sectionIds.map((section) => (
+                <div className="opsInspectorRow" key={section}>
+                  <b>{t(`surfaces.contracts.sections.${section}.title`)}</b>
+                  <span>{contract ? t('surfaces.contracts.sectionPending') : t('surfaces.contracts.sectionEmpty')}</span>
+                  <small>{contract ? t('surfaces.contracts.ops.pending') : t('surfaces.contracts.ops.empty')}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        <section className="opsBottomPanel">
+          <article className="opsSideCard">
+            <div className="opsPanelHead compact">
+              <div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.ops.workspaceActivity')}</div>
+                <div className="opsPanelId">{t('surfaces.contracts.ops.contractEventsOnly')}</div>
+              </div>
+            </div>
+            <div className="opsActivityRow">
+              <span>{contract ? formatDateTime(contract.updated_at) : t('surfaces.contracts.emptyValue')}</span>
+              <div>
+                <b>{contract ? t('surfaces.contracts.ops.contractLoaded') : t('surfaces.contracts.ops.waitingForContract')}</b>
+                <p>{contract ? contract.id : t('surfaces.contracts.emptyBody')}</p>
+              </div>
+              <small>{contract ? t('surfaces.contracts.ops.event') : t('surfaces.contracts.ops.idle')}</small>
+            </div>
+          </article>
+
+          <article className="opsSideCard">
+            <div className="opsPanelHead compact">
+              <div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.ops.stageControls')}</div>
+                <div className="opsPanelId">{t('surfaces.contracts.ops.liveConsoleOnly')}</div>
+              </div>
+            </div>
+            <p className="opsControlCopy">{contract ? t('surfaces.contracts.ops.stageControlLoaded') : t('surfaces.contracts.ops.stageControlEmpty')}</p>
+          </article>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function ContractMeter({ label, percent, tone, value }: { label: string; percent: number; tone: 'amber' | 'mauve' | 'pass'; value: string }) {
+  return (
+    <div className={`opsMeter ${tone}`}>
+      <div>
+        <span>{label}</span>
+        <b>{value}</b>
+      </div>
+      <i><span style={{ width: `${percent}%` }} /></i>
+    </div>
+  );
+}
+
+function FieldRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function CurrentUserRow({
+  profile,
+  t,
+}: {
+  profile: MeResponse | null;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  if (!profile) {
+    return null;
+  }
+
+  const displayName = profile.user.display_name.trim() || profile.user.email || profile.user.id;
+  const role = isMembershipRole(profile.organization_membership.role)
+    ? t(`membershipRoles.${profile.organization_membership.role}`)
+    : profile.organization_membership.role;
+
+  return (
+    <tr className="userRow">
+      <td>
+        <div className="userName">
+          <span className="avatar" aria-hidden="true">
+            {initials(displayName)}
+          </span>
+          <span>{displayName}</span>
+        </div>
+      </td>
+      <td className="userEmail">{profile.user.email ?? t('users.emptyValue')}</td>
+      <td>
+        <span className="pill roleOwner">{role}</span>
+      </td>
+      <td>
+        <span className="pill statusActive">{profile.user.state}</span>
+      </td>
+      <td />
+    </tr>
+  );
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toISOString();
 }
 
 function SurfaceEmptyStatePanel({

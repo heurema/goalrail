@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
@@ -49,6 +49,20 @@ function meResponse(overrides: { role?: string } = {}) {
       role: overrides.role ?? 'owner',
       state: 'active',
     },
+  };
+}
+
+function contractResponse(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: '018f0000-0000-7000-8000-000000000101',
+    repo_binding_id: '018f0000-0000-7000-8000-000000000004',
+    goal_id: '018f0000-0000-7000-8000-000000000102',
+    state: 'draft',
+    current_seed_id: '018f0000-0000-7000-8000-000000000103',
+    current_draft_id: '018f0000-0000-7000-8000-000000000104',
+    created_at: '2026-05-06T10:00:00Z',
+    updated_at: '2026-05-06T10:15:00Z',
+    ...overrides,
   };
 }
 
@@ -183,8 +197,8 @@ describe('App', () => {
   });
 
   it.each([
-    ['en', 'database_not_configured', 'Goalrail server is not connected to a database yet. Check backend configuration.'],
-    ['ru', 'auth_not_configured', 'На сервере не настроена авторизация. Проверьте GOALRAIL_AUTH_JWT_SECRET.'],
+    ['en', 'database_not_configured', 'Goalrail server is not ready yet.'],
+    ['ru', 'auth_not_configured', 'Авторизация на сервере пока не готова.'],
   ] as const)('%s operational backend errors stay honest and do not render the console', async (locale, code, message) => {
     await setLocale(locale);
     fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope(code), 503));
@@ -311,7 +325,7 @@ describe('App', () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
-  it('keeps exactly three product surfaces with honest EN and RU structured empty states', async () => {
+  it('keeps exactly three product surfaces and renders contracts from real API lookup only', async () => {
     await loginSuccessfully();
 
     const navigation = screen.getByRole('navigation', { name: /product surfaces/i });
@@ -321,8 +335,28 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /^Delivery Readiness$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Proof$/i })).toBeInTheDocument();
-    expect(screen.getByLabelText(/contracts: structured empty state/i)).toBeInTheDocument();
-    expect(screen.getByText('Goal → Contract → Task → Proof')).toBeInTheDocument();
+    expect(screen.getByLabelText(/contract workspace/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Not selected').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Select a contract to review its state and delivery scope/i).length).toBeGreaterThan(0);
+    expect(document.body).not.toHaveTextContent(
+      /trialops-demo|C-0147|fake queue|fake pass|fake fail|backend available|endpoint|GET \/v1\/contracts|prefilled/i
+    );
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse()));
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: '018f0000-0000-7000-8000-000000000101' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    await screen.findByText('018f0000-0000-7000-8000-000000000104');
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts/018f0000-0000-7000-8000-000000000101');
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
     expect(screen.getByText(/enough context to become a delivery contract/i)).toBeInTheDocument();
@@ -338,6 +372,20 @@ describe('App', () => {
     expect(document.body).not.toHaveTextContent(
       /trialops-demo|C-0147|readiness score|\/100|\bscan\b|proof queue|fake queue|fake pass|fake fail|pass\/fail/i
     );
+  });
+
+  it('shows not_found for missing contract IDs without seeding demo data', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('not_found'), 404));
+
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: 'missing-contract' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Contract was not found.');
+    expect(screen.getAllByText('Check the ID and try again.').length).toBeGreaterThan(0);
+    expect(document.body).not.toHaveTextContent(/C-0147|trialops-demo|billing-api|frontend-console/i);
   });
 
   it('theme storage remains exactly goalrail.console.theme', async () => {
@@ -405,32 +453,21 @@ describe('App', () => {
     expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
   });
 
-  it('keeps users component-state-only with neutral role and status values', async () => {
+  it('renders users from /v1/me only and does not expose local add/edit demo data', async () => {
     await loginSuccessfully();
     const callsBeforeUsersEdit = fetchMock.mock.calls.length;
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add user/i }));
 
-    const drawer = screen.getByRole('complementary', { name: /add user/i });
-    expect(drawer).toBeInTheDocument();
-
-    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'QA Lead' } });
-    fireEvent.change(within(drawer).getByLabelText(/^Email$/i), { target: { value: 'qa@example.com' } });
-    fireEvent.change(within(drawer).getByLabelText(/^Role$/i), { target: { value: 'observer' } });
-    fireEvent.change(within(drawer).getByLabelText(/^Status$/i), { target: { value: 'disabled' } });
-    fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
-
-    expect(screen.getByText('QA Lead')).toBeInTheDocument();
-    expect(screen.getAllByText('Observer').length).toBeGreaterThan(1);
-    expect(screen.getAllByText('Disabled').length).toBeGreaterThan(1);
+    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
+    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
+    expect(screen.getByText(/No additional real user records/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add user/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('Product Lead')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reviewer')).not.toBeInTheDocument();
+    expect(screen.queryByText('qa@example.com')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(callsBeforeUsersEdit);
-
-    fireEvent.change(screen.getByLabelText(/filter by role/i), { target: { value: 'observer' } });
-    fireEvent.change(screen.getByLabelText(/filter by status/i), { target: { value: 'active' } });
-
-    await waitFor(() => expect(screen.queryByText('QA Lead')).not.toBeInTheDocument());
   });
 
   it('does not render disallowed product or platform features', async () => {
