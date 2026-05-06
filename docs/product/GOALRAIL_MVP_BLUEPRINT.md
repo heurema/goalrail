@@ -22,6 +22,7 @@ related_docs:
   - docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md
   - docs/adr/ADR-0020-public-contract-identity-boundary.md
   - docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md
+  - docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md
   - docs/adr/ADR-0022-installation-boundary.md
   - docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
@@ -278,6 +279,25 @@ Implemented planning lease boundary:
 - `POST /v1/plans/{id}/proposals` requires `lease_id` and `lease_token`; raw
   lease tokens are returned only once when a lease is created
 - no worker, controller, or runner binary exists yet
+
+Accepted future minimal planning worker direction:
+- the first worker should be a separate thin planning worker binary, likely
+  `goalrail-worker`
+- the worker polls the API server for one plan lease, reads the leased plan
+  through the API, computes or collects one proposal outside the API server,
+  submits that proposal with lease proof, and repeats
+- the worker may renew its active lease while planning, but it processes one
+  plan at a time and holds one lease at a time in v0
+- the worker is not a runner: it does not checkout repositories, execute code,
+  start `Run` records, submit receipts, write `GateDecision`, or create `Proof`
+- the worker does not create canonical `WorkItem` records directly; accepted
+  WorkItems remain materialized only by API-server-owned proposal acceptance
+- the worker talks only to the API server and does not read or write Postgres
+  directly
+- v0 planner behavior may be deterministic or manual proposal mode using
+  approved Contract and Plan metadata fetched from the API; repo-aware planning
+  remains a later planner / runner context boundary
+- no planning worker binary is implemented yet
 
 ### Layer 4 — Delivery Runtime
 Produces:

@@ -384,3 +384,9 @@ Raw lease tokens are returned only on lease creation and stored only as hashes.
 No worker, controller, runner, checkout, execution, assignment, claiming,
 generic queue, outbox, runtime registry, `Run`, receipt, `GateDecision`, or
 `Proof` implementation is added by this server slice.
+
+ADR-0024 documents the accepted next boundary for a minimal external planning
+worker loop that consumes this lease API. That future worker remains planning
+only: it polls the API server, processes one leased plan at a time, submits one
+proposal with lease proof, and still does not checkout repositories, execute
+code, write Postgres directly, create WorkItems, or act as a runner.

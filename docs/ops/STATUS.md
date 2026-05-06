@@ -21,7 +21,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-06
+Last updated: 2026-05-07
 Status: planning / product canon and pilot frame active; first local Go CLI with
 local Project Scan baseline / overlay commands and Go server intent-plane /
 public Contract aggregate and `/v1/contracts` lifecycle façade / ContractSeed /
@@ -31,6 +31,8 @@ Contract aggregate identity is implemented as
 a stable `contract_id` boundary and transitional public
 seed/draft/approval/direct-task routes are removed; the typed WorkItemPlan pull
 lease API from ADR-0021 is implemented without adding a generic queue;
+ADR-0024 accepts a future minimal `goalrail-worker` polling loop over that API,
+but no worker binary exists yet;
 source-level core server CORS allowlist support exists through exact
 `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` values, with CORS disabled when unset and
 wildcard origins rejected; the main console/API
@@ -119,8 +121,9 @@ infra; current live API CORS is a temporary nginx ingress bridge for
 `https://goalrail.dev`. This status does not claim committed server config,
 required human review, signed-commit enforcement, real-device mobile QA, or
 native-speaker copy proofread. It also does not approve analytics, CRM,
-database, generic queue, lease implementation, LLM/API, repo integration,
-runtime execution, gate, proof, or broad backend platform behavior.
+database, generic queue, planning worker implementation, LLM/API, repo
+integration, runtime execution, gate, proof, or broad backend platform
+behavior.
 
 ## Current state
 
@@ -138,7 +141,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-six kernel/CLI/server/domain boundary ADRs
+- twenty-seven kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -230,6 +233,14 @@ The project currently has:
   server-owned pull leasing through `POST /v1/plans/leases`, FIFO v0
   scheduling with lazy expiry, and no generic `queue_jobs` / `jobs` /
   `work_queue` table for this boundary
+- ADR-0024 documents the minimal planning worker loop boundary: the accepted
+  future first worker is a separate thin `goalrail-worker` process that talks
+  only to the API server, polls one plan lease, reads one plan, renews while
+  working when needed, computes or collects one proposal, submits it with
+  `lease_id` and `lease_token`, and repeats. It is not a runner and remains
+  unimplemented: no checkout, execution, direct Postgres writes, WorkItem
+  creation, assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
+  `GateDecision`, or `Proof`.
 - ADR-0022 documents the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -327,7 +338,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-six boundary ADRs exist
+- kernel schema note and twenty-seven boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -391,6 +402,11 @@ The project currently has:
 - `POST /v1/contracts/{id}/approvals` creates an immutable internal `ApprovedContract(approved)` snapshot from the current ready draft, moves Contract state to `approved` with `approved_snapshot_id`, requires `approved_by`, guards repeated approval with `409 already_approved`, and does not mutate `ContractDraft`, start execution, write `GateDecision`, or create `Proof`
 - WorkItem planning now uses `Plan -> Lease -> Proposal -> Acceptance`: one `WorkItemPlan` per approved public Contract in v0, typed `WorkItemPlanLease(active/completed/expired)` records reserve queued or expired leased plans through `POST /v1/plans/leases`, proposal submission requires `lease_id` plus `lease_token`, explicit acceptance materializes one or more durable canonical `WorkItem(planned)` records with `plan_id` and `proposal_id`, persists the records in Postgres when DB is configured, exposes `GET /v1/tasks/{id}` for single task reads, appends `work_item.created` for each accepted task transactionally with Postgres acceptance, and does not assign, claim, create `Run`, start execution, checkout a repository, submit a receipt, write `GateDecision`, or create `Proof`; workers/planners submit proposals through the API and do not write WorkItems directly to the DB
 - the typed WorkItemPlan pull lease API is implemented with `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, and `PATCH /v1/plans/leases/{id}`; raw lease tokens are returned only on create, stored only as hashes, and no generic queue implementation exists
+- the accepted next worker direction is a minimal API-only `goalrail-worker`
+  planning loop over typed leases; it has not been implemented and does not
+  imply checkout, execution, direct DB writes, WorkItem creation by the worker,
+  assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
+  `GateDecision`, or `Proof`
 - the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
@@ -401,7 +417,8 @@ The project currently has:
 - the Contract approval boundary is documented in ADR-0017 and implemented as `ContractDraft(ready_for_approval) -> ApprovedContract`; approval does not start execution, write `GateDecision`, or create `Proof`
 - the WorkItem planning boundary is documented in ADR-0018 and ADR-0019 and implemented as a public `Plan -> Lease -> Proposal -> Acceptance -> WorkItem(planned)` control-plane flow with durable Postgres storage when configured and single task read by ID; the worker/controller/runner execution-side implementation remains deferred; WorkItem planning is not assignment, claiming, execution, `Run`, runner checkout, receipt, `GateDecision`, or `Proof`
 - the WorkItemPlan pull lease boundary is documented in ADR-0021 and implemented
-  as a typed server API/persistence slice; no planning worker/controller or
+  as a typed server API/persistence slice; ADR-0024 documents the accepted
+  minimal planning worker loop direction, but no planning worker/controller or
   runner-backed planning implementation exists yet
 - the public Contract identity boundary is documented in ADR-0020 and the
   server now exposes the smallest public `/v1/contracts` lifecycle façade while
@@ -426,7 +443,7 @@ The project currently has:
 - no WorkItem assignment/claiming, `Run`, receipt, GateDecision, or Proof yet
 - no planning worker/controller, runner-backed planning implementation,
   assignment/claiming, checkout, execution, generic queue, outbox,
-  broker, or runtime registry yet
+  broker, runtime registry, `Run`, receipt, `GateDecision`, or `Proof` yet
 - no production repo authorization or deploy-key provisioning in the CLI
 - no broad RepoBinding state sync beyond repository-context and explicit metadata-only init
 - no production organization/user/provider connection/repository catalog implementation beyond the dev-seeded Installation / Organization / Project / RepoBinding Postgres foundation and metadata-only RepoBinding init yet
