@@ -42,7 +42,7 @@ func BuildBaseline(ctx context.Context, workDir string, repoBindingID string, op
 	if err != nil {
 		return RepositoryBaselineProfile{}, err
 	}
-	trackedPaths, err := gitTrackedPaths(ctx, facts.CanonicalRepoRoot)
+	trackedPaths, trackedPathsTruncated, err := gitTrackedPaths(ctx, facts.CanonicalRepoRoot, options.MaxFilesScanned)
 	if err != nil {
 		return RepositoryBaselineProfile{}, err
 	}
@@ -55,6 +55,9 @@ func BuildBaseline(ctx context.Context, workDir string, repoBindingID string, op
 		workspaceSet: map[string]struct{}{},
 	}
 	scan.scanPaths(trackedPaths)
+	if trackedPathsTruncated {
+		scan.markFileLimitTruncated()
+	}
 	scan.detectPackageJSONTests()
 	workspaces := scan.limitedWorkspaces()
 
@@ -167,14 +170,18 @@ func (s *baselineScanner) scanPaths(paths []string) {
 			continue
 		}
 		if len(s.scannedSet) >= s.options.MaxFilesScanned {
-			s.truncated = true
-			if !hasSkipReason(s.skipped, "scan_budget_file_limit") {
-				s.skipped = append(s.skipped, SkipReceipt{Path: "*", Reason: "scan_budget_file_limit"})
-			}
+			s.markFileLimitTruncated()
 			continue
 		}
 		s.scannedSet[relativePath] = struct{}{}
 		s.collectSignals(relativePath)
+	}
+}
+
+func (s *baselineScanner) markFileLimitTruncated() {
+	s.truncated = true
+	if !hasSkipReason(s.skipped, "scan_budget_file_limit") {
+		s.skipped = append(s.skipped, SkipReceipt{Path: "*", Reason: "scan_budget_file_limit"})
 	}
 }
 

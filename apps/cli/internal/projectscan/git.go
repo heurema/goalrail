@@ -1,9 +1,11 @@
 package projectscan
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,22 +87,51 @@ func gitStatusPorcelainV2(ctx context.Context, canonicalRoot string) (string, er
 	return gitOutput(ctx, canonicalRoot, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=no", "--ignored=no")
 }
 
-func gitTrackedPaths(ctx context.Context, canonicalRoot string) ([]string, error) {
-	raw, err := gitOutputBytes(ctx, canonicalRoot, "ls-tree", "-r", "-z", "--name-only", "HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("git ls-tree HEAD: %w", err)
+func gitTrackedPaths(ctx context.Context, canonicalRoot string, limit int) ([]string, bool, error) {
+	if limit <= 0 {
+		limit = defaultMaxFilesScanned
 	}
-	parts := strings.Split(string(raw), "\x00")
-	paths := make([]string, 0, len(parts))
-	for _, part := range parts {
-		path := normalizeRelativePath(part)
-		if path == "" {
-			continue
+	cmd := exec.CommandContext(ctx, "git", "-C", canonicalRoot, "ls-tree", "-r", "-z", "--name-only", "HEAD")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, fmt.Errorf("git ls-tree HEAD: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, false, fmt.Errorf("git ls-tree HEAD: %w", err)
+	}
+
+	reader := bufio.NewReader(stdout)
+	paths := make([]string, 0, limit)
+	truncated := false
+	for {
+		part, readErr := reader.ReadString('\x00')
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return nil, false, fmt.Errorf("git ls-tree HEAD: %w", readErr)
 		}
-		paths = append(paths, path)
+
+		path := normalizeRelativePath(strings.TrimSuffix(part, "\x00"))
+		if path != "" {
+			if len(paths) >= limit {
+				truncated = true
+				_ = cmd.Process.Kill()
+				_ = cmd.Wait()
+				break
+			}
+			paths = append(paths, path)
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+	}
+	if !truncated {
+		if err := cmd.Wait(); err != nil {
+			return nil, false, fmt.Errorf("git ls-tree HEAD: %w", err)
+		}
 	}
 	sortStrings(paths)
-	return paths, nil
+	return paths, truncated, nil
 }
 
 func gitBlobSize(ctx context.Context, canonicalRoot string, relativePath string) (int, error) {

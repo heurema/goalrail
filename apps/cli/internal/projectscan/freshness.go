@@ -1,6 +1,13 @@
 package projectscan
 
 func EvaluateFreshness(currentHeadSHA string, baseline *RepositoryBaselineProfile, overlay WorkspaceOverlay) FreshnessResult {
+	if overlay.State == OverlayStateUnmerged || len(overlay.UnmergedPaths) > 0 {
+		return FreshnessResult{
+			Status:                 FreshnessUnmergedBlocking,
+			Reasons:                []string{"unmerged_paths"},
+			BlocksExecutionOrProof: true,
+		}
+	}
 	if baseline == nil || baseline.RepositoryBaselineProfileID == "" {
 		return FreshnessResult{
 			Status:                     FreshnessMissingBaseline,
@@ -20,13 +27,6 @@ func EvaluateFreshness(currentHeadSHA string, baseline *RepositoryBaselineProfil
 			Status:                     FreshnessStaleHead,
 			Reasons:                    []string{"head_sha_mismatch"},
 			BaselineRebuildRecommended: true,
-		}
-	}
-	if overlay.State == OverlayStateUnmerged || len(overlay.UnmergedPaths) > 0 {
-		return FreshnessResult{
-			Status:                 FreshnessUnmergedBlocking,
-			Reasons:                []string{"unmerged_paths"},
-			BlocksExecutionOrProof: true,
 		}
 	}
 	if len(overlay.ScanCriticalChangedPaths) > 0 {

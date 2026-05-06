@@ -194,6 +194,30 @@ func TestSchemaVersionMismatchMakesBaselineStale(t *testing.T) {
 	}
 }
 
+func TestUnmergedOverlayBlocksBeforeBaselineMaintenance(t *testing.T) {
+	t.Parallel()
+
+	overlay := WorkspaceOverlay{
+		State:         OverlayStateUnmerged,
+		UnmergedPaths: []string{"go.mod"},
+	}
+
+	missing := EvaluateFreshness("head", nil, overlay)
+	if missing.Status != FreshnessUnmergedBlocking || !missing.BlocksExecutionOrProof {
+		t.Fatalf("missing baseline freshness = %#v, want unmerged blocking", missing)
+	}
+
+	baseline := RepositoryBaselineProfile{
+		RepositoryBaselineProfileID: "baseline-1",
+		HeadSHA:                     "old-head",
+		SchemaVersion:               SchemaVersion,
+	}
+	stale := EvaluateFreshness("new-head", &baseline, overlay)
+	if stale.Status != FreshnessUnmergedBlocking || !stale.BlocksExecutionOrProof {
+		t.Fatalf("stale baseline freshness = %#v, want unmerged blocking", stale)
+	}
+}
+
 func TestMissingAndCorruptCacheAreMissingBaseline(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -222,6 +246,36 @@ func TestMissingAndCorruptCacheAreMissingBaseline(t *testing.T) {
 	}
 	if _, ok, err := cache.LoadLatestBaseline("rb-1", facts.CanonicalRepoRoot); err != nil || ok {
 		t.Fatalf("corrupt cache LoadLatestBaseline ok=%v err=%v, want false nil", ok, err)
+	}
+}
+
+func TestBuildBaselineTruncatesTrackedPathEnumeration(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupRepo(t)
+	for i := 0; i < 5; i++ {
+		writeFile(t, repoDir, filepath.Join("pkg", "file"+string(rune('a'+i))+".go"), "package pkg\n")
+	}
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "many files")
+
+	baseline, err := BuildBaseline(context.Background(), repoDir, "rb-1", BuildOptions{MaxFilesScanned: 2})
+	if err != nil {
+		t.Fatalf("BuildBaseline() error = %v", err)
+	}
+
+	if !baseline.Partiality.Truncated {
+		t.Fatal("Partiality.Truncated = false, want true")
+	}
+	if baseline.Status != BaselineStatusPartial {
+		t.Fatalf("baseline status = %q, want partial", baseline.Status)
+	}
+	if len(baseline.Receipts.Scanned) > 2 {
+		t.Fatalf("scanned paths = %d, want <= 2", len(baseline.Receipts.Scanned))
+	}
+	if !hasSkipReason(baseline.Receipts.Skipped, "scan_budget_file_limit") {
+		t.Fatalf("skipped = %#v, want scan_budget_file_limit", baseline.Receipts.Skipped)
 	}
 }
 
