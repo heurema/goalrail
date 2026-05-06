@@ -44,7 +44,7 @@ func (s *PostgresWorkItemPlanLeaseStore) AcquireNextLease(ctx context.Context, i
 	row := s.query.QueryRow(ctx, `
 SELECT id, organization_id, project_id, contract_id, approved_contract_id, repo_binding_id, state, requested_by, current_lease_id, leased_by, lease_expires_at, created_at, updated_at
 FROM work_item_plans
-WHERE state = $1 OR (state = $2 AND lease_expires_at < $3)
+WHERE state = $1 OR (state = $2 AND lease_expires_at <= $3)
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED

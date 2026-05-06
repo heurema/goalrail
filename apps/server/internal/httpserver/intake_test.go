@@ -2276,7 +2276,7 @@ func (s *fakeWorkItemPlanLeaseStore) AcquireNextLease(_ context.Context, input w
 	var selected spine.WorkItemPlan
 	found := false
 	for _, plan := range s.plans.plans {
-		if plan.State == spine.WorkItemPlanStateQueued || (plan.State == spine.WorkItemPlanStateLeased && plan.LeaseExpiresAt != nil && plan.LeaseExpiresAt.Before(input.CreatedAt)) {
+		if plan.State == spine.WorkItemPlanStateQueued || (plan.State == spine.WorkItemPlanStateLeased && plan.LeaseExpiresAt != nil && !plan.LeaseExpiresAt.After(input.CreatedAt)) {
 			if !found || plan.CreatedAt.Before(selected.CreatedAt) || (plan.CreatedAt.Equal(selected.CreatedAt) && plan.ID < selected.ID) {
 				selected = plan
 				found = true

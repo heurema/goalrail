@@ -861,6 +861,9 @@ func TestPostgresWorkItemPlanLeaseStoreAcquireGetRenewAndComplete(t *testing.T) 
 	if !strings.Contains(query.calls[0].sql, "FOR UPDATE SKIP LOCKED") {
 		t.Fatalf("acquire SQL = %q, want row locking", query.calls[0].sql)
 	}
+	if !strings.Contains(query.calls[0].sql, "lease_expires_at <= $3") {
+		t.Fatalf("acquire SQL = %q, want leases expiring at now to be eligible", query.calls[0].sql)
+	}
 	if len(exec.calls) != 2 || !strings.Contains(exec.calls[0].sql, "INSERT INTO work_item_plan_leases") || !strings.Contains(exec.calls[1].sql, "UPDATE work_item_plans") {
 		t.Fatalf("acquire exec calls = %#v, want lease insert then plan update", exec.calls)
 	}

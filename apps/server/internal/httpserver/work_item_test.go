@@ -184,7 +184,7 @@ func TestPlanLeaseQueueSelection(t *testing.T) {
 		t.Fatalf("second leased plan = %q, want %q", next.PlanID, second.ID)
 	}
 	expiredPlan := server.workItemPlans.plans[first.ID]
-	expiredPlan.LeaseExpiresAt = ptrTime(testTime().Add(-time.Minute))
+	expiredPlan.LeaseExpiresAt = ptrTime(testTime())
 	server.workItemPlans.plans[first.ID] = expiredPlan
 	proposalSubmitted := server.workItemPlans.plans[third.ID]
 	proposalSubmitted.State = spine.WorkItemPlanStateProposalSubmitted
