@@ -1,5 +1,5 @@
 schema_version: goalrail.components.v0
-updated_at: 2026-05-06
+updated_at: 2026-05-07
 authority: operational
 status_anchor: true
 components:
@@ -121,6 +121,13 @@ components:
       - apps/server/internal/postgres/migrations/00001_init.sql
     public_claim_allowed: false
     notes: "WorkItem planning exists as a server-owned non-executable control-plane boundary from approved public Contract to WorkItemPlan(queued/leased/proposal_submitted/accepted), WorkItemPlanLease(active/completed/expired), WorkItemPlanProposal(submitted), explicit acceptance, and one or more canonical WorkItem(planned) records. Public routes are `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, `PATCH /v1/plans/leases/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`. Direct public `POST /v1/contracts/{id}/tasks` is removed. WorkItem plans, leases, proposals, and accepted WorkItems are durable in Postgres when structured database config is present; production server wiring returns `503 database_not_configured` without DB config instead of using in-memory product state. The old map-backed WorkItem/WorkItemPlan stores were removed from `apps/server/internal/store`; tests use package-local fakes where needed. Accepted WorkItems carry plan_id and proposal_id. There is no plan/proposal/task list/search endpoint and no worker lease list/search endpoint. Proposal submission requires `lease_id` plus `lease_token`, stores proposals through the API server, and marks the lease completed. Proposal acceptance appends work_item.created transactionally with WorkItem writes when Postgres is configured. Canonical WorkItem writes remain API-server-owned; workers/planners submit proposals through the API and do not write WorkItems directly to the DB. ADR-0021's typed WorkItemPlan pull lease boundary is implemented as a server API/persistence slice: `WorkItemPlan(state=queued)` remains the typed planning queue item, `WorkItemPlanLease` records reserve plans through API-server-owned pull leasing, and raw lease tokens are returned only once on create and stored only as hashes. No worker/controller, runner-backed planner, assignment, claiming, execution, Run, receipt, GateDecision, Proof, checkout, generic queue, outbox, broker, or runtime registry implementation exists yet."
+  planning_worker:
+    name: Planning Worker
+    status: docs_only
+    truth_owner: docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: Accepted design only; not implemented. ADR-0024 defines the future minimal `goalrail-worker` direction as a separate thin API-only planning worker that polls `POST /v1/plans/leases`, fetches one leased plan through the API, optionally renews the active lease, computes or collects one bounded proposal, submits it with `lease_id` plus `lease_token`, and repeats. A future implementation path may be `apps/worker` or `apps/server/cmd/goalrail-worker`, but no such worker path or binary exists now and neither path is claimed as implemented. The planning worker is not a runner, does not access Postgres directly, does not create WorkItems directly, does not accept proposals, does not assign or claim WorkItems, does not checkout repositories, does not run commands, does not start Runs, does not submit receipts, does not write GateDecision, does not create Proof, and does not add queue, outbox, worker registry, or runtime registry behavior.
   runtime_registry:
     name: Runtime Registry
     status: planned

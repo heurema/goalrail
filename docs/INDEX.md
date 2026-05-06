@@ -93,44 +93,45 @@ related_docs:
 50. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
 51. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
 52. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
-53. `docs/adr/ADR-0022-installation-boundary.md`
-54. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
-55. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
-56. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
-57. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+53. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
+54. `docs/adr/ADR-0022-installation-boundary.md`
+55. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
+56. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
+57. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
+58. `docs/adr/ADR-0027-organization-user-management-boundary.md`
 
 ### 7. Governance and change control
-58. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-59. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-60. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-61. `docs/product/GOALRAIL_RULE_STACK.md`
+59. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+60. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+61. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+62. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-62. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-63. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-64. `docs/ops/STATUS.md`
-65. `docs/ops/NEXT.md`
-66. `docs/ops/DECISIONS.md`
-67. `docs/ops/COMPONENTS.yaml`
-68. `docs/ops/BRANCH_PROTECTION.md`
-69. `docs/ops/REPO_STRUCTURE.md`
-70. `docs/ops/GO_CODE_GUIDE.md`
-71. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-72. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-73. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-74. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+63. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+64. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+65. `docs/ops/STATUS.md`
+66. `docs/ops/NEXT.md`
+67. `docs/ops/DECISIONS.md`
+68. `docs/ops/COMPONENTS.yaml`
+69. `docs/ops/BRANCH_PROTECTION.md`
+70. `docs/ops/REPO_STRUCTURE.md`
+71. `docs/ops/GO_CODE_GUIDE.md`
+72. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+73. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+74. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+75. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-75. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-76. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-77. `docs/reference/design/reference_screens/`
-78. `.goalrail/work/`
-79. `.goalrail/knowledge/`
-80. `.punk/publishing.toml`
-81. `.goalrail/flows/`
-82. `.goalrail/evals/`
-83. `docs/ops/PUBLISHING_MIGRATION.md`
-84. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+76. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+77. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+78. `docs/reference/design/reference_screens/`
+79. `.goalrail/work/`
+80. `.goalrail/knowledge/`
+81. `.punk/publishing.toml`
+82. `.goalrail/flows/`
+83. `.goalrail/evals/`
+84. `docs/ops/PUBLISHING_MIGRATION.md`
+85. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -198,6 +199,9 @@ related_docs:
 - `ADR-0019` — WorkItem planning controller / runner boundary
 - `ADR-0020` — Public Contract identity boundary
 - `ADR-0021` — WorkItemPlan pull lease boundary; typed planning queue and future lease protocol direction
+- `ADR-0024` — Minimal planning worker loop boundary; future thin
+  `goalrail-worker` polling loop over typed plan leases, without runner,
+  checkout, execution, direct DB writes, or WorkItem creation by the worker
 - `ADR-0022` — Installation boundary; running control-plane instance above
   Organization, with `self_hosted` and `saas` as the only deployment modes
 - `ADR-0023` — user bootstrap, auth, and CLI login boundary; self-hosted
