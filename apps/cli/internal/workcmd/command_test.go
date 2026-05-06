@@ -91,15 +91,15 @@ func TestRunStartCreatesIntakeAndPromotesGoal(t *testing.T) {
 	if output.Display.Summary == "" {
 		t.Fatal("display.summary is empty")
 	}
-	if output.NextAction.Kind != "continue_goal" || output.NextAction.Blocking || output.NextAction.Available {
-		t.Fatalf("next_action = %#v, want unavailable continue_goal", output.NextAction)
+	if output.NextAction.Kind != "continue_goal" || output.NextAction.Blocking || !output.NextAction.Available {
+		t.Fatalf("next_action = %#v, want available continue_goal", output.NextAction)
 	}
 	wantCommand := "goalrail work continue --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
 	if output.NextAction.Command != wantCommand {
 		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
 	}
-	if output.NextAction.PlannedSlice != "B" {
-		t.Fatalf("next_action.planned_slice = %q, want B", output.NextAction.PlannedSlice)
+	if output.NextAction.PlannedSlice != "" {
+		t.Fatalf("next_action.planned_slice = %q, want empty", output.NextAction.PlannedSlice)
 	}
 	if intakeRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || intakeRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("intake project context = %#v, want marker IDs", intakeRequest)
@@ -304,6 +304,248 @@ func TestRunStartOrganizationMismatchFailsBeforeIntake(t *testing.T) {
 	}
 }
 
+func TestRunContinueReadyGoalReturnsDraftContractNextAction(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, continueCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/goals/018f0000-0000-7000-8000-000000000006/continuation":
+			continueCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/goals/{id}/continuation method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_contract_seed","readiness":{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_contract_seed","ready":true,"reason_codes":[],"message":"goal is ready for contract seed"},"goal":{"id":"018f0000-0000-7000-8000-000000000006","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"ready_for_contract_seed"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runContinueJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--goal-id", "018f0000-0000-7000-8000-000000000006", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work continue) error = %v", err)
+	}
+
+	if output.SchemaVersion != "goalrail.cli.v1" {
+		t.Fatalf("schema_version = %q, want goalrail.cli.v1", output.SchemaVersion)
+	}
+	if output.GoalID != "018f0000-0000-7000-8000-000000000006" || output.State != "ready_for_contract_seed" {
+		t.Fatalf("goal/state = %q/%q, want ready goal", output.GoalID, output.State)
+	}
+	if output.Display.Summary == "" {
+		t.Fatal("display.summary is empty")
+	}
+	if output.NextAction.Kind != "draft_contract" || output.NextAction.Available || output.NextAction.PlannedSlice != "D" {
+		t.Fatalf("next_action = %#v, want unavailable draft_contract planned for D", output.NextAction)
+	}
+	wantCommand := "goalrail contract draft --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
+	if output.NextAction.Command != wantCommand {
+		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
+	}
+	if meCount.Load() != 1 || continueCount.Load() != 1 {
+		t.Fatalf("request counts me/continue = %d/%d, want 1/1", meCount.Load(), continueCount.Load())
+	}
+}
+
+func TestRunContinueIncompleteGoalReturnsAskUserNextAction(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/goals/018f0000-0000-7000-8000-000000000006/continuation":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"needs_clarification","readiness":{"goal_id":"018f0000-0000-7000-8000-000000000006","state":"needs_clarification","ready":false,"reason_codes":["missing_scope_hint"],"message":"goal needs clarification before contract seed"},"goal":{"id":"018f0000-0000-7000-8000-000000000006","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"needs_clarification"},"clarification_request":{"id":"018f0000-0000-7000-8000-000000000101","goal_id":"018f0000-0000-7000-8000-000000000006","reason_codes":["missing_scope_hint"],"state":"open","questions":[{"id":"018f0000-0000-7000-8000-000000000102","text":"What is the intended scope at a high level?","why_needed":"A scope hint is required before contract seed readiness.","answer_type":"text","maps_to":"goal.scope_hint"}]}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runContinueJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--goal-id", "018f0000-0000-7000-8000-000000000006", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work continue) error = %v", err)
+	}
+
+	if output.State != "needs_clarification" {
+		t.Fatalf("state = %q, want needs_clarification", output.State)
+	}
+	if output.NextAction.Kind != "ask_user" || !output.NextAction.Available || !output.NextAction.Blocking {
+		t.Fatalf("next_action = %#v, want available blocking ask_user", output.NextAction)
+	}
+	if output.NextAction.RequestID != "018f0000-0000-7000-8000-000000000101" {
+		t.Fatalf("request_id = %q, want server request id", output.NextAction.RequestID)
+	}
+	if len(output.NextAction.Questions) != 1 || output.NextAction.Questions[0].MapsTo != "goal.scope_hint" {
+		t.Fatalf("questions = %#v, want scope question", output.NextAction.Questions)
+	}
+}
+
+func TestRunContinueMissingProjectConfigFailsBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, err := runContinueJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--goal-id", "goal-1", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work continue) error = nil, want missing marker")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "missing .goalrail/project.yml") {
+		t.Fatalf("error = %q, want missing marker hint", err.Error())
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 without marker", got)
+	}
+}
+
+func TestRunContinueExpiredTokenFailsBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	session := validSession(server.URL)
+	session.AccessTokenExpiresAt = time.Date(2026, 5, 5, 9, 59, 59, 0, time.UTC)
+	_, err := runContinueJSON(t, repoDir, fakeSessionStore{session: session}, "--goal-id", "goal-1", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work continue) error = nil, want expired login")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 for expired token", got)
+	}
+}
+
+func TestRunContinueOrganizationMismatchFailsBeforeContinuation(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, continueCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000999","role":"member"}}`))
+		case "/v1/goals/goal-1/continuation":
+			continueCount.Add(1)
+			http.Error(w, "unexpected continuation request", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runContinueJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--goal-id", "goal-1", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(work continue) error = nil, want organization mismatch")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if meCount.Load() != 1 || continueCount.Load() != 0 {
+		t.Fatalf("request counts me/continue = %d/%d, want 1/0", meCount.Load(), continueCount.Load())
+	}
+}
+
+func TestRunContinueTextDoesNotClaimUnavailableRuntimeWork(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member"}}`))
+		case "/v1/goals/goal-1/continuation":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"goal_id":"goal-1","state":"needs_clarification","clarification_request":{"id":"request-1","goal_id":"goal-1","reason_codes":["missing_scope_hint"],"state":"open","questions":[{"id":"question-1","text":"What is the intended scope at a high level?","why_needed":"A scope hint is required before contract seed readiness.","answer_type":"text","maps_to":"goal.scope_hint"}]}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"continue", "--goal-id", "goal-1"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work continue text) error = %v", err)
+	}
+	got := stdout.String()
+	for _, forbidden := range []string{"created a contract", "runner", "proof"} {
+		if strings.Contains(strings.ToLower(got), forbidden) {
+			t.Fatalf("stdout = %q, want no %q claim", got, forbidden)
+		}
+	}
+	if !strings.Contains(got, "Clarification request: request-1") {
+		t.Fatalf("stdout = %q, want clarification request", got)
+	}
+}
+
 func TestRunStartHelpUsage(t *testing.T) {
 	t.Parallel()
 
@@ -316,7 +558,7 @@ func TestRunStartHelpUsage(t *testing.T) {
 	}
 }
 
-func TestRunStartTextKeepsAvailableNextAndMarksPlannedContinuation(t *testing.T) {
+func TestRunStartTextMakesContinuationPrimaryNextStep(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
 
@@ -334,12 +576,12 @@ func TestRunStartTextKeepsAvailableNextAndMarksPlannedContinuation(t *testing.T)
 		t.Fatalf("Run(work start text) error = %v", err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "Next: goalrail project status") {
-		t.Fatalf("stdout = %q, want real project status next command", got)
+	wantNext := "Next: goalrail work continue --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
+	if !strings.Contains(got, wantNext) {
+		t.Fatalf("stdout = %q, want continuation next command", got)
 	}
-	wantPlanned := "Planned continuation, not available yet: goalrail work continue --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
-	if !strings.Contains(got, wantPlanned) {
-		t.Fatalf("stdout = %q, want planned continuation", got)
+	if strings.Contains(got, "not available yet") {
+		t.Fatalf("stdout = %q, want available continuation without planned warning", got)
 	}
 }
 
@@ -478,6 +720,27 @@ func runStartJSONWithOptions(t *testing.T, workDir string, store fakeSessionStor
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work start JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runContinueJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkContinueOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"continue"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkContinueOutput{}, err
+	}
+
+	var output spine.WorkContinueOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work continue JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }

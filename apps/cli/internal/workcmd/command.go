@@ -23,12 +23,11 @@ import (
 )
 
 const (
-	serverMode           = "server"
-	cliSchemaVersion     = "goalrail.cli.v1"
-	nextSuggestedCommand = "goalrail project status"
-	workStartedMessage   = "Work intake started."
-	workStartedNote      = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
-	maxWorkBodyBytes     = 1 << 20
+	serverMode         = "server"
+	cliSchemaVersion   = "goalrail.cli.v1"
+	workStartedMessage = "Work intake started."
+	workStartedNote    = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
+	maxWorkBodyBytes   = 1 << 20
 )
 
 type SessionStore interface {
@@ -62,17 +61,23 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return err
 	case "start":
 		return runStart(ctx, out, workDir, args[1:], options)
+	case "continue":
+		return runContinue(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown work command %q", args[0]))
 	}
 }
 
 func Usage() string {
-	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n\nRun goalrail work <command> --help for command usage.\n"
+	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n\nRun goalrail work <command> --help for command usage.\n"
 }
 
 func StartUsage() string {
 	return "Usage: goalrail work start --title <title> [--body <body> | --body-file <path|->] [--format text|json]\n\nCreates an IntakeRecord and promotes it to a Goal using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nUse --body-file - to read the work body from stdin.\n\nThis command does not configure audit, create hooks, create branches, provision deploy keys, connect provider integrations, run workers, gates, proof, or verification.\n"
+}
+
+func ContinueUsage() string {
+	return "Usage: goalrail work continue --goal-id <goal_id> [--format text|json]\n\nReconciles Goal readiness through the Goalrail server using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not answer clarifications, draft contracts, generate context packs, run workers, gates, proof, or verification.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -195,17 +200,16 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 		Title:           normalizedTitle,
 		LocalConfigPath: projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
-			Summary: "Created an IntakeRecord and promoted it to a Goal. Work continuation is planned for Slice B and is not available yet.",
+			Summary: "Created an IntakeRecord and promoted it to a Goal. Continue the Goal to reconcile readiness and get the next action.",
 		},
 		NextAction: spine.NextAction{
-			Kind:         "continue_goal",
-			Blocking:     false,
-			Command:      fmt.Sprintf("goalrail work continue --goal-id %s --format json", goal.ID),
-			Available:    false,
-			PlannedSlice: "B",
+			Kind:      "continue_goal",
+			Blocking:  false,
+			Command:   fmt.Sprintf("goalrail work continue --goal-id %s --format json", goal.ID),
+			Available: true,
 		},
 		Message:              workStartedMessage,
-		NextSuggestedCommand: nextSuggestedCommand,
+		NextSuggestedCommand: fmt.Sprintf("goalrail work continue --goal-id %s --format json", goal.ID),
 	}
 	if output.OrganizationID == "" {
 		output.OrganizationID = goal.OrganizationID
@@ -224,6 +228,86 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 	return err
 }
 
+func runContinue(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work continue", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	goalID := flags.String("goal-id", "", "Goal ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, ContinueUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedGoalID := strings.TrimSpace(*goalID)
+	if normalizedGoalID == "" {
+		return exitcode.UsageError(errors.New("--goal-id is required"))
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	discovered, err := gitctx.Discover(ctx, workDir)
+	if err != nil {
+		if errors.Is(err, gitctx.ErrNotGitRepository) {
+			return exitcode.UsageError(errors.New("goalrail work continue requires a Git worktree with .goalrail/project.yml; run goalrail init first"))
+		}
+		return exitcode.RuntimeError(err)
+	}
+	config, ok, err := projectconfig.Read(discovered.GitRoot)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
+	}
+
+	session, serverURL, err := loadUsableSession(options)
+	if err != nil {
+		return err
+	}
+	if strings.TrimRight(config.ServerURL, "/") != serverURL {
+		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
+	}
+
+	client := options.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	profile, err := getCurrentProfile(ctx, client, session)
+	if err != nil {
+		return err
+	}
+	if err := validateMarkerMembership(config, profile); err != nil {
+		return err
+	}
+
+	continuation, err := postGoalContinuation(ctx, client, session, normalizedGoalID)
+	if err != nil {
+		return err
+	}
+	output, err := buildContinueOutput(config, serverURL, continuation)
+	if err != nil {
+		return err
+	}
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderContinueText(output))
+	return err
+}
+
 func renderStartText(output spine.WorkStartOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work intake started\n\n")
@@ -239,8 +323,127 @@ func renderStartText(output spine.WorkStartOutput) string {
 		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
 	}
 	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", workStartedNote, output.NextSuggestedCommand)
+	if output.NextAction.Command != "" && output.NextAction.Available {
+		fmt.Fprintf(&b, "Continue: %s\n", output.NextAction.Command)
+	}
 	if output.NextAction.Command != "" && !output.NextAction.Available {
 		fmt.Fprintf(&b, "Planned continuation, not available yet: %s\n", output.NextAction.Command)
+	}
+	return b.String()
+}
+
+func buildContinueOutput(config projectconfig.Config, serverURL string, continuation goalContinuationResponse) (spine.WorkContinueOutput, error) {
+	goalID := strings.TrimSpace(continuation.GoalID)
+	if goalID == "" {
+		return spine.WorkContinueOutput{}, exitcode.RuntimeError(errors.New("goal continuation response did not include goal_id"))
+	}
+	state := strings.TrimSpace(continuation.State)
+	if state == "" {
+		return spine.WorkContinueOutput{}, exitcode.RuntimeError(errors.New("goal continuation response did not include state"))
+	}
+
+	output := spine.WorkContinueOutput{
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  config.OrganizationID,
+		ProjectID:       config.ProjectID,
+		RepoBindingID:   config.RepoBindingID,
+		GoalID:          goalID,
+		State:           state,
+		LocalConfigPath: projectconfig.RelativePath,
+	}
+	if continuation.Goal != nil {
+		if strings.TrimSpace(continuation.Goal.OrganizationID) != "" {
+			output.OrganizationID = continuation.Goal.OrganizationID
+		}
+		if strings.TrimSpace(continuation.Goal.ProjectID) != "" {
+			output.ProjectID = continuation.Goal.ProjectID
+		}
+		if strings.TrimSpace(continuation.Goal.RepoBindingID) != "" {
+			output.RepoBindingID = continuation.Goal.RepoBindingID
+		}
+	}
+
+	switch state {
+	case "ready_for_contract_seed":
+		output.Display = spine.DisplaySummary{
+			Summary: "Goal is ready for contract seed. Contract drafting is the next planned step, but that CLI command is not available yet.",
+		}
+		output.NextAction = spine.NextAction{
+			Kind:         "draft_contract",
+			Blocking:     false,
+			Command:      fmt.Sprintf("goalrail contract draft --goal-id %s --format json", goalID),
+			Available:    false,
+			PlannedSlice: "D",
+		}
+	case "needs_clarification":
+		if continuation.ClarificationRequest == nil {
+			return spine.WorkContinueOutput{}, exitcode.RuntimeError(errors.New("goal continuation response did not include clarification_request"))
+		}
+		if strings.TrimSpace(continuation.ClarificationRequest.ID) == "" {
+			return spine.WorkContinueOutput{}, exitcode.RuntimeError(errors.New("goal continuation response did not include clarification_request.id"))
+		}
+		questions := make([]spine.ClarificationQuestionRef, 0, len(continuation.ClarificationRequest.Questions))
+		for _, question := range continuation.ClarificationRequest.Questions {
+			questions = append(questions, spine.ClarificationQuestionRef{
+				ID:         question.ID,
+				Text:       question.Text,
+				WhyNeeded:  question.WhyNeeded,
+				AnswerType: question.AnswerType,
+				MapsTo:     question.MapsTo,
+			})
+		}
+		output.Display = spine.DisplaySummary{
+			Summary: "Goal needs clarification. Ask the user the returned questions before continuing.",
+		}
+		output.NextAction = spine.NextAction{
+			Kind:      "ask_user",
+			Blocking:  true,
+			Available: true,
+			RequestID: continuation.ClarificationRequest.ID,
+			Questions: questions,
+		}
+	default:
+		output.Display = spine.DisplaySummary{
+			Summary: "Goal continuation is blocked in state " + state + ".",
+		}
+		output.NextAction = spine.NextAction{
+			Kind:      "blocked",
+			Blocking:  true,
+			Available: false,
+		}
+	}
+
+	return output, nil
+}
+
+func renderContinueText(output spine.WorkContinueOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Work continuation\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Goal: %s\n", output.GoalID)
+	fmt.Fprintf(&b, "State: %s\n", output.State)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+
+	switch output.NextAction.Kind {
+	case "ask_user":
+		fmt.Fprintf(&b, "\nClarification request: %s\n", output.NextAction.RequestID)
+		for i, question := range output.NextAction.Questions {
+			fmt.Fprintf(&b, "%d. %s\n", i+1, question.Text)
+		}
+	case "draft_contract":
+		fmt.Fprintf(&b, "\nNext planned command: %s\n", output.NextAction.Command)
+		if output.NextAction.PlannedSlice != "" {
+			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		}
+	case "blocked":
+		fmt.Fprintf(&b, "\nNext action: blocked\n")
 	}
 	return b.String()
 }
@@ -426,6 +629,34 @@ func promoteIntake(ctx context.Context, client HTTPClient, session authstore.Ses
 	return decoded, nil
 }
 
+func postGoalContinuation(ctx context.Context, client HTTPClient, session authstore.Session, goalID string) (goalContinuationResponse, error) {
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	endpoint := serverURL + "/v1/goals/" + url.PathEscape(goalID) + "/continuation"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("build goal continuation request: %w", err))
+	}
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("continue goal on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return goalContinuationResponse{}, mapHTTPError("goal continuation request", response, serverURL)
+	}
+	var decoded goalContinuationResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return goalContinuationResponse{}, exitcode.RuntimeError(fmt.Errorf("decode goal continuation response: %w", err))
+	}
+	if strings.TrimSpace(decoded.GoalID) == "" {
+		return goalContinuationResponse{}, exitcode.RuntimeError(errors.New("goal continuation response did not include goal_id"))
+	}
+	return decoded, nil
+}
+
 func mapHTTPError(operation string, response *http.Response, serverURL string) error {
 	message := decodeServerErrorMessage(response.Body, response.StatusCode)
 	switch response.StatusCode {
@@ -520,4 +751,36 @@ type goalResponse struct {
 	Title          string `json:"title"`
 	Summary        string `json:"summary"`
 	State          string `json:"state"`
+}
+
+type goalContinuationResponse struct {
+	GoalID               string                        `json:"goal_id"`
+	State                string                        `json:"state"`
+	Readiness            *goalReadinessResponse        `json:"readiness,omitempty"`
+	Goal                 *goalResponse                 `json:"goal,omitempty"`
+	ClarificationRequest *clarificationRequestResponse `json:"clarification_request,omitempty"`
+}
+
+type goalReadinessResponse struct {
+	GoalID      string   `json:"goal_id"`
+	State       string   `json:"state"`
+	Ready       bool     `json:"ready"`
+	ReasonCodes []string `json:"reason_codes"`
+	Message     string   `json:"message"`
+}
+
+type clarificationRequestResponse struct {
+	ID          string                          `json:"id"`
+	GoalID      string                          `json:"goal_id"`
+	ReasonCodes []string                        `json:"reason_codes"`
+	Questions   []clarificationQuestionResponse `json:"questions"`
+	State       string                          `json:"state"`
+}
+
+type clarificationQuestionResponse struct {
+	ID         string `json:"id"`
+	Text       string `json:"text"`
+	WhyNeeded  string `json:"why_needed"`
+	AnswerType string `json:"answer_type"`
+	MapsTo     string `json:"maps_to"`
 }

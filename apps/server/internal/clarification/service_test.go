@@ -270,6 +270,43 @@ func TestServiceCreateRequestRejectsDuplicateOpenRequest(t *testing.T) {
 	}
 }
 
+func TestServiceGetOrCreateOpenRequestReturnsExistingAfterCreateConflict(t *testing.T) {
+	service, goals, requests, _, _ := requestService(t)
+	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
+	if err := goals.Create(context.Background(), createdGoal); err != nil {
+		t.Fatalf("Create goal: %v", err)
+	}
+	existing := spine.ClarificationRequest{
+		ID:          "existing-request",
+		GoalID:      createdGoal.ID,
+		ReasonCodes: []spine.GoalReadinessReasonCode{spine.GoalReadinessReasonMissingScopeHint},
+		Questions: []spine.ClarificationQuestion{
+			{
+				ID:         "existing-question",
+				Text:       "What is the scope?",
+				WhyNeeded:  "Scope is required.",
+				AnswerType: spine.ClarificationAnswerTypeText,
+				MapsTo:     spine.ClarificationMapsToGoalScopeHint,
+			},
+		},
+		Target:    spine.ClarificationTarget{Role: spine.ClarificationTargetRoleIntentOwner},
+		State:     spine.ClarificationRequestStateOpen,
+		CreatedAt: testTime(),
+	}
+	requests.requests[existing.ID] = existing
+	requests.openByGoal[existing.GoalID] = existing.ID
+	requests.hideOpenByGoalCount = 1
+	requests.createErr = clarification.ErrAlreadyOpen
+
+	request, err := service.GetOrCreateOpenRequest(context.Background(), createdGoal.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateOpenRequest() error = %v", err)
+	}
+	if request.ID != existing.ID {
+		t.Fatalf("request id = %q, want %q", request.ID, existing.ID)
+	}
+}
+
 func TestServiceCreateRequestRejectsInvalidGoalState(t *testing.T) {
 	service, goals, _, _, _ := requestService(t)
 	createdGoal := validGoal(spine.GoalReadinessReasonMissingScopeHint)
@@ -880,6 +917,8 @@ func cloneGoal(goal spine.Goal) spine.Goal {
 type fakeClarificationStore struct {
 	requests                  map[spine.ClarificationRequestID]spine.ClarificationRequest
 	openByGoal                map[spine.GoalID]spine.ClarificationRequestID
+	createErr                 error
+	hideOpenByGoalCount       int
 	createSawTransaction      bool
 	updateStateSawTransaction bool
 	updateStateMissing        bool
@@ -894,6 +933,9 @@ func newFakeClarificationStore() *fakeClarificationStore {
 
 func (s *fakeClarificationStore) Create(ctx context.Context, request spine.ClarificationRequest) error {
 	s.createSawTransaction = s.createSawTransaction || sawTransaction(ctx)
+	if s.createErr != nil {
+		return s.createErr
+	}
 	s.requests[request.ID] = cloneClarificationRequest(request)
 	if request.State == spine.ClarificationRequestStateOpen {
 		s.openByGoal[request.GoalID] = request.ID
@@ -907,6 +949,10 @@ func (s *fakeClarificationStore) Get(_ context.Context, id spine.ClarificationRe
 }
 
 func (s *fakeClarificationStore) GetOpenByGoalID(_ context.Context, id spine.GoalID) (spine.ClarificationRequest, bool, error) {
+	if s.hideOpenByGoalCount > 0 {
+		s.hideOpenByGoalCount--
+		return spine.ClarificationRequest{}, false, nil
+	}
 	requestID, ok := s.openByGoal[id]
 	if !ok {
 		return spine.ClarificationRequest{}, false, nil

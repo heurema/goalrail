@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
+	"github.com/heurema/goalrail/apps/server/internal/continuation"
 	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
@@ -543,6 +545,232 @@ func TestPostGoalReadinessUnknownGoalReturnsNotFound(t *testing.T) {
 	decodeJSON(t, response.body, &body)
 	if body.Error.Code != "not_found" {
 		t.Fatalf("error code = %q, want %q", body.Error.Code, "not_found")
+	}
+}
+
+func TestPostGoalContinuationReturnsReadyForContractSeed(t *testing.T) {
+	server := testServer(t)
+	created := createReadyEnoughGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, forbiddenField := range []string{"\"contract_id\"", "\"work_item_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+
+	var body spine.GoalContinuation
+	decodeJSON(t, response.body, &body)
+	if body.GoalID != created.ID {
+		t.Fatalf("goal_id = %q, want %q", body.GoalID, created.ID)
+	}
+	if body.State != spine.GoalStateReadyForContractSeed {
+		t.Fatalf("state = %q, want %q", body.State, spine.GoalStateReadyForContractSeed)
+	}
+	if body.Readiness == nil || !body.Readiness.Ready {
+		t.Fatalf("readiness = %#v, want ready result", body.Readiness)
+	}
+	if body.ClarificationRequest != nil {
+		t.Fatalf("clarification_request = %#v, want nil", body.ClarificationRequest)
+	}
+	if len(server.clarifications.requests) != 0 {
+		t.Fatalf("clarification requests = %d, want 0", len(server.clarifications.requests))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostGoalContinuationReturnsOpenClarificationForIncompleteGoal(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var body spine.GoalContinuation
+	decodeJSON(t, response.body, &body)
+	if body.State != spine.GoalStateNeedsClarification {
+		t.Fatalf("state = %q, want %q", body.State, spine.GoalStateNeedsClarification)
+	}
+	if body.Readiness == nil || body.Readiness.Ready {
+		t.Fatalf("readiness = %#v, want not ready result", body.Readiness)
+	}
+	if body.ClarificationRequest == nil {
+		t.Fatal("clarification_request = nil, want open request")
+	}
+	if body.ClarificationRequest.GoalID != created.ID {
+		t.Fatalf("clarification goal_id = %q, want %q", body.ClarificationRequest.GoalID, created.ID)
+	}
+	if body.ClarificationRequest.State != spine.ClarificationRequestStateOpen {
+		t.Fatalf("clarification state = %q, want %q", body.ClarificationRequest.State, spine.ClarificationRequestStateOpen)
+	}
+	if !hasClarificationQuestion(body.ClarificationRequest.Questions, spine.ClarificationMapsToGoalScopeHint) {
+		t.Fatalf("questions = %#v, want scope_hint question", body.ClarificationRequest.Questions)
+	}
+	if !hasClarificationQuestion(body.ClarificationRequest.Questions, spine.ClarificationMapsToGoalAcceptanceHint) {
+		t.Fatalf("questions = %#v, want acceptance_hint question", body.ClarificationRequest.Questions)
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostGoalContinuationReusesOpenClarificationRequest(t *testing.T) {
+	server := testServer(t)
+	intakeID := createIntake(t, server, validIntakeJSON)
+	created := promoteIntake(t, server, intakeID)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if first.code != http.StatusOK {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusOK, first.body)
+	}
+	second := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if second.code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusOK, second.body)
+	}
+	third := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if third.code != http.StatusOK {
+		t.Fatalf("third status = %d, want %d: %s", third.code, http.StatusOK, third.body)
+	}
+
+	var firstBody spine.GoalContinuation
+	var secondBody spine.GoalContinuation
+	var thirdBody spine.GoalContinuation
+	decodeJSON(t, first.body, &firstBody)
+	decodeJSON(t, second.body, &secondBody)
+	decodeJSON(t, third.body, &thirdBody)
+	if firstBody.ClarificationRequest == nil || secondBody.ClarificationRequest == nil || thirdBody.ClarificationRequest == nil {
+		t.Fatalf("clarification requests = %#v / %#v / %#v, want all present", firstBody.ClarificationRequest, secondBody.ClarificationRequest, thirdBody.ClarificationRequest)
+	}
+	if firstBody.ClarificationRequest.ID != secondBody.ClarificationRequest.ID || firstBody.ClarificationRequest.ID != thirdBody.ClarificationRequest.ID {
+		t.Fatalf("clarification request ids = %q/%q/%q, want same", firstBody.ClarificationRequest.ID, secondBody.ClarificationRequest.ID, thirdBody.ClarificationRequest.ID)
+	}
+	if len(server.clarifications.requests) != 1 {
+		t.Fatalf("clarification requests = %d, want 1", len(server.clarifications.requests))
+	}
+}
+
+func TestPostGoalContinuationInvalidGoalIDReturnsValidationError(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/not-a-uuid/continuation", "")
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "validation_failed" {
+		t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+	}
+	if len(server.clarifications.requests) != 0 {
+		t.Fatalf("clarification requests = %d, want 0", len(server.clarifications.requests))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostGoalContinuationRequiresAuthentication(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	created := createReadyEnoughGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "unauthorized" {
+		t.Fatalf("error code = %q, want unauthorized", body.Error.Code)
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("goal missing after unauthorized continuation")
+	}
+	if stored.State != spine.GoalStateCreated {
+		t.Fatalf("stored state = %q, want %q", stored.State, spine.GoalStateCreated)
+	}
+	if len(server.clarifications.requests) != 0 {
+		t.Fatalf("clarification requests = %d, want 0", len(server.clarifications.requests))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostGoalContinuationRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	created := createReadyEnoughGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "forbidden" {
+		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
+	}
+
+	stored, ok, err := server.goals.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("goals.Get() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("goal missing after forbidden continuation")
+	}
+	if stored.State != spine.GoalStateCreated {
+		t.Fatalf("stored state = %q, want %q", stored.State, spine.GoalStateCreated)
+	}
+	if len(server.clarifications.requests) != 0 {
+		t.Fatalf("clarification requests = %d, want 0", len(server.clarifications.requests))
+	}
+	assertNoContractTaskSideEffects(t, server)
+}
+
+func TestPostGoalContinuationReturnsRejectedGoalAsBlockedState(t *testing.T) {
+	server := testServer(t)
+	created := createReadyEnoughGoal(t, server)
+	created.State = spine.GoalStateRejected
+	if err := server.goals.Create(context.Background(), created); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/goals/"+string(created.ID)+"/continuation", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+
+	var body spine.GoalContinuation
+	decodeJSON(t, response.body, &body)
+	if body.State != spine.GoalStateRejected {
+		t.Fatalf("state = %q, want %q", body.State, spine.GoalStateRejected)
+	}
+	if body.Readiness != nil {
+		t.Fatalf("readiness = %#v, want nil", body.Readiness)
+	}
+	if body.ClarificationRequest != nil {
+		t.Fatalf("clarification_request = %#v, want nil", body.ClarificationRequest)
 	}
 }
 
@@ -1223,6 +1451,18 @@ func testServer(t *testing.T) testServerDeps {
 
 func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver) testServerDeps {
 	t.Helper()
+	return testServerWithResolverAndContinuationAuth(t, resolver, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000002"),
+	})
+}
+
+func testServerWithContinuationAuth(t *testing.T, authService httpserver.AuthService) testServerDeps {
+	t.Helper()
+	return testServerWithResolverAndContinuationAuth(t, validProjectContextResolver(), authService)
+}
+
+func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.ProjectContextResolver, authService httpserver.AuthService) testServerDeps {
+	t.Helper()
 
 	intakeStore := newFakeIntakeStore()
 	goalStore := newFakeGoalStore()
@@ -1244,6 +1484,8 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	goalHandler := httpserver.NewGoalHandler(goalService)
 	clarificationService := clarification.NewService(goalStore, clarificationStore, answerStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	clarificationHandler := httpserver.NewClarificationHandler(clarificationService)
+	continuationService := continuation.NewService(goalStore, goalService, clarificationService)
+	continuationHandler := httpserver.NewContinuationHandler(authService, continuationService)
 	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, txRunner, fixedClock{now: testTime()}, ids)
@@ -1255,7 +1497,7 @@ func testServerWithResolver(t *testing.T, resolver intake.ProjectContextResolver
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, contractHandler, workItemHandler, workItemPlanHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,
@@ -1839,6 +2081,27 @@ func validProjectContextResolver() fakeProjectContextResolver {
 	}
 }
 
+func continuationAuthProfile(organizationID spine.OrganizationID) auth.Profile {
+	return auth.Profile{
+		User: spine.User{
+			ID:          "018f0000-0000-7000-8000-000000000001",
+			DisplayName: "Developer",
+			State:       spine.EntityStateActive,
+			CreatedAt:   testTime(),
+			UpdatedAt:   testTime(),
+		},
+		OrganizationMembership: spine.OrganizationMembership{
+			ID:             "018f0000-0000-7000-8000-000000000011",
+			OrganizationID: organizationID,
+			UserID:         "018f0000-0000-7000-8000-000000000001",
+			Role:           spine.OrganizationMembershipRoleMember,
+			State:          spine.EntityStateActive,
+			CreatedAt:      testTime(),
+			UpdatedAt:      testTime(),
+		},
+	}
+}
+
 type fakeProjectContextResolver struct {
 	resolved spine.ResolvedRepoBindingContext
 	ok       bool
@@ -1891,7 +2154,7 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func (g *sequenceIDs) NewGoalID() (spine.GoalID, error) {
 	g.goal++
-	return spine.GoalID(fmt.Sprintf("goal-%d", g.goal)), nil
+	return spine.GoalID(fmt.Sprintf("018f0000-0000-7000-8000-%012d", g.goal)), nil
 }
 
 func (g *sequenceIDs) NewClarificationRequestID() (spine.ClarificationRequestID, error) {
@@ -2002,6 +2265,58 @@ func createClarificationReadyGoal(t *testing.T, server testServerDeps) spine.Goa
 	}
 	decodeJSON(t, response.body, &body)
 	return body.Goal
+}
+
+func createReadyEnoughGoal(t *testing.T, server testServerDeps) spine.Goal {
+	t.Helper()
+
+	created := spine.Goal{
+		ID:             "018f0000-0000-7000-8000-000000000101",
+		IntakeID:       "direct-ready-intake-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		Title:          "Ready goal",
+		Summary:        "Refactor duplicate CSV export filter logic",
+		ScopeHint:      "CSV export filter duplicate handling",
+		AcceptanceHint: "Existing CSV export behavior is preserved",
+		SourceRefs: []spine.SourceRef{
+			{Kind: "test", ID: "direct-ready-intake-1"},
+		},
+		RequestAuthor: spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		IntentOwner:   spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		State:         spine.GoalStateCreated,
+		CreatedAt:     testTime(),
+	}
+	if err := server.goals.Create(context.Background(), created); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	return created
+}
+
+func assertNoContractTaskSideEffects(t *testing.T, server testServerDeps) {
+	t.Helper()
+	if len(server.contracts.contracts) != 0 {
+		t.Fatalf("contracts = %d, want 0", len(server.contracts.contracts))
+	}
+	if len(server.contractSeeds.seeds) != 0 {
+		t.Fatalf("contract seeds = %d, want 0", len(server.contractSeeds.seeds))
+	}
+	if len(server.contractDrafts.drafts) != 0 {
+		t.Fatalf("contract drafts = %d, want 0", len(server.contractDrafts.drafts))
+	}
+	if len(server.approvedContracts.approved) != 0 {
+		t.Fatalf("approved contracts = %d, want 0", len(server.approvedContracts.approved))
+	}
+	if len(server.workItems.items) != 0 {
+		t.Fatalf("work items = %d, want 0", len(server.workItems.items))
+	}
+	if len(server.workItemPlans.plans) != 0 {
+		t.Fatalf("work item plans = %d, want 0", len(server.workItemPlans.plans))
+	}
+	if len(server.workItemProposals.proposals) != 0 {
+		t.Fatalf("work item proposals = %d, want 0", len(server.workItemProposals.proposals))
+	}
 }
 
 func createClarificationRequest(t *testing.T, server testServerDeps) spine.ClarificationRequest {
