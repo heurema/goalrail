@@ -122,6 +122,48 @@ func TestOwnerCanCreateUserWithTemporaryPasswordReturnedOnce(t *testing.T) {
 	}
 }
 
+func TestCreateUserWithExistingEmailReturnsConflictWithoutMutatingExistingRecords(t *testing.T) {
+	store := newFakeStore()
+	originalUser := store.users[memberUserID]
+	originalMembership := store.memberships[key(orgID, memberUserID)]
+	originalCredential := spine.UserPasswordCredential{
+		UserID:             memberUserID,
+		PasswordHash:       "hash:existing-password",
+		MustChangePassword: false,
+		PasswordChangedAt:  ptrTime(testNow.Add(-2 * time.Hour)),
+		CreatedAt:          testNow.Add(-3 * time.Hour),
+		UpdatedAt:          testNow.Add(-2 * time.Hour),
+	}
+	store.credentials[memberUserID] = originalCredential
+	service := newTestService(store)
+
+	result, err := service.CreateUser(context.Background(), CreateUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		Email:               " MEMBER@EXAMPLE.COM ",
+		DisplayName:         "Changed Name",
+		Role:                "owner",
+	})
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
+	}
+	if result.TemporaryPassword != "" {
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
+	}
+	if got := store.users[memberUserID]; got != originalUser {
+		t.Fatalf("user mutated on conflict:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if got := store.memberships[key(orgID, memberUserID)]; got != originalMembership {
+		t.Fatalf("membership mutated on conflict:\n got: %#v\nwant: %#v", got, originalMembership)
+	}
+	if got := store.credentials[memberUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("credential mutated on conflict:\n got: %#v\nwant: %#v", got, originalCredential)
+	}
+	if _, ok := store.users[newUserID]; ok {
+		t.Fatalf("new user was created despite conflict: %#v", store.users[newUserID])
+	}
+}
+
 func TestListUsersDoesNotExposeTemporaryPasswordOrCredentialMaterial(t *testing.T) {
 	store := newFakeStore()
 	store.credentials[memberUserID] = spine.UserPasswordCredential{
@@ -191,23 +233,6 @@ func TestCannotDemoteLastActiveOwner(t *testing.T) {
 	})
 	if !errors.Is(err, ErrLastActiveOwner) {
 		t.Fatalf("PatchUser() error = %v, want ErrLastActiveOwner", err)
-	}
-}
-
-func TestCreateCannotDemoteExistingLastActiveOwner(t *testing.T) {
-	store := newFakeStore()
-	delete(store.memberships, key(orgID, memberUserID))
-	service := newTestService(store)
-
-	_, err := service.CreateUser(context.Background(), CreateUserInput{
-		AuthenticatedUserID: ownerUserID,
-		OrganizationID:      orgID,
-		Email:               "owner@example.com",
-		DisplayName:         "Owner",
-		Role:                "member",
-	})
-	if !errors.Is(err, ErrLastActiveOwner) {
-		t.Fatalf("CreateUser() error = %v, want ErrLastActiveOwner", err)
 	}
 }
 
@@ -431,6 +456,26 @@ func mustJSON(t *testing.T, value any) string {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 	return string(encoded)
+}
+
+func sameCredential(a spine.UserPasswordCredential, b spine.UserPasswordCredential) bool {
+	return a.UserID == b.UserID &&
+		a.PasswordHash == b.PasswordHash &&
+		a.MustChangePassword == b.MustChangePassword &&
+		sameTimePtr(a.PasswordChangedAt, b.PasswordChangedAt) &&
+		a.CreatedAt.Equal(b.CreatedAt) &&
+		a.UpdatedAt.Equal(b.UpdatedAt)
+}
+
+func sameTimePtr(a *time.Time, b *time.Time) bool {
+	switch {
+	case a == nil && b == nil:
+		return true
+	case a == nil || b == nil:
+		return false
+	default:
+		return a.Equal(*b)
+	}
 }
 
 const (

@@ -16,6 +16,7 @@ import (
 var (
 	ErrForbidden       = errors.New("user is not allowed to manage organization users")
 	ErrNotFound        = errors.New("organization user not found")
+	ErrUserExists      = errors.New("organization user already exists")
 	ErrLastActiveOwner = errors.New("last active owner cannot be disabled or demoted")
 )
 
@@ -198,63 +199,37 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 		if err != nil {
 			return fmt.Errorf("get user by email: %w", err)
 		}
-		existingUserState := user.State
-		if !ok {
-			id, err := s.IDs.NewUserID()
-			if err != nil {
-				return fmt.Errorf("new user id: %w", err)
-			}
-			user = spine.User{
-				ID:        id,
-				CreatedAt: now,
-			}
+		if ok {
+			return ErrUserExists
 		}
-		user.Email = normalized.Email
-		user.DisplayName = normalized.DisplayName
-		user.State = spine.EntityStateActive
-		user.UpdatedAt = now
-		if user.CreatedAt.IsZero() {
-			user.CreatedAt = now
+		id, err := s.IDs.NewUserID()
+		if err != nil {
+			return fmt.Errorf("new user id: %w", err)
+		}
+		user = spine.User{
+			ID:          id,
+			Email:       normalized.Email,
+			DisplayName: normalized.DisplayName,
+			State:       spine.EntityStateActive,
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 		if err := s.Store.UpsertUser(txCtx, user); err != nil {
 			return fmt.Errorf("upsert user: %w", err)
 		}
 
-		membership, ok, err := s.Store.GetOrganizationMembership(txCtx, normalized.OrganizationID, user.ID)
+		membershipID, err := s.IDs.NewOrganizationMembershipID()
 		if err != nil {
-			return fmt.Errorf("get organization membership: %w", err)
+			return fmt.Errorf("new organization membership id: %w", err)
 		}
-		if !ok {
-			id, err := s.IDs.NewOrganizationMembershipID()
-			if err != nil {
-				return fmt.Errorf("new organization membership id: %w", err)
-			}
-			membership = spine.OrganizationMembership{
-				ID:             id,
-				OrganizationID: normalized.OrganizationID,
-				UserID:         user.ID,
-				CreatedAt:      now,
-			}
-		}
-		if existingUserState == spine.EntityStateActive &&
-			membership.State == spine.EntityStateActive &&
-			membership.Role == spine.OrganizationMembershipRoleOwner &&
-			spine.OrganizationMembershipRole(normalized.Role) != spine.OrganizationMembershipRoleOwner {
-			count, err := s.Store.CountActiveOwners(txCtx, normalized.OrganizationID)
-			if err != nil {
-				return fmt.Errorf("count active owners: %w", err)
-			}
-			if count <= 1 {
-				return ErrLastActiveOwner
-			}
-		}
-		membership.OrganizationID = normalized.OrganizationID
-		membership.UserID = user.ID
-		membership.Role = spine.OrganizationMembershipRole(normalized.Role)
-		membership.State = spine.EntityStateActive
-		membership.UpdatedAt = now
-		if membership.CreatedAt.IsZero() {
-			membership.CreatedAt = now
+		membership := spine.OrganizationMembership{
+			ID:             membershipID,
+			OrganizationID: normalized.OrganizationID,
+			UserID:         user.ID,
+			Role:           spine.OrganizationMembershipRole(normalized.Role),
+			State:          spine.EntityStateActive,
+			CreatedAt:      now,
+			UpdatedAt:      now,
 		}
 		if err := s.Store.UpsertOrganizationMembership(txCtx, membership); err != nil {
 			return fmt.Errorf("upsert organization membership: %w", err)

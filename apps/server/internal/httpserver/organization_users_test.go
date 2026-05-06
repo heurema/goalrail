@@ -67,6 +67,7 @@ func TestOrganizationUsersMapsServiceErrors(t *testing.T) {
 	}{
 		{name: "forbidden", err: usermanagement.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: "forbidden"},
 		{name: "validation", err: &usermanagement.ValidationError{Message: "role must be one of owner, admin, member, or viewer"}, wantStatus: http.StatusBadRequest, wantCode: "validation_failed"},
+		{name: "user exists", err: usermanagement.ErrUserExists, wantStatus: http.StatusConflict, wantCode: "organization_user_exists"},
 		{name: "last owner", err: usermanagement.ErrLastActiveOwner, wantStatus: http.StatusConflict, wantCode: "last_active_owner"},
 		{name: "not found", err: usermanagement.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: "not_found"},
 	}
@@ -82,6 +83,21 @@ func TestOrganizationUsersMapsServiceErrors(t *testing.T) {
 				t.Fatalf("body = %q, want error code %q", response.body, tt.wantCode)
 			}
 		})
+	}
+}
+
+func TestOrganizationUsersCreateConflictDoesNotReturnTemporaryPassword(t *testing.T) {
+	handler := httpserver.NewOrganizationUsersHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeOrganizationUsersService{createErr: usermanagement.ErrUserExists})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.Create), http.MethodPost, "/v1/organizations/018f0000-0000-7000-8000-000000000002/users", `{"email":"dev@example.com","display_name":"Dev","role":"member"}`, "Bearer access-token")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	if !strings.Contains(response.body, "organization_user_exists") {
+		t.Fatalf("body = %q, want organization_user_exists", response.body)
+	}
+	if strings.Contains(response.body, "temporary_password") {
+		t.Fatalf("body leaked temporary_password on conflict: %s", response.body)
 	}
 }
 

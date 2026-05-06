@@ -114,6 +114,8 @@ func (h *OrganizationUsersHandler) respondServiceError(w http.ResponseWriter, er
 		RespondError(w, http.StatusForbidden, "forbidden", "user is not allowed to manage users in this organization")
 	case errors.Is(err, usermanagement.ErrNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "organization user not found")
+	case errors.Is(err, usermanagement.ErrUserExists):
+		RespondError(w, http.StatusConflict, "organization_user_exists", "organization user already exists")
 	case errors.Is(err, usermanagement.ErrLastActiveOwner):
 		RespondError(w, http.StatusConflict, "last_active_owner", "last active owner cannot be disabled or demoted")
 	case errors.Is(err, auth.ErrMembershipRequired):

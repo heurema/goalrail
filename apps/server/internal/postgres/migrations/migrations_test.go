@@ -115,6 +115,9 @@ func TestInitMigrationCreatesAuthCredentialTables(t *testing.T) {
 	sql := string(contents)
 	for _, want := range []string{
 		"CREATE TABLE user_password_credentials",
+		"CREATE UNIQUE INDEX users_email_lower_unique",
+		"ON users (lower(email))",
+		"WHERE email <> ''",
 		"user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE",
 		"password_hash TEXT NOT NULL",
 		"must_change_password BOOLEAN NOT NULL DEFAULT TRUE",
@@ -186,6 +189,7 @@ func TestInitMigrationDropsAuthCredentialTablesBeforeUsers(t *testing.T) {
 		"DROP TABLE IF EXISTS cli_auth_codes;",
 		"DROP INDEX IF EXISTS user_password_credentials_must_change_password_idx;",
 		"DROP TABLE IF EXISTS user_password_credentials;",
+		"DROP INDEX IF EXISTS users_email_lower_unique;",
 		"DROP TABLE IF EXISTS users;",
 	} {
 		if !strings.Contains(sql, want) {
