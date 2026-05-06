@@ -12,6 +12,9 @@ import (
 type WorkItemPlanService interface {
 	CreatePlan(context.Context, spine.ContractID, spine.WorkItemPlanCreateRequest) (spine.WorkItemPlan, error)
 	GetPlan(context.Context, spine.WorkItemPlanID) (spine.WorkItemPlan, error)
+	AcquireNextLease(context.Context, spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error)
+	GetLease(context.Context, spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, error)
+	RenewLease(context.Context, spine.WorkItemPlanLeaseID, spine.WorkItemPlanLeaseRenewRequest) (spine.WorkItemPlanLease, error)
 	SubmitProposal(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalSubmitRequest) (spine.WorkItemPlanProposal, error)
 	GetProposal(context.Context, spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, error)
 	AcceptProposal(context.Context, spine.WorkItemPlanProposalID, spine.WorkItemPlanAcceptanceRequest) (spine.WorkItemPlanAcceptanceResult, error)
@@ -46,6 +49,47 @@ func (h *WorkItemPlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, plan)
+}
+
+func (h *WorkItemPlanHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
+	var input spine.WorkItemPlanLeaseCreateRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	lease, ok, err := h.service.AcquireNextLease(r.Context(), input)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	RespondJSON(w, http.StatusCreated, lease)
+}
+
+func (h *WorkItemPlanHandler) GetLease(w http.ResponseWriter, r *http.Request) {
+	lease, err := h.service.GetLease(r.Context(), spine.WorkItemPlanLeaseID(r.PathValue("id")))
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, lease)
+}
+
+func (h *WorkItemPlanHandler) RenewLease(w http.ResponseWriter, r *http.Request) {
+	var input spine.WorkItemPlanLeaseRenewRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	lease, err := h.service.RenewLease(r.Context(), spine.WorkItemPlanLeaseID(r.PathValue("id")), input)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, lease)
 }
 
 func (h *WorkItemPlanHandler) SubmitProposal(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +142,8 @@ func (h *WorkItemPlanHandler) respondServiceError(w http.ResponseWriter, err err
 		RespondError(w, http.StatusNotFound, "not_found", "plan not found")
 	case errors.Is(err, workitemplan.ErrProposalNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "proposal not found")
+	case errors.Is(err, workitemplan.ErrLeaseNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "lease not found")
 	case errors.Is(err, workitemplan.ErrInvalidContractState):
 		RespondError(w, http.StatusConflict, "invalid_state", "contract is not approved")
 	case errors.Is(err, workitemplan.ErrContractMissingApprovedSnapshot):
@@ -114,6 +160,12 @@ func (h *WorkItemPlanHandler) respondServiceError(w http.ResponseWriter, err err
 		RespondError(w, http.StatusConflict, "already_proposed", "plan already has a proposal")
 	case errors.Is(err, workitemplan.ErrAlreadyAccepted):
 		RespondError(w, http.StatusConflict, "already_accepted", "proposal already accepted")
+	case errors.Is(err, workitemplan.ErrLeaseExpired):
+		RespondError(w, http.StatusConflict, "lease_expired", "lease expired")
+	case errors.Is(err, workitemplan.ErrLeaseCompleted):
+		RespondError(w, http.StatusConflict, "lease_completed", "lease completed")
+	case errors.Is(err, workitemplan.ErrInvalidLease):
+		RespondError(w, http.StatusConflict, "invalid_lease", "lease is invalid")
 	default:
 		respondInternalError(w)
 	}

@@ -37,6 +37,9 @@ type RouteHandlers struct {
 	ContractApprove           http.Handler
 	ContractPlans             http.Handler
 	PlanGet                   http.Handler
+	PlanLeases                http.Handler
+	PlanLeaseGet              http.Handler
+	PlanLeaseRenew            http.Handler
 	PlanProposals             http.Handler
 	ProposalGet               http.Handler
 	ProposalAcceptance        http.Handler
@@ -79,6 +82,12 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/contracts/{id}/submissions", mustHandler("contract submit", handlers.ContractSubmit))
 	mux.Handle("POST /v1/contracts/{id}/approvals", mustHandler("contract approve", handlers.ContractApprove))
 	mux.Handle("POST /v1/contracts/{id}/plans", mustHandler("contract plans", handlers.ContractPlans))
+	mux.Handle("POST /v1/plans/leases", mustHandler("plan leases", handlers.PlanLeases))
+	mux.Handle("GET /v1/plans/leases", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		RespondError(w, http.StatusNotFound, "not_found", "not found")
+	}))
+	mux.Handle("GET /v1/plans/leases/{id}", mustHandler("plan lease get", handlers.PlanLeaseGet))
+	mux.Handle("PATCH /v1/plans/leases/{id}", mustHandler("plan lease renew", handlers.PlanLeaseRenew))
 	mux.Handle("GET /v1/plans/{id}", mustHandler("plan get", handlers.PlanGet))
 	mux.Handle("POST /v1/plans/{id}/proposals", mustHandler("plan proposals", handlers.PlanProposals))
 	mux.Handle("GET /v1/proposals/{id}", mustHandler("proposal get", handlers.ProposalGet))

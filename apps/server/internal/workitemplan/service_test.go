@@ -12,7 +12,7 @@ import (
 )
 
 func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
-	service, _, _, plans, proposals, workItems, events := planningService(t)
+	service, _, _, plans, leases, proposals, workItems, events := planningService(t)
 	approved := validApprovedContract()
 
 	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
@@ -30,7 +30,8 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 		t.Fatal("CreatePlan materialized a WorkItem")
 	}
 
-	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID)))
+	lease := acquireLease(t, service)
+	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
 	if err != nil {
 		t.Fatalf("SubmitProposal() error = %v", err)
 	}
@@ -40,6 +41,10 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 	storedPlan, _, _ := plans.Get(context.Background(), plan.ID)
 	if storedPlan.State != spine.WorkItemPlanStateProposalSubmitted {
 		t.Fatalf("plan state = %q, want proposal_submitted", storedPlan.State)
+	}
+	storedLease, _, _ := leases.Get(context.Background(), lease.ID)
+	if storedLease.State != spine.WorkItemPlanLeaseStateCompleted {
+		t.Fatalf("lease state = %q, want completed", storedLease.State)
 	}
 
 	accepted, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
@@ -71,7 +76,7 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 }
 
 func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
-	service, _, _, _, _, _, _ := planningService(t)
+	service, _, _, _, _, _, _, _ := planningService(t)
 	approved := validApprovedContract()
 	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
@@ -84,11 +89,12 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}); err != workitemplan.ErrAlreadyPlanned {
 		t.Fatalf("duplicate CreatePlan() error = %v, want %v", err, workitemplan.ErrAlreadyPlanned)
 	}
-	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID)))
+	lease := acquireLease(t, service)
+	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
 	if err != nil {
 		t.Fatalf("SubmitProposal() error = %v", err)
 	}
-	if _, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID))); err != workitemplan.ErrAlreadyProposed {
+	if _, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease)); err != workitemplan.ErrAlreadyProposed {
 		t.Fatalf("duplicate SubmitProposal() error = %v, want %v", err, workitemplan.ErrAlreadyProposed)
 	}
 	if _, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
@@ -105,7 +111,7 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 
 func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	txRunner := newFakeTransactionRunner()
-	service, _, _, plans, proposals, _, _ := planningService(t, txRunner)
+	service, _, _, plans, _, proposals, _, _ := planningService(t, txRunner)
 	approved := validApprovedContract()
 	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
 	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
@@ -115,7 +121,9 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
 
-	proposal, err := service.SubmitProposal(outerCtx, plan.ID, validProposalRequest(string(approved.ID)))
+	lease := acquireLease(t, service)
+	txRunner.calls = 0
+	proposal, err := service.SubmitProposal(outerCtx, plan.ID, validProposalRequest(string(approved.ID), lease))
 	if err != nil {
 		t.Fatalf("SubmitProposal() error = %v", err)
 	}
@@ -142,9 +150,48 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceRenewLeaseMissReturnsSpecificLeaseConflict(t *testing.T) {
+	service, _, _, _, leases, _, _, _ := planningService(t)
+	approved := validApprovedContract()
+	if _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	}); err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	lease := acquireLease(t, service)
+
+	leases.renewMiss = true
+	leases.renewMissMode = spine.WorkItemPlanLeaseStateCompleted
+	_, err := service.RenewLease(context.Background(), lease.ID, spine.WorkItemPlanLeaseRenewRequest{
+		LeaseToken: lease.LeaseToken,
+	})
+	if !errors.Is(err, workitemplan.ErrLeaseCompleted) {
+		t.Fatalf("RenewLease() error = %v, want %v", err, workitemplan.ErrLeaseCompleted)
+	}
+}
+
+func TestServiceSubmitProposalLeaseCompletionMissReturnsLeaseConflict(t *testing.T) {
+	service, _, _, _, leases, _, _, _ := planningService(t)
+	approved := validApprovedContract()
+	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	lease := acquireLease(t, service)
+
+	leases.markCompletedMiss = true
+	leases.markCompletedMissMode = spine.WorkItemPlanLeaseStateExpired
+	_, err = service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
+	if !errors.Is(err, workitemplan.ErrLeaseExpired) {
+		t.Fatalf("SubmitProposal() error = %v, want %v", err, workitemplan.ErrLeaseExpired)
+	}
+}
+
 func TestServiceSubmitProposalFailedCreateDoesNotRunPostFailureDuplicateLookup(t *testing.T) {
 	txRunner := newFakeTransactionRunner()
-	service, _, _, _, proposals, _, _ := planningService(t, txRunner)
+	service, _, _, _, _, proposals, _, _ := planningService(t, txRunner)
 	approved := validApprovedContract()
 	createErr := errors.New("create failed")
 	proposals.createErr = createErr
@@ -155,7 +202,8 @@ func TestServiceSubmitProposalFailedCreateDoesNotRunPostFailureDuplicateLookup(t
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
 
-	_, err = service.SubmitProposal(txRunner.txCtx, plan.ID, validProposalRequest(string(approved.ID)))
+	lease := acquireLease(t, service)
+	_, err = service.SubmitProposal(txRunner.txCtx, plan.ID, validProposalRequest(string(approved.ID), lease))
 	if !errors.Is(err, createErr) {
 		t.Fatalf("SubmitProposal() error = %v, want original create error", err)
 	}
@@ -166,7 +214,7 @@ func TestServiceSubmitProposalFailedCreateDoesNotRunPostFailureDuplicateLookup(t
 
 func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	txRunner := newFakeTransactionRunner()
-	service, _, _, plans, proposals, workItems, events := planningService(t, txRunner)
+	service, _, _, plans, _, proposals, workItems, events := planningService(t, txRunner)
 	approved := validApprovedContract()
 
 	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
@@ -175,7 +223,8 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
-	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID)))
+	lease := acquireLease(t, service)
+	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
 	if err != nil {
 		t.Fatalf("SubmitProposal() error = %v", err)
 	}
@@ -211,7 +260,7 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
-func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
+func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*workitemplan.Service, *fakeContractStore, *fakeApprovedContractStore, *fakeWorkItemPlanStore, *fakeLeaseStore, *fakeWorkItemPlanProposalStore, *fakeWorkItemStore, *fakeEventLog) {
 	t.Helper()
 	txRunner := workitemplan.TransactionRunner(newFakeTransactionRunner())
 	if len(runners) > 0 {
@@ -220,6 +269,7 @@ func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*
 	contracts := newFakeContractStore()
 	approvedContracts := newFakeApprovedContractStore()
 	plans := newFakeWorkItemPlanStore()
+	leases := newFakeLeaseStore(plans)
 	proposals := newFakeWorkItemPlanProposalStore()
 	workItems := newFakeWorkItemStore()
 	events := newFakeEventLog()
@@ -228,8 +278,8 @@ func planningService(t *testing.T, runners ...workitemplan.TransactionRunner) (*
 	if err := approvedContracts.Create(context.Background(), approved); err != nil {
 		t.Fatalf("approvedContracts.Create() error = %v", err)
 	}
-	service := workitemplan.NewService(contracts, approvedContracts, plans, proposals, workItems, events, txRunner, fixedClock{now: testTime()}, &sequenceIDs{})
-	return service, contracts, approvedContracts, plans, proposals, workItems, events
+	service := workitemplan.NewService(contracts, approvedContracts, plans, leases, proposals, workItems, events, txRunner, fixedClock{now: testTime()}, &sequenceIDs{})
+	return service, contracts, approvedContracts, plans, leases, proposals, workItems, events
 }
 
 type fakeTransactionRunner struct {
@@ -332,6 +382,110 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 	plan.UpdatedAt = updatedAt.UTC()
 	s.plans[id] = plan
 	return nil
+}
+
+type fakeLeaseStore struct {
+	plans                 *fakeWorkItemPlanStore
+	leases                map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease
+	renewMiss             bool
+	renewMissMode         spine.WorkItemPlanLeaseState
+	markCompletedMiss     bool
+	markCompletedMissMode spine.WorkItemPlanLeaseState
+}
+
+func newFakeLeaseStore(plans *fakeWorkItemPlanStore) *fakeLeaseStore {
+	return &fakeLeaseStore{
+		plans:  plans,
+		leases: map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease{},
+	}
+}
+
+func (s *fakeLeaseStore) AcquireNextLease(_ context.Context, input workitemplan.LeaseAcquireInput) (spine.WorkItemPlanLease, bool, error) {
+	var selected spine.WorkItemPlan
+	found := false
+	for _, plan := range s.plans.plans {
+		if plan.State == spine.WorkItemPlanStateQueued || (plan.State == spine.WorkItemPlanStateLeased && plan.LeaseExpiresAt != nil && !plan.LeaseExpiresAt.After(input.CreatedAt)) {
+			if !found || plan.CreatedAt.Before(selected.CreatedAt) || (plan.CreatedAt.Equal(selected.CreatedAt) && plan.ID < selected.ID) {
+				selected = plan
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	if selected.State == spine.WorkItemPlanStateLeased && selected.CurrentLeaseID != nil {
+		previous := s.leases[*selected.CurrentLeaseID]
+		previous.State = spine.WorkItemPlanLeaseStateExpired
+		previous.UpdatedAt = input.UpdatedAt
+		s.leases[previous.ID] = previous
+	}
+	lease := spine.WorkItemPlanLease{
+		ID:                 input.ID,
+		PlanID:             selected.ID,
+		ContractID:         selected.ContractID,
+		ApprovedContractID: selected.ApprovedContractID,
+		RepoBindingID:      selected.RepoBindingID,
+		LeasedBy:           input.LeasedBy,
+		State:              spine.WorkItemPlanLeaseStateActive,
+		LeaseTokenHash:     input.LeaseTokenHash,
+		ExpiresAt:          input.ExpiresAt,
+		CreatedAt:          input.CreatedAt,
+		UpdatedAt:          input.UpdatedAt,
+	}
+	s.leases[lease.ID] = lease
+	selected.State = spine.WorkItemPlanStateLeased
+	selected.CurrentLeaseID = &lease.ID
+	selected.LeasedBy = &lease.LeasedBy
+	selected.LeaseExpiresAt = &lease.ExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.plans.plans[selected.ID] = selected
+	return lease, true, nil
+}
+
+func (s *fakeLeaseStore) Get(_ context.Context, id spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, bool, error) {
+	lease, ok := s.leases[id]
+	return lease, ok, nil
+}
+
+func (s *fakeLeaseStore) Renew(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, expiresAt time.Time, updatedAt time.Time) (spine.WorkItemPlanLease, bool, error) {
+	lease, ok := s.leases[id]
+	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(updatedAt) {
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	if s.renewMiss {
+		if s.renewMissMode != "" {
+			lease.State = s.renewMissMode
+			s.leases[id] = lease
+		}
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	lease.ExpiresAt = expiresAt
+	lease.UpdatedAt = updatedAt
+	s.leases[id] = lease
+	plan := s.plans.plans[lease.PlanID]
+	plan.LeaseExpiresAt = &lease.ExpiresAt
+	plan.UpdatedAt = updatedAt
+	s.plans.plans[plan.ID] = plan
+	return lease, true, nil
+}
+
+func (s *fakeLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) (bool, error) {
+	lease, ok := s.leases[id]
+	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(completedAt) {
+		return false, nil
+	}
+	if s.markCompletedMiss {
+		if s.markCompletedMissMode != "" {
+			lease.State = s.markCompletedMissMode
+			s.leases[id] = lease
+		}
+		return false, nil
+	}
+	lease.State = spine.WorkItemPlanLeaseStateCompleted
+	lease.UpdatedAt = completedAt
+	s.leases[id] = lease
+	return true, nil
 }
 
 type fakeWorkItemPlanProposalStore struct {
@@ -487,9 +641,25 @@ func storeContractForApproved(t *testing.T, contracts *fakeContractStore, approv
 	}
 }
 
-func validProposalRequest(approvedContractID string) spine.WorkItemPlanProposalSubmitRequest {
+func acquireLease(t *testing.T, service *workitemplan.Service) spine.WorkItemPlanLeaseCreated {
+	t.Helper()
+	lease, ok, err := service.AcquireNextLease(context.Background(), spine.WorkItemPlanLeaseCreateRequest{
+		LeasedBy: spine.ActorRef{Kind: "worker", ID: "planner-worker-1"},
+	})
+	if err != nil {
+		t.Fatalf("AcquireNextLease() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("AcquireNextLease() ok = false, want true")
+	}
+	return lease
+}
+
+func validProposalRequest(approvedContractID string, lease spine.WorkItemPlanLeaseCreated) spine.WorkItemPlanProposalSubmitRequest {
 	orderIndex := 0
 	return spine.WorkItemPlanProposalSubmitRequest{
+		LeaseID:            lease.ID,
+		LeaseToken:         lease.LeaseToken,
 		SubmittedBy:        spine.ActorRef{Kind: "worker", ID: "planner-worker-1"},
 		Planner:            map[string]any{"kind": "goalrail_worker", "id": "planner-worker-1"},
 		SourceSnapshotRefs: []spine.SourceRef{{Kind: "approved_contract", ID: approvedContractID}},
@@ -528,6 +698,7 @@ func (c fixedClock) Now() time.Time {
 
 type sequenceIDs struct {
 	plan     int
+	lease    int
 	proposal int
 	workItem int
 	event    int
@@ -536,6 +707,11 @@ type sequenceIDs struct {
 func (g *sequenceIDs) NewWorkItemPlanID() (spine.WorkItemPlanID, error) {
 	g.plan++
 	return spine.WorkItemPlanID("plan-1"), nil
+}
+
+func (g *sequenceIDs) NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error) {
+	g.lease++
+	return spine.WorkItemPlanLeaseID("lease-1"), nil
 }
 
 func (g *sequenceIDs) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {

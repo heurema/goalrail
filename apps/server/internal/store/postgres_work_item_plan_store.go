@@ -82,6 +82,9 @@ func (s *PostgresWorkItemPlanStore) Create(ctx context.Context, plan spine.WorkI
 			"repo_binding_id",
 			"state",
 			"requested_by",
+			"current_lease_id",
+			"leased_by",
+			"lease_expires_at",
 			"created_at",
 			"updated_at",
 		).
@@ -94,6 +97,9 @@ func (s *PostgresWorkItemPlanStore) Create(ctx context.Context, plan spine.WorkI
 			repoBindingID,
 			plan.State,
 			requestedBy,
+			nil,
+			nil,
+			nil,
 			createdAt,
 			updatedAt,
 		)
@@ -178,6 +184,9 @@ func scanWorkItemPlan(row pgx.Row) (spine.WorkItemPlan, error) {
 	var repoBindingID string
 	var state string
 	var requestedBy []byte
+	var currentLeaseID pgtype.UUID
+	var leasedBy []byte
+	var leaseExpiresAt pgtype.Timestamptz
 	if err := row.Scan(
 		&id,
 		&organizationID,
@@ -187,6 +196,9 @@ func scanWorkItemPlan(row pgx.Row) (spine.WorkItemPlan, error) {
 		&repoBindingID,
 		&state,
 		&requestedBy,
+		&currentLeaseID,
+		&leasedBy,
+		&leaseExpiresAt,
 		&plan.CreatedAt,
 		&plan.UpdatedAt,
 	); err != nil {
@@ -201,6 +213,21 @@ func scanWorkItemPlan(row pgx.Row) (spine.WorkItemPlan, error) {
 	plan.State = spine.WorkItemPlanState(state)
 	if err := json.Unmarshal(requestedBy, &plan.RequestedBy); err != nil {
 		return spine.WorkItemPlan{}, fmt.Errorf("unmarshal work item plan requested_by: %w", err)
+	}
+	if value := uuidString(currentLeaseID); value != "" {
+		leaseID := spine.WorkItemPlanLeaseID(value)
+		plan.CurrentLeaseID = &leaseID
+	}
+	if len(leasedBy) > 0 {
+		var actor spine.ActorRef
+		if err := json.Unmarshal(leasedBy, &actor); err != nil {
+			return spine.WorkItemPlan{}, fmt.Errorf("unmarshal work item plan leased_by: %w", err)
+		}
+		plan.LeasedBy = &actor
+	}
+	if leaseExpiresAt.Valid {
+		value := leaseExpiresAt.Time.UTC()
+		plan.LeaseExpiresAt = &value
 	}
 	plan.CreatedAt = plan.CreatedAt.UTC()
 	plan.UpdatedAt = plan.UpdatedAt.UTC()
@@ -217,6 +244,9 @@ func workItemPlanColumns() []string {
 		"repo_binding_id",
 		"state",
 		"requested_by",
+		"current_lease_id",
+		"leased_by",
+		"lease_expires_at",
 		"created_at",
 		"updated_at",
 	}

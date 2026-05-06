@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
@@ -84,12 +85,131 @@ func TestGetPlanReturnsPlanAndUnknownReturnsNotFound(t *testing.T) {
 	assertErrorCode(t, missing, http.StatusNotFound, "not_found")
 }
 
+func TestPlanLeaseLifecycleRoutes(t *testing.T) {
+	t.Run("queued plan acquires active lease and token once", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"}}`)
+		if response.code != http.StatusCreated {
+			t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		}
+		assertNoHiddenContext(t, response.body)
+		var lease spine.WorkItemPlanLeaseCreated
+		decodeJSON(t, response.body, &lease)
+		if lease.PlanID != plan.ID || lease.State != spine.WorkItemPlanLeaseStateActive || lease.LeaseToken == "" {
+			t.Fatalf("lease = %#v, want active lease for plan with token", lease)
+		}
+		if lease.ExpiresAt.Sub(testTime()) != 15*time.Minute {
+			t.Fatalf("default ttl = %s, want 15m", lease.ExpiresAt.Sub(testTime()))
+		}
+
+		getResponse := doJSON(t, server.router, http.MethodGet, "/v1/plans/leases/"+string(lease.ID), "")
+		if getResponse.code != http.StatusOK {
+			t.Fatalf("get status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
+		}
+		if strings.Contains(getResponse.body, "lease_token") {
+			t.Fatalf("GET lease response exposes raw token: %s", getResponse.body)
+		}
+
+		renew := doJSON(t, server.router, http.MethodPatch, "/v1/plans/leases/"+string(lease.ID), fmt.Sprintf(`{"lease_token":%q,"ttl_seconds":1800}`, lease.LeaseToken))
+		if renew.code != http.StatusOK {
+			t.Fatalf("renew status = %d, want %d: %s", renew.code, http.StatusOK, renew.body)
+		}
+		if strings.Contains(renew.body, "lease_token") {
+			t.Fatalf("renew response exposes raw token: %s", renew.body)
+		}
+	})
+
+	t.Run("no queued plans returns 204", func(t *testing.T) {
+		server := testServer(t)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"}}`)
+		if response.code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNoContent, response.body)
+		}
+	})
+
+	t.Run("invalid lease create input", func(t *testing.T) {
+		server := testServer(t)
+		createApprovedContract(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		response = doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"},"ttl_seconds":29}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		response = doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"},"ttl_seconds":3601}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+	})
+
+	t.Run("renew rejects bad expired and completed leases", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		lease := acquireLease(t, server)
+		bad := doJSON(t, server.router, http.MethodPatch, "/v1/plans/leases/"+string(lease.ID), `{"lease_token":"bad-token"}`)
+		assertErrorCode(t, bad, http.StatusConflict, "invalid_lease")
+
+		stored := server.workItemLeases.leases[lease.ID]
+		stored.ExpiresAt = testTime().Add(-time.Minute)
+		server.workItemLeases.leases[lease.ID] = stored
+		expired := doJSON(t, server.router, http.MethodPatch, "/v1/plans/leases/"+string(lease.ID), fmt.Sprintf(`{"lease_token":%q}`, lease.LeaseToken))
+		assertErrorCode(t, expired, http.StatusConflict, "lease_expired")
+
+		server = testServer(t)
+		approved = createApprovedContract(t, server)
+		plan = createPlan(t, server, approved.ContractID)
+		lease = acquireLease(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID), lease))
+		if response.code != http.StatusCreated {
+			t.Fatalf("submit proposal status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		}
+		completed := doJSON(t, server.router, http.MethodPatch, "/v1/plans/leases/"+string(lease.ID), fmt.Sprintf(`{"lease_token":%q}`, lease.LeaseToken))
+		assertErrorCode(t, completed, http.StatusConflict, "lease_completed")
+	})
+}
+
+func TestPlanLeaseQueueSelection(t *testing.T) {
+	server := testServer(t)
+	first := createPlan(t, server, createApprovedContract(t, server).ContractID)
+	second := createPlan(t, server, createApprovedContract(t, server).ContractID)
+	third := createPlan(t, server, createApprovedContract(t, server).ContractID)
+	fourth := createPlan(t, server, createApprovedContract(t, server).ContractID)
+
+	lease := acquireLease(t, server)
+	if lease.PlanID != first.ID {
+		t.Fatalf("first leased plan = %q, want oldest %q", lease.PlanID, first.ID)
+	}
+	next := acquireLease(t, server)
+	if next.PlanID != second.ID {
+		t.Fatalf("second leased plan = %q, want %q", next.PlanID, second.ID)
+	}
+	expiredPlan := server.workItemPlans.plans[first.ID]
+	expiredPlan.LeaseExpiresAt = ptrTime(testTime())
+	server.workItemPlans.plans[first.ID] = expiredPlan
+	proposalSubmitted := server.workItemPlans.plans[third.ID]
+	proposalSubmitted.State = spine.WorkItemPlanStateProposalSubmitted
+	server.workItemPlans.plans[third.ID] = proposalSubmitted
+	accepted := server.workItemPlans.plans[fourth.ID]
+	accepted.State = spine.WorkItemPlanStateAccepted
+	server.workItemPlans.plans[fourth.ID] = accepted
+
+	releasedAgain := acquireLease(t, server)
+	if releasedAgain.PlanID != first.ID {
+		t.Fatalf("expired leased plan = %q, want released %q", releasedAgain.PlanID, first.ID)
+	}
+	empty := doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"}}`)
+	if empty.code != http.StatusNoContent {
+		t.Fatalf("after skipped states status = %d, want 204: %s", empty.code, empty.body)
+	}
+}
+
 func TestPostPlanProposalsStoresProposalAndDoesNotCreateTasks(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 	plan := createPlan(t, server, approved.ContractID)
+	lease := acquireLease(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID)))
+	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID), lease))
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -120,6 +240,13 @@ func TestPostPlanProposalsStoresProposalAndDoesNotCreateTasks(t *testing.T) {
 	if storedPlan.State != spine.WorkItemPlanStateProposalSubmitted {
 		t.Fatalf("plan state = %q, want proposal_submitted", storedPlan.State)
 	}
+	storedLease, ok, err := server.workItemLeases.Get(context.Background(), lease.ID)
+	if err != nil {
+		t.Fatalf("leases.Get() error = %v", err)
+	}
+	if !ok || storedLease.State != spine.WorkItemPlanLeaseStateCompleted {
+		t.Fatalf("lease state = %q ok=%v, want completed true", storedLease.State, ok)
+	}
 	if _, ok, err := server.workItems.GetByApprovedContractID(context.Background(), approved.ID); err != nil {
 		t.Fatalf("workItems.GetByApprovedContractID() error = %v", err)
 	} else if ok {
@@ -128,11 +255,50 @@ func TestPostPlanProposalsStoresProposalAndDoesNotCreateTasks(t *testing.T) {
 }
 
 func TestPostPlanProposalsRejectsInvalidAndDuplicateProposal(t *testing.T) {
+	t.Run("missing lease proof", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", `{"submitted_by":{"kind":"worker","id":"planner-1"},"proposed_tasks":[{"title":"t","summary":"s","scope":["x"],"acceptance_refs":["a"],"proof_expectation_refs":["p"]}]}`)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		lease := acquireLease(t, server)
+		response = doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", proposalJSONWithLeaseValues(string(approved.ID), string(lease.ID), "bad-token"))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_lease")
+	})
+
+	t.Run("lease for wrong plan", func(t *testing.T) {
+		server := testServer(t)
+		first := createApprovedContract(t, server)
+		second := createApprovedContract(t, server)
+		planOne := createPlan(t, server, first.ContractID)
+		planTwo := createPlan(t, server, second.ContractID)
+		lease := acquireLease(t, server)
+		if lease.PlanID != planOne.ID {
+			t.Fatalf("lease plan = %q, want %q", lease.PlanID, planOne.ID)
+		}
+		_ = acquireLease(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(planTwo.ID)+"/proposals", validProposalJSON(string(second.ID), lease))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_lease")
+	})
+
+	t.Run("expired lease proof", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		lease := acquireLease(t, server)
+		stored := server.workItemLeases.leases[lease.ID]
+		stored.ExpiresAt = testTime().Add(-time.Minute)
+		server.workItemLeases.leases[lease.ID] = stored
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID), lease))
+		assertErrorCode(t, response, http.StatusConflict, "lease_expired")
+	})
+
 	t.Run("missing proposed tasks", func(t *testing.T) {
 		server := testServer(t)
 		approved := createApprovedContract(t, server)
 		plan := createPlan(t, server, approved.ContractID)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", `{"submitted_by":{"kind":"worker","id":"planner-1"},"proposed_tasks":[]}`)
+		lease := acquireLease(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", proposalJSONWithTasks(string(approved.ID), lease, `[]`))
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 	})
 
@@ -140,7 +306,8 @@ func TestPostPlanProposalsRejectsInvalidAndDuplicateProposal(t *testing.T) {
 		server := testServer(t)
 		approved := createApprovedContract(t, server)
 		plan := createPlan(t, server, approved.ContractID)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", `{"submitted_by":{"kind":"worker","id":"planner-1"},"proposed_tasks":[{"title":"","summary":"s","scope":["x"],"acceptance_refs":["a"],"proof_expectation_refs":["p"]}]}`)
+		lease := acquireLease(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", proposalJSONWithTasks(string(approved.ID), lease, `[{"title":"","summary":"s","scope":["x"],"acceptance_refs":["a"],"proof_expectation_refs":["p"]}]`))
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 	})
 
@@ -149,7 +316,7 @@ func TestPostPlanProposalsRejectsInvalidAndDuplicateProposal(t *testing.T) {
 		approved := createApprovedContract(t, server)
 		plan := createPlan(t, server, approved.ContractID)
 		submitProposal(t, server, plan.ID, string(approved.ID))
-		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", validProposalJSON(string(approved.ID)))
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/proposals", proposalJSONWithLeaseValues(string(approved.ID), "lease-unknown", "token"))
 		assertErrorCode(t, response, http.StatusConflict, "already_proposed")
 	})
 }
@@ -270,6 +437,8 @@ func TestRemovedDirectTaskRouteAndListRoutesReturnNotFound(t *testing.T) {
 		{method: http.MethodGet, path: "/v1/plans"},
 		{method: http.MethodGet, path: "/v1/proposals"},
 		{method: http.MethodGet, path: "/v1/tasks"},
+		{method: http.MethodGet, path: "/v1/plans/leases"},
+		{method: http.MethodGet, path: "/v1/queue/jobs"},
 	} {
 		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
 			response := doJSON(t, server.router, tt.method, tt.path, "")
@@ -291,13 +460,28 @@ func createPlan(t *testing.T, server testServerDeps, contractID spine.ContractID
 
 func submitProposal(t *testing.T, server testServerDeps, planID spine.WorkItemPlanID, approvedContractID string) spine.WorkItemPlanProposal {
 	t.Helper()
-	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(planID)+"/proposals", validProposalJSON(approvedContractID))
+	lease := acquireLease(t, server)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(planID)+"/proposals", validProposalJSON(approvedContractID, lease))
 	if response.code != http.StatusCreated {
 		t.Fatalf("submit proposal status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 	var proposal spine.WorkItemPlanProposal
 	decodeJSON(t, response.body, &proposal)
 	return proposal
+}
+
+func acquireLease(t *testing.T, server testServerDeps) spine.WorkItemPlanLeaseCreated {
+	t.Helper()
+	response := doJSON(t, server.router, http.MethodPost, "/v1/plans/leases", `{"leased_by":{"kind":"worker","id":"planner-worker-1"}}`)
+	if response.code != http.StatusCreated {
+		t.Fatalf("acquire lease status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	var lease spine.WorkItemPlanLeaseCreated
+	decodeJSON(t, response.body, &lease)
+	if lease.LeaseToken == "" {
+		t.Fatal("lease_token is empty")
+	}
+	return lease
 }
 
 func acceptProposal(t *testing.T, server testServerDeps, proposalID spine.WorkItemPlanProposalID) spine.WorkItemPlanAcceptanceResult {
@@ -311,8 +495,26 @@ func acceptProposal(t *testing.T, server testServerDeps, proposalID spine.WorkIt
 	return result
 }
 
-func validProposalJSON(approvedContractID string) string {
+func validProposalJSON(approvedContractID string, lease spine.WorkItemPlanLeaseCreated) string {
+	return proposalJSONWithLeaseValues(approvedContractID, string(lease.ID), lease.LeaseToken)
+}
+
+func proposalJSONWithTasks(approvedContractID string, lease spine.WorkItemPlanLeaseCreated, tasks string) string {
 	return fmt.Sprintf(`{
+  "lease_id": %q,
+  "lease_token": %q,
+  "submitted_by": {"kind": "worker", "id": "planner-worker-1"},
+  "planner": {"kind": "goalrail_worker", "id": "planner-worker-1", "version": "0.1.0"},
+  "source_snapshot_refs": [{"kind": "approved_contract", "id": %q}],
+  "rationale": "Split independent refactor and coverage tasks.",
+  "proposed_tasks": %s
+}`, string(lease.ID), lease.LeaseToken, approvedContractID, tasks)
+}
+
+func proposalJSONWithLeaseValues(approvedContractID string, leaseID string, leaseToken string) string {
+	return fmt.Sprintf(`{
+  "lease_id": %q,
+  "lease_token": %q,
   "submitted_by": {"kind": "worker", "id": "planner-worker-1"},
   "planner": {"kind": "goalrail_worker", "id": "planner-worker-1", "version": "0.1.0"},
   "source_snapshot_refs": [{"kind": "approved_contract", "id": %q}],
@@ -337,7 +539,7 @@ func validProposalJSON(approvedContractID string) string {
       "source_refs": [{"kind": "approved_contract", "id": %q}]
     }
   ]
-}`, approvedContractID, approvedContractID, approvedContractID)
+}`, leaseID, leaseToken, approvedContractID, approvedContractID, approvedContractID)
 }
 
 func createApprovedContract(t *testing.T, server testServerDeps) spine.ApprovedContract {
@@ -452,6 +654,10 @@ func assertErrorCode(t *testing.T, response routeResponse, status int, code stri
 	if body.Error.Code != code {
 		t.Fatalf("error code = %q, want %q", body.Error.Code, code)
 	}
+}
+
+func ptrTime(value time.Time) *time.Time {
+	return &value
 }
 
 func TestWorkItemResponseJSONDoesNotExposeContext(t *testing.T) {

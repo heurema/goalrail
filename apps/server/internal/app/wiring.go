@@ -44,6 +44,7 @@ type postgresStores struct {
 	approvedContracts     *store.PostgresApprovedContractStore
 	workItems             *store.PostgresWorkItemStore
 	workItemPlans         *store.PostgresWorkItemPlanStore
+	workItemPlanLeases    *store.PostgresWorkItemPlanLeaseStore
 	workItemProposals     *store.PostgresWorkItemPlanProposalStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
@@ -63,6 +64,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		approvedContracts:     store.NewPostgresApprovedContractStore(pool),
 		workItems:             store.NewPostgresWorkItemStore(pool),
 		workItemPlans:         store.NewPostgresWorkItemPlanStore(pool),
+		workItemPlanLeases:    store.NewPostgresWorkItemPlanLeaseStore(pool),
 		workItemProposals:     store.NewPostgresWorkItemPlanProposalStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
@@ -103,7 +105,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		continuation:      continuation.NewService(stores.goals, goalService, clarificationService),
 		contract:          contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
 		workItem:          workitem.NewService(stores.workItems),
-		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
+		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
 		repoBinding:       repoBindingService,
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
@@ -204,6 +206,9 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		ContractSubmit:            http.HandlerFunc(h.contract.SubmitForApproval),
 		ContractApprove:           http.HandlerFunc(h.contract.Approve),
 		ContractPlans:             http.HandlerFunc(h.workItemPlan.CreatePlan),
+		PlanLeases:                http.HandlerFunc(h.workItemPlan.AcquireLease),
+		PlanLeaseGet:              http.HandlerFunc(h.workItemPlan.GetLease),
+		PlanLeaseRenew:            http.HandlerFunc(h.workItemPlan.RenewLease),
 		PlanGet:                   http.HandlerFunc(h.workItemPlan.GetPlan),
 		PlanProposals:             http.HandlerFunc(h.workItemPlan.SubmitProposal),
 		ProposalGet:               http.HandlerFunc(h.workItemPlan.GetProposal),
@@ -272,6 +277,9 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		ContractSubmit:            unavailable,
 		ContractApprove:           unavailable,
 		ContractPlans:             unavailable,
+		PlanLeases:                unavailable,
+		PlanLeaseGet:              unavailable,
+		PlanLeaseRenew:            unavailable,
 		PlanGet:                   unavailable,
 		PlanProposals:             unavailable,
 		ProposalGet:               unavailable,

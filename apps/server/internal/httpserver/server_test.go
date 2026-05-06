@@ -120,6 +120,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
 		ContractPlans:             probeRoute("contract_plans"),
+		PlanLeases:                probeRoute("plan_leases"),
+		PlanLeaseGet:              probeRoute("plan_lease_get"),
+		PlanLeaseRenew:            probeRoute("plan_lease_renew"),
 		PlanGet:                   probeRoute("plan_get"),
 		PlanProposals:             probeRoute("plan_proposals"),
 		ProposalGet:               probeRoute("proposal_get"),
@@ -164,6 +167,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "contract_submit", method: http.MethodPost, path: "/v1/contracts/contract-1/submissions", wantRoute: "contract_submit"},
 		{name: "contract_approve", method: http.MethodPost, path: "/v1/contracts/contract-1/approvals", wantRoute: "contract_approve"},
 		{name: "contract_plans", method: http.MethodPost, path: "/v1/contracts/contract-1/plans", wantRoute: "contract_plans"},
+		{name: "plan_leases", method: http.MethodPost, path: "/v1/plans/leases", wantRoute: "plan_leases"},
+		{name: "plan_lease_get", method: http.MethodGet, path: "/v1/plans/leases/lease-1", wantRoute: "plan_lease_get"},
+		{name: "plan_lease_renew", method: http.MethodPatch, path: "/v1/plans/leases/lease-1", wantRoute: "plan_lease_renew"},
 		{name: "plan_get", method: http.MethodGet, path: "/v1/plans/plan-1", wantRoute: "plan_get"},
 		{name: "plan_proposals", method: http.MethodPost, path: "/v1/plans/plan-1/proposals", wantRoute: "plan_proposals"},
 		{name: "proposal_get", method: http.MethodGet, path: "/v1/proposals/proposal-1", wantRoute: "proposal_get"},
@@ -221,6 +227,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ContractSubmit:            probeRoute("contract_submit"),
 		ContractApprove:           probeRoute("contract_approve"),
 		ContractPlans:             probeRoute("contract_plans"),
+		PlanLeases:                probeRoute("plan_leases"),
+		PlanLeaseGet:              probeRoute("plan_lease_get"),
+		PlanLeaseRenew:            probeRoute("plan_lease_renew"),
 		PlanGet:                   probeRoute("plan_get"),
 		PlanProposals:             probeRoute("plan_proposals"),
 		ProposalGet:               probeRoute("proposal_get"),
@@ -335,7 +344,7 @@ func doJSON(t *testing.T, handler http.Handler, method string, path string, body
 	handler.ServeHTTP(recorder, request)
 
 	contentType := recorder.Header().Get("Content-Type")
-	if !strings.HasPrefix(contentType, "application/json") {
+	if recorder.Code != http.StatusNoContent && !strings.HasPrefix(contentType, "application/json") {
 		t.Fatalf("Content-Type = %q, want application/json", contentType)
 	}
 
@@ -392,6 +401,9 @@ func newRouter(
 		ContractApprove:           http.HandlerFunc(contractHandler.Approve),
 		ContractPlans:             http.HandlerFunc(workItemPlanHandler.CreatePlan),
 		PlanGet:                   http.HandlerFunc(workItemPlanHandler.GetPlan),
+		PlanLeases:                http.HandlerFunc(workItemPlanHandler.AcquireLease),
+		PlanLeaseGet:              http.HandlerFunc(workItemPlanHandler.GetLease),
+		PlanLeaseRenew:            http.HandlerFunc(workItemPlanHandler.RenewLease),
 		PlanProposals:             http.HandlerFunc(workItemPlanHandler.SubmitProposal),
 		ProposalGet:               http.HandlerFunc(workItemPlanHandler.GetProposal),
 		ProposalAcceptance:        http.HandlerFunc(workItemPlanHandler.AcceptProposal),

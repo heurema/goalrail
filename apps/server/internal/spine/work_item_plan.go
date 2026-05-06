@@ -6,12 +6,23 @@ type WorkItemPlanID string
 
 type WorkItemPlanProposalID string
 
+type WorkItemPlanLeaseID string
+
 type WorkItemPlanState string
 
 const (
 	WorkItemPlanStateQueued            WorkItemPlanState = "queued"
+	WorkItemPlanStateLeased            WorkItemPlanState = "leased"
 	WorkItemPlanStateProposalSubmitted WorkItemPlanState = "proposal_submitted"
 	WorkItemPlanStateAccepted          WorkItemPlanState = "accepted"
+)
+
+type WorkItemPlanLeaseState string
+
+const (
+	WorkItemPlanLeaseStateActive    WorkItemPlanLeaseState = "active"
+	WorkItemPlanLeaseStateCompleted WorkItemPlanLeaseState = "completed"
+	WorkItemPlanLeaseStateExpired   WorkItemPlanLeaseState = "expired"
 )
 
 type WorkItemProposalState string
@@ -22,16 +33,47 @@ const (
 )
 
 type WorkItemPlan struct {
-	ID                 WorkItemPlanID     `json:"id"`
-	OrganizationID     OrganizationID     `json:"-"`
-	ProjectID          ProjectID          `json:"-"`
-	ContractID         ContractID         `json:"contract_id"`
-	ApprovedContractID ApprovedContractID `json:"approved_contract_id"`
-	RepoBindingID      RepoBindingID      `json:"repo_binding_id"`
-	State              WorkItemPlanState  `json:"state"`
-	RequestedBy        ActorRef           `json:"requested_by"`
-	CreatedAt          time.Time          `json:"created_at"`
-	UpdatedAt          time.Time          `json:"updated_at"`
+	ID                 WorkItemPlanID       `json:"id"`
+	OrganizationID     OrganizationID       `json:"-"`
+	ProjectID          ProjectID            `json:"-"`
+	ContractID         ContractID           `json:"contract_id"`
+	ApprovedContractID ApprovedContractID   `json:"approved_contract_id"`
+	RepoBindingID      RepoBindingID        `json:"repo_binding_id"`
+	State              WorkItemPlanState    `json:"state"`
+	RequestedBy        ActorRef             `json:"requested_by"`
+	CurrentLeaseID     *WorkItemPlanLeaseID `json:"current_lease_id,omitempty"`
+	LeasedBy           *ActorRef            `json:"leased_by,omitempty"`
+	LeaseExpiresAt     *time.Time           `json:"lease_expires_at,omitempty"`
+	CreatedAt          time.Time            `json:"created_at"`
+	UpdatedAt          time.Time            `json:"updated_at"`
+}
+
+type WorkItemPlanLease struct {
+	ID                 WorkItemPlanLeaseID    `json:"id"`
+	PlanID             WorkItemPlanID         `json:"plan_id"`
+	ContractID         ContractID             `json:"contract_id"`
+	ApprovedContractID ApprovedContractID     `json:"approved_contract_id"`
+	RepoBindingID      RepoBindingID          `json:"repo_binding_id"`
+	LeasedBy           ActorRef               `json:"leased_by"`
+	State              WorkItemPlanLeaseState `json:"state"`
+	LeaseTokenHash     string                 `json:"-"`
+	ExpiresAt          time.Time              `json:"expires_at"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+}
+
+type WorkItemPlanLeaseCreated struct {
+	ID                 WorkItemPlanLeaseID    `json:"id"`
+	PlanID             WorkItemPlanID         `json:"plan_id"`
+	ContractID         ContractID             `json:"contract_id"`
+	ApprovedContractID ApprovedContractID     `json:"approved_contract_id"`
+	RepoBindingID      RepoBindingID          `json:"repo_binding_id"`
+	LeasedBy           ActorRef               `json:"leased_by"`
+	State              WorkItemPlanLeaseState `json:"state"`
+	LeaseToken         string                 `json:"lease_token"`
+	ExpiresAt          time.Time              `json:"expires_at"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 type WorkItemPlanProposal struct {
@@ -69,12 +111,24 @@ type WorkItemPlanCreateRequest struct {
 	RequestedBy ActorRef `json:"requested_by"`
 }
 
+type WorkItemPlanLeaseCreateRequest struct {
+	LeasedBy   ActorRef `json:"leased_by"`
+	TTLSeconds int      `json:"ttl_seconds,omitempty"`
+}
+
+type WorkItemPlanLeaseRenewRequest struct {
+	LeaseToken string `json:"lease_token"`
+	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+}
+
 type WorkItemPlanProposalSubmitRequest struct {
-	SubmittedBy        ActorRef           `json:"submitted_by"`
-	Planner            map[string]any     `json:"planner"`
-	SourceSnapshotRefs []SourceRef        `json:"source_snapshot_refs"`
-	Rationale          string             `json:"rationale"`
-	ProposedTasks      []ProposedWorkItem `json:"proposed_tasks"`
+	LeaseID            WorkItemPlanLeaseID `json:"lease_id"`
+	LeaseToken         string              `json:"lease_token"`
+	SubmittedBy        ActorRef            `json:"submitted_by"`
+	Planner            map[string]any      `json:"planner"`
+	SourceSnapshotRefs []SourceRef         `json:"source_snapshot_refs"`
+	Rationale          string              `json:"rationale"`
+	ProposedTasks      []ProposedWorkItem  `json:"proposed_tasks"`
 }
 
 type WorkItemPlanAcceptanceRequest struct {

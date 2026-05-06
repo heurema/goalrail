@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/heurema/goalrail/apps/server/internal/spine"
+	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
 
 func TestPostgresIntakeStoreCreateBuildsDurableInsert(t *testing.T) {
@@ -834,6 +835,75 @@ func TestPostgresWorkItemPlanProposalStoreCreateGetAndMark(t *testing.T) {
 	}
 }
 
+func TestPostgresWorkItemPlanLeaseStoreAcquireGetRenewAndComplete(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{values: validWorkItemPlanRowValues()}}
+	store := NewPostgresWorkItemPlanLeaseStoreWithExecutorAndQuerier(exec, query)
+
+	lease, ok, err := store.AcquireNextLease(ctx, workitemplan.LeaseAcquireInput{
+		ID:             "018f0000-0000-7000-8000-000000000a01",
+		LeasedBy:       spine.ActorRef{Kind: "worker", ID: "planner-worker-1"},
+		LeaseTokenHash: "token-hash",
+		ExpiresAt:      testStoreTime().Add(15 * time.Minute),
+		CreatedAt:      testStoreTime(),
+		UpdatedAt:      testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("AcquireNextLease() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("AcquireNextLease() ok = false, want true")
+	}
+	if lease.PlanID != "018f0000-0000-7000-8000-000000000801" || lease.State != spine.WorkItemPlanLeaseStateActive {
+		t.Fatalf("lease = %#v, want active lease for plan", lease)
+	}
+	if !strings.Contains(query.calls[0].sql, "FOR UPDATE SKIP LOCKED") {
+		t.Fatalf("acquire SQL = %q, want row locking", query.calls[0].sql)
+	}
+	if !strings.Contains(query.calls[0].sql, "lease_expires_at <= $3") {
+		t.Fatalf("acquire SQL = %q, want leases expiring at now to be eligible", query.calls[0].sql)
+	}
+	if len(exec.calls) != 2 || !strings.Contains(exec.calls[0].sql, "INSERT INTO work_item_plan_leases") || !strings.Contains(exec.calls[1].sql, "UPDATE work_item_plans") {
+		t.Fatalf("acquire exec calls = %#v, want lease insert then plan update", exec.calls)
+	}
+
+	query.row = fakeProjectContextRow{values: validWorkItemPlanLeaseRowValues()}
+	got, ok, err := store.Get(ctx, "018f0000-0000-7000-8000-000000000a01")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !ok || got.LeaseTokenHash != "token-hash" {
+		t.Fatalf("Get() = %#v ok=%v, want lease with token hash", got, ok)
+	}
+
+	renewed, ok, err := store.Renew(ctx, got.ID, got.LeaseTokenHash, testStoreTime().Add(30*time.Minute), testStoreTime())
+	if err != nil {
+		t.Fatalf("Renew() error = %v", err)
+	}
+	if !ok || renewed.ID != got.ID {
+		t.Fatalf("Renew() = %#v ok=%v, want renewed lease", renewed, ok)
+	}
+	lastQuery := query.calls[len(query.calls)-1].sql
+	if !strings.Contains(lastQuery, "lease_token_hash") || !strings.Contains(lastQuery, "state") || !strings.Contains(lastQuery, "expires_at >") {
+		t.Fatalf("renew SQL = %q, want token/state/expiry guard", lastQuery)
+	}
+	if planUpdate := strings.Index(lastQuery, "UPDATE work_item_plans"); planUpdate < 0 || planUpdate > strings.Index(lastQuery, "UPDATE work_item_plan_leases") {
+		t.Fatalf("renew SQL = %q, want plan row locked before lease row", lastQuery)
+	}
+	completed, err := store.MarkCompleted(ctx, got.ID, got.LeaseTokenHash, testStoreTime())
+	if err != nil {
+		t.Fatalf("MarkCompleted() error = %v", err)
+	}
+	if !completed {
+		t.Fatal("MarkCompleted() completed = false, want true")
+	}
+	lastExec := exec.calls[len(exec.calls)-1].sql
+	if !strings.Contains(lastExec, "UPDATE work_item_plan_leases") || !strings.Contains(lastExec, "lease_token_hash") || !strings.Contains(lastExec, "expires_at >") {
+		t.Fatalf("complete SQL = %q, want guarded lease completion", lastExec)
+	}
+}
+
 func validPostgresIntakeRecord() spine.IntakeRecord {
 	now := testStoreTime()
 	return spine.IntakeRecord{
@@ -1083,6 +1153,23 @@ func validPostgresWorkItemPlanProposal() spine.WorkItemPlanProposal {
 	}
 }
 
+func validPostgresWorkItemPlanLease() spine.WorkItemPlanLease {
+	plan := validPostgresWorkItemPlan()
+	return spine.WorkItemPlanLease{
+		ID:                 "018f0000-0000-7000-8000-000000000a01",
+		PlanID:             plan.ID,
+		ContractID:         plan.ContractID,
+		ApprovedContractID: plan.ApprovedContractID,
+		RepoBindingID:      plan.RepoBindingID,
+		LeasedBy:           spine.ActorRef{Kind: "worker", ID: "planner-worker-1"},
+		State:              spine.WorkItemPlanLeaseStateActive,
+		LeaseTokenHash:     "token-hash",
+		ExpiresAt:          testStoreTime().Add(15 * time.Minute),
+		CreatedAt:          testStoreTime(),
+		UpdatedAt:          testStoreTime(),
+	}
+}
+
 func validWorkItemPlanRowValues() []any {
 	plan := validPostgresWorkItemPlan()
 	return []any{
@@ -1094,8 +1181,28 @@ func validWorkItemPlanRowValues() []any {
 		string(plan.RepoBindingID),
 		string(plan.State),
 		[]byte(`{"kind":"user","id":"018f0000-0000-7000-8000-000000000001"}`),
+		nil,
+		nil,
+		nil,
 		testStoreTime(),
 		testStoreTime(),
+	}
+}
+
+func validWorkItemPlanLeaseRowValues() []any {
+	lease := validPostgresWorkItemPlanLease()
+	return []any{
+		string(lease.ID),
+		string(lease.PlanID),
+		string(lease.ContractID),
+		string(lease.ApprovedContractID),
+		string(lease.RepoBindingID),
+		[]byte(`{"kind":"worker","id":"planner-worker-1"}`),
+		string(lease.State),
+		lease.LeaseTokenHash,
+		lease.ExpiresAt,
+		lease.CreatedAt,
+		lease.UpdatedAt,
 	}
 }
 

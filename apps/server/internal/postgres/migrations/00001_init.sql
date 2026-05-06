@@ -460,10 +460,13 @@ CREATE TABLE work_item_plans (
     repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
     state TEXT NOT NULL,
     requested_by JSONB NOT NULL,
+    current_lease_id UUID NULL,
+    leased_by JSONB NULL,
+    lease_expires_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
     CONSTRAINT work_item_plans_contract_id_unique UNIQUE (contract_id),
-    CONSTRAINT work_item_plans_state_check CHECK (state IN ('queued', 'proposal_submitted', 'accepted'))
+    CONSTRAINT work_item_plans_state_check CHECK (state IN ('queued', 'leased', 'proposal_submitted', 'accepted'))
 );
 
 CREATE INDEX work_item_plans_organization_created_at_idx
@@ -480,6 +483,12 @@ CREATE INDEX work_item_plans_approved_contract_id_idx
 
 CREATE INDEX work_item_plans_repo_binding_id_idx
     ON work_item_plans(repo_binding_id);
+
+CREATE INDEX work_item_plans_state_created_at_idx
+    ON work_item_plans(state, created_at);
+
+CREATE INDEX work_item_plans_lease_expires_at_idx
+    ON work_item_plans(lease_expires_at);
 
 CREATE TABLE work_item_plan_proposals (
     id UUID PRIMARY KEY,
@@ -517,6 +526,34 @@ CREATE INDEX work_item_plan_proposals_organization_created_at_idx
 
 CREATE INDEX work_item_plan_proposals_project_created_at_idx
     ON work_item_plan_proposals(project_id, created_at);
+
+CREATE TABLE work_item_plan_leases (
+    id UUID PRIMARY KEY,
+    plan_id UUID NOT NULL REFERENCES work_item_plans(id) ON DELETE CASCADE,
+    contract_id UUID NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+    approved_contract_id UUID NOT NULL REFERENCES approved_contracts(id) ON DELETE CASCADE,
+    repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE,
+    leased_by JSONB NOT NULL,
+    state TEXT NOT NULL,
+    lease_token_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT work_item_plan_leases_state_check CHECK (state IN ('active', 'completed', 'expired')),
+    CONSTRAINT work_item_plan_leases_token_hash_check CHECK (lease_token_hash <> '')
+);
+
+CREATE INDEX work_item_plan_leases_plan_id_idx
+    ON work_item_plan_leases(plan_id);
+
+CREATE INDEX work_item_plan_leases_state_expires_at_idx
+    ON work_item_plan_leases(state, expires_at);
+
+CREATE INDEX work_item_plan_leases_contract_id_idx
+    ON work_item_plan_leases(contract_id);
+
+CREATE INDEX work_item_plan_leases_repo_binding_id_idx
+    ON work_item_plan_leases(repo_binding_id);
 
 CREATE TABLE work_items (
     id UUID PRIMARY KEY,
@@ -604,6 +641,11 @@ DROP INDEX IF EXISTS work_items_contract_id_idx;
 DROP INDEX IF EXISTS work_items_project_created_at_idx;
 DROP INDEX IF EXISTS work_items_organization_created_at_idx;
 DROP TABLE IF EXISTS work_items;
+DROP INDEX IF EXISTS work_item_plan_leases_repo_binding_id_idx;
+DROP INDEX IF EXISTS work_item_plan_leases_contract_id_idx;
+DROP INDEX IF EXISTS work_item_plan_leases_state_expires_at_idx;
+DROP INDEX IF EXISTS work_item_plan_leases_plan_id_idx;
+DROP TABLE IF EXISTS work_item_plan_leases;
 DROP INDEX IF EXISTS work_item_plan_proposals_project_created_at_idx;
 DROP INDEX IF EXISTS work_item_plan_proposals_organization_created_at_idx;
 DROP INDEX IF EXISTS work_item_plan_proposals_approved_contract_id_idx;
@@ -611,6 +653,8 @@ DROP INDEX IF EXISTS work_item_plan_proposals_contract_id_idx;
 DROP INDEX IF EXISTS work_item_plan_proposals_plan_id_idx;
 DROP TABLE IF EXISTS work_item_plan_proposals;
 DROP INDEX IF EXISTS work_item_plans_repo_binding_id_idx;
+DROP INDEX IF EXISTS work_item_plans_lease_expires_at_idx;
+DROP INDEX IF EXISTS work_item_plans_state_created_at_idx;
 DROP INDEX IF EXISTS work_item_plans_approved_contract_id_idx;
 DROP INDEX IF EXISTS work_item_plans_contract_id_idx;
 DROP INDEX IF EXISTS work_item_plans_project_created_at_idx;

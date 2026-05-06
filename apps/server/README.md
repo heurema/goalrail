@@ -403,14 +403,31 @@ curl -sS -X POST http://localhost:8080/v1/contracts/{contract_id}/plans \
   }'
 ```
 
-For now the future worker/planner output can be submitted manually through the
-API as a Proposal. The server validates and stores the Proposal but does not
-create canonical WorkItems yet:
+Then acquire the next eligible typed planning lease. This mutates server-owned
+state, marks the selected `WorkItemPlan` as `leased`, and returns the raw
+`lease_token` only once in the creation response:
+
+```bash
+curl -sS -X POST http://localhost:8080/v1/plans/leases \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "leased_by": {"kind": "worker", "id": "planner-worker-1"},
+    "ttl_seconds": 900
+  }'
+```
+
+The current server has the typed lease API but still has no worker,
+controller, or runner binary. A future worker/planner submits its proposal
+through the API with the lease proof. The server validates and stores the
+Proposal, marks the lease `completed`, and does not create canonical WorkItems
+yet:
 
 ```bash
 curl -sS -X POST http://localhost:8080/v1/plans/{plan_id}/proposals \
   -H 'Content-Type: application/json' \
   -d '{
+    "lease_id": "{lease_id}",
+    "lease_token": "{lease_token_returned_only_on_create}",
     "submitted_by": {"kind": "worker", "id": "planner-worker-1"},
     "planner": {"kind": "goalrail_worker", "id": "planner-worker-1", "version": "0.1.0"},
     "source_snapshot_refs": [{"kind": "approved_contract", "id": "{approved_contract_id}"}],
@@ -444,7 +461,8 @@ Read the planned task by its stable task ID:
 curl -sS http://localhost:8080/v1/tasks/{task_id}
 ```
 
-There is no task list/search endpoint in this slice.
+There is no task list/search endpoint and no worker lease list/search endpoint
+in this slice.
 
 This flow still does not create executable work, gate decisions, proof, runner
 jobs, VCS integration, or automatic readiness re-check after answer application.
