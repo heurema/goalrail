@@ -117,6 +117,30 @@ function isMembershipRole(value: string | undefined): value is MembershipRole {
   return MEMBERSHIP_ROLES.includes(value as MembershipRole);
 }
 
+function profileConsoleRole(profile: MeResponse): UserRole {
+  if (profile.organization_membership.role === 'member') {
+    return 'member';
+  }
+
+  if (profile.organization_membership.role === 'viewer') {
+    return 'observer';
+  }
+
+  return 'owner';
+}
+
+function profileConsoleStatus(profile: MeResponse): UserStatus {
+  if (profile.user.state === 'pending' || profile.organization_membership.state === 'pending') {
+    return 'pending';
+  }
+
+  if (profile.user.state === 'disabled' || profile.organization_membership.state === 'disabled') {
+    return 'disabled';
+  }
+
+  return 'active';
+}
+
 function readStoredTheme(): ThemeId {
   try {
     if (typeof window === 'undefined') {
@@ -431,6 +455,26 @@ function App() {
     });
   }, [roleFilter, searchQuery, statusFilter, users]);
 
+  const visibleCurrentProfile = useMemo(() => {
+    if (!profile) {
+      return null;
+    }
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const displayName = profile.user.display_name.trim() || profile.user.email || profile.user.id;
+    const email = profile.user.email ?? '';
+    const matchesQuery =
+      !normalizedQuery ||
+      displayName.toLowerCase().includes(normalizedQuery) ||
+      email.toLowerCase().includes(normalizedQuery);
+    const matchesRole = roleFilter === 'all' || profileConsoleRole(profile) === roleFilter;
+    const matchesStatus = statusFilter === 'all' || profileConsoleStatus(profile) === statusFilter;
+
+    return matchesQuery && matchesRole && matchesStatus ? profile : null;
+  }, [profile, roleFilter, searchQuery, statusFilter]);
+
+  const visibleUserCount = visibleUsers.length + (visibleCurrentProfile ? 1 : 0);
+
   const userRows = useMemo(
     () =>
       visibleUsers.map((user) => (
@@ -618,7 +662,7 @@ function App() {
             <p className="metaText">
               {screen === 'settings-appearance'
                 ? translate('settings.presets', { count: THEMES.length })
-                : translate('settings.records', { count: visibleUsers.length })}
+                : translate('settings.records', { count: visibleUserCount })}
             </p>
           </header>
 
@@ -714,9 +758,9 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      <CurrentUserRow profile={profile} t={translate} />
+                      <CurrentUserRow profile={visibleCurrentProfile} t={translate} />
                       {userRows}
-                      {visibleUsers.length === 0 ? (
+                      {visibleUserCount === 0 ? (
                         <tr>
                           <td className="emptyUsers" colSpan={5}>
                             {translate('users.emptyRealOnly')}
@@ -1109,6 +1153,8 @@ function CurrentUserRow({
   }
 
   const displayName = profile.user.display_name.trim() || profile.user.email || profile.user.id;
+  const consoleRole = profileConsoleRole(profile);
+  const status = profileConsoleStatus(profile);
   const role = isMembershipRole(profile.organization_membership.role)
     ? t(`membershipRoles.${profile.organization_membership.role}`)
     : profile.organization_membership.role;
@@ -1125,10 +1171,10 @@ function CurrentUserRow({
       </td>
       <td className="userEmail">{profile.user.email ?? t('users.emptyValue')}</td>
       <td>
-        <span className="pill roleOwner">{role}</span>
+        <span className={consoleRole === 'owner' ? 'pill roleOwner' : 'pill'}>{role}</span>
       </td>
       <td>
-        <span className="pill statusActive">{profile.user.state}</span>
+        <span className={`pill ${statusClass(status)}`}>{t(`statuses.${status}`)}</span>
       </td>
       <td />
     </tr>

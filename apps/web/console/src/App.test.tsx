@@ -462,12 +462,17 @@ describe('App', () => {
 
     expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
     expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
-    expect(screen.getByText(/No additional real user records/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No additional real user records/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add user/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Product Lead')).not.toBeInTheDocument();
     expect(screen.queryByText('Reviewer')).not.toBeInTheDocument();
     expect(screen.queryByText('qa@example.com')).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(callsBeforeUsersEdit);
+
+    fireEvent.change(screen.getByLabelText(/filter by role/i), { target: { value: 'observer' } });
+
+    expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('Owner');
+    expect(screen.getByText(/No additional real user records/i)).toBeInTheDocument();
   });
 
   it('does not render disallowed product or platform features', async () => {
