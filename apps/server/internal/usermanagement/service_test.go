@@ -208,10 +208,19 @@ func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *
 	}
 }
 
-func TestCreateUserDuplicateEmailInsertRaceReturnsConflict(t *testing.T) {
+func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
 	store := newFakeStore()
-	store.upsertUserErr = errors.New("duplicate email")
-	store.upsertUserConflict = user(otherExistingUserID, "Race", "race@example.com", spine.EntityStateActive)
+	originalUser := user(otherExistingUserID, "Race", "race@example.com", spine.EntityStateActive)
+	originalCredential := spine.UserPasswordCredential{
+		UserID:             otherExistingUserID,
+		PasswordHash:       "hash:race-password",
+		MustChangePassword: false,
+		PasswordChangedAt:  ptrTime(testNow.Add(-time.Hour)),
+		CreatedAt:          testNow.Add(-2 * time.Hour),
+		UpdatedAt:          testNow.Add(-time.Hour),
+	}
+	store.createUserConflict = originalUser
+	store.credentials[otherExistingUserID] = originalCredential
 	service := newTestService(store)
 
 	result, err := service.CreateUser(context.Background(), CreateUserInput{
@@ -221,14 +230,21 @@ func TestCreateUserDuplicateEmailInsertRaceReturnsConflict(t *testing.T) {
 		DisplayName:         "Race",
 		Role:                "member",
 	})
-	if !errors.Is(err, ErrUserExists) {
-		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
 	}
 	if result.TemporaryPassword != "" {
-		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
+		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user after race", result.TemporaryPassword)
 	}
-	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
-		t.Fatalf("membership was created despite duplicate-email conflict")
+	if got := store.users[otherExistingUserID]; got != originalUser {
+		t.Fatalf("existing user mutated after race:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("existing credential mutated after race:\n got: %#v\nwant: %#v", got, originalCredential)
+	}
+	membership := store.memberships[key(orgID, otherExistingUserID)]
+	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleMember || membership.State != spine.EntityStateActive {
+		t.Fatalf("attached membership = %#v, want active member membership", membership)
 	}
 }
 
@@ -409,8 +425,7 @@ type fakeStore struct {
 	memberships        map[string]spine.OrganizationMembership
 	credentials        map[spine.UserID]spine.UserPasswordCredential
 	revoked            map[spine.UserID]bool
-	upsertUserErr      error
-	upsertUserConflict spine.User
+	createUserConflict spine.User
 	calls              []string
 }
 
@@ -462,13 +477,16 @@ func (s *fakeStore) GetUserByEmail(_ context.Context, email string) (spine.User,
 	return spine.User{}, false, nil
 }
 
-func (s *fakeStore) UpsertUser(_ context.Context, user spine.User) error {
-	if s.upsertUserErr != nil {
-		if s.upsertUserConflict.ID != "" {
-			s.users[s.upsertUserConflict.ID] = s.upsertUserConflict
-		}
-		return s.upsertUserErr
+func (s *fakeStore) CreateUser(_ context.Context, user spine.User) (bool, error) {
+	if s.createUserConflict.ID != "" {
+		s.users[s.createUserConflict.ID] = s.createUserConflict
+		return false, nil
 	}
+	s.users[user.ID] = user
+	return true, nil
+}
+
+func (s *fakeStore) UpsertUser(_ context.Context, user spine.User) error {
 	s.users[user.ID] = user
 	return nil
 }

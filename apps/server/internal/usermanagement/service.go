@@ -34,6 +34,7 @@ type Store interface {
 	ListOrganizationMemberships(context.Context, spine.OrganizationID) ([]spine.OrganizationMembership, error)
 	GetUser(context.Context, spine.UserID) (spine.User, bool, error)
 	GetUserByEmail(context.Context, string) (spine.User, bool, error)
+	CreateUser(context.Context, spine.User) (bool, error)
 	UpsertUser(context.Context, spine.User) error
 	GetOrganizationMembership(context.Context, spine.OrganizationID, spine.UserID) (spine.OrganizationMembership, bool, error)
 	CreateOrganizationMembership(context.Context, spine.OrganizationMembership) error
@@ -237,11 +238,35 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-		if err := s.Store.UpsertUser(txCtx, user); err != nil {
-			if _, exists, lookupErr := s.Store.GetUserByEmail(txCtx, normalized.Email); lookupErr == nil && exists {
+		created, err := s.Store.CreateUser(txCtx, user)
+		if err != nil {
+			return fmt.Errorf("create user: %w", err)
+		}
+		if !created {
+			existingUser, ok, err := s.Store.GetUserByEmail(txCtx, normalized.Email)
+			if err != nil {
+				return fmt.Errorf("get user by email after create conflict: %w", err)
+			}
+			if !ok || existingUser.State != spine.EntityStateActive {
 				return ErrUserExists
 			}
-			return fmt.Errorf("upsert user: %w", err)
+			membership, attached, err := s.createMembershipForExistingUser(txCtx, existingUser, normalized, now)
+			if err != nil {
+				return err
+			}
+			if !attached {
+				return ErrUserExists
+			}
+			credential, credentialOK, err := s.Store.GetPasswordCredential(txCtx, existingUser.ID)
+			if err != nil {
+				return fmt.Errorf("get password credential summary: %w", err)
+			}
+			result = CreateUserResult{
+				User:                   existingUser,
+				OrganizationMembership: membership,
+				Credential:             credentialSummary(credential, credentialOK),
+			}
+			return nil
 		}
 		membershipID, err := s.IDs.NewOrganizationMembershipID()
 		if err != nil {

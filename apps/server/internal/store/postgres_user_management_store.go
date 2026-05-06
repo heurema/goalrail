@@ -89,6 +89,29 @@ func (s *PostgresUserManagementStore) GetUserByEmail(ctx context.Context, email 
 	return s.getUser(ctx, "get user by email", stmt)
 }
 
+func (s *PostgresUserManagementStore) CreateUser(ctx context.Context, user spine.User) (bool, error) {
+	userID, err := uuidValue(user.ID, "user id")
+	if err != nil {
+		return false, err
+	}
+	createdAt := utcOrNow(user.CreatedAt)
+	updatedAt := utcOrDefault(user.UpdatedAt, createdAt)
+	stmt := s.psql.
+		Insert("users").
+		Columns("id", "display_name", "email", "state", "created_at", "updated_at").
+		Values(userID, user.DisplayName, user.Email, user.State, createdAt, updatedAt).
+		Suffix("ON CONFLICT (lower(email)) WHERE email <> '' DO NOTHING")
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return false, fmt.Errorf("create user SQL: %w", err)
+	}
+	tag, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return false, fmt.Errorf("create user: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 func (s *PostgresUserManagementStore) UpsertUser(ctx context.Context, user spine.User) error {
 	userID, err := uuidValue(user.ID, "user id")
 	if err != nil {
