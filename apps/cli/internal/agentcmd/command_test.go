@@ -32,8 +32,11 @@ func TestInstallCreatesAgentPackFiles(t *testing.T) {
 	}
 	assertFileContains(t, filepath.Join(repoDir, agentGuideRelativePath), "Use the Goalrail CLI as the machine interface")
 	assertFileContains(t, filepath.Join(repoDir, agentGuideRelativePath), "This Agent Pack is provider-neutral")
+	assertFileContains(t, filepath.Join(repoDir, agentGuideRelativePath), "next_action.available=false")
 	assertFileContains(t, filepath.Join(repoDir, agentCommandsRelativePath), `"version": "goalrail.agent.v0"`)
 	assertFileContains(t, filepath.Join(repoDir, agentCommandsRelativePath), `"goalrail work start --title <title> --body-file - --format json"`)
+	assertFileContains(t, filepath.Join(repoDir, agentCommandsRelativePath), `"do_not_call_unavailable_next_actions": true`)
+	assertFileContains(t, filepath.Join(repoDir, rootAgentShimRelativePath), ".goalrail/agent/GOALRAIL.md")
 	assertProviderFilesMissing(t, repoDir)
 }
 
@@ -71,7 +74,7 @@ func TestInstallIsIdempotentWhenContentMatches(t *testing.T) {
 	if output.Status != projectconfig.StatusUnchanged {
 		t.Fatalf("status = %q, want unchanged", output.Status)
 	}
-	if output.Files[agentGuideRelativePath] != projectconfig.StatusUnchanged || output.Files[agentCommandsRelativePath] != projectconfig.StatusUnchanged {
+	if output.Files[agentGuideRelativePath] != projectconfig.StatusUnchanged || output.Files[agentCommandsRelativePath] != projectconfig.StatusUnchanged || output.Files[rootAgentShimRelativePath] != projectconfig.StatusUnchanged {
 		t.Fatalf("file statuses = %#v, want unchanged", output.Files)
 	}
 }
@@ -105,6 +108,59 @@ func TestInstallFailsOnChangedFileUnlessForce(t *testing.T) {
 		t.Fatalf("status = %q, want updated", output.Status)
 	}
 	assertFileContains(t, filepath.Join(repoDir, agentGuideRelativePath), "Goalrail Agent Pack v0")
+	assertFileContains(t, filepath.Join(repoDir, rootAgentShimRelativePath), ".goalrail/agent/GOALRAIL.md")
+}
+
+func TestInstallSkipsExistingRootAgentsFile(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	writeProjectConfigFixture(t, repoDir)
+	customAgents := "custom agent instructions\n"
+	if err := os.WriteFile(filepath.Join(repoDir, rootAgentShimRelativePath), []byte(customAgents), 0o644); err != nil {
+		t.Fatalf("write custom AGENTS.md: %v", err)
+	}
+
+	output, err := runInstallJSON(t, repoDir, "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(agent install) error = %v", err)
+	}
+	if output.Files[rootAgentShimRelativePath] != statusSkippedManualPatch {
+		t.Fatalf("AGENTS.md status = %q, want skipped", output.Files[rootAgentShimRelativePath])
+	}
+	assertFileEquals(t, filepath.Join(repoDir, rootAgentShimRelativePath), customAgents)
+}
+
+func TestInstallForceDoesNotOverwriteExistingRootAgentsFile(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	writeProjectConfigFixture(t, repoDir)
+	if _, err := runInstallJSON(t, repoDir, "--format", "json"); err != nil {
+		t.Fatalf("first Run(agent install) error = %v", err)
+	}
+	customAgents := "custom agent instructions\n"
+	if err := os.WriteFile(filepath.Join(repoDir, rootAgentShimRelativePath), []byte(customAgents), 0o644); err != nil {
+		t.Fatalf("write custom AGENTS.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoDir, agentCommandsRelativePath), []byte("custom\n"), 0o644); err != nil {
+		t.Fatalf("mutate commands: %v", err)
+	}
+
+	output, err := runInstallJSON(t, repoDir, "--format", "json", "--force")
+	if err != nil {
+		t.Fatalf("Run(agent install --force) error = %v", err)
+	}
+	if output.Files[agentCommandsRelativePath] != projectconfig.StatusUpdated {
+		t.Fatalf("commands status = %q, want updated", output.Files[agentCommandsRelativePath])
+	}
+	if output.Files[rootAgentShimRelativePath] != statusSkippedManualPatch {
+		t.Fatalf("AGENTS.md status = %q, want skipped", output.Files[rootAgentShimRelativePath])
+	}
+	assertFileContains(t, filepath.Join(repoDir, agentCommandsRelativePath), `"do_not_call_unavailable_next_actions": true`)
+	assertFileEquals(t, filepath.Join(repoDir, rootAgentShimRelativePath), customAgents)
 }
 
 func TestInstallJSONReturnsInstalledPathsAndStatus(t *testing.T) {
@@ -118,10 +174,10 @@ func TestInstallJSONReturnsInstalledPathsAndStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run(agent install --format json) error = %v", err)
 	}
-	if len(output.Paths) != 2 || output.Paths[0] != agentGuideRelativePath || output.Paths[1] != agentCommandsRelativePath {
+	if len(output.Paths) != 3 || output.Paths[0] != agentGuideRelativePath || output.Paths[1] != agentCommandsRelativePath || output.Paths[2] != rootAgentShimRelativePath {
 		t.Fatalf("paths = %#v, want agent pack paths", output.Paths)
 	}
-	if output.Files[agentGuideRelativePath] != projectconfig.StatusWritten || output.Files[agentCommandsRelativePath] != projectconfig.StatusWritten {
+	if output.Files[agentGuideRelativePath] != projectconfig.StatusWritten || output.Files[agentCommandsRelativePath] != projectconfig.StatusWritten || output.Files[rootAgentShimRelativePath] != projectconfig.StatusWritten {
 		t.Fatalf("file statuses = %#v, want written", output.Files)
 	}
 }
@@ -245,6 +301,18 @@ func assertFileContains(t *testing.T, path string, want string) {
 	}
 	if !strings.Contains(string(raw), want) {
 		t.Fatalf("%s = %q, want containing %q", path, string(raw), want)
+	}
+}
+
+func assertFileEquals(t *testing.T, path string, want string) {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if string(raw) != want {
+		t.Fatalf("%s = %q, want %q", path, string(raw), want)
 	}
 }
 

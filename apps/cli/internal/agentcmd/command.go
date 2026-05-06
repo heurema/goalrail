@@ -21,6 +21,8 @@ const (
 	agentDirRelativePath      = ".goalrail/agent"
 	agentGuideRelativePath    = ".goalrail/agent/GOALRAIL.md"
 	agentCommandsRelativePath = ".goalrail/agent/commands.json"
+	rootAgentShimRelativePath = "AGENTS.md"
+	statusSkippedManualPatch  = "skipped_manual_patch_needed"
 )
 
 type InstallOutput struct {
@@ -95,21 +97,28 @@ func runInstall(ctx context.Context, out *term.Output, workDir string, args []st
 	files := map[string]string{
 		agentGuideRelativePath:    agentGuideContent(),
 		agentCommandsRelativePath: commandsJSONContent(),
+		rootAgentShimRelativePath: rootAgentShimContent(),
 	}
-	paths := []string{agentGuideRelativePath, agentCommandsRelativePath}
-	for _, relativePath := range paths {
+	neutralPaths := []string{agentGuideRelativePath, agentCommandsRelativePath}
+	paths := []string{agentGuideRelativePath, agentCommandsRelativePath, rootAgentShimRelativePath}
+	for _, relativePath := range neutralPaths {
 		if err := preflightAgentFile(discovered.GitRoot, relativePath, files[relativePath], *force); err != nil {
 			return err
 		}
 	}
 	statuses := map[string]string{}
-	for _, relativePath := range paths {
+	for _, relativePath := range neutralPaths {
 		status, err := writeAgentFile(discovered.GitRoot, relativePath, files[relativePath], *force)
 		if err != nil {
 			return err
 		}
 		statuses[relativePath] = status
 	}
+	status, err := writeRootAgentShim(discovered.GitRoot, files[rootAgentShimRelativePath])
+	if err != nil {
+		return err
+	}
+	statuses[rootAgentShimRelativePath] = status
 
 	output := InstallOutput{
 		Status: aggregateStatus(statuses),
@@ -121,6 +130,31 @@ func runInstall(ctx context.Context, out *term.Output, workDir string, args []st
 	}
 	_, err = fmt.Fprint(out.Stdout, renderInstallText(output))
 	return err
+}
+
+func writeRootAgentShim(gitRoot, content string) (string, error) {
+	path := filepath.Join(gitRoot, rootAgentShimRelativePath)
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return "", exitcode.RuntimeError(fmt.Errorf("write %s: %w", rootAgentShimRelativePath, err))
+		}
+		return projectconfig.StatusWritten, nil
+	}
+	if err != nil {
+		return "", exitcode.RuntimeError(fmt.Errorf("inspect %s: %w", rootAgentShimRelativePath, err))
+	}
+	if info.Mode()&os.ModeSymlink != 0 || info.IsDir() {
+		return statusSkippedManualPatch, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", exitcode.RuntimeError(fmt.Errorf("read %s: %w", rootAgentShimRelativePath, err))
+	}
+	if bytes.Equal(raw, []byte(content)) {
+		return projectconfig.StatusUnchanged, nil
+	}
+	return statusSkippedManualPatch, nil
 }
 
 func preflightAgentFile(gitRoot, relativePath, content string, force bool) error {
@@ -267,6 +301,8 @@ goalrail work start --title <title> --body-file - --format json
 
 Pass pasted task text through stdin as the work body.
 
+If a Goalrail JSON response contains ` + "`next_action.available=false`" + `, do not call ` + "`next_action.command`" + `. Treat it as a planned future command and explain the current available next step to the user.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -304,7 +340,23 @@ func commandsJSONContent() string {
         "Proof"
       ]
     }
+  },
+  "agent_rules": {
+    "do_not_call_unavailable_next_actions": true
   }
 }
+`
+}
+
+func rootAgentShimContent() string {
+	return `# Goalrail Agent Shim
+
+This repository has a Goalrail Agent Pack.
+
+For Goalrail work, read:
+
+.goalrail/agent/GOALRAIL.md
+
+Use Goalrail CLI with --format json. Do not invent Goalrail state.
 `
 }
