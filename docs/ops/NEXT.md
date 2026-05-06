@@ -61,24 +61,23 @@
   lookup, and logout over those existing endpoints. Organization / Project /
   RepoBinding profile selection remains unimplemented; the server-rendered CLI
   auth bridge remains separate.
-- ADR-0027 now defines the Organization user management boundary:
-  regular Organization users are a future Console-backed server API workflow,
+- ADR-0027 defines the Organization user management boundary:
+  regular Organization users are a Console-backed server API workflow,
   not CLI user creation; canonical identity is `User`, Organization access is
   `OrganizationMembership`, v0 user management is owner-only, temporary
   passwords are backend-generated and shown once, first-login password change
   remains mandatory, roles are `owner`, `admin`, `member`, and `viewer`, and
-  there is no separate CLI-user entity or `goalrail users create` command.
+  there is no separate CLI-user entity or `goalrail users create` command. The
+  backend now implements `GET /v1/organizations/{organization_id}/users`,
+  `POST /v1/organizations/{organization_id}/users`, and
+  `PATCH /v1/organizations/{organization_id}/users/{user_id}` with owner-only
+  v0 authorization, server-side membership loading, cross-organization
+  rejection, one-time temporary password generation, and last-active-owner
+  protection.
 - Next bounded Organization user-management implementation slices:
-  1. backend Organization user-management API for the future
-     `GET /v1/organizations/{organization_id}/users`,
-     `POST /v1/organizations/{organization_id}/users`, and
-     `PATCH /v1/organizations/{organization_id}/users/{user_id}` routes, with
-     owner-only v0 authorization, server-side membership loading,
-     cross-organization rejection, one-time temporary password generation, and
-     last-active-owner protection
-  2. console Users API-backed persistence replacing component-state Users
+  1. console Users API-backed persistence replacing component-state Users
      data, without storing temporary passwords or tokens in browser storage
-  3. ops docs update after implementation to align STATUS, NEXT,
+  2. ops docs update after console persistence lands to align STATUS, NEXT,
      COMPONENTS.yaml, and console docs with actual code reality
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
@@ -271,10 +270,11 @@ Done means:
 - access and refresh tokens are kept in React memory only; no cookies, token
   `localStorage`, token `sessionStorage`, or profile browser persistence exists
 - `goalrail.console.theme` remains the only accepted localStorage key
-- Settings -> Users remains component-state only with no backend admin user API
+- Settings -> Users remains component-state only and does not call the backend
+  admin user-management API
 - no public registration, signup, SSO, invite/reset email, password reset,
-  admin user creation/list endpoint, SaaS onboarding, organization creation
-  API, analytics, repo integration, runner, gate, proof, CORS, deployment
+  SaaS onboarding, organization creation API, analytics, repo integration,
+  runner, gate, proof, CORS, deployment
   config, hostnames, IPs, ports, credentials, reverse-proxy snippets, or
   secrets were added
 - live `https://goalrail.dev` now uses this repo-side auth source through the

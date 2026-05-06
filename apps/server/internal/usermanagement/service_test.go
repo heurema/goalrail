@@ -1,0 +1,449 @@
+package usermanagement
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/heurema/goalrail/apps/server/internal/spine"
+)
+
+func TestOwnerCanListUsersInOwnOrganization(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	result, err := service.ListUsers(context.Background(), ListUsersInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+	})
+	if err != nil {
+		t.Fatalf("ListUsers() error = %v", err)
+	}
+	if len(result.Users) != 2 {
+		t.Fatalf("users len = %d, want 2", len(result.Users))
+	}
+	if result.Users[0].User.ID != ownerUserID || result.Users[1].User.ID != memberUserID {
+		t.Fatalf("users = %#v, want owner then member", result.Users)
+	}
+}
+
+func TestNonOwnersCannotManageUsersInV0(t *testing.T) {
+	for _, role := range []spine.OrganizationMembershipRole{
+		spine.OrganizationMembershipRoleAdmin,
+		spine.OrganizationMembershipRoleMember,
+		spine.OrganizationMembershipRoleViewer,
+	} {
+		t.Run(string(role), func(t *testing.T) {
+			store := newFakeStore()
+			store.memberships[key(orgID, ownerUserID)] = membership(ownerMembershipID, orgID, ownerUserID, role, spine.EntityStateActive)
+			service := newTestService(store)
+
+			_, err := service.ListUsers(context.Background(), ListUsersInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+			})
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("ListUsers() error = %v, want ErrForbidden", err)
+			}
+			_, err = service.CreateUser(context.Background(), CreateUserInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+				Email:               "new@example.com",
+				DisplayName:         "New User",
+				Role:                "member",
+			})
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("CreateUser() error = %v, want ErrForbidden", err)
+			}
+			nextRole := "viewer"
+			_, err = service.PatchUser(context.Background(), PatchUserInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+				UserID:              memberUserID,
+				Role:                &nextRole,
+			})
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("PatchUser() error = %v, want ErrForbidden", err)
+			}
+		})
+	}
+}
+
+func TestCrossOrganizationRequestIsRejected(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	_, err := service.ListUsers(context.Background(), ListUsersInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      otherOrgID,
+	})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("ListUsers() error = %v, want ErrForbidden", err)
+	}
+}
+
+func TestOwnerCanCreateUserWithTemporaryPasswordReturnedOnce(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	result, err := service.CreateUser(context.Background(), CreateUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		Email:               " DEV@EXAMPLE.COM ",
+		DisplayName:         " Dev Name ",
+		Role:                "member",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser() error = %v", err)
+	}
+	if result.TemporaryPassword != "temporary-password" {
+		t.Fatalf("TemporaryPassword = %q, want generated password", result.TemporaryPassword)
+	}
+	if result.User.Email != "dev@example.com" || result.User.DisplayName != "Dev Name" {
+		t.Fatalf("user = %#v, want normalized email and display name", result.User)
+	}
+	if result.OrganizationMembership.Role != spine.OrganizationMembershipRoleMember || result.OrganizationMembership.State != spine.EntityStateActive {
+		t.Fatalf("membership = %#v, want active member", result.OrganizationMembership)
+	}
+
+	credential := store.credentials[result.User.ID]
+	if credential.PasswordHash != "hash:temporary-password" {
+		t.Fatalf("stored PasswordHash = %q, want hash", credential.PasswordHash)
+	}
+	if !credential.MustChangePassword || credential.PasswordChangedAt != nil {
+		t.Fatalf("stored credential = %#v, want first-login password change", credential)
+	}
+	encoded := mustJSON(t, result)
+	if strings.Contains(encoded, "password_hash") || strings.Contains(encoded, "hash:temporary-password") {
+		t.Fatalf("create response leaked credential material: %s", encoded)
+	}
+}
+
+func TestListUsersDoesNotExposeTemporaryPasswordOrCredentialMaterial(t *testing.T) {
+	store := newFakeStore()
+	store.credentials[memberUserID] = spine.UserPasswordCredential{
+		UserID:             memberUserID,
+		PasswordHash:       "hash:member-temporary-password",
+		MustChangePassword: true,
+		CreatedAt:          testNow,
+		UpdatedAt:          testNow,
+	}
+	service := newTestService(store)
+
+	result, err := service.ListUsers(context.Background(), ListUsersInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+	})
+	if err != nil {
+		t.Fatalf("ListUsers() error = %v", err)
+	}
+	encoded := mustJSON(t, result)
+	for _, forbidden := range []string{
+		"temporary_password",
+		"member-temporary-password",
+		"password_hash",
+		"hash:member-temporary-password",
+		"refresh_token",
+		"access_token",
+		"cli_auth",
+	} {
+		if strings.Contains(encoded, forbidden) {
+			t.Fatalf("list response leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestInvalidAndObserverRolesAreRejected(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	for _, role := range []string{"manager", "observer"} {
+		t.Run(role, func(t *testing.T) {
+			_, err := service.CreateUser(context.Background(), CreateUserInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+				Email:               "dev@example.com",
+				DisplayName:         "Dev",
+				Role:                role,
+			})
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("CreateUser() error = %v, want ValidationError", err)
+			}
+		})
+	}
+}
+
+func TestCannotDemoteLastActiveOwner(t *testing.T) {
+	store := newFakeStore()
+	delete(store.memberships, key(orgID, memberUserID))
+	nextRole := "admin"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+		Role:                &nextRole,
+	})
+	if !errors.Is(err, ErrLastActiveOwner) {
+		t.Fatalf("PatchUser() error = %v, want ErrLastActiveOwner", err)
+	}
+}
+
+func TestCreateCannotDemoteExistingLastActiveOwner(t *testing.T) {
+	store := newFakeStore()
+	delete(store.memberships, key(orgID, memberUserID))
+	service := newTestService(store)
+
+	_, err := service.CreateUser(context.Background(), CreateUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		Email:               "owner@example.com",
+		DisplayName:         "Owner",
+		Role:                "member",
+	})
+	if !errors.Is(err, ErrLastActiveOwner) {
+		t.Fatalf("CreateUser() error = %v, want ErrLastActiveOwner", err)
+	}
+}
+
+func TestCannotDisableLastActiveOwner(t *testing.T) {
+	store := newFakeStore()
+	delete(store.memberships, key(orgID, memberUserID))
+	nextState := "inactive"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+		State:               &nextState,
+	})
+	if !errors.Is(err, ErrLastActiveOwner) {
+		t.Fatalf("PatchUser() error = %v, want ErrLastActiveOwner", err)
+	}
+}
+
+func TestDisablingUserRevokesActiveSessionsWhenAllowed(t *testing.T) {
+	store := newFakeStore()
+	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
+	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive)
+	nextState := "inactive"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              secondOwnerUserID,
+		State:               &nextState,
+	})
+	if err != nil {
+		t.Fatalf("PatchUser() error = %v", err)
+	}
+	if !store.revoked[secondOwnerUserID] {
+		t.Fatalf("sessions for %q were not revoked", secondOwnerUserID)
+	}
+}
+
+func newTestService(store *fakeStore) *Service {
+	service := NewService(store, fakeTransactionRunner{})
+	service.Clock = fixedClock{now: testNow}
+	service.IDs = sequenceIDs{}
+	service.Passwords = fixedPasswordGenerator{}
+	service.Hasher = fixedHasher{}
+	return service
+}
+
+type fakeStore struct {
+	users       map[spine.UserID]spine.User
+	memberships map[string]spine.OrganizationMembership
+	credentials map[spine.UserID]spine.UserPasswordCredential
+	revoked     map[spine.UserID]bool
+}
+
+func newFakeStore() *fakeStore {
+	return &fakeStore{
+		users: map[spine.UserID]spine.User{
+			ownerUserID:  user(ownerUserID, "Owner", "owner@example.com", spine.EntityStateActive),
+			memberUserID: user(memberUserID, "Member", "member@example.com", spine.EntityStateActive),
+		},
+		memberships: map[string]spine.OrganizationMembership{
+			key(orgID, ownerUserID):  membership(ownerMembershipID, orgID, ownerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive),
+			key(orgID, memberUserID): membership(memberMembershipID, orgID, memberUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateActive),
+		},
+		credentials: map[spine.UserID]spine.UserPasswordCredential{
+			ownerUserID: {
+				UserID:             ownerUserID,
+				PasswordHash:       "hash:owner-password",
+				MustChangePassword: false,
+				PasswordChangedAt:  ptrTime(testNow.Add(-time.Hour)),
+				CreatedAt:          testNow,
+				UpdatedAt:          testNow,
+			},
+		},
+		revoked: map[spine.UserID]bool{},
+	}
+}
+
+func (s *fakeStore) ListOrganizationMemberships(_ context.Context, organizationID spine.OrganizationID) ([]spine.OrganizationMembership, error) {
+	var result []spine.OrganizationMembership
+	for _, userID := range []spine.UserID{ownerUserID, memberUserID, secondOwnerUserID, newUserID} {
+		if membership, ok := s.memberships[key(organizationID, userID)]; ok {
+			result = append(result, membership)
+		}
+	}
+	return result, nil
+}
+
+func (s *fakeStore) GetUser(_ context.Context, userID spine.UserID) (spine.User, bool, error) {
+	user, ok := s.users[userID]
+	return user, ok, nil
+}
+
+func (s *fakeStore) GetUserByEmail(_ context.Context, email string) (spine.User, bool, error) {
+	for _, user := range s.users {
+		if strings.EqualFold(user.Email, email) {
+			return user, true, nil
+		}
+	}
+	return spine.User{}, false, nil
+}
+
+func (s *fakeStore) UpsertUser(_ context.Context, user spine.User) error {
+	s.users[user.ID] = user
+	return nil
+}
+
+func (s *fakeStore) GetOrganizationMembership(_ context.Context, organizationID spine.OrganizationID, userID spine.UserID) (spine.OrganizationMembership, bool, error) {
+	membership, ok := s.memberships[key(organizationID, userID)]
+	return membership, ok, nil
+}
+
+func (s *fakeStore) UpsertOrganizationMembership(_ context.Context, membership spine.OrganizationMembership) error {
+	s.memberships[key(membership.OrganizationID, membership.UserID)] = membership
+	return nil
+}
+
+func (s *fakeStore) GetPasswordCredential(_ context.Context, userID spine.UserID) (spine.UserPasswordCredential, bool, error) {
+	credential, ok := s.credentials[userID]
+	return credential, ok, nil
+}
+
+func (s *fakeStore) UpsertPasswordCredential(_ context.Context, credential spine.UserPasswordCredential) error {
+	s.credentials[credential.UserID] = credential
+	return nil
+}
+
+func (s *fakeStore) CountActiveOwners(_ context.Context, organizationID spine.OrganizationID) (int, error) {
+	count := 0
+	for _, membership := range s.memberships {
+		user := s.users[membership.UserID]
+		if membership.OrganizationID == organizationID &&
+			membership.Role == spine.OrganizationMembershipRoleOwner &&
+			membership.State == spine.EntityStateActive &&
+			user.State == spine.EntityStateActive {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (s *fakeStore) RevokeActiveSessionsForUser(_ context.Context, userID spine.UserID, _ time.Time) error {
+	s.revoked[userID] = true
+	return nil
+}
+
+type fakeTransactionRunner struct{}
+
+func (fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
+type fixedClock struct {
+	now time.Time
+}
+
+func (c fixedClock) Now() time.Time {
+	return c.now
+}
+
+type sequenceIDs struct{}
+
+func (sequenceIDs) NewUserID() (spine.UserID, error) {
+	return newUserID, nil
+}
+
+func (sequenceIDs) NewOrganizationMembershipID() (spine.OrganizationMembershipID, error) {
+	return newMembershipID, nil
+}
+
+type fixedPasswordGenerator struct{}
+
+func (fixedPasswordGenerator) NewPassword() (string, error) {
+	return "temporary-password", nil
+}
+
+type fixedHasher struct{}
+
+func (fixedHasher) HashPassword(input string) (string, error) {
+	return "hash:" + input, nil
+}
+
+func user(id spine.UserID, displayName string, email string, state spine.EntityState) spine.User {
+	return spine.User{
+		ID:          id,
+		DisplayName: displayName,
+		Email:       email,
+		State:       state,
+		CreatedAt:   testNow,
+		UpdatedAt:   testNow,
+	}
+}
+
+func membership(id spine.OrganizationMembershipID, organizationID spine.OrganizationID, userID spine.UserID, role spine.OrganizationMembershipRole, state spine.EntityState) spine.OrganizationMembership {
+	return spine.OrganizationMembership{
+		ID:             id,
+		OrganizationID: organizationID,
+		UserID:         userID,
+		Role:           role,
+		State:          state,
+		CreatedAt:      testNow,
+		UpdatedAt:      testNow,
+	}
+}
+
+func key(organizationID spine.OrganizationID, userID spine.UserID) string {
+	return string(organizationID) + ":" + string(userID)
+}
+
+func ptrTime(value time.Time) *time.Time {
+	return &value
+}
+
+func mustJSON(t *testing.T, value any) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	return string(encoded)
+}
+
+const (
+	orgID                   spine.OrganizationID           = "018f0000-0000-7000-8000-000000000002"
+	otherOrgID              spine.OrganizationID           = "018f0000-0000-7000-8000-000000000099"
+	ownerUserID             spine.UserID                   = "018f0000-0000-7000-8000-000000000001"
+	memberUserID            spine.UserID                   = "018f0000-0000-7000-8000-000000000003"
+	secondOwnerUserID       spine.UserID                   = "018f0000-0000-7000-8000-000000000004"
+	newUserID               spine.UserID                   = "018f0000-0000-7000-8000-000000000005"
+	ownerMembershipID       spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000011"
+	memberMembershipID      spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000012"
+	secondOwnerMembershipID spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000013"
+	newMembershipID         spine.OrganizationMembershipID = "018f0000-0000-7000-8000-000000000014"
+)
+
+var testNow = time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
