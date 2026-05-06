@@ -53,6 +53,7 @@ type testServerDeps struct {
 	approvedContracts *fakeApprovedContractStore
 	workItems         *fakeWorkItemStore
 	workItemPlans     *fakeWorkItemPlanStore
+	workItemLeases    *fakeWorkItemPlanLeaseStore
 	workItemProposals *fakeWorkItemPlanProposalStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
@@ -1730,6 +1731,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	approvedContractStore := newFakeApprovedContractStore()
 	workItemStore := newFakeWorkItemStore()
 	workItemPlanStore := newFakeWorkItemPlanStore()
+	workItemLeaseStore := newFakeWorkItemPlanLeaseStore(workItemPlanStore)
 	workItemPlanProposalStore := newFakeWorkItemPlanProposalStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
@@ -1749,7 +1751,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	contractHandler := httpserver.NewContractHandler(contractService)
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
-	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemLeaseStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
 
 	return testServerDeps{
@@ -1764,6 +1766,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		approvedContracts: approvedContractStore,
 		workItems:         workItemStore,
 		workItemPlans:     workItemPlanStore,
+		workItemLeases:    workItemLeaseStore,
 		workItemProposals: workItemPlanProposalStore,
 		events:            events,
 		idFactory:         ids,
@@ -2257,6 +2260,92 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 	return nil
 }
 
+type fakeWorkItemPlanLeaseStore struct {
+	plans  *fakeWorkItemPlanStore
+	leases map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease
+}
+
+func newFakeWorkItemPlanLeaseStore(plans *fakeWorkItemPlanStore) *fakeWorkItemPlanLeaseStore {
+	return &fakeWorkItemPlanLeaseStore{
+		plans:  plans,
+		leases: map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease{},
+	}
+}
+
+func (s *fakeWorkItemPlanLeaseStore) AcquireNextLease(_ context.Context, input workitemplan.LeaseAcquireInput) (spine.WorkItemPlanLease, bool, error) {
+	var selected spine.WorkItemPlan
+	found := false
+	for _, plan := range s.plans.plans {
+		if plan.State == spine.WorkItemPlanStateQueued || (plan.State == spine.WorkItemPlanStateLeased && plan.LeaseExpiresAt != nil && plan.LeaseExpiresAt.Before(input.CreatedAt)) {
+			if !found || plan.CreatedAt.Before(selected.CreatedAt) || (plan.CreatedAt.Equal(selected.CreatedAt) && plan.ID < selected.ID) {
+				selected = plan
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	if selected.State == spine.WorkItemPlanStateLeased && selected.CurrentLeaseID != nil {
+		previous := s.leases[*selected.CurrentLeaseID]
+		previous.State = spine.WorkItemPlanLeaseStateExpired
+		previous.UpdatedAt = input.UpdatedAt
+		s.leases[previous.ID] = previous
+	}
+	lease := spine.WorkItemPlanLease{
+		ID:                 input.ID,
+		PlanID:             selected.ID,
+		ContractID:         selected.ContractID,
+		ApprovedContractID: selected.ApprovedContractID,
+		RepoBindingID:      selected.RepoBindingID,
+		LeasedBy:           input.LeasedBy,
+		State:              spine.WorkItemPlanLeaseStateActive,
+		LeaseTokenHash:     input.LeaseTokenHash,
+		ExpiresAt:          input.ExpiresAt,
+		CreatedAt:          input.CreatedAt,
+		UpdatedAt:          input.UpdatedAt,
+	}
+	s.leases[lease.ID] = lease
+	selected.State = spine.WorkItemPlanStateLeased
+	selected.CurrentLeaseID = &lease.ID
+	selected.LeasedBy = &lease.LeasedBy
+	selected.LeaseExpiresAt = &lease.ExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.plans.plans[selected.ID] = selected
+	return lease, true, nil
+}
+
+func (s *fakeWorkItemPlanLeaseStore) Get(_ context.Context, id spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, bool, error) {
+	lease, ok := s.leases[id]
+	return lease, ok, nil
+}
+
+func (s *fakeWorkItemPlanLeaseStore) Renew(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, expiresAt time.Time, updatedAt time.Time) (spine.WorkItemPlanLease, bool, error) {
+	lease, ok := s.leases[id]
+	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(updatedAt) {
+		return spine.WorkItemPlanLease{}, false, nil
+	}
+	lease.ExpiresAt = expiresAt
+	lease.UpdatedAt = updatedAt
+	s.leases[id] = lease
+	plan := s.plans.plans[lease.PlanID]
+	plan.LeaseExpiresAt = &lease.ExpiresAt
+	plan.UpdatedAt = updatedAt
+	s.plans.plans[plan.ID] = plan
+	return lease, true, nil
+}
+
+func (s *fakeWorkItemPlanLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) error {
+	lease, ok := s.leases[id]
+	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(completedAt) {
+		return workitemplan.ErrInvalidLease
+	}
+	lease.State = spine.WorkItemPlanLeaseStateCompleted
+	lease.UpdatedAt = completedAt
+	s.leases[id] = lease
+	return nil
+}
+
 type fakeWorkItemPlanProposalStore struct {
 	proposals map[spine.WorkItemPlanProposalID]spine.WorkItemPlanProposal
 	byPlan    map[spine.WorkItemPlanID]spine.WorkItemPlanProposalID
@@ -2383,19 +2472,20 @@ func (r *fakeTransactionRunner) RunReadCommitted(ctx context.Context, fn func(co
 }
 
 type sequenceIDs struct {
-	intake           int
-	goal             int
-	clarification    int
-	question         int
-	answer           int
-	contract         int
-	contractSeed     int
-	contractDraft    int
-	approvedContract int
-	workItem         int
-	workItemPlan     int
-	workItemProposal int
-	event            int
+	intake            int
+	goal              int
+	clarification     int
+	question          int
+	answer            int
+	contract          int
+	contractSeed      int
+	contractDraft     int
+	approvedContract  int
+	workItem          int
+	workItemPlan      int
+	workItemPlanLease int
+	workItemProposal  int
+	event             int
 }
 
 func (g *sequenceIDs) NewIntakeID() (spine.IntakeID, error) {
@@ -2456,6 +2546,11 @@ func (g *sequenceIDs) NewWorkItemID() (spine.WorkItemID, error) {
 func (g *sequenceIDs) NewWorkItemPlanID() (spine.WorkItemPlanID, error) {
 	g.workItemPlan++
 	return spine.WorkItemPlanID(fmt.Sprintf("plan-%d", g.workItemPlan)), nil
+}
+
+func (g *sequenceIDs) NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error) {
+	g.workItemPlanLease++
+	return spine.WorkItemPlanLeaseID(fmt.Sprintf("lease-%d", g.workItemPlanLease)), nil
 }
 
 func (g *sequenceIDs) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {

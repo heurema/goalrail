@@ -2,6 +2,10 @@ package workitemplan
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +20,10 @@ import (
 
 const (
 	SourceRefKindProposal = "proposal"
+
+	defaultLeaseTTL = 15 * time.Minute
+	minLeaseTTL     = 30 * time.Second
+	maxLeaseTTL     = 60 * time.Minute
 )
 
 var (
@@ -31,6 +39,10 @@ var (
 	ErrProposalNotFound                = errors.New("work item plan proposal not found")
 	ErrInvalidProposalState            = errors.New("work item plan proposal state is not valid for this transition")
 	ErrAlreadyAccepted                 = errors.New("work item plan proposal already accepted")
+	ErrLeaseNotFound                   = errors.New("work item plan lease not found")
+	ErrLeaseExpired                    = errors.New("work item plan lease expired")
+	ErrLeaseCompleted                  = errors.New("work item plan lease completed")
+	ErrInvalidLease                    = errors.New("work item plan lease is invalid")
 )
 
 type ValidationError struct {
@@ -61,6 +73,22 @@ type PlanStore interface {
 	MarkAccepted(context.Context, spine.WorkItemPlanID, time.Time) error
 }
 
+type LeaseAcquireInput struct {
+	ID             spine.WorkItemPlanLeaseID
+	LeasedBy       spine.ActorRef
+	LeaseTokenHash string
+	ExpiresAt      time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type LeaseStore interface {
+	AcquireNextLease(context.Context, LeaseAcquireInput) (spine.WorkItemPlanLease, bool, error)
+	Get(context.Context, spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, bool, error)
+	Renew(context.Context, spine.WorkItemPlanLeaseID, string, time.Time, time.Time) (spine.WorkItemPlanLease, bool, error)
+	MarkCompleted(context.Context, spine.WorkItemPlanLeaseID, string, time.Time) error
+}
+
 type ProposalStore interface {
 	Create(context.Context, spine.WorkItemPlanProposal) error
 	Get(context.Context, spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, bool, error)
@@ -87,6 +115,7 @@ type Clock interface {
 
 type IDGenerator interface {
 	NewWorkItemPlanID() (spine.WorkItemPlanID, error)
+	NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error)
 	NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error)
 	NewWorkItemID() (spine.WorkItemID, error)
 	NewEventID() (spine.EventID, error)
@@ -96,6 +125,7 @@ type Service struct {
 	Contracts         ContractReader
 	ApprovedContracts ApprovedContractReader
 	Plans             PlanStore
+	Leases            LeaseStore
 	Proposals         ProposalStore
 	WorkItems         WorkItemStore
 	Events            EventLog
@@ -104,11 +134,12 @@ type Service struct {
 	IDs               IDGenerator
 }
 
-func NewService(contracts ContractReader, approvedContracts ApprovedContractReader, plans PlanStore, proposals ProposalStore, workItems WorkItemStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+func NewService(contracts ContractReader, approvedContracts ApprovedContractReader, plans PlanStore, leases LeaseStore, proposals ProposalStore, workItems WorkItemStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		Contracts:         contracts,
 		ApprovedContracts: approvedContracts,
 		Plans:             plans,
+		Leases:            leases,
 		Proposals:         proposals,
 		WorkItems:         workItems,
 		Events:            events,
@@ -172,7 +203,102 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 	return plan, nil
 }
 
+func (s *Service) AcquireNextLease(ctx context.Context, input spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error) {
+	if err := validateActor("leased_by", input.LeasedBy); err != nil {
+		return spine.WorkItemPlanLeaseCreated{}, false, err
+	}
+	ttl, err := leaseTTL(input.TTLSeconds)
+	if err != nil {
+		return spine.WorkItemPlanLeaseCreated{}, false, err
+	}
+	leaseID, err := s.IDs.NewWorkItemPlanLeaseID()
+	if err != nil {
+		return spine.WorkItemPlanLeaseCreated{}, false, fmt.Errorf("new work item plan lease id: %w", err)
+	}
+	token, err := newLeaseToken()
+	if err != nil {
+		return spine.WorkItemPlanLeaseCreated{}, false, fmt.Errorf("new work item plan lease token: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	acquire := LeaseAcquireInput{
+		ID:             leaseID,
+		LeasedBy:       input.LeasedBy,
+		LeaseTokenHash: leaseTokenHash(token),
+		ExpiresAt:      now.Add(ttl),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+
+	var lease spine.WorkItemPlanLease
+	var ok bool
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		var acquireErr error
+		lease, ok, acquireErr = s.Leases.AcquireNextLease(txCtx, acquire)
+		if acquireErr != nil {
+			return fmt.Errorf("acquire work item plan lease: %w", acquireErr)
+		}
+		return nil
+	}); err != nil {
+		return spine.WorkItemPlanLeaseCreated{}, false, err
+	}
+	if !ok {
+		return spine.WorkItemPlanLeaseCreated{}, false, nil
+	}
+	return leaseCreatedResponse(lease, token), true, nil
+}
+
+func (s *Service) GetLease(ctx context.Context, id spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, error) {
+	lease, ok, err := s.Leases.Get(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlanLease{}, fmt.Errorf("get work item plan lease: %w", err)
+	}
+	if !ok {
+		return spine.WorkItemPlanLease{}, ErrLeaseNotFound
+	}
+	return lease, nil
+}
+
+func (s *Service) RenewLease(ctx context.Context, id spine.WorkItemPlanLeaseID, input spine.WorkItemPlanLeaseRenewRequest) (spine.WorkItemPlanLease, error) {
+	if strings.TrimSpace(input.LeaseToken) == "" {
+		return spine.WorkItemPlanLease{}, &ValidationError{Field: "lease_token", Message: "is required"}
+	}
+	ttl, err := leaseTTL(input.TTLSeconds)
+	if err != nil {
+		return spine.WorkItemPlanLease{}, err
+	}
+	lease, err := s.GetLease(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlanLease{}, err
+	}
+	now := s.Clock.Now().UTC()
+	if err := validateLeaseProof(lease, "", leaseTokenHash(input.LeaseToken), now); err != nil {
+		return spine.WorkItemPlanLease{}, err
+	}
+	var renewed spine.WorkItemPlanLease
+	var ok bool
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		var renewErr error
+		renewed, ok, renewErr = s.Leases.Renew(txCtx, id, leaseTokenHash(input.LeaseToken), now.Add(ttl), now)
+		if renewErr != nil {
+			return fmt.Errorf("renew work item plan lease: %w", renewErr)
+		}
+		return nil
+	}); err != nil {
+		return spine.WorkItemPlanLease{}, err
+	}
+	if !ok {
+		return spine.WorkItemPlanLease{}, ErrInvalidLease
+	}
+	return renewed, nil
+}
+
 func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanID, input spine.WorkItemPlanProposalSubmitRequest) (spine.WorkItemPlanProposal, error) {
+	if strings.TrimSpace(string(input.LeaseID)) == "" {
+		return spine.WorkItemPlanProposal{}, &ValidationError{Field: "lease_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.LeaseToken) == "" {
+		return spine.WorkItemPlanProposal{}, &ValidationError{Field: "lease_token", Message: "is required"}
+	}
 	plan, err := s.GetPlan(ctx, planID)
 	if err != nil {
 		return spine.WorkItemPlanProposal{}, err
@@ -182,10 +308,19 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 	} else if ok {
 		return spine.WorkItemPlanProposal{}, ErrAlreadyProposed
 	}
-	if plan.State != spine.WorkItemPlanStateQueued {
+	if plan.State != spine.WorkItemPlanStateLeased {
 		return spine.WorkItemPlanProposal{}, fmt.Errorf("%w: %s", ErrInvalidPlanState, plan.State)
 	}
 	if err := validateProposalInput(input); err != nil {
+		return spine.WorkItemPlanProposal{}, err
+	}
+	lease, err := s.GetLease(ctx, input.LeaseID)
+	if err != nil {
+		return spine.WorkItemPlanProposal{}, err
+	}
+	tokenHash := leaseTokenHash(input.LeaseToken)
+	now := s.Clock.Now().UTC()
+	if err := validateLeaseProof(lease, plan.ID, tokenHash, now); err != nil {
 		return spine.WorkItemPlanProposal{}, err
 	}
 
@@ -193,7 +328,6 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 	if err != nil {
 		return spine.WorkItemPlanProposal{}, fmt.Errorf("new work item plan proposal id: %w", err)
 	}
-	now := s.Clock.Now().UTC()
 	proposedTasks := cloneProposedTasksWithOrder(input.ProposedTasks)
 	proposal := spine.WorkItemPlanProposal{
 		ID:                 proposalID,
@@ -218,6 +352,9 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 		}
 		if err := s.Plans.MarkProposalSubmitted(txCtx, plan.ID, now); err != nil {
 			return fmt.Errorf("mark work item plan proposal submitted: %w", err)
+		}
+		if err := s.Leases.MarkCompleted(txCtx, lease.ID, tokenHash, now); err != nil {
+			return fmt.Errorf("mark work item plan lease completed: %w", err)
 		}
 		return nil
 	}); err != nil {
@@ -453,6 +590,71 @@ func validateActor(field string, actor spine.ActorRef) error {
 	return nil
 }
 
+func leaseTTL(ttlSeconds int) (time.Duration, error) {
+	if ttlSeconds == 0 {
+		return defaultLeaseTTL, nil
+	}
+	ttl := time.Duration(ttlSeconds) * time.Second
+	if ttl < minLeaseTTL {
+		return 0, &ValidationError{Field: "ttl_seconds", Message: "must be at least 30"}
+	}
+	if ttl > maxLeaseTTL {
+		return 0, &ValidationError{Field: "ttl_seconds", Message: "must be at most 3600"}
+	}
+	return ttl, nil
+}
+
+func newLeaseToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
+}
+
+func leaseTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func validateLeaseProof(lease spine.WorkItemPlanLease, planID spine.WorkItemPlanID, tokenHash string, now time.Time) error {
+	switch lease.State {
+	case spine.WorkItemPlanLeaseStateCompleted:
+		return ErrLeaseCompleted
+	case spine.WorkItemPlanLeaseStateExpired:
+		return ErrLeaseExpired
+	case spine.WorkItemPlanLeaseStateActive:
+	default:
+		return ErrInvalidLease
+	}
+	if !lease.ExpiresAt.After(now) {
+		return ErrLeaseExpired
+	}
+	if planID != "" && lease.PlanID != planID {
+		return ErrInvalidLease
+	}
+	if lease.LeaseTokenHash != tokenHash {
+		return ErrInvalidLease
+	}
+	return nil
+}
+
+func leaseCreatedResponse(lease spine.WorkItemPlanLease, token string) spine.WorkItemPlanLeaseCreated {
+	return spine.WorkItemPlanLeaseCreated{
+		ID:                 lease.ID,
+		PlanID:             lease.PlanID,
+		ContractID:         lease.ContractID,
+		ApprovedContractID: lease.ApprovedContractID,
+		RepoBindingID:      lease.RepoBindingID,
+		LeasedBy:           lease.LeasedBy,
+		State:              lease.State,
+		LeaseToken:         token,
+		ExpiresAt:          lease.ExpiresAt,
+		CreatedAt:          lease.CreatedAt,
+		UpdatedAt:          lease.UpdatedAt,
+	}
+}
+
 func cloneProposedTasksWithOrder(tasks []spine.ProposedWorkItem) []spine.ProposedWorkItem {
 	out := make([]spine.ProposedWorkItem, 0, len(tasks))
 	for i, task := range tasks {
@@ -541,6 +743,14 @@ func (UUIDGenerator) NewWorkItemPlanID() (spine.WorkItemPlanID, error) {
 		return "", err
 	}
 	return spine.WorkItemPlanID(id.String()), nil
+}
+
+func (UUIDGenerator) NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.WorkItemPlanLeaseID(id.String()), nil
 }
 
 func (UUIDGenerator) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {

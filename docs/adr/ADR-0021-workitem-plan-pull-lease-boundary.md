@@ -93,8 +93,8 @@ queue_jobs / jobs / generic_queue_items with kind + payload JSONB
 
 ## Future REST shape
 
-These routes are future target API shape. They are not implemented in the
-current server.
+At ADR acceptance time, these routes were future target API shape and were not
+implemented in the server.
 
 | Route | Meaning |
 | --- | --- |
@@ -301,7 +301,7 @@ Workers must not write `WorkItem` records directly.
 
 ## Current vs future
 
-Current implementation:
+Implementation at ADR acceptance:
 
 - has public `Plan` / `Proposal` / `Acceptance`
 - has `POST /v1/contracts/{id}/plans`
@@ -315,7 +315,7 @@ Current implementation:
 - does not have `GET /v1/plans/leases/{id}`
 - does not have `PATCH /v1/plans/leases/{id}`
 
-Future implementation:
+Implementation direction:
 
 - should add typed `WorkItemPlanLease` persistence
 - should add future lease routes under `/v1/plans/leases`
@@ -355,7 +355,7 @@ This ADR does not implement or authorize:
 
 ### Negative
 
-- A future implementation still needs a new lease table and route handlers.
+- Worker/controller/runner-side planning still needs a later implementation.
 - A later queue abstraction may be needed if unrelated job families appear.
 - FIFO v0 is intentionally simple and may need capability or policy filters
   later.
@@ -369,3 +369,18 @@ The next backend implementation slice may add the smallest typed
 That implementation slice should not add checkout, execution, assignment,
 claiming, generic queue jobs, broad worker registry, runtime registry, `Run`,
 receipt, `GateDecision`, or `Proof`.
+
+## Implementation note
+
+As of 2026-05-06, the server implements the narrow typed lease API and
+persistence slice described by this ADR:
+
+- `POST /v1/plans/leases`
+- `GET /v1/plans/leases/{id}`
+- `PATCH /v1/plans/leases/{id}`
+- `POST /v1/plans/{id}/proposals` now requires `lease_id` and `lease_token`
+
+Raw lease tokens are returned only on lease creation and stored only as hashes.
+No worker, controller, runner, checkout, execution, assignment, claiming,
+generic queue, outbox, runtime registry, `Run`, receipt, `GateDecision`, or
+`Proof` implementation is added by this server slice.

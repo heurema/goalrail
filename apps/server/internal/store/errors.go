@@ -35,6 +35,7 @@ var (
 	ErrWorkItemPlanAlreadyExists      = errors.New("work item plan already exists")
 	ErrWorkItemPlanAlreadyPlanned     = errors.New("contract already has work item plan")
 	ErrWorkItemPlanNotFound           = errors.New("work item plan not found")
+	ErrWorkItemPlanLeaseNotFound      = errors.New("work item plan lease not found")
 	ErrWorkItemPlanProposalExists     = errors.New("work item plan proposal already exists")
 	ErrWorkItemPlanAlreadyHasProposal = errors.New("work item plan already has proposal")
 	ErrWorkItemPlanProposalNotFound   = errors.New("work item plan proposal not found")

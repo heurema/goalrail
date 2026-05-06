@@ -251,22 +251,22 @@ ApprovedContract(approved)
   -> explicit acceptance creates WorkItem(planned) records
 ```
 
-The current server implements the public `plans` / `proposals` / `acceptance`
-control-plane API and removes the previous direct public task creation
-shortcut. This does not implement worker/controller leases, runner-backed repo
-inspection, checkout, execution, assignment, claiming, gate, or proof. Proposal
-submission remains an API stand-in for future worker output. Public URL
-vocabulary uses product-facing resources such as `contracts`, `plans`,
-`proposals`, and `tasks`; internal domain names such as `ApprovedContract`,
-`WorkItem`, and `WorkItemPlanProposal` do not need to appear verbatim in public
-paths.
+The current server implements the public `plans` / `leases` / `proposals` /
+`acceptance` control-plane API and removes the previous direct public task
+creation shortcut. This does not implement worker/controller binaries,
+runner-backed repo inspection, checkout, execution, assignment, claiming, gate,
+or proof. Proposal submission is now guarded by typed lease proof and remains an
+API stand-in for future worker output. Public URL vocabulary uses
+product-facing resources such as `contracts`, `plans`, `leases`, `proposals`,
+and `tasks`; internal domain names such as `ApprovedContract`, `WorkItem`, and
+`WorkItemPlanProposal` do not need to appear verbatim in public paths.
 
-Target planning lease direction:
+Implemented planning lease boundary:
 - `WorkItemPlan(state=queued)` is the typed planning queue item
-- future `WorkItemPlanLease` records reserve one planning job for one worker
+- `WorkItemPlanLease` records reserve one planning job for one worker
   attempt
-- workers should pull the next available planning job through a future
-  `POST /v1/plans/leases` API route; leasing mutates server-owned state and is
+- workers should pull the next available planning job through
+  `POST /v1/plans/leases`; leasing mutates server-owned state and is
   not a read-only `GET`
 - the API server owns lease selection, lease state, token validation, proposal
   persistence, and accepted WorkItem materialization
@@ -275,9 +275,9 @@ Target planning lease direction:
 - this is a typed `WorkItemPlan` queue direction, not a generic queue platform
   with `queue_jobs`, job kinds, JSONB payloads, worker registry, broad retry
   machinery, or dead-letter queue semantics
-- the lease API is not implemented yet; current proposal submission may still be
-  manual and future implementation should require lease proof for worker
-  proposal submission
+- `POST /v1/plans/{id}/proposals` requires `lease_id` and `lease_token`; raw
+  lease tokens are returned only once when a lease is created
+- no worker, controller, or runner binary exists yet
 
 ### Layer 4 — Delivery Runtime
 Produces:

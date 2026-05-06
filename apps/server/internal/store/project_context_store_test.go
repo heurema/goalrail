@@ -570,6 +570,10 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 			}
 			*target = value
 		case *[]byte:
+			if r.values[i] == nil {
+				*target = nil
+				continue
+			}
 			value, ok := r.values[i].([]byte)
 			if !ok {
 				return errors.New("json value is not bytes")
@@ -613,6 +617,18 @@ func (r fakeProjectContextRow) Scan(dest ...any) error {
 				return errors.New("timestamptz value is not time")
 			}
 			*target = pgtype.Timestamptz{Time: value, Valid: true}
+		case *pgtype.UUID:
+			if r.values[i] == nil {
+				*target = pgtype.UUID{Valid: false}
+				continue
+			}
+			value, ok := r.values[i].(string)
+			if !ok {
+				return errors.New("uuid value is not string")
+			}
+			if err := target.Scan(value); err != nil {
+				return err
+			}
 		case *spine.IntakeID:
 			value, ok := r.values[i].(string)
 			if !ok {

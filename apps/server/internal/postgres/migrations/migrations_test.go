@@ -423,12 +423,17 @@ func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	for _, want := range []string{
 		"CREATE TABLE work_item_plans",
 		"CONSTRAINT work_item_plans_contract_id_unique UNIQUE (contract_id)",
-		"CONSTRAINT work_item_plans_state_check CHECK (state IN ('queued', 'proposal_submitted', 'accepted'))",
+		"current_lease_id UUID NULL",
+		"leased_by JSONB NULL",
+		"lease_expires_at TIMESTAMPTZ NULL",
+		"CONSTRAINT work_item_plans_state_check CHECK (state IN ('queued', 'leased', 'proposal_submitted', 'accepted'))",
 		"CREATE INDEX work_item_plans_organization_created_at_idx",
 		"CREATE INDEX work_item_plans_project_created_at_idx",
 		"CREATE INDEX work_item_plans_contract_id_idx",
 		"CREATE INDEX work_item_plans_approved_contract_id_idx",
 		"CREATE INDEX work_item_plans_repo_binding_id_idx",
+		"CREATE INDEX work_item_plans_state_created_at_idx",
+		"CREATE INDEX work_item_plans_lease_expires_at_idx",
 		"CREATE TABLE work_item_plan_proposals",
 		"CONSTRAINT work_item_plan_proposals_plan_id_unique UNIQUE (plan_id)",
 		"CONSTRAINT work_item_plan_proposals_state_check CHECK (state IN ('submitted', 'accepted'))",
@@ -437,6 +442,13 @@ func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 		"CREATE INDEX work_item_plan_proposals_approved_contract_id_idx",
 		"CREATE INDEX work_item_plan_proposals_organization_created_at_idx",
 		"CREATE INDEX work_item_plan_proposals_project_created_at_idx",
+		"CREATE TABLE work_item_plan_leases",
+		"lease_token_hash TEXT NOT NULL",
+		"CONSTRAINT work_item_plan_leases_state_check CHECK (state IN ('active', 'completed', 'expired'))",
+		"CREATE INDEX work_item_plan_leases_plan_id_idx",
+		"CREATE INDEX work_item_plan_leases_state_expires_at_idx",
+		"CREATE INDEX work_item_plan_leases_contract_id_idx",
+		"CREATE INDEX work_item_plan_leases_repo_binding_id_idx",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("init migration missing %q", want)
@@ -444,6 +456,12 @@ func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	}
 	if strings.Index(sql, "CREATE TABLE work_item_plans") > strings.Index(sql, "CREATE TABLE work_item_plan_proposals") {
 		t.Fatalf("work_item_plans must be created before work_item_plan_proposals")
+	}
+	if strings.Index(sql, "CREATE TABLE work_item_plan_proposals") > strings.Index(sql, "CREATE TABLE work_item_plan_leases") {
+		t.Fatalf("work_item_plan_leases must be created after work_item_plan_proposals")
+	}
+	if strings.Index(sql, "CREATE TABLE work_item_plan_leases") > strings.Index(sql, "CREATE TABLE work_items") {
+		t.Fatalf("work_items must be created after work_item_plan_leases")
 	}
 }
 
@@ -462,6 +480,11 @@ func TestInitMigrationDropsWorkItemsBeforeApprovedContracts(t *testing.T) {
 		"DROP INDEX IF EXISTS work_items_project_created_at_idx;",
 		"DROP INDEX IF EXISTS work_items_organization_created_at_idx;",
 		"DROP TABLE IF EXISTS work_items;",
+		"DROP INDEX IF EXISTS work_item_plan_leases_repo_binding_id_idx;",
+		"DROP INDEX IF EXISTS work_item_plan_leases_contract_id_idx;",
+		"DROP INDEX IF EXISTS work_item_plan_leases_state_expires_at_idx;",
+		"DROP INDEX IF EXISTS work_item_plan_leases_plan_id_idx;",
+		"DROP TABLE IF EXISTS work_item_plan_leases;",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Fatalf("init migration down missing %q", want)
@@ -475,6 +498,12 @@ func TestInitMigrationDropsWorkItemsBeforeApprovedContracts(t *testing.T) {
 	}
 	if strings.Index(sql, "DROP TABLE IF EXISTS work_items;") > strings.Index(sql, "DROP TABLE IF EXISTS work_item_plan_proposals;") {
 		t.Fatalf("work_items must be dropped before work_item_plan_proposals")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS work_items;") > strings.Index(sql, "DROP TABLE IF EXISTS work_item_plan_leases;") {
+		t.Fatalf("work_items must be dropped before work_item_plan_leases")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS work_item_plan_leases;") > strings.Index(sql, "DROP TABLE IF EXISTS work_item_plans;") {
+		t.Fatalf("work_item_plan_leases must be dropped before work_item_plans")
 	}
 	if strings.Index(sql, "DROP TABLE IF EXISTS work_item_plan_proposals;") > strings.Index(sql, "DROP TABLE IF EXISTS work_item_plans;") {
 		t.Fatalf("work_item_plan_proposals must be dropped before work_item_plans")
