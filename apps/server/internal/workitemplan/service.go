@@ -86,7 +86,7 @@ type LeaseStore interface {
 	AcquireNextLease(context.Context, LeaseAcquireInput) (spine.WorkItemPlanLease, bool, error)
 	Get(context.Context, spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, bool, error)
 	Renew(context.Context, spine.WorkItemPlanLeaseID, string, time.Time, time.Time) (spine.WorkItemPlanLease, bool, error)
-	MarkCompleted(context.Context, spine.WorkItemPlanLeaseID, string, time.Time) error
+	MarkCompleted(context.Context, spine.WorkItemPlanLeaseID, string, time.Time) (bool, error)
 }
 
 type ProposalStore interface {
@@ -353,14 +353,32 @@ func (s *Service) SubmitProposal(ctx context.Context, planID spine.WorkItemPlanI
 		if err := s.Plans.MarkProposalSubmitted(txCtx, plan.ID, now); err != nil {
 			return fmt.Errorf("mark work item plan proposal submitted: %w", err)
 		}
-		if err := s.Leases.MarkCompleted(txCtx, lease.ID, tokenHash, now); err != nil {
+		completed, err := s.Leases.MarkCompleted(txCtx, lease.ID, tokenHash, now)
+		if err != nil {
 			return fmt.Errorf("mark work item plan lease completed: %w", err)
+		}
+		if !completed {
+			return s.resolveLeaseCompletionMiss(txCtx, lease.ID, plan.ID, tokenHash, now)
 		}
 		return nil
 	}); err != nil {
 		return spine.WorkItemPlanProposal{}, err
 	}
 	return proposal, nil
+}
+
+func (s *Service) resolveLeaseCompletionMiss(ctx context.Context, leaseID spine.WorkItemPlanLeaseID, planID spine.WorkItemPlanID, tokenHash string, now time.Time) error {
+	lease, ok, err := s.Leases.Get(ctx, leaseID)
+	if err != nil {
+		return fmt.Errorf("get work item plan lease after completion miss: %w", err)
+	}
+	if !ok {
+		return ErrInvalidLease
+	}
+	if err := validateLeaseProof(lease, planID, tokenHash, now); err != nil {
+		return err
+	}
+	return ErrInvalidLease
 }
 
 func (s *Service) GetProposal(ctx context.Context, id spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, error) {

@@ -888,8 +888,15 @@ func TestPostgresWorkItemPlanLeaseStoreAcquireGetRenewAndComplete(t *testing.T) 
 	if !strings.Contains(lastQuery, "lease_token_hash") || !strings.Contains(lastQuery, "state") || !strings.Contains(lastQuery, "expires_at >") {
 		t.Fatalf("renew SQL = %q, want token/state/expiry guard", lastQuery)
 	}
-	if err := store.MarkCompleted(ctx, got.ID, got.LeaseTokenHash, testStoreTime()); err != nil {
+	if planUpdate := strings.Index(lastQuery, "UPDATE work_item_plans"); planUpdate < 0 || planUpdate > strings.Index(lastQuery, "UPDATE work_item_plan_leases") {
+		t.Fatalf("renew SQL = %q, want plan row locked before lease row", lastQuery)
+	}
+	completed, err := store.MarkCompleted(ctx, got.ID, got.LeaseTokenHash, testStoreTime())
+	if err != nil {
 		t.Fatalf("MarkCompleted() error = %v", err)
+	}
+	if !completed {
+		t.Fatal("MarkCompleted() completed = false, want true")
 	}
 	lastExec := exec.calls[len(exec.calls)-1].sql
 	if !strings.Contains(lastExec, "UPDATE work_item_plan_leases") || !strings.Contains(lastExec, "lease_token_hash") || !strings.Contains(lastExec, "expires_at >") {

@@ -117,21 +117,37 @@ func (s *PostgresWorkItemPlanLeaseStore) Get(ctx context.Context, id spine.WorkI
 }
 
 func (s *PostgresWorkItemPlanLeaseStore) Renew(ctx context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, expiresAt time.Time, updatedAt time.Time) (spine.WorkItemPlanLease, bool, error) {
+	if s.query == nil {
+		return spine.WorkItemPlanLease{}, false, fmt.Errorf("renew work item plan lease query executor is nil")
+	}
 	leaseID, err := uuidValue(id, "work item plan lease id")
 	if err != nil {
 		return spine.WorkItemPlanLease{}, false, err
 	}
-	stmt := s.psql.
-		Update("work_item_plan_leases").
-		Set("expires_at", expiresAt.UTC()).
-		Set("updated_at", updatedAt.UTC()).
-		Where(squirrel.Eq{"id": leaseID, "lease_token_hash": tokenHash, "state": spine.WorkItemPlanLeaseStateActive}).
-		Where(squirrel.Gt{"expires_at": updatedAt.UTC()}).
-		Suffix("RETURNING " + joinSQLColumns(workItemPlanLeaseColumns()))
-	row, err := queryRow(ctx, s.query, "renew work item plan lease", stmt)
-	if err != nil {
-		return spine.WorkItemPlanLease{}, false, err
-	}
+	row := s.query.QueryRow(ctx, `
+WITH updated_plan AS (
+	UPDATE work_item_plans AS p
+	SET lease_expires_at = $3, updated_at = $4
+	FROM work_item_plan_leases AS l
+	WHERE p.id = l.plan_id
+		AND p.current_lease_id = l.id
+		AND p.state = $5
+		AND l.id = $1
+		AND l.lease_token_hash = $2
+		AND l.state = $6
+		AND l.expires_at > $4
+	RETURNING l.id
+),
+renewed_lease AS (
+	UPDATE work_item_plan_leases AS l
+	SET expires_at = $3, updated_at = $4
+	FROM updated_plan AS p
+	WHERE l.id = p.id
+	RETURNING l.id, l.plan_id, l.contract_id, l.approved_contract_id, l.repo_binding_id, l.leased_by, l.state, l.lease_token_hash, l.expires_at, l.created_at, l.updated_at
+)
+SELECT id, plan_id, contract_id, approved_contract_id, repo_binding_id, leased_by, state, lease_token_hash, expires_at, created_at, updated_at
+FROM renewed_lease
+`, leaseID, tokenHash, expiresAt.UTC(), updatedAt.UTC(), spine.WorkItemPlanStateLeased, spine.WorkItemPlanLeaseStateActive)
 	lease, err := scanWorkItemPlanLease(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -139,16 +155,16 @@ func (s *PostgresWorkItemPlanLeaseStore) Renew(ctx context.Context, id spine.Wor
 		}
 		return spine.WorkItemPlanLease{}, false, fmt.Errorf("renew work item plan lease: %w", err)
 	}
-	if err := s.updatePlanLeaseExpiry(ctx, lease.PlanID, lease.ID, lease.ExpiresAt, lease.UpdatedAt); err != nil {
-		return spine.WorkItemPlanLease{}, false, err
-	}
 	return lease, true, nil
 }
 
-func (s *PostgresWorkItemPlanLeaseStore) MarkCompleted(ctx context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) error {
+func (s *PostgresWorkItemPlanLeaseStore) MarkCompleted(ctx context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) (bool, error) {
+	if s.exec == nil {
+		return false, fmt.Errorf("complete work item plan lease executor is nil")
+	}
 	leaseID, err := uuidValue(id, "work item plan lease id")
 	if err != nil {
-		return err
+		return false, err
 	}
 	stmt := s.psql.
 		Update("work_item_plan_leases").
@@ -156,7 +172,15 @@ func (s *PostgresWorkItemPlanLeaseStore) MarkCompleted(ctx context.Context, id s
 		Set("updated_at", completedAt.UTC()).
 		Where(squirrel.Eq{"id": leaseID, "lease_token_hash": tokenHash, "state": spine.WorkItemPlanLeaseStateActive}).
 		Where(squirrel.Gt{"expires_at": completedAt.UTC()})
-	return execUpdate(ctx, s.exec, "complete work item plan lease", ErrWorkItemPlanLeaseNotFound, stmt)
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return false, fmt.Errorf("complete work item plan lease SQL: %w", err)
+	}
+	result, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return false, fmt.Errorf("complete work item plan lease: %w", err)
+	}
+	return result.RowsAffected() > 0, nil
 }
 
 func (s *PostgresWorkItemPlanLeaseStore) insertLease(ctx context.Context, lease spine.WorkItemPlanLease) error {

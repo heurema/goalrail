@@ -150,6 +150,25 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestServiceSubmitProposalLeaseCompletionMissReturnsLeaseConflict(t *testing.T) {
+	service, _, _, _, leases, _, _, _ := planningService(t)
+	approved := validApprovedContract()
+	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	})
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+	lease := acquireLease(t, service)
+
+	leases.markCompletedMiss = true
+	leases.markCompletedMissMode = spine.WorkItemPlanLeaseStateExpired
+	_, err = service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
+	if !errors.Is(err, workitemplan.ErrLeaseExpired) {
+		t.Fatalf("SubmitProposal() error = %v, want %v", err, workitemplan.ErrLeaseExpired)
+	}
+}
+
 func TestServiceSubmitProposalFailedCreateDoesNotRunPostFailureDuplicateLookup(t *testing.T) {
 	txRunner := newFakeTransactionRunner()
 	service, _, _, _, _, proposals, _, _ := planningService(t, txRunner)
@@ -346,8 +365,10 @@ func (s *fakeWorkItemPlanStore) MarkAccepted(_ context.Context, id spine.WorkIte
 }
 
 type fakeLeaseStore struct {
-	plans  *fakeWorkItemPlanStore
-	leases map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease
+	plans                 *fakeWorkItemPlanStore
+	leases                map[spine.WorkItemPlanLeaseID]spine.WorkItemPlanLease
+	markCompletedMiss     bool
+	markCompletedMissMode spine.WorkItemPlanLeaseState
 }
 
 func newFakeLeaseStore(plans *fakeWorkItemPlanStore) *fakeLeaseStore {
@@ -420,15 +441,22 @@ func (s *fakeLeaseStore) Renew(_ context.Context, id spine.WorkItemPlanLeaseID, 
 	return lease, true, nil
 }
 
-func (s *fakeLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) error {
+func (s *fakeLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) (bool, error) {
 	lease, ok := s.leases[id]
 	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(completedAt) {
-		return workitemplan.ErrInvalidLease
+		return false, nil
+	}
+	if s.markCompletedMiss {
+		if s.markCompletedMissMode != "" {
+			lease.State = s.markCompletedMissMode
+			s.leases[id] = lease
+		}
+		return false, nil
 	}
 	lease.State = spine.WorkItemPlanLeaseStateCompleted
 	lease.UpdatedAt = completedAt
 	s.leases[id] = lease
-	return nil
+	return true, nil
 }
 
 type fakeWorkItemPlanProposalStore struct {

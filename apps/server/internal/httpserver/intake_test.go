@@ -2335,15 +2335,15 @@ func (s *fakeWorkItemPlanLeaseStore) Renew(_ context.Context, id spine.WorkItemP
 	return lease, true, nil
 }
 
-func (s *fakeWorkItemPlanLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) error {
+func (s *fakeWorkItemPlanLeaseStore) MarkCompleted(_ context.Context, id spine.WorkItemPlanLeaseID, tokenHash string, completedAt time.Time) (bool, error) {
 	lease, ok := s.leases[id]
 	if !ok || lease.LeaseTokenHash != tokenHash || lease.State != spine.WorkItemPlanLeaseStateActive || !lease.ExpiresAt.After(completedAt) {
-		return workitemplan.ErrInvalidLease
+		return false, nil
 	}
 	lease.State = spine.WorkItemPlanLeaseStateCompleted
 	lease.UpdatedAt = completedAt
 	s.leases[id] = lease
-	return nil
+	return true, nil
 }
 
 type fakeWorkItemPlanProposalStore struct {
