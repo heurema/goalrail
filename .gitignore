@@ -12,6 +12,7 @@ test-results/
 output/
 **/__pycache__/
 apps/worker/goalrail-worker
+apps/runner/goalrail-runner
 .goalrail/work/demo/trialops/design-handoff/
 .idea/
 .vscode/

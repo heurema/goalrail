@@ -135,3 +135,33 @@ type WorkProposalAcceptOutput struct {
 	Display         DisplaySummary `json:"display"`
 	NextAction      NextAction     `json:"next_action"`
 }
+
+type CheckoutInstruction struct {
+	JobID              string        `json:"job_id"`
+	TaskID             string        `json:"task_id"`
+	RepoBindingID      RepoBindingID `json:"repo_binding_id"`
+	AccessMode         string        `json:"access_mode"`
+	Provider           string        `json:"provider"`
+	RepositoryFullName string        `json:"repository_full_name"`
+	RepositoryURL      string        `json:"repository_url"`
+	WorkflowBaseBranch string        `json:"workflow_base_branch"`
+	PathScope          string        `json:"path_scope"`
+	SourceRef          SourceRef     `json:"source_ref"`
+	RawSourceUploaded  bool          `json:"raw_source_uploaded"`
+}
+
+type WorkCheckoutPrepareOutput struct {
+	SchemaVersion    string              `json:"schema_version"`
+	Mode             string              `json:"mode"`
+	ServerURL        string              `json:"server_url"`
+	OrganizationID   string              `json:"organization_id"`
+	ProjectID        string              `json:"project_id"`
+	RepoBindingID    RepoBindingID       `json:"repo_binding_id"`
+	TaskID           string              `json:"task_id"`
+	CheckoutJobID    string              `json:"checkout_job_id"`
+	CheckoutJobState string              `json:"checkout_job_state"`
+	Instruction      CheckoutInstruction `json:"instruction"`
+	LocalConfigPath  string              `json:"local_config_path"`
+	Display          DisplaySummary      `json:"display"`
+	NextAction       NextAction          `json:"next_action"`
+}

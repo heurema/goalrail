@@ -1,0 +1,60 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/heurema/goalrail/apps/runner/internal/checkoutrunner"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg := checkoutrunner.Config{
+		ServerURL:       os.Getenv("GOALRAIL_RUNNER_SERVER_URL"),
+		RunnerID:        os.Getenv("GOALRAIL_RUNNER_ID"),
+		WorkspaceRef:    os.Getenv("GOALRAIL_RUNNER_WORKSPACE_REF"),
+		CommitSHA:       os.Getenv("GOALRAIL_RUNNER_COMMIT_SHA"),
+		BaselineID:      os.Getenv("GOALRAIL_RUNNER_BASELINE_ID"),
+		OverlayID:       os.Getenv("GOALRAIL_RUNNER_OVERLAY_ID"),
+		PollInterval:    10 * time.Second,
+		LeaseTTLSeconds: 900,
+		Once:            false,
+		LogWriter:       os.Stderr,
+	}
+	if raw := strings.TrimSpace(os.Getenv("GOALRAIL_RUNNER_DIRTY")); raw == "true" || raw == "1" {
+		cfg.Dirty = true
+	}
+	if raw := strings.TrimSpace(os.Getenv("GOALRAIL_RUNNER_PARTIAL")); raw == "true" || raw == "1" {
+		cfg.Partial = true
+	}
+
+	flags := flag.NewFlagSet("goalrail-runner", flag.ExitOnError)
+	flags.StringVar(&cfg.ServerURL, "server-url", cfg.ServerURL, "Goalrail API server URL; also configurable with GOALRAIL_RUNNER_SERVER_URL")
+	flags.StringVar(&cfg.RunnerID, "runner-id", cfg.RunnerID, "runner identity; also configurable with GOALRAIL_RUNNER_ID")
+	flags.StringVar(&cfg.WorkspaceRef, "workspace-ref", cfg.WorkspaceRef, "mounted workspace reference; also configurable with GOALRAIL_RUNNER_WORKSPACE_REF")
+	flags.StringVar(&cfg.CommitSHA, "commit-sha", cfg.CommitSHA, "workspace commit SHA; also configurable with GOALRAIL_RUNNER_COMMIT_SHA")
+	flags.StringVar(&cfg.BaselineID, "baseline-id", cfg.BaselineID, "optional repository baseline id")
+	flags.StringVar(&cfg.OverlayID, "overlay-id", cfg.OverlayID, "optional repository overlay id")
+	flags.BoolVar(&cfg.Dirty, "dirty", cfg.Dirty, "mark workspace receipt dirty")
+	flags.BoolVar(&cfg.Partial, "partial", cfg.Partial, "mark workspace receipt partial")
+	flags.DurationVar(&cfg.PollInterval, "poll-interval", cfg.PollInterval, "poll interval when no checkout job is available")
+	flags.IntVar(&cfg.LeaseTTLSeconds, "lease-ttl-seconds", cfg.LeaseTTLSeconds, "requested checkout lease TTL in seconds")
+	flags.BoolVar(&cfg.Once, "once", cfg.Once, "run one poll iteration and exit")
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+
+	if err := checkoutrunner.Run(ctx, cfg); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

@@ -188,9 +188,13 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("work proposal accept smoke error = %v", err)
 	}
 	assertSmokeSchema(t, accepted.SchemaVersion)
-	assertNextAction(t, accepted.NextAction, "planned_workitems_ready", false, false, "H")
+	assertNextAction(t, accepted.NextAction, "prepare_checkout", true, false, "")
 	if accepted.ProposalID != smokeProposalID || accepted.PlanID != smokePlanID || len(accepted.CreatedTaskIDs) != 1 || accepted.CreatedTaskIDs[0] != smokeWorkItemID {
 		t.Fatalf("proposal accept output = %#v, want one planned WorkItem trace", accepted)
+	}
+	wantCheckoutCommand := "goalrail work checkout prepare --task-id " + smokeWorkItemID + " --format json"
+	if accepted.NextAction.Command != wantCheckoutCommand {
+		t.Fatalf("proposal accept next command = %q, want %q", accepted.NextAction.Command, wantCheckoutCommand)
 	}
 
 	server.AssertNoForbiddenCalls(t)

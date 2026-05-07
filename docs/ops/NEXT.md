@@ -16,10 +16,10 @@
   push-to-live pipeline
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, checkout job / checkout receipt preparation storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
-- ADR-0028 now defines the runner checkout instruction and workspace receipt
-  boundary for H1: the next code slice may create or return a checkout job from
+- ADR-0028 now defines and H1 implements the runner checkout instruction and
+  workspace receipt boundary: the code can create or return a checkout job from
   `WorkItem(planned)`, issue a bounded runner checkout instruction, and record a
   runner-submitted workspace receipt without assignment, claiming, execution,
   `Run`, gate, proof, server-side clone, or server-side repository secrets
@@ -32,7 +32,7 @@
 - ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; approval remains a later boundary
 - ADR-0016 now defines the `ContractDraft ready_for_approval` boundary, and the server implements it as an explicit `draft -> ready_for_approval` transition with completeness checks and `marked_by` audit identity; approval, approved Contract, work item, gate, and proof remain later boundaries
 - ADR-0017 now defines the Contract approval boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`; the server implements it as explicit ApprovedContract snapshot creation with `approved_by` and `contract.approved`; approval does not start execution, gate, or proof
-- ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, execution, Run, receipt, gate, and proof remain later boundaries
+- ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, execution, Run, execution receipt, gate, and proof remain later boundaries
 - ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, and the first minimal API-only planning worker exists under `apps/worker`, while worker controller / runner execution-side implementation remains deferred
 - ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary and public `/v1/contracts` lifecycle façade routes
 - ADR-0021 now defines and the server implements the typed WorkItemPlan pull lease boundary: planning workers create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, proposal submission requires lease proof, no generic queue platform is accepted, and no worker controller / runner binary exists yet
@@ -43,6 +43,11 @@
   no checkout, execution, direct Postgres writes, WorkItem creation,
   assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
   `GateDecision`, or `Proof`.
+- `apps/runner` now implements the first minimal API-only `goalrail-runner`
+  checkout receipt loop. It polls checkout job leases, receives bounded checkout
+  instructions, and submits workspace receipts with lease proof. It does not
+  clone/fetch repositories in H1, run commands, assign/claim WorkItems, create
+  `Run`, write `GateDecision`, create `Proof`, or add runtime registry behavior.
 - ADR-0022 now defines the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -116,11 +121,11 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- Next bounded backend / runner implementation slice: H1 should implement only
-  checkout instruction plus workspace receipt, following ADR-0028. It should
-  keep WorkItems `planned`, use runner-owned local credentials, avoid
-  server-side clone and repository secrets, and still not start assignment,
-  claiming, execution, `Run`, gate, or proof.
+- H1 checkout instruction plus workspace receipt is implemented. The next
+  bounded delivery-runtime slice must start after a fresh runner/execution
+  boundary review and should not assume checkout receipt means code execution.
+  WorkItems still remain `planned`; assignment, claiming, execution, `Run`,
+  gate, and proof are still deferred.
 - Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
   provider OAuth, VcsConnection, token storage, provider clients, live metadata
   listing, `Run`, and execution receipt behavior remain deferred.
@@ -814,8 +819,8 @@ Done means:
    - do not add server-side clone, provider OAuth, runner checkout,
      watcher/daemon, embeddings, ContractContextPack generation, gate, or proof
 2. Runner-owned repository checkout credential boundary
-   - Status: DONE — ADR-0028 defines the H1 checkout instruction / workspace
-     receipt boundary.
+   - Status: DONE — ADR-0028 defines and H1 implements the checkout instruction
+     / workspace receipt boundary.
    - runner startup flags are limited to Goalrail connection, runner identity /
      narrow runner auth input, and local credential file paths
    - API-issued `CheckoutInstruction` fields include task / contract / plan /
@@ -828,8 +833,8 @@ Done means:
      cleanup metadata
    - supported H1 credential modes: Git HTTPS token file, SSH key file, and
      mounted workspace
-   - add no provider OAuth, VcsConnection, token storage, provider clients, live
-     metadata listing, checkout implementation, runner implementation,
+   - H1 adds no provider OAuth, VcsConnection, token storage, provider clients,
+     live metadata listing, actual clone/fetch checkout implementation,
      assignment, claiming, `Run`, execution, gate, or proof
 3. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`

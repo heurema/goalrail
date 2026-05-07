@@ -40,8 +40,10 @@ WorkItem(planned)
   -> CheckoutReceipt
 ```
 
-This ADR is documentation-only. It does not implement runner code, server routes,
-stores, migrations, CLI commands, checkout, execution, `Run`, gate, or proof.
+This ADR was accepted as a boundary decision before H1 implementation. H1 now
+implements the checkout job / instruction and workspace receipt protocol slice,
+but still does not implement actual repository clone/fetch, arbitrary command
+execution, `Run`, gate, or proof.
 
 ## Decision
 
@@ -64,7 +66,7 @@ preparation records. They are not `Run`, not proof, and not gate verdicts.
 
 ## H1 implementation target
 
-Recommended first implementation slice:
+Implemented first slice:
 
 ```text
 H1 — runner checkout instruction + workspace receipt

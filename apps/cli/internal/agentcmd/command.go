@@ -323,6 +323,10 @@ If a Goalrail JSON response contains ` + "`next_action.kind=review_plan_proposal
 
 Only call ` + "`goalrail work proposal accept --confirm-user-acceptance`" + ` after the user explicitly accepts the submitted WorkItemPlanProposal. Never infer plan acceptance from silence or from a generic continuation request.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=prepare_checkout`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail work checkout prepare`" + ` with the returned WorkItem ID. This creates or returns a server-owned checkout job and checkout instruction only. It does not assign, claim, execute commands, create Run, verify, gate, or create proof.
+
+If a Goalrail JSON response contains ` + "`next_action.kind=runner_checkout_required`" + `, explain that a runner process must submit a workspace receipt before execution can be designed. Do not perform checkout by chat, do not run arbitrary commands as proof, and do not claim execution.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -536,6 +540,32 @@ func commandsJSONContent() string {
         "Run",
         "Decision",
         "Proof"
+      ]
+    },
+    "prepare_checkout": {
+      "command": "goalrail work checkout prepare --task-id <task_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "task_id",
+        "planned_workitem"
+      ],
+      "creates": [
+        "CheckoutJob",
+        "CheckoutInstruction"
+      ],
+      "does_not_create": [
+        "Assignment",
+        "Claim",
+        "Run",
+        "Decision",
+        "Proof"
+      ],
+      "does_not_execute": [
+        "commands",
+        "tests",
+        "checkout"
       ]
     }
   },

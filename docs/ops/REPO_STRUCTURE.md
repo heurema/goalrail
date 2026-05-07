@@ -62,11 +62,15 @@ Use it together with:
 | Server ContractDraft creation/update/ready_for_approval service logic | `apps/server/internal/contractdraft/` |
 | Server ApprovedContract approval service logic | `apps/server/internal/approvedcontract/` |
 | Server WorkItem planning service logic | `apps/server/internal/workitem/` |
+| Server checkout preparation service logic | `apps/server/internal/checkout/` |
 | Server Postgres stores and store error sentinels | `apps/server/internal/store/` |
 | Server test-local fakes | The relevant `*_test.go` package file |
 | Go planning worker module | `apps/worker/` |
 | Canonical planning worker binary entrypoint | `apps/worker/cmd/goalrail-worker/` |
 | Worker-only internal packages and API DTOs | `apps/worker/internal/` |
+| Go runner module | `apps/runner/` |
+| Canonical runner binary entrypoint | `apps/runner/cmd/goalrail-runner/` |
+| Runner-only internal packages and API DTOs | `apps/runner/internal/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shell | `apps/web/console/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |

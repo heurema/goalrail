@@ -1322,11 +1322,73 @@ func TestRunProposalAcceptCreatesPlannedWorkItemsNextUnavailable(t *testing.T) {
 	if output.ProposalID != "018f0000-0000-7000-8000-000000000302" || len(output.CreatedTaskIDs) != 1 {
 		t.Fatalf("proposal/tasks = %q/%d, want accepted proposal with task", output.ProposalID, len(output.CreatedTaskIDs))
 	}
-	if output.NextAction.Kind != "planned_workitems_ready" || output.NextAction.Available || output.NextAction.PlannedSlice != "H" {
-		t.Fatalf("next_action = %#v, want unavailable planned workitems next", output.NextAction)
+	if output.NextAction.Kind != "prepare_checkout" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401") {
+		t.Fatalf("next_action = %#v, want available checkout preparation next", output.NextAction)
 	}
 	if acceptRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || acceptRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("accept request project/repo = %q/%q, want marker context", acceptRequest.ProjectID, acceptRequest.RepoBindingID)
+	}
+}
+
+func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, checkoutCount atomic.Int32
+	var request workPlanCreateRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401/checkout-jobs":
+			checkoutCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/tasks/{id}/checkout-jobs method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&request); err != nil {
+				t.Errorf("decode checkout job request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000501","task_id":"018f0000-0000-7000-8000-000000000401","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"queued","instruction":{"job_id":"018f0000-0000-7000-8000-000000000501","task_id":"018f0000-0000-7000-8000-000000000401","repo_binding_id":"018f0000-0000-7000-8000-000000000004","access_mode":"customer_mounted_workspace","provider":"github","repository_full_name":"heurema/goalrail","repository_url":"https://github.com/heurema/goalrail","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"018f0000-0000-7000-8000-000000000401"},"raw_source_uploaded":false}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runCheckoutPrepareJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work checkout prepare) error = %v", err)
+	}
+	if output.SchemaVersion != "goalrail.cli.v1" || output.TaskID != "018f0000-0000-7000-8000-000000000401" || output.CheckoutJobID != "018f0000-0000-7000-8000-000000000501" {
+		t.Fatalf("output = %#v, want checkout job envelope", output)
+	}
+	if output.Instruction.RawSourceUploaded || output.Instruction.RepositoryFullName != "heurema/goalrail" {
+		t.Fatalf("instruction = %#v, want no raw source and repository metadata", output.Instruction)
+	}
+	if output.NextAction.Kind != "runner_checkout_required" || !output.NextAction.Blocking || output.NextAction.Available {
+		t.Fatalf("next_action = %#v, want unavailable runner checkout requirement", output.NextAction)
+	}
+	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("checkout request project/repo = %q/%q, want marker context", request.ProjectID, request.RepoBindingID)
+	}
+	if meCount.Load() != 1 || checkoutCount.Load() != 1 {
+		t.Fatalf("request counts me/checkout = %d/%d, want 1/1", meCount.Load(), checkoutCount.Load())
 	}
 }
 
@@ -1619,6 +1681,27 @@ func runProposalAcceptJSON(t *testing.T, workDir string, store fakeSessionStore,
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work proposal accept JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runCheckoutPrepareJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkCheckoutPrepareOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"checkout", "prepare"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkCheckoutPrepareOutput{}, err
+	}
+
+	var output spine.WorkCheckoutPrepareOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work checkout prepare JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }
