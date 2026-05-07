@@ -120,26 +120,30 @@ related_docs:
 73. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
 74. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
 75. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-76. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-77. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-78. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-79. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-80. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-81. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+76. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+77. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+78. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+79. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+80. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+81. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+82. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+83. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+84. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+85. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-82. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-83. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-84. `docs/reference/design/reference_screens/`
-85. `docs/reference/start-assistant/`
-86. `.goalrail/work/`
-87. `.goalrail/knowledge/`
-88. `.goalrail/public-kb/manifest.yaml`
-89. `.punk/publishing.toml`
-90. `.goalrail/flows/`
-91. `.goalrail/evals/`
-92. `docs/ops/PUBLISHING_MIGRATION.md`
-93. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+86. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+87. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+88. `docs/reference/design/reference_screens/`
+89. `docs/reference/start-assistant/`
+90. `.goalrail/work/`
+91. `.goalrail/knowledge/`
+92. `.goalrail/public-kb/manifest.yaml`
+93. `.punk/publishing.toml`
+94. `.goalrail/flows/`
+95. `.goalrail/evals/`
+96. `docs/ops/PUBLISHING_MIGRATION.md`
+97. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -245,6 +249,15 @@ related_docs:
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
 - `CONSOLE_MAIN_DEPLOYMENT_WIRING.md` — operational record for the main `goalrail.dev` console and `api.goalrail.dev` API Flux GitOps deployment and smoke status
 - `CONSOLE_RU_DEPLOYMENT_WIRING.md` — operational record for the static `console.goalrail.ru` deployment wiring and smoke status
+- `START_ASSISTANT_IMPLEMENTATION_PLAN.md` — staged implementation plan for `/start`, from static page to source-grounded assistant
+- `START_ASSISTANT_WORKER_ARCHITECTURE.md` — Stage 3A architecture for the separate public-edge assistant Worker and `/api/start-chat` ownership boundary
+- `START_ASSISTANT_PUBLIC_KB_PIPELINE.md` — public KB source whitelist, build process, vector store lifecycle, manifest storage, freshness, and rollback rules
+- `START_ASSISTANT_STAGE_3B_PLAN.md` — smallest live Worker implementation plan, tests, smoke checks, security validation, and non-goals
+- `START_ASSISTANT_KNOWLEDGE_SYNC.md` — initial public knowledge sync policy for compiling whitelisted docs into retrieval artifacts
+- `START_ASSISTANT_SECURITY_AND_PRIVACY.md` — public assistant safety boundary, input policy, logging posture, abuse controls, and safe refusals
+- `START_ASSISTANT_API_CONTRACT.md` — planned `POST /api/start-chat` request/response contract and system-instruction draft
+- `DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md` — proposed decision snippet for the separate public-edge Worker boundary
+- `DECISION_LOG_START_ASSISTANT_SNIPPET.md` — proposed decision snippet for the global `/start` assistant surface
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
@@ -252,8 +265,10 @@ related_docs:
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
+- `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
+- `.goalrail/public-kb/manifest.yaml` — explicit public KB whitelist input for the future source-grounded `/start` assistant
 - `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external and resolved via CLI
 - legacy `.punk/publishing/` was removed; see `docs/ops/PUBLISHING_MIGRATION.md`
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics
