@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { startAnswers, startArtifacts, startQuestions } from './startPageData';
 import './StartPage.css';
@@ -76,30 +76,18 @@ function StartPage() {
   const [liveStatus, setLiveStatus] = useState<LiveAssistantStatus>('idle');
   const [liveAnswer, setLiveAnswer] = useState<LiveAssistantResponse | null>(null);
   const [liveError, setLiveError] = useState('');
+  const askPanelRef = useRef<HTMLElement | null>(null);
+  const liveQuestionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeQuestion = useMemo(
     () => startQuestions.find((question) => question.id === activeQuestionId) ?? startQuestions[0],
     [activeQuestionId]
   );
   const activeAnswer = startAnswers[activeQuestion.answerId] ?? startAnswers[startQuestions[0].answerId];
-  const displayedAnswer = liveAnswer
-    ? {
-        eyebrow: 'Public KB answer',
-        title: 'Source-grounded assistant response',
-        body: [liveAnswer.answer],
-        sources: liveAnswer.sources.map((source) =>
-          source.section ? `${source.title} / ${source.section}` : source.title || source.path
-        ),
-        nextQuestions: liveAnswer.suggested_questions,
-        knowledge: liveAnswer.knowledge,
-      }
-    : {
-        eyebrow: activeAnswer.eyebrow,
-        title: activeAnswer.title,
-        body: activeAnswer.body,
-        sources: activeAnswer.sources,
-        nextQuestions: activeAnswer.nextQuestions,
-        knowledge: null,
-      };
+  const liveAnswerSources = liveAnswer
+    ? liveAnswer.sources.map((source) =>
+        source.section ? `${source.title} / ${source.section}` : source.title || source.path
+      )
+    : [];
 
   useEffect(() => {
     document.title = START_PAGE_TITLE;
@@ -108,6 +96,16 @@ function StartPage() {
     upsertPropertyMeta('og:description', START_PAGE_OG_DESCRIPTION);
     upsertPropertyMeta('og:type', 'website');
   }, []);
+
+  useEffect(() => {
+    const input = liveQuestionInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+  }, [liveQuestion]);
 
   async function handleLiveQuestionSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,10 +146,25 @@ function StartPage() {
   }
 
   function selectStaticQuestion(questionId: string) {
+    const question = startQuestions.find((item) => item.id === questionId) ?? startQuestions[0];
+
     setActiveQuestionId(questionId);
+    setLiveQuestion(question.label);
     setLiveAnswer(null);
     setLiveStatus('idle');
     setLiveError('');
+
+    const focusPrompt = () => {
+      askPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      liveQuestionInputRef.current?.focus({ preventScroll: true });
+    };
+
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(focusPrompt);
+      return;
+    }
+
+    focusPrompt();
   }
 
   return (
@@ -182,11 +195,12 @@ function StartPage() {
             </p>
           </div>
 
-          <aside className="startAskPanel" aria-label="Public assistant entry">
+          <section className="startAskPanel" aria-label="Public assistant entry" ref={askPanelRef}>
             <div className="startPanelHeader">
-              <span className="startPanelDot" aria-hidden="true" />
-              <span>Guided entry</span>
-              <span className="startPanelStatus">{liveStatus === 'answered' ? 'answered' : 'public kb'}</span>
+              <span>Public Goalrail KB</span>
+              <span className="startPanelStatus">
+                {liveStatus === 'loading' ? 'asking' : liveStatus === 'answered' ? 'answered' : 'live'}
+              </span>
             </div>
             <form className="startAskBox" onSubmit={handleLiveQuestionSubmit}>
               <textarea
@@ -194,11 +208,16 @@ function StartPage() {
                 disabled={liveStatus === 'loading'}
                 onChange={(event) => setLiveQuestion(event.target.value)}
                 placeholder="Ask about repo readiness, contracts, proof, approval, or AI delivery drift..."
+                ref={liveQuestionInputRef}
                 rows={2}
                 value={liveQuestion}
               />
-              <button disabled={!liveQuestion.trim() || liveStatus === 'loading'} type="submit">
-                {liveStatus === 'loading' ? 'Asking' : 'Ask'}
+              <button aria-label="Ask" disabled={!liveQuestion.trim() || liveStatus === 'loading'} type="submit">
+                {liveStatus === 'loading' ? (
+                  <span className="startAskSpinner" aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true">↑</span>
+                )}
               </button>
             </form>
             <p className={liveStatus === 'error' ? 'startAskNote error' : 'startAskNote'}>
@@ -206,30 +225,74 @@ function StartPage() {
                 ? liveError
                 : 'Answers use public Goalrail materials only. Static guide remains available below.'}
             </p>
+            {liveAnswer ? (
+              <article className="startLiveAnswer" aria-live="polite">
+                <div className="startLiveAnswerHeader">
+                  <p className="kicker">Public KB answer</p>
+                  <h2>Source-grounded assistant response</h2>
+                </div>
+                <p>{liveAnswer.answer}</p>
+                {liveAnswer.disclaimer ? <p className="startAnswerDisclaimer">{liveAnswer.disclaimer}</p> : null}
+                <div className="startLiveMeta" aria-label="Live answer sources and freshness">
+                  {liveAnswer.knowledge?.updated_at || liveAnswer.knowledge?.commit_sha ? (
+                    <div>
+                      <h3>Knowledge</h3>
+                      <ul>
+                        {liveAnswer.knowledge.updated_at ? <li>Updated {liveAnswer.knowledge.updated_at}</li> : null}
+                        {liveAnswer.knowledge.commit_sha ? <li>Revision {liveAnswer.knowledge.commit_sha}</li> : null}
+                      </ul>
+                    </div>
+                  ) : null}
+                  <div>
+                    <h3>Sources</h3>
+                    <ul>
+                      {liveAnswerSources.map((source) => (
+                        <li key={source}>{source}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {liveAnswer.suggested_questions.length > 0 ? (
+                    <div>
+                      <h3>Related</h3>
+                      <ul>
+                        {liveAnswer.suggested_questions.map((question) => (
+                          <li key={question}>{question}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            ) : null}
             <div className="startMiniArtifacts" aria-label="Delivery control path">
               <span>Goal</span>
               <span>Contract</span>
               <span>Proof</span>
               <span>Approval</span>
             </div>
-          </aside>
+          </section>
         </section>
 
         <section className="startQuestionSection" id="questions" aria-labelledby="start-questions-title">
           <div className="startSectionHeader">
             <p className="kicker">Quick questions</p>
-            <h2 id="start-questions-title">Use guided questions when you want a starting point.</h2>
+            <h2 id="start-questions-title">Pick a prompt, then ask when ready.</h2>
           </div>
           <div className="startQuestionGrid">
             {startQuestions.map((question) => (
               <button
                 aria-pressed={question.id === activeQuestionId}
+                aria-label={question.label}
                 className={question.id === activeQuestionId ? 'startQuestionCard active' : 'startQuestionCard'}
                 key={question.id}
                 onClick={() => selectStaticQuestion(question.id)}
                 type="button"
               >
-                <span>{question.label}</span>
+                <span className="startQuestionCue" aria-hidden="true" />
+                <span className="startQuestionText">{question.label}</span>
+                <span className="startQuestionArrow" aria-hidden="true">
+                  +
+                </span>
               </button>
             ))}
           </div>
@@ -239,27 +302,17 @@ function StartPage() {
           <div className="startAnswerPanel">
             <div className="startAnswerRail" aria-hidden="true" />
             <div className="startAnswerContent">
-              <p className="kicker">{displayedAnswer.eyebrow}</p>
-              <h2 id="start-answer-title">{displayedAnswer.title}</h2>
-              {displayedAnswer.body.map((paragraph) => (
+              <p className="kicker">{activeAnswer.eyebrow}</p>
+              <h2 id="start-answer-title">{activeAnswer.title}</h2>
+              {activeAnswer.body.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
-              {liveAnswer?.disclaimer ? <p className="startAnswerDisclaimer">{liveAnswer.disclaimer}</p> : null}
             </div>
             <aside className="startAnswerMeta" aria-label="Answer source and follow-ups">
-              {displayedAnswer.knowledge?.updated_at || displayedAnswer.knowledge?.commit_sha ? (
-                <div>
-                  <h3>Knowledge</h3>
-                  <ul>
-                    {displayedAnswer.knowledge.updated_at ? <li>Updated {displayedAnswer.knowledge.updated_at}</li> : null}
-                    {displayedAnswer.knowledge.commit_sha ? <li>Revision {displayedAnswer.knowledge.commit_sha}</li> : null}
-                  </ul>
-                </div>
-              ) : null}
               <div>
                 <h3>Sources</h3>
                 <ul>
-                  {displayedAnswer.sources.map((source) => (
+                  {activeAnswer.sources.map((source) => (
                     <li key={source}>{source}</li>
                   ))}
                 </ul>
@@ -267,7 +320,7 @@ function StartPage() {
               <div>
                 <h3>Related</h3>
                 <ul>
-                  {displayedAnswer.nextQuestions.map((question) => (
+                  {activeAnswer.nextQuestions.map((question) => (
                     <li key={question}>{question}</li>
                   ))}
                 </ul>

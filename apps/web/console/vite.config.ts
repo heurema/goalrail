@@ -1,12 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+const startAssistantProxyTarget = process.env.START_ASSISTANT_PROXY_TARGET || 'https://goalrail.dev';
+
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
       '/api/start-chat': {
-        target: 'http://127.0.0.1:8787',
+        target: startAssistantProxyTarget,
         changeOrigin: true,
       },
     },
