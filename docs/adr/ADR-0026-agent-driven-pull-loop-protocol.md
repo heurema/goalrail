@@ -399,7 +399,8 @@ This ADR does not implement:
 - server-side repository clone
 - raw source upload by default
 - standalone `work context prepare`
-- planning worker implementation
+- repo-aware planning worker, runner-backed planner, or execution worker
+  implementation
 - lease acquisition CLI
 - proposal submission or acceptance CLI
 - WorkItem materialization from the agent-facing CLI

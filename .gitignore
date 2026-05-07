@@ -11,6 +11,7 @@ test-results/
 .playwright-cli/
 output/
 **/__pycache__/
+apps/worker/goalrail-worker
 .goalrail/work/demo/trialops/design-handoff/
 .idea/
 .vscode/
