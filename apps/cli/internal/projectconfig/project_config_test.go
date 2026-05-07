@@ -77,6 +77,65 @@ version: 1
 	}
 }
 
+func TestParseYAMLPreservesHashInsidePlainScalar(t *testing.T) {
+	t.Parallel()
+
+	raw := `version: 1
+server_url: https://goalrail.example.test/api#team
+organization_id: 018f0000-0000-7000-8000-000000000002
+project_id: 018f0000-0000-7000-8000-000000000003
+repo_binding_id: 018f0000-0000-7000-8000-000000000004
+
+repository:
+  provider: github
+  full_name: heurema/goalrail
+  url: https://github.com/heurema/goalrail.git#mirror
+  workflow_base_branch: main # local workflow base
+`
+
+	got, err := ParseYAML(raw)
+	if err != nil {
+		t.Fatalf("ParseYAML plain scalar hash marker error = %v", err)
+	}
+	if got.ServerURL != "https://goalrail.example.test/api#team" {
+		t.Fatalf("ServerURL = %q, want hash preserved", got.ServerURL)
+	}
+	if got.Repository.URL != "https://github.com/heurema/goalrail.git#mirror" {
+		t.Fatalf("Repository.URL = %q, want hash preserved", got.Repository.URL)
+	}
+	if got.Repository.WorkflowBaseBranch != "main" {
+		t.Fatalf("WorkflowBaseBranch = %q, want comment stripped", got.Repository.WorkflowBaseBranch)
+	}
+}
+
+func TestParseYAMLDecodesSingleQuotedScalars(t *testing.T) {
+	t.Parallel()
+
+	raw := `version: 1
+server_url: 'https://goalrail.example.test'
+organization_id: '018f0000-0000-7000-8000-000000000002'
+project_id: '018f0000-0000-7000-8000-000000000003'
+repo_binding_id: '018f0000-0000-7000-8000-000000000004'
+
+repository:
+  provider: 'github'
+  full_name: 'heurema/goalrail'
+  url: 'git@github.com:heurema/goalrail.git'
+  workflow_base_branch: 'release-''26'
+`
+
+	got, err := ParseYAML(raw)
+	if err != nil {
+		t.Fatalf("ParseYAML single-quoted marker error = %v", err)
+	}
+	if got.Repository.Provider != "github" {
+		t.Fatalf("Provider = %q, want decoded github", got.Repository.Provider)
+	}
+	if got.Repository.WorkflowBaseBranch != "release-'26" {
+		t.Fatalf("WorkflowBaseBranch = %q, want decoded single quote", got.Repository.WorkflowBaseBranch)
+	}
+}
+
 func TestParseYAMLMissingRequiredFieldFails(t *testing.T) {
 	t.Parallel()
 

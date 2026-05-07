@@ -441,7 +441,7 @@ func (p *markerParser) setString(value string, seen *bool, target *string, name 
 }
 
 func stripYAMLComment(line string) (string, error) {
-	inQuote := false
+	quote := rune(0)
 	escaped := false
 	for index, r := range line {
 		if escaped {
@@ -450,21 +450,41 @@ func stripYAMLComment(line string) (string, error) {
 		}
 		switch r {
 		case '\\':
-			if inQuote {
+			if quote == '"' {
 				escaped = true
 			}
 		case '"':
-			inQuote = !inQuote
+			switch quote {
+			case 0:
+				quote = r
+			case r:
+				quote = 0
+			}
+		case '\'':
+			switch quote {
+			case 0:
+				quote = r
+			case r:
+				quote = 0
+			}
 		case '#':
-			if !inQuote {
+			if quote == 0 && isYAMLCommentStart(line, index) {
 				return strings.TrimRight(line[:index], " \t"), nil
 			}
 		}
 	}
-	if inQuote {
+	if quote != 0 {
 		return "", errors.New("unterminated quoted string")
 	}
 	return line, nil
+}
+
+func isYAMLCommentStart(line string, index int) bool {
+	if index == 0 {
+		return true
+	}
+	previous := line[index-1]
+	return previous == ' ' || previous == '\t'
 }
 
 func parseYAMLInt(value string) (int, error) {
@@ -481,10 +501,22 @@ func parseYAMLInt(value string) (int, error) {
 
 func parseYAMLString(value string) (string, error) {
 	value = strings.TrimSpace(value)
-	if !strings.HasPrefix(value, `"`) {
+	switch {
+	case strings.HasPrefix(value, `"`):
+		return strconv.Unquote(value)
+	case strings.HasPrefix(value, `'`):
+		return parseSingleQuotedYAMLString(value)
+	default:
 		return value, nil
 	}
-	return strconv.Unquote(value)
+}
+
+func parseSingleQuotedYAMLString(value string) (string, error) {
+	if len(value) < 2 || !strings.HasSuffix(value, `'`) {
+		return "", errors.New("unterminated single-quoted string")
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(value, `'`), `'`)
+	return strings.ReplaceAll(inner, `''`, `'`), nil
 }
 
 func QuoteYAMLString(value string) string {
