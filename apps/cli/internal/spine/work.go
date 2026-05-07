@@ -69,3 +69,18 @@ type WorkAnswerOutput struct {
 	Display                DisplaySummary `json:"display"`
 	NextAction             NextAction     `json:"next_action"`
 }
+
+type WorkPlanOutput struct {
+	SchemaVersion   string         `json:"schema_version"`
+	Mode            string         `json:"mode"`
+	ServerURL       string         `json:"server_url"`
+	OrganizationID  string         `json:"organization_id"`
+	ProjectID       string         `json:"project_id"`
+	RepoBindingID   RepoBindingID  `json:"repo_binding_id"`
+	ContractID      ContractID     `json:"contract_id"`
+	PlanID          string         `json:"plan_id"`
+	PlanState       string         `json:"plan_state"`
+	LocalConfigPath string         `json:"local_config_path"`
+	Display         DisplaySummary `json:"display"`
+	NextAction      NextAction     `json:"next_action"`
+}

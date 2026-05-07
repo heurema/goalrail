@@ -129,7 +129,7 @@ func TestAgentPullLoopCLISmokeThroughApprovedContract(t *testing.T) {
 	if err := runSmokeContractCommand(t, repoDir, store, "", &approved, "approve", "--contract-id", string(submitted.ContractID), "--confirm-user-approval", "--format", "json"); err != nil {
 		t.Fatalf("contract approve smoke error = %v", err)
 	}
-	assertNextAction(t, approved.NextAction, "plan_work", false, false, "G")
+	assertNextAction(t, approved.NextAction, "plan_work", true, false, "")
 	wantPlanCommand := "goalrail work plan --contract-id " + smokeContractID + " --format json"
 	if approved.NextAction.Command != wantPlanCommand {
 		t.Fatalf("approved next command = %q, want %q", approved.NextAction.Command, wantPlanCommand)

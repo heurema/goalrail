@@ -108,7 +108,9 @@ type ProposedWorkItem struct {
 }
 
 type WorkItemPlanCreateRequest struct {
-	RequestedBy ActorRef `json:"requested_by"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	RequestedBy   ActorRef      `json:"requested_by,omitempty"`
 }
 
 type WorkItemPlanLeaseCreateRequest struct {

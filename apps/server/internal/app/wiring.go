@@ -137,7 +137,7 @@ func newAppHandlers(services appServices) appHandlers {
 		continuation:      httpserver.NewContinuationHandler(services.auth, services.continuation),
 		contract:          httpserver.NewContractHandler(services.auth, services.contract),
 		workItem:          httpserver.NewWorkItemHandler(services.workItem),
-		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.workItemPlan),
+		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.auth, services.workItemPlan),
 		repoBinding:       httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
 		repositoryInit:    httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
 		repositoryContext: httpserver.NewRepositoryContextSnapshotHandler(services.auth, services.repositoryContext),

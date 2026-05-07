@@ -317,6 +317,8 @@ If the user explicitly accepts the reviewed draft and Goalrail exposes ` + "`goa
 
 Only call ` + "`goalrail contract approve --confirm-user-approval`" + ` after the user explicitly approves the submitted Contract. Never infer approval from silence or from a generic continuation request.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=plan_work`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail work plan`" + ` with the returned Contract ID. This only creates or returns a server WorkItemPlan; newly created plans start queued. It does not acquire a lease, produce a proposal, create WorkItems, run code, verify, or create proof.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -468,6 +470,27 @@ func commandsJSONContent() string {
         "ApprovedContract"
       ],
       "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "plan_work": {
+      "command": "goalrail work plan --contract-id <contract_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "approved_contract"
+      ],
+      "creates": [
+        "WorkItemPlan"
+      ],
+      "does_not_create": [
+        "WorkItemPlanLease",
+        "WorkItemPlanProposal",
         "WorkItem",
         "Run",
         "Decision",

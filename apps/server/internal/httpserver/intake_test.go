@@ -1752,7 +1752,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemLeaseStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
+	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
 
 	return testServerDeps{
 		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler),

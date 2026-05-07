@@ -937,7 +937,7 @@ func TestRunApproveRequiresExplicitConfirmationBeforeHTTP(t *testing.T) {
 	}
 }
 
-func TestRunApproveCreatesApprovedSnapshotAndPlansFutureWork(t *testing.T) {
+func TestRunApproveCreatesApprovedSnapshotAndExposesWorkPlan(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
 
@@ -986,8 +986,8 @@ func TestRunApproveCreatesApprovedSnapshotAndPlansFutureWork(t *testing.T) {
 	if output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ContractState != "approved" {
 		t.Fatalf("contract/state = %q/%q, want approved", output.ContractID, output.ContractState)
 	}
-	if output.NextAction.Kind != "plan_work" || output.NextAction.Available || output.NextAction.PlannedSlice != "G" {
-		t.Fatalf("next_action = %#v, want unavailable planned plan_work", output.NextAction)
+	if output.NextAction.Kind != "plan_work" || !output.NextAction.Available || output.NextAction.PlannedSlice != "" {
+		t.Fatalf("next_action = %#v, want available plan_work", output.NextAction)
 	}
 	wantCommand := "goalrail work plan --contract-id 018f0000-0000-7000-8000-000000000009 --format json"
 	if output.NextAction.Command != wantCommand {
@@ -1091,8 +1091,8 @@ func TestRunApproveTextIsHumanSafe(t *testing.T) {
 		t.Fatalf("Run(contract approve text) error = %v", err)
 	}
 	got := stdout.String()
-	if !strings.Contains(got, "Next planned command, not available yet") {
-		t.Fatalf("stdout = %q, want planned unavailable next command", got)
+	if !strings.Contains(got, "Next: goalrail work plan") {
+		t.Fatalf("stdout = %q, want available work plan next command", got)
 	}
 	for _, forbidden := range []string{"runner", "verified", "proof"} {
 		if strings.Contains(strings.ToLower(got), forbidden) {
