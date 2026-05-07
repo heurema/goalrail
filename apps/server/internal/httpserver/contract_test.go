@@ -513,7 +513,117 @@ func TestPostContractSubmissionsMovesContractReadyForApproval(t *testing.T) {
 	} else if ok {
 		t.Fatal("approved contract was created during submission")
 	}
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftMarkedReadyForApproval); got != 1 {
+		t.Fatalf("contract_draft.marked_ready_for_approval events = %d, want 1", got)
+	}
+	var markedPayload struct {
+		MarkedBy spine.ActorRef `json:"marked_by"`
+	}
+	for _, event := range server.events.Events() {
+		if event.Type != contractdraft.EventTypeContractDraftMarkedReadyForApproval {
+			continue
+		}
+		if err := json.Unmarshal(event.Payload, &markedPayload); err != nil {
+			t.Fatalf("unmarshal contract_draft.marked_ready_for_approval payload: %v", err)
+		}
+	}
+	if markedPayload.MarkedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("marked_by.id = %q, want authenticated user id", markedPayload.MarkedBy.ID)
+	}
 	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
+func TestPostContractSubmissionsRequiresAuthBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	contract := spine.Contract{
+		ID:             "contract-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		State:          spine.ContractStateDraft,
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/submissions", readyForApprovalJSON())
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftMarkedReadyForApproval); got != 0 {
+		t.Fatalf("contract_draft.marked_ready_for_approval events = %d, want 0", got)
+	}
+}
+
+func TestPostContractSubmissionsRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	draftID := spine.ContractDraftID("contract-draft-1")
+	contract := spine.Contract{
+		ID:             "contract-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		State:          spine.ContractStateDraft,
+		CurrentDraftID: &draftID,
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/submissions", readyForApprovalJSONWithContext(string(contract.ProjectID), string(contract.RepoBindingID)))
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftMarkedReadyForApproval); got != 0 {
+		t.Fatalf("contract_draft.marked_ready_for_approval events = %d, want 0", got)
+	}
+}
+
+func TestPostContractSubmissionsRejectsProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		body func(spine.Contract) string
+	}{
+		{
+			name: "project",
+			body: func(contract spine.Contract) string {
+				return readyForApprovalJSONWithContext("018f0000-0000-7000-8000-000000009998", string(contract.RepoBindingID))
+			},
+		},
+		{
+			name: "repo binding",
+			body: func(contract spine.Contract) string {
+				return readyForApprovalJSONWithContext(string(contract.ProjectID), "018f0000-0000-7000-8000-000000009999")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			contract := createContract(t, server)
+			eventCountBefore := len(server.events.Events())
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/submissions", tt.body(contract))
+			if response.code != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+			}
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "project_context_mismatch" {
+				t.Fatalf("error code = %q, want project_context_mismatch", body.Error.Code)
+			}
+			if got := len(server.events.Events()); got != eventCountBefore {
+				t.Fatalf("events = %d, want %d without submission mutation", got, eventCountBefore)
+			}
+		})
+	}
 }
 
 func TestPostContractApprovalsCreatesApprovedSnapshot(t *testing.T) {
@@ -553,7 +663,107 @@ func TestPostContractApprovalsCreatesApprovedSnapshot(t *testing.T) {
 	} else if ok {
 		t.Fatal("work item was created during approval")
 	}
+	if approved.ApprovedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("approved_by.id = %q, want authenticated user id", approved.ApprovedBy.ID)
+	}
+	assertNoPlanningStores(t, server)
 	assertNoForbiddenApprovalSideEffects(t, server.events.Events())
+}
+
+func TestPostContractApprovalsRequiresAuthBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	contract := spine.Contract{
+		ID:             "contract-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		State:          spine.ContractStateReadyForApproval,
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/approvals", approveContractJSON())
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if len(server.approvedContracts.approved) != 0 {
+		t.Fatal("approved contract was created despite auth failure")
+	}
+}
+
+func TestPostContractApprovalsRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	draftID := spine.ContractDraftID("contract-draft-1")
+	contract := spine.Contract{
+		ID:             "contract-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		State:          spine.ContractStateReadyForApproval,
+		CurrentDraftID: &draftID,
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/approvals", approveContractJSONWithContext(string(contract.ProjectID), string(contract.RepoBindingID)))
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	if len(server.approvedContracts.approved) != 0 {
+		t.Fatal("approved contract was created despite org mismatch")
+	}
+}
+
+func TestPostContractApprovalsRejectsProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		body func(spine.Contract) string
+	}{
+		{
+			name: "project",
+			body: func(contract spine.Contract) string {
+				return approveContractJSONWithContext("018f0000-0000-7000-8000-000000009998", string(contract.RepoBindingID))
+			},
+		},
+		{
+			name: "repo binding",
+			body: func(contract spine.Contract) string {
+				return approveContractJSONWithContext(string(contract.ProjectID), "018f0000-0000-7000-8000-000000009999")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			contract := submitContractForApproval(t, server, createContract(t, server).ID)
+			eventCountBefore := len(server.events.Events())
+
+			response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/approvals", tt.body(contract))
+			if response.code != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+			}
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "project_context_mismatch" {
+				t.Fatalf("error code = %q, want project_context_mismatch", body.Error.Code)
+			}
+			if got := len(server.events.Events()); got != eventCountBefore {
+				t.Fatalf("events = %d, want %d without approval mutation", got, eventCountBefore)
+			}
+			if len(server.approvedContracts.approved) != 0 {
+				t.Fatal("approved contract was created despite context mismatch")
+			}
+		})
+	}
 }
 
 func TestContractLifecycleThroughPlanningFlowUsesPublicContractID(t *testing.T) {
@@ -713,8 +923,32 @@ func readyForApprovalJSON() string {
 	}`
 }
 
+func readyForApprovalJSONWithContext(projectID string, repoBindingID string) string {
+	return `{
+		"project_id": "` + projectID + `",
+		"repo_binding_id": "` + repoBindingID + `",
+		"marked_by": {
+			"kind": "user",
+			"id": "dev_1",
+			"display_name": "Developer"
+		}
+	}`
+}
+
 func approveContractJSON() string {
 	return `{
+		"approved_by": {
+			"kind": "user",
+			"id": "dev_approver",
+			"display_name": "Approver"
+		}
+	}`
+}
+
+func approveContractJSONWithContext(projectID string, repoBindingID string) string {
+	return `{
+		"project_id": "` + projectID + `",
+		"repo_binding_id": "` + repoBindingID + `",
 		"approved_by": {
 			"kind": "user",
 			"id": "dev_approver",
@@ -746,5 +980,19 @@ func assertNoForbiddenApprovalSideEffects(t *testing.T, events []spine.Event) {
 		if forbidden[event.Type] {
 			t.Fatalf("forbidden event type appended: %s", event.Type)
 		}
+	}
+}
+
+func assertNoPlanningStores(t *testing.T, server testServerDeps) {
+	t.Helper()
+
+	if len(server.workItemPlans.plans) != 0 {
+		t.Fatalf("work item plans = %d, want 0 during contract approval", len(server.workItemPlans.plans))
+	}
+	if len(server.workItemLeases.leases) != 0 {
+		t.Fatalf("work item plan leases = %d, want 0 during contract approval", len(server.workItemLeases.leases))
+	}
+	if len(server.workItemProposals.proposals) != 0 {
+		t.Fatalf("work item plan proposals = %d, want 0 during contract approval", len(server.workItemProposals.proposals))
 	}
 }

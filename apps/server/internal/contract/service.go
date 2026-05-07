@@ -154,7 +154,7 @@ func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input sp
 	if err := authorizeContractMutation(membership, contract); err != nil {
 		return spine.Contract{}, err
 	}
-	if err := validateExpectedContractContext(input, contract); err != nil {
+	if err := validateExpectedContractContext(input.ProjectID, input.RepoBindingID, contract); err != nil {
 		return spine.Contract{}, err
 	}
 	if contract.State != spine.ContractStateDraft {
@@ -174,9 +174,15 @@ func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input sp
 	return s.getContract(ctx, id)
 }
 
-func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, input spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error) {
+func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, input spine.ContractDraftReadyForApprovalRequest, membership spine.OrganizationMembership) (spine.Contract, error) {
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
+		return spine.Contract{}, err
+	}
+	if err := authorizeContractMutation(membership, contract); err != nil {
+		return spine.Contract{}, err
+	}
+	if err := validateExpectedContractContext(input.ProjectID, input.RepoBindingID, contract); err != nil {
 		return spine.Contract{}, err
 	}
 	if contract.State != spine.ContractStateDraft {
@@ -196,9 +202,15 @@ func (s *Service) SubmitForApproval(ctx context.Context, id spine.ContractID, in
 	return s.getContract(ctx, id)
 }
 
-func (s *Service) Approve(ctx context.Context, id spine.ContractID, input spine.ApproveContractDraftRequest) (spine.Contract, error) {
+func (s *Service) Approve(ctx context.Context, id spine.ContractID, input spine.ApproveContractDraftRequest, membership spine.OrganizationMembership) (spine.Contract, error) {
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
+		return spine.Contract{}, err
+	}
+	if err := authorizeContractMutation(membership, contract); err != nil {
+		return spine.Contract{}, err
+	}
+	if err := validateExpectedContractContext(input.ProjectID, input.RepoBindingID, contract); err != nil {
 		return spine.Contract{}, err
 	}
 	if contract.State == spine.ContractStateApproved {
@@ -284,11 +296,11 @@ func validateExpectedGoalContext(input spine.ContractCreateRequest, goal spine.G
 	return nil
 }
 
-func validateExpectedContractContext(input spine.ContractDraftUpdateRequest, contract spine.Contract) error {
-	if strings.TrimSpace(string(input.ProjectID)) != "" && input.ProjectID != contract.ProjectID {
+func validateExpectedContractContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, contract spine.Contract) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != contract.ProjectID {
 		return ErrProjectMismatch
 	}
-	if strings.TrimSpace(string(input.RepoBindingID)) != "" && input.RepoBindingID != contract.RepoBindingID {
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != contract.RepoBindingID {
 		return ErrRepoBindingMismatch
 	}
 	return nil

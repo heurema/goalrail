@@ -33,5 +33,7 @@ type ApprovedContract struct {
 }
 
 type ApproveContractDraftRequest struct {
-	ApprovedBy ActorRef `json:"approved_by"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	ApprovedBy    ActorRef      `json:"approved_by"`
 }

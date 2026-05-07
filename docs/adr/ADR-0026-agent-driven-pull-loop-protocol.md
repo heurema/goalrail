@@ -31,6 +31,9 @@ Current implemented state:
   for a ready Goal and returns a local repository receipt.
 - `goalrail contract update` submits structured proposed ContractDraft fields
   after the local agent reads local code.
+- `goalrail contract submit` submits a reviewed draft for explicit approval.
+- `goalrail contract approve --confirm-user-approval` approves a submitted
+  Contract only after explicit user confirmation.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -131,6 +134,8 @@ Slice B updates `work start` so the returned continuation command is available:
   available local pull-loop step.
 - Slice E adds `contract update` so `next_action.kind=update_contract` is an
   available local pull-loop step while the Contract remains in draft state.
+- Slice F adds `contract submit` and `contract approve` so reviewable drafts can
+  move through explicit approval without starting planning.
 
 ### `goalrail work continue`
 
@@ -275,6 +280,70 @@ create proof.
 `display.summary`, `contract_id`, `contract_state`, `changed_fields`, and
 `next_action.kind=review_contract`.
 
+### `goalrail contract submit`
+
+`contract submit` marks the current draft Contract ready for explicit user
+approval:
+
+```bash
+goalrail contract submit --contract-id "<contract_id>" --format json
+```
+
+The CLI must load the local `.goalrail/project.yml` marker, require
+`project_id` and `repo_binding_id`, validate the stored CLI login/session,
+validate the marker Organization against `/v1/me`, and send the local marker
+`project_id` and `repo_binding_id` as server-side expectations.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, verify the Contract Organization matches
+that membership, derive `marked_by` from the authenticated user rather than
+trusting payload actor fields, reject supplied project/repo expectations that
+do not match the Contract before mutation, require `Contract(draft)`, run
+existing ContractDraft completeness checks, transition the current draft to
+`ready_for_approval`, append `contract_draft.marked_ready_for_approval`, and
+not create an ApprovedContract, WorkItem, Run, GateDecision, or Proof.
+
+`contract submit` returns an agent-facing envelope with `schema_version`,
+`display.summary`, `contract_id`, `contract_state`, and
+`next_action.kind=approve_contract` with `available=true`. The command must
+include `--confirm-user-approval` so a later approval requires an explicit
+human signal.
+
+### `goalrail contract approve`
+
+`contract approve` approves a submitted Contract only after explicit user
+confirmation:
+
+```bash
+goalrail contract approve \
+  --contract-id "<contract_id>" \
+  --confirm-user-approval \
+  --format json
+```
+
+The CLI must reject the command before HTTP unless `--confirm-user-approval` is
+present. With the flag present, the CLI must load the local
+`.goalrail/project.yml` marker, require `project_id` and `repo_binding_id`,
+validate the stored CLI login/session, validate the marker Organization
+against `/v1/me`, and send the local marker `project_id` and `repo_binding_id`
+as server-side expectations.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, verify the Contract Organization matches
+that membership, derive `approved_by` from the authenticated user rather than
+trusting payload actor fields, reject supplied project/repo expectations that
+do not match the Contract before mutation, require
+`Contract(ready_for_approval)`, create an immutable ApprovedContract snapshot,
+move the public Contract state to `approved`, append `contract.approved`, guard
+repeated approval with an explicit conflict, and not create a WorkItem, Run,
+GateDecision, or Proof.
+
+`contract approve` returns an agent-facing envelope with `schema_version`,
+`display.summary`, `contract_id`, `contract_state`, and
+`next_action.kind=plan_work` with `available=false`, `planned_slice=G`, and the
+future `goalrail work plan --contract-id <contract_id> --format json` command.
+Planning remains unavailable in Slice F.
+
 ### Clarification and contracts
 
 Clarification remains server-owned. The server creates ClarificationRequest and
@@ -315,10 +384,10 @@ pretending a universal server push channel exists.
 The server remains canonical and auditable. The CLI becomes the local bridge for
 repository context, auth, and transport. The agent remains a UX layer.
 
-Slices A-E establish the first usable
-start -> continue -> answer -> contract draft handle -> contract update
-pull-loop without implying submit/approval, planning, runner, gate, or proof
-are available.
+Slices A-F establish the first usable
+start -> continue -> answer -> contract draft handle -> contract update ->
+submit -> explicit approve pull-loop without implying planning, runner, gate,
+or proof are available.
 
 ## Rejected alternatives
 

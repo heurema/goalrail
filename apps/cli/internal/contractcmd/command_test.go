@@ -846,6 +846,261 @@ func TestRunUpdateTextIsHumanSafe(t *testing.T) {
 	}
 }
 
+func TestRunSubmitMovesContractToApprovalReview(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, submitCount atomic.Int32
+	var request contractTransitionRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/submissions":
+			submitCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/contracts/{id}/submissions method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&request); err != nil {
+				t.Errorf("decode contract submit request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"ready_for_approval"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runSubmitJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(contract submit) error = %v", err)
+	}
+
+	if output.SchemaVersion != "goalrail.cli.v1" {
+		t.Fatalf("schema_version = %q, want goalrail.cli.v1", output.SchemaVersion)
+	}
+	if output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ContractState != "ready_for_approval" {
+		t.Fatalf("contract/state = %q/%q, want ready_for_approval", output.ContractID, output.ContractState)
+	}
+	if output.NextAction.Kind != "approve_contract" || !output.NextAction.Available || !output.NextAction.Blocking {
+		t.Fatalf("next_action = %#v, want available blocking approve_contract", output.NextAction)
+	}
+	wantCommand := "goalrail contract approve --contract-id 018f0000-0000-7000-8000-000000000009 --confirm-user-approval --format json"
+	if output.NextAction.Command != wantCommand {
+		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
+	}
+	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("submit request project/repo = %q/%q, want local marker context", request.ProjectID, request.RepoBindingID)
+	}
+	if meCount.Load() != 1 || submitCount.Load() != 1 {
+		t.Fatalf("request counts me/submit = %d/%d, want 1/1", meCount.Load(), submitCount.Load())
+	}
+}
+
+func TestRunApproveRequiresExplicitConfirmationBeforeHTTP(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, err := runApproveJSON(t, t.TempDir(), fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(contract approve) error = nil, want explicit confirmation error")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "--confirm-user-approval") {
+		t.Fatalf("error = %q, want confirmation flag hint", err.Error())
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 without confirmation", got)
+	}
+}
+
+func TestRunApproveCreatesApprovedSnapshotAndPlansFutureWork(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, approveCount atomic.Int32
+	var request contractTransitionRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/approvals":
+			approveCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/contracts/{id}/approvals method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&request); err != nil {
+				t.Errorf("decode contract approve request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"approved","approved_snapshot_id":"018f0000-0000-7000-8000-000000000010"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runApproveJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--confirm-user-approval", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(contract approve) error = %v", err)
+	}
+
+	if output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ContractState != "approved" {
+		t.Fatalf("contract/state = %q/%q, want approved", output.ContractID, output.ContractState)
+	}
+	if output.NextAction.Kind != "plan_work" || output.NextAction.Available || output.NextAction.PlannedSlice != "G" {
+		t.Fatalf("next_action = %#v, want unavailable planned plan_work", output.NextAction)
+	}
+	wantCommand := "goalrail work plan --contract-id 018f0000-0000-7000-8000-000000000009 --format json"
+	if output.NextAction.Command != wantCommand {
+		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
+	}
+	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("approve request project/repo = %q/%q, want local marker context", request.ProjectID, request.RepoBindingID)
+	}
+	if meCount.Load() != 1 || approveCount.Load() != 1 {
+		t.Fatalf("request counts me/approve = %d/%d, want 1/1", meCount.Load(), approveCount.Load())
+	}
+}
+
+func TestRunSubmitMissingProjectConfigFailsBeforeHTTP(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, err := runSubmitJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(contract submit) error = nil, want missing marker")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 without marker", got)
+	}
+}
+
+func TestRunSubmitOrganizationMismatchFailsBeforeMutation(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, submitCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000009999","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/submissions":
+			submitCount.Add(1)
+			http.Error(w, "unexpected mutation", http.StatusInternalServerError)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	_, err := runSubmitJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err == nil {
+		t.Fatal("Run(contract submit) error = nil, want organization mismatch")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Validation {
+		t.Fatalf("exit code = %d, want validation", got)
+	}
+	if meCount.Load() != 1 || submitCount.Load() != 0 {
+		t.Fatalf("request counts me/submit = %d/%d, want 1/0", meCount.Load(), submitCount.Load())
+	}
+}
+
+func TestRunApproveTextIsHumanSafe(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/approvals":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"approved"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"approve", "--contract-id", "018f0000-0000-7000-8000-000000000009", "--confirm-user-approval"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(contract approve text) error = %v", err)
+	}
+	got := stdout.String()
+	if !strings.Contains(got, "Next planned command, not available yet") {
+		t.Fatalf("stdout = %q, want planned unavailable next command", got)
+	}
+	for _, forbidden := range []string{"runner", "verified", "proof"} {
+		if strings.Contains(strings.ToLower(got), forbidden) {
+			t.Fatalf("stdout = %q, want no %q claim", got, forbidden)
+		}
+	}
+}
+
 func runDraftJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...string) (spine.ContractDraftOutput, error) {
 	t.Helper()
 
@@ -887,6 +1142,46 @@ func runUpdateJSON(t *testing.T, repoDir string, store fakeSessionStore, stdin s
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode contract update JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runSubmitJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...string) (spine.ContractTransitionOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, append([]string{"submit"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.ContractTransitionOutput{}, err
+	}
+	var output spine.ContractTransitionOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode contract submit JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runApproveJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...string) (spine.ContractTransitionOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, append([]string{"approve"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.ContractTransitionOutput{}, err
+	}
+	var output spine.ContractTransitionOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode contract approve JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }

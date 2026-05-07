@@ -63,6 +63,10 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runDraft(ctx, out, workDir, args[1:], options)
 	case "update":
 		return runUpdate(ctx, out, workDir, args[1:], options)
+	case "submit":
+		return runSubmit(ctx, out, workDir, args[1:], options)
+	case "approve":
+		return runApprove(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown contract command %q", args[0]))
 	}
@@ -311,6 +315,170 @@ func runUpdate(ctx context.Context, out *term.Output, workDir string, args []str
 	return err
 }
 
+func runSubmit(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail contract submit", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	contractID := flags.String("contract-id", "", "Contract ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, SubmitUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedContractID := strings.TrimSpace(*contractID)
+	if normalizedContractID == "" {
+		return exitcode.UsageError(errors.New("--contract-id is required"))
+	}
+	if err := validateUUIDLike("contract_id", normalizedContractID); err != nil {
+		return err
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	commandContext, err := loadContractCommandContext(ctx, workDir, "submit", options)
+	if err != nil {
+		return err
+	}
+	contractResponse, err := postContractSubmit(ctx, commandContext.Client, commandContext.Session, normalizedContractID, commandContext.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateContractUpdateContext(commandContext.Config, normalizedContractID, contractResponse); err != nil {
+		return err
+	}
+
+	output := buildSubmitOutput(commandContext.Config, commandContext.ServerURL, contractResponse)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderSubmitText(output))
+	return err
+}
+
+func runApprove(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail contract approve", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	contractID := flags.String("contract-id", "", "Contract ID")
+	confirmUserApproval := flags.Bool("confirm-user-approval", false, "confirm the user explicitly approved this Contract")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, ApproveUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedContractID := strings.TrimSpace(*contractID)
+	if normalizedContractID == "" {
+		return exitcode.UsageError(errors.New("--contract-id is required"))
+	}
+	if err := validateUUIDLike("contract_id", normalizedContractID); err != nil {
+		return err
+	}
+	if !*confirmUserApproval {
+		return exitcode.UsageError(errors.New("goalrail contract approve requires --confirm-user-approval after explicit user approval"))
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	commandContext, err := loadContractCommandContext(ctx, workDir, "approve", options)
+	if err != nil {
+		return err
+	}
+	contractResponse, err := postContractApprove(ctx, commandContext.Client, commandContext.Session, normalizedContractID, commandContext.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateContractUpdateContext(commandContext.Config, normalizedContractID, contractResponse); err != nil {
+		return err
+	}
+
+	output := buildApproveOutput(commandContext.Config, commandContext.ServerURL, contractResponse)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderApproveText(output))
+	return err
+}
+
+type contractCommandContext struct {
+	Config    projectconfig.Config
+	Session   authstore.Session
+	ServerURL string
+	Client    HTTPClient
+	Profile   meResponse
+}
+
+func loadContractCommandContext(ctx context.Context, workDir string, command string, options Options) (contractCommandContext, error) {
+	facts, err := projectscan.DiscoverGit(ctx, workDir)
+	if err != nil {
+		if errors.Is(err, projectscan.ErrNotGitRepository) {
+			return contractCommandContext{}, exitcode.UsageError(fmt.Errorf("goalrail contract %s requires a Git worktree with .goalrail/project.yml; run goalrail init first", command))
+		}
+		return contractCommandContext{}, exitcode.RuntimeError(err)
+	}
+	config, ok, err := projectconfig.Read(facts.CanonicalRepoRoot)
+	if err != nil {
+		return contractCommandContext{}, err
+	}
+	if !ok {
+		return contractCommandContext{}, exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
+	}
+	if err := validateMarkerProjectBinding(config); err != nil {
+		return contractCommandContext{}, err
+	}
+
+	session, serverURL, err := loadUsableSession(options)
+	if err != nil {
+		return contractCommandContext{}, err
+	}
+	if strings.TrimRight(config.ServerURL, "/") != serverURL {
+		return contractCommandContext{}, exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
+	}
+
+	client := options.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	profile, err := getCurrentProfile(ctx, client, session)
+	if err != nil {
+		return contractCommandContext{}, err
+	}
+	if err := validateMarkerMembership(config, profile); err != nil {
+		return contractCommandContext{}, err
+	}
+
+	return contractCommandContext{
+		Config:    config,
+		Session:   session,
+		ServerURL: serverURL,
+		Client:    client,
+		Profile:   profile,
+	}, nil
+}
+
 func resolvePath(workDir, value string) string {
 	if filepath.IsAbs(value) {
 		return value
@@ -338,7 +506,7 @@ func writeText(w io.Writer, report spine.ContractValidationReport) error {
 }
 
 func Usage() string {
-	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  draft       create or return a server Contract draft handle for a ready Goal\n  update      update proposed fields on a server ContractDraft\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
+	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  draft       create or return a server Contract draft handle for a ready Goal\n  update      update proposed fields on a server ContractDraft\n  submit      submit a draft Contract for explicit user approval\n  approve     approve a submitted Contract after explicit user confirmation\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
 }
 
 func ValidateUsage() string {
@@ -351,6 +519,14 @@ func DraftUsage() string {
 
 func UpdateUsage() string {
 	return "Usage: goalrail contract update --contract-id <contract_id> --fields-file <path|-> [--format text|json]\n\nUpdates proposed fields on a server ContractDraft using structured JSON from a file or stdin. The command reads the Git-root .goalrail/project.yml marker, validates the stored login profile and Organization marker, sends project/repo expectations, and returns changed fields plus the next review action. It does not upload raw source bodies, submit or approve contracts, create WorkItems, run workers, gates, proof, or verification.\n"
+}
+
+func SubmitUsage() string {
+	return "Usage: goalrail contract submit --contract-id <contract_id> [--format text|json]\n\nSubmits the current server ContractDraft for explicit user approval. The command reads the Git-root .goalrail/project.yml marker, validates the stored login profile and Organization marker, sends project/repo expectations, and returns the approval next action. It does not approve contracts, create WorkItems, run workers, gates, proof, or verification.\n"
+}
+
+func ApproveUsage() string {
+	return "Usage: goalrail contract approve --contract-id <contract_id> --confirm-user-approval [--format text|json]\n\nApproves a submitted Contract only after explicit user approval. The command requires --confirm-user-approval, validates the Git-root .goalrail/project.yml marker plus login and Organization marker, and sends project/repo expectations. It does not create WorkItems, run workers, gates, proof, or verification.\n"
 }
 
 func loadUsableSession(options Options) (authstore.Session, string, error) {
@@ -877,6 +1053,57 @@ func patchContractUpdate(ctx context.Context, client HTTPClient, session authsto
 	return decoded, nil
 }
 
+func postContractSubmit(ctx context.Context, client HTTPClient, session authstore.Session, contractID string, config projectconfig.Config) (contractDraftResponse, error) {
+	payload := contractTransitionRequest{
+		ProjectID:     config.ProjectID,
+		RepoBindingID: config.RepoBindingID,
+	}
+	return postContractTransition(ctx, client, session, contractID, "submissions", payload, http.StatusOK, "contract submit request")
+}
+
+func postContractApprove(ctx context.Context, client HTTPClient, session authstore.Session, contractID string, config projectconfig.Config) (contractDraftResponse, error) {
+	payload := contractTransitionRequest{
+		ProjectID:     config.ProjectID,
+		RepoBindingID: config.RepoBindingID,
+	}
+	return postContractTransition(ctx, client, session, contractID, "approvals", payload, http.StatusCreated, "contract approve request")
+}
+
+func postContractTransition(ctx context.Context, client HTTPClient, session authstore.Session, contractID string, path string, payload contractTransitionRequest, successStatus int, operation string) (contractDraftResponse, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("encode %s: %w", operation, err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, serverURL+"/v1/contracts/"+contractID+"/"+path, bytes.NewReader(body))
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("build %s: %w", operation, err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("run %s on %s: %w", operation, serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != successStatus {
+		return contractDraftResponse{}, mapHTTPError(operation, response, serverURL)
+	}
+	var decoded contractDraftResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("decode %s response: %w", operation, err))
+	}
+	if strings.TrimSpace(string(decoded.ID)) == "" {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("%s response did not include id", operation))
+	}
+	if strings.TrimSpace(string(decoded.State)) == "" {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("%s response did not include state", operation))
+	}
+	return decoded, nil
+}
+
 func validateContractDraftContext(config projectconfig.Config, goalID string, contractDraft contractDraftResponse) error {
 	if contractDraft.GoalID != "" && contractDraft.GoalID != goalID {
 		return exitcode.ValidationError(errors.New("contract draft response goal_id does not match requested Goal"))
@@ -951,6 +1178,53 @@ func buildUpdateOutput(config projectconfig.Config, serverURL string, contractRe
 	}
 }
 
+func buildSubmitOutput(config projectconfig.Config, serverURL string, contractResponse contractDraftResponse) spine.ContractTransitionOutput {
+	return spine.ContractTransitionOutput{
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  config.OrganizationID,
+		ProjectID:       config.ProjectID,
+		RepoBindingID:   spine.RepoBindingID(config.RepoBindingID),
+		ContractID:      contractResponse.ID,
+		ContractState:   contractResponse.State,
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Submitted Contract for explicit user approval. Ask the user to approve before calling approve.",
+		},
+		NextAction: spine.NextAction{
+			Kind:      "approve_contract",
+			Blocking:  true,
+			Available: true,
+			Command:   fmt.Sprintf("goalrail contract approve --contract-id %s --confirm-user-approval --format json", contractResponse.ID),
+		},
+	}
+}
+
+func buildApproveOutput(config projectconfig.Config, serverURL string, contractResponse contractDraftResponse) spine.ContractTransitionOutput {
+	return spine.ContractTransitionOutput{
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  config.OrganizationID,
+		ProjectID:       config.ProjectID,
+		RepoBindingID:   spine.RepoBindingID(config.RepoBindingID),
+		ContractID:      contractResponse.ID,
+		ContractState:   contractResponse.State,
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Approved Contract snapshot created. Planning is a future Goalrail step and is not available from this command.",
+		},
+		NextAction: spine.NextAction{
+			Kind:         "plan_work",
+			Blocking:     false,
+			Available:    false,
+			PlannedSlice: "G",
+			Command:      fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
+		},
+	}
+}
+
 func renderDraftText(output spine.ContractDraftOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Contract draft handle\n\n")
@@ -1003,6 +1277,45 @@ func renderUpdateText(output spine.ContractUpdateOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	b.WriteString("\nNext: review the draft contract with the user.\n")
+	return b.String()
+}
+
+func renderSubmitText(output spine.ContractTransitionOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contract submitted for approval\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "State: %s\n", output.ContractState)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Command != "" && output.NextAction.Available {
+		fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+	}
+	return b.String()
+}
+
+func renderApproveText(output spine.ContractTransitionOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contract approved\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "State: %s\n", output.ContractState)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Command != "" && !output.NextAction.Available {
+		fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
+	}
+	if output.NextAction.PlannedSlice != "" {
+		fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+	}
 	return b.String()
 }
 
@@ -1074,6 +1387,11 @@ type contractUpdateRequest struct {
 	ContextRefs   []contractUpdateContextRef `json:"context_refs,omitempty"`
 	Unknowns      []string                   `json:"unknowns,omitempty"`
 	changedFields []string
+}
+
+type contractTransitionRequest struct {
+	ProjectID     string `json:"project_id"`
+	RepoBindingID string `json:"repo_binding_id"`
 }
 
 type contractUpdateActorRef struct {
