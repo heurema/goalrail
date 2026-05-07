@@ -67,3 +67,22 @@ This ADR does not imply:
 - final gate verdict writing
 - server-generated proof
 - `gr` alias support in this slice
+
+## Update - 2026-05-07
+
+The original 2026-04-25 slice described `goalrail init` as local/demo and
+draft-only. Current implementation has moved beyond that initial slice:
+server-backed `goalrail init` now initializes repository context through the
+authenticated server API, writes a non-secret `.goalrail/project.yml` marker,
+ensures `.goalrail/.gitignore`, and runs a local Project Scan cache write.
+Plain init also records a metadata-only repository context snapshot.
+
+This update preserves the historical ADR context; it does not broaden MVP
+scope. The current init lifecycle, trust boundary, and partial-failure recovery
+direction are documented in `docs/ops/INIT_LIFECYCLE.md`. The local
+RepositoryBaselineProfile / WorkspaceOverlay lifecycle is governed by
+`docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`.
+
+The updated init path still does not imply production repository
+authorization, checkout, server clone, raw source upload by default, hosted
+execution, runner integration, gate logic, or proof generation.
