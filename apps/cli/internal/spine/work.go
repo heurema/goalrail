@@ -22,6 +22,11 @@ type ClarificationQuestionRef struct {
 	MapsTo     string `json:"maps_to"`
 }
 
+type SourceRef struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+}
+
 type WorkStartOutput struct {
 	SchemaVersion        string         `json:"schema_version"`
 	Mode                 string         `json:"mode"`
@@ -80,6 +85,52 @@ type WorkPlanOutput struct {
 	ContractID      ContractID     `json:"contract_id"`
 	PlanID          string         `json:"plan_id"`
 	PlanState       string         `json:"plan_state"`
+	LocalConfigPath string         `json:"local_config_path"`
+	Display         DisplaySummary `json:"display"`
+	NextAction      NextAction     `json:"next_action"`
+}
+
+type ProposedWorkItem struct {
+	Title                string      `json:"title"`
+	Summary              string      `json:"summary"`
+	Scope                []string    `json:"scope"`
+	AcceptanceRefs       []string    `json:"acceptance_refs"`
+	ProofExpectationRefs []string    `json:"proof_expectation_refs"`
+	OwnerHint            string      `json:"owner_hint,omitempty"`
+	OrderIndex           *int        `json:"order_index,omitempty"`
+	SourceRefs           []SourceRef `json:"source_refs,omitempty"`
+}
+
+type WorkPlanStatusOutput struct {
+	SchemaVersion   string             `json:"schema_version"`
+	Mode            string             `json:"mode"`
+	ServerURL       string             `json:"server_url"`
+	OrganizationID  string             `json:"organization_id"`
+	ProjectID       string             `json:"project_id"`
+	RepoBindingID   RepoBindingID      `json:"repo_binding_id"`
+	ContractID      ContractID         `json:"contract_id"`
+	PlanID          string             `json:"plan_id"`
+	PlanState       string             `json:"plan_state"`
+	ProposalID      string             `json:"proposal_id,omitempty"`
+	ProposalState   string             `json:"proposal_state,omitempty"`
+	ProposedTasks   []ProposedWorkItem `json:"proposed_tasks,omitempty"`
+	LocalConfigPath string             `json:"local_config_path"`
+	Display         DisplaySummary     `json:"display"`
+	NextAction      NextAction         `json:"next_action"`
+}
+
+type WorkProposalAcceptOutput struct {
+	SchemaVersion   string         `json:"schema_version"`
+	Mode            string         `json:"mode"`
+	ServerURL       string         `json:"server_url"`
+	OrganizationID  string         `json:"organization_id"`
+	ProjectID       string         `json:"project_id"`
+	RepoBindingID   RepoBindingID  `json:"repo_binding_id"`
+	ContractID      ContractID     `json:"contract_id"`
+	PlanID          string         `json:"plan_id"`
+	ProposalID      string         `json:"proposal_id"`
+	ProposalState   string         `json:"proposal_state"`
+	CreatedTaskIDs  []string       `json:"created_task_ids"`
 	LocalConfigPath string         `json:"local_config_path"`
 	Display         DisplaySummary `json:"display"`
 	NextAction      NextAction     `json:"next_action"`
