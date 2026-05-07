@@ -25,6 +25,7 @@ import {
 } from './repositoryContextClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
+import StartPage from './StartPage';
 
 import './App.css';
 
@@ -231,7 +232,19 @@ function repositoryContextErrorMessage(error: unknown, t: (key: string, options?
   return t('repository.errors.generic');
 }
 
+function isStartRoute() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.location.pathname.replace(/\/+$/, '') === '/start';
+}
+
 function App() {
+  return isStartRoute() ? <StartPage /> : <ConsoleApp />;
+}
+
+function ConsoleApp() {
   const { i18n, t } = useTranslation();
   const translate = t as unknown as (key: string, options?: Record<string, unknown>) => string;
   const activeLocale = isSupportedLocale(i18n.resolvedLanguage) ? i18n.resolvedLanguage : 'en';

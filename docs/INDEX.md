@@ -61,78 +61,90 @@ related_docs:
 
 ### 5. Product shape and external posture
 22. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-23. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
-24. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
-25. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-26. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-27. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+23. `docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md`
+24. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+25. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
+26. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+27. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+28. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-28. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-29. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
-30. `docs/PROJECT_SPINE_SCHEMA.md`
-31. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-32. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-33. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-34. `docs/adr/ADR-0003-go-cli-layout.md`
-35. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
-36. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
-37. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
-38. `docs/adr/ADR-0007-clarification-request-boundary.md`
-39. `docs/adr/ADR-0008-runner-checkout-boundary.md`
-40. `docs/adr/ADR-0009-clarification-answer-boundary.md`
-41. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
-42. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
-43. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
-44. `docs/adr/ADR-0013-contract-seed-boundary.md`
-45. `docs/adr/ADR-0014-contract-draft-boundary.md`
-46. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
-47. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
-48. `docs/adr/ADR-0017-contract-approval-boundary.md`
-49. `docs/adr/ADR-0018-workitem-planning-boundary.md`
-50. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
-51. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
-52. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
-53. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
-54. `docs/adr/ADR-0022-installation-boundary.md`
-55. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
-56. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
-57. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
-58. `docs/adr/ADR-0027-organization-user-management-boundary.md`
-59. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
+29. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+30. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
+31. `docs/PROJECT_SPINE_SCHEMA.md`
+32. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+33. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+34. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+35. `docs/adr/ADR-0003-go-cli-layout.md`
+36. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
+37. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+38. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
+39. `docs/adr/ADR-0007-clarification-request-boundary.md`
+40. `docs/adr/ADR-0008-runner-checkout-boundary.md`
+41. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+42. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
+43. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
+44. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
+45. `docs/adr/ADR-0013-contract-seed-boundary.md`
+46. `docs/adr/ADR-0014-contract-draft-boundary.md`
+47. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
+48. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
+49. `docs/adr/ADR-0017-contract-approval-boundary.md`
+50. `docs/adr/ADR-0018-workitem-planning-boundary.md`
+51. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
+52. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
+53. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
+54. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
+55. `docs/adr/ADR-0022-installation-boundary.md`
+56. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
+57. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
+58. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
+59. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+60. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
 
 ### 7. Governance and change control
-60. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-61. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-62. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-63. `docs/product/GOALRAIL_RULE_STACK.md`
+61. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+62. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+63. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+64. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-64. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-65. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-66. `docs/ops/STATUS.md`
-67. `docs/ops/NEXT.md`
-68. `docs/ops/DECISIONS.md`
-69. `docs/ops/COMPONENTS.yaml`
-70. `docs/ops/BRANCH_PROTECTION.md`
-71. `docs/ops/REPO_STRUCTURE.md`
-72. `docs/ops/GO_CODE_GUIDE.md`
-73. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-74. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-75. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-76. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+65. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+66. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+67. `docs/ops/STATUS.md`
+68. `docs/ops/NEXT.md`
+69. `docs/ops/DECISIONS.md`
+70. `docs/ops/COMPONENTS.yaml`
+71. `docs/ops/BRANCH_PROTECTION.md`
+72. `docs/ops/REPO_STRUCTURE.md`
+73. `docs/ops/GO_CODE_GUIDE.md`
+74. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+75. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+76. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+77. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+78. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+79. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+80. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+81. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+82. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+83. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+84. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+85. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+86. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-77. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-78. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-79. `docs/reference/design/reference_screens/`
-80. `.goalrail/work/`
-81. `.goalrail/knowledge/`
-82. `.punk/publishing.toml`
-83. `.goalrail/flows/`
-84. `.goalrail/evals/`
-85. `docs/ops/PUBLISHING_MIGRATION.md`
-86. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+87. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+88. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+89. `docs/reference/design/reference_screens/`
+90. `docs/reference/start-assistant/`
+91. `.goalrail/work/`
+92. `.goalrail/knowledge/`
+93. `.goalrail/public-kb/manifest.yaml`
+94. `.punk/publishing.toml`
+95. `.goalrail/flows/`
+96. `.goalrail/evals/`
+97. `docs/ops/PUBLISHING_MIGRATION.md`
+98. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -168,6 +180,7 @@ related_docs:
 
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
+- `GOALRAIL_GLOBAL_START_ASSISTANT.md` — draft global `/start` assistant surface: English-first guided entry page, public knowledge boundary, static-first then source-grounded assistant sequence, and no repo scan / code execution posture
 - `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — current public RU pilot landing canon and copy/governance reference for the business-first landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
 - `GOALRAIL_LANDING_COPY.md` — historical / superseded technical prompt-handoff landing draft; not current public landing canon and not the source of truth for `apps/web/pilot-intake-ru`
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
@@ -241,6 +254,15 @@ related_docs:
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
 - `CONSOLE_MAIN_DEPLOYMENT_WIRING.md` — operational record for the main `goalrail.dev` console and `api.goalrail.dev` API Flux GitOps deployment and smoke status
 - `CONSOLE_RU_DEPLOYMENT_WIRING.md` — operational record for the static `console.goalrail.ru` deployment wiring and smoke status
+- `START_ASSISTANT_IMPLEMENTATION_PLAN.md` — staged implementation plan for `/start`, from static page to source-grounded assistant
+- `START_ASSISTANT_WORKER_ARCHITECTURE.md` — Stage 3A architecture for the separate public-edge assistant Worker and `/api/start-chat` ownership boundary
+- `START_ASSISTANT_PUBLIC_KB_PIPELINE.md` — public KB source whitelist, build process, vector store lifecycle, manifest storage, freshness, and rollback rules
+- `START_ASSISTANT_STAGE_3B_PLAN.md` — smallest live Worker implementation plan, tests, smoke checks, security validation, and non-goals
+- `START_ASSISTANT_KNOWLEDGE_SYNC.md` — initial public knowledge sync policy for compiling whitelisted docs into retrieval artifacts
+- `START_ASSISTANT_SECURITY_AND_PRIVACY.md` — public assistant safety boundary, input policy, logging posture, abuse controls, and safe refusals
+- `START_ASSISTANT_API_CONTRACT.md` — planned `POST /api/start-chat` request/response contract and system-instruction draft
+- `DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md` — proposed decision snippet for the separate public-edge Worker boundary
+- `DECISION_LOG_START_ASSISTANT_SNIPPET.md` — proposed decision snippet for the global `/start` assistant surface
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
@@ -248,8 +270,10 @@ related_docs:
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
+- `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
+- `.goalrail/public-kb/manifest.yaml` — explicit public KB whitelist input for the future source-grounded `/start` assistant
 - `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external and resolved via CLI
 - legacy `.punk/publishing/` was removed; see `docs/ops/PUBLISHING_MIGRATION.md`
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics

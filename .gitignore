@@ -16,6 +16,7 @@ apps/worker/goalrail-worker
 .idea/
 .vscode/
 .playwright-mcp/
+.goalrail/public-kb/dist/
 
 # Punk publishing runtime artifacts
 .punk/publishing/
