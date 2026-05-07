@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -25,6 +26,10 @@ const (
 	nextSuggestedCommand   = "goalrail work start --title <title>"
 	serverRegistrationNote = "This registered repository metadata on the GoalRail server, wrote a non-secret GoalRail repository marker, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization, recorded a metadata-only repository context snapshot, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
+
+	defaultInitHTTPTimeout   = 30 * time.Second
+	defaultInitRetryAttempts = 3
+	defaultInitRetryBackoff  = 10 * time.Millisecond
 )
 
 type serverErrorResponse struct {
@@ -56,10 +61,7 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 		return err
 	}
 
-	client := options.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := initHTTPClient(options.HTTPClient)
 
 	requestPayload := spine.RepoBindingInitRequest{
 		Provider:              draft.Provider,
@@ -148,10 +150,7 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 		return err
 	}
 
-	client := options.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := initHTTPClient(options.HTTPClient)
 
 	requestPayload := spine.RepositoryContextInitRequest{
 		Provider:                    draft.Provider,
@@ -284,6 +283,96 @@ func loadSession(options Options) (authstore.Session, error) {
 	return session, nil
 }
 
+func initHTTPClient(client HTTPClient) HTTPClient {
+	if client != nil {
+		return client
+	}
+	return &http.Client{Timeout: defaultInitHTTPTimeout}
+}
+
+func doInitRequest(ctx context.Context, client HTTPClient, build func() (*http.Request, error)) (*http.Response, error) {
+	for attempt := 1; attempt <= defaultInitRetryAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		request, err := build()
+		if err != nil {
+			return nil, err
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			formattedErr := formatInitHTTPError(ctx, err)
+			if attempt == defaultInitRetryAttempts || !shouldRetryInitTransportError(ctx, err) {
+				return nil, formattedErr
+			}
+			if err := waitInitRetryBackoff(ctx, attempt); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if !shouldRetryInitStatus(response.StatusCode) || attempt == defaultInitRetryAttempts {
+			return response, nil
+		}
+		closeInitRetryResponse(response)
+		if err := waitInitRetryBackoff(ctx, attempt); err != nil {
+			return nil, err
+		}
+	}
+	return nil, errors.New("server request could not complete")
+}
+
+func formatInitHTTPError(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) {
+		return err
+	}
+	if errors.Is(err, context.DeadlineExceeded) || isInitHTTPTimeout(err) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("server request timed out or could not complete: %w", err)
+	}
+	return fmt.Errorf("server request could not complete: %w", err)
+}
+
+func shouldRetryInitTransportError(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	return errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func isInitHTTPTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+func shouldRetryInitStatus(statusCode int) bool {
+	return statusCode >= http.StatusInternalServerError && statusCode <= 599
+}
+
+func closeInitRetryResponse(response *http.Response) {
+	if response == nil || response.Body == nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+	_ = response.Body.Close()
+}
+
+func waitInitRetryBackoff(ctx context.Context, attempt int) error {
+	timer := time.NewTimer(defaultInitRetryBackoff * time.Duration(attempt))
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func postRepoBindingInit(ctx context.Context, client HTTPClient, session authstore.Session, projectID string, payload spine.RepoBindingInitRequest) (spine.RepoBindingInitResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -291,14 +380,15 @@ func postRepoBindingInit(ctx context.Context, client HTTPClient, session authsto
 	}
 	serverURL := strings.TrimRight(session.ServerURL, "/")
 	endpoint := serverURL + "/v1/projects/" + url.PathEscape(projectID) + "/repo-bindings/init"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return spine.RepoBindingInitResponse{}, exitcode.RuntimeError(fmt.Errorf("build repo binding init request: %w", err))
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
-
-	response, err := client.Do(request)
+	response, err := doInitRequest(ctx, client, func() (*http.Request, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build repo binding init request: %w", err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		return request, nil
+	})
 	if err != nil {
 		return spine.RepoBindingInitResponse{}, exitcode.RuntimeError(fmt.Errorf("initialize repo binding on %s: %w", serverURL, err))
 	}
@@ -333,14 +423,15 @@ func postRepositoryContextInit(ctx context.Context, client HTTPClient, session a
 	}
 	serverURL := strings.TrimRight(session.ServerURL, "/")
 	endpoint := serverURL + "/v1/init/repository-context"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return spine.RepositoryContextInitResponse{}, exitcode.RuntimeError(fmt.Errorf("build repository context init request: %w", err))
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
-
-	response, err := client.Do(request)
+	response, err := doInitRequest(ctx, client, func() (*http.Request, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build repository context init request: %w", err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		return request, nil
+	})
 	if err != nil {
 		return spine.RepositoryContextInitResponse{}, exitcode.RuntimeError(fmt.Errorf("initialize repository context on %s: %w", serverURL, err))
 	}
@@ -375,14 +466,15 @@ func postRepositoryContextSnapshot(ctx context.Context, client HTTPClient, sessi
 	}
 	serverURL := strings.TrimRight(session.ServerURL, "/")
 	endpoint := serverURL + "/v1/repo-bindings/" + url.PathEscape(repoBindingID) + "/context-snapshots"
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("build repository context snapshot request: %w", err))
-	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
-
-	response, err := client.Do(request)
+	response, err := doInitRequest(ctx, client, func() (*http.Request, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build repository context snapshot request: %w", err)
+		}
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		return request, nil
+	})
 	if err != nil {
 		return spine.RepositoryContextSnapshotResponse{}, exitcode.RuntimeError(fmt.Errorf("record repository context snapshot on %s: %w", serverURL, err))
 	}
