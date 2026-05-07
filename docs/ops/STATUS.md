@@ -314,7 +314,10 @@ The project currently has:
   created users and reset rotations, reset-side active session revocation,
   safe attachment of existing active users that are not yet members of the
   target Organization without credential rotation, membership-scoped
-  active/inactive updates, and last-active-owner protection.
+  active/inactive updates, last-active-owner protection, and self-action
+  safety: self owner demotion, self membership deactivation, and self admin
+  temporary-password reset are rejected, while self display-name edits and
+  non-self resets for active or inactive users/memberships remain allowed.
   Settings / Users consumes these API-backed records, and there is no
   `goalrail users create` command.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,

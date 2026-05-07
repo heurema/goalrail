@@ -102,6 +102,7 @@ func TestOrganizationUsersMapsServiceErrors(t *testing.T) {
 		{name: "validation", err: &usermanagement.ValidationError{Message: "role must be one of owner, admin, member, or viewer"}, wantStatus: http.StatusBadRequest, wantCode: "validation_failed"},
 		{name: "user exists", err: usermanagement.ErrUserExists, wantStatus: http.StatusConflict, wantCode: "organization_user_exists"},
 		{name: "last owner", err: usermanagement.ErrLastActiveOwner, wantStatus: http.StatusConflict, wantCode: "last_active_owner"},
+		{name: "self action", err: usermanagement.ErrSelfActionForbidden, wantStatus: http.StatusConflict, wantCode: "self_action_forbidden"},
 		{name: "not found", err: usermanagement.ErrNotFound, wantStatus: http.StatusNotFound, wantCode: "not_found"},
 	}
 	for _, tt := range tests {

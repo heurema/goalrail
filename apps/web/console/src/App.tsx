@@ -129,6 +129,19 @@ function userRecordWithoutSecret(record: OrganizationUserRecord): OrganizationUs
   };
 }
 
+function isOwnerSelfActionBlocked(profile: MeResponse | null, record: OrganizationUserRecord | null, draft: UserDraft) {
+  if (!profile || !record || profile.user.id !== record.user.id || record.organization_membership.role !== 'owner') {
+    return null;
+  }
+  if (draft.role !== 'owner') {
+    return 'users.errors.selfOwnerDowngradeBlocked';
+  }
+  if (draft.state === 'inactive') {
+    return 'users.errors.selfDeactivationBlocked';
+  }
+  return null;
+}
+
 function isThemeId(value: string | null): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
@@ -263,6 +276,8 @@ function App() {
     ? translate(`membershipRoles.${sessionRoleValue}`)
     : sessionRoleValue ?? 'member';
   const editingRecord = editingId ? users.find((record) => record.user.id === editingId) ?? null : null;
+  const isEditingSelf = Boolean(editingRecord && profile?.user.id === editingRecord.user.id);
+  const isEditingOtherOwner = Boolean(editingRecord && !isEditingSelf && editingRecord.organization_membership.role === 'owner');
   const isResettingTemporaryPassword = resettingUserId !== null;
 
   async function handleLanguageChange(locale: ConsoleLocale) {
@@ -524,6 +539,11 @@ function App() {
       setFormError(translate('users.validation.nameAndEmail'));
       return;
     }
+    const blockedSelfAction = isOwnerSelfActionBlocked(profile, editingRecord, nextDraft);
+    if (blockedSelfAction) {
+      setFormError(translate(blockedSelfAction));
+      return;
+    }
 
     const accessToken = tokens?.accessToken;
     const organizationId = profile?.organization_membership.organization_id;
@@ -594,6 +614,11 @@ function App() {
   }
 
   function requestTemporaryPasswordReset(record: OrganizationUserRecord) {
+    if (profile?.user.id === record.user.id) {
+      setResetTarget(null);
+      setFormError(translate('users.errors.selfResetBlocked'));
+      return;
+    }
     setResetTarget(record);
     setResetError('');
   }
@@ -611,6 +636,12 @@ function App() {
     const accessToken = tokens?.accessToken;
     const organizationId = profile?.organization_membership.organization_id;
     if (!target) {
+      return;
+    }
+    if (profile?.user.id === target.user.id) {
+      setResetTarget(null);
+      setResetError('');
+      setFormError(translate('users.errors.selfResetBlocked'));
       return;
     }
     if (!accessToken || !organizationId) {
@@ -1103,15 +1134,18 @@ function App() {
               </label>
               ) : null}
 
+              {isEditingSelf ? <p className="fieldMessage">{translate('users.selfActionHelper')}</p> : null}
+              {isEditingOtherOwner ? <p className="fieldMessage">{translate('users.otherOwnerWarning')}</p> : null}
+
               {editingId && editingRecord ? (
                 <section className="resetCredentialPanel" aria-label={translate('users.resetTemporaryPassword')}>
                   <div>
                     <h4>{translate('users.resetTemporaryPassword')}</h4>
-                    <p>{translate('users.resetTemporaryPasswordCopy')}</p>
+                    <p>{isEditingSelf ? translate('users.selfResetBlockedCopy') : translate('users.resetTemporaryPasswordCopy')}</p>
                   </div>
                   <button
                     className="ghostButton dangerButton"
-                    disabled={isResettingTemporaryPassword}
+                    disabled={isResettingTemporaryPassword || isEditingSelf}
                     onClick={() => requestTemporaryPasswordReset(editingRecord)}
                     type="button"
                   >

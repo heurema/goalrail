@@ -137,6 +137,8 @@ func (h *OrganizationUsersHandler) respondServiceError(w http.ResponseWriter, er
 		RespondError(w, http.StatusConflict, "organization_user_exists", "organization user already exists")
 	case errors.Is(err, usermanagement.ErrLastActiveOwner):
 		RespondError(w, http.StatusConflict, "last_active_owner", "last active owner cannot be disabled or demoted")
+	case errors.Is(err, usermanagement.ErrSelfActionForbidden):
+		RespondError(w, http.StatusConflict, "self_action_forbidden", "self user-management action is not allowed from this admin surface")
 	case errors.Is(err, auth.ErrMembershipRequired):
 		RespondError(w, http.StatusForbidden, "membership_required", "active organization membership is required")
 	default:
