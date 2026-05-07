@@ -55,6 +55,23 @@ continues to serve `https://api.goalrail.dev` for authenticated product routes.
 
 ## Deploy and update
 
+### Public KB sync
+
+Public KB sync is automated as an operator-triggered GitHub Actions workflow:
+
+```bash
+GH_SAFE_ACCOUNT=t3chn gh workflow run start-assistant-public-kb-sync.yml \
+  -f publish_to_worker=true \
+  -f confirm=PUBLISH_START_ASSISTANT_KB
+```
+
+The workflow validates the public KB on PRs and relevant `main` pushes without
+secrets. The publish path runs only through `workflow_dispatch`, protected
+environment `start-assistant-kb-sync`, and deployment secrets. It uploads a new
+OpenAI file_search index, updates Worker runtime secrets through Wrangler, and
+deploys the Worker route with `--keep-vars`, then runs a live assistant
+freshness smoke. It does not print provider IDs or Worker config values to logs.
+
 ### Worker route
 
 From the Worker package:
@@ -206,7 +223,9 @@ The live `/start` assistant still must not add or imply:
 
 ## Known limitations
 
-- Public KB sync is manual. No GitHub Action sync is live yet.
+- Public KB sync is operator-triggered through GitHub Actions. It is not
+  automatic on every `main` push.
+- Runtime manifest storage is still Worker secrets, not KV/R2.
 - Provider index identifiers and secrets are not recorded in the repository.
 - Route-specific metadata is client-side in the Vite SPA. The app-shell HTML is
   still shared before React runs.
@@ -217,7 +236,6 @@ The live `/start` assistant still must not add or imply:
 
 ## Next slice
 
-The next bounded slice is Stage 3C: automate the public KB sync path after the
-manual KB upload has proved answer quality. That slice should define the
-manifest pointer location, rollback retention, and CI/operator approval boundary
-before adding automation.
+The next bounded slice is manifest lifecycle hardening: move from Worker-secret
+runtime pointers to KV/R2 or another approved manifest pointer with explicit
+rollback retention.

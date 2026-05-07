@@ -74,13 +74,26 @@ async function main() {
     `${JSON.stringify(runtimeManifest, null, 2)}\n`,
   );
 
+  const runtimeManifestPath = path.join(distDir, 'runtime-manifest.json');
+
+  if (args.quiet) {
+    console.log(
+      [
+        'Uploaded Goalrail public KB to OpenAI file_search.',
+        `Runtime manifest: ${runtimeManifestPath}`,
+        'Worker runtime config values were written to the runtime manifest and were not printed.',
+      ].join('\n'),
+    );
+    return;
+  }
+
   console.log(
     [
       'Uploaded Goalrail public KB to OpenAI file_search.',
       `Vector store: ${vectorStore.id}`,
       `File: ${uploadedFile.id}`,
       `Batch: ${batch.id} (${finalBatch.status})`,
-      `Runtime manifest: ${path.join(distDir, 'runtime-manifest.json')}`,
+      `Runtime manifest: ${runtimeManifestPath}`,
       '',
       'Configure the Worker deployment with:',
       `OPENAI_START_VECTOR_STORE_ID=${vectorStore.id}`,
@@ -91,7 +104,7 @@ async function main() {
 }
 
 function parseArgs(argv) {
-  const args = { execute: false, noWait: false };
+  const args = { execute: false, noWait: false, quiet: false };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -103,6 +116,11 @@ function parseArgs(argv) {
 
     if (arg === '--no-wait') {
       args.noWait = true;
+      continue;
+    }
+
+    if (arg === '--quiet') {
+      args.quiet = true;
       continue;
     }
 
@@ -129,6 +147,7 @@ function printHelp() {
 Options:
   --execute      Send OpenAI requests. Omitted by default for a safe dry run.
   --no-wait      Do not poll the vector store file batch.
+  --quiet        Do not print provider IDs or Worker config values after upload.
   --dist <path>  Generated KB artifact directory. Default: ${defaultDistDir}
 `);
 }
