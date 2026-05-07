@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -115,37 +116,38 @@ related_docs:
 68. `docs/ops/NEXT.md`
 69. `docs/ops/DECISIONS.md`
 70. `docs/ops/COMPONENTS.yaml`
-71. `docs/ops/BRANCH_PROTECTION.md`
-72. `docs/ops/REPO_STRUCTURE.md`
-73. `docs/ops/GO_CODE_GUIDE.md`
-74. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-75. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-76. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-77. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-78. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-79. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-80. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-81. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-82. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-83. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-84. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-85. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-86. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-87. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+71. `docs/ops/INIT_LIFECYCLE.md`
+72. `docs/ops/BRANCH_PROTECTION.md`
+73. `docs/ops/REPO_STRUCTURE.md`
+74. `docs/ops/GO_CODE_GUIDE.md`
+75. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+76. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+77. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+78. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+79. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+80. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+81. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+82. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+83. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+84. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+85. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+86. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+87. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+88. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-88. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-89. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-90. `docs/reference/design/reference_screens/`
-91. `docs/reference/start-assistant/`
-92. `.goalrail/work/`
-93. `.goalrail/knowledge/`
-94. `.goalrail/public-kb/manifest.yaml`
-95. `.punk/publishing.toml`
-96. `.goalrail/flows/`
-97. `.goalrail/evals/`
-98. `docs/ops/PUBLISHING_MIGRATION.md`
-99. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+89. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+90. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+91. `docs/reference/design/reference_screens/`
+92. `docs/reference/start-assistant/`
+93. `.goalrail/work/`
+94. `.goalrail/knowledge/`
+95. `.goalrail/public-kb/manifest.yaml`
+96. `.punk/publishing.toml`
+97. `.goalrail/flows/`
+98. `.goalrail/evals/`
+99. `docs/ops/PUBLISHING_MIGRATION.md`
+100. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -250,6 +252,9 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
+  modes, local marker / snapshot / Project Scan distinctions, trust boundary,
+  and MVP partial-failure recovery direction
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
