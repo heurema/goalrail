@@ -289,6 +289,9 @@ func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, 
 	}
 	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.Receipts.Create(txCtx, receipt); err != nil {
+			if errors.Is(err, ErrAlreadyReceipted) {
+				return ErrAlreadyReceipted
+			}
 			return fmt.Errorf("create checkout receipt: %w", err)
 		}
 		updated, err := s.Jobs.MarkReceiptSubmitted(txCtx, job.ID, receipt.RunnerID, leaseTokenHash(input.LeaseToken), now)
