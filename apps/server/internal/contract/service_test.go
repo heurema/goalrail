@@ -39,9 +39,9 @@ func TestCreateUsesTransactionRunnerRollbackWhenDraftCreationFails(t *testing.T)
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	failingDraftService := &failingDraftService{err: errors.New("draft create failed")}
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, failingDraftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, failingDraftService, approvalService, txRunner)
 
-	if _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}); err == nil {
+	if _, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID)); err == nil {
 		t.Fatal("Create() error = nil, want draft failure")
 	}
 	if _, ok, err := contractStore.GetByGoalID(ctx, goal.ID); err != nil {
@@ -56,10 +56,13 @@ func TestCreateUsesTransactionRunnerRollbackWhenDraftCreationFails(t *testing.T)
 	}
 
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service = contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	service = contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	created, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("retry Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("retry Create() createdNew = false, want true")
 	}
 	if created.State != spine.ContractStateDraft {
 		t.Fatalf("retry contract state = %q, want %q", created.State, spine.ContractStateDraft)
@@ -96,11 +99,14 @@ func TestCreateUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
 
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	created, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("Create() createdNew = false, want true")
 	}
 	if txRunner.calls != 3 {
 		t.Fatalf("TxRunner calls = %d, want 3", txRunner.calls)
@@ -131,6 +137,146 @@ func TestCreateUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestCreateReturnsExistingContractForGoal(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
+
+	first, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("first Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("first Create() createdNew = false, want true")
+	}
+	second, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("second Create() error = %v", err)
+	}
+	if createdNew {
+		t.Fatal("second Create() createdNew = true, want false")
+	}
+	if second.ID != first.ID || second.CurrentDraftID == nil || *second.CurrentDraftID != *first.CurrentDraftID {
+		t.Fatalf("second contract = %#v, want same draft handle as %#v", second, first)
+	}
+	if len(contractStore.contracts) != 1 || len(seedStore.seeds) != 1 || len(draftStore.drafts) != 1 {
+		t.Fatalf("stored counts contracts/seeds/drafts = %d/%d/%d, want 1/1/1", len(contractStore.contracts), len(seedStore.seeds), len(draftStore.drafts))
+	}
+	if got := countEventType(events.Events(), contractseed.EventTypeContractSeedCreated); got != 1 {
+		t.Fatalf("contract_seed.created events = %d, want 1", got)
+	}
+	if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftCreated); got != 1 {
+		t.Fatalf("contract_draft.created events = %d, want 1", got)
+	}
+}
+
+func TestCreateRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
+
+	_, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership("018f0000-0000-7000-8000-000000009999"))
+	if !errors.Is(err, contract.ErrOrganizationForbidden) {
+		t.Fatalf("Create() error = %v, want ErrOrganizationForbidden", err)
+	}
+	if len(contractStore.contracts) != 0 || len(seedStore.seeds) != 0 || len(draftStore.drafts) != 0 || len(events.Events()) != 0 {
+		t.Fatalf("mutation happened despite org mismatch")
+	}
+}
+
+func TestCreateRejectsExpectedProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input func(spine.Goal) spine.ContractCreateRequest
+		want  error
+	}{
+		{
+			name: "project",
+			input: func(goal spine.Goal) spine.ContractCreateRequest {
+				return spine.ContractCreateRequest{
+					GoalID:        goal.ID,
+					ProjectID:     "018f0000-0000-7000-8000-000000009998",
+					RepoBindingID: goal.RepoBindingID,
+				}
+			},
+			want: contract.ErrProjectMismatch,
+		},
+		{
+			name: "repo binding",
+			input: func(goal spine.Goal) spine.ContractCreateRequest {
+				return spine.ContractCreateRequest{
+					GoalID:        goal.ID,
+					ProjectID:     goal.ProjectID,
+					RepoBindingID: "018f0000-0000-7000-8000-000000009999",
+				}
+			},
+			want: contract.ErrRepoBindingMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			goalStore := newFakeGoalStore()
+			contractStore := newFakeContractStore()
+			seedStore := newFakeContractSeedStore()
+			draftStore := newFakeContractDraftStore()
+			approvedStore := newFakeApprovedContractStore()
+			events := newFakeEventLog()
+			ids := &sequenceIDs{}
+			txRunner := &fakeTransactionRunner{}
+
+			goal := readyGoal()
+			if err := goalStore.Create(ctx, goal); err != nil {
+				t.Fatalf("goals.Create() error = %v", err)
+			}
+			seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
+
+			_, _, err := service.Create(ctx, tt.input(goal), activeMembership(goal.OrganizationID))
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Create() error = %v, want %v", err, tt.want)
+			}
+			if len(contractStore.contracts) != 0 || len(seedStore.seeds) != 0 || len(draftStore.drafts) != 0 || len(events.Events()) != 0 {
+				t.Fatalf("mutation happened despite expected context mismatch")
+			}
+		})
+	}
+}
+
 func TestUpdateDraftUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
@@ -150,15 +296,15 @@ func TestUpdateDraftUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	transactionalAppendsBeforeUpdate := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
 	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`))
 	if err != nil {
 		t.Fatalf("UpdateDraft() error = %v", err)
@@ -212,15 +358,15 @@ func TestSubmitForApprovalUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	transactionalAppendsBeforeSubmit := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
 	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
@@ -277,8 +423,8 @@ func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -289,7 +435,7 @@ func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 	transactionalAppendsBeforeApprove := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
 	approved, err := service.Approve(ctx, submitted.ID, approveRequest())
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
@@ -346,9 +492,9 @@ func TestContractLifecycleTransitionsUseRequiredTransactionRunner(t *testing.T) 
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
 
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -473,7 +619,7 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func readyGoal() spine.Goal {
 	return spine.Goal{
-		ID:             "goal-1",
+		ID:             "018f0000-0000-7000-8000-000000000101",
 		IntakeID:       "intake-1",
 		OrganizationID: "018f0000-0000-7000-8000-000000000002",
 		ProjectID:      "018f0000-0000-7000-8000-000000000003",
@@ -486,6 +632,18 @@ func readyGoal() spine.Goal {
 		IntentOwner:    spine.ActorRef{Kind: "user", ID: "dev_1"},
 		State:          spine.GoalStateReadyForContractSeed,
 		CreatedAt:      testTime(),
+	}
+}
+
+func activeMembership(organizationID spine.OrganizationID) spine.OrganizationMembership {
+	return spine.OrganizationMembership{
+		ID:             "018f0000-0000-7000-8000-000000000011",
+		OrganizationID: organizationID,
+		UserID:         "018f0000-0000-7000-8000-000000000001",
+		Role:           spine.OrganizationMembershipRoleMember,
+		State:          spine.EntityStateActive,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
 	}
 }
 

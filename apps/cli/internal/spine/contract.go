@@ -51,3 +51,35 @@ type ContractValidationFinding struct {
 	Severity string `json:"severity"`
 	Message  string `json:"message"`
 }
+
+type LocalRepoReceipt struct {
+	RepoBindingID            RepoBindingID `json:"repo_binding_id"`
+	HeadSHA                  string        `json:"head_sha"`
+	BaselineID               string        `json:"baseline_id,omitempty"`
+	OverlayID                string        `json:"overlay_id"`
+	OverlayState             string        `json:"overlay_state"`
+	Freshness                string        `json:"freshness"`
+	Dirty                    bool          `json:"dirty"`
+	Partial                  bool          `json:"partial"`
+	RawSourceUploaded        bool          `json:"raw_source_uploaded"`
+	BaselineRebuilt          bool          `json:"baseline_rebuilt"`
+	PartialReasons           []string      `json:"partial_reasons,omitempty"`
+	ScanCriticalChangedPaths []string      `json:"scan_critical_changed_paths,omitempty"`
+	UnmergedPaths            []string      `json:"unmerged_paths,omitempty"`
+}
+
+type ContractDraftOutput struct {
+	SchemaVersion    string           `json:"schema_version"`
+	Mode             string           `json:"mode"`
+	ServerURL        string           `json:"server_url"`
+	OrganizationID   string           `json:"organization_id"`
+	ProjectID        string           `json:"project_id"`
+	RepoBindingID    RepoBindingID    `json:"repo_binding_id"`
+	GoalID           string           `json:"goal_id"`
+	ContractID       ContractID       `json:"contract_id"`
+	ContractState    ContractState    `json:"contract_state"`
+	LocalRepoReceipt LocalRepoReceipt `json:"local_repo_receipt"`
+	LocalConfigPath  string           `json:"local_config_path"`
+	Display          DisplaySummary   `json:"display"`
+	NextAction       NextAction       `json:"next_action"`
+}

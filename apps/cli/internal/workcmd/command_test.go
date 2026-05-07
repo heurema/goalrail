@@ -350,8 +350,8 @@ func TestRunContinueReadyGoalReturnsDraftContractNextAction(t *testing.T) {
 	if output.Display.Summary == "" {
 		t.Fatal("display.summary is empty")
 	}
-	if output.NextAction.Kind != "draft_contract" || output.NextAction.Available || output.NextAction.PlannedSlice != "D" {
-		t.Fatalf("next_action = %#v, want unavailable draft_contract planned for D", output.NextAction)
+	if output.NextAction.Kind != "draft_contract" || !output.NextAction.Available || output.NextAction.PlannedSlice != "" {
+		t.Fatalf("next_action = %#v, want available draft_contract", output.NextAction)
 	}
 	wantCommand := "goalrail contract draft --goal-id 018f0000-0000-7000-8000-000000000006 --format json"
 	if output.NextAction.Command != wantCommand {
@@ -608,8 +608,8 @@ func TestRunAnswerFileSubmitsStructuredAnswers(t *testing.T) {
 	if output.Display.Summary == "" {
 		t.Fatal("display.summary is empty")
 	}
-	if output.NextAction.Kind != "draft_contract" || output.NextAction.Available || output.NextAction.PlannedSlice != "D" {
-		t.Fatalf("next_action = %#v, want unavailable draft_contract planned for D", output.NextAction)
+	if output.NextAction.Kind != "draft_contract" || !output.NextAction.Available || output.NextAction.PlannedSlice != "" {
+		t.Fatalf("next_action = %#v, want available draft_contract", output.NextAction)
 	}
 	if len(answerRequest.Answers) != 1 || answerRequest.Answers[0].QuestionID != "q_scope" || answerRequest.Answers[0].Value != "Bounded answer bridge" {
 		t.Fatalf("answer request = %#v, want structured answer payload", answerRequest)
@@ -806,8 +806,8 @@ func TestRunAnswerTextDoesNotClaimUnavailableRuntimeWork(t *testing.T) {
 			t.Fatalf("stdout = %q, want no %q claim", got, forbidden)
 		}
 	}
-	if !strings.Contains(got, "Next planned command, not available yet") {
-		t.Fatalf("stdout = %q, want planned command availability warning", got)
+	if !strings.Contains(got, "Next: goalrail contract draft") {
+		t.Fatalf("stdout = %q, want available contract draft next command", got)
 	}
 }
 

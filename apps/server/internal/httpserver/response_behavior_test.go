@@ -32,7 +32,7 @@ func TestInternalFallbackResponseShape(t *testing.T) {
 
 func TestContractApproveUsesPayloadActorWhenContextMissing(t *testing.T) {
 	service := &capturingContractService{}
-	handler := httpserver.NewContractHandler(service)
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{}, service)
 	request := newContractApproveRequest(t, context.Background(), approveContractJSON())
 	recorder := httptest.NewRecorder()
 
@@ -67,7 +67,7 @@ func TestContractApprovePreservesExistingActorContext(t *testing.T) {
 		Source: actor.SourceDevHeader,
 	}
 	service := &capturingContractService{}
-	handler := httpserver.NewContractHandler(service)
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{}, service)
 	request := newContractApproveRequest(t, actor.WithActor(context.Background(), existing), approveContractJSON())
 	recorder := httptest.NewRecorder()
 
@@ -119,8 +119,8 @@ type capturingContractService struct {
 	approveActorOK bool
 }
 
-func (s *capturingContractService) Create(context.Context, spine.ContractCreateRequest) (spine.Contract, error) {
-	return spine.Contract{}, nil
+func (s *capturingContractService) Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error) {
+	return spine.Contract{}, false, nil
 }
 
 func (s *capturingContractService) Get(context.Context, spine.ContractID) (spine.Contract, error) {

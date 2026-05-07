@@ -307,6 +307,8 @@ If a Goalrail JSON response contains ` + "`next_action.available=true`" + ` and 
 
 If a Goalrail JSON response contains ` + "`next_action.kind=ask_user`" + `, render the returned questions to the user. Submit answers with ` + "`goalrail work answer`" + ` using question_id-bound structured JSON. Do not submit free-form answers without mapping them to returned ` + "`question_id`" + ` values.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=draft_contract`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail contract draft`" + ` with the returned Goal ID. The command returns a server Contract handle and a local repository receipt. Do not upload raw source or draft contract fields outside returned Goalrail commands.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -374,6 +376,29 @@ func commandsJSONContent() string {
       ],
       "does_not_create": [
         "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "draft_contract": {
+      "command": "goalrail contract draft --goal-id <goal_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "goal_id"
+      ],
+      "creates": [
+        "Contract",
+        "ContractSeed",
+        "ContractDraft"
+      ],
+      "returns": [
+        "local_repo_receipt"
+      ],
+      "does_not_create": [
         "WorkItem",
         "Run",
         "Decision",

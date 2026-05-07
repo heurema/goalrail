@@ -435,14 +435,15 @@ Done means:
   create a tiny root `AGENTS.md` shim only when missing; it does not overwrite
   existing root agent instructions and does not install Claude, Gemini, Cursor,
   Windsurf, Gravity, or other provider-specific adapters; the generated pack
-  includes `work continue`, `work answer`, and question_id-bound structured
-  clarification answer guidance
+  includes `work continue`, `work answer`, `contract draft`, question_id-bound
+  structured clarification answer guidance, and local repository receipt
+  guidance
 - ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
   bodies from a file or stdin while returning a `goalrail.cli.v1` JSON envelope
   with `display.summary` and an available continuation command
 - ✅ `goalrail work continue --format json` returns a `goalrail.cli.v1`
   envelope with `schema_version`, `display.summary`, `state`, `goal_id`, and
-  `next_action`; ready Goals return planned/unavailable `draft_contract`,
+  `next_action`; ready Goals return available `draft_contract`,
   incomplete Goals return blocking available `ask_user`, and rejected/blocked
   Goals return `blocked`
 - ✅ `goalrail work answer --clarification-request-id <id> --answers-file
@@ -452,16 +453,24 @@ Done means:
   endpoint, and returns the next `goalrail.cli.v1` action after server-side
   answer recording, allowed Goal hint application, and explicit readiness
   re-check
+- ✅ `goalrail contract draft --goal-id <goal_id>` reads the same marker plus
+  stored login profile, validates `/v1/me` organization membership before
+  mutation, refreshes local Project Scan baseline/overlay evidence without
+  uploading raw source bodies, sends the local marker `project_id` and
+  `repo_binding_id` as server-validated expectations, calls authenticated
+  create-or-return `/v1/contracts`, and returns `contract_id`,
+  `contract_state`, `local_repo_receipt`, and planned/unavailable
+  `update_contract`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
   cache storage in `.goalrail/project.yml`
 - no root `.gitignore` mutation for Goalrail local-state ignores
 - no audit/hook/branch/verification setup from init
-- no WorkItem, Contract, audit request, Run, receipt, gate, proof, provider
+- no WorkItem, audit request, Run, gate, proof, provider
   integration, provider shim, branch, PR, hook, clone, deploy-key setup,
-  or contract draft CLI from `work start`, `work continue`, `work answer`, or
-  `agent install`
+  or contract field update CLI from `work start`, `work continue`,
+  `work answer`, `contract draft`, or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint
