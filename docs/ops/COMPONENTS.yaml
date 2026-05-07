@@ -155,6 +155,7 @@ components:
       - apps/server/internal/httpserver/checkout.go
       - apps/server/internal/store/postgres_checkout_store.go
       - apps/server/internal/postgres/migrations/00001_init.sql
+      - apps/server/internal/postgres/migrations/00002_checkout_jobs.sql
       - apps/cli/internal/workcmd
       - apps/runner/go.mod
       - apps/runner/cmd/goalrail-runner
