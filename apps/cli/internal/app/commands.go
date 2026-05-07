@@ -32,7 +32,7 @@ var rootCommands = []commandSummary{
 	{name: "project", summary: "scan and report local project freshness"},
 	{name: "work", summary: "start and continue server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
-	{name: "contract", summary: "draft contract handles and validate contract JSON files"},
+	{name: "contract", summary: "draft, update, and validate contract state"},
 	{name: "proof", summary: "render proof JSON files"},
 }
 
@@ -269,7 +269,7 @@ func newReadinessCommand(env clienv.Env) *cobra.Command {
 func newContractCommand(env clienv.Env) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "contract",
-		Short:              "draft contract handles and validate contract JSON files",
+		Short:              "draft, update, and validate contract state",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, args, contractcmd.Options{})
@@ -288,6 +288,14 @@ func newContractCommand(env clienv.Env) *cobra.Command {
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"draft"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "update",
+		Short:              "update proposed fields on a server ContractDraft",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"update"}, args...), contractcmd.Options{})
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -380,6 +388,8 @@ func helpFor(cmd *cobra.Command) string {
 		return contractcmd.Usage()
 	case "goalrail contract draft":
 		return contractcmd.DraftUsage()
+	case "goalrail contract update":
+		return contractcmd.UpdateUsage()
 	case "goalrail contract validate":
 		return contractcmd.ValidateUsage()
 	case "goalrail proof":

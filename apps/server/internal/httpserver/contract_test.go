@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"reflect"
 	"strings"
@@ -320,12 +321,12 @@ func TestPatchContractUpdatesCurrentDraft(t *testing.T) {
 
 	response := doJSON(t, server.router, http.MethodPatch, "/v1/contracts/"+string(contract.ID), updateDraftJSON(`{
 		"title": "Reviewed draft title",
-		"intent_summary": "Reviewed summary",
-		"proposed_scope": ["Reviewed scope"],
-		"proposed_acceptance_criteria": ["Reviewed acceptance"],
-		"proposed_non_goals": [],
-		"proposed_constraints": ["No schema changes"],
-		"proposed_expected_checks": ["go test ./..."],
+			"intent_summary": "Reviewed summary",
+			"proposed_scope": ["Reviewed scope"],
+			"proposed_acceptance_criteria": ["Reviewed acceptance"],
+			"proposed_non_goals": ["Do not change billing UI"],
+			"proposed_constraints": ["No schema changes"],
+			"proposed_expected_checks": ["go test ./..."],
 		"proposed_proof_expectations": ["Attach test output"],
 		"risk_hints": ["Low risk"]
 	}`))
@@ -356,6 +357,105 @@ func TestPatchContractUpdatesCurrentDraft(t *testing.T) {
 	}
 	if !reflect.DeepEqual(draft.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
 		t.Fatalf("proposed_acceptance_criteria = %#v, want reviewed acceptance", draft.ProposedAcceptanceCriteria)
+	}
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftUpdated); got != 1 {
+		t.Fatalf("contract_draft.updated events = %d, want 1", got)
+	}
+	var updatedPayload struct {
+		UpdatedBy spine.ActorRef `json:"updated_by"`
+	}
+	for _, event := range server.events.Events() {
+		if event.Type != contractdraft.EventTypeContractDraftUpdated {
+			continue
+		}
+		if err := json.Unmarshal(event.Payload, &updatedPayload); err != nil {
+			t.Fatalf("unmarshal contract_draft.updated payload: %v", err)
+		}
+	}
+	if updatedPayload.UpdatedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("updated_by.id = %q, want authenticated user id", updatedPayload.UpdatedBy.ID)
+	}
+	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
+func TestPatchContractRejectsProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	tests := []struct {
+		name string
+		body func(spine.Contract) string
+	}{
+		{
+			name: "project",
+			body: func(contract spine.Contract) string {
+				return updateDraftJSONWithContext("018f0000-0000-7000-8000-000000009998", string(contract.RepoBindingID), `{"title":"Reviewed"}`)
+			},
+		},
+		{
+			name: "repo binding",
+			body: func(contract spine.Contract) string {
+				return updateDraftJSONWithContext("018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000009999", `{"title":"Reviewed"}`)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := testServer(t)
+			contract := createContract(t, server)
+			eventCountBefore := len(server.events.Events())
+
+			response := doJSON(t, server.router, http.MethodPatch, "/v1/contracts/"+string(contract.ID), tt.body(contract))
+			if response.code != http.StatusConflict {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+			}
+			var body struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			decodeJSON(t, response.body, &body)
+			if body.Error.Code != "project_context_mismatch" {
+				t.Fatalf("error code = %q, want project_context_mismatch", body.Error.Code)
+			}
+			if got := len(server.events.Events()); got != eventCountBefore {
+				t.Fatalf("events = %d, want %d without update mutation", got, eventCountBefore)
+			}
+		})
+	}
+}
+
+func TestPatchContractRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	draftID := spine.ContractDraftID("contract-draft-1")
+	contract := spine.Contract{
+		ID:             "contract-1",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		State:          spine.ContractStateDraft,
+		CurrentDraftID: &draftID,
+		GoalID:         "018f0000-0000-7000-8000-000000000006",
+	}
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPatch, "/v1/contracts/"+string(contract.ID), updateDraftJSONWithContext(string(contract.ProjectID), string(contract.RepoBindingID), `{"title":"Reviewed"}`))
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "forbidden" {
+		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
+	}
+	if got := len(server.events.Events()); got != 0 {
+		t.Fatalf("events = %d, want 0 without update mutation", got)
 	}
 }
 
@@ -581,6 +681,19 @@ func createContractJSON(goalID spine.GoalID) string {
 
 func updateDraftJSON(changes string) string {
 	return `{
+		"updated_by": {
+			"kind": "user",
+			"id": "dev_1",
+			"display_name": "Developer"
+		},
+		"changes": ` + changes + `
+	}`
+}
+
+func updateDraftJSONWithContext(projectID string, repoBindingID string, changes string) string {
+	return `{
+		"project_id": "` + projectID + `",
+		"repo_binding_id": "` + repoBindingID + `",
 		"updated_by": {
 			"kind": "user",
 			"id": "dev_1",

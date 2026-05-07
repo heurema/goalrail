@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/heurema/goalrail/apps/server/internal/actor"
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -84,6 +85,24 @@ func TestContractApprovePreservesExistingActorContext(t *testing.T) {
 	}
 }
 
+func TestContractUpdateRequiresAuthBeforeService(t *testing.T) {
+	service := &capturingContractService{}
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken}, service)
+	request := httptest.NewRequest(http.MethodPatch, "/v1/contracts/contract-1", strings.NewReader(updateDraftJSON(`{"title":"Reviewed"}`)))
+	request.Header.Set("Content-Type", "application/json")
+	request.SetPathValue("id", "contract-1")
+	recorder := httptest.NewRecorder()
+
+	handler.UpdateDraft(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+	}
+	if service.updateCalled {
+		t.Fatal("contract update service was called despite auth failure")
+	}
+}
+
 func newContractApproveRequest(t *testing.T, ctx context.Context, body string) *http.Request {
 	t.Helper()
 
@@ -117,6 +136,7 @@ func assertJSONErrorResponse(t *testing.T, response routeResponse, status int, c
 type capturingContractService struct {
 	approveActor   actor.ActorContext
 	approveActorOK bool
+	updateCalled   bool
 }
 
 func (s *capturingContractService) Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error) {
@@ -127,7 +147,8 @@ func (s *capturingContractService) Get(context.Context, spine.ContractID) (spine
 	return spine.Contract{}, nil
 }
 
-func (s *capturingContractService) UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest) (spine.Contract, error) {
+func (s *capturingContractService) UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error) {
+	s.updateCalled = true
 	return spine.Contract{}, nil
 }
 

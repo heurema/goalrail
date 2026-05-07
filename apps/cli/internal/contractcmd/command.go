@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,8 +25,9 @@ import (
 )
 
 const (
-	serverMode       = "server"
-	cliSchemaVersion = "goalrail.cli.v1"
+	serverMode             = "server"
+	cliSchemaVersion       = "goalrail.cli.v1"
+	maxContractUpdateBytes = 1 << 20
 )
 
 type SessionStore interface {
@@ -41,6 +43,7 @@ type Options struct {
 	HTTPClient HTTPClient
 	CacheRoot  string
 	Now        func() time.Time
+	Stdin      io.Reader
 }
 
 func Run(ctx context.Context, out *term.Output, workDir string, args []string) error {
@@ -58,6 +61,8 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runValidate(ctx, out, workDir, args[1:])
 	case "draft":
 		return runDraft(ctx, out, workDir, args[1:], options)
+	case "update":
+		return runUpdate(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown contract command %q", args[0]))
 	}
@@ -207,6 +212,105 @@ func runDraft(ctx context.Context, out *term.Output, workDir string, args []stri
 	return err
 }
 
+func runUpdate(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail contract update", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	contractID := flags.String("contract-id", "", "Contract ID")
+	fieldsFile := flags.String("fields-file", "", "structured contract fields JSON file or - for stdin")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, UpdateUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedContractID := strings.TrimSpace(*contractID)
+	if normalizedContractID == "" {
+		return exitcode.UsageError(errors.New("--contract-id is required"))
+	}
+	if err := validateUUIDLike("contract_id", normalizedContractID); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*fieldsFile) == "" {
+		return exitcode.UsageError(errors.New("--fields-file is required"))
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	facts, err := projectscan.DiscoverGit(ctx, workDir)
+	if err != nil {
+		if errors.Is(err, projectscan.ErrNotGitRepository) {
+			return exitcode.UsageError(errors.New("goalrail contract update requires a Git worktree with .goalrail/project.yml; run goalrail init first"))
+		}
+		return exitcode.RuntimeError(err)
+	}
+	config, ok, err := projectconfig.Read(facts.CanonicalRepoRoot)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
+	}
+	if err := validateMarkerProjectBinding(config); err != nil {
+		return err
+	}
+
+	session, serverURL, err := loadUsableSession(options)
+	if err != nil {
+		return err
+	}
+	if strings.TrimRight(config.ServerURL, "/") != serverURL {
+		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
+	}
+
+	update, err := readContractUpdateRequest(workDir, *fieldsFile, options)
+	if err != nil {
+		return err
+	}
+	update.ProjectID = config.ProjectID
+	update.RepoBindingID = config.RepoBindingID
+
+	client := options.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+
+	profile, err := getCurrentProfile(ctx, client, session)
+	if err != nil {
+		return err
+	}
+	if err := validateMarkerMembership(config, profile); err != nil {
+		return err
+	}
+	update.UpdatedBy = actorRefForProfile(profile)
+
+	contractResponse, err := patchContractUpdate(ctx, client, session, normalizedContractID, update)
+	if err != nil {
+		return err
+	}
+	if err := validateContractUpdateContext(config, normalizedContractID, contractResponse); err != nil {
+		return err
+	}
+
+	output := buildUpdateOutput(config, serverURL, contractResponse, update.changedFields)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderUpdateText(output))
+	return err
+}
+
 func resolvePath(workDir, value string) string {
 	if filepath.IsAbs(value) {
 		return value
@@ -234,7 +338,7 @@ func writeText(w io.Writer, report spine.ContractValidationReport) error {
 }
 
 func Usage() string {
-	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  draft       create or return a server Contract draft handle for a ready Goal\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
+	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  draft       create or return a server Contract draft handle for a ready Goal\n  update      update proposed fields on a server ContractDraft\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
 }
 
 func ValidateUsage() string {
@@ -243,6 +347,10 @@ func ValidateUsage() string {
 
 func DraftUsage() string {
 	return "Usage: goalrail contract draft --goal-id <goal_id> [--format text|json]\n\nCreates or returns a server Contract draft handle for a ready Goal using the current Git root .goalrail/project.yml marker and the stored goalrail login profile. It refreshes local Project Scan evidence and returns a local repository receipt. It does not upload raw source bodies, update contract fields, create WorkItems, run workers, gates, proof, or verification.\n"
+}
+
+func UpdateUsage() string {
+	return "Usage: goalrail contract update --contract-id <contract_id> --fields-file <path|-> [--format text|json]\n\nUpdates proposed fields on a server ContractDraft using structured JSON from a file or stdin. The command reads the Git-root .goalrail/project.yml marker, validates the stored login profile and Organization marker, sends project/repo expectations, and returns changed fields plus the next review action. It does not upload raw source bodies, submit or approve contracts, create WorkItems, run workers, gates, proof, or verification.\n"
 }
 
 func loadUsableSession(options Options) (authstore.Session, string, error) {
@@ -329,6 +437,31 @@ func validateMarkerProjectBinding(config projectconfig.Config) error {
 		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is missing repo_binding_id; run goalrail init again"))
 	}
 	return nil
+}
+
+func validateUUIDLike(field string, value string) error {
+	if len(value) != 36 {
+		return exitcode.ValidationError(fmt.Errorf("%s must be a UUID", field))
+	}
+	for i, char := range value {
+		switch i {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return exitcode.ValidationError(fmt.Errorf("%s must be a UUID", field))
+			}
+		default:
+			if !isHex(char) {
+				return exitcode.ValidationError(fmt.Errorf("%s must be a UUID", field))
+			}
+		}
+	}
+	return nil
+}
+
+func isHex(char rune) bool {
+	return ('0' <= char && char <= '9') ||
+		('a' <= char && char <= 'f') ||
+		('A' <= char && char <= 'F')
 }
 
 func refreshLocalRepoReceipt(ctx context.Context, facts projectscan.GitFacts, config projectconfig.Config, options Options) (spine.LocalRepoReceipt, error) {
@@ -475,6 +608,275 @@ func postContractDraft(ctx context.Context, client HTTPClient, session authstore
 	return decoded, nil
 }
 
+func readContractUpdateRequest(workDir string, fieldsFile string, options Options) (contractUpdateRequest, error) {
+	data, err := readContractUpdateData(workDir, fieldsFile, options.Stdin)
+	if err != nil {
+		return contractUpdateRequest{}, err
+	}
+	return decodeContractUpdateRequest(data)
+}
+
+func readContractUpdateData(workDir string, fieldsFile string, stdin io.Reader) ([]byte, error) {
+	fieldsFile = strings.TrimSpace(fieldsFile)
+	if fieldsFile == "-" {
+		if stdin == nil {
+			stdin = os.Stdin
+		}
+		data, err := io.ReadAll(io.LimitReader(stdin, maxContractUpdateBytes+1))
+		if err != nil {
+			return nil, exitcode.RuntimeError(fmt.Errorf("read contract update fields from stdin: %w", err))
+		}
+		if int64(len(data)) > maxContractUpdateBytes {
+			return nil, exitcode.ValidationError(errors.New("contract update fields JSON is too large"))
+		}
+		return data, nil
+	}
+
+	filePath := resolvePath(workDir, fieldsFile)
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, exitcode.RuntimeError(fmt.Errorf("read contract update fields file %q: %w", fieldsFile, err))
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxContractUpdateBytes+1))
+	if err != nil {
+		return nil, exitcode.RuntimeError(fmt.Errorf("read contract update fields file %q: %w", fieldsFile, err))
+	}
+	if int64(len(data)) > maxContractUpdateBytes {
+		return nil, exitcode.ValidationError(errors.New("contract update fields JSON is too large"))
+	}
+	return data, nil
+}
+
+func decodeContractUpdateRequest(data []byte) (contractUpdateRequest, error) {
+	var raw map[string]json.RawMessage
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(&raw); err != nil {
+		return contractUpdateRequest{}, exitcode.ValidationError(fmt.Errorf("parse contract update fields JSON: %w", err))
+	}
+	if err := ensureSingleJSONValue(decoder); err != nil {
+		return contractUpdateRequest{}, err
+	}
+	if len(raw) == 0 {
+		return contractUpdateRequest{}, exitcode.ValidationError(errors.New("contract update fields must include at least one proposed field"))
+	}
+
+	request := contractUpdateRequest{
+		Changes: map[string]json.RawMessage{},
+	}
+	for field, value := range raw {
+		switch field {
+		case "context_refs":
+			refs, err := decodeContextRefs(value)
+			if err != nil {
+				return contractUpdateRequest{}, err
+			}
+			request.ContextRefs = refs
+		case "unknowns":
+			unknowns, err := decodeUnknowns(value)
+			if err != nil {
+				return contractUpdateRequest{}, err
+			}
+			request.Unknowns = unknowns
+		case "proposed_verification":
+			if _, exists := raw["proposed_expected_checks"]; exists {
+				return contractUpdateRequest{}, exitcode.ValidationError(errors.New("proposed_verification cannot be combined with proposed_expected_checks"))
+			}
+			normalized, err := normalizeStringSliceField(field, value)
+			if err != nil {
+				return contractUpdateRequest{}, err
+			}
+			request.Changes["proposed_expected_checks"] = normalized
+		default:
+			kind, ok := editableContractUpdateFields[field]
+			if !ok {
+				return contractUpdateRequest{}, exitcode.ValidationError(fmt.Errorf("unknown contract update field %q", field))
+			}
+			normalized, err := normalizeContractUpdateField(field, kind, value)
+			if err != nil {
+				return contractUpdateRequest{}, err
+			}
+			request.Changes[field] = normalized
+		}
+	}
+
+	if len(request.Changes) == 0 {
+		return contractUpdateRequest{}, exitcode.ValidationError(errors.New("contract update fields must include at least one editable proposed field"))
+	}
+	request.changedFields = sortedMapKeys(request.Changes)
+	return request, nil
+}
+
+func ensureSingleJSONValue(decoder *json.Decoder) error {
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return exitcode.ValidationError(errors.New("contract update fields JSON must contain one object"))
+		}
+		return exitcode.ValidationError(fmt.Errorf("parse contract update fields JSON: %w", err))
+	}
+	return nil
+}
+
+func normalizeContractUpdateField(field string, kind contractUpdateFieldKind, raw json.RawMessage) (json.RawMessage, error) {
+	switch kind {
+	case contractUpdateFieldString:
+		return normalizeStringField(field, raw)
+	case contractUpdateFieldStringSlice:
+		return normalizeStringSliceField(field, raw)
+	default:
+		return nil, exitcode.ValidationError(fmt.Errorf("unsupported contract update field %q", field))
+	}
+}
+
+func isJSONNull(raw json.RawMessage) bool {
+	return strings.TrimSpace(string(raw)) == "null"
+}
+
+func normalizeStringField(field string, raw json.RawMessage) (json.RawMessage, error) {
+	if isJSONNull(raw) {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must not be null", field))
+	}
+	var value string
+	if err := decodeStrictRaw(raw, &value); err != nil {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must be a string", field))
+	}
+	if strings.TrimSpace(value) == "" {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must not be blank", field))
+	}
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return nil, exitcode.RuntimeError(fmt.Errorf("encode %s: %w", field, err))
+	}
+	return normalized, nil
+}
+
+func normalizeStringSliceField(field string, raw json.RawMessage) (json.RawMessage, error) {
+	if isJSONNull(raw) {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must not be null", field))
+	}
+	var values []string
+	if err := decodeStrictRaw(raw, &values); err != nil {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must be an array of strings", field))
+	}
+	if len(values) == 0 {
+		return nil, exitcode.ValidationError(fmt.Errorf("%s must include at least one value", field))
+	}
+	for i, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return nil, exitcode.ValidationError(fmt.Errorf("%s[%d] must not be blank", field, i))
+		}
+	}
+	normalized, err := json.Marshal(values)
+	if err != nil {
+		return nil, exitcode.RuntimeError(fmt.Errorf("encode %s: %w", field, err))
+	}
+	return normalized, nil
+}
+
+func decodeContextRefs(raw json.RawMessage) ([]contractUpdateContextRef, error) {
+	if isJSONNull(raw) {
+		return nil, exitcode.ValidationError(errors.New("context_refs must not be null"))
+	}
+	var refs []contractUpdateContextRef
+	if err := decodeStrictRaw(raw, &refs); err != nil {
+		return nil, exitcode.ValidationError(errors.New("context_refs must be an array of structured refs"))
+	}
+	for i, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == "" {
+			return nil, exitcode.ValidationError(fmt.Errorf("context_refs[%d].kind is required", i))
+		}
+		if strings.TrimSpace(ref.ID) == "" {
+			return nil, exitcode.ValidationError(fmt.Errorf("context_refs[%d].id is required", i))
+		}
+	}
+	return refs, nil
+}
+
+func decodeUnknowns(raw json.RawMessage) ([]string, error) {
+	if isJSONNull(raw) {
+		return nil, exitcode.ValidationError(errors.New("unknowns must not be null"))
+	}
+	var unknowns []string
+	if err := decodeStrictRaw(raw, &unknowns); err != nil {
+		return nil, exitcode.ValidationError(errors.New("unknowns must be an array of strings"))
+	}
+	for i, value := range unknowns {
+		if strings.TrimSpace(value) == "" {
+			return nil, exitcode.ValidationError(fmt.Errorf("unknowns[%d] must not be blank", i))
+		}
+	}
+	return unknowns, nil
+}
+
+func decodeStrictRaw(raw json.RawMessage, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("extra JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+func sortedMapKeys(values map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func actorRefForProfile(profile meResponse) contractUpdateActorRef {
+	return contractUpdateActorRef{
+		Kind:        "user",
+		ID:          profile.User.ID,
+		DisplayName: profile.User.DisplayName,
+	}
+}
+
+func patchContractUpdate(ctx context.Context, client HTTPClient, session authstore.Session, contractID string, update contractUpdateRequest) (contractDraftResponse, error) {
+	body, err := json.Marshal(update)
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("encode contract update request: %w", err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	request, err := http.NewRequestWithContext(ctx, http.MethodPatch, serverURL+"/v1/contracts/"+contractID, bytes.NewReader(body))
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("build contract update request: %w", err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("update contract draft on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return contractDraftResponse{}, mapHTTPError("contract update request", response, serverURL)
+	}
+	var decoded contractDraftResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return contractDraftResponse{}, exitcode.RuntimeError(fmt.Errorf("decode contract update response: %w", err))
+	}
+	if strings.TrimSpace(string(decoded.ID)) == "" {
+		return contractDraftResponse{}, exitcode.RuntimeError(errors.New("contract update response did not include id"))
+	}
+	if strings.TrimSpace(string(decoded.State)) == "" {
+		return contractDraftResponse{}, exitcode.RuntimeError(errors.New("contract update response did not include state"))
+	}
+	return decoded, nil
+}
+
 func validateContractDraftContext(config projectconfig.Config, goalID string, contractDraft contractDraftResponse) error {
 	if contractDraft.GoalID != "" && contractDraft.GoalID != goalID {
 		return exitcode.ValidationError(errors.New("contract draft response goal_id does not match requested Goal"))
@@ -485,8 +887,28 @@ func validateContractDraftContext(config projectconfig.Config, goalID string, co
 	return nil
 }
 
+func validateContractUpdateContext(config projectconfig.Config, contractID string, contractResponse contractDraftResponse) error {
+	if string(contractResponse.ID) != contractID {
+		return exitcode.ValidationError(errors.New("contract update response id does not match requested Contract"))
+	}
+	if contractResponse.RepoBindingID != "" && string(contractResponse.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("contract update response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the Contract"))
+	}
+	return nil
+}
+
 func buildDraftOutput(config projectconfig.Config, serverURL string, goalID string, contractDraft contractDraftResponse, receipt spine.LocalRepoReceipt) spine.ContractDraftOutput {
-	command := fmt.Sprintf("goalrail contract update --contract-id %s --fields-file - --format json", contractDraft.ID)
+	summary := fmt.Sprintf("Found a Contract handle in state %s. Contract update is only available while the Contract is draft.", contractDraft.State)
+	nextAction := spine.NextAction{
+		Kind:      "update_contract",
+		Blocking:  false,
+		Available: false,
+	}
+	if contractDraft.State == spine.ContractStateDraft {
+		summary = "Created or found a draft Contract handle. Local repository receipt is attached; update proposed contract fields next."
+		nextAction.Available = true
+		nextAction.Command = fmt.Sprintf("goalrail contract update --contract-id %s --fields-file - --format json", contractDraft.ID)
+	}
 	return spine.ContractDraftOutput{
 		SchemaVersion:    cliSchemaVersion,
 		Mode:             serverMode,
@@ -500,14 +922,31 @@ func buildDraftOutput(config projectconfig.Config, serverURL string, goalID stri
 		LocalRepoReceipt: receipt,
 		LocalConfigPath:  projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
-			Summary: "Created or found a draft Contract handle. Local repository receipt is attached; contract field updates are a later slice.",
+			Summary: summary,
+		},
+		NextAction: nextAction,
+	}
+}
+
+func buildUpdateOutput(config projectconfig.Config, serverURL string, contractResponse contractDraftResponse, changedFields []string) spine.ContractUpdateOutput {
+	return spine.ContractUpdateOutput{
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  config.OrganizationID,
+		ProjectID:       config.ProjectID,
+		RepoBindingID:   spine.RepoBindingID(config.RepoBindingID),
+		ContractID:      contractResponse.ID,
+		ContractState:   contractResponse.State,
+		ChangedFields:   append([]string{}, changedFields...),
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Updated proposed ContractDraft fields. Review the draft contract next.",
 		},
 		NextAction: spine.NextAction{
-			Kind:         "update_contract",
-			Blocking:     false,
-			Command:      command,
-			Available:    false,
-			PlannedSlice: "E",
+			Kind:      "review_contract",
+			Blocking:  true,
+			Available: true,
 		},
 	}
 }
@@ -533,12 +972,37 @@ func renderDraftText(output spine.ContractDraftOutput) string {
 		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
-	if output.NextAction.Command != "" {
+	if output.NextAction.Command != "" && output.NextAction.Available {
+		fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+	}
+	if output.NextAction.Command != "" && !output.NextAction.Available {
 		fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
 	}
 	if output.NextAction.PlannedSlice != "" {
 		fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
 	}
+	return b.String()
+}
+
+func renderUpdateText(output spine.ContractUpdateOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contract draft updated\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "State: %s\n", output.ContractState)
+	if len(output.ChangedFields) > 0 {
+		b.WriteString("Changed fields:\n")
+		for _, field := range output.ChangedFields {
+			fmt.Fprintf(&b, "- %s\n", field)
+		}
+	}
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	b.WriteString("\nNext: review the draft contract with the user.\n")
 	return b.String()
 }
 
@@ -600,6 +1064,48 @@ type contractCreateRequest struct {
 	GoalID        string `json:"goal_id"`
 	ProjectID     string `json:"project_id"`
 	RepoBindingID string `json:"repo_binding_id"`
+}
+
+type contractUpdateRequest struct {
+	ProjectID     string                     `json:"project_id"`
+	RepoBindingID string                     `json:"repo_binding_id"`
+	UpdatedBy     contractUpdateActorRef     `json:"updated_by"`
+	Changes       map[string]json.RawMessage `json:"changes"`
+	ContextRefs   []contractUpdateContextRef `json:"context_refs,omitempty"`
+	Unknowns      []string                   `json:"unknowns,omitempty"`
+	changedFields []string
+}
+
+type contractUpdateActorRef struct {
+	Kind        string `json:"kind"`
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name,omitempty"`
+}
+
+type contractUpdateContextRef struct {
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	BaselineID string `json:"baseline_id,omitempty"`
+	OverlayID  string `json:"overlay_id,omitempty"`
+}
+
+type contractUpdateFieldKind string
+
+const (
+	contractUpdateFieldString      contractUpdateFieldKind = "string"
+	contractUpdateFieldStringSlice contractUpdateFieldKind = "string_slice"
+)
+
+var editableContractUpdateFields = map[string]contractUpdateFieldKind{
+	"title":                        contractUpdateFieldString,
+	"intent_summary":               contractUpdateFieldString,
+	"proposed_scope":               contractUpdateFieldStringSlice,
+	"proposed_non_goals":           contractUpdateFieldStringSlice,
+	"proposed_constraints":         contractUpdateFieldStringSlice,
+	"proposed_acceptance_criteria": contractUpdateFieldStringSlice,
+	"proposed_expected_checks":     contractUpdateFieldStringSlice,
+	"proposed_proof_expectations":  contractUpdateFieldStringSlice,
+	"risk_hints":                   contractUpdateFieldStringSlice,
 }
 
 type contractDraftResponse struct {

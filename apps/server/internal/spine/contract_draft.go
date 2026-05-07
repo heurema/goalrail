@@ -35,8 +35,19 @@ type ContractDraft struct {
 }
 
 type ContractDraftUpdateRequest struct {
-	UpdatedBy ActorRef                   `json:"updated_by"`
-	Changes   map[string]json.RawMessage `json:"changes"`
+	ProjectID     ProjectID                  `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID              `json:"repo_binding_id,omitempty"`
+	UpdatedBy     ActorRef                   `json:"updated_by"`
+	Changes       map[string]json.RawMessage `json:"changes"`
+	ContextRefs   []ContractUpdateContextRef `json:"context_refs,omitempty"`
+	Unknowns      []string                   `json:"unknowns,omitempty"`
+}
+
+type ContractUpdateContextRef struct {
+	Kind       string `json:"kind"`
+	ID         string `json:"id"`
+	BaselineID string `json:"baseline_id,omitempty"`
+	OverlayID  string `json:"overlay_id,omitempty"`
 }
 
 type ContractDraftReadyForApprovalRequest struct {

@@ -225,6 +225,12 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 	if len(input.Changes) == 0 {
 		return spine.ContractDraft{}, &ValidationError{Field: "changes", Message: "must include at least one editable field"}
 	}
+	if err := validateContextRefs(input.ContextRefs); err != nil {
+		return spine.ContractDraft{}, err
+	}
+	if err := validateUnknowns(input.Unknowns); err != nil {
+		return spine.ContractDraft{}, err
+	}
 
 	updated := draft
 	previousValues := make(map[string]any, len(input.Changes))
@@ -321,7 +327,7 @@ func (s *Service) Update(ctx context.Context, draftID spine.ContractDraftID, inp
 	updated.State = spine.ContractDraftStateDraft
 
 	now := s.Clock.Now().UTC()
-	event, err := s.contractDraftUpdatedEvent(updated, changedFields, input.UpdatedBy, previousValues, newValues, now)
+	event, err := s.contractDraftUpdatedEvent(updated, changedFields, input.UpdatedBy, input.ContextRefs, input.Unknowns, previousValues, newValues, now)
 	if err != nil {
 		return spine.ContractDraft{}, err
 	}
@@ -391,6 +397,28 @@ func validateUpdatedBy(updatedBy spine.ActorRef) error {
 
 func validateMarkedBy(markedBy spine.ActorRef) error {
 	return validateActor("marked_by", markedBy)
+}
+
+func validateContextRefs(refs []spine.ContractUpdateContextRef) error {
+	for i, ref := range refs {
+		field := fmt.Sprintf("context_refs[%d]", i)
+		if strings.TrimSpace(ref.Kind) == "" {
+			return &ValidationError{Field: field + ".kind", Message: "is required"}
+		}
+		if strings.TrimSpace(ref.ID) == "" {
+			return &ValidationError{Field: field + ".id", Message: "is required"}
+		}
+	}
+	return nil
+}
+
+func validateUnknowns(unknowns []string) error {
+	for i, unknown := range unknowns {
+		if strings.TrimSpace(unknown) == "" {
+			return &ValidationError{Field: fmt.Sprintf("unknowns[%d]", i), Message: "must not be blank"}
+		}
+	}
+	return nil
 }
 
 func validateActor(field string, actor spine.ActorRef) error {
@@ -484,6 +512,9 @@ func decodeStringChange(field string, raw json.RawMessage) (string, error) {
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return "", &ValidationError{Field: "changes." + field, Message: "must be a string"}
 	}
+	if strings.TrimSpace(value) == "" {
+		return "", &ValidationError{Field: "changes." + field, Message: "must not be blank"}
+	}
 	return value, nil
 }
 
@@ -492,8 +523,13 @@ func decodeStringSliceChange(field string, raw json.RawMessage, _ bool) ([]strin
 	if err := json.Unmarshal(raw, &value); err != nil {
 		return nil, &ValidationError{Field: "changes." + field, Message: "must be an array of strings"}
 	}
-	if value == nil {
-		value = []string{}
+	if len(value) == 0 {
+		return nil, &ValidationError{Field: "changes." + field, Message: "must include at least one value"}
+	}
+	for i, item := range value {
+		if strings.TrimSpace(item) == "" {
+			return nil, &ValidationError{Field: fmt.Sprintf("changes.%s[%d]", field, i), Message: "must not be blank"}
+		}
 	}
 	return cloneStrings(value), nil
 }
@@ -573,16 +609,18 @@ func (s *Service) contractDraftCreatedEvent(created spine.ContractDraft) (spine.
 }
 
 type contractDraftUpdatedPayload struct {
-	ContractDraftID spine.ContractDraftID `json:"contract_draft_id"`
-	ContractID      spine.ContractID      `json:"contract_id"`
-	ChangedFields   []string              `json:"changed_fields"`
-	UpdatedBy       spine.ActorRef        `json:"updated_by"`
-	PreviousValues  map[string]any        `json:"previous_values"`
-	NewValues       map[string]any        `json:"new_values"`
-	UpdatedAt       time.Time             `json:"updated_at"`
+	ContractDraftID spine.ContractDraftID            `json:"contract_draft_id"`
+	ContractID      spine.ContractID                 `json:"contract_id"`
+	ChangedFields   []string                         `json:"changed_fields"`
+	UpdatedBy       spine.ActorRef                   `json:"updated_by"`
+	ContextRefs     []spine.ContractUpdateContextRef `json:"context_refs,omitempty"`
+	Unknowns        []string                         `json:"unknowns,omitempty"`
+	PreviousValues  map[string]any                   `json:"previous_values"`
+	NewValues       map[string]any                   `json:"new_values"`
+	UpdatedAt       time.Time                        `json:"updated_at"`
 }
 
-func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changedFields []string, updatedBy spine.ActorRef, previousValues map[string]any, newValues map[string]any, updatedAt time.Time) (spine.Event, error) {
+func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changedFields []string, updatedBy spine.ActorRef, contextRefs []spine.ContractUpdateContextRef, unknowns []string, previousValues map[string]any, newValues map[string]any, updatedAt time.Time) (spine.Event, error) {
 	eventID, err := s.IDs.NewEventID()
 	if err != nil {
 		return spine.Event{}, fmt.Errorf("new contract draft updated event id: %w", err)
@@ -593,6 +631,8 @@ func (s *Service) contractDraftUpdatedEvent(updated spine.ContractDraft, changed
 		ContractID:      updated.ContractID,
 		ChangedFields:   append([]string{}, changedFields...),
 		UpdatedBy:       updatedBy,
+		ContextRefs:     append([]spine.ContractUpdateContextRef{}, contextRefs...),
+		Unknowns:        append([]string{}, unknowns...),
 		PreviousValues:  previousValues,
 		NewValues:       newValues,
 		UpdatedAt:       updatedAt,

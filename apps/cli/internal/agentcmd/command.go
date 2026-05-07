@@ -309,6 +309,10 @@ If a Goalrail JSON response contains ` + "`next_action.kind=ask_user`" + `, rend
 
 If a Goalrail JSON response contains ` + "`next_action.kind=draft_contract`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail contract draft`" + ` with the returned Goal ID. The command returns a server Contract handle and a local repository receipt. Do not upload raw source or draft contract fields outside returned Goalrail commands.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=update_contract`" + ` and ` + "`next_action.available=true`" + `, read only the local files needed for the draft and submit structured proposed fields with ` + "`goalrail contract update`" + `. Use ` + "`question_id`" + `- and field-bound JSON, include local receipt refs when useful, and do not upload raw source bodies.
+
+If a Goalrail JSON response contains ` + "`next_action.kind=review_contract`" + `, show the changed draft contract fields to the user for review. Do not submit, approve, plan, run, verify, or create proof unless Goalrail returns an available command for that later state.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -403,6 +407,28 @@ func commandsJSONContent() string {
         "Run",
         "Decision",
         "Proof"
+      ]
+    },
+    "update_contract": {
+      "command": "goalrail contract update --contract-id <contract_id> --fields-file - --format json",
+      "stdin": "structured_contract_fields_json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id"
+      ],
+      "updates": [
+        "ContractDraft"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ],
+      "does_not_upload": [
+        "raw_source"
       ]
     }
   },
