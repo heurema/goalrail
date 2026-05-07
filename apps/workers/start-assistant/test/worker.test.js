@@ -158,6 +158,58 @@ test('refuses secret sharing requests before provider calls', async () => {
   assert.match(body.answer, /do not share secrets/i);
 });
 
+test('refuses raw credential material before provider calls', async () => {
+  let called = false;
+  const response = await handleStartAssistantRequest(
+    request({ question: 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890' }),
+    {
+      OPENAI_API_KEY: 'test-key',
+      OPENAI_START_MODEL: 'test-model',
+      OPENAI_START_VECTOR_STORE_ID: 'vs_test',
+    },
+    {
+      fetch: async () => {
+        called = true;
+        throw new Error('should not call provider');
+      },
+    }
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(called, false);
+  assert.match(body.answer, /do not share secrets/i);
+});
+
+test('refuses pasted code snippets before provider calls', async () => {
+  let called = false;
+  const response = await handleStartAssistantRequest(
+    request({
+      question: `Can you review this?
+const answer = 42;
+function calculate() {
+  return answer;
+}`,
+    }),
+    {
+      OPENAI_API_KEY: 'test-key',
+      OPENAI_START_MODEL: 'test-model',
+      OPENAI_START_VECTOR_STORE_ID: 'vs_test',
+    },
+    {
+      fetch: async () => {
+        called = true;
+        throw new Error('should not call provider');
+      },
+    }
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(called, false);
+  assert.match(body.answer, /cannot process pasted code snippets/i);
+});
+
 test('calls OpenAI Responses API with file_search and shapes citations', async () => {
   let captured;
   const response = await handleStartAssistantRequest(

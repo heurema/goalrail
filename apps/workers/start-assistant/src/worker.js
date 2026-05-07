@@ -247,14 +247,58 @@ function unavailable(message) {
   return jsonError('assistant_unavailable', message, 503);
 }
 
+function containsCredentialMaterial(question) {
+  return [
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/i,
+    /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}\b/,
+    /\bgithub_pat_[A-Za-z0-9_]{20,}\b/,
+    /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/,
+    /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
+    /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+    /\bAIza[0-9A-Za-z_-]{25,}\b/,
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
+    /\bAuthorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/=-]{12,}/i,
+    /\bBearer\s+[A-Za-z0-9._~+/=-]{30,}\b/i,
+    /\b(?:API_KEY|OPENAI_API_KEY|TOKEN|ACCESS_TOKEN|SECRET|PASSWORD|PRIVATE_KEY|CLIENT_SECRET)\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{12,}/i,
+  ].some((pattern) => pattern.test(question));
+}
+
+function containsPastedCode(question) {
+  return [
+    /```|~~~/,
+    /^#!\//m,
+    /^\s*#include\s+</m,
+    /^\s*(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=/m,
+    /^\s*function\s+[A-Za-z_$][\w$]*\s*\(/m,
+    /^\s*class\s+[A-Za-z_$][\w$]*(?:\s+extends|\s*\{)/m,
+    /^\s*(?:import|export)\s+.+\s+from\s+['"][^'"]+['"]/m,
+    /^\s*def\s+[A-Za-z_]\w*\s*\(/m,
+    /^\s*package\s+main\b/m,
+    /^\s*func\s+[A-Za-z_]\w*\s*\(/m,
+    /^\s*(?:if|for|while|switch)\s*\(.+\)\s*\{/m,
+    /\bSELECT\b[\s\S]{0,80}\bFROM\b/i,
+  ].some((pattern) => pattern.test(question));
+}
+
 function refusalForQuestion(question) {
   const normalized = question.toLowerCase();
 
-  if (/(api[_\s-]?key|secret|password|credential|private token|access token|bearer token|-----begin)/i.test(question)) {
+  if (
+    containsCredentialMaterial(question) ||
+    /(api[_\s-]?key|secret|password|credential|private token|access token|bearer token|-----begin)/i.test(question)
+  ) {
     return {
       answer:
         'Please do not share secrets here. This public assistant cannot process private credentials. Rotate any secret that may have been exposed.',
       suggested_questions: ['What is Goalrail?', 'What does proof before approval mean?'],
+    };
+  }
+
+  if (containsPastedCode(question)) {
+    return {
+      answer:
+        'I cannot process pasted code snippets from this public page. Describe the workflow, boundary, check, or review problem without including private code.',
+      suggested_questions: ['Is my repo ready for coding agents?', 'How should a team review AI-generated changes?'],
     };
   }
 
