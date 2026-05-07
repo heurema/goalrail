@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -240,7 +241,7 @@ func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.Organiza
 				ID:                 context.RepoBinding.ID,
 				Provider:           context.RepoBinding.Provider,
 				RepositoryFullName: context.RepoBinding.RepositoryFullName,
-				RepositoryURL:      context.RepoBinding.RepositoryURL,
+				RepositoryURL:      sanitizeRepositoryURL(context.RepoBinding.RepositoryURL),
 				DefaultBranch:      context.RepoBinding.DefaultBranch,
 				WorkflowBaseBranch: context.RepoBinding.WorkflowBaseBranch,
 				PathScope:          context.RepoBinding.PathScope,
@@ -252,6 +253,15 @@ func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.Organiza
 		})
 	}
 	return public
+}
+
+func sanitizeRepositoryURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.User == nil {
+		return raw
+	}
+	parsed.User = nil
+	return parsed.String()
 }
 
 func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {

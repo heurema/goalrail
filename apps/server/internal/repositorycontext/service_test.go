@@ -302,6 +302,32 @@ func TestGetOrganizationRepositoryContextReturnsNarrowPublicDTO(t *testing.T) {
 	}
 }
 
+func TestGetOrganizationRepositoryContextStripsRepositoryURLUserinfo(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "https://token:secret@github.com/heurema/goalrail.git"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "https://github.com/heurema/goalrail.git" {
+		t.Fatalf("repository_url = %q, want userinfo stripped", got)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if bytes.Contains(body, []byte("token")) || bytes.Contains(body, []byte("secret")) {
+		t.Fatalf("response leaked credentialed repository URL: %s", body)
+	}
+}
+
 func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
 	store := newFakeStore()
 	store.organization = organizationFixture()
