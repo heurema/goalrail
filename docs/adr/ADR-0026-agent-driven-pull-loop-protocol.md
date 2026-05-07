@@ -340,9 +340,42 @@ GateDecision, or Proof.
 
 `contract approve` returns an agent-facing envelope with `schema_version`,
 `display.summary`, `contract_id`, `contract_state`, and
-`next_action.kind=plan_work` with `available=false`, `planned_slice=G`, and the
-future `goalrail work plan --contract-id <contract_id> --format json` command.
-Planning remains unavailable in Slice F.
+`next_action.kind=plan_work` with `available=true` and
+`goalrail work plan --contract-id <contract_id> --format json`.
+
+### `goalrail work plan`
+
+`work plan` creates or returns the server-owned planning queue record for an
+approved Contract:
+
+```bash
+goalrail work plan \
+  --contract-id "<contract_id>" \
+  --format json
+```
+
+The CLI must load the local `.goalrail/project.yml` marker, require
+`project_id` and `repo_binding_id`, validate the stored CLI login/session,
+validate the marker Organization against `/v1/me`, and send the local marker
+`project_id` and `repo_binding_id` as server-side expectations.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, verify the Contract Organization matches
+that membership, derive `requested_by` from the authenticated user rather than
+trusting payload actor fields, reject supplied project/repo expectations that
+do not match the Contract before mutation, require an approved public
+Contract plus approved snapshot, and create or return exactly one
+`WorkItemPlan` for the Contract; newly created plans start `queued`.
+
+`work plan` returns an agent-facing envelope with `schema_version`,
+`display.summary`, `contract_id`, `plan_id`, `plan_state`, `repo_binding_id`,
+and a state-aware unavailable `next_action`: `queued` maps to
+`planning_worker_required` for Slice G2, `leased` maps to
+`planning_in_progress`, `proposal_submitted` maps to `review_plan_proposal`,
+`accepted` maps to `planned_workitems_exist`, and unknown states map to
+`blocked`. It does not acquire a lease, create a proposal, accept a proposal,
+create WorkItems, start a worker, run code, make gate decisions, or create
+proof.
 
 ### Clarification and contracts
 
@@ -366,7 +399,10 @@ This ADR does not implement:
 - server-side repository clone
 - raw source upload by default
 - standalone `work context prepare`
-- WorkItem planning from draft Contract
+- planning worker implementation
+- lease acquisition CLI
+- proposal submission or acceptance CLI
+- WorkItem materialization from the agent-facing CLI
 - runner checkout
 - execution
 - gate

@@ -15,9 +15,9 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 	service, _, _, plans, leases, proposals, workItems, events := planningService(t)
 	approved := validApprovedContract()
 
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -78,16 +78,20 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	service, _, _, _, _, _, _, _ := planningService(t)
 	approved := validApprovedContract()
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
-	if _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	existing, newlyCreated, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	}); err != workitemplan.ErrAlreadyPlanned {
-		t.Fatalf("duplicate CreatePlan() error = %v, want %v", err, workitemplan.ErrAlreadyPlanned)
+	}, activeMembership(approved.OrganizationID))
+	if err != nil {
+		t.Fatalf("duplicate CreatePlan() error = %v, want nil", err)
+	}
+	if newlyCreated || existing.ID != plan.ID {
+		t.Fatalf("duplicate CreatePlan() = %#v newlyCreated=%t, want existing plan %q", existing, newlyCreated, plan.ID)
 	}
 	lease := acquireLease(t, service)
 	proposal, err := service.SubmitProposal(context.Background(), plan.ID, validProposalRequest(string(approved.ID), lease))
@@ -114,9 +118,9 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 	service, _, _, plans, _, proposals, _, _ := planningService(t, txRunner)
 	approved := validApprovedContract()
 	outerCtx := context.WithValue(context.Background(), txContextKey{}, "outer")
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -153,9 +157,9 @@ func TestServiceSubmitProposalUsesRequiredTransactionRunner(t *testing.T) {
 func TestServiceRenewLeaseMissReturnsSpecificLeaseConflict(t *testing.T) {
 	service, _, _, _, leases, _, _, _ := planningService(t)
 	approved := validApprovedContract()
-	if _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	if _, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	}); err != nil {
+	}, activeMembership(approved.OrganizationID)); err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
 	lease := acquireLease(t, service)
@@ -173,9 +177,9 @@ func TestServiceRenewLeaseMissReturnsSpecificLeaseConflict(t *testing.T) {
 func TestServiceSubmitProposalLeaseCompletionMissReturnsLeaseConflict(t *testing.T) {
 	service, _, _, _, leases, _, _, _ := planningService(t)
 	approved := validApprovedContract()
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -195,9 +199,9 @@ func TestServiceSubmitProposalFailedCreateDoesNotRunPostFailureDuplicateLookup(t
 	approved := validApprovedContract()
 	createErr := errors.New("create failed")
 	proposals.createErr = createErr
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -217,9 +221,9 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 	service, _, _, plans, _, proposals, workItems, events := planningService(t, txRunner)
 	approved := validApprovedContract()
 
-	plan, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
 		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("CreatePlan() error = %v", err)
 	}
@@ -615,6 +619,18 @@ func validApprovedContract() spine.ApprovedContract {
 		ApprovedBy:         spine.ActorRef{Kind: "user", ID: "approver"},
 		ApprovedAt:         testTime(),
 		State:              spine.ApprovedContractStateApproved,
+	}
+}
+
+func activeMembership(organizationID spine.OrganizationID) spine.OrganizationMembership {
+	return spine.OrganizationMembership{
+		ID:             "membership-1",
+		OrganizationID: organizationID,
+		UserID:         "requester",
+		Role:           spine.OrganizationMembershipRoleMember,
+		State:          spine.EntityStateActive,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
 	}
 }
 

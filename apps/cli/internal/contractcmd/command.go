@@ -1213,14 +1213,13 @@ func buildApproveOutput(config projectconfig.Config, serverURL string, contractR
 		ContractState:   contractResponse.State,
 		LocalConfigPath: projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
-			Summary: "Approved Contract snapshot created. Planning is a future Goalrail step and is not available from this command.",
+			Summary: "Approved Contract snapshot created. Create the queued WorkItemPlan next.",
 		},
 		NextAction: spine.NextAction{
-			Kind:         "plan_work",
-			Blocking:     false,
-			Available:    false,
-			PlannedSlice: "G",
-			Command:      fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
+			Kind:      "plan_work",
+			Blocking:  false,
+			Available: true,
+			Command:   fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
 		},
 	}
 }
@@ -1310,11 +1309,14 @@ func renderApproveText(output spine.ContractTransitionOutput) string {
 		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Command != "" && output.NextAction.Available {
+		fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+	}
 	if output.NextAction.Command != "" && !output.NextAction.Available {
 		fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
-	}
-	if output.NextAction.PlannedSlice != "" {
-		fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.PlannedSlice != "" {
+			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		}
 	}
 	return b.String()
 }
