@@ -51,6 +51,27 @@ const (
 	RepoBindingAccessModeMetadataOnly             RepoBindingAccessMode = "metadata_only"
 )
 
+type MalformedIDError struct {
+	Field  string
+	Reason string
+	Err    error
+}
+
+func (e MalformedIDError) Error() string {
+	reason := e.Reason
+	if reason == "" {
+		reason = "must be valid"
+	}
+	if e.Field == "" {
+		return reason
+	}
+	return e.Field + " " + reason
+}
+
+func (e MalformedIDError) Unwrap() error {
+	return e.Err
+}
+
 type User struct {
 	ID          UserID      `json:"id"`
 	DisplayName string      `json:"display_name"`

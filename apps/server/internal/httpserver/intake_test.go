@@ -2449,6 +2449,9 @@ func (s *fakeCheckoutJobStore) Create(_ context.Context, job spine.CheckoutJob) 
 }
 
 func (s *fakeCheckoutJobStore) Get(_ context.Context, id spine.CheckoutJobID) (spine.CheckoutJob, bool, error) {
+	if id == "malformed-id" {
+		return spine.CheckoutJob{}, false, spine.MalformedIDError{Field: "checkout job id", Reason: "must be uuid"}
+	}
 	job, ok := s.jobs[id]
 	return job, ok, nil
 }
@@ -2466,6 +2469,9 @@ func (s *fakeCheckoutJobStore) AcquireNextLease(_ context.Context, input checkou
 	var selected spine.CheckoutJob
 	found := false
 	for _, job := range s.jobs {
+		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
+			continue
+		}
 		if job.State == spine.CheckoutJobStateQueued || (job.State == spine.CheckoutJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
 			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
 				selected = job

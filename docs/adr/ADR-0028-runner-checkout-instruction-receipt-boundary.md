@@ -150,7 +150,7 @@ credential file paths only, for example:
 
 - `--server-url` / `GOALRAIL_RUNNER_SERVER_URL`
 - `--runner-id` / `GOALRAIL_RUNNER_ID`
-- runner API token file or equivalent narrow runner auth input
+- `GOALRAIL_RUNNER_BEARER_TOKEN` for the current narrow API auth input
 - Git HTTPS token file
 - SSH key file
 - known_hosts file
@@ -387,8 +387,9 @@ This ADR does not define or implement:
 
 - H1 still will not execute tasks.
 - H1 still will not produce proof.
-- A runner auth handshake must be explicit before public runner-facing routes
-  become usable.
+- H1 uses existing bearer-authenticated OrganizationMembership boundaries for
+  runner-facing lease and receipt routes; a dedicated runner registration /
+  runner-token protocol remains a later hardening slice.
 - Checkout receipt evidence is not enough for final acceptance; it is only
   workspace preparation evidence.
 

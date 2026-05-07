@@ -733,6 +733,80 @@ func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 	})
 }
 
+func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+
+	lease := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"runner_id":"runner-1"}`)
+	assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
+
+	receipt := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/job-1/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+	assertErrorCode(t, receipt, http.StatusUnauthorized, "unauthorized")
+	if len(server.checkoutReceipts.receipts) != 0 {
+		t.Fatalf("checkout receipts = %d, want 0 after auth failure", len(server.checkoutReceipts.receipts))
+	}
+}
+
+func TestCheckoutRunnerRoutesRespectOrganizationBoundary(t *testing.T) {
+	t.Run("lease only sees jobs from authenticated organization", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+		})
+		job := spine.CheckoutJob{
+			ID:             "checkout-job-foreign",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-foreign",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime(),
+			UpdatedAt:      testTime(),
+		}
+		server.checkoutJobs.jobs[job.ID] = job
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"runner_id":"runner-1"}`)
+		if response.code != http.StatusNoContent {
+			t.Fatalf("lease status = %d, want %d: %s", response.code, http.StatusNoContent, response.body)
+		}
+		if got := server.checkoutJobs.jobs[job.ID].State; got != spine.CheckoutJobStateQueued {
+			t.Fatalf("foreign checkout job state = %q, want queued", got)
+		}
+	})
+
+	t.Run("receipt rejects job from another organization", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+		})
+		expiresAt := testTime().Add(time.Hour)
+		job := spine.CheckoutJob{
+			ID:              "checkout-job-foreign",
+			OrganizationID:  "018f0000-0000-7000-8000-000000000002",
+			ProjectID:       "018f0000-0000-7000-8000-000000000003",
+			TaskID:          "work-item-foreign",
+			RepoBindingID:   "018f0000-0000-7000-8000-000000000004",
+			State:           spine.CheckoutJobStateLeased,
+			CurrentRunnerID: "runner-1",
+			LeaseTokenHash:  "unused",
+			LeaseExpiresAt:  &expiresAt,
+			CreatedAt:       testTime(),
+			UpdatedAt:       testTime(),
+		}
+		server.checkoutJobs.jobs[job.ID] = job
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(job.ID)+"/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
+		if len(server.checkoutReceipts.receipts) != 0 {
+			t.Fatalf("checkout receipts = %d, want 0 after org mismatch", len(server.checkoutReceipts.receipts))
+		}
+	})
+}
+
+func TestCheckoutRunnerRoutesReturnClientErrorForMalformedIDs(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/malformed-id/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+	assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+}
+
 func TestRemovedDirectTaskRouteAndListRoutesReturnNotFound(t *testing.T) {
 	server := testServer(t)
 	for _, tt := range []struct {

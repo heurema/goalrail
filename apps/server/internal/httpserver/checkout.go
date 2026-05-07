@@ -11,8 +11,8 @@ import (
 
 type CheckoutService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.CheckoutJobCreateRequest, spine.OrganizationMembership) (spine.CheckoutJob, bool, error)
-	AcquireNextLease(context.Context, spine.CheckoutJobLeaseCreateRequest) (spine.CheckoutJobLeaseCreated, bool, error)
-	SubmitReceipt(context.Context, spine.CheckoutJobID, spine.CheckoutReceiptSubmitRequest) (spine.CheckoutReceipt, error)
+	AcquireNextLease(context.Context, spine.CheckoutJobLeaseCreateRequest, spine.OrganizationMembership) (spine.CheckoutJobLeaseCreated, bool, error)
+	SubmitReceipt(context.Context, spine.CheckoutJobID, spine.CheckoutReceiptSubmitRequest, spine.OrganizationMembership) (spine.CheckoutReceipt, error)
 }
 
 type CheckoutHandler struct {
@@ -49,12 +49,17 @@ func (h *CheckoutHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CheckoutHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
 	var input spine.CheckoutJobLeaseCreateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
-	lease, ok, err := h.service.AcquireNextLease(r.Context(), input)
+	lease, ok, err := h.service.AcquireNextLease(r.Context(), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -67,12 +72,17 @@ func (h *CheckoutHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CheckoutHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
 	var input spine.CheckoutReceiptSubmitRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
-	receipt, err := h.service.SubmitReceipt(r.Context(), spine.CheckoutJobID(r.PathValue("id")), input)
+	receipt, err := h.service.SubmitReceipt(r.Context(), spine.CheckoutJobID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -82,9 +92,12 @@ func (h *CheckoutHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) 
 
 func (h *CheckoutHandler) respondServiceError(w http.ResponseWriter, err error) {
 	var validationErr *checkout.ValidationError
+	var malformedID spine.MalformedIDError
 	switch {
 	case errors.As(err, &validationErr):
 		RespondError(w, http.StatusBadRequest, "validation_failed", validationErr.Error())
+	case errors.As(err, &malformedID):
+		RespondError(w, http.StatusBadRequest, "validation_failed", malformedID.Error())
 	case errors.Is(err, checkout.ErrWorkItemNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "work item not found")
 	case errors.Is(err, checkout.ErrRepoBindingNotFound):

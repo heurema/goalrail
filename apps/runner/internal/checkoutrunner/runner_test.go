@@ -12,12 +12,15 @@ import (
 	"time"
 )
 
+const testBearerToken = "runner-api-token"
+
 func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
 	t.Parallel()
 
 	var leaseRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases" {
+			assertBearer(t, r)
 			leaseRequests.Add(1)
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -29,6 +32,7 @@ func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
 	var logs bytes.Buffer
 	if err := Run(context.Background(), Config{
 		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -53,6 +57,7 @@ func TestRunTreatsSleepCancellationAsCleanShutdown(t *testing.T) {
 	var leaseRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases" {
+			assertBearer(t, r)
 			leaseRequests.Add(1)
 			w.WriteHeader(http.StatusNoContent)
 			cancel()
@@ -64,6 +69,7 @@ func TestRunTreatsSleepCancellationAsCleanShutdown(t *testing.T) {
 
 	if err := Run(ctx, Config{
 		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -88,11 +94,13 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases":
+			assertBearer(t, r)
 			decodeStrict(t, r, &leaseRequest)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"job_id":"job-1","task_id":"task-1","state":"leased","runner_id":"runner-1","lease_token":"` + secretToken + `","lease_expires_at":"2026-05-07T13:00:00Z","instruction":{"job_id":"job-1","task_id":"task-1","repo_binding_id":"repo-1","access_mode":"customer_mounted_workspace","provider":"github","repository_full_name":"heurema/goalrail","repository_url":"https://github.com/heurema/goalrail","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"task-1"},"raw_source_uploaded":false},"created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/job-1/receipts":
+			assertBearer(t, r)
 			receiptRequests.Add(1)
 			decodeStrict(t, r, &receiptRequest)
 			w.Header().Set("Content-Type", "application/json")
@@ -107,6 +115,7 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	var logs bytes.Buffer
 	if err := Run(context.Background(), Config{
 		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -159,10 +168,12 @@ func TestRunOnceLeaseConflictsDoNotRetryStaleReceipt(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch {
 				case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases":
+					assertBearer(t, r)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
 					_, _ = w.Write([]byte(`{"job_id":"job-1","task_id":"task-1","state":"leased","runner_id":"runner-1","lease_token":"` + secretToken + `","lease_expires_at":"2026-05-07T13:00:00Z","instruction":{"job_id":"job-1","task_id":"task-1","repo_binding_id":"repo-1","access_mode":"customer_mounted_workspace","provider":"github","repository_full_name":"heurema/goalrail","repository_url":"https://github.com/heurema/goalrail","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"task-1"},"raw_source_uploaded":false},"created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 				case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/job-1/receipts":
+					assertBearer(t, r)
 					receiptRequests.Add(1)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusConflict)
@@ -176,6 +187,7 @@ func TestRunOnceLeaseConflictsDoNotRetryStaleReceipt(t *testing.T) {
 			var logs bytes.Buffer
 			runner, err := NewRunner(Config{
 				ServerURL:       server.URL,
+				BearerToken:     testBearerToken,
 				RunnerID:        "runner-1",
 				WorkspaceRef:    "mounted:/workspace/goalrail",
 				CommitSHA:       "abc123",
@@ -206,7 +218,7 @@ func TestRunOnceLeaseConflictsDoNotRetryStaleReceipt(t *testing.T) {
 func TestNewAPIClientUsesBoundedDefaultTimeout(t *testing.T) {
 	t.Parallel()
 
-	client, err := newAPIClient("http://goalrail.test", nil)
+	client, err := newAPIClient("http://goalrail.test", testBearerToken, nil)
 	if err != nil {
 		t.Fatalf("newAPIClient() error = %v", err)
 	}
@@ -215,6 +227,13 @@ func TestNewAPIClientUsesBoundedDefaultTimeout(t *testing.T) {
 	}
 	if client.client.Timeout != defaultHTTPClientTimeout {
 		t.Fatalf("client timeout = %s, want %s", client.client.Timeout, defaultHTTPClientTimeout)
+	}
+}
+
+func assertBearer(t *testing.T, r *http.Request) {
+	t.Helper()
+	if got, want := r.Header.Get("Authorization"), "Bearer "+testBearerToken; got != want {
+		t.Fatalf("Authorization = %q, want %q", got, want)
 	}
 }
 

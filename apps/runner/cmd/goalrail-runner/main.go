@@ -19,6 +19,7 @@ func main() {
 
 	cfg := checkoutrunner.Config{
 		ServerURL:       os.Getenv("GOALRAIL_RUNNER_SERVER_URL"),
+		BearerToken:     os.Getenv("GOALRAIL_RUNNER_BEARER_TOKEN"),
 		RunnerID:        os.Getenv("GOALRAIL_RUNNER_ID"),
 		WorkspaceRef:    os.Getenv("GOALRAIL_RUNNER_WORKSPACE_REF"),
 		CommitSHA:       os.Getenv("GOALRAIL_RUNNER_COMMIT_SHA"),

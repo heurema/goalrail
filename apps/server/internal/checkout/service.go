@@ -66,6 +66,7 @@ type RepoBindingReader interface {
 }
 
 type JobLeaseInput struct {
+	OrganizationID spine.OrganizationID
 	RunnerID       string
 	LeaseTokenHash string
 	LeaseExpiresAt time.Time
@@ -189,7 +190,10 @@ func (s *Service) CreateOrReturnJob(ctx context.Context, taskID spine.WorkItemID
 	return job, true, nil
 }
 
-func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobLeaseCreateRequest) (spine.CheckoutJobLeaseCreated, bool, error) {
+func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobLeaseCreateRequest, membership spine.OrganizationMembership) (spine.CheckoutJobLeaseCreated, bool, error) {
+	if err := requireActiveMembership(membership); err != nil {
+		return spine.CheckoutJobLeaseCreated{}, false, err
+	}
 	runnerID := strings.TrimSpace(input.RunnerID)
 	if runnerID == "" {
 		return spine.CheckoutJobLeaseCreated{}, false, &ValidationError{Field: "runner_id", Message: "is required"}
@@ -204,6 +208,7 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 	}
 	now := s.Clock.Now().UTC()
 	leaseInput := JobLeaseInput{
+		OrganizationID: membership.OrganizationID,
 		RunnerID:       runnerID,
 		LeaseTokenHash: leaseTokenHash(token),
 		LeaseExpiresAt: now.Add(ttl),
@@ -237,7 +242,7 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 	}, true, nil
 }
 
-func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, input spine.CheckoutReceiptSubmitRequest) (spine.CheckoutReceipt, error) {
+func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, input spine.CheckoutReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.CheckoutReceipt, error) {
 	if err := validateReceiptInput(input); err != nil {
 		return spine.CheckoutReceipt{}, err
 	}
@@ -247,6 +252,9 @@ func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, 
 	}
 	if !ok {
 		return spine.CheckoutReceipt{}, ErrCheckoutJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.CheckoutReceipt{}, err
 	}
 	if job.State == spine.CheckoutJobStateReceiptSubmitted {
 		return spine.CheckoutReceipt{}, ErrAlreadyReceipted
@@ -345,11 +353,18 @@ func (s *Service) loadAuthorizedTaskContext(ctx context.Context, taskID spine.Wo
 }
 
 func authorizeTaskAccess(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
-	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
-		return ErrMembershipRequired
+	if err := requireActiveMembership(membership); err != nil {
+		return err
 	}
 	if membership.OrganizationID != organizationID {
 		return ErrOrganizationForbidden
+	}
+	return nil
+}
+
+func requireActiveMembership(membership spine.OrganizationMembership) error {
+	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
+		return ErrMembershipRequired
 	}
 	return nil
 }

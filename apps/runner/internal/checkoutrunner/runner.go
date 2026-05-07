@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	ServerURL       string
+	BearerToken     string
 	RunnerID        string
 	WorkspaceRef    string
 	CommitSHA       string
@@ -55,7 +56,7 @@ func NewRunner(config Config) (*Runner, error) {
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
-	client, err := newAPIClient(config.ServerURL, config.HTTPClient)
+	client, err := newAPIClient(config.ServerURL, config.BearerToken, config.HTTPClient)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +144,9 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 func validateConfig(config Config) error {
 	if strings.TrimSpace(config.ServerURL) == "" {
 		return errors.New("server url is required")
+	}
+	if strings.TrimSpace(config.BearerToken) == "" {
+		return errors.New("runner bearer token is required")
 	}
 	if strings.TrimSpace(config.RunnerID) == "" {
 		return errors.New("runner id is required")

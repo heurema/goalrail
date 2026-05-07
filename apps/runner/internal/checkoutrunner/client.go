@@ -16,8 +16,9 @@ import (
 const defaultHTTPClientTimeout = 30 * time.Second
 
 type apiClient struct {
-	baseURL string
-	client  *http.Client
+	baseURL     string
+	bearerToken string
+	client      *http.Client
 }
 
 type apiError struct {
@@ -33,7 +34,7 @@ func (e *apiError) Error() string {
 	return fmt.Sprintf("goalrail api returned %s: %s", e.code, e.message)
 }
 
-func newAPIClient(serverURL string, client *http.Client) (*apiClient, error) {
+func newAPIClient(serverURL string, bearerToken string, client *http.Client) (*apiClient, error) {
 	parsed, err := url.Parse(strings.TrimSpace(serverURL))
 	if err != nil {
 		return nil, fmt.Errorf("parse server url: %w", err)
@@ -48,8 +49,9 @@ func newAPIClient(serverURL string, client *http.Client) (*apiClient, error) {
 		client = &http.Client{Timeout: defaultHTTPClientTimeout}
 	}
 	return &apiClient{
-		baseURL: strings.TrimRight(parsed.String(), "/"),
-		client:  client,
+		baseURL:     strings.TrimRight(parsed.String(), "/"),
+		bearerToken: strings.TrimSpace(bearerToken),
+		client:      client,
 	}, nil
 }
 
@@ -63,6 +65,7 @@ func (c *apiClient) acquireLease(ctx context.Context, input checkoutLeaseCreateR
 		return checkoutLease{}, false, fmt.Errorf("build checkout lease request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	c.authorize(request)
 
 	response, err := c.client.Do(request)
 	if err != nil {
@@ -96,6 +99,7 @@ func (c *apiClient) submitReceipt(ctx context.Context, jobID string, input check
 		return checkoutReceipt{}, fmt.Errorf("build checkout receipt request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
+	c.authorize(request)
 
 	response, err := c.client.Do(request)
 	if err != nil {
@@ -114,6 +118,12 @@ func (c *apiClient) submitReceipt(ctx context.Context, jobID string, input check
 		return checkoutReceipt{}, errors.New("checkout receipt response is missing id")
 	}
 	return decoded, nil
+}
+
+func (c *apiClient) authorize(request *http.Request) {
+	if c.bearerToken != "" {
+		request.Header.Set("Authorization", "Bearer "+c.bearerToken)
+	}
 }
 
 func decodeAPIError(response *http.Response) error {
