@@ -263,6 +263,17 @@ function calculate() {
   assert.match(body.answer, /cannot process pasted code snippets/i);
 });
 
+test('allows natural language select from phrasing', async () => {
+  const response = await handleStartAssistantRequest(
+    request({ question: 'How should I select from AI IDE options without losing delivery control?' }),
+    MOCK_ENV
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(body.answer, /cannot process pasted code snippets/i);
+});
+
 test('refuses file upload prompts before provider calls', async () => {
   let called = false;
   const response = await handleStartAssistantRequest(

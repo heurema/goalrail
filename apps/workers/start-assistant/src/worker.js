@@ -287,7 +287,7 @@ function containsPastedCode(question) {
     /^\s*package\s+main\b/m,
     /^\s*func\s+[A-Za-z_]\w*\s*\(/m,
     /^\s*(?:if|for|while|switch)\s*\(.+\)\s*\{/m,
-    /\bSELECT\b[\s\S]{0,80}\bFROM\b/i,
+    /^\s*SELECT\b[\s\S]{0,160}\bFROM\b/m,
   ].some((pattern) => pattern.test(question));
 }
 
