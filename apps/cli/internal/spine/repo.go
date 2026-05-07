@@ -2,6 +2,32 @@ package spine
 
 const RepoBindingStatusPendingServerKeyProvisioning = "pending_server_key_provisioning"
 
+type InitOverallStatus string
+
+const (
+	InitOverallStatusSuccess             InitOverallStatus = "success"
+	InitOverallStatusSuccessWithWarnings InitOverallStatus = "success_with_warnings"
+	InitOverallStatusPartialFailed       InitOverallStatus = "partial_failed"
+	InitOverallStatusFailed              InitOverallStatus = "failed"
+)
+
+type InitStepStatus string
+
+const (
+	InitStepStatusOK      InitStepStatus = "ok"
+	InitStepStatusSkipped InitStepStatus = "skipped"
+	InitStepStatusWarning InitStepStatus = "warning"
+	InitStepStatusError   InitStepStatus = "error"
+)
+
+type InitStepResult struct {
+	Name         string         `json:"name"`
+	Status       InitStepStatus `json:"status"`
+	Message      string         `json:"message,omitempty"`
+	Recoverable  bool           `json:"recoverable,omitempty"`
+	RetryCommand string         `json:"retry_command,omitempty"`
+}
+
 type RepoBindingDraft struct {
 	RepoURL               string   `json:"repo_url"`
 	Status                string   `json:"status"`
@@ -72,63 +98,67 @@ type RepositoryContextInitResponse struct {
 }
 
 type RepoBindingInitOutput struct {
-	Mode                  string `json:"mode"`
-	ServerURL             string `json:"server_url"`
-	ProjectID             string `json:"project_id"`
-	RepoBindingID         string `json:"repo_binding_id"`
-	OrganizationID        string `json:"organization_id"`
-	Provider              string `json:"provider"`
-	RepositoryFullName    string `json:"repository_full_name"`
-	RepositoryURL         string `json:"repository_url"`
-	ProviderDefaultBranch string `json:"provider_default_branch"`
-	WorkflowBaseBranch    string `json:"workflow_base_branch"`
-	State                 string `json:"state"`
-	Created               bool   `json:"created"`
-	Message               string `json:"message"`
-	NextCommand           string `json:"next_suggested_command"`
-	LocalConfigPath       string `json:"local_config_path"`
-	LocalConfigStatus     string `json:"local_config_status"`
-	LocalConfigMessage    string `json:"local_config_message,omitempty"`
-	LocalIgnorePath       string `json:"local_ignore_path"`
-	LocalIgnoreStatus     string `json:"local_ignore_status"`
-	ProjectScanStatus     string `json:"project_scan_status"`
-	ProjectScanBaselineID string `json:"project_scan_baseline_id,omitempty"`
-	ProjectScanOverlayID  string `json:"project_scan_overlay_id,omitempty"`
-	ProjectScanFreshness  string `json:"project_scan_freshness,omitempty"`
-	ProjectScanWarning    string `json:"project_scan_warning,omitempty"`
+	Mode                  string            `json:"mode"`
+	Status                InitOverallStatus `json:"status"`
+	ServerURL             string            `json:"server_url"`
+	ProjectID             string            `json:"project_id"`
+	RepoBindingID         string            `json:"repo_binding_id"`
+	OrganizationID        string            `json:"organization_id"`
+	Provider              string            `json:"provider"`
+	RepositoryFullName    string            `json:"repository_full_name"`
+	RepositoryURL         string            `json:"repository_url"`
+	ProviderDefaultBranch string            `json:"provider_default_branch"`
+	WorkflowBaseBranch    string            `json:"workflow_base_branch"`
+	State                 string            `json:"state"`
+	Created               bool              `json:"created"`
+	Message               string            `json:"message"`
+	NextCommand           string            `json:"next_suggested_command"`
+	LocalConfigPath       string            `json:"local_config_path"`
+	LocalConfigStatus     string            `json:"local_config_status"`
+	LocalConfigMessage    string            `json:"local_config_message,omitempty"`
+	LocalIgnorePath       string            `json:"local_ignore_path"`
+	LocalIgnoreStatus     string            `json:"local_ignore_status"`
+	ProjectScanStatus     string            `json:"project_scan_status"`
+	ProjectScanBaselineID string            `json:"project_scan_baseline_id,omitempty"`
+	ProjectScanOverlayID  string            `json:"project_scan_overlay_id,omitempty"`
+	ProjectScanFreshness  string            `json:"project_scan_freshness,omitempty"`
+	ProjectScanWarning    string            `json:"project_scan_warning,omitempty"`
+	Steps                 []InitStepResult  `json:"steps"`
 }
 
 type RepositoryContextInitOutput struct {
-	Mode                  string `json:"mode"`
-	ServerURL             string `json:"server_url"`
-	OrganizationID        string `json:"organization_id"`
-	ProjectID             string `json:"project_id"`
-	ProjectSlug           string `json:"project_slug"`
-	ProjectDisplayName    string `json:"project_display_name"`
-	ProjectCreated        bool   `json:"project_created"`
-	RepoBindingID         string `json:"repo_binding_id"`
-	RepoBindingCreated    bool   `json:"repo_binding_created"`
-	Provider              string `json:"provider"`
-	RepositoryFullName    string `json:"repository_full_name"`
-	RepositoryURL         string `json:"repository_url"`
-	ProviderDefaultBranch string `json:"provider_default_branch"`
-	WorkflowBaseBranch    string `json:"workflow_base_branch"`
-	State                 string `json:"state"`
-	Message               string `json:"message"`
-	LocalConfigPath       string `json:"local_config_path"`
-	LocalConfigStatus     string `json:"local_config_status"`
-	LocalConfigMessage    string `json:"local_config_message,omitempty"`
-	LocalIgnorePath       string `json:"local_ignore_path"`
-	LocalIgnoreStatus     string `json:"local_ignore_status"`
-	ContextSnapshotID     string `json:"context_snapshot_id"`
-	ContextSnapshotStatus string `json:"context_snapshot_status"`
-	ContextFingerprint    string `json:"context_fingerprint"`
-	ProjectScanStatus     string `json:"project_scan_status"`
-	ProjectScanBaselineID string `json:"project_scan_baseline_id,omitempty"`
-	ProjectScanOverlayID  string `json:"project_scan_overlay_id,omitempty"`
-	ProjectScanFreshness  string `json:"project_scan_freshness,omitempty"`
-	ProjectScanWarning    string `json:"project_scan_warning,omitempty"`
-	NextCommand           string `json:"next_suggested_command"`
+	Mode                  string            `json:"mode"`
+	Status                InitOverallStatus `json:"status"`
+	ServerURL             string            `json:"server_url"`
+	OrganizationID        string            `json:"organization_id"`
+	ProjectID             string            `json:"project_id"`
+	ProjectSlug           string            `json:"project_slug"`
+	ProjectDisplayName    string            `json:"project_display_name"`
+	ProjectCreated        bool              `json:"project_created"`
+	RepoBindingID         string            `json:"repo_binding_id"`
+	RepoBindingCreated    bool              `json:"repo_binding_created"`
+	Provider              string            `json:"provider"`
+	RepositoryFullName    string            `json:"repository_full_name"`
+	RepositoryURL         string            `json:"repository_url"`
+	ProviderDefaultBranch string            `json:"provider_default_branch"`
+	WorkflowBaseBranch    string            `json:"workflow_base_branch"`
+	State                 string            `json:"state"`
+	Message               string            `json:"message"`
+	LocalConfigPath       string            `json:"local_config_path"`
+	LocalConfigStatus     string            `json:"local_config_status"`
+	LocalConfigMessage    string            `json:"local_config_message,omitempty"`
+	LocalIgnorePath       string            `json:"local_ignore_path"`
+	LocalIgnoreStatus     string            `json:"local_ignore_status"`
+	ContextSnapshotID     string            `json:"context_snapshot_id"`
+	ContextSnapshotStatus string            `json:"context_snapshot_status"`
+	ContextFingerprint    string            `json:"context_fingerprint"`
+	ProjectScanStatus     string            `json:"project_scan_status"`
+	ProjectScanBaselineID string            `json:"project_scan_baseline_id,omitempty"`
+	ProjectScanOverlayID  string            `json:"project_scan_overlay_id,omitempty"`
+	ProjectScanFreshness  string            `json:"project_scan_freshness,omitempty"`
+	ProjectScanWarning    string            `json:"project_scan_warning,omitempty"`
+	NextCommand           string            `json:"next_suggested_command"`
+	Steps                 []InitStepResult  `json:"steps"`
 }
 
 type RepositoryContextSnapshotRequest struct {

@@ -68,17 +68,16 @@ Current implementation sequence:
 5. The server creates or reuses one repo-backed Project and creates or reuses
    one metadata-only RepoBinding inside the authenticated user's existing
    Organization.
-6. Build a bounded repository inventory locally and post it to
+6. Write the non-secret Git-root `.goalrail/project.yml` marker.
+7. Ensure `.goalrail/.gitignore` protects Goalrail-owned machine-local state.
+8. Build a bounded repository inventory locally and post it to
    `POST /v1/repo-bindings/{repo_binding_id}/context-snapshots`.
-7. Write the non-secret Git-root `.goalrail/project.yml` marker.
-8. Ensure `.goalrail/.gitignore` protects Goalrail-owned machine-local state.
 9. Run a best-effort local Project Scan cache write for the committed HEAD plus
    current workspace overlay.
 
-Current implementation note: step 6 happens before the local marker is written.
-The intended MVP recovery direction below treats snapshot recording as advisory
-post-marker work, so this ordering is a stabilization gap rather than product
-scope.
+Snapshot recording is advisory post-marker work. If snapshot recording fails
+after binding and marker write, the command reports `success_with_warnings`
+rather than leaving the repository without a local marker.
 
 ### `goalrail init --project <project_id>`
 
@@ -99,6 +98,29 @@ Current implementation sequence:
 8. Run a best-effort local Project Scan cache write.
 
 This mode does not currently record a repository context snapshot.
+
+## Init result output
+
+Server-backed init JSON includes a stable top-level `status` and compact
+`steps` array in addition to the existing top-level fields.
+
+Current status values are:
+- `success`
+- `success_with_warnings`
+- `partial_failed`
+- `failed` when a successful output object can safely represent a fatal state;
+  normal pre-binding command failures may still exit with no output object
+
+Current step names are:
+- `repository_context` for default `goalrail init`
+- `repo_binding` for `goalrail init --project <project_id>`
+- `local_marker`
+- `local_gitignore`
+- `context_snapshot` for default `goalrail init`
+- `project_scan`
+
+Step status values are `ok`, `skipped`, `warning`, and `error`. Recoverable
+warning/error steps may include a `retry_command`.
 
 ## Local files
 
@@ -219,10 +241,10 @@ pretending advisory work is canonical.
 | Failure point | Current behavior | MVP direction |
 | --- | --- | --- |
 | Server binding / repository-context init fails | Command fails before marker, snapshot, or scan. | `failed`; no local marker should be written. |
-| Marker write fails after server success | Command fails after server state may exist. | `partial_failed`; recoverable local bootstrap failure. A repair/status command should guide marker rewrite or reconciliation. |
-| `.goalrail/.gitignore` write fails after marker | Command fails today. | Treat with the marker local-bootstrap family; prefer recoverable local repair without changing server binding. |
-| Snapshot build/post fails after binding and marker | Plain init currently fails before marker because snapshot is recorded before marker. | `success_with_warnings`; binding and marker are sufficient, snapshot is advisory and can be retried. |
-| Project Scan cache write fails after binding and marker | Command succeeds with `project_scan_status=error` and warning fields. | `success_with_warnings`; local scan can be retried with `goalrail project scan`. |
+| Marker write fails after server success | Command emits `partial_failed` output when possible, then exits with the local write error. | `partial_failed`; recoverable local bootstrap failure. A repair/status command should guide marker rewrite or reconciliation. |
+| `.goalrail/.gitignore` write fails after marker | Command emits `partial_failed` output when possible, then exits with the local write error. | Treat with the marker local-bootstrap family; prefer recoverable local repair without changing server binding. |
+| Snapshot build/post fails after binding and marker | Command succeeds with `success_with_warnings`. | `success_with_warnings`; binding and marker are sufficient, snapshot is advisory and can be retried. |
+| Project Scan cache write fails after binding and marker | Command succeeds with `project_scan_status=error`, `success_with_warnings`, and a recoverable `project_scan` step. | `success_with_warnings`; local scan can be retried with `goalrail project scan`. |
 
 The desired user-visible distinction is:
 - `failed`: canonical binding did not happen or cannot be trusted
@@ -230,8 +252,9 @@ The desired user-visible distinction is:
 - `success_with_warnings`: binding and marker succeeded, but advisory snapshot
   or local scan evidence is missing or stale
 
-These labels are direction, not a claim that the current CLI already emits a
-stable status enum for each recovery class.
+The current CLI emits this stable status enum for server-backed init JSON
+outputs. Binding and preflight failures can still exit before an output object
+exists.
 
 ## Non-goals
 
