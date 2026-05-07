@@ -340,6 +340,40 @@ func TestOwnerCanResetExistingUserTemporaryPassword(t *testing.T) {
 	}
 }
 
+func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
+	store := newFakeStore()
+	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Inactive User", "inactive@example.com", spine.EntityStateInactive)
+	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
+	store.credentials[secondOwnerUserID] = spine.UserPasswordCredential{
+		UserID:             secondOwnerUserID,
+		PasswordHash:       "hash:old-inactive-password",
+		MustChangePassword: false,
+		PasswordChangedAt:  ptrTime(testNow.Add(-time.Hour)),
+		CreatedAt:          testNow.Add(-2 * time.Hour),
+		UpdatedAt:          testNow.Add(-time.Hour),
+	}
+	service := newTestService(store)
+
+	result, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              secondOwnerUserID,
+	})
+	if err != nil {
+		t.Fatalf("ResetTemporaryPassword() error = %v", err)
+	}
+	if result.TemporaryPassword != "temporary-password" {
+		t.Fatalf("TemporaryPassword = %q, want generated password", result.TemporaryPassword)
+	}
+	credential := store.credentials[secondOwnerUserID]
+	if credential.PasswordHash != "hash:temporary-password" || !credential.MustChangePassword || credential.PasswordChangedAt != nil {
+		t.Fatalf("credential = %#v, want reset temporary credential", credential)
+	}
+	if !store.revoked[secondOwnerUserID] {
+		t.Fatalf("sessions for %q were not revoked", secondOwnerUserID)
+	}
+}
+
 func TestResetTemporaryPasswordRequiresExistingOrganizationUser(t *testing.T) {
 	store := newFakeStore()
 	service := newTestService(store)
@@ -354,6 +388,117 @@ func TestResetTemporaryPasswordRequiresExistingOrganizationUser(t *testing.T) {
 	}
 	if _, ok := store.credentials[otherExistingUserID]; ok {
 		t.Fatalf("credential created for non-member: %#v", store.credentials[otherExistingUserID])
+	}
+}
+
+func TestSelfOwnerRoleDowngradeIsRejectedWithAnotherActiveOwner(t *testing.T) {
+	for _, role := range []string{"admin", "member", "viewer"} {
+		t.Run(role, func(t *testing.T) {
+			store := newFakeStore()
+			store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
+			store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive)
+			originalMembership := store.memberships[key(orgID, ownerUserID)]
+			service := newTestService(store)
+
+			_, err := service.PatchUser(context.Background(), PatchUserInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+				UserID:              ownerUserID,
+				Role:                &role,
+			})
+			if !errors.Is(err, ErrSelfActionForbidden) {
+				t.Fatalf("PatchUser() error = %v, want ErrSelfActionForbidden", err)
+			}
+			if got := store.memberships[key(orgID, ownerUserID)]; got != originalMembership {
+				t.Fatalf("self membership mutated:\n got: %#v\nwant: %#v", got, originalMembership)
+			}
+		})
+	}
+}
+
+func TestSelfOwnerMembershipDeactivationIsRejectedWithAnotherActiveOwner(t *testing.T) {
+	store := newFakeStore()
+	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Second Owner", "second@example.com", spine.EntityStateActive)
+	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleOwner, spine.EntityStateActive)
+	originalMembership := store.memberships[key(orgID, ownerUserID)]
+	nextState := "inactive"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+		State:               &nextState,
+	})
+	if !errors.Is(err, ErrSelfActionForbidden) {
+		t.Fatalf("PatchUser() error = %v, want ErrSelfActionForbidden", err)
+	}
+	if got := store.memberships[key(orgID, ownerUserID)]; got != originalMembership {
+		t.Fatalf("self membership mutated:\n got: %#v\nwant: %#v", got, originalMembership)
+	}
+}
+
+func TestSelfDisplayNamePatchRemainsAllowed(t *testing.T) {
+	store := newFakeStore()
+	nextName := "Updated Owner"
+	service := newTestService(store)
+
+	result, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+		DisplayName:         &nextName,
+	})
+	if err != nil {
+		t.Fatalf("PatchUser() error = %v", err)
+	}
+	if result.User.DisplayName != nextName {
+		t.Fatalf("DisplayName = %q, want %q", result.User.DisplayName, nextName)
+	}
+	if got := store.memberships[key(orgID, ownerUserID)].Role; got != spine.OrganizationMembershipRoleOwner {
+		t.Fatalf("self role = %q, want owner", got)
+	}
+}
+
+func TestSelfOwnerNoopRoleAndActiveStatePatchRemainAllowed(t *testing.T) {
+	store := newFakeStore()
+	nextRole := "owner"
+	nextState := "active"
+	service := newTestService(store)
+
+	result, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+		Role:                &nextRole,
+		State:               &nextState,
+	})
+	if err != nil {
+		t.Fatalf("PatchUser() error = %v", err)
+	}
+	if result.OrganizationMembership.Role != spine.OrganizationMembershipRoleOwner || result.OrganizationMembership.State != spine.EntityStateActive {
+		t.Fatalf("membership = %#v, want active owner", result.OrganizationMembership)
+	}
+}
+
+func TestSelfTemporaryPasswordResetIsRejected(t *testing.T) {
+	store := newFakeStore()
+	originalCredential := store.credentials[ownerUserID]
+	service := newTestService(store)
+
+	_, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              ownerUserID,
+	})
+	if !errors.Is(err, ErrSelfActionForbidden) {
+		t.Fatalf("ResetTemporaryPassword() error = %v, want ErrSelfActionForbidden", err)
+	}
+	if got := store.credentials[ownerUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("self credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
+	}
+	if store.revoked[ownerUserID] {
+		t.Fatalf("self sessions were revoked")
 	}
 }
 

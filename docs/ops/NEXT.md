@@ -84,13 +84,16 @@
   newly created users and reset rotations, reset-side active session
   revocation, safe attachment of already existing active users that are not yet
   members of the target Organization without credential rotation,
-  membership-scoped active/inactive updates, and last-active-owner protection.
+  membership-scoped active/inactive updates, last-active-owner protection, and
+  self-action safety for owner self-demotion, self membership deactivation, and
+  self admin temporary-password reset.
 - The canonical `apps/web/console` Settings / Users surface now uses `/v1/me`
   to determine `organization_id`, calls the ADR-0027 Organization
   user-management API for list/create/patch/temporary-password reset, uses
   backend roles `owner` / `admin` / `member` / `viewer`, shows
-  `must_change_password` as credential status, and keeps temporary passwords in
-  one-time React state only.
+  `must_change_password` as credential status, keeps temporary passwords in
+  one-time React state only, and blocks self owner demotion, self membership
+  deactivation, and self temporary-password reset in the admin Users surface.
 - Next bounded Organization user-management implementation slices should stay
   outside CLI user creation, invite/reset email, public registration, SaaS
   onboarding, SSO/OIDC, runner, gate, and proof.

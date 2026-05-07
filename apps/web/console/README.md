@@ -17,6 +17,9 @@ Current scope:
 - left navigation with three structured empty product surfaces: Contracts, Delivery Readiness, Proof
 - bottom-left Settings utility with Appearance theme presets and API-backed
   Organization Users add/edit/temporary-password reset UI
+- Settings / Users blocks self-demotion from owner, self membership
+  deactivation, and self temporary-password reset; own password changes use
+  the existing password-change flow
 - selected theme persists only as a local browser visual preference under `goalrail.console.theme`
 - locale is not persisted in browser storage; runtime switching updates i18next,
   `document.documentElement.lang`, and the URL `lng` query param
@@ -45,4 +48,6 @@ Delivery rule:
   target role
 - generated temporary passwords are shown only from the immediate successful
   create/reset response and must not be stored in browser storage
+- user management remains Console/admin API-backed; there are no CLI
+  user-management commands
 - product surfaces, auth state, locale, users, and settings screen are not persisted

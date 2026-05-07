@@ -873,6 +873,109 @@ describe('App', () => {
     expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('rotated-once-secret');
   });
 
+  it('blocks self temporary password reset before calling the API', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Owner', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /edit owner/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    expect(within(drawer).getAllByText(/Use Change password for your own password/i).length).toBeGreaterThan(0);
+    const resetButton = within(drawer).getByRole('button', { name: /^Reset temporary password$/i });
+    expect(resetButton).toBeDisabled();
+    fireEvent.click(resetButton);
+
+    expect(screen.queryByRole('dialog', { name: /confirm temporary password reset/i })).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('blocks self owner downgrade before calling PATCH', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Owner', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }),
+      organizationUserRecord({ displayName: 'Second Owner', email: 'second@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000020' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /edit owner/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Role$/i), { target: { value: 'admin' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You cannot remove your own owner access');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('blocks self membership deactivation before calling PATCH', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Owner', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }),
+      organizationUserRecord({ displayName: 'Second Owner', email: 'second@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000020' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /edit owner/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Status$/i), { target: { value: 'inactive' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You cannot deactivate your own organization membership');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('allows self display name edit while preserving owner role and active state', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Owner', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('owner@example.com');
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(organizationUserRecord({ displayName: 'Owner Updated', email: 'owner@example.com', role: 'owner', userId: '018f0000-0000-7000-8000-000000000001' }))
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /edit owner/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    fireEvent.change(within(drawer).getByLabelText(/^Name$/i), { target: { value: 'Owner Updated' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
+
+    await screen.findByText('Owner Updated');
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000001'
+    );
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({
+          display_name: 'Owner Updated',
+          role: 'owner',
+          state: 'active',
+        }),
+      })
+    );
+  });
+
   it('edit user does not require email because PATCH does not update email', async () => {
     await loginSuccessfully();
     fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([

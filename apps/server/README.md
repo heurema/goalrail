@@ -284,6 +284,13 @@ password exactly once. The server stores only password hashes, sets
 that user. List responses never return password hashes, temporary passwords,
 refresh tokens, session tokens, or CLI auth codes.
 
+Temporary-password reset remains allowed for active or inactive non-self
+Organization users and memberships. The admin reset route rejects resetting the
+authenticated user's own password; use the authenticated password-change flow
+for your own password instead. The patch route rejects self-demotion away from
+`owner` and self-deactivation of the caller's own Organization membership while
+still allowing self display-name edits and no-op owner / active patches.
+
 The API remains a Console/admin surface. There are no CLI user-management
 commands, invite/reset email delivery, public registration, self-service
 password reset, SaaS onboarding, SSO/OIDC, or organization creation API in this
