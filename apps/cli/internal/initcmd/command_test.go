@@ -801,7 +801,7 @@ func TestRunRepositoryContextInitSnapshotFailureAfterMarkerReturnsWarningStatus(
 		case "/v1/init/repository-context":
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "release/2026-05")))
 		case "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots":
 			if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
 				t.Errorf("local marker before failed snapshot stat error = %v, want marker written first", err)
@@ -816,7 +816,7 @@ func TestRunRepositoryContextInitSnapshotFailureAfterMarkerReturnsWarningStatus(
 	}))
 	defer server.Close()
 
-	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--format", "json")
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--repo", "git@github.com:heurema/goalrail.git", "--base", "release/2026-05", "--format", "json")
 	if err != nil {
 		t.Fatalf("Run(init) error = %v", err)
 	}
@@ -827,7 +827,8 @@ func TestRunRepositoryContextInitSnapshotFailureAfterMarkerReturnsWarningStatus(
 		t.Fatalf("context snapshot output = %#v, want warning without snapshot id", output)
 	}
 	step := findInitStep(output.Steps, initStepContextSnapshot)
-	if step == nil || step.Status != spine.InitStepStatusWarning || !step.Recoverable || step.RetryCommand != "goalrail init" {
+	wantRetry := "goalrail init --repo git@github.com:heurema/goalrail.git --base release/2026-05"
+	if step == nil || step.Status != spine.InitStepStatusWarning || !step.Recoverable || step.RetryCommand != wantRetry {
 		t.Fatalf("context_snapshot step = %#v, want recoverable warning with init retry", step)
 	}
 	if output.ProjectScanStatus != "quick" {
@@ -856,12 +857,12 @@ func TestRunRepositoryContextInitMarkerWriteFailureEmitsPartialFailedOutput(t *t
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+		_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "release/2026-05")))
 	}))
 	defer server.Close()
 
 	var stdout, stderr bytes.Buffer
-	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--format", "json"}, Options{
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--repo", "git@github.com:heurema/goalrail.git", "--base", "release/2026-05", "--format", "json"}, Options{
 		Store:                fakeSessionStore{session: validSession(server.URL)},
 		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
 		ProjectScanCacheRoot: t.TempDir(),
@@ -889,8 +890,117 @@ func TestRunRepositoryContextInitMarkerWriteFailureEmitsPartialFailedOutput(t *t
 		{name: initStepContextSnapshot, status: spine.InitStepStatusSkipped},
 		{name: initStepProjectScan, status: spine.InitStepStatusSkipped},
 	})
-	if output.NextCommand != "goalrail init" {
+	wantRetry := "goalrail init --repo git@github.com:heurema/goalrail.git --base release/2026-05"
+	if output.NextCommand != wantRetry {
 		t.Fatalf("next_suggested_command = %q, want retry init", output.NextCommand)
+	}
+	step := findInitStep(output.Steps, initStepLocalMarker)
+	if step == nil || step.RetryCommand != wantRetry {
+		t.Fatalf("local_marker step = %#v, want retry command %q", step, wantRetry)
+	}
+}
+
+func TestRunServerBackedInitLocalRecoveryRetryCommandsPreserveProjectRepoAndBase(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	projectID := "018f0000-0000-7000-8000-000000000003"
+	wantRetry := "goalrail init --project " + projectID + " --repo git@github.com:heurema/goalrail.git --base release/2026-05"
+	tests := []struct {
+		name             string
+		prepare          func(string)
+		blockAfterServer bool
+		wantStep         string
+	}{
+		{
+			name:             "marker_failure",
+			blockAfterServer: true,
+			wantStep:         initStepLocalMarker,
+		},
+		{
+			name: "gitignore_failure",
+			prepare: func(repoDir string) {
+				if err := os.MkdirAll(filepath.Join(repoDir, ".goalrail", ".gitignore"), 0o755); err != nil {
+					t.Fatalf("create blocking .goalrail/.gitignore directory: %v", err)
+				}
+			},
+			wantStep: initStepLocalGitignore,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+			if tt.prepare != nil {
+				tt.prepare(repoDir)
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tt.blockAfterServer {
+					if err := os.WriteFile(filepath.Join(repoDir, ".goalrail"), []byte("blocks marker directory"), 0o644); err != nil {
+						t.Errorf("write blocking .goalrail file: %v", err)
+						http.Error(w, "fixture failed", http.StatusInternalServerError)
+						return
+					}
+				}
+				repoBindingInitHandler(t, projectID)(w, r)
+			}))
+			defer server.Close()
+
+			var stdout, stderr bytes.Buffer
+			err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--project", projectID, "--repo", "git@github.com:heurema/goalrail.git", "--base", "release/2026-05", "--format", "json"}, Options{
+				Store:                fakeSessionStore{session: validSession(server.URL)},
+				Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+				ProjectScanCacheRoot: t.TempDir(),
+			})
+			if err == nil {
+				t.Fatal("Run(init --project) error = nil, want local recovery failure")
+			}
+			if got := exitcode.ForError(err); got != exitcode.Runtime {
+				t.Fatalf("exit code = %d, want runtime", got)
+			}
+
+			var output spine.RepoBindingInitOutput
+			decoder := json.NewDecoder(&stdout)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&output); err != nil {
+				t.Fatalf("decode partial init JSON %q: %v", stdout.String(), err)
+			}
+			if output.Status != spine.InitOverallStatusPartialFailed {
+				t.Fatalf("status = %q, want partial_failed", output.Status)
+			}
+			if output.NextCommand != wantRetry {
+				t.Fatalf("next_suggested_command = %q, want %q", output.NextCommand, wantRetry)
+			}
+			step := findInitStep(output.Steps, tt.wantStep)
+			if step == nil || step.Status != spine.InitStepStatusError || !step.Recoverable || step.RetryCommand != wantRetry {
+				t.Fatalf("%s step = %#v, want recoverable error with retry %q", tt.wantStep, step, wantRetry)
+			}
+		})
+	}
+}
+
+func TestInitRetryCommandsPreserveContextAndQuoteUnsafeValues(t *testing.T) {
+	t.Parallel()
+
+	if got := repositoryContextInitRetryCommand(spine.RepoBindingDraft{
+		RepoURL:            "https://github.com/heurema/goalrail.git",
+		WorkflowBaseBranch: "release/2026-05",
+	}); got != "goalrail init --repo https://github.com/heurema/goalrail.git --base release/2026-05" {
+		t.Fatalf("repository retry command = %q, want ordinary HTTPS args unquoted", got)
+	}
+	if got := repoBindingInitRetryCommand("018f0000-0000-7000-8000-000000000003", spine.RepoBindingDraft{
+		RepoURL:            "git@github.com:heurema/goalrail.git",
+		WorkflowBaseBranch: "main",
+	}); got != "goalrail init --project 018f0000-0000-7000-8000-000000000003 --repo git@github.com:heurema/goalrail.git --base main" {
+		t.Fatalf("repo binding retry command = %q, want ordinary SSH args unquoted", got)
+	}
+	if got := repositoryContextInitRetryCommand(spine.RepoBindingDraft{
+		RepoURL:            "https://example.com/acme/repo with space.git",
+		WorkflowBaseBranch: "release/$USER's-branch",
+	}); got != "goalrail init --repo 'https://example.com/acme/repo with space.git' --base 'release/$USER'\\''s-branch'" {
+		t.Fatalf("quoted repository retry command = %q, want shell-quoted unsafe args", got)
 	}
 }
 
