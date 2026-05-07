@@ -216,6 +216,16 @@ type RepositoryContextSnapshotResult struct {
 	Message           string                      `json:"message"`
 }
 
+type OrganizationRepositoryContextResult struct {
+	Organization Organization                `json:"organization"`
+	Contexts     []ProjectRepoBindingContext `json:"contexts"`
+}
+
+type ProjectRepoBindingContext struct {
+	Project     Project     `json:"project"`
+	RepoBinding RepoBinding `json:"repo_binding"`
+}
+
 type ResolvedRepoBindingContext struct {
 	OrganizationID OrganizationID `json:"organization_id"`
 	ProjectID      ProjectID      `json:"project_id"`

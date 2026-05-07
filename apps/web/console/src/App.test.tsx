@@ -112,6 +112,44 @@ function contractResponse(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function repositoryContextResponse(contexts: unknown[] = [repositoryContextRecord()]) {
+  return {
+    organization: {
+      id: '018f0000-0000-7000-8000-000000000002',
+      slug: 'goalrail-dev',
+      display_name: 'Goalrail Dev',
+      state: 'active',
+    },
+    contexts,
+  };
+}
+
+function repositoryContextRecord(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    project: {
+      id: String(overrides.projectId ?? '018f0000-0000-7000-8000-000000000003'),
+      slug: String(overrides.projectSlug ?? 'github-heurema-goalrail'),
+      display_name: String(overrides.projectDisplayName ?? 'heurema/goalrail'),
+      state: String(overrides.projectState ?? 'active'),
+      created_at: '2026-05-07T10:00:00Z',
+      updated_at: '2026-05-07T10:15:00Z',
+    },
+    repo_binding: {
+      id: String(overrides.repoBindingId ?? '018f0000-0000-7000-8000-000000000004'),
+      provider: String(overrides.provider ?? 'github'),
+      repository_full_name: String(overrides.repositoryFullName ?? 'heurema/goalrail'),
+      repository_url: String(overrides.repositoryUrl ?? 'git@github.com:heurema/goalrail.git'),
+      default_branch: String(overrides.defaultBranch ?? 'main'),
+      workflow_base_branch: String(overrides.workflowBaseBranch ?? 'main'),
+      path_scope: String(overrides.pathScope ?? '.'),
+      access_mode: String(overrides.accessMode ?? 'metadata_only'),
+      state: String(overrides.repoBindingState ?? 'active'),
+      created_at: '2026-05-07T10:00:00Z',
+      updated_at: '2026-05-07T10:15:00Z',
+    },
+  };
+}
+
 function errorEnvelope(code: string, message = 'error') {
   return {
     error: { code, message },
@@ -559,6 +597,59 @@ describe('App', () => {
     expect(screen.queryByText('Product Lead')).not.toBeInTheDocument();
     expect(screen.queryByText('Reviewer')).not.toBeInTheDocument();
     expect(screen.queryByText('qa@example.com')).not.toBeInTheDocument();
+  });
+
+  it('repository settings calls GET with the organization_id from /v1/me and renders metadata only', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(repositoryContextResponse()));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Repository$/i }));
+
+    expect(await screen.findByRole('heading', { name: /^Repository$/i })).toBeInTheDocument();
+    expect(await screen.findByText('Goalrail Dev')).toBeInTheDocument();
+    expect(screen.getAllByText('heurema/goalrail').length).toBeGreaterThan(0);
+    expect(screen.getByText('metadata_only')).toBeInTheDocument();
+    expect(screen.getByText(/does not prove checkout permission or provider authorization/i)).toBeInTheDocument();
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(document.body).not.toHaveTextContent(/readiness score|proof status|checkout ready|provider connected|token|credential|run receipt|gate decision/i);
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+  });
+
+  it('repository settings shows an empty state for no active contexts', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(repositoryContextResponse([])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Repository$/i }));
+
+    expect(await screen.findByText(/No repository context initialized yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/read-only Console surface/i)).toBeInTheDocument();
+  });
+
+  it('repository settings shows loading and error states', async () => {
+    await loginSuccessfully();
+    const repositoryLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => repositoryLookup.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Repository$/i }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Loading repository context...');
+
+    await act(async () => {
+      repositoryLookup.resolve(jsonResponse(errorEnvelope('forbidden'), 403));
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have access to this Organization repository context.');
   });
 
   it('ignores stale user-list responses after auth state changes', async () => {

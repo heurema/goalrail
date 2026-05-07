@@ -25,10 +25,11 @@ const (
 )
 
 var (
-	ErrForbidden           = errors.New("user is not allowed to record repository context snapshot")
-	ErrRepoBindingNotFound = errors.New("repo binding not found")
-	ErrRepoBindingInactive = errors.New("repo binding is not active")
-	ErrSnapshotMismatch    = errors.New("repository context snapshot does not match repo binding")
+	ErrForbidden            = errors.New("user is not allowed to record repository context snapshot")
+	ErrOrganizationNotFound = errors.New("organization not found")
+	ErrRepoBindingNotFound  = errors.New("repo binding not found")
+	ErrRepoBindingInactive  = errors.New("repo binding is not active")
+	ErrSnapshotMismatch     = errors.New("repository context snapshot does not match repo binding")
 )
 
 type ValidationError struct {
@@ -44,7 +45,9 @@ func (e *ValidationError) Error() string {
 }
 
 type Store interface {
+	GetOrganization(context.Context, spine.OrganizationID) (spine.Organization, bool, error)
 	GetRepoBinding(context.Context, spine.RepoBindingID) (spine.RepoBinding, bool, error)
+	ListActiveProjectRepoBindingContexts(context.Context, spine.OrganizationID) ([]spine.ProjectRepoBindingContext, error)
 	GetRepositoryContextSnapshotByFingerprint(context.Context, spine.RepoBindingID, string) (spine.RepositoryContextSnapshotRecord, bool, error)
 	CreateRepositoryContextSnapshot(context.Context, spine.RepositoryContextSnapshotRecord) error
 }
@@ -71,6 +74,12 @@ type RecordInput struct {
 	Membership          spine.OrganizationMembership
 	RepoBindingID       spine.RepoBindingID
 	Snapshot            spine.RepositoryContextSnapshotRequest
+}
+
+type ReadOrganizationContextInput struct {
+	AuthenticatedUserID spine.UserID
+	Membership          spine.OrganizationMembership
+	OrganizationID      spine.OrganizationID
 }
 
 type Service struct {
@@ -176,6 +185,49 @@ func (s *Service) RecordSnapshot(ctx context.Context, input RecordInput) (spine.
 	return snapshotResult(record, true, recordedMessage), nil
 }
 
+func (s *Service) GetOrganizationRepositoryContext(ctx context.Context, input ReadOrganizationContextInput) (spine.OrganizationRepositoryContextResult, error) {
+	normalized, err := normalizeReadInput(input)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, err
+	}
+	if err := authorizeRead(normalized.Membership, normalized.OrganizationID); err != nil {
+		return spine.OrganizationRepositoryContextResult{}, err
+	}
+
+	organization, ok, err := s.Store.GetOrganization(ctx, normalized.OrganizationID)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, fmt.Errorf("get organization: %w", err)
+	}
+	if !ok || organization.State != spine.EntityStateActive {
+		return spine.OrganizationRepositoryContextResult{}, ErrOrganizationNotFound
+	}
+
+	contexts, err := s.Store.ListActiveProjectRepoBindingContexts(ctx, normalized.OrganizationID)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, fmt.Errorf("list active project repo binding contexts: %w", err)
+	}
+	if contexts == nil {
+		contexts = []spine.ProjectRepoBindingContext{}
+	}
+	return spine.OrganizationRepositoryContextResult{
+		Organization: organization,
+		Contexts:     contexts,
+	}, nil
+}
+
+func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {
+	if strings.TrimSpace(string(input.AuthenticatedUserID)) == "" {
+		return ReadOrganizationContextInput{}, &ValidationError{Field: "user_id", Message: "authenticated user is required"}
+	}
+	if strings.TrimSpace(string(input.OrganizationID)) == "" {
+		return ReadOrganizationContextInput{}, &ValidationError{Field: "organization_id", Message: "is required"}
+	}
+	if err := validateUUIDv7("organization_id", string(input.OrganizationID)); err != nil {
+		return ReadOrganizationContextInput{}, err
+	}
+	return input, nil
+}
+
 func normalizeInput(input RecordInput) (RecordInput, error) {
 	if strings.TrimSpace(string(input.AuthenticatedUserID)) == "" {
 		return RecordInput{}, &ValidationError{Field: "user_id", Message: "authenticated user is required"}
@@ -227,6 +279,18 @@ func authorize(membership spine.OrganizationMembership) error {
 	}
 	switch membership.Role {
 	case spine.OrganizationMembershipRoleOwner, spine.OrganizationMembershipRoleAdmin, spine.OrganizationMembershipRoleMember:
+		return nil
+	default:
+		return ErrForbidden
+	}
+}
+
+func authorizeRead(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
+	if membership.State != spine.EntityStateActive || membership.OrganizationID != organizationID {
+		return ErrForbidden
+	}
+	switch membership.Role {
+	case spine.OrganizationMembershipRoleOwner, spine.OrganizationMembershipRoleAdmin, spine.OrganizationMembershipRoleMember, spine.OrganizationMembershipRoleViewer:
 		return nil
 	default:
 		return ErrForbidden

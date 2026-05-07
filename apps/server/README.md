@@ -268,6 +268,23 @@ curl -sS -X POST http://localhost:8080/v1/auth/logout \
 Logout validates the bearer access token, loads the referenced session, and
 marks that session revoked with `revoked_at`.
 
+## Repository context read API
+
+After login, active Organization members can read the server-owned Project /
+RepoBinding metadata for their Organization:
+
+- `GET /v1/organizations/{organization_id}/repository-context`
+
+The endpoint loads the caller profile and OrganizationMembership server-side,
+rejects cross-Organization reads, and returns Organization metadata plus an
+array of active Project + active RepoBinding contexts. An Organization with no
+active context returns `200` with `contexts: []`.
+
+This response is metadata-only. It does not return Installation mode,
+`public_base_url`, provider tokens, clone credentials, repository secret
+material, source bodies, checkout status, readiness score, proof status, runner
+state, or provider authorization state.
+
 ## Organization user-management API
 
 After login, owner-only Organization user management is available through the

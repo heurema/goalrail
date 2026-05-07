@@ -225,6 +225,85 @@ func TestRecordSnapshotResolvesConcurrentFingerprintRaceIdempotently(t *testing.
 	}
 }
 
+func TestGetOrganizationRepositoryContextReturnsActiveContextsForAllRoles(t *testing.T) {
+	roles := []spine.OrganizationMembershipRole{
+		spine.OrganizationMembershipRoleOwner,
+		spine.OrganizationMembershipRoleAdmin,
+		spine.OrganizationMembershipRoleMember,
+		spine.OrganizationMembershipRoleViewer,
+	}
+	for _, role := range roles {
+		t.Run(string(role), func(t *testing.T) {
+			store := newFakeStore()
+			store.organization = organizationFixture()
+			store.organizationOK = true
+			store.contexts = []spine.ProjectRepoBindingContext{projectRepoBindingContextFixture()}
+			service := newTestService(store, &fakeEventLog{})
+			input := validReadInput()
+			input.Membership.Role = role
+
+			result, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+			if err != nil {
+				t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+			}
+			if result.Organization.ID != testOrganizationID {
+				t.Fatalf("organization id = %q, want %q", result.Organization.ID, testOrganizationID)
+			}
+			if got := len(result.Contexts); got != 1 {
+				t.Fatalf("contexts = %d, want 1", got)
+			}
+			if result.Contexts[0].RepoBinding.AccessMode != spine.RepoBindingAccessModeMetadataOnly {
+				t.Fatalf("access mode = %q, want metadata_only", result.Contexts[0].RepoBinding.AccessMode)
+			}
+		})
+	}
+}
+
+func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+	input := validReadInput()
+	input.OrganizationID = "018f0000-0000-7000-8000-000000000099"
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want ErrForbidden", err)
+	}
+	if store.getOrganizationCalls != 0 {
+		t.Fatalf("GetOrganization calls = %d, want 0 before authorization", store.getOrganizationCalls)
+	}
+}
+
+func TestGetOrganizationRepositoryContextReturnsEmptyContexts(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	if result.Contexts == nil {
+		t.Fatal("contexts = nil, want empty array slice")
+	}
+	if len(result.Contexts) != 0 {
+		t.Fatalf("contexts = %d, want 0", len(result.Contexts))
+	}
+}
+
+func TestGetOrganizationRepositoryContextRejectsUnknownOrganization(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store, &fakeEventLog{})
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if !errors.Is(err, ErrOrganizationNotFound) {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want ErrOrganizationNotFound", err)
+	}
+}
+
 const (
 	testUserID         spine.UserID         = "018f0000-0000-7000-8000-000000000001"
 	testOrganizationID spine.OrganizationID = "018f0000-0000-7000-8000-000000000002"
@@ -267,6 +346,48 @@ func validInput() RecordInput {
 	}
 }
 
+func validReadInput() ReadOrganizationContextInput {
+	return ReadOrganizationContextInput{
+		AuthenticatedUserID: testUserID,
+		Membership: spine.OrganizationMembership{
+			ID:             "018f0000-0000-7000-8000-000000000005",
+			OrganizationID: testOrganizationID,
+			UserID:         testUserID,
+			Role:           spine.OrganizationMembershipRoleViewer,
+			State:          spine.EntityStateActive,
+		},
+		OrganizationID: testOrganizationID,
+	}
+}
+
+func organizationFixture() spine.Organization {
+	return spine.Organization{
+		ID:             testOrganizationID,
+		InstallationID: "018f0000-0000-7000-8000-000000000006",
+		Slug:           "goalrail-dev",
+		DisplayName:    "Goalrail Dev",
+		State:          spine.EntityStateActive,
+		CreatedAt:      testNow(),
+		UpdatedAt:      testNow(),
+	}
+}
+
+func projectRepoBindingContextFixture() spine.ProjectRepoBindingContext {
+	return spine.ProjectRepoBindingContext{
+		Project: spine.Project{
+			ID:              testProjectID,
+			OrganizationID:  testOrganizationID,
+			CreatedByUserID: testUserID,
+			Slug:            "github-heurema-goalrail",
+			DisplayName:     "heurema/goalrail",
+			State:           spine.EntityStateActive,
+			CreatedAt:       testNow(),
+			UpdatedAt:       testNow(),
+		},
+		RepoBinding: repoBindingFixture(),
+	}
+}
+
 func repoBindingFixture() spine.RepoBinding {
 	return spine.RepoBinding{
 		ID:                 testRepoBindingID,
@@ -289,7 +410,11 @@ func repoBindingFixture() spine.RepoBinding {
 type fakeStore struct {
 	binding                  spine.RepoBinding
 	bindingOK                bool
+	organization             spine.Organization
+	organizationOK           bool
+	contexts                 []spine.ProjectRepoBindingContext
 	getBindingCalls          int
+	getOrganizationCalls     int
 	snapshotsByFingerprint   map[string]spine.RepositoryContextSnapshotRecord
 	createdSnapshots         []spine.RepositoryContextSnapshotRecord
 	createSnapshotErr        error
@@ -303,6 +428,18 @@ func newFakeStore() *fakeStore {
 func (s *fakeStore) GetRepoBinding(_ context.Context, _ spine.RepoBindingID) (spine.RepoBinding, bool, error) {
 	s.getBindingCalls++
 	return s.binding, s.bindingOK, nil
+}
+
+func (s *fakeStore) GetOrganization(_ context.Context, _ spine.OrganizationID) (spine.Organization, bool, error) {
+	s.getOrganizationCalls++
+	return s.organization, s.organizationOK, nil
+}
+
+func (s *fakeStore) ListActiveProjectRepoBindingContexts(_ context.Context, _ spine.OrganizationID) ([]spine.ProjectRepoBindingContext, error) {
+	if s.contexts == nil {
+		return []spine.ProjectRepoBindingContext{}, nil
+	}
+	return append([]spine.ProjectRepoBindingContext(nil), s.contexts...), nil
 }
 
 func (s *fakeStore) GetRepositoryContextSnapshotByFingerprint(_ context.Context, repoBindingID spine.RepoBindingID, fingerprint string) (spine.RepositoryContextSnapshotRecord, bool, error) {

@@ -94,6 +94,12 @@
   `must_change_password` as credential status, keeps temporary passwords in
   one-time React state only, and blocks self owner demotion, self membership
   deactivation, and self temporary-password reset in the admin Users surface.
+- The canonical `apps/web/console` Settings / Repository surface now uses
+  `/v1/me` to determine `organization_id` and reads
+  `GET /v1/organizations/{organization_id}/repository-context` for
+  metadata-only Organization / active Project / active RepoBinding visibility.
+  This is read-only and does not claim provider authorization, checkout,
+  readiness, proof, execution, or runner state.
 - Next bounded Organization user-management implementation slices should stay
   outside CLI user creation, invite/reset email, public registration, SaaS
   onboarding, SSO/OIDC, runner, gate, and proof.
@@ -295,9 +301,11 @@ Done means:
 - Settings -> Users uses the backend Organization user-management API and keeps
   only fetched view, form state, filters, and one-time create/reset response
   secrets in React memory
+- Settings -> Repository uses a backend read-only repository-context API and
+  keeps only fetched metadata view state in React memory
 - no public registration, signup, SSO, invite/reset email, self-service
   password reset, password reset email delivery,
-  SaaS onboarding, organization creation API, analytics, repo integration,
+  SaaS onboarding, organization creation API, analytics, provider integration,
   runner, gate, proof, CORS, deployment
   config, hostnames, IPs, ports, credentials, reverse-proxy snippets, or
   secrets were added
