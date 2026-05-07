@@ -209,6 +209,9 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
 		case "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots":
+			if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
+				t.Errorf("local marker before snapshot stat error = %v, want marker written before advisory snapshot", err)
+			}
 			decoder := json.NewDecoder(r.Body)
 			decoder.DisallowUnknownFields()
 			if err := decoder.Decode(&snapshotReceived); err != nil {
@@ -258,6 +261,16 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.ProjectScanStatus != "quick" || output.ProjectScanBaselineID == "" || output.ProjectScanOverlayID == "" || output.ProjectScanFreshness != "fresh" {
 		t.Fatalf("project scan output = %#v, want quick/fresh with ids", output)
 	}
+	if output.Status != spine.InitOverallStatusSuccess {
+		t.Fatalf("status = %q, want success", output.Status)
+	}
+	assertInitSteps(t, output.Steps, []wantInitStep{
+		{name: initStepRepositoryContext, status: spine.InitStepStatusOK},
+		{name: initStepLocalMarker, status: spine.InitStepStatusOK},
+		{name: initStepLocalGitignore, status: spine.InitStepStatusOK},
+		{name: initStepContextSnapshot, status: spine.InitStepStatusOK},
+		{name: initStepProjectScan, status: spine.InitStepStatusOK},
+	})
 	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
 		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
 	}
@@ -351,7 +364,7 @@ func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
 		"Commit .goalrail/project.yml and .goalrail/.gitignore with this repository.",
 		"Repository context snapshot: 018f0000-0000-7000-8000-000000000301 (recorded)",
 		"Project scan: quick",
-		"This initialized GoalRail repository context for your existing organization, recorded a metadata-only repository context snapshot, and ran a local Project Scan.",
+		"This initialized GoalRail repository context for your existing organization, wrote a non-secret GoalRail repository marker, attempted a metadata-only repository context snapshot, and ran a local Project Scan.",
 		"No server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured.",
 	} {
 		if !strings.Contains(got, want) {
@@ -670,6 +683,16 @@ func TestRunServerBackedInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.LocalIgnorePath != projectConfigIgnoreRelativePath || output.LocalIgnoreStatus != localConfigStatusWritten {
 		t.Fatalf("local ignore output = %q/%q, want %q/%q", output.LocalIgnorePath, output.LocalIgnoreStatus, projectConfigIgnoreRelativePath, localConfigStatusWritten)
 	}
+	if output.Status != spine.InitOverallStatusSuccess {
+		t.Fatalf("status = %q, want success", output.Status)
+	}
+	assertInitSteps(t, output.Steps, []wantInitStep{
+		{name: initStepRepoBinding, status: spine.InitStepStatusOK},
+		{name: initStepLocalMarker, status: spine.InitStepStatusOK},
+		{name: initStepLocalGitignore, status: spine.InitStepStatusOK},
+		{name: initStepProjectScan, status: spine.InitStepStatusOK},
+	})
+	assertNoInitStep(t, output.Steps, initStepContextSnapshot)
 	if received.Provider != "github" || received.RepositoryFullName != "heurema/goalrail" || received.RepositoryURL != "git@github.com:heurema/goalrail.git" {
 		t.Fatalf("request repo fields = %#v, want GitHub goalrail repo", received)
 	}
@@ -728,6 +751,153 @@ func TestRunServerBackedInitFromNestedDirectoryWritesGitRootConfig(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(nestedDir, projectConfigIgnoreRelativePath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("nested local-state gitignore stat error = %v, want not exist", err)
+	}
+}
+
+func TestRunServerBackedInitProjectScanFailureReturnsWarningStatus(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	projectID := "018f0000-0000-7000-8000-000000000003"
+	server := httptest.NewServer(repoBindingInitHandler(t, projectID))
+	defer server.Close()
+	cacheRootFile := filepath.Join(t.TempDir(), "project-scan-cache-root")
+	if err := os.WriteFile(cacheRootFile, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write cache root file: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--project", projectID, "--format", "json"}, Options{
+		Store:                fakeSessionStore{session: validSession(server.URL)},
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: cacheRootFile,
+	})
+	if err != nil {
+		t.Fatalf("Run(init --project) error = %v", err)
+	}
+
+	var output spine.RepoBindingInitOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode init server JSON %q: %v", stdout.String(), err)
+	}
+	if output.Status != spine.InitOverallStatusSuccessWithWarnings {
+		t.Fatalf("status = %q, want success_with_warnings", output.Status)
+	}
+	if output.ProjectScanStatus != "error" || output.ProjectScanWarning == "" {
+		t.Fatalf("project scan output = %#v, want non-fatal scan error warning", output)
+	}
+	step := findInitStep(output.Steps, initStepProjectScan)
+	if step == nil || step.Status != spine.InitStepStatusWarning || !step.Recoverable || !strings.Contains(step.RetryCommand, "goalrail project scan") {
+		t.Fatalf("project_scan step = %#v, want recoverable warning with project scan retry", step)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
+		t.Fatalf("local marker stat error = %v, want marker written before scan warning", err)
+	}
+}
+
+func TestRunRepositoryContextInitSnapshotFailureAfterMarkerReturnsWarningStatus(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/init/repository-context":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+		case "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots":
+			if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
+				t.Errorf("local marker before failed snapshot stat error = %v, want marker written first", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"code":"temporary_snapshot_error","message":"snapshot unavailable"}}`))
+		default:
+			t.Errorf("path = %s, want repository context init or snapshot path", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	output, err := runRepositoryContextJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(init) error = %v", err)
+	}
+	if output.Status != spine.InitOverallStatusSuccessWithWarnings {
+		t.Fatalf("status = %q, want success_with_warnings", output.Status)
+	}
+	if output.ContextSnapshotStatus != string(spine.InitStepStatusWarning) || output.ContextSnapshotID != "" {
+		t.Fatalf("context snapshot output = %#v, want warning without snapshot id", output)
+	}
+	step := findInitStep(output.Steps, initStepContextSnapshot)
+	if step == nil || step.Status != spine.InitStepStatusWarning || !step.Recoverable || step.RetryCommand != "goalrail init" {
+		t.Fatalf("context_snapshot step = %#v, want recoverable warning with init retry", step)
+	}
+	if output.ProjectScanStatus != "quick" {
+		t.Fatalf("project_scan_status = %q, want scan still attempted after snapshot warning", output.ProjectScanStatus)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
+		t.Fatalf("local marker stat error = %v, want marker present", err)
+	}
+}
+
+func TestRunRepositoryContextInitMarkerWriteFailureEmitsPartialFailedOutput(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/init/repository-context" {
+			t.Errorf("path = %s, want repository context init path only", r.URL.Path)
+			http.Error(w, "bad path", http.StatusNotFound)
+			return
+		}
+		if err := os.WriteFile(filepath.Join(repoDir, ".goalrail"), []byte("blocks marker directory"), 0o644); err != nil {
+			t.Errorf("write blocking .goalrail file: %v", err)
+			http.Error(w, "fixture failed", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(repositoryContextInitResponseJSON(true, true, "main")))
+	}))
+	defer server.Close()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--format", "json"}, Options{
+		Store:                fakeSessionStore{session: validSession(server.URL)},
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("Run(init) error = nil, want marker write failure")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Runtime {
+		t.Fatalf("exit code = %d, want runtime", got)
+	}
+
+	var output spine.RepositoryContextInitOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode partial init JSON %q: %v", stdout.String(), err)
+	}
+	if output.Status != spine.InitOverallStatusPartialFailed {
+		t.Fatalf("status = %q, want partial_failed", output.Status)
+	}
+	assertInitSteps(t, output.Steps, []wantInitStep{
+		{name: initStepRepositoryContext, status: spine.InitStepStatusOK},
+		{name: initStepLocalMarker, status: spine.InitStepStatusError},
+		{name: initStepLocalGitignore, status: spine.InitStepStatusSkipped},
+		{name: initStepContextSnapshot, status: spine.InitStepStatusSkipped},
+		{name: initStepProjectScan, status: spine.InitStepStatusSkipped},
+	})
+	if output.NextCommand != "goalrail init" {
+		t.Fatalf("next_suggested_command = %q, want retry init", output.NextCommand)
 	}
 }
 
@@ -1101,6 +1271,41 @@ func TestRunHelpUsage(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "records a metadata-only repository context snapshot") || strings.Contains(got, "project context snapshot") {
 		t.Fatalf("stdout = %q, want repository snapshot wording", got)
 	}
+}
+
+type wantInitStep struct {
+	name   string
+	status spine.InitStepStatus
+}
+
+func assertInitSteps(t *testing.T, steps []spine.InitStepResult, wants []wantInitStep) {
+	t.Helper()
+
+	if len(steps) != len(wants) {
+		t.Fatalf("steps = %#v, want %d steps", steps, len(wants))
+	}
+	for i, want := range wants {
+		if steps[i].Name != want.name || steps[i].Status != want.status {
+			t.Fatalf("steps[%d] = %#v, want %s/%s", i, steps[i], want.name, want.status)
+		}
+	}
+}
+
+func assertNoInitStep(t *testing.T, steps []spine.InitStepResult, name string) {
+	t.Helper()
+
+	if step := findInitStep(steps, name); step != nil {
+		t.Fatalf("step %q = %#v, want absent", name, step)
+	}
+}
+
+func findInitStep(steps []spine.InitStepResult, name string) *spine.InitStepResult {
+	for i := range steps {
+		if steps[i].Name == name {
+			return &steps[i]
+		}
+	}
+	return nil
 }
 
 func runInitJSON(t *testing.T, workDir string, args ...string) (spine.RepoBindingDraft, error) {

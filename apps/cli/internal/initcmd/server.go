@@ -25,11 +25,18 @@ const (
 	serverMode             = "server"
 	nextSuggestedCommand   = "goalrail work start --title <title>"
 	serverRegistrationNote = "This registered repository metadata on the GoalRail server, wrote a non-secret GoalRail repository marker, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
-	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization, recorded a metadata-only repository context snapshot, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
+	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization, wrote a non-secret GoalRail repository marker, attempted a metadata-only repository context snapshot, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 
 	defaultInitHTTPTimeout   = 30 * time.Second
 	defaultInitRetryAttempts = 3
 	defaultInitRetryBackoff  = 10 * time.Millisecond
+
+	initStepRepoBinding       = "repo_binding"
+	initStepRepositoryContext = "repository_context"
+	initStepLocalMarker       = "local_marker"
+	initStepLocalGitignore    = "local_gitignore"
+	initStepContextSnapshot   = "context_snapshot"
+	initStepProjectScan       = "project_scan"
 )
 
 type serverErrorResponse struct {
@@ -96,6 +103,10 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 	if output.ProjectID == "" {
 		output.ProjectID = projectID
 	}
+	steps := []spine.InitStepResult{
+		initStepOK(initStepRepoBinding, responsePayload.Message),
+	}
+	retryCommand := repoBindingInitRetryCommand(projectID)
 	configStatus, err := writeProjectConfig(draft.GitRoot, projectConfig{
 		ServerURL:      output.ServerURL,
 		OrganizationID: output.OrganizationID,
@@ -109,18 +120,46 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 		},
 	})
 	if err != nil {
-		return err
+		output.LocalConfigPath = projectConfigRelativePath
+		output.LocalConfigStatus = string(spine.InitStepStatusError)
+		output.LocalConfigMessage = err.Error()
+		output.NextCommand = retryCommand
+		steps = append(steps,
+			initStepError(initStepLocalMarker, "Local Goalrail project marker could not be written: "+err.Error(), retryCommand),
+			initStepSkipped(initStepLocalGitignore, "Skipped because local marker write failed."),
+			initStepSkipped(initStepProjectScan, "Skipped because local marker write failed."),
+		)
+		output.Steps = steps
+		output.Status = initOverallStatus(steps)
+		return writeRepoBindingOutputWithError(out, format, output, err)
 	}
+	steps = append(steps, initStepOK(initStepLocalMarker, localConfigMessage(configStatus)))
 	ignoreStatus, err := ensureProjectConfigGitignore(draft.GitRoot)
 	if err != nil {
-		return err
+		output.LocalConfigPath = projectConfigRelativePath
+		output.LocalConfigStatus = configStatus
+		output.LocalConfigMessage = localConfigMessage(configStatus)
+		output.LocalIgnorePath = projectConfigIgnoreRelativePath
+		output.LocalIgnoreStatus = string(spine.InitStepStatusError)
+		output.NextCommand = retryCommand
+		steps = append(steps,
+			initStepError(initStepLocalGitignore, "Local Goalrail ignore rules could not be written: "+err.Error(), retryCommand),
+			initStepSkipped(initStepProjectScan, "Skipped because local ignore rule write failed."),
+		)
+		output.Steps = steps
+		output.Status = initOverallStatus(steps)
+		return writeRepoBindingOutputWithError(out, format, output, err)
 	}
 	output.LocalConfigPath = projectConfigRelativePath
 	output.LocalConfigStatus = configStatus
 	output.LocalConfigMessage = localConfigMessage(configStatus)
 	output.LocalIgnorePath = projectConfigIgnoreRelativePath
 	output.LocalIgnoreStatus = ignoreStatus
-	applyRepoBindingProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
+	steps = append(steps, initStepOK(initStepLocalGitignore, localIgnoreMessage(ignoreStatus)))
+	scanResult := applyRepoBindingProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
+	steps = append(steps, projectScanInitStep(scanResult))
+	output.Steps = steps
+	output.Status = initOverallStatus(steps)
 
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
@@ -187,22 +226,10 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 		Message:               responsePayload.Message,
 		NextCommand:           nextSuggestedCommand,
 	}
-	snapshotRequest, err := buildRepositoryContextSnapshot(draft.GitRoot, output, draft)
-	if err != nil {
-		return exitcode.RuntimeError(fmt.Errorf("collect repository context snapshot: %w", err))
+	steps := []spine.InitStepResult{
+		initStepOK(initStepRepositoryContext, responsePayload.Message),
 	}
-	snapshotResponse, err := postRepositoryContextSnapshot(ctx, client, session, output.RepoBindingID, snapshotRequest)
-	if err != nil {
-		return err
-	}
-	if snapshotResponse.Created {
-		output.ContextSnapshotStatus = "recorded"
-	} else {
-		output.ContextSnapshotStatus = "unchanged"
-	}
-	output.ContextSnapshotID = snapshotResponse.ContextSnapshotID
-	output.ContextFingerprint = snapshotResponse.Fingerprint
-
+	retryCommand := repositoryContextInitRetryCommand()
 	configStatus, err := writeProjectConfig(draft.GitRoot, projectConfig{
 		ServerURL:      output.ServerURL,
 		OrganizationID: output.OrganizationID,
@@ -216,18 +243,51 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 		},
 	})
 	if err != nil {
-		return err
+		output.LocalConfigPath = projectConfigRelativePath
+		output.LocalConfigStatus = string(spine.InitStepStatusError)
+		output.LocalConfigMessage = err.Error()
+		output.NextCommand = retryCommand
+		steps = append(steps,
+			initStepError(initStepLocalMarker, "Local Goalrail project marker could not be written: "+err.Error(), retryCommand),
+			initStepSkipped(initStepLocalGitignore, "Skipped because local marker write failed."),
+			initStepSkipped(initStepContextSnapshot, "Skipped because local marker write failed."),
+			initStepSkipped(initStepProjectScan, "Skipped because local marker write failed."),
+		)
+		output.Steps = steps
+		output.Status = initOverallStatus(steps)
+		return writeRepositoryContextOutputWithError(out, format, output, err)
 	}
+	steps = append(steps, initStepOK(initStepLocalMarker, localConfigMessage(configStatus)))
 	ignoreStatus, err := ensureProjectConfigGitignore(draft.GitRoot)
 	if err != nil {
-		return err
+		output.LocalConfigPath = projectConfigRelativePath
+		output.LocalConfigStatus = configStatus
+		output.LocalConfigMessage = localConfigMessage(configStatus)
+		output.LocalIgnorePath = projectConfigIgnoreRelativePath
+		output.LocalIgnoreStatus = string(spine.InitStepStatusError)
+		output.NextCommand = retryCommand
+		steps = append(steps,
+			initStepError(initStepLocalGitignore, "Local Goalrail ignore rules could not be written: "+err.Error(), retryCommand),
+			initStepSkipped(initStepContextSnapshot, "Skipped because local ignore rule write failed."),
+			initStepSkipped(initStepProjectScan, "Skipped because local ignore rule write failed."),
+		)
+		output.Steps = steps
+		output.Status = initOverallStatus(steps)
+		return writeRepositoryContextOutputWithError(out, format, output, err)
 	}
 	output.LocalConfigPath = projectConfigRelativePath
 	output.LocalConfigStatus = configStatus
 	output.LocalConfigMessage = localConfigMessage(configStatus)
 	output.LocalIgnorePath = projectConfigIgnoreRelativePath
 	output.LocalIgnoreStatus = ignoreStatus
-	applyRepositoryContextProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
+	steps = append(steps, initStepOK(initStepLocalGitignore, localIgnoreMessage(ignoreStatus)))
+
+	snapshotStep := applyRepositoryContextSnapshot(ctx, client, session, draft, &output)
+	steps = append(steps, snapshotStep)
+	scanResult := applyRepositoryContextProjectScan(ctx, draft.GitRoot, output.RepoBindingID, options, &output)
+	steps = append(steps, projectScanInitStep(scanResult))
+	output.Steps = steps
+	output.Status = initOverallStatus(steps)
 
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
@@ -281,6 +341,127 @@ func loadSession(options Options) (authstore.Session, error) {
 		return authstore.Session{}, exitcode.RuntimeError(err)
 	}
 	return session, nil
+}
+
+func initStepOK(name string, message string) spine.InitStepResult {
+	return spine.InitStepResult{
+		Name:    name,
+		Status:  spine.InitStepStatusOK,
+		Message: strings.TrimSpace(message),
+	}
+}
+
+func initStepSkipped(name string, message string) spine.InitStepResult {
+	return spine.InitStepResult{
+		Name:    name,
+		Status:  spine.InitStepStatusSkipped,
+		Message: strings.TrimSpace(message),
+	}
+}
+
+func initStepWarning(name string, message string, retryCommand string) spine.InitStepResult {
+	return spine.InitStepResult{
+		Name:         name,
+		Status:       spine.InitStepStatusWarning,
+		Message:      strings.TrimSpace(message),
+		Recoverable:  true,
+		RetryCommand: strings.TrimSpace(retryCommand),
+	}
+}
+
+func initStepError(name string, message string, retryCommand string) spine.InitStepResult {
+	return spine.InitStepResult{
+		Name:         name,
+		Status:       spine.InitStepStatusError,
+		Message:      strings.TrimSpace(message),
+		Recoverable:  true,
+		RetryCommand: strings.TrimSpace(retryCommand),
+	}
+}
+
+func initOverallStatus(steps []spine.InitStepResult) spine.InitOverallStatus {
+	hasWarning := false
+	for _, step := range steps {
+		switch step.Status {
+		case spine.InitStepStatusError:
+			return spine.InitOverallStatusPartialFailed
+		case spine.InitStepStatusWarning:
+			hasWarning = true
+		}
+	}
+	if hasWarning {
+		return spine.InitOverallStatusSuccessWithWarnings
+	}
+	return spine.InitOverallStatusSuccess
+}
+
+func projectScanInitStep(result initProjectScanResult) spine.InitStepResult {
+	if result.Warning != "" || result.Status == projectscan.BaselineStatusError {
+		message := "Local Project Scan cache could not be written."
+		if result.Warning != "" {
+			message = "Local Project Scan cache could not be written: " + result.Warning
+		}
+		return initStepWarning(initStepProjectScan, message, "goalrail project scan --format json")
+	}
+	return initStepOK(initStepProjectScan, "Local Project Scan cache written.")
+}
+
+func applyRepositoryContextSnapshot(ctx context.Context, client HTTPClient, session authstore.Session, draft spine.RepoBindingDraft, output *spine.RepositoryContextInitOutput) spine.InitStepResult {
+	snapshotRequest, err := buildRepositoryContextSnapshot(draft.GitRoot, *output, draft)
+	if err != nil {
+		output.ContextSnapshotStatus = string(spine.InitStepStatusWarning)
+		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: collect repository context snapshot: "+err.Error(), repositoryContextInitRetryCommand())
+	}
+	snapshotResponse, err := postRepositoryContextSnapshot(ctx, client, session, output.RepoBindingID, snapshotRequest)
+	if err != nil {
+		output.ContextSnapshotStatus = string(spine.InitStepStatusWarning)
+		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: "+err.Error(), repositoryContextInitRetryCommand())
+	}
+	if snapshotResponse.Created {
+		output.ContextSnapshotStatus = "recorded"
+	} else {
+		output.ContextSnapshotStatus = "unchanged"
+	}
+	output.ContextSnapshotID = snapshotResponse.ContextSnapshotID
+	output.ContextFingerprint = snapshotResponse.Fingerprint
+	if snapshotResponse.Message != "" {
+		return initStepOK(initStepContextSnapshot, snapshotResponse.Message)
+	}
+	return initStepOK(initStepContextSnapshot, "Repository context snapshot "+output.ContextSnapshotStatus+".")
+}
+
+func repoBindingInitRetryCommand(projectID string) string {
+	return "goalrail init --project " + projectID
+}
+
+func repositoryContextInitRetryCommand() string {
+	return "goalrail init"
+}
+
+func writeRepoBindingOutputWithError(out *term.Output, format term.Format, output spine.RepoBindingInitOutput, commandErr error) error {
+	var writeErr error
+	if format == term.FormatJSON {
+		writeErr = term.WriteJSON(out.Stdout, output)
+	} else {
+		_, writeErr = fmt.Fprint(out.Stdout, renderServerText(output))
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	return commandErr
+}
+
+func writeRepositoryContextOutputWithError(out *term.Output, format term.Format, output spine.RepositoryContextInitOutput, commandErr error) error {
+	var writeErr error
+	if format == term.FormatJSON {
+		writeErr = term.WriteJSON(out.Stdout, output)
+	} else {
+		_, writeErr = fmt.Fprint(out.Stdout, renderRepositoryContextText(output))
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	return commandErr
 }
 
 func initHTTPClient(client HTTPClient) HTTPClient {
@@ -529,7 +710,11 @@ func renderServerText(output spine.RepoBindingInitOutput) string {
 	if !output.Created {
 		title = "Repository binding already initialized"
 	}
+	if output.Status == spine.InitOverallStatusPartialFailed {
+		title = "Repository binding partially initialized"
+	}
 	fmt.Fprintf(&b, "%s\n\n", title)
+	writeInitStatusText(&b, output.Status)
 	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
 	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
 	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
@@ -550,7 +735,12 @@ func renderServerText(output spine.RepoBindingInitOutput) string {
 	}
 	writeLocalConfigText(&b, output.LocalConfigMessage, output.LocalIgnorePath, output.LocalIgnoreStatus)
 	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
-	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", serverRegistrationNote, output.NextCommand)
+	writeInitStepNotices(&b, output.Steps)
+	if output.Status == spine.InitOverallStatusPartialFailed {
+		fmt.Fprintf(&b, "\nServer binding succeeded, but local init did not complete.\n\nNext: %s\n", output.NextCommand)
+	} else {
+		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", serverRegistrationNote, output.NextCommand)
+	}
 	return b.String()
 }
 
@@ -560,7 +750,11 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 	if !output.ProjectCreated && !output.RepoBindingCreated {
 		title = "Repository context already initialized"
 	}
+	if output.Status == spine.InitOverallStatusPartialFailed {
+		title = "Repository context partially initialized"
+	}
 	fmt.Fprintf(&b, "%s\n\n", title)
+	writeInitStatusText(&b, output.Status)
 	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
 	fmt.Fprintf(&b, "Organization: %s\n", output.OrganizationID)
 	if output.ProjectSlug != "" || output.ProjectDisplayName != "" {
@@ -593,7 +787,12 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 		fmt.Fprintf(&b, "Repository context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
 	}
 	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
-	fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
+	writeInitStepNotices(&b, output.Steps)
+	if output.Status == spine.InitOverallStatusPartialFailed {
+		fmt.Fprintf(&b, "\nServer repository context succeeded, but local init did not complete.\n\nNext: %s\n", output.NextCommand)
+	} else {
+		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
+	}
 	return b.String()
 }
 
@@ -630,22 +829,24 @@ func runInitProjectScan(ctx context.Context, gitRoot string, repoBindingID strin
 	}
 }
 
-func applyRepoBindingProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepoBindingInitOutput) {
+func applyRepoBindingProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepoBindingInitOutput) initProjectScanResult {
 	result := runInitProjectScan(ctx, gitRoot, repoBindingID, options)
 	output.ProjectScanStatus = result.Status
 	output.ProjectScanBaselineID = result.BaselineID
 	output.ProjectScanOverlayID = result.OverlayID
 	output.ProjectScanFreshness = result.Freshness
 	output.ProjectScanWarning = result.Warning
+	return result
 }
 
-func applyRepositoryContextProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepositoryContextInitOutput) {
+func applyRepositoryContextProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options, output *spine.RepositoryContextInitOutput) initProjectScanResult {
 	result := runInitProjectScan(ctx, gitRoot, repoBindingID, options)
 	output.ProjectScanStatus = result.Status
 	output.ProjectScanBaselineID = result.BaselineID
 	output.ProjectScanOverlayID = result.OverlayID
 	output.ProjectScanFreshness = result.Freshness
 	output.ProjectScanWarning = result.Warning
+	return result
 }
 
 func writeProjectScanText(b *strings.Builder, status string, baselineID string, freshness string, warning string) {
@@ -665,11 +866,50 @@ func writeProjectScanText(b *strings.Builder, status string, baselineID string, 
 	}
 }
 
+func writeInitStatusText(b *strings.Builder, status spine.InitOverallStatus) {
+	if status == "" || status == spine.InitOverallStatusSuccess {
+		return
+	}
+	fmt.Fprintf(b, "Init status: %s\n", status)
+}
+
+func writeInitStepNotices(b *strings.Builder, steps []spine.InitStepResult) {
+	for _, step := range steps {
+		switch step.Status {
+		case spine.InitStepStatusWarning:
+			if step.Message != "" {
+				fmt.Fprintf(b, "Warning: %s\n", step.Message)
+			}
+			if step.RetryCommand != "" {
+				fmt.Fprintf(b, "Recovery hint: retry with `%s`.\n", step.RetryCommand)
+			}
+		case spine.InitStepStatusError:
+			if step.Message != "" {
+				fmt.Fprintf(b, "Local recovery needed: %s\n", step.Message)
+			}
+			if step.RetryCommand != "" {
+				fmt.Fprintf(b, "Recovery hint: fix the local file issue, then retry with `%s`.\n", step.RetryCommand)
+			}
+		}
+	}
+}
+
 func localConfigMessage(status string) string {
 	if status == localConfigStatusUnchanged {
 		return "Existing Goalrail project marker found and verified."
 	}
 	return "Commit .goalrail/project.yml and .goalrail/.gitignore with this repository."
+}
+
+func localIgnoreMessage(status string) string {
+	switch status {
+	case localConfigStatusUnchanged:
+		return "Existing .goalrail/.gitignore local state rules found and verified."
+	case localConfigStatusUpdated:
+		return "Updated .goalrail/.gitignore with Goalrail local state rules."
+	default:
+		return "Wrote .goalrail/.gitignore with Goalrail local state rules."
+	}
 }
 
 func writeLocalConfigText(b *strings.Builder, message string, ignorePath string, ignoreStatus string) {
