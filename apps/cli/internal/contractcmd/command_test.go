@@ -113,6 +113,33 @@ func TestRunDraftCreatesContractAndReturnsLocalRepoReceipt(t *testing.T) {
 	}
 }
 
+func TestBuildDraftOutputDoesNotOfferUpdateForNonDraftContract(t *testing.T) {
+	t.Parallel()
+
+	output := buildDraftOutput(projectconfig.Config{
+		ServerURL:      "https://goalrail.example",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+	}, "https://goalrail.example", "018f0000-0000-7000-8000-000000000006", contractDraftResponse{
+		ID:            "018f0000-0000-7000-8000-000000000009",
+		RepoBindingID: "018f0000-0000-7000-8000-000000000004",
+		GoalID:        "018f0000-0000-7000-8000-000000000006",
+		State:         spine.ContractState("ready_for_approval"),
+	}, spine.LocalRepoReceipt{})
+
+	if output.NextAction.Kind != "update_contract" || output.NextAction.Available || output.NextAction.Command != "" {
+		t.Fatalf("next_action = %#v, want unavailable update_contract without command", output.NextAction)
+	}
+	got := renderDraftText(output)
+	if strings.Contains(got, "goalrail contract update") {
+		t.Fatalf("draft text = %q, should not offer contract update command for non-draft contract", got)
+	}
+	if !strings.Contains(got, "Contract update is only available while the Contract is draft.") {
+		t.Fatalf("draft text = %q, want non-draft update warning", got)
+	}
+}
+
 func TestRunDraftMissingProjectConfigFailsBeforeHTTP(t *testing.T) {
 	t.Parallel()
 	requireGit(t)

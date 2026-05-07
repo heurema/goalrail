@@ -898,7 +898,17 @@ func validateContractUpdateContext(config projectconfig.Config, contractID strin
 }
 
 func buildDraftOutput(config projectconfig.Config, serverURL string, goalID string, contractDraft contractDraftResponse, receipt spine.LocalRepoReceipt) spine.ContractDraftOutput {
-	command := fmt.Sprintf("goalrail contract update --contract-id %s --fields-file - --format json", contractDraft.ID)
+	summary := fmt.Sprintf("Found a Contract handle in state %s. Contract update is only available while the Contract is draft.", contractDraft.State)
+	nextAction := spine.NextAction{
+		Kind:      "update_contract",
+		Blocking:  false,
+		Available: false,
+	}
+	if contractDraft.State == spine.ContractStateDraft {
+		summary = "Created or found a draft Contract handle. Local repository receipt is attached; update proposed contract fields next."
+		nextAction.Available = true
+		nextAction.Command = fmt.Sprintf("goalrail contract update --contract-id %s --fields-file - --format json", contractDraft.ID)
+	}
 	return spine.ContractDraftOutput{
 		SchemaVersion:    cliSchemaVersion,
 		Mode:             serverMode,
@@ -912,14 +922,9 @@ func buildDraftOutput(config projectconfig.Config, serverURL string, goalID stri
 		LocalRepoReceipt: receipt,
 		LocalConfigPath:  projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
-			Summary: "Created or found a draft Contract handle. Local repository receipt is attached; update proposed contract fields next.",
+			Summary: summary,
 		},
-		NextAction: spine.NextAction{
-			Kind:      "update_contract",
-			Blocking:  false,
-			Command:   command,
-			Available: true,
-		},
+		NextAction: nextAction,
 	}
 }
 

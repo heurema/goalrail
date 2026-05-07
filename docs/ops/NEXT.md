@@ -459,7 +459,8 @@ Done means:
   uploading raw source bodies, sends the local marker `project_id` and
   `repo_binding_id` as server-validated expectations, calls authenticated
   create-or-return `/v1/contracts`, and returns `contract_id`,
-  `contract_state`, `local_repo_receipt`, and available `update_contract`
+  `contract_state`, `local_repo_receipt`, and available `update_contract` only
+  while the returned Contract is still `draft`
 - ✅ `goalrail contract update --contract-id <contract_id> --fields-file
   <path|->` reads structured proposed field JSON from file/stdin, validates the
   same marker/login/org boundary, sends marker `project_id` and

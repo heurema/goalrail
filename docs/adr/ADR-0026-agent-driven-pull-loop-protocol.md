@@ -130,7 +130,7 @@ Slice B updates `work start` so the returned continuation command is available:
 - Slice D adds `contract draft` so `next_action.kind=draft_contract` is an
   available local pull-loop step.
 - Slice E adds `contract update` so `next_action.kind=update_contract` is an
-  available local pull-loop step.
+  available local pull-loop step while the Contract remains in draft state.
 
 ### `goalrail work continue`
 
@@ -228,7 +228,9 @@ duplicate draft state.
 
 `contract draft` returns an agent-facing envelope with `schema_version`,
 `display.summary`, `goal_id`, `contract_id`, `contract_state`,
-`local_repo_receipt`, and an available `next_action.kind=update_contract`.
+`local_repo_receipt`, and `next_action.kind=update_contract`. The update action
+is available only when `contract_state=draft`; existing non-draft Contracts do
+not advertise a callable update command.
 
 ### `goalrail contract update`
 
