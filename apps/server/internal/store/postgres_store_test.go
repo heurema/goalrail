@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/heurema/goalrail/apps/server/internal/checkout"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
 )
@@ -835,6 +836,45 @@ func TestPostgresWorkItemPlanProposalStoreCreateGetAndMark(t *testing.T) {
 	}
 }
 
+func TestPostgresCheckoutJobStoreCreateInitializesLeaseFields(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresCheckoutJobStoreWithExecutorAndQuerier(exec, nil)
+
+	if err := store.Create(ctx, validPostgresCheckoutJob()); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO checkout_jobs") {
+		t.Fatalf("SQL = %q, want checkout_jobs insert", call.sql)
+	}
+	if got, want := len(call.args), 17; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	if call.args[12] != "" {
+		t.Fatalf("current_runner_id arg = %#v, want empty string for NOT NULL column", call.args[12])
+	}
+	if call.args[13] != "" {
+		t.Fatalf("lease_token_hash arg = %#v, want empty string", call.args[13])
+	}
+	if call.args[14] != nil {
+		t.Fatalf("lease_expires_at arg = %#v, want nil", call.args[14])
+	}
+}
+
+func TestPostgresCheckoutReceiptStoreMapsDuplicateJobReceipt(t *testing.T) {
+	ctx := context.Background()
+	store := NewPostgresCheckoutReceiptStoreWithExecutor(uniqueViolationExecer{constraint: "checkout_receipts_job_id_unique"})
+
+	err := store.Create(ctx, validPostgresCheckoutReceipt())
+	if !errors.Is(err, checkout.ErrAlreadyReceipted) {
+		t.Fatalf("Create() error = %v, want ErrAlreadyReceipted", err)
+	}
+}
+
 func TestPostgresWorkItemPlanLeaseStoreAcquireGetRenewAndComplete(t *testing.T) {
 	ctx := context.Background()
 	exec := &recordingProjectContextExecer{}
@@ -1361,6 +1401,58 @@ func validWorkItemRowValues() []any {
 		int32(1),
 		[]byte(`[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000601"}]`),
 		testStoreTime(),
+	}
+}
+
+func validPostgresCheckoutJob() spine.CheckoutJob {
+	jobID := spine.CheckoutJobID("018f0000-0000-7000-8000-000000000b01")
+	taskID := spine.WorkItemID("018f0000-0000-7000-8000-000000000701")
+	repoBindingID := spine.RepoBindingID("018f0000-0000-7000-8000-000000000004")
+	return spine.CheckoutJob{
+		ID:                 jobID,
+		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
+		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		TaskID:             taskID,
+		ContractID:         "018f0000-0000-7000-8000-000000000301",
+		ApprovedContractID: "018f0000-0000-7000-8000-000000000601",
+		PlanID:             "018f0000-0000-7000-8000-000000000801",
+		ProposalID:         "018f0000-0000-7000-8000-000000000901",
+		RepoBindingID:      repoBindingID,
+		State:              spine.CheckoutJobStateQueued,
+		RequestedBy:        spine.ActorRef{Kind: "user", ID: "018f0000-0000-7000-8000-000000000001"},
+		Instruction: spine.CheckoutInstruction{
+			JobID:              jobID,
+			TaskID:             taskID,
+			RepoBindingID:      repoBindingID,
+			AccessMode:         spine.RepoBindingAccessModeCustomerMountedWorkspace,
+			Provider:           "github",
+			RepositoryFullName: "heurema/goalrail",
+			RepositoryURL:      "https://github.com/heurema/goalrail",
+			WorkflowBaseBranch: "main",
+			PathScope:          ".",
+			SourceRef:          spine.SourceRef{Kind: "work_item", ID: string(taskID)},
+			RawSourceUploaded:  false,
+		},
+		CreatedAt: testStoreTime(),
+		UpdatedAt: testStoreTime(),
+	}
+}
+
+func validPostgresCheckoutReceipt() spine.CheckoutReceipt {
+	return spine.CheckoutReceipt{
+		ID:                "018f0000-0000-7000-8000-000000000c01",
+		JobID:             "018f0000-0000-7000-8000-000000000b01",
+		TaskID:            "018f0000-0000-7000-8000-000000000701",
+		RepoBindingID:     "018f0000-0000-7000-8000-000000000004",
+		RunnerID:          "runner-1",
+		WorkspaceRef:      "mounted:/workspace/goalrail",
+		CommitSHA:         "abc123",
+		BaselineID:        "baseline-1",
+		OverlayID:         "overlay-1",
+		Dirty:             false,
+		Partial:           false,
+		RawSourceUploaded: false,
+		CreatedAt:         testStoreTime(),
 	}
 }
 

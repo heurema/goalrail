@@ -121,7 +121,7 @@ func (s *PostgresCheckoutJobStore) Create(ctx context.Context, job spine.Checkou
 			job.State,
 			requestedBy,
 			instruction,
-			nil,
+			"",
 			"",
 			nil,
 			createdAt,
@@ -407,7 +407,7 @@ func (s *PostgresCheckoutReceiptStore) Create(ctx context.Context, receipt spine
 		)
 	if err := execSQL(ctx, s.exec, "create checkout receipt", stmt); err != nil {
 		if uniqueViolationConstraint(err) == "checkout_receipts_job_id_unique" {
-			return ErrCheckoutReceiptAlreadyCreated
+			return checkout.ErrAlreadyReceipted
 		}
 		if isUniqueViolation(err) {
 			return ErrCheckoutReceiptAlreadyExists
