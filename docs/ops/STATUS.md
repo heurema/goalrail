@@ -93,7 +93,8 @@ session on bearer-token logout, and resolves current user membership
 server-side instead of trusting role claims in JWTs. ADR-0027 documents the
 Organization user-management boundary as Console-backed server API routes, not
 CLI user creation; the backend admin user API exists, and the canonical
-Console Users UI now consumes it for Organization user list/create/patch.
+Console Users UI now consumes it for Organization user
+list/create/patch/temporary-password reset.
 `goalrail login
 <server_url>` now starts a localhost loopback listener, opens or prints the
 server CLI login URL, exchanges a one-time code for tokens, and stores token
@@ -147,7 +148,7 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, and API-backed Organization Users list/create/edit using `/v1/me` organization context plus the ADR-0027 Organization user-management routes; temporary passwords are shown only from the immediate create response and are not persisted in browser storage; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
+- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, and API-backed Organization Users list/create/edit plus temporary-password reset using `/v1/me` organization context and the ADR-0027 Organization user-management routes; temporary passwords are shown only from the immediate create/reset response and are not persisted in browser storage; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -307,12 +308,14 @@ The project currently has:
   last active owner cannot be disabled or demoted. The backend now implements
   `GET /v1/organizations/{organization_id}/users`,
   `POST /v1/organizations/{organization_id}/users`, and
-  `PATCH /v1/organizations/{organization_id}/users/{user_id}` with owner-only
-  v0 authorization, one-time temporary password return for newly created users,
+  `PATCH /v1/organizations/{organization_id}/users/{user_id}`, plus
+  `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
+  with owner-only v0 authorization, one-time temporary password return for newly
+  created users and reset rotations, reset-side active session revocation,
   safe attachment of existing active users that are not yet members of the
-  target Organization without credential rotation, and membership-scoped
-  active/inactive updates.
-  Settings / Users remains component-state only, and there is no
+  target Organization without credential rotation, membership-scoped
+  active/inactive updates, and last-active-owner protection.
+  Settings / Users consumes these API-backed records, and there is no
   `goalrail users create` command.
 - No checkout job, checkout instruction, checkout receipt, runner clone/fetch,
   mounted-workspace checkout flow, provider credential storage, VcsConnection,

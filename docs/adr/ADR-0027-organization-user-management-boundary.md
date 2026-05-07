@@ -69,22 +69,21 @@ authenticate the caller identity/session, but authorization must use current
 server-side membership state.
 
 The server must reject cross-organization user-management attempts. A caller
-authorized in one Organization may not list, create, update, disable, or change
-membership roles for users in another Organization.
+authorized in one Organization may not list, create, update, disable, reset
+temporary passwords for, or change membership roles for users in another
+Organization.
 
 The server must prevent disabling or demoting the last active owner in an
 Organization.
 
 ## API direction
 
-Future product/admin routes should be Organization-scoped:
+Product/admin routes should be Organization-scoped:
 
 - `GET /v1/organizations/{organization_id}/users`
 - `POST /v1/organizations/{organization_id}/users`
 - `PATCH /v1/organizations/{organization_id}/users/{user_id}`
-
-These routes are future product/admin routes only. This ADR does not implement
-or register them.
+- `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
 
 The list route should return Organization user and membership summary data. It
 must not return password hashes, temporary passwords, refresh tokens, session
@@ -99,8 +98,16 @@ The patch route should update bounded user-management fields such as active
 state and Organization role. It must enforce the authorization rules in this
 ADR, including cross-organization rejection and last-active-owner protection.
 
+The temporary-password reset route should rotate the existing Organization
+user's password credential, return the backend-generated temporary password
+exactly once in the reset response, store only the password hash, set
+`must_change_password = true`, and revoke the user's active sessions. It must
+not create users, accept caller-supplied plaintext passwords, send email, or
+return credential material from list/get responses.
+
 The API must not accept a plaintext password supplied by the Console for normal
-admin-created users in v0. The backend owns temporary password generation.
+admin-created users or reset temporary-password rotations in v0. The backend
+owns temporary password generation.
 
 ## Password and session direction
 
@@ -109,6 +116,9 @@ Temporary passwords must never be persisted in plaintext.
 Temporary passwords must never be logged.
 
 Temporary passwords must never be returned from list or get endpoints.
+
+Temporary-password reset responses follow the same one-time secret rule as
+create responses.
 
 Temporary passwords must never be stored in browser storage, including
 `localStorage`, `sessionStorage`, IndexedDB, or cookies.
@@ -120,6 +130,10 @@ First-login password change remains mandatory for temporary-password users.
 Users with `must_change_password = true` must not receive normal product or CLI
 runtime access until they complete password change.
 
+Resetting an existing user's temporary password must revoke that user's active
+sessions so older sessions cannot continue normal product access after the
+credential is marked `must_change_password`.
+
 Session and token behavior remains aligned with ADR-0023: short-lived JWT
 access tokens for narrow identity/session claims, opaque DB-backed refresh
 token state, and server-side membership checks for authorization.
@@ -129,13 +143,13 @@ token state, and server-side membership checks for authorization.
 Settings / Users is the intended v0 product surface for Organization user
 management.
 
-The Console should call the future Organization-scoped server API for listing,
-creating, disabling/enabling, and role changes. It should not invent local-only
-canonical user state once the API exists.
+The Console should call the Organization-scoped server API for listing,
+creating, disabling/enabling, role changes, and temporary-password resets. It
+should not invent local-only canonical user state once the API exists.
 
 The Console may display a generated temporary password immediately after a
-successful create response, but must treat it as a one-time secret. It must not
-persist that value in browser storage or reloadable state.
+successful create or reset response, but must treat it as a one-time secret. It
+must not persist that value in browser storage or reloadable state.
 
 Console copy and role controls must use backend-aligned roles:
 
@@ -172,7 +186,8 @@ Authorization must stay organization-aware even in self-hosted mode with one
 bootstrapped primary Organization.
 
 Temporary-password handling becomes a one-time display and credential-hash
-boundary, not a reusable secret transport or browser-persisted value.
+boundary, not a reusable secret transport, email-reset flow, or
+browser-persisted value.
 
 The CLI remains compatible with self-hosted and future SaaS auth because it
 logs in existing users instead of creating users.

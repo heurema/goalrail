@@ -14,6 +14,7 @@ type OrganizationUserManagementService interface {
 	ListUsers(context.Context, usermanagement.ListUsersInput) (usermanagement.ListUsersResult, error)
 	CreateUser(context.Context, usermanagement.CreateUserInput) (usermanagement.CreateUserResult, error)
 	PatchUser(context.Context, usermanagement.PatchUserInput) (usermanagement.PatchUserResult, error)
+	ResetTemporaryPassword(context.Context, usermanagement.ResetTemporaryPasswordInput) (usermanagement.ResetTemporaryPasswordResult, error)
 }
 
 type OrganizationUsersHandler struct {
@@ -91,6 +92,24 @@ func (h *OrganizationUsersHandler) Patch(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	RespondJSON(w, http.StatusOK, result)
+}
+
+func (h *OrganizationUsersHandler) ResetTemporaryPassword(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	result, err := h.service.ResetTemporaryPassword(r.Context(), usermanagement.ResetTemporaryPasswordInput{
+		AuthenticatedUserID: profile.User.ID,
+		OrganizationID:      spine.OrganizationID(r.PathValue("organization_id")),
+		UserID:              spine.UserID(r.PathValue("user_id")),
+	})
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusCreated, result)
 }
 
 type createOrganizationUserRequest struct {

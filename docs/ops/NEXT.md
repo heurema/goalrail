@@ -77,17 +77,20 @@
   there is no separate CLI-user entity or `goalrail users create` command. The
   backend now implements `GET /v1/organizations/{organization_id}/users`,
   `POST /v1/organizations/{organization_id}/users`, and
-  `PATCH /v1/organizations/{organization_id}/users/{user_id}` with owner-only
-  v0 authorization, server-side membership loading, cross-organization
-  rejection, one-time temporary password generation for newly created users,
-  safe attachment of already existing active users that are not yet members of
-  the target Organization without credential rotation, membership-scoped
-  active/inactive updates, and last-active-owner protection.
+  `PATCH /v1/organizations/{organization_id}/users/{user_id}`, plus
+  `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
+  with owner-only v0 authorization, server-side membership loading,
+  cross-organization rejection, one-time temporary password generation for
+  newly created users and reset rotations, reset-side active session
+  revocation, safe attachment of already existing active users that are not yet
+  members of the target Organization without credential rotation,
+  membership-scoped active/inactive updates, and last-active-owner protection.
 - The canonical `apps/web/console` Settings / Users surface now uses `/v1/me`
   to determine `organization_id`, calls the ADR-0027 Organization
-  user-management API for list/create/patch, uses backend roles
-  `owner` / `admin` / `member` / `viewer`, shows `must_change_password` as
-  credential status, and keeps temporary passwords in one-time React state only.
+  user-management API for list/create/patch/temporary-password reset, uses
+  backend roles `owner` / `admin` / `member` / `viewer`, shows
+  `must_change_password` as credential status, and keeps temporary passwords in
+  one-time React state only.
 - Next bounded Organization user-management implementation slices should stay
   outside CLI user creation, invite/reset email, public registration, SaaS
   onboarding, SSO/OIDC, runner, gate, and proof.
@@ -287,9 +290,10 @@ Done means:
   `localStorage`, token `sessionStorage`, or profile browser persistence exists
 - `goalrail.console.theme` remains the only accepted localStorage key
 - Settings -> Users uses the backend Organization user-management API and keeps
-  only fetched view, form state, filters, and one-time create response secrets
-  in React memory
-- no public registration, signup, SSO, invite/reset email, password reset,
+  only fetched view, form state, filters, and one-time create/reset response
+  secrets in React memory
+- no public registration, signup, SSO, invite/reset email, self-service
+  password reset, password reset email delivery,
   SaaS onboarding, organization creation API, analytics, repo integration,
   runner, gate, proof, CORS, deployment
   config, hostnames, IPs, ports, credentials, reverse-proxy snippets, or

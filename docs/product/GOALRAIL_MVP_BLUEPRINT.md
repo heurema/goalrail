@@ -159,13 +159,15 @@ Initial Project / repo context:
   registration; temporary passwords, first-login password change, short-lived
   JWT access tokens, opaque DB-backed refresh tokens, and browser-loopback
   `goalrail login` are auth/CLI directions, not implemented product behavior yet
-- Organization user management is a future Console-backed server API boundary,
+- Organization user management is a Console-backed server API boundary,
   not CLI user creation. The canonical identity remains `User`; Organization
   access remains `OrganizationMembership`; password credentials stay separate
   from `users`; temporary passwords are backend-generated, shown once, never
   persisted in plaintext or stored in browser storage, and require first-login
-  password change. The CLI is for login and delivery/runtime commands after a
-  user already exists; there is no separate CLI-user entity and no
+  password change. Admin temporary-password rotation for an existing
+  Organization user follows the same one-time display and hash-only credential
+  boundary. The CLI is for login and delivery/runtime commands after a user
+  already exists; there is no separate CLI-user entity and no
   `goalrail users create` command in v0.
 - Project is a delivery container inside an Organization
 - Project is not a repository

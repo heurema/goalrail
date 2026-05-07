@@ -333,6 +333,20 @@ select:focus-visible {
   background: color-mix(in oklab, var(--panel-2) 72%, transparent);
 }
 
+.dangerButton {
+  border-color: color-mix(in oklab, var(--danger) 48%, var(--line));
+  color: var(--danger);
+}
+
+.primaryButton.dangerButton {
+  background: color-mix(in oklab, var(--danger-soft) 30%, var(--panel-2));
+  color: var(--ink);
+}
+
+.dangerButton:hover {
+  background: color-mix(in oklab, var(--danger-soft) 18%, transparent);
+}
+
 .fullWidth {
   width: 100%;
 }
@@ -2538,6 +2552,33 @@ select:focus-visible {
   overflow: auto;
 }
 
+.resetCredentialPanel {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 14px;
+  border: 1px solid color-mix(in oklab, var(--danger-soft) 64%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--danger-soft) 12%, var(--panel));
+}
+
+.resetCredentialPanel h4,
+.resetCredentialPanel p {
+  margin: 0;
+}
+
+.resetCredentialPanel h4 {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.resetCredentialPanel p {
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .drawerFooter {
   display: flex;
   justify-content: flex-end;
@@ -2545,6 +2586,55 @@ select:focus-visible {
   padding: 14px 22px;
   border-top: 1px solid var(--line-soft);
   background: color-mix(in oklab, var(--bg) 50%, var(--bg-2));
+}
+
+.confirmScrim {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  border: 0;
+  background: color-mix(in oklab, black 60%, transparent);
+  backdrop-filter: blur(3px);
+  cursor: pointer;
+}
+
+.confirmPanel {
+  position: fixed;
+  z-index: 31;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(420px, calc(100vw - 32px));
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-2);
+  box-shadow: 0 24px 70px color-mix(in oklab, black 54%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+.confirmPanel h3,
+.confirmPanel p {
+  margin: 0;
+}
+
+.confirmPanel h3 {
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.confirmPanel p:not(.kicker):not(.fieldMessage) {
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 @media (max-width: 760px) {

@@ -268,6 +268,27 @@ curl -sS -X POST http://localhost:8080/v1/auth/logout \
 Logout validates the bearer access token, loads the referenced session, and
 marks that session revoked with `revoked_at`.
 
+## Organization user-management API
+
+After login, owner-only Organization user management is available through the
+Organization-scoped API used by Console Settings / Users:
+
+- `GET /v1/organizations/{organization_id}/users`
+- `POST /v1/organizations/{organization_id}/users`
+- `PATCH /v1/organizations/{organization_id}/users/{user_id}`
+- `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
+
+Create and temporary-password reset responses return the generated temporary
+password exactly once. The server stores only password hashes, sets
+`must_change_password = true`, and the reset route revokes active sessions for
+that user. List responses never return password hashes, temporary passwords,
+refresh tokens, session tokens, or CLI auth codes.
+
+The API remains a Console/admin surface. There are no CLI user-management
+commands, invite/reset email delivery, public registration, self-service
+password reset, SaaS onboarding, SSO/OIDC, or organization creation API in this
+slice.
+
 ## CLI browser-loopback login
 
 The server exposes the smallest browser page and code exchange needed for
@@ -297,11 +318,11 @@ expire after roughly five minutes, and are consumed once. These routes require
 the same structured Postgres database configuration as other product/auth
 routes. Without database configuration they return `503 database_not_configured`.
 
-There is still no product web console login UI, public registration, admin user
-creation endpoint, SaaS onboarding, organization creation API, password reset
-flow, email invite/reset delivery, refresh-token rotation, keychain
-integration, Organization / Project / RepoBinding profile selection, or broader
-session-management API in this slice.
+The CLI auth bridge does not add public registration, CLI user creation,
+self-service password reset, email invite/reset delivery, SaaS onboarding,
+organization creation API, refresh-token rotation, keychain integration,
+Organization / Project / RepoBinding profile selection, or broader
+session-management API.
 
 ## Dev intake flow
 

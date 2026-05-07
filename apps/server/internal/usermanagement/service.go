@@ -41,6 +41,7 @@ type Store interface {
 	UpsertOrganizationMembership(context.Context, spine.OrganizationMembership) error
 	GetPasswordCredential(context.Context, spine.UserID) (spine.UserPasswordCredential, bool, error)
 	UpsertPasswordCredential(context.Context, spine.UserPasswordCredential) error
+	RevokeActiveSessionsForUser(context.Context, spine.UserID, time.Time) error
 	LockActiveOwnerMemberships(context.Context, spine.OrganizationID) error
 	CountActiveOwners(context.Context, spine.OrganizationID) (int, error)
 }
@@ -123,6 +124,19 @@ type PatchUserResult struct {
 	User                   spine.User                   `json:"user"`
 	OrganizationMembership spine.OrganizationMembership `json:"organization_membership"`
 	Credential             CredentialSummary            `json:"credential"`
+}
+
+type ResetTemporaryPasswordInput struct {
+	AuthenticatedUserID spine.UserID
+	OrganizationID      spine.OrganizationID
+	UserID              spine.UserID
+}
+
+type ResetTemporaryPasswordResult struct {
+	User                   spine.User                   `json:"user"`
+	OrganizationMembership spine.OrganizationMembership `json:"organization_membership"`
+	Credential             CredentialSummary            `json:"credential"`
+	TemporaryPassword      string                       `json:"temporary_password"`
 }
 
 func NewService(store Store, txRunner TransactionRunner) *Service {
@@ -288,21 +302,9 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			return fmt.Errorf("create organization membership: %w", err)
 		}
 
-		temporaryPassword, err := s.Passwords.NewPassword()
+		temporaryPassword, credential, err := s.newTemporaryCredential(user.ID, now)
 		if err != nil {
-			return fmt.Errorf("generate temporary password: %w", err)
-		}
-		passwordHash, err := s.Hasher.HashPassword(temporaryPassword)
-		if err != nil {
-			return fmt.Errorf("hash temporary password: %w", err)
-		}
-		credential := spine.UserPasswordCredential{
-			UserID:             user.ID,
-			PasswordHash:       passwordHash,
-			MustChangePassword: true,
-			PasswordChangedAt:  nil,
-			CreatedAt:          now,
-			UpdatedAt:          now,
+			return err
 		}
 		if err := s.Store.UpsertPasswordCredential(txCtx, credential); err != nil {
 			return fmt.Errorf("upsert temporary password credential: %w", err)
@@ -393,6 +395,58 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 	return result, nil
 }
 
+func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTemporaryPasswordInput) (ResetTemporaryPasswordResult, error) {
+	normalized, err := normalizeResetTemporaryPasswordInput(input)
+	if err != nil {
+		return ResetTemporaryPasswordResult{}, err
+	}
+
+	var result ResetTemporaryPasswordResult
+	err = s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.requireOwner(txCtx, normalized.OrganizationID, normalized.AuthenticatedUserID); err != nil {
+			return err
+		}
+		user, ok, err := s.Store.GetUser(txCtx, normalized.UserID)
+		if err != nil {
+			return fmt.Errorf("get user: %w", err)
+		}
+		if !ok {
+			return ErrNotFound
+		}
+		membership, ok, err := s.Store.GetOrganizationMembership(txCtx, normalized.OrganizationID, normalized.UserID)
+		if err != nil {
+			return fmt.Errorf("get organization membership: %w", err)
+		}
+		if !ok {
+			return ErrNotFound
+		}
+
+		now := s.Clock.Now().UTC()
+		temporaryPassword, credential, err := s.newTemporaryCredential(user.ID, now)
+		if err != nil {
+			return err
+		}
+		if err := s.Store.UpsertPasswordCredential(txCtx, credential); err != nil {
+			return fmt.Errorf("upsert reset temporary password credential: %w", err)
+		}
+		if err := s.Store.RevokeActiveSessionsForUser(txCtx, user.ID, now); err != nil {
+			return fmt.Errorf("revoke user sessions after temporary password reset: %w", err)
+		}
+
+		result = ResetTemporaryPasswordResult{
+			User:                   user,
+			OrganizationMembership: membership,
+			Credential:             credentialSummary(credential, true),
+			TemporaryPassword:      temporaryPassword,
+		}
+		return nil
+	})
+	if err != nil {
+		return ResetTemporaryPasswordResult{}, err
+	}
+	return result, nil
+}
+
 func (s *Service) createMembershipForExistingUser(ctx context.Context, user spine.User, input CreateUserInput, now time.Time) (spine.OrganizationMembership, bool, error) {
 	if _, ok, err := s.Store.GetOrganizationMembership(ctx, input.OrganizationID, user.ID); err != nil {
 		return spine.OrganizationMembership{}, false, fmt.Errorf("get existing organization membership: %w", err)
@@ -456,6 +510,26 @@ func (s *Service) guardLastActiveOwner(ctx context.Context, organizationID spine
 	return nil
 }
 
+func (s *Service) newTemporaryCredential(userID spine.UserID, now time.Time) (string, spine.UserPasswordCredential, error) {
+	temporaryPassword, err := s.Passwords.NewPassword()
+	if err != nil {
+		return "", spine.UserPasswordCredential{}, fmt.Errorf("generate temporary password: %w", err)
+	}
+	passwordHash, err := s.Hasher.HashPassword(temporaryPassword)
+	if err != nil {
+		return "", spine.UserPasswordCredential{}, fmt.Errorf("hash temporary password: %w", err)
+	}
+	credential := spine.UserPasswordCredential{
+		UserID:             userID,
+		PasswordHash:       passwordHash,
+		MustChangePassword: true,
+		PasswordChangedAt:  nil,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	return temporaryPassword, credential, nil
+}
+
 func normalizeCreateInput(input CreateUserInput) (CreateUserInput, error) {
 	normalized := CreateUserInput{
 		AuthenticatedUserID: input.AuthenticatedUserID,
@@ -516,6 +590,20 @@ func normalizePatchInput(input PatchUserInput) (PatchUserInput, error) {
 	}
 	if normalized.DisplayName == nil && normalized.Role == nil && normalized.State == nil {
 		return PatchUserInput{}, &ValidationError{Message: "at least one of display_name, role, or state is required"}
+	}
+	return normalized, nil
+}
+
+func normalizeResetTemporaryPasswordInput(input ResetTemporaryPasswordInput) (ResetTemporaryPasswordInput, error) {
+	normalized := input
+	if err := validateRequiredUUID(normalized.OrganizationID, "organization_id"); err != nil {
+		return ResetTemporaryPasswordInput{}, err
+	}
+	if err := validateRequiredUUID(normalized.AuthenticatedUserID, "authenticated_user_id"); err != nil {
+		return ResetTemporaryPasswordInput{}, err
+	}
+	if err := validateRequiredUUID(normalized.UserID, "user_id"); err != nil {
+		return ResetTemporaryPasswordInput{}, err
 	}
 	return normalized, nil
 }

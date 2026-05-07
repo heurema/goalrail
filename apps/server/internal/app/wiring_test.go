@@ -60,6 +60,7 @@ func TestHTTPServerWithoutDatabaseReturnsUnavailableForProductRoutes(t *testing.
 		{name: "organization users list", method: http.MethodGet, path: "/v1/organizations/018f0000-0000-7000-8000-000000000002/users"},
 		{name: "organization users create", method: http.MethodPost, path: "/v1/organizations/018f0000-0000-7000-8000-000000000002/users", body: `{}`},
 		{name: "organization users patch", method: http.MethodPatch, path: "/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000001", body: `{}`},
+		{name: "organization users reset temporary password", method: http.MethodPost, path: "/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000001/temporary-password-resets"},
 		{name: "repository context init", method: http.MethodPost, path: "/v1/init/repository-context", body: `{}`},
 		{name: "repository context snapshot", method: http.MethodPost, path: "/v1/repo-bindings/018f0000-0000-7000-8000-000000000004/context-snapshots", body: `{}`},
 		{name: "repo binding init", method: http.MethodPost, path: "/v1/projects/018f0000-0000-7000-8000-000000000003/repo-bindings/init", body: `{}`},

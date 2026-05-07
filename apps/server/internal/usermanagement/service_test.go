@@ -68,6 +68,14 @@ func TestNonOwnersCannotManageUsersInV0(t *testing.T) {
 			if !errors.Is(err, ErrForbidden) {
 				t.Fatalf("PatchUser() error = %v, want ErrForbidden", err)
 			}
+			_, err = service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+				AuthenticatedUserID: ownerUserID,
+				OrganizationID:      orgID,
+				UserID:              memberUserID,
+			})
+			if !errors.Is(err, ErrForbidden) {
+				t.Fatalf("ResetTemporaryPassword() error = %v, want ErrForbidden", err)
+			}
 		})
 	}
 }
@@ -282,6 +290,73 @@ func TestListUsersDoesNotExposeTemporaryPasswordOrCredentialMaterial(t *testing.
 	}
 }
 
+func TestOwnerCanResetExistingUserTemporaryPassword(t *testing.T) {
+	store := newFakeStore()
+	originalUser := store.users[memberUserID]
+	originalMembership := store.memberships[key(orgID, memberUserID)]
+	store.credentials[memberUserID] = spine.UserPasswordCredential{
+		UserID:             memberUserID,
+		PasswordHash:       "hash:old-password",
+		MustChangePassword: false,
+		PasswordChangedAt:  ptrTime(testNow.Add(-time.Hour)),
+		CreatedAt:          testNow.Add(-2 * time.Hour),
+		UpdatedAt:          testNow.Add(-time.Hour),
+	}
+	service := newTestService(store)
+
+	result, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              memberUserID,
+	})
+	if err != nil {
+		t.Fatalf("ResetTemporaryPassword() error = %v", err)
+	}
+	if result.TemporaryPassword != "temporary-password" {
+		t.Fatalf("TemporaryPassword = %q, want generated password", result.TemporaryPassword)
+	}
+	if got := store.users[memberUserID]; got != originalUser {
+		t.Fatalf("user mutated on reset:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if got := store.memberships[key(orgID, memberUserID)]; got != originalMembership {
+		t.Fatalf("membership mutated on reset:\n got: %#v\nwant: %#v", got, originalMembership)
+	}
+	credential := store.credentials[memberUserID]
+	if credential.PasswordHash != "hash:temporary-password" {
+		t.Fatalf("stored PasswordHash = %q, want reset hash", credential.PasswordHash)
+	}
+	if !credential.MustChangePassword || credential.PasswordChangedAt != nil {
+		t.Fatalf("stored credential = %#v, want mandatory password change", credential)
+	}
+	if !store.revoked[memberUserID] {
+		t.Fatalf("sessions for %q were not revoked", memberUserID)
+	}
+	if !result.Credential.MustChangePassword || result.Credential.PasswordChangedAt != nil {
+		t.Fatalf("result credential = %#v, want must_change_password summary", result.Credential)
+	}
+	encoded := mustJSON(t, result)
+	if strings.Contains(encoded, "password_hash") || strings.Contains(encoded, "hash:temporary-password") || strings.Contains(encoded, "old-password") {
+		t.Fatalf("reset response leaked credential material: %s", encoded)
+	}
+}
+
+func TestResetTemporaryPasswordRequiresExistingOrganizationUser(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store)
+
+	_, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              otherExistingUserID,
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ResetTemporaryPassword() error = %v, want ErrNotFound", err)
+	}
+	if _, ok := store.credentials[otherExistingUserID]; ok {
+		t.Fatalf("credential created for non-member: %#v", store.credentials[otherExistingUserID])
+	}
+}
+
 func TestInvalidAndObserverRolesAreRejected(t *testing.T) {
 	store := newFakeStore()
 	service := newTestService(store)
@@ -408,6 +483,15 @@ func TestPathIDsMustBeValidUUIDs(t *testing.T) {
 	})
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("PatchUser() error = %v, want ValidationError", err)
+	}
+
+	_, err = service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              "not-a-uuid",
+	})
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("ResetTemporaryPassword() error = %v, want ValidationError", err)
 	}
 }
 

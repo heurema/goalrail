@@ -2329,3 +2329,28 @@ Rationale:
 - Running the quick scan after init gives future contract/task commands a local
   baseline substrate while preserving the server no-clone and no-source-upload
   boundary.
+
+## D-0089 — Console can rotate temporary passwords for existing Organization users
+Date: 2026-05-07
+Status: accepted
+
+Decision:
+- Add an owner-only Organization-scoped admin route:
+  `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`.
+- The route rotates the existing user's password credential by generating a
+  backend-owned temporary password, storing only the password hash, setting
+  `must_change_password = true`, clearing `password_changed_at`, and revoking
+  active sessions for that user.
+- The reset response returns the generated temporary password exactly once.
+- Console Settings / Users exposes the action for existing Organization users
+  with confirmation and keeps the returned temporary password only in transient
+  React state for immediate display.
+- This does not add CLI user-management commands, invite/reset email delivery,
+  public registration, self-service password reset, SaaS onboarding, SSO/OIDC,
+  organization creation API, runner, gate, or proof behavior.
+
+Rationale:
+- This completes the admin temporary-password handoff loop introduced by
+  backend-created users while preserving ADR-0027's Console/admin boundary.
+- Revoking active sessions makes the `must_change_password` rotation effective
+  for users who already had product sessions.

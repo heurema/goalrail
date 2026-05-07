@@ -819,6 +819,60 @@ describe('App', () => {
     expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Inactive');
   });
 
+  it('resets an existing user temporary password after confirmation and displays it once', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
+      organizationUserRecord({ displayName: 'Dev User', email: 'dev@example.com', role: 'member', userId: '018f0000-0000-7000-8000-000000000010' }),
+    ])));
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
+    await screen.findByText('Dev User');
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ...organizationUserRecord({
+          displayName: 'Dev User',
+          email: 'dev@example.com',
+          role: 'member',
+          mustChangePassword: true,
+          userId: '018f0000-0000-7000-8000-000000000010',
+        }),
+        temporary_password: 'rotated-once-secret',
+      }, 201)
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /edit dev user/i }));
+    const drawer = screen.getByLabelText(/edit user/i);
+    fireEvent.click(within(drawer).getByRole('button', { name: /^Reset temporary password$/i }));
+    const confirmDialog = screen.getByRole('dialog', { name: /confirm temporary password reset/i });
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: /^Reset temporary password$/i }));
+
+    expect(await screen.findByText('rotated-once-secret')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe(
+      '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010/temporary-password-resets'
+    );
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: {
+          Authorization: 'Bearer access-token',
+        },
+      })
+    );
+    expect(fetchMock.mock.calls[3][1]?.body).toBeUndefined();
+    expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Must change password');
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.localStorage.length).toBe(0);
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+    expect(window.sessionStorage.length).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    expect(screen.queryByText('rotated-once-secret')).not.toBeInTheDocument();
+    expect(screen.getByRole('table', { name: /workspace users/i })).not.toHaveTextContent('rotated-once-secret');
+  });
+
   it('edit user does not require email because PATCH does not update email', async () => {
     await loginSuccessfully();
     fetchMock.mockResolvedValueOnce(jsonResponse(organizationUsersResponse([
