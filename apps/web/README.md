@@ -37,7 +37,8 @@ Rule:
 ## Current resources
 
 - `apps/web/console` is the canonical multilingual EN/RU console source with
-  bounded auth API client flow and structured empty product surfaces
+  bounded auth API client flow, API-backed Settings / Users management, and
+  structured empty product surfaces
 - `apps/web/demo-change-packet` is the current EN change-packet demo prototype
 - `apps/web/demo-change-packet-ru` is a separate RU copy intended for an independent demo domain, not an in-app translation layer
 - `apps/web/pilot-intake-ru` is the Russian pilot-intake landing prototype

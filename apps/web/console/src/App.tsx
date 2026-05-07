@@ -17,6 +17,7 @@ import {
   isUsersClientError,
   listOrganizationUsers,
   patchOrganizationUser,
+  resetOrganizationUserTemporaryPassword,
 } from './usersClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 
@@ -120,6 +121,14 @@ function displayUserState(record: OrganizationUserRecord): OrganizationUserState
   return 'active';
 }
 
+function userRecordWithoutSecret(record: OrganizationUserRecord): OrganizationUserRecord {
+  return {
+    user: record.user,
+    organization_membership: record.organization_membership,
+    credential: record.credential,
+  };
+}
+
 function isThemeId(value: string | null): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
@@ -217,6 +226,9 @@ function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<UserDraft>(EMPTY_DRAFT);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<OrganizationUserRecord | null>(null);
+  const [resetError, setResetError] = useState('');
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
   const usersLoadSequence = useRef(0);
   const authSessionSequence = useRef(0);
@@ -250,6 +262,8 @@ function App() {
   const sessionRole = isMembershipRole(sessionRoleValue)
     ? translate(`membershipRoles.${sessionRoleValue}`)
     : sessionRoleValue ?? 'member';
+  const editingRecord = editingId ? users.find((record) => record.user.id === editingId) ?? null : null;
+  const isResettingTemporaryPassword = resettingUserId !== null;
 
   async function handleLanguageChange(locale: ConsoleLocale) {
     await i18n.changeLanguage(locale);
@@ -366,6 +380,9 @@ function App() {
     setUsersError('');
     setFormError('');
     setTemporaryPassword(null);
+    setResetTarget(null);
+    setResetError('');
+    setResettingUserId(null);
     setContractIdInput('');
     setContractLoadStatus('idle');
     setContractError('');
@@ -466,6 +483,8 @@ function App() {
     setDraft({ ...EMPTY_DRAFT });
     setFormError('');
     setTemporaryPassword(null);
+    setResetTarget(null);
+    setResetError('');
     setIsDrawerOpen(true);
   }
 
@@ -479,11 +498,18 @@ function App() {
     });
     setFormError('');
     setTemporaryPassword(null);
+    setResetTarget(null);
+    setResetError('');
     setIsDrawerOpen(true);
   }
 
   function closeDrawer() {
+    if (isResettingTemporaryPassword) {
+      return;
+    }
     setIsDrawerOpen(false);
+    setResetTarget(null);
+    setResetError('');
   }
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
@@ -523,8 +549,9 @@ function App() {
         if (authSessionSequence.current !== mutationSessionSequence) {
           return;
         }
+        const userRecord = userRecordWithoutSecret(result);
         usersLoadSequence.current += 1;
-        setUsers((currentUsers) => currentUsers.map((record) => (record.user.id === editingId ? result : record)));
+        setUsers((currentUsers) => currentUsers.map((record) => (record.user.id === editingId ? userRecord : record)));
       } else {
         const result = await createOrganizationUser({
           accessToken,
@@ -536,8 +563,9 @@ function App() {
         if (authSessionSequence.current !== mutationSessionSequence) {
           return;
         }
+        const userRecord = userRecordWithoutSecret(result);
         usersLoadSequence.current += 1;
-        setUsers((currentUsers) => [...currentUsers.filter((record) => record.user.id !== result.user.id), result]);
+        setUsers((currentUsers) => [...currentUsers.filter((record) => record.user.id !== result.user.id), userRecord]);
         if (result.temporary_password) {
           setTemporaryPassword({
             email: result.user.email ?? nextDraft.email,
@@ -562,6 +590,75 @@ function App() {
       }
 
       setFormError(usersErrorMessage(error, translate));
+    }
+  }
+
+  function requestTemporaryPasswordReset(record: OrganizationUserRecord) {
+    setResetTarget(record);
+    setResetError('');
+  }
+
+  function cancelTemporaryPasswordReset() {
+    if (isResettingTemporaryPassword) {
+      return;
+    }
+    setResetTarget(null);
+    setResetError('');
+  }
+
+  async function confirmTemporaryPasswordReset() {
+    const target = resetTarget;
+    const accessToken = tokens?.accessToken;
+    const organizationId = profile?.organization_membership.organization_id;
+    if (!target) {
+      return;
+    }
+    if (!accessToken || !organizationId) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    setResetError('');
+    setResettingUserId(target.user.id);
+    const mutationSessionSequence = authSessionSequence.current;
+
+    try {
+      const result = await resetOrganizationUserTemporaryPassword({
+        accessToken,
+        organizationId,
+        userId: target.user.id,
+      });
+      if (authSessionSequence.current !== mutationSessionSequence) {
+        return;
+      }
+      const userRecord = userRecordWithoutSecret(result);
+      usersLoadSequence.current += 1;
+      setUsers((currentUsers) => currentUsers.map((record) => (record.user.id === target.user.id ? userRecord : record)));
+      setTemporaryPassword({
+        email: result.user.email ?? target.user.email ?? target.user.id,
+        password: result.temporary_password,
+      });
+      setUsersLoadStatus('loaded');
+      setUsersError('');
+      setResetTarget(null);
+      setResetError('');
+      setIsDrawerOpen(false);
+    } catch (error) {
+      if (authSessionSequence.current !== mutationSessionSequence) {
+        return;
+      }
+      if (isUsersClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setResetError(usersErrorMessage(error, translate));
+    } finally {
+      if (authSessionSequence.current === mutationSessionSequence) {
+        setResettingUserId(null);
+      }
     }
   }
 
@@ -1006,6 +1103,23 @@ function App() {
               </label>
               ) : null}
 
+              {editingId && editingRecord ? (
+                <section className="resetCredentialPanel" aria-label={translate('users.resetTemporaryPassword')}>
+                  <div>
+                    <h4>{translate('users.resetTemporaryPassword')}</h4>
+                    <p>{translate('users.resetTemporaryPasswordCopy')}</p>
+                  </div>
+                  <button
+                    className="ghostButton dangerButton"
+                    disabled={isResettingTemporaryPassword}
+                    onClick={() => requestTemporaryPasswordReset(editingRecord)}
+                    type="button"
+                  >
+                    {translate('users.resetTemporaryPassword')}
+                  </button>
+                </section>
+              ) : null}
+
               {formError ? <p className="fieldMessage" role="alert">{formError}</p> : null}
             </div>
 
@@ -1019,6 +1133,39 @@ function App() {
             </footer>
             </form>
           </aside>
+        </>
+      ) : null}
+
+      {resetTarget ? (
+        <>
+          <button
+            aria-label={translate('users.cancelTemporaryPasswordReset')}
+            className="confirmScrim"
+            disabled={isResettingTemporaryPassword}
+            onClick={cancelTemporaryPasswordReset}
+            type="button"
+          />
+          <section
+            aria-label={translate('users.confirmTemporaryPasswordResetTitle')}
+            aria-modal="true"
+            className="confirmPanel"
+            role="dialog"
+          >
+            <div>
+              <p className="kicker">{translate('users.confirmTemporaryPasswordResetKicker')}</p>
+              <h3>{translate('users.confirmTemporaryPasswordResetTitle')}</h3>
+              <p>{translate('users.confirmTemporaryPasswordResetCopy', { email: resetTarget.user.email ?? resetTarget.user.id })}</p>
+            </div>
+            {resetError ? <p className="fieldMessage" role="alert">{resetError}</p> : null}
+            <footer className="confirmActions">
+              <button className="ghostButton" disabled={isResettingTemporaryPassword} onClick={cancelTemporaryPasswordReset} type="button">
+                {translate('users.cancel')}
+              </button>
+              <button className="primaryButton dangerButton" disabled={isResettingTemporaryPassword} onClick={confirmTemporaryPasswordReset} type="button">
+                {isResettingTemporaryPassword ? translate('users.resettingTemporaryPassword') : translate('users.confirmTemporaryPasswordReset')}
+              </button>
+            </footer>
+          </section>
         </>
       ) : null}
     </main>

@@ -41,6 +41,10 @@ export interface CreateOrganizationUserResponse extends OrganizationUserRecord {
   temporary_password?: string;
 }
 
+export interface ResetOrganizationUserTemporaryPasswordResponse extends OrganizationUserRecord {
+  temporary_password: string;
+}
+
 export type PatchOrganizationUserResponse = OrganizationUserRecord;
 
 export interface UsersClientError {
@@ -124,6 +128,20 @@ export async function patchOrganizationUser(input: {
         ...(input.role === undefined ? {} : { role: input.role }),
         ...(input.state === undefined ? {} : { state: input.state }),
       },
+    }
+  );
+}
+
+export async function resetOrganizationUserTemporaryPassword(input: {
+  accessToken: string;
+  organizationId: string;
+  userId: string;
+}): Promise<ResetOrganizationUserTemporaryPasswordResponse> {
+  return request<ResetOrganizationUserTemporaryPasswordResponse>(
+    `${organizationUsersPath(input.organizationId)}/${encodeURIComponent(input.userId)}/temporary-password-resets`,
+    {
+      method: 'POST',
+      accessToken: input.accessToken,
     }
   );
 }
