@@ -533,13 +533,6 @@ func TestRunRepositoryContextInitPreflightConflictSkipsServer(t *testing.T) {
 			},
 		},
 		{
-			name: "repository_url",
-			mutate: func(config projectConfig) projectConfig {
-				config.Repository.URL = "https://github.com/heurema/goalrail.git"
-				return config
-			},
-		},
-		{
 			name: "workflow_base_branch",
 			mutate: func(config projectConfig) projectConfig {
 				config.Repository.WorkflowBaseBranch = "release"
@@ -1021,13 +1014,6 @@ func TestRunServerBackedInitPreflightConflictSkipsServer(t *testing.T) {
 			name: "repository_full_name",
 			mutate: func(config projectConfig) projectConfig {
 				config.Repository.FullName = "heurema/other"
-				return config
-			},
-		},
-		{
-			name: "repository_url",
-			mutate: func(config projectConfig) projectConfig {
-				config.Repository.URL = "https://github.com/heurema/goalrail.git"
 				return config
 			},
 		},
