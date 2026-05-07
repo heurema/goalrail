@@ -124,27 +124,28 @@ related_docs:
 77. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
 78. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
 79. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-80. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-81. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-82. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-83. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-84. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-85. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-86. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+80. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+81. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+82. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+83. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+84. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+85. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+86. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+87. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-87. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-88. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-89. `docs/reference/design/reference_screens/`
-90. `docs/reference/start-assistant/`
-91. `.goalrail/work/`
-92. `.goalrail/knowledge/`
-93. `.goalrail/public-kb/manifest.yaml`
-94. `.punk/publishing.toml`
-95. `.goalrail/flows/`
-96. `.goalrail/evals/`
-97. `docs/ops/PUBLISHING_MIGRATION.md`
-98. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+88. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+89. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+90. `docs/reference/design/reference_screens/`
+91. `docs/reference/start-assistant/`
+92. `.goalrail/work/`
+93. `.goalrail/knowledge/`
+94. `.goalrail/public-kb/manifest.yaml`
+95. `.punk/publishing.toml`
+96. `.goalrail/flows/`
+97. `.goalrail/evals/`
+98. `docs/ops/PUBLISHING_MIGRATION.md`
+99. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -258,9 +259,10 @@ related_docs:
 - `START_ASSISTANT_WORKER_ARCHITECTURE.md` — Stage 3A architecture for the separate public-edge assistant Worker and `/api/start-chat` ownership boundary
 - `START_ASSISTANT_PUBLIC_KB_PIPELINE.md` — public KB source whitelist, build process, vector store lifecycle, manifest storage, freshness, and rollback rules
 - `START_ASSISTANT_STAGE_3B_PLAN.md` — smallest live Worker implementation plan, tests, smoke checks, security validation, and non-goals
+- `START_ASSISTANT_LIVE_RUNBOOK.md` — live `/start` route ownership, Worker deploy/smoke commands, rollback path, and remaining limits
 - `START_ASSISTANT_KNOWLEDGE_SYNC.md` — initial public knowledge sync policy for compiling whitelisted docs into retrieval artifacts
 - `START_ASSISTANT_SECURITY_AND_PRIVACY.md` — public assistant safety boundary, input policy, logging posture, abuse controls, and safe refusals
-- `START_ASSISTANT_API_CONTRACT.md` — planned `POST /api/start-chat` request/response contract and system-instruction draft
+- `START_ASSISTANT_API_CONTRACT.md` — `POST /api/start-chat` request/response contract and system-instruction draft
 - `DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md` — proposed decision snippet for the separate public-edge Worker boundary
 - `DECISION_LOG_START_ASSISTANT_SNIPPET.md` — proposed decision snippet for the global `/start` assistant surface
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon

@@ -7,6 +7,25 @@ source-grounded `/start` assistant.
 
 Stage 3B must not begin until the Stage 3A architecture boundary is accepted.
 
+## Current completion status
+
+Stage 3B is complete as a first live slice as of 2026-05-07.
+
+Current live state:
+
+- `/start` is served from `apps/web/console` at
+  `https://goalrail.dev/start`;
+- `POST /api/start-chat` is served by the separate Cloudflare Worker from
+  `apps/workers/start-assistant`, not by `apps/server`;
+- the Worker route is `goalrail.dev/api/start-chat*`;
+- the verified public KB revision is
+  `263075db460d762fe7fa1f09d30709bc68e8eb5c`;
+- the current live runbook is
+  `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`.
+
+Remaining follow-up is Stage 3C: automate the public KB sync path after the
+manual KB upload path has proved answer quality.
+
 ## Preconditions
 
 Resolve these before code:
@@ -96,8 +115,11 @@ The current package is dependency-free JavaScript Worker code with Node tests
 and a local mock dev server. It implements request validation, safe refusals,
 OpenAI Responses API file_search request shaping, response normalization, and
 the `/start` browser fetch path. It now includes minimal Cloudflare Wrangler
-config plus manual public KB build/upload tooling. It does not add live deploy,
-provider secrets, production Worker configuration values, or GitHub Action sync.
+config plus manual public KB build/upload tooling. It has been live-deployed as
+the separate Cloudflare Worker route `goalrail.dev/api/start-chat*`, with
+production provider secrets and vector-store configuration held outside this
+repository. It still does not add provider secrets, production secret values,
+or GitHub Action sync to the repository.
 
 ## Endpoint
 

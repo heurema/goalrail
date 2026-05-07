@@ -204,18 +204,21 @@ Goal:
 - route the canonical `apps/web/console` frontend to `https://goalrail.dev`
   and the `apps/server` API to `https://api.goalrail.dev` through the external
   `11me/infra` Flux GitOps path.
+- keep the public `/start` client route served by the same console deployment
+  with SPA fallback.
 
 Done means:
 - Flux reconciled infra revision
-  `main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7`
+  `main@sha1:918c12936b03b469e3cb014a2c0ab119a850563e`
 - Flux Kustomization `flux-system/apps-personal` reported `Ready=True`
 - `goalrail-console` and `goalrail-server` rollouts completed successfully
 - `goalrail.dev` and `api.goalrail.dev` resolved publicly
 - `goalrail-dev-tls` and `api-goalrail-dev-tls` reported `Ready=True`
 - frontend HTTP 200 smoke passed with no `Set-Cookie`
+- `https://goalrail.dev/start` HTTP 200 smoke passed through SPA fallback
 - API `/livez`, `/readyz`, and `/version` smoke passed
 - frontend HTML/bundle contained no `console.goalrail.dev`, and the bundle
-  contained `https://api.goalrail.dev`
+  contained `https://api.goalrail.dev` plus `/api/start-chat`
 - API CORS preflight for `Origin: https://goalrail.dev` returned HTTP 204 with
   allowed methods `GET, POST, PATCH, OPTIONS` and headers
   `Authorization, Content-Type`
@@ -225,6 +228,8 @@ Current truth:
   `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
 - console source remains `apps/web/console`; API source remains `apps/server`;
   deployment source of truth remains the external `11me/infra` repo
+- `POST https://goalrail.dev/api/start-chat` is owned by the separate
+  Cloudflare Worker from `apps/workers/start-assistant`, not by `apps/server`
 - demo sandbox `https://demo.goalrail.dev` remains separate
 - legacy `https://console.goalrail.ru/` remains separate and is not migrated by
   this slice

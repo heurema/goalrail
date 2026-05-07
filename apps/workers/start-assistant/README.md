@@ -32,9 +32,20 @@ Deployment config:
 
 - `wrangler.toml` defines the separate `goalrail-start-assistant` Worker
   package.
-- Public route ownership remains deployment-managed outside this repository.
+- The live public route is `goalrail.dev/api/start-chat*`.
 - Live deploy requires Cloudflare auth and Worker-side OpenAI/vector-store
-  configuration.
+  configuration held outside this repository.
+- The verified live Worker version is
+  `77b2dbc5-b7aa-42d0-b91b-3b313f8c6f50`.
+
+Live deploy command:
+
+```bash
+npx --yes wrangler deploy --config wrangler.toml --route "goalrail.dev/api/start-chat*" --keep-vars
+```
+
+`--keep-vars` preserves deployment-managed secrets and runtime config. Do not
+commit real values.
 
 Manual public KB commands:
 
@@ -59,3 +70,6 @@ npm --prefix apps/workers/start-assistant run deploy:dry-run
 
 The local dev server defaults to `http://127.0.0.1:8787` and enters mock mode
 when OpenAI provider configuration is absent.
+
+Live smoke guidance is recorded in
+`docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`.

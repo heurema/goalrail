@@ -9,6 +9,9 @@ Stage 3A is documentation only. It does not add Worker code, backend routes,
 OpenAI calls, vector store sync, secrets, runtime dependencies, analytics, or
 tracking.
 
+Current live deployment and smoke commands are recorded in
+`docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`.
+
 ## Ownership
 
 | Surface | Owner | Boundary |

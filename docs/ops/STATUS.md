@@ -42,10 +42,13 @@ source-level core server CORS allowlist support exists through exact
 wildcard origins rejected; the main console/API
 deployment is now live through `11me/infra` Flux GitOps at
 `https://goalrail.dev` and `https://api.goalrail.dev`, with Flux revision
-`main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7`, Kustomization
+`main@sha1:918c12936b03b469e3cb014a2c0ab119a850563e`, Kustomization
 `flux-system/apps-personal` Ready=True, console/server rollouts successful,
-public DNS/TLS ready, frontend/API smoke passed, and the console bundle built
-against `https://api.goalrail.dev`; live API CORS is temporarily handled by
+public DNS/TLS ready, frontend/API smoke passed, `/start` live with SPA
+fallback, and the console bundle built against `https://api.goalrail.dev`; the
+same-origin `POST /api/start-chat` route is live through the separate
+Cloudflare Worker from `apps/workers/start-assistant`, with public KB revision
+`263075db460d762fe7fa1f09d30709bc68e8eb5c`; live API CORS is temporarily handled by
 nginx ingress annotations allowing `https://goalrail.dev` because the deployed
 server image still predates the app-level CORS implementation from Goalrail
 PR #120; pilot-intake-ru is now a business-first public RU pilot landing per
@@ -126,9 +129,9 @@ infra; current live API CORS is a temporary nginx ingress bridge for
 `https://goalrail.dev`. This status does not claim committed server config,
 required human review, signed-commit enforcement, real-device mobile QA, or
 native-speaker copy proofread. It also does not approve analytics, CRM,
-database, generic queue, repo-aware planning worker implementation, LLM/API, repo
-integration, runtime execution, gate, proof, or broad backend platform
-behavior.
+database, generic queue, repo-aware planning worker implementation, LLM/API
+outside the bounded start-assistant Worker, repo integration, runtime
+execution, gate, proof, or broad backend platform behavior.
 
 ## Current state
 
@@ -152,7 +155,8 @@ The project currently has:
 - planned flow / eval structure
 - reference screens
 - shared web stack rules under `apps/web/`
-- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, API-backed Organization Users list/create/edit plus temporary-password reset using `/v1/me` organization context and the ADR-0027 Organization user-management routes, and read-only Settings / Repository metadata using `/v1/me` organization context plus `GET /v1/organizations/{organization_id}/repository-context`; temporary passwords are shown only from the immediate create/reset response and are not persisted in browser storage; Repository context data is metadata-only Project / RepoBinding visibility and does not claim provider authorization, checkout, readiness, proof, execution, or runner state; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
+- one canonical multilingual console source under `apps/web/console` with EN/RU static i18next resources, existing server auth endpoints for login, optional first-login password change, `/v1/me`, logout, in-memory tokens only, no cookies or token/profile/session browser-storage persistence, `goalrail.console.theme` as the only browser-storage key, no locale persistence, three structured empty product surfaces, bottom-left Settings utility, Appearance theme picker, public English `/start`, API-backed Organization Users list/create/edit plus temporary-password reset using `/v1/me` organization context and the ADR-0027 Organization user-management routes, and read-only Settings / Repository metadata using `/v1/me` organization context plus `GET /v1/organizations/{organization_id}/repository-context`; temporary passwords are shown only from the immediate create/reset response and are not persisted in browser storage; Repository context data is metadata-only Project / RepoBinding visibility and does not claim provider authorization, checkout, readiness, proof, execution, or runner state; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source has been removed and live `https://console.goalrail.ru/` remains separate
+- a separate public-edge start assistant Worker under `apps/workers/start-assistant` owns live same-origin `POST https://goalrail.dev/api/start-chat`; it answers from the public KB revision `263075db460d762fe7fa1f09d30709bc68e8eb5c` through OpenAI Responses API file_search and keeps repo scan, file upload, code execution, analytics, cookies, sessions, CRM, browser OpenAI keys, chat history, and core `apps/server` ownership out of scope
 - local change-packet demo prototypes under `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru`
 - a business-first RU pilot landing under `apps/web/pilot-intake-ru` for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one product area, with illustrative repository readiness / controlled task / pilot result cards, a D-0056 minimal `POST /api/pilot-lead` email lead endpoint with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for successfully notified, legacy processed, and in-flight rows, no user-agent storage for new lead records, a landing-owned repo-side Go sidecar for the endpoint/digest/purge command under `apps/web/pilot-intake-ru/server`, server-installed daily previous-day digest at 07:00 GMT+3 when leads exist plus direct mailto fallback, no analytics, no tracking, no IP logging, no cookies, no sessions, no fingerprinting, no CRM, no Google Sheets, no repo integration, no runtime execution, no persistence beyond local JSONL lead log, no chat UI, no file upload, and no model selector; the previous 5-step technical walkthrough is demoted to internal / technical demo or checkpoint status in git history per D-0055.
 - an open-source community baseline (`LICENSE`, `NOTICE`, contributor docs, issue forms, `CODEOWNERS`)
@@ -373,7 +377,8 @@ The project currently has:
 - `.punk/publishing.local.toml` is the ignored local-only manual-bootstrap pointer; resolver/runtime implementation is pending
 - `.goalrail/flows/` and `.goalrail/evals/` exist as planned future structure, not executable product surfaces
 - `apps/web/` is now the shared namespace for frontend resources and stack rules
-- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, an ops-style Contracts surface that can load one real public Contract aggregate by explicit `contract_id` through `GET /v1/contracts/{id}`, structured empty Delivery Readiness and Proof surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, API-backed Organization Users list/create/edit using `/v1/me` organization context plus the ADR-0027 routes, and read-only Settings / Repository Project + RepoBinding metadata backed by `GET /v1/organizations/{organization_id}/repository-context`; the main deployment is live at `https://goalrail.dev` and uses `https://api.goalrail.dev` through `11me/infra` Flux GitOps
+- `apps/web/console` is the canonical multilingual EN/RU console source with real auth API login, optional first-login password change, `/v1/me`, logout, neutral internal role/status/surface IDs, runtime i18next language switching, no locale storage, an ops-style Contracts surface that can load one real public Contract aggregate by explicit `contract_id` through `GET /v1/contracts/{id}`, structured empty Delivery Readiness and Proof surfaces, bottom-left Settings utility, Appearance theme picker, local-only theme preference under `goalrail.console.theme`, API-backed Organization Users list/create/edit using `/v1/me` organization context plus the ADR-0027 routes, read-only Settings / Repository Project + RepoBinding metadata backed by `GET /v1/organizations/{organization_id}/repository-context`, and public English `/start` backed by static guided fallback plus same-origin start assistant route; the main deployment is live at `https://goalrail.dev` and uses `https://api.goalrail.dev` through `11me/infra` Flux GitOps
+- `apps/workers/start-assistant` is the separate public-edge Worker package for live `POST /api/start-chat`; it is not a core `apps/server` route and does not own canonical Goalrail product state
 - `apps/web/demo-change-packet` is the current React + Vite + Mantine EN change-packet demo prototype, deployed through standalone infra at `demo.goalrail.dev`
 - `apps/web/demo-change-packet-ru` is the separate RU copy of the change-packet demo prototype, deployed through standalone infra at `demo.goalrail.ru` rather than in-app i18n
 - `apps/web/console-ru` source has been removed. The live `https://console.goalrail.ru/` deployment remains a separate legacy RU static release and is not migrated by the main `goalrail.dev` slice.

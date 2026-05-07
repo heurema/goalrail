@@ -24,6 +24,24 @@ Every built KB artifact should be traceable to:
 - source file path;
 - heading path or chunk identifier.
 
+## Current live KB snapshot
+
+The first live `/start` assistant slice uses a manually built and uploaded
+public KB artifact.
+
+Verified live metadata as of 2026-05-07:
+
+- repository: `heurema/goalrail`;
+- commit SHA: `263075db460d762fe7fa1f09d30709bc68e8eb5c`;
+- updated at: `2026-05-07T15:19:12.980Z`;
+- retrieval path: OpenAI Responses API with `file_search`;
+- sync mode: manual operator upload;
+- browser exposure: only freshness metadata, source references, answer text,
+  suggested questions, and the safety disclaimer.
+
+Provider vector-store identifiers remain deployment-managed and are not
+recorded in this repository. GitHub Action sync is not live.
+
 ## Whitelist model
 
 Use an explicit whitelist only.

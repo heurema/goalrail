@@ -37,6 +37,10 @@ Current scope:
   repo integration, runner, gate, proof, or product data loop
 - live `console.goalrail.ru` may still point to an older static release until a
   separate deployment migration / API routing slice
+- live `https://goalrail.dev/start` is served from this app through the main
+  console deployment, while same-origin `POST /api/start-chat` is owned by the
+  separate Cloudflare Worker, not by `apps/server`; external static serving
+  must preserve SPA fallback for `/start`
 
 Delivery rule:
 - CLI and server functionality should become real first
