@@ -51,5 +51,7 @@ type ContractUpdateContextRef struct {
 }
 
 type ContractDraftReadyForApprovalRequest struct {
-	MarkedBy ActorRef `json:"marked_by"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	MarkedBy      ActorRef      `json:"marked_by"`
 }

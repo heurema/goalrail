@@ -473,7 +473,7 @@ func TestSubmitForApprovalUsesRequiredTransactionRunner(t *testing.T) {
 
 	txRunner := &fakeTransactionRunner{}
 	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
-	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
@@ -534,7 +534,7 @@ func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	submitted, err := createService.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	submitted, err := createService.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
@@ -542,7 +542,7 @@ func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 
 	txRunner := &fakeTransactionRunner{}
 	service := contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
-	approved, err := service.Approve(ctx, submitted.ID, approveRequest())
+	approved, err := service.Approve(ctx, submitted.ID, approveRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
@@ -611,14 +611,14 @@ func TestContractLifecycleTransitionsUseRequiredTransactionRunner(t *testing.T) 
 	if updated.State != spine.ContractStateDraft {
 		t.Fatalf("updated contract state = %q, want %q", updated.State, spine.ContractStateDraft)
 	}
-	submitted, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	submitted, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
 	if submitted.State != spine.ContractStateReadyForApproval {
 		t.Fatalf("submitted contract state = %q, want %q", submitted.State, spine.ContractStateReadyForApproval)
 	}
-	approved, err := service.Approve(ctx, created.ID, approveRequest())
+	approved, err := service.Approve(ctx, created.ID, approveRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}

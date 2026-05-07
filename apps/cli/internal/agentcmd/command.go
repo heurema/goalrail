@@ -313,6 +313,10 @@ If a Goalrail JSON response contains ` + "`next_action.kind=update_contract`" + 
 
 If a Goalrail JSON response contains ` + "`next_action.kind=review_contract`" + `, show the changed draft contract fields to the user for review. Do not submit, approve, plan, run, verify, or create proof unless Goalrail returns an available command for that later state.
 
+If the user explicitly accepts the reviewed draft and Goalrail exposes ` + "`goalrail contract submit`" + ` as an available command, submit the Contract for approval. This is not approval.
+
+Only call ` + "`goalrail contract approve --confirm-user-approval`" + ` after the user explicitly approves the submitted Contract. Never infer approval from silence or from a generic continuation request.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -429,6 +433,45 @@ func commandsJSONContent() string {
       ],
       "does_not_upload": [
         "raw_source"
+      ]
+    },
+    "submit_contract": {
+      "command": "goalrail contract submit --contract-id <contract_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "reviewed_contract_draft"
+      ],
+      "updates": [
+        "ContractDraft"
+      ],
+      "does_not_create": [
+        "ApprovedContract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "approve_contract": {
+      "command": "goalrail contract approve --contract-id <contract_id> --confirm-user-approval --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "explicit_user_approval"
+      ],
+      "creates": [
+        "ApprovedContract"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
       ]
     }
   },

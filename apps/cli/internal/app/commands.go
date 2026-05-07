@@ -32,7 +32,7 @@ var rootCommands = []commandSummary{
 	{name: "project", summary: "scan and report local project freshness"},
 	{name: "work", summary: "start and continue server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
-	{name: "contract", summary: "draft, update, and validate contract state"},
+	{name: "contract", summary: "draft, update, submit, approve, and validate contract state"},
 	{name: "proof", summary: "render proof JSON files"},
 }
 
@@ -299,6 +299,22 @@ func newContractCommand(env clienv.Env) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
+		Use:                "submit",
+		Short:              "submit a server ContractDraft for approval",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"submit"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "approve",
+		Short:              "approve a submitted Contract after user confirmation",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"approve"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
 		Use:                "validate",
 		Short:              "validate a contract JSON file",
 		DisableFlagParsing: true,
@@ -390,6 +406,10 @@ func helpFor(cmd *cobra.Command) string {
 		return contractcmd.DraftUsage()
 	case "goalrail contract update":
 		return contractcmd.UpdateUsage()
+	case "goalrail contract submit":
+		return contractcmd.SubmitUsage()
+	case "goalrail contract approve":
+		return contractcmd.ApproveUsage()
 	case "goalrail contract validate":
 		return contractcmd.ValidateUsage()
 	case "goalrail proof":

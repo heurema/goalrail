@@ -31,9 +31,11 @@ func TestInternalFallbackResponseShape(t *testing.T) {
 	assertJSONErrorResponse(t, response, http.StatusInternalServerError, "internal_error", "internal server error")
 }
 
-func TestContractApproveUsesPayloadActorWhenContextMissing(t *testing.T) {
+func TestContractApproveDerivesActorFromAuthenticatedUser(t *testing.T) {
 	service := &capturingContractService{}
-	handler := httpserver.NewContractHandler(fakeHTTPAuthService{}, service)
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000002"),
+	}, service)
 	request := newContractApproveRequest(t, context.Background(), approveContractJSON())
 	recorder := httptest.NewRecorder()
 
@@ -48,40 +50,37 @@ func TestContractApproveUsesPayloadActorWhenContextMissing(t *testing.T) {
 	want := actor.ActorContext{
 		Actor: spine.ActorRef{
 			Kind:        "user",
-			ID:          "dev_approver",
-			DisplayName: "Approver",
+			ID:          "018f0000-0000-7000-8000-000000000001",
+			DisplayName: "Developer",
 		},
-		Source: actor.SourcePayloadCompat,
+		Source: actor.SourceService,
 	}
 	if !reflect.DeepEqual(service.approveActor, want) {
 		t.Fatalf("approval actor = %#v, want %#v", service.approveActor, want)
 	}
+	wantInput := spine.ActorRef{
+		Kind:        "user",
+		ID:          "018f0000-0000-7000-8000-000000000001",
+		DisplayName: "Developer",
+	}
+	if !reflect.DeepEqual(service.approveInput.ApprovedBy, wantInput) {
+		t.Fatalf("approved_by input = %#v, want authenticated user", service.approveInput.ApprovedBy)
+	}
 }
 
-func TestContractApprovePreservesExistingActorContext(t *testing.T) {
-	existing := actor.ActorContext{
-		Actor: spine.ActorRef{
-			Kind:        "user",
-			ID:          "trusted-actor",
-			DisplayName: "Trusted Actor",
-		},
-		Source: actor.SourceDevHeader,
-	}
+func TestContractApproveRequiresAuthBeforeService(t *testing.T) {
 	service := &capturingContractService{}
-	handler := httpserver.NewContractHandler(fakeHTTPAuthService{}, service)
-	request := newContractApproveRequest(t, actor.WithActor(context.Background(), existing), approveContractJSON())
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken}, service)
+	request := newContractApproveRequest(t, context.Background(), approveContractJSON())
 	recorder := httptest.NewRecorder()
 
 	handler.Approve(recorder, request)
 
-	if recorder.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
 	}
-	if !service.approveActorOK {
-		t.Fatal("approval actor context was not set")
-	}
-	if !reflect.DeepEqual(service.approveActor, existing) {
-		t.Fatalf("approval actor = %#v, want existing %#v", service.approveActor, existing)
+	if service.approveCalled {
+		t.Fatal("contract approve service was called despite auth failure")
 	}
 }
 
@@ -106,9 +105,9 @@ func TestContractUpdateRequiresAuthBeforeService(t *testing.T) {
 func newContractApproveRequest(t *testing.T, ctx context.Context, body string) *http.Request {
 	t.Helper()
 
-	request := httptest.NewRequest(http.MethodPost, "/v1/contracts/contract-1/approvals", strings.NewReader(body)).WithContext(ctx)
+	request := httptest.NewRequest(http.MethodPost, "/v1/contracts/018f0000-0000-7000-8000-000000000009/approvals", strings.NewReader(body)).WithContext(ctx)
 	request.Header.Set("Content-Type", "application/json")
-	request.SetPathValue("id", "contract-1")
+	request.SetPathValue("id", "018f0000-0000-7000-8000-000000000009")
 	return request
 }
 
@@ -136,6 +135,8 @@ func assertJSONErrorResponse(t *testing.T, response routeResponse, status int, c
 type capturingContractService struct {
 	approveActor   actor.ActorContext
 	approveActorOK bool
+	approveCalled  bool
+	approveInput   spine.ApproveContractDraftRequest
 	updateCalled   bool
 }
 
@@ -152,11 +153,13 @@ func (s *capturingContractService) UpdateDraft(context.Context, spine.ContractID
 	return spine.Contract{}, nil
 }
 
-func (s *capturingContractService) SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error) {
+func (s *capturingContractService) SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest, spine.OrganizationMembership) (spine.Contract, error) {
 	return spine.Contract{}, nil
 }
 
-func (s *capturingContractService) Approve(ctx context.Context, id spine.ContractID, _ spine.ApproveContractDraftRequest) (spine.Contract, error) {
+func (s *capturingContractService) Approve(ctx context.Context, id spine.ContractID, input spine.ApproveContractDraftRequest, _ spine.OrganizationMembership) (spine.Contract, error) {
+	s.approveCalled = true
+	s.approveInput = input
 	s.approveActor, s.approveActorOK = actor.FromContext(ctx)
 	return spine.Contract{
 		ID:    id,

@@ -436,8 +436,9 @@ Done means:
   existing root agent instructions and does not install Claude, Gemini, Cursor,
   Windsurf, Gravity, or other provider-specific adapters; the generated pack
   includes `work continue`, `work answer`, `contract draft`, `contract update`,
-  question_id-bound structured clarification answer guidance, structured
-  contract field update guidance, and local repository receipt guidance
+  `contract submit`, `contract approve`, question_id-bound structured
+  clarification answer guidance, structured contract field update guidance,
+  explicit user approval guidance, and local repository receipt guidance
 - ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
   bodies from a file or stdin while returning a `goalrail.cli.v1` JSON envelope
   with `display.summary` and an available continuation command
@@ -467,6 +468,20 @@ Done means:
   `repo_binding_id` expectations to authenticated `PATCH /v1/contracts/{id}`,
   updates only current ContractDraft proposed fields, returns
   `changed_fields`, and yields `next_action.kind=review_contract`
+- ✅ `goalrail contract submit --contract-id <contract_id>` validates the same
+  marker/login/org boundary, sends marker `project_id` and `repo_binding_id`
+  expectations to authenticated `POST /v1/contracts/{id}/submissions`,
+  derives `marked_by` server-side from the authenticated user, runs the
+  existing readiness checks, moves the Contract to `ready_for_approval`, and
+  yields available `next_action.kind=approve_contract`
+- ✅ `goalrail contract approve --contract-id <contract_id>
+  --confirm-user-approval` fails before HTTP without the explicit confirmation
+  flag, validates the same marker/login/org boundary when present, sends marker
+  `project_id` and `repo_binding_id` expectations to authenticated
+  `POST /v1/contracts/{id}/approvals`, derives `approved_by` server-side from
+  the authenticated user, creates the ApprovedContract snapshot, moves the
+  Contract to `approved`, and yields unavailable planned
+  `next_action.kind=plan_work`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -475,9 +490,9 @@ Done means:
 - no audit/hook/branch/verification setup from init
 - no WorkItem, audit request, Run, gate, proof, provider
   integration, provider shim, branch, PR, hook, clone, deploy-key setup,
-  submit/approval automation, planning, runner, or verification from
+  planning, runner, or verification from
   `work start`, `work continue`, `work answer`, `contract draft`,
-  `contract update`, or `agent install`
+  `contract update`, `contract submit`, `contract approve`, or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint

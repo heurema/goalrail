@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
@@ -16,8 +18,8 @@ type ContractService interface {
 	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
 	Get(context.Context, spine.ContractID) (spine.Contract, error)
 	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error)
-	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error)
-	Approve(context.Context, spine.ContractID, spine.ApproveContractDraftRequest) (spine.Contract, error)
+	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest, spine.OrganizationMembership) (spine.Contract, error)
+	Approve(context.Context, spine.ContractID, spine.ApproveContractDraftRequest, spine.OrganizationMembership) (spine.Contract, error)
 }
 
 type ContractHandler struct {
@@ -93,13 +95,20 @@ func (h *ContractHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ContractHandler) SubmitForApproval(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.ContractDraftReadyForApprovalRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
+	input.MarkedBy = actorRefForAuthProfile(profile)
 
-	updated, err := h.service.SubmitForApproval(r.Context(), spine.ContractID(r.PathValue("id")), input)
+	updated, err := h.service.SubmitForApproval(r.Context(), spine.ContractID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -109,20 +118,38 @@ func (h *ContractHandler) SubmitForApproval(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ContractHandler) Approve(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.ApproveContractDraftRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
+	input.ApprovedBy = actorRefForAuthProfile(profile)
 
-	ctx := contextWithApprovalActor(r.Context(), input.ApprovedBy)
-	approved, err := h.service.Approve(ctx, spine.ContractID(r.PathValue("id")), input)
+	ctx := actor.WithActor(r.Context(), actor.ActorContext{
+		Actor:  input.ApprovedBy,
+		Source: actor.SourceService,
+	})
+	approved, err := h.service.Approve(ctx, spine.ContractID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
 
 	RespondJSON(w, http.StatusCreated, approved)
+}
+
+func actorRefForAuthProfile(profile auth.Profile) spine.ActorRef {
+	return spine.ActorRef{
+		Kind:        "user",
+		ID:          string(profile.User.ID),
+		DisplayName: profile.User.DisplayName,
+	}
 }
 
 func (h *ContractHandler) respondServiceError(w http.ResponseWriter, err error) {

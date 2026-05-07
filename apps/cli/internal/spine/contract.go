@@ -15,6 +15,7 @@ type ContractState string
 const (
 	ContractStateDraft              ContractState = "draft"
 	ContractStateNeedsClarification ContractState = "needs_clarification"
+	ContractStateReadyForApproval   ContractState = "ready_for_approval"
 	ContractStateApproved           ContractState = "approved"
 	ContractStateRejected           ContractState = "rejected"
 )
@@ -94,6 +95,20 @@ type ContractUpdateOutput struct {
 	ContractID      ContractID     `json:"contract_id"`
 	ContractState   ContractState  `json:"contract_state"`
 	ChangedFields   []string       `json:"changed_fields"`
+	LocalConfigPath string         `json:"local_config_path"`
+	Display         DisplaySummary `json:"display"`
+	NextAction      NextAction     `json:"next_action"`
+}
+
+type ContractTransitionOutput struct {
+	SchemaVersion   string         `json:"schema_version"`
+	Mode            string         `json:"mode"`
+	ServerURL       string         `json:"server_url"`
+	OrganizationID  string         `json:"organization_id"`
+	ProjectID       string         `json:"project_id"`
+	RepoBindingID   RepoBindingID  `json:"repo_binding_id"`
+	ContractID      ContractID     `json:"contract_id"`
+	ContractState   ContractState  `json:"contract_state"`
 	LocalConfigPath string         `json:"local_config_path"`
 	Display         DisplaySummary `json:"display"`
 	NextAction      NextAction     `json:"next_action"`
