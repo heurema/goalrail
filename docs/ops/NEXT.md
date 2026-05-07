@@ -23,16 +23,16 @@
 - ADR-0016 now defines the `ContractDraft ready_for_approval` boundary, and the server implements it as an explicit `draft -> ready_for_approval` transition with completeness checks and `marked_by` audit identity; approval, approved Contract, work item, gate, and proof remain later boundaries
 - ADR-0017 now defines the Contract approval boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`; the server implements it as explicit ApprovedContract snapshot creation with `approved_by` and `contract.approved`; approval does not start execution, gate, or proof
 - ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, execution, Run, receipt, gate, and proof remain later boundaries
-- ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, while worker/controller/runner execution-side implementation remains deferred
+- ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, and the first minimal API-only planning worker exists under `apps/worker`, while worker controller / runner execution-side implementation remains deferred
 - ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary and public `/v1/contracts` lifecycle façade routes
-- ADR-0021 now defines and the server implements the typed WorkItemPlan pull lease boundary: future planning workers should create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, proposal submission requires lease proof, no generic queue platform is accepted, and no worker/controller/runner binary exists yet
-- ADR-0024 now defines the minimal planning worker loop boundary:
-  the future first worker should be a separate thin `goalrail-worker` process
-  that talks only to the API server, polls one plan lease, reads one plan,
-  renews while working when needed, submits one proposal with lease proof, and
-  repeats. It is not implemented yet and is not a runner: no checkout,
-  execution, direct Postgres writes, WorkItem creation, assignment/claiming,
-  queue/outbox/runtime registry, `Run`, receipt, `GateDecision`, or `Proof`.
+- ADR-0021 now defines and the server implements the typed WorkItemPlan pull lease boundary: planning workers create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, proposal submission requires lease proof, no generic queue platform is accepted, and no worker controller / runner binary exists yet
+- ADR-0024 now defines and `apps/worker` implements the minimal planning
+  worker loop boundary: the first `goalrail-worker` prototype talks only to the
+  API server, polls one plan lease, reads one plan, submits one deterministic
+  development-mode proposal with lease proof, and repeats. It is not a runner:
+  no checkout, execution, direct Postgres writes, WorkItem creation,
+  assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
+  `GateDecision`, or `Proof`.
 - ADR-0022 now defines the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -106,12 +106,10 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- Next bounded backend / worker implementation slice: minimal planning worker
-  loop over the implemented typed WorkItemPlan lease API. It should add only a
-  thin `goalrail-worker` process that polls `POST /v1/plans/leases`, fetches
-  the leased plan through the API, renews the lease when needed, computes or
-  collects a bounded v0 proposal, and submits it with `lease_id` plus
-  `lease_token`.
+- Next bounded backend / worker implementation slice: planning proposal review
+  and acceptance bridge after the minimal `goalrail-worker` proposal transport.
+  It should keep accepted WorkItem materialization explicit and should not
+  start assignment, claiming, checkout, execution, gate, or proof.
 - Checkout, execution, gate, proof, assignment/claiming, queue, outbox,
   runtime registry, runner checkout credentials, provider OAuth,
   VcsConnection, token storage, provider clients, live metadata listing, `Run`,
@@ -847,17 +845,12 @@ Done means:
 
 ### Server follow-up slices
 
-1. Minimal planning worker loop implementation
-   - implement the smallest external `goalrail-worker` loop over the
-     implemented typed plan lease API
-   - keep the worker API-only: poll one lease, fetch one plan, renew when
-     needed, compute or collect one bounded proposal, submit with lease proof,
-     then repeat
-   - keep repo-aware planning computation behind a later planner / runner
-     context boundary
-   - do not implement checkout, execution, receipt, generic queue, outbox, gate,
-     proof, runtime registry, assignment, claiming, direct DB writes, or
-     WorkItem creation by the worker
+1. Planning proposal review / acceptance bridge
+   - expose the next explicit step after the minimal worker submits a proposal
+   - keep proposal acceptance separate from worker proposal submission
+   - make WorkItem materialization explicit and auditable
+   - do not start assignment, claiming, checkout, execution, receipt, gate,
+     proof, runtime registry, direct DB writes, or runner behavior
 2. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
