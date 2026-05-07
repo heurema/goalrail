@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
+
+const defaultHTTPClientTimeout = 30 * time.Second
 
 type apiClient struct {
 	baseURL string
@@ -42,7 +45,7 @@ func newAPIClient(serverURL string, client *http.Client) (*apiClient, error) {
 		return nil, errors.New("server url must include host")
 	}
 	if client == nil {
-		client = http.DefaultClient
+		client = &http.Client{Timeout: defaultHTTPClientTimeout}
 	}
 	return &apiClient{
 		baseURL: strings.TrimRight(parsed.String(), "/"),

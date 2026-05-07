@@ -47,6 +47,21 @@ func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
 	}
 }
 
+func TestNewAPIClientUsesBoundedDefaultTimeout(t *testing.T) {
+	t.Parallel()
+
+	client, err := newAPIClient("http://goalrail.test", nil)
+	if err != nil {
+		t.Fatalf("newAPIClient() error = %v", err)
+	}
+	if client.client == http.DefaultClient {
+		t.Fatal("newAPIClient() reused http.DefaultClient")
+	}
+	if client.client.Timeout != defaultHTTPClientTimeout {
+		t.Fatalf("client timeout = %s, want %s", client.client.Timeout, defaultHTTPClientTimeout)
+	}
+}
+
 func TestRunTreatsSleepCancellationAsCleanShutdown(t *testing.T) {
 	t.Parallel()
 
