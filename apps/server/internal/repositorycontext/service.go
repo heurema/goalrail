@@ -258,7 +258,7 @@ func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.Organiza
 func sanitizeRepositoryURL(raw string) string {
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return ""
+		return sanitizeSCPLikeRepositoryURL(raw)
 	}
 	parsed.User = nil
 	parsed.RawQuery = ""
@@ -266,6 +266,23 @@ func sanitizeRepositoryURL(raw string) string {
 	parsed.Fragment = ""
 	parsed.RawFragment = ""
 	return parsed.String()
+}
+
+func sanitizeSCPLikeRepositoryURL(raw string) string {
+	candidate := raw
+	if index := strings.IndexAny(candidate, "?#"); index >= 0 {
+		candidate = candidate[:index]
+	}
+	if !strings.HasPrefix(candidate, "git@") {
+		return ""
+	}
+	if strings.ContainsAny(candidate, "\r\n\t ") {
+		return ""
+	}
+	if at := strings.Index(candidate, "@"); at <= 0 || !strings.Contains(candidate[at+1:], ":") {
+		return ""
+	}
+	return candidate
 }
 
 func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {
