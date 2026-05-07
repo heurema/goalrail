@@ -210,9 +210,48 @@ func (s *Service) GetOrganizationRepositoryContext(ctx context.Context, input Re
 		contexts = []spine.ProjectRepoBindingContext{}
 	}
 	return spine.OrganizationRepositoryContextResult{
-		Organization: organization,
-		Contexts:     contexts,
+		Organization: publicOrganization(organization),
+		Contexts:     publicContexts(contexts),
 	}, nil
+}
+
+func publicOrganization(organization spine.Organization) spine.OrganizationRepositoryContextOrganization {
+	return spine.OrganizationRepositoryContextOrganization{
+		ID:          organization.ID,
+		Slug:        organization.Slug,
+		DisplayName: organization.DisplayName,
+		State:       organization.State,
+	}
+}
+
+func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.OrganizationRepositoryContext {
+	public := make([]spine.OrganizationRepositoryContext, 0, len(contexts))
+	for _, context := range contexts {
+		public = append(public, spine.OrganizationRepositoryContext{
+			Project: spine.OrganizationRepositoryContextProject{
+				ID:          context.Project.ID,
+				Slug:        context.Project.Slug,
+				DisplayName: context.Project.DisplayName,
+				State:       context.Project.State,
+				CreatedAt:   context.Project.CreatedAt,
+				UpdatedAt:   context.Project.UpdatedAt,
+			},
+			RepoBinding: spine.OrganizationRepositoryContextRepoBinding{
+				ID:                 context.RepoBinding.ID,
+				Provider:           context.RepoBinding.Provider,
+				RepositoryFullName: context.RepoBinding.RepositoryFullName,
+				RepositoryURL:      context.RepoBinding.RepositoryURL,
+				DefaultBranch:      context.RepoBinding.DefaultBranch,
+				WorkflowBaseBranch: context.RepoBinding.WorkflowBaseBranch,
+				PathScope:          context.RepoBinding.PathScope,
+				AccessMode:         context.RepoBinding.AccessMode,
+				State:              context.RepoBinding.State,
+				CreatedAt:          context.RepoBinding.CreatedAt,
+				UpdatedAt:          context.RepoBinding.UpdatedAt,
+			},
+		})
+	}
+	return public
 }
 
 func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {

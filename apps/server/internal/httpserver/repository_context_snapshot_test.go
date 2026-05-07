@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -40,21 +41,21 @@ func TestOrganizationRepositoryContextRequiresBearerAuth(t *testing.T) {
 func TestOrganizationRepositoryContextReturnsMetadataOnlyContexts(t *testing.T) {
 	handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepositoryContextSnapshotService{
 		readResult: spine.OrganizationRepositoryContextResult{
-			Organization: spine.Organization{
+			Organization: spine.OrganizationRepositoryContextOrganization{
 				ID:          "018f0000-0000-7000-8000-000000000002",
 				Slug:        "goalrail-dev",
 				DisplayName: "Goalrail Dev",
 				State:       spine.EntityStateActive,
 			},
-			Contexts: []spine.ProjectRepoBindingContext{
+			Contexts: []spine.OrganizationRepositoryContext{
 				{
-					Project: spine.Project{
+					Project: spine.OrganizationRepositoryContextProject{
 						ID:          "018f0000-0000-7000-8000-000000000003",
 						Slug:        "github-heurema-goalrail",
 						DisplayName: "heurema/goalrail",
 						State:       spine.EntityStateActive,
 					},
-					RepoBinding: spine.RepoBinding{
+					RepoBinding: spine.OrganizationRepositoryContextRepoBinding{
 						ID:                 "018f0000-0000-7000-8000-000000000004",
 						Provider:           "github",
 						RepositoryFullName: "heurema/goalrail",
@@ -80,13 +81,48 @@ func TestOrganizationRepositoryContextReturnsMetadataOnlyContexts(t *testing.T) 
 	if strings.Contains(response.body, "token") || strings.Contains(response.body, "credential") || strings.Contains(response.body, "password") || strings.Contains(response.body, "proof") || strings.Contains(response.body, "readiness") {
 		t.Fatalf("body leaked forbidden status or secret vocabulary: %s", response.body)
 	}
+	for _, forbidden := range []string{
+		"installation_id",
+		"organization_id",
+		"project_id",
+		"created_by_user_id",
+		"vcs_connection_id",
+		"repository_external_id",
+		"public_base_url",
+		"checkout_status",
+		"provider_authorization_state",
+	} {
+		if strings.Contains(response.body, forbidden) {
+			t.Fatalf("body leaked forbidden field %q: %s", forbidden, response.body)
+		}
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(response.body), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	organization := body["organization"].(map[string]any)
+	if _, ok := organization["installation_id"]; ok {
+		t.Fatalf("organization leaked installation_id: %#v", organization)
+	}
+	context := body["contexts"].([]any)[0].(map[string]any)
+	project := context["project"].(map[string]any)
+	if _, ok := project["created_by_user_id"]; ok {
+		t.Fatalf("project leaked created_by_user_id: %#v", project)
+	}
+	repoBinding := context["repo_binding"].(map[string]any)
+	if _, ok := repoBinding["vcs_connection_id"]; ok {
+		t.Fatalf("repo_binding leaked vcs_connection_id: %#v", repoBinding)
+	}
+	if _, ok := repoBinding["repository_external_id"]; ok {
+		t.Fatalf("repo_binding leaked repository_external_id: %#v", repoBinding)
+	}
 }
 
 func TestOrganizationRepositoryContextReturnsEmptyArray(t *testing.T) {
 	handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepositoryContextSnapshotService{
 		readResult: spine.OrganizationRepositoryContextResult{
-			Organization: spine.Organization{ID: "018f0000-0000-7000-8000-000000000002", State: spine.EntityStateActive},
-			Contexts:     []spine.ProjectRepoBindingContext{},
+			Organization: spine.OrganizationRepositoryContextOrganization{ID: "018f0000-0000-7000-8000-000000000002", State: spine.EntityStateActive},
+			Contexts:     []spine.OrganizationRepositoryContext{},
 		},
 	})
 

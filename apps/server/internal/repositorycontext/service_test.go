@@ -259,6 +259,49 @@ func TestGetOrganizationRepositoryContextReturnsActiveContextsForAllRoles(t *tes
 	}
 }
 
+func TestGetOrganizationRepositoryContextReturnsNarrowPublicDTO(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	store.contexts = []spine.ProjectRepoBindingContext{projectRepoBindingContextFixture()}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if got := result.Organization.ID; got != testOrganizationID {
+		t.Fatalf("organization id = %q, want %q", got, testOrganizationID)
+	}
+	if got := result.Contexts[0].Project.ID; got != testProjectID {
+		t.Fatalf("project id = %q, want %q", got, testProjectID)
+	}
+	if got := result.Contexts[0].RepoBinding.ID; got != testRepoBindingID {
+		t.Fatalf("repo binding id = %q, want %q", got, testRepoBindingID)
+	}
+	for _, forbidden := range []string{
+		"installation_id",
+		"organization_id",
+		"project_id",
+		"created_by_user_id",
+		"vcs_connection_id",
+		"repository_external_id",
+		"public_base_url",
+		"token",
+		"credential",
+		"proof",
+		"readiness",
+	} {
+		if bytes.Contains(body, []byte(forbidden)) {
+			t.Fatalf("response leaked %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
 	store := newFakeStore()
 	store.organization = organizationFixture()
@@ -390,20 +433,22 @@ func projectRepoBindingContextFixture() spine.ProjectRepoBindingContext {
 
 func repoBindingFixture() spine.RepoBinding {
 	return spine.RepoBinding{
-		ID:                 testRepoBindingID,
-		OrganizationID:     testOrganizationID,
-		ProjectID:          testProjectID,
-		CreatedByUserID:    testUserID,
-		Provider:           "github",
-		RepositoryFullName: "heurema/goalrail",
-		RepositoryURL:      "git@github.com:heurema/goalrail.git",
-		DefaultBranch:      "main",
-		WorkflowBaseBranch: "main",
-		PathScope:          ".",
-		AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
-		State:              spine.EntityStateActive,
-		CreatedAt:          testNow(),
-		UpdatedAt:          testNow(),
+		ID:                   testRepoBindingID,
+		OrganizationID:       testOrganizationID,
+		ProjectID:            testProjectID,
+		CreatedByUserID:      testUserID,
+		VcsConnectionID:      "vcs-connection-internal",
+		Provider:             "github",
+		RepositoryExternalID: "repo-external-internal",
+		RepositoryFullName:   "heurema/goalrail",
+		RepositoryURL:        "git@github.com:heurema/goalrail.git",
+		DefaultBranch:        "main",
+		WorkflowBaseBranch:   "main",
+		PathScope:            ".",
+		AccessMode:           spine.RepoBindingAccessModeMetadataOnly,
+		State:                spine.EntityStateActive,
+		CreatedAt:            testNow(),
+		UpdatedAt:            testNow(),
 	}
 }
 
