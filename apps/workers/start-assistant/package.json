@@ -4,6 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "node src/dev-server.js",
+    "deploy": "npx wrangler deploy --config wrangler.toml",
+    "deploy:dry-run": "npx wrangler deploy --dry-run --config wrangler.toml",
     "test": "node --test"
   }
 }

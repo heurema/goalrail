@@ -76,6 +76,7 @@ Use it together with:
 | Research that is not canon yet | `docs/research/` or `.goalrail/knowledge/`, depending on durability |
 | Docs-check fixtures and schemas | `tools/docs-check/fixtures/` and `tools/docs-check/schemas/` |
 | Repository hygiene commands | `scripts/` |
+| Start assistant public KB helper scripts | `scripts/start-assistant/` |
 | Goalrail working slice reports | `.goalrail/work/` |
 | Future Goalrail flow/spec artifacts | `.goalrail/flows/` |
 | Future eval/spec artifacts | `.goalrail/evals/` |

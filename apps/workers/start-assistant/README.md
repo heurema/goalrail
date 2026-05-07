@@ -28,11 +28,33 @@ Runtime configuration names:
 
 Do not commit real values for these variables.
 
+Deployment config:
+
+- `wrangler.toml` defines the separate `goalrail-start-assistant` Worker
+  package.
+- Public route ownership remains deployment-managed outside this repository.
+- Live deploy requires Cloudflare auth and Worker-side OpenAI/vector-store
+  configuration.
+
+Manual public KB commands:
+
+```bash
+node scripts/start-assistant/build-public-kb.mjs
+node scripts/start-assistant/upload-public-kb-openai.mjs
+node scripts/start-assistant/upload-public-kb-openai.mjs --execute
+```
+
+The upload command is dry-run by default. `--execute` requires `OPENAI_API_KEY`,
+uploads only the generated public KB document, creates a new OpenAI vector
+store, attaches the file through a vector-store file batch, and writes an
+ignored runtime manifest under `.goalrail/public-kb/dist/`.
+
 Local commands:
 
 ```bash
 npm --prefix apps/workers/start-assistant test
 npm --prefix apps/workers/start-assistant run dev
+npm --prefix apps/workers/start-assistant run deploy:dry-run
 ```
 
 The local dev server defaults to `http://127.0.0.1:8787` and enters mock mode

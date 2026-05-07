@@ -95,8 +95,9 @@ apps/workers/start-assistant
 The current package is dependency-free JavaScript Worker code with Node tests
 and a local mock dev server. It implements request validation, safe refusals,
 OpenAI Responses API file_search request shaping, response normalization, and
-the `/start` browser fetch path. It does not add deployment config, provider
-secrets, vector-store upload automation, or GitHub Action sync.
+the `/start` browser fetch path. It now includes minimal Cloudflare Wrangler
+config plus manual public KB build/upload tooling. It does not add live deploy,
+provider secrets, production Worker configuration values, or GitHub Action sync.
 
 ## Endpoint
 

@@ -12,91 +12,33 @@ rules:
   include_unreviewed_chats: false
 
 sources:
-  - path: docs/INDEX.md
-    title: Goalrail Docs Index
+  - path: docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md
+    title: Goalrail Global Start Assistant
+    priority: canon
+    public: true
+    language: en
+    notes: English-first global entry page and public assistant boundary.
+
+  - path: docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md
+    title: Goalrail Provider Boundaries
+    priority: canon
+    public: true
+    language: en
+    notes: Public-safe boundary against AI IDE, tracker, and provider replacement claims.
+
+  - path: docs/reference/start-assistant/static-answers.md
+    title: Start Assistant Static Answers
     priority: reference
     public: true
-    notes: Entry point and source-of-truth ordering.
+    language: en
+    notes: English public-safe answer seeds used by Stage 2 static page.
 
-  - path: docs/product/GOALRAIL_PRODUCT_CONCEPT.md
-    title: Goalrail Product Concept
-    priority: canon
+  - path: docs/reference/start-assistant/quick-questions.json
+    title: Start Assistant Quick Questions
+    priority: reference
     public: true
-    notes: Canonical product definition.
-
-  - path: docs/product/GOALRAIL_OPERATING_MODEL.md
-    title: Goalrail Operating Model
-    priority: operating-model
-    public: true
-    notes: Core flow from incoming task to contract, execution, verify, proof.
-
-  - path: docs/product/GOALRAIL_GTM_MODEL.md
-    title: Goalrail GTM Model
-    priority: canon
-    public: true
-    notes: Pilot-first GTM boundaries and channel posture.
-
-  - path: docs/product/GOALRAIL_OFFER.md
-    title: Goalrail Offer
-    priority: offer
-    public: true
-    notes: Current free qualification and paid pilot boundaries. Review before indexing pricing lines publicly.
-
-  - path: docs/product/GOALRAIL_PUBLIC_NARRATIVE.md
-    title: Goalrail Public Narrative
-    priority: public-narrative
-    public: true
-    notes: Public story, naming and narrative laws.
-
-  - path: docs/product/GOALRAIL_PUBLIC_LANGUAGE.md
-    title: Goalrail Public Language
-    priority: public-language
-    public: true
-    notes: External wording and public phrasing rules.
-
-  - path: docs/product/GOALRAIL_MESSAGE_HIERARCHY.md
-    title: Goalrail Message Hierarchy
-    priority: public-language
-    public: true
-    notes: Message stack and public language.
-
-  - path: docs/product/GOALRAIL_PAIN_STATEMENT.md
-    title: Goalrail Pain Statement
-    priority: public-language
-    public: true
-    notes: Pain framing and market case.
-
-  - path: docs/product/GOALRAIL_ICP.md
-    title: Goalrail ICP
-    priority: offer
-    public: true
-    notes: Target team and no-fit framing.
-
-  - path: docs/product/GOALRAIL_PILOT_MODEL.md
-    title: Goalrail Pilot Model
-    priority: offer
-    public: true
-    notes: Pilot shape and pilot boundaries.
-
-  - path: README.md
-    title: Goalrail README
-    priority: entry
-    public: true
-    notes: Repository entry page.
-
-  - path: docs/brand/LINKEDIN_AUTHOR_STYLE.md
-    title: LinkedIn Author Style
-    priority: brand
-    public: true
-    optional: true
-    notes: Include only if file exists and is approved.
-
-  - path: docs/brand/HABR_ENGINEERING_AUTHOR_STYLE.md
-    title: Habr Engineering Author Style
-    priority: brand
-    public: true
-    optional: true
-    notes: Include only if file exists and is approved.
+    language: en
+    notes: English quick question labels and ordering.
 
 exclude_patterns:
   - "**/*.local.*"

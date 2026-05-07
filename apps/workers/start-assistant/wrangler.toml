@@ -1,0 +1,15 @@
+name = "goalrail-start-assistant"
+main = "src/worker.js"
+compatibility_date = "2026-05-07"
+workers_dev = false
+minify = true
+
+# Public route ownership is deployment-managed. The intended route is:
+# goalrail.dev/api/start-chat -> this Worker.
+#
+# Required live configuration is set outside the repository:
+# - OPENAI_API_KEY
+# - OPENAI_START_MODEL
+# - OPENAI_START_VECTOR_STORE_ID
+# - START_ASSISTANT_KB_REVISION
+# - START_ASSISTANT_KB_UPDATED_AT

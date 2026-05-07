@@ -46,6 +46,7 @@ compile it, but must not silently widen it.
 Allowed when explicitly whitelisted:
 
 - selected public/canonical `docs/product/*` docs;
+- selected `docs/reference/start-assistant/*` public assistant reference files;
 - selected `docs/brand/*` style and narrative docs that are safe for public
   readers;
 - selected `docs/research/*` public research notes;
@@ -129,10 +130,31 @@ Recommended generated files:
 ```text
 .goalrail/public-kb/dist/public-manifest.json
 .goalrail/public-kb/dist/chunks.ndjson
+.goalrail/public-kb/dist/public-kb.md
 ```
 
-Generated `dist/` artifacts should not become the source of truth. Whether they
-are committed or deployment-only must be decided before Stage 3B implementation.
+Generated `dist/` artifacts are deployment-only and ignored by git. They must
+not become the source of truth.
+
+Current manual build command:
+
+```bash
+node scripts/start-assistant/build-public-kb.mjs
+```
+
+The build command reads only the committed whitelist manifest, skips missing
+optional sources, splits Markdown by headings, writes the compiled manifest,
+NDJSON chunks, and upload-ready public Markdown document, and scans generated
+content for obvious secret markers. The current `/start` public KB is
+English-only: each source row must declare `language: en`, and the build fails
+if Cyrillic text is present in source or generated retrieval artifacts.
+
+Current v0 source classes are intentionally narrow:
+
+- English `/start` product boundary;
+- English provider/product boundary material;
+- English static answer seeds;
+- English quick-question reference data.
 
 ## Chunk policy
 
@@ -242,6 +264,21 @@ Why:
 - lets Stage 3B test answer quality before hardening automation.
 
 GitHub Action sync can follow after the manual flow is proven.
+
+Current manual upload command:
+
+```bash
+node scripts/start-assistant/upload-public-kb-openai.mjs
+```
+
+The upload command is a dry run by default. With `--execute` and
+`OPENAI_API_KEY` set in the operator environment, it uploads only the generated
+public KB Markdown file, creates a new OpenAI vector store, attaches the file
+through a vector-store file batch, waits for ingestion, and writes an ignored
+runtime manifest under `.goalrail/public-kb/dist/`.
+
+The script does not deploy the Worker and does not write secrets or provider
+configuration into the repository.
 
 ## Optional future Cloudflare Vectorize path
 
