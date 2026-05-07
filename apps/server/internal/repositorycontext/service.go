@@ -273,16 +273,24 @@ func sanitizeSCPLikeRepositoryURL(raw string) string {
 	if index := strings.IndexAny(candidate, "?#"); index >= 0 {
 		candidate = candidate[:index]
 	}
-	if !strings.HasPrefix(candidate, "git@") {
-		return ""
-	}
 	if strings.ContainsAny(candidate, "\r\n\t ") {
 		return ""
 	}
-	if at := strings.Index(candidate, "@"); at <= 0 || !strings.Contains(candidate[at+1:], ":") {
+	at := strings.Index(candidate, "@")
+	if at <= 0 || !isSafeSCPUsername(candidate[:at]) || !strings.Contains(candidate[at+1:], ":") {
 		return ""
 	}
 	return candidate
+}
+
+func isSafeSCPUsername(username string) bool {
+	for _, r := range username {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return username != ""
 }
 
 func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {

@@ -398,6 +398,25 @@ func TestGetOrganizationRepositoryContextPreservesSafeSCPLikeRepositoryURL(t *te
 	}
 }
 
+func TestGetOrganizationRepositoryContextPreservesSafeSCPLikeRepositoryURLUsername(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "deploy@git.example.com:team/repo.git?token=secret"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "deploy@git.example.com:team/repo.git" {
+		t.Fatalf("repository_url = %q, want safe SCP-like remote with username and query stripped", got)
+	}
+}
+
 func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
 	store := newFakeStore()
 	store.organization = organizationFixture()
