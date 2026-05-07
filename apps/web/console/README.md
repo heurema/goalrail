@@ -5,6 +5,11 @@ Real Goalrail console shell.
 Canonical source: `apps/web/console`.
 
 Current scope:
+- public `/start` route for English global entry traffic; it uses local quick
+  questions and static answers as fallback, and can submit short public
+  questions to same-origin `POST /api/start-chat` when the separate start
+  assistant Worker is routed; no browser OpenAI key, repo scan, code execution,
+  analytics, cookies, sessions, uploads, CRM, or chat history
 - multilingual EN/RU source using `react-i18next` + `i18next`
 - login-only entry screen with no registration path
 - auth client for the existing `apps/server` auth API:
@@ -32,6 +37,14 @@ Current scope:
   repo integration, runner, gate, proof, or product data loop
 - live `console.goalrail.ru` may still point to an older static release until a
   separate deployment migration / API routing slice
+- live `https://goalrail.dev/start` is served from this app through the main
+  console deployment, while same-origin `POST /api/start-chat` is owned by the
+  separate Cloudflare Worker, not by `apps/server`; external static serving
+  must preserve SPA fallback for `/start`
+- local Vite dev proxies `/api/start-chat` to `https://goalrail.dev` by default
+  so the public assistant works without a local Worker; set
+  `START_ASSISTANT_PROXY_TARGET=http://127.0.0.1:8787` when intentionally
+  testing a local start-assistant Worker
 
 Delivery rule:
 - CLI and server functionality should become real first

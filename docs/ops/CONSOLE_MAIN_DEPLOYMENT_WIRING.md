@@ -19,6 +19,7 @@ related_docs:
   - apps/web/README.md
   - apps/web/console/README.md
   - apps/server/README.md
+  - docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md
 ---
 # Console Main — Deployment Wiring
 
@@ -30,9 +31,12 @@ The main Goalrail console and API are now deployed through the external
 `11me/infra` Flux GitOps path:
 
 - frontend: `https://goalrail.dev`
+- public start page: `https://goalrail.dev/start`
 - API: `https://api.goalrail.dev`
+- start assistant API: `https://goalrail.dev/api/start-chat`
 - console source: `apps/web/console`
 - API source: `apps/server`
+- start assistant source: `apps/workers/start-assistant`
 - deployment source of truth: `11me/infra`
 
 The demo sandbox remains separate at `https://demo.goalrail.dev`. The legacy
@@ -54,24 +58,30 @@ intentionally not recorded in this repository.
 | Field | Value |
 |-------|-------|
 | Frontend public URL | `https://goalrail.dev` |
+| Public start page | `https://goalrail.dev/start` |
 | API public URL | `https://api.goalrail.dev` |
+| Start assistant API URL | `https://goalrail.dev/api/start-chat` |
 | Console source | `apps/web/console` |
 | API source | `apps/server` |
+| Start assistant source | `apps/workers/start-assistant` |
 | Deployment source of truth | `11me/infra` |
-| Infra merge revision | `main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7` |
+| Infra merge revision | `main@sha1:918c12936b03b469e3cb014a2c0ab119a850563e` |
 | Flux Kustomization | `flux-system/apps-personal` |
-| Console source ref used by infra build | `060bbe8e6f306861f81732ab83171059af786505` |
+| Console source ref used by infra build | `031a03d85bd19c754b773ad365eca9acfb462345` |
 | Console API build env | `VITE_GOALRAIL_API_BASE_URL=https://api.goalrail.dev` |
 | Console default locale build env | `VITE_GOALRAIL_DEFAULT_LOCALE=en` |
+| Start assistant Worker route | `goalrail.dev/api/start-chat*` |
+| Start assistant Worker version verified live | `77b2dbc5-b7aa-42d0-b91b-3b313f8c6f50` |
+| Start assistant KB revision verified live | `263075db460d762fe7fa1f09d30709bc68e8eb5c` |
 | Demo sandbox | `https://demo.goalrail.dev`, separate |
 | Legacy RU console | `https://console.goalrail.ru/`, separate / not migrated |
 
 ## Live verification
 
-Flux and rollout evidence from 2026-05-05:
+Flux and rollout evidence from 2026-05-07:
 
 - Flux source revision was
-  `main@sha1:f4cb3db22853d0d92291f37acb055cd28e8abec7`.
+  `main@sha1:918c12936b03b469e3cb014a2c0ab119a850563e`.
 - Flux Kustomization `flux-system/apps-personal` reported `Ready=True`.
 - `goalrail-console` rollout completed successfully.
 - `goalrail-server` rollout completed successfully.
@@ -83,14 +93,28 @@ Flux and rollout evidence from 2026-05-05:
 Public smoke:
 
 - `https://goalrail.dev/` returned HTTP 200.
+- `https://goalrail.dev/start` returned HTTP 200.
 - `https://api.goalrail.dev/livez` returned `{"status":"ok"}`.
 - `https://api.goalrail.dev/readyz` returned `{"status":"ok"}`.
 - `https://api.goalrail.dev/version` returned
   `{"service":"goalrail-server","version":"0.0.0-dev"}`.
+- `POST https://goalrail.dev/api/start-chat` returned HTTP 200 with public
+  source references and `knowledge.commit_sha`.
+- `GET https://goalrail.dev/api/start-chat` returned HTTP 405.
+- `POST https://goalrail.dev/api/start-chat/extra` returned HTTP 404.
 - The frontend response had no `Set-Cookie` header.
 - The frontend HTML and JavaScript bundle did not contain
   `console.goalrail.dev`.
 - The frontend JavaScript bundle contained `https://api.goalrail.dev`.
+- The frontend JavaScript bundle contained `/api/start-chat`.
+
+The `goalrail.dev` static serving path must preserve SPA fallback for public
+client routes such as `/start`. In the external infra this is represented by
+nginx behavior equivalent to `try_files $uri $uri/ /index.html`.
+
+The start assistant route is intentionally same-origin on `goalrail.dev`, but
+it is owned by the separate Cloudflare Worker, not by the core API deployment
+at `api.goalrail.dev`.
 
 Browser CORS preflight smoke:
 

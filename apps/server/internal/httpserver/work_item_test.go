@@ -149,6 +149,77 @@ func TestGetPlanReturnsPlanAndUnknownReturnsNotFound(t *testing.T) {
 	assertErrorCode(t, missing, http.StatusNotFound, "not_found")
 }
 
+func TestPostPlanStatusReturnsProposalAndRequiresContext(t *testing.T) {
+	t.Run("submitted proposal included", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+
+		beforePlan := server.workItemPlans.plans[plan.ID]
+		beforeLeaseCount := len(server.workItemLeases.leases)
+		beforeProposalCount := len(server.workItemProposals.proposals)
+		beforeWorkItemCount := len(server.workItems.items)
+		beforeEventCount := len(server.events.Events())
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/status", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004"}`)
+		if response.code != http.StatusOK {
+			t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+		}
+		assertNoHiddenContext(t, response.body)
+		for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\""} {
+			if strings.Contains(response.body, forbidden) {
+				t.Fatalf("status response exposes worker secret field %s: %s", forbidden, response.body)
+			}
+		}
+		var status spine.WorkItemPlanStatus
+		decodeJSON(t, response.body, &status)
+		if status.Plan.ID != plan.ID || status.Plan.State != spine.WorkItemPlanStateProposalSubmitted {
+			t.Fatalf("plan status = %q/%q, want submitted plan %q", status.Plan.ID, status.Plan.State, plan.ID)
+		}
+		if status.Proposal == nil || status.Proposal.ID != proposal.ID || len(status.Proposal.ProposedTasks) != 2 {
+			t.Fatalf("proposal = %#v, want submitted proposal with tasks", status.Proposal)
+		}
+		afterPlan := server.workItemPlans.plans[plan.ID]
+		if afterPlan.State != beforePlan.State || afterPlan.CurrentLeaseID != beforePlan.CurrentLeaseID || !afterPlan.UpdatedAt.Equal(beforePlan.UpdatedAt) {
+			t.Fatalf("status route mutated plan = %#v, want %#v", afterPlan, beforePlan)
+		}
+		if len(server.workItemLeases.leases) != beforeLeaseCount {
+			t.Fatalf("leases = %d, want %d after status read", len(server.workItemLeases.leases), beforeLeaseCount)
+		}
+		if len(server.workItemProposals.proposals) != beforeProposalCount {
+			t.Fatalf("proposals = %d, want %d after status read", len(server.workItemProposals.proposals), beforeProposalCount)
+		}
+		if len(server.workItems.items) != beforeWorkItemCount {
+			t.Fatalf("work items = %d, want %d after status read", len(server.workItems.items), beforeWorkItemCount)
+		}
+		if len(server.events.Events()) != beforeEventCount {
+			t.Fatalf("events = %d, want %d after status read", len(server.events.Events()), beforeEventCount)
+		}
+	})
+
+	t.Run("unauthenticated rejects before read", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/plan-1/status", `{}`)
+		assertErrorCode(t, response, http.StatusUnauthorized, "unauthorized")
+	})
+
+	t.Run("project expectation mismatch", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/status", `{"project_id":"project-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+	})
+
+	t.Run("repo expectation mismatch", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/plans/"+string(plan.ID)+"/status", `{"repo_binding_id":"repo-binding-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+	})
+}
+
 func TestPlanLeaseLifecycleRoutes(t *testing.T) {
 	t.Run("queued plan acquires active lease and token once", func(t *testing.T) {
 		server := testServer(t)
@@ -411,7 +482,7 @@ func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 	plan := createPlan(t, server, approved.ContractID)
 	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","accepted_by":{"kind":"user","id":"spoofed-acceptor"}}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -424,6 +495,9 @@ func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 	}
 	if got := len(accepted.CreatedTaskIDs); got != 2 {
 		t.Fatalf("created_task_ids = %d, want 2", got)
+	}
+	if accepted.AcceptedBy.Kind != "user" || accepted.AcceptedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("accepted_by = %#v, want authenticated user actor", accepted.AcceptedBy)
 	}
 
 	for _, taskID := range accepted.CreatedTaskIDs {
@@ -463,31 +537,67 @@ func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 	if storedProposal.State != spine.WorkItemProposalStateAccepted || storedProposal.AcceptedBy == nil {
 		t.Fatalf("proposal accepted state = %q/%#v, want accepted actor", storedProposal.State, storedProposal.AcceptedBy)
 	}
+	if storedProposal.AcceptedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("stored accepted_by = %#v, want authenticated user actor", storedProposal.AcceptedBy)
+	}
 	if got := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated); got != 2 {
 		t.Fatalf("work_item.created events = %d, want 2", got)
 	}
 }
 
-func TestPostProposalAcceptanceRejectsDuplicateAndMissingActor(t *testing.T) {
+func TestPostProposalAcceptanceRejectsDuplicateAndInvalidContext(t *testing.T) {
 	t.Run("duplicate acceptance", func(t *testing.T) {
 		server := testServer(t)
 		approved := createApprovedContract(t, server)
 		plan := createPlan(t, server, approved.ContractID)
 		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
 		acceptProposal(t, server, proposal.ID)
+		beforeWorkItemCount := len(server.workItems.items)
+		beforeWorkItemEvents := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated)
 
-		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{}`)
 		assertErrorCode(t, response, http.StatusConflict, "already_accepted")
+		if len(server.workItems.items) != beforeWorkItemCount {
+			t.Fatalf("work items = %d, want %d after duplicate acceptance", len(server.workItems.items), beforeWorkItemCount)
+		}
+		if got := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated); got != beforeWorkItemEvents {
+			t.Fatalf("work_item.created events = %d, want %d after duplicate acceptance", got, beforeWorkItemEvents)
+		}
 	})
 
-	t.Run("missing accepted_by", func(t *testing.T) {
+	t.Run("unauthenticated rejects before mutation", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/proposal-1/acceptance", `{}`)
+		assertErrorCode(t, response, http.StatusUnauthorized, "unauthorized")
+		if len(server.workItems.items) != 0 {
+			t.Fatalf("work items = %d, want 0 after auth failure", len(server.workItems.items))
+		}
+	})
+
+	t.Run("project expectation mismatch", func(t *testing.T) {
 		server := testServer(t)
 		approved := createApprovedContract(t, server)
 		plan := createPlan(t, server, approved.ContractID)
 		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
 
-		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{}`)
-		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"project_id":"project-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.workItems.items) != 0 {
+			t.Fatalf("work items = %d, want 0 after project mismatch", len(server.workItems.items))
+		}
+	})
+
+	t.Run("repo expectation mismatch", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposal.ID)+"/acceptance", `{"repo_binding_id":"repo-binding-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.workItems.items) != 0 {
+			t.Fatalf("work items = %d, want 0 after repo mismatch", len(server.workItems.items))
+		}
 	})
 }
 
@@ -596,7 +706,7 @@ func acquireLease(t *testing.T, server testServerDeps) spine.WorkItemPlanLeaseCr
 
 func acceptProposal(t *testing.T, server testServerDeps, proposalID spine.WorkItemPlanProposalID) spine.WorkItemPlanAcceptanceResult {
 	t.Helper()
-	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposalID)+"/acceptance", `{"accepted_by":{"kind":"user","id":"acceptor-1"}}`)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/proposals/"+string(proposalID)+"/acceptance", `{}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("accept proposal status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -724,8 +834,15 @@ func assertNoForbiddenWorkItemSideEffects(t *testing.T, events []spine.Event) {
 	t.Helper()
 
 	forbidden := map[string]bool{
+		"work_item.assigned":    true,
+		"work_item.claimed":     true,
+		"checkout.created":      true,
+		"run.created":           true,
 		"run.started":           true,
+		"receipt.created":       true,
 		"receipt.submitted":     true,
+		"decision.created":      true,
+		"gate_decision.created": true,
 		"gate.decision_written": true,
 		"proof.created":         true,
 	}

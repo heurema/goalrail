@@ -49,7 +49,7 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 
 	accepted, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
 		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("AcceptProposal() error = %v", err)
 	}
@@ -103,12 +103,12 @@ func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	}
 	if _, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
 		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
-	}); err != nil {
+	}, activeMembership(approved.OrganizationID)); err != nil {
 		t.Fatalf("AcceptProposal() error = %v", err)
 	}
 	if _, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
 		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
-	}); err != workitemplan.ErrAlreadyAccepted {
+	}, activeMembership(approved.OrganizationID)); err != workitemplan.ErrAlreadyAccepted {
 		t.Fatalf("duplicate AcceptProposal() error = %v, want %v", err, workitemplan.ErrAlreadyAccepted)
 	}
 }
@@ -236,7 +236,7 @@ func TestServiceAcceptProposalUsesRequiredTransactionRunner(t *testing.T) {
 
 	accepted, err := service.AcceptProposal(context.Background(), proposal.ID, spine.WorkItemPlanAcceptanceRequest{
 		AcceptedBy: spine.ActorRef{Kind: "user", ID: "acceptor"},
-	})
+	}, activeMembership(approved.OrganizationID))
 	if err != nil {
 		t.Fatalf("AcceptProposal() error = %v", err)
 	}

@@ -1,0 +1,154 @@
+name: Start Assistant Public KB Sync
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/start-assistant-public-kb-sync.yml"
+      - ".goalrail/public-kb/manifest.yaml"
+      - "docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md"
+      - "docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md"
+      - "docs/reference/start-assistant/**"
+      - "scripts/start-assistant/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/start-assistant-public-kb-sync.yml"
+      - ".goalrail/public-kb/manifest.yaml"
+      - "docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md"
+      - "docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md"
+      - "docs/reference/start-assistant/**"
+      - "scripts/start-assistant/**"
+  workflow_dispatch:
+    inputs:
+      publish_to_worker:
+        description: "Upload a new OpenAI file_search index and update Worker secrets."
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: "Type PUBLISH_START_ASSISTANT_KB to publish."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-public-kb:
+    name: validate-public-kb
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+
+      - name: Build public KB
+        run: node scripts/start-assistant/build-public-kb.mjs
+
+      - name: Upload dry run
+        run: node scripts/start-assistant/upload-public-kb-openai.mjs
+
+      - name: Upload public KB build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: start-assistant-public-kb
+          path: |
+            .goalrail/public-kb/dist/public-manifest.json
+            .goalrail/public-kb/dist/chunks.ndjson
+            .goalrail/public-kb/dist/public-kb.md
+          retention-days: 7
+
+  publish-public-kb:
+    name: publish-public-kb
+    needs: validate-public-kb
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_worker == true && inputs.confirm == 'PUBLISH_START_ASSISTANT_KB' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: start-assistant-kb-sync
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+
+      - name: Download public KB build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: start-assistant-public-kb
+          path: .goalrail/public-kb/dist
+
+      - name: Check required deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${OPENAI_API_KEY:-}"
+          test -n "${CLOUDFLARE_API_TOKEN:-}"
+          test -n "${CLOUDFLARE_ACCOUNT_ID:-}"
+
+      - name: Upload public KB to OpenAI
+        run: node scripts/start-assistant/upload-public-kb-openai.mjs --execute --quiet
+
+      - name: Update Worker runtime secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runtime_manifest=".goalrail/public-kb/dist/runtime-manifest.json"
+          vector_store_id="$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(j.worker_config.OPENAI_START_VECTOR_STORE_ID);" "$runtime_manifest")"
+          kb_revision="$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(j.worker_config.START_ASSISTANT_KB_REVISION);" "$runtime_manifest")"
+          kb_updated_at="$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(j.worker_config.START_ASSISTANT_KB_UPDATED_AT);" "$runtime_manifest")"
+
+          printf '%s' "$vector_store_id" | npx --yes wrangler secret put OPENAI_START_VECTOR_STORE_ID --config apps/workers/start-assistant/wrangler.toml
+          printf '%s' "$kb_revision" | npx --yes wrangler secret put START_ASSISTANT_KB_REVISION --config apps/workers/start-assistant/wrangler.toml
+          printf '%s' "$kb_updated_at" | npx --yes wrangler secret put START_ASSISTANT_KB_UPDATED_AT --config apps/workers/start-assistant/wrangler.toml
+
+      - name: Deploy Worker with updated runtime config
+        run: npx --yes wrangler deploy --config apps/workers/start-assistant/wrangler.toml --route "goalrail.dev/api/start-chat*" --keep-vars
+
+      - name: Smoke live assistant freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          runtime_manifest=".goalrail/public-kb/dist/runtime-manifest.json"
+          expected_revision="$(node -e "const fs=require('fs'); const j=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); process.stdout.write(j.worker_config.START_ASSISTANT_KB_REVISION);" "$runtime_manifest")"
+
+          response="$(curl -fsS -X POST https://goalrail.dev/api/start-chat \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"What is Goalrail?"}')"
+
+          printf '%s' "$response" | EXPECTED_REVISION="$expected_revision" node -e "
+            const fs = require('fs');
+            const expectedRevision = process.env.EXPECTED_REVISION;
+            const response = JSON.parse(fs.readFileSync(0, 'utf8'));
+            if (!response.knowledge?.commit_sha) {
+              throw new Error('Missing knowledge.commit_sha in live assistant response');
+            }
+            if (response.knowledge.commit_sha !== expectedRevision) {
+              throw new Error(
+                'Live assistant served KB revision ' +
+                  response.knowledge.commit_sha +
+                  ' but expected ' +
+                  expectedRevision,
+              );
+            }
+            if (!Array.isArray(response.sources) || response.sources.length === 0) {
+              throw new Error('Missing source references in live assistant response');
+            }
+            console.log('live_knowledge_commit_sha=' + response.knowledge.commit_sha);
+          "
