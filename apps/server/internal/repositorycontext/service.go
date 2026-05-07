@@ -325,7 +325,7 @@ func authorize(membership spine.OrganizationMembership) error {
 }
 
 func authorizeRead(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
-	if membership.State != spine.EntityStateActive || membership.OrganizationID != organizationID {
+	if membership.State != spine.EntityStateActive || !sameUUID(membership.OrganizationID, organizationID) {
 		return ErrForbidden
 	}
 	switch membership.Role {
@@ -334,6 +334,12 @@ func authorizeRead(membership spine.OrganizationMembership, organizationID spine
 	default:
 		return ErrForbidden
 	}
+}
+
+func sameUUID(left spine.OrganizationID, right spine.OrganizationID) bool {
+	leftID, leftErr := uuid.Parse(string(left))
+	rightID, rightErr := uuid.Parse(string(right))
+	return leftErr == nil && rightErr == nil && leftID == rightID
 }
 
 func snapshotMatchesBinding(snapshot spine.RepositoryContextSnapshotRequest, binding spine.RepoBinding) bool {

@@ -337,6 +337,23 @@ func TestGetOrganizationRepositoryContextReturnsEmptyContexts(t *testing.T) {
 	}
 }
 
+func TestGetOrganizationRepositoryContextAuthorizesCaseInsensitiveUUIDPath(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+	input := validReadInput()
+	input.OrganizationID = spine.OrganizationID(strings.ToUpper(string(testOrganizationID)))
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want nil", err)
+	}
+	if store.getOrganizationCalls != 1 {
+		t.Fatalf("GetOrganization calls = %d, want 1", store.getOrganizationCalls)
+	}
+}
+
 func TestGetOrganizationRepositoryContextRejectsUnknownOrganization(t *testing.T) {
 	store := newFakeStore()
 	service := newTestService(store, &fakeEventLog{})
