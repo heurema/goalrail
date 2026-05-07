@@ -867,7 +867,7 @@ func TestRunPlanCreatesQueuedWorkItemPlan(t *testing.T) {
 	if output.Display.Summary == "" {
 		t.Fatal("display.summary is empty")
 	}
-	if output.NextAction.Kind != "planning_worker_required" || !output.NextAction.Blocking || output.NextAction.Available || output.NextAction.PlannedSlice != "G2" {
+	if output.NextAction.Kind != "planning_worker_required" || !output.NextAction.Blocking || output.NextAction.Available {
 		t.Fatalf("next_action = %#v, want unavailable blocking planning_worker_required", output.NextAction)
 	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
@@ -887,34 +887,34 @@ func TestRunPlanMapsExistingPlanStatesHonestly(t *testing.T) {
 		planState    string
 		nextKind     string
 		blocking     bool
+		available    bool
 		plannedSlice string
 	}{
 		{
-			name:         "queued",
-			planState:    "queued",
-			nextKind:     "planning_worker_required",
-			blocking:     true,
-			plannedSlice: "G2",
+			name:      "queued",
+			planState: "queued",
+			nextKind:  "planning_worker_required",
+			blocking:  true,
 		},
 		{
-			name:         "leased",
-			planState:    "leased",
-			nextKind:     "planning_in_progress",
-			blocking:     true,
-			plannedSlice: "G2",
+			name:      "leased",
+			planState: "leased",
+			nextKind:  "planning_in_progress",
+			blocking:  true,
 		},
 		{
-			name:         "proposal submitted",
-			planState:    "proposal_submitted",
-			nextKind:     "review_plan_proposal",
-			blocking:     true,
-			plannedSlice: "G3",
+			name:      "proposal submitted",
+			planState: "proposal_submitted",
+			nextKind:  "review_plan_proposal",
+			blocking:  true,
+			available: true,
 		},
 		{
-			name:      "accepted",
-			planState: "accepted",
-			nextKind:  "planned_workitems_exist",
-			blocking:  false,
+			name:         "accepted",
+			planState:    "accepted",
+			nextKind:     "planned_workitems_ready",
+			blocking:     false,
+			plannedSlice: "H",
 		},
 		{
 			name:      "unknown",
@@ -959,11 +959,14 @@ func TestRunPlanMapsExistingPlanStatesHonestly(t *testing.T) {
 			if output.PlanState != tc.planState {
 				t.Fatalf("plan_state = %q, want %q", output.PlanState, tc.planState)
 			}
-			if output.NextAction.Kind != tc.nextKind || output.NextAction.Blocking != tc.blocking || output.NextAction.Available {
-				t.Fatalf("next_action = %#v, want kind=%q blocking=%v unavailable", output.NextAction, tc.nextKind, tc.blocking)
+			if output.NextAction.Kind != tc.nextKind || output.NextAction.Blocking != tc.blocking || output.NextAction.Available != tc.available {
+				t.Fatalf("next_action = %#v, want kind=%q blocking=%v available=%v", output.NextAction, tc.nextKind, tc.blocking, tc.available)
 			}
 			if output.NextAction.PlannedSlice != tc.plannedSlice {
 				t.Fatalf("planned_slice = %q, want %q", output.NextAction.PlannedSlice, tc.plannedSlice)
+			}
+			if tc.planState == "proposal_submitted" && !strings.Contains(output.NextAction.Command, "goalrail work plan status --plan-id") {
+				t.Fatalf("next command = %q, want plan status command", output.NextAction.Command)
 			}
 			if tc.planState != "queued" && strings.Contains(strings.ToLower(output.Display.Summary), "queued") {
 				t.Fatalf("display.summary = %q, should not claim queued for state %q", output.Display.Summary, tc.planState)
@@ -1152,6 +1155,178 @@ func TestRunPlanTextDoesNotClaimWorkerProposalOrProof(t *testing.T) {
 	}
 	if !strings.Contains(got, "planning worker required") {
 		t.Fatalf("stdout = %q, want worker-required message", got)
+	}
+}
+
+func TestRunPlanStatusReturnsSubmittedProposalAndAcceptNextAction(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var statusRequest workPlanCreateRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/plans/018f0000-0000-7000-8000-000000000301/status":
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/plans/{id}/status method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&statusRequest); err != nil {
+				t.Errorf("decode plan status request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"plan":{"id":"018f0000-0000-7000-8000-000000000301","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"proposal_submitted"},"proposal":{"id":"018f0000-0000-7000-8000-000000000302","plan_id":"018f0000-0000-7000-8000-000000000301","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"submitted","proposed_tasks":[{"title":"Refactor CSV export filters","summary":"Extract duplicated filter construction.","scope":["Update export filter construction"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"order_index":0}]}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runPlanStatusJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--plan-id", "018f0000-0000-7000-8000-000000000301", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work plan status) error = %v", err)
+	}
+	if output.PlanState != "proposal_submitted" || output.ProposalID != "018f0000-0000-7000-8000-000000000302" || len(output.ProposedTasks) != 1 {
+		t.Fatalf("plan/proposal/tasks = %q/%q/%d, want submitted proposal", output.PlanState, output.ProposalID, len(output.ProposedTasks))
+	}
+	if output.NextAction.Kind != "accept_proposal" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "--confirm-user-acceptance") {
+		t.Fatalf("next_action = %#v, want available explicit proposal accept", output.NextAction)
+	}
+	if statusRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || statusRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("status request project/repo = %q/%q, want marker context", statusRequest.ProjectID, statusRequest.RepoBindingID)
+	}
+}
+
+func TestRunPlanStatusDoesNotAcceptWithoutProposalID(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/plans/018f0000-0000-7000-8000-000000000301/status":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"plan":{"id":"018f0000-0000-7000-8000-000000000301","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"proposal_submitted"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runPlanStatusJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--plan-id", "018f0000-0000-7000-8000-000000000301", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work plan status) error = %v", err)
+	}
+	if output.ProposalID != "" {
+		t.Fatalf("proposal_id = %q, want empty when status response has no proposal", output.ProposalID)
+	}
+	if output.NextAction.Kind == "accept_proposal" || strings.Contains(output.NextAction.Command, "proposal accept") {
+		t.Fatalf("next_action = %#v, want no proposal acceptance command without proposal_id", output.NextAction)
+	}
+	if output.NextAction.Kind != "review_plan_proposal" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "work plan status") {
+		t.Fatalf("next_action = %#v, want plan status retry/review action", output.NextAction)
+	}
+}
+
+func TestRunProposalAcceptRequiresConfirmBeforeHTTP(t *testing.T) {
+	t.Parallel()
+
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"proposal", "accept", "--proposal-id", "018f0000-0000-7000-8000-000000000302", "--format", "json"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err == nil {
+		t.Fatal("Run(work proposal accept) error = nil, want missing confirmation")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if got := requestCount.Load(); got != 0 {
+		t.Fatalf("server requests = %d, want 0 without confirmation", got)
+	}
+}
+
+func TestRunProposalAcceptCreatesPlannedWorkItemsNextUnavailable(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var acceptRequest workPlanCreateRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/proposals/018f0000-0000-7000-8000-000000000302/acceptance":
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/proposals/{id}/acceptance method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&acceptRequest); err != nil {
+				t.Errorf("decode proposal acceptance request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"proposal_id":"018f0000-0000-7000-8000-000000000302","plan_id":"018f0000-0000-7000-8000-000000000301","contract_id":"018f0000-0000-7000-8000-000000000009","state":"accepted","created_task_ids":["018f0000-0000-7000-8000-000000000401"]}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runProposalAcceptJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--proposal-id", "018f0000-0000-7000-8000-000000000302", "--confirm-user-acceptance", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work proposal accept) error = %v", err)
+	}
+	if output.ProposalID != "018f0000-0000-7000-8000-000000000302" || len(output.CreatedTaskIDs) != 1 {
+		t.Fatalf("proposal/tasks = %q/%d, want accepted proposal with task", output.ProposalID, len(output.CreatedTaskIDs))
+	}
+	if output.NextAction.Kind != "planned_workitems_ready" || output.NextAction.Available || output.NextAction.PlannedSlice != "H" {
+		t.Fatalf("next_action = %#v, want unavailable planned workitems next", output.NextAction)
+	}
+	if acceptRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || acceptRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("accept request project/repo = %q/%q, want marker context", acceptRequest.ProjectID, acceptRequest.RepoBindingID)
 	}
 }
 
@@ -1402,6 +1577,48 @@ func runPlanJSON(t *testing.T, workDir string, store fakeSessionStore, args ...s
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work plan JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runPlanStatusJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkPlanStatusOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"plan", "status"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkPlanStatusOutput{}, err
+	}
+
+	var output spine.WorkPlanStatusOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work plan status JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runProposalAcceptJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkProposalAcceptOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"proposal", "accept"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkProposalAcceptOutput{}, err
+	}
+
+	var output spine.WorkProposalAcceptOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work proposal accept JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }

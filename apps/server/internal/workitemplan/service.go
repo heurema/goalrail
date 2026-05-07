@@ -213,6 +213,27 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 	return plan, nil
 }
 
+func (s *Service) GetPlanStatus(ctx context.Context, id spine.WorkItemPlanID, input spine.WorkItemPlanStatusRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanStatus, error) {
+	plan, err := s.GetPlan(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+	if err := authorizePlanAccess(membership, plan.OrganizationID); err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+	if err := validateExpectedPlanContext(input.ProjectID, input.RepoBindingID, plan); err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+
+	status := spine.WorkItemPlanStatus{Plan: plan}
+	if proposal, ok, err := s.Proposals.GetByPlanID(ctx, plan.ID); err != nil {
+		return spine.WorkItemPlanStatus{}, fmt.Errorf("get work item plan proposal by plan id: %w", err)
+	} else if ok {
+		status.Proposal = &proposal
+	}
+	return status, nil
+}
+
 func (s *Service) AcquireNextLease(ctx context.Context, input spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error) {
 	if err := validateActor("leased_by", input.LeasedBy); err != nil {
 		return spine.WorkItemPlanLeaseCreated{}, false, err
@@ -416,12 +437,18 @@ func (s *Service) GetProposal(ctx context.Context, id spine.WorkItemPlanProposal
 	return proposal, nil
 }
 
-func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemPlanProposalID, input spine.WorkItemPlanAcceptanceRequest) (spine.WorkItemPlanAcceptanceResult, error) {
+func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemPlanProposalID, input spine.WorkItemPlanAcceptanceRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanAcceptanceResult, error) {
 	if err := validateActor("accepted_by", input.AcceptedBy); err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
 	proposal, err := s.GetProposal(ctx, proposalID)
 	if err != nil {
+		return spine.WorkItemPlanAcceptanceResult{}, err
+	}
+	if err := authorizePlanAccess(membership, proposal.OrganizationID); err != nil {
+		return spine.WorkItemPlanAcceptanceResult{}, err
+	}
+	if err := validateExpectedProposalContext(input.ProjectID, input.RepoBindingID, proposal); err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
 	if proposal.State == spine.WorkItemProposalStateAccepted {
@@ -508,10 +535,14 @@ func (s *Service) loadApprovedContract(ctx context.Context, contractID spine.Con
 }
 
 func authorizePlanCreation(membership spine.OrganizationMembership, contract spine.Contract) error {
+	return authorizePlanAccess(membership, contract.OrganizationID)
+}
+
+func authorizePlanAccess(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
 	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
 		return ErrMembershipRequired
 	}
-	if membership.OrganizationID != contract.OrganizationID {
+	if membership.OrganizationID != organizationID {
 		return ErrOrganizationForbidden
 	}
 	return nil
@@ -522,6 +553,26 @@ func validateExpectedContractContext(projectID spine.ProjectID, repoBindingID sp
 		return ErrProjectMismatch
 	}
 	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != contract.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
+}
+
+func validateExpectedPlanContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, plan spine.WorkItemPlan) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != plan.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != plan.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
+}
+
+func validateExpectedProposalContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, proposal spine.WorkItemPlanProposal) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != proposal.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != proposal.RepoBindingID {
 		return ErrRepoBindingMismatch
 	}
 	return nil

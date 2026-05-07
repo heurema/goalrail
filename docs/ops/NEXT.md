@@ -106,10 +106,9 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- Next bounded backend / worker implementation slice: planning proposal review
-  and acceptance bridge after the minimal `goalrail-worker` proposal transport.
-  It should keep accepted WorkItem materialization explicit and should not
-  start assignment, claiming, checkout, execution, gate, or proof.
+- Next bounded backend / worker implementation slice: add a compact smoke
+  fixture through `WorkItem(planned)` after proposal review / acceptance. It
+  should not start assignment, claiming, checkout, execution, gate, or proof.
 - Checkout, execution, gate, proof, assignment/claiming, queue, outbox,
   runtime registry, runner checkout credentials, provider OAuth,
   VcsConnection, token storage, provider clients, live metadata listing, `Run`,

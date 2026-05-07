@@ -32,7 +32,8 @@ a stable `contract_id` boundary and transitional public
 seed/draft/approval/direct-task routes are removed; the typed WorkItemPlan pull
 lease API from ADR-0021 is implemented without adding a generic queue;
 ADR-0024's minimal `goalrail-worker` polling loop now exists as an API-only
-prototype under `apps/worker`;
+prototype under `apps/worker`, and agent-facing proposal review / acceptance
+now exists for explicit WorkItemPlanProposal acceptance into planned WorkItems;
 source-level core server CORS allowlist support exists through exact
 `GOALRAIL_HTTP_CORS_ALLOWED_ORIGINS` values, with CORS disabled when unset and
 wildcard origins rejected; the main console/API
@@ -241,6 +242,15 @@ The project currently has:
   It is not a runner: no checkout, execution, direct Postgres writes, WorkItem
   creation, assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
   `GateDecision`, or `Proof`.
+- ADR-0026 now extends the agent-facing pull loop through proposal review and
+  explicit acceptance: `goalrail work plan status --plan-id` reads the current
+  plan and submitted proposal for review, and
+  `goalrail work proposal accept --proposal-id <proposal_id>
+  --confirm-user-acceptance` accepts a submitted proposal into
+  `WorkItem(planned)`. Acceptance derives `accepted_by` from the authenticated
+  user, enforces Organization plus project/repo expectations before mutation,
+  and still does not assign, claim, checkout, execute, create `Run`, submit
+  receipts, write `GateDecision`, or create `Proof`.
 - ADR-0022 documents the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -361,8 +371,18 @@ The project currently has:
 - `apps/web/pilot-intake-ru` is the current public React + Vite + Mantine RU business-first pilot landing for `pilot.goalrail.ru` (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository readiness, project context, controlled tasks, verified result); it includes a narrow landing-owned Go sidecar under `apps/web/pilot-intake-ru/server` for lead capture and digest source, and it supersedes the previous technical interactive walkthrough as the primary public RU landing per D-0055.
 - `apps/cli` is the first stdlib-only Go CLI bootstrap with canonical binary entrypoint `cmd/goalrail`
 - CLI commands now exist for `version`, normal server-backed `goalrail init`, optional `goalrail init --base <branch>` workflow base override, low-level `goalrail init --project <project_id>`, explicit auth-free `goalrail init --local-demo`, explicit provider-neutral `goalrail agent install`, local `goalrail project scan/status`, server-backed `goalrail work start`, server-backed `goalrail work continue`, server-backed `goalrail work answer`, server-backed `goalrail contract draft`, server-backed `goalrail contract update`, server-backed `goalrail contract submit`, server-backed `goalrail contract approve --confirm-user-approval`, `readiness scan`, `contract validate`, `proof show`, and the first `goalrail login <server_url>` browser-loopback auth path; normal `goalrail init` uses local Git metadata plus the stored login profile to call the server repository-context init endpoint, records a bounded metadata-only repository context snapshot on the server, writes a non-secret Git-root `.goalrail/project.yml` marker only after server success, ensures `.goalrail/.gitignore` for Goalrail-owned machine-local state, and runs a local Project Scan cache write, while `goalrail init --project <project_id>` remains the low-level Project-scoped RepoBinding init path; `goalrail agent install` writes `.goalrail/agent/GOALRAIL.md` and `.goalrail/agent/commands.json` with `work continue`, `work answer`, `contract draft`, `contract update`, `contract submit`, `contract approve`, question_id-bound answer guidance, structured contract field guidance, explicit user approval guidance, and local repository receipt guidance, may create a tiny root `AGENTS.md` shim only when missing, never overwrites an existing root `AGENTS.md`, and does not install provider-specific Codex, Claude, Gemini, Cursor, Windsurf, Gravity, runner, gate, proof, readiness, Jira, or Linear automation
+- The CLI also now exposes server-backed `goalrail work plan status --plan-id
+  <plan_id>` for proposal review and
+  `goalrail work proposal accept --proposal-id <proposal_id>
+  --confirm-user-acceptance` for explicit proposal acceptance. Agent Pack v0
+  includes both commands and tells agents not to infer plan acceptance from
+  silence.
 - `apps/server` is the first Go HTTP server bootstrap with canonical binary entrypoint `cmd/goalrail-server`
 - server endpoints include `GET /livez`, `GET /readyz`, `GET /version`, `POST /v1/auth/login`, `GET /cli/login`, `POST /cli/login`, `POST /v1/auth/cli/exchange`, `POST /v1/auth/refresh`, `POST /v1/auth/change-password`, `POST /v1/auth/logout`, `GET /v1/me`, `GET /v1/organizations/{organization_id}/repository-context`, `GET /v1/organizations/{organization_id}/users`, `POST /v1/organizations/{organization_id}/users`, `PATCH /v1/organizations/{organization_id}/users/{user_id}`, `POST /v1/init/repository-context`, `POST /v1/repo-bindings/{repo_binding_id}/context-snapshots`, `POST /v1/projects/{project_id}/repo-bindings/init`, `POST /v1/intakes`, `GET /v1/intakes/{id}`, `POST /v1/intakes/{id}/goals`, `POST /v1/goals/{id}/readiness`, `POST /v1/goals/{id}/continuation`, `POST /v1/clarifications/{id}/answers/continuation`, `POST /v1/goals/{id}/clarifications`, `POST /v1/clarifications/{id}/answers`, `POST /v1/answers/{id}/applications`, `POST /v1/contracts`, `GET /v1/contracts/{id}`, `PATCH /v1/contracts/{id}`, `POST /v1/contracts/{id}/submissions`, `POST /v1/contracts/{id}/approvals`, `POST /v1/contracts/{id}/plans`, `GET /v1/plans/{id}`, `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, `PATCH /v1/plans/leases/{id}`, `POST /v1/plans/{id}/proposals`, `GET /v1/proposals/{id}`, `POST /v1/proposals/{id}/acceptance`, and `GET /v1/tasks/{id}`; there is no full RepoBinding CRUD endpoint, `GET /v1/plans`, `GET /v1/proposals`, `GET /v1/tasks`, or worker lease list/search endpoint, and the previous public `/v1/goals/{id}/contract-seeds`, `/v1/contract-seeds/{id}/contract-drafts`, `/v1/contract-drafts/{id}`, and direct `POST /v1/contracts/{id}/tasks` lifecycle/planning routes are no longer registered
+- The server also exposes authenticated `POST /v1/plans/{id}/status` for
+  agent-facing plan/proposal review with Organization plus project/repo
+  expectation checks; the existing worker-facing `GET /v1/plans/{id}` and
+  lease/proposal transport routes keep their current semantics.
 - `POST /v1/contracts/{id}/plans` resolves `{id}` as stable public
   `contract_id`, requires bearer auth plus active OrganizationMembership,
   derives `requested_by` from the authenticated user, enforces Contract
@@ -411,7 +431,7 @@ The project currently has:
 - `PATCH /v1/contracts/{id}` updates the current internal draft's proposed fields through the public `contract_id`, now requires bearer authentication and server-side Organization ownership before mutation, accepts optional project/repo expectations, derives `updated_by` from the authenticated user for audit identity, rejects empty/blank update values, preserves `ContractDraft.state = draft`, appends `contract_draft.updated`, and does not approve or create tasks
 - `POST /v1/contracts/{id}/submissions` transitions the current internal draft to `ready_for_approval`, moves Contract state to `ready_for_approval`, now requires bearer authentication and server-side Organization ownership before mutation, accepts optional project/repo expectations, derives `marked_by` from the authenticated user for audit identity, runs completeness checks, and does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
 - `POST /v1/contracts/{id}/approvals` creates an immutable internal `ApprovedContract(approved)` snapshot from the current ready draft, moves Contract state to `approved` with `approved_snapshot_id`, now requires bearer authentication and server-side Organization ownership before mutation, accepts optional project/repo expectations, derives `approved_by` from the authenticated user for audit identity, guards repeated approval with `409 already_approved`, and does not mutate `ContractDraft`, start execution, write `GateDecision`, or create `Proof`
-- WorkItem planning now uses `Plan -> Lease -> Proposal -> Acceptance`: one `WorkItemPlan` per approved public Contract in v0, typed `WorkItemPlanLease(active/completed/expired)` records reserve queued or expired leased plans through `POST /v1/plans/leases`, proposal submission requires `lease_id` plus `lease_token`, explicit acceptance materializes one or more durable canonical `WorkItem(planned)` records with `plan_id` and `proposal_id`, persists the records in Postgres when DB is configured, exposes `GET /v1/tasks/{id}` for single task reads, appends `work_item.created` for each accepted task transactionally with Postgres acceptance, and does not assign, claim, create `Run`, start execution, checkout a repository, submit a receipt, write `GateDecision`, or create `Proof`; workers/planners submit proposals through the API and do not write WorkItems directly to the DB
+- WorkItem planning now uses `Plan -> Lease -> Proposal -> Acceptance`: one `WorkItemPlan` per approved public Contract in v0, typed `WorkItemPlanLease(active/completed/expired)` records reserve queued or expired leased plans through `POST /v1/plans/leases`, proposal submission requires `lease_id` plus `lease_token`, explicit authenticated acceptance materializes one or more durable canonical `WorkItem(planned)` records with `plan_id` and `proposal_id`, derives `accepted_by` from the authenticated user, persists the records in Postgres when DB is configured, exposes `GET /v1/tasks/{id}` for single task reads, appends `work_item.created` for each accepted task transactionally with Postgres acceptance, and does not assign, claim, create `Run`, start execution, checkout a repository, submit a receipt, write `GateDecision`, or create `Proof`; workers/planners submit proposals through the API and do not write WorkItems directly to the DB
 - the typed WorkItemPlan pull lease API is implemented with `POST /v1/plans/leases`, `GET /v1/plans/leases/{id}`, and `PATCH /v1/plans/leases/{id}`; raw lease tokens are returned only on create, stored only as hashes, and no generic queue implementation exists
 - the minimal API-only `goalrail-worker` planning loop over typed leases exists
   under `apps/worker`; it does not imply checkout, execution, direct DB writes,
