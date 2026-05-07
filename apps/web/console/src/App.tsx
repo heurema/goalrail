@@ -20,6 +20,7 @@ import {
   resetOrganizationUserTemporaryPassword,
 } from './usersClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
+import StartPage from './StartPage';
 
 import './App.css';
 
@@ -199,7 +200,19 @@ function usersErrorMessage(error: unknown, t: (key: string, options?: Record<str
   return t('users.errors.generic');
 }
 
+function isStartRoute() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.location.pathname.replace(/\/+$/, '') === '/start';
+}
+
 function App() {
+  return isStartRoute() ? <StartPage /> : <ConsoleApp />;
+}
+
+function ConsoleApp() {
   const { i18n, t } = useTranslation();
   const translate = t as unknown as (key: string, options?: Record<string, unknown>) => string;
   const activeLocale = isSupportedLocale(i18n.resolvedLanguage) ? i18n.resolvedLanguage : 'en';

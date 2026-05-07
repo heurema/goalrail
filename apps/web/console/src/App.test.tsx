@@ -157,6 +157,7 @@ describe('App', () => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     window.history.replaceState(null, '', '/');
+    document.title = 'Goalrail';
     window.localStorage.clear();
     window.sessionStorage.clear();
     asMock(window.localStorage.clear).mockClear();
@@ -166,6 +167,80 @@ describe('App', () => {
     asMock(window.sessionStorage.getItem).mockClear();
     asMock(window.sessionStorage.setItem).mockClear();
     await setLocale('en');
+  });
+
+  it('renders the static /start page without backend calls or browser storage writes', () => {
+    window.history.replaceState(null, '', '/start');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /ask goalrail about ai-assisted delivery/i })).toBeInTheDocument();
+    expect(screen.getByText('From business goal to verified code change.')).toBeInTheDocument();
+    expect(screen.getByText(/Goalrail is a control layer for teams using AI coding tools/i)).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /ask goalrail/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Ask$/i })).toBeDisabled();
+    expect(screen.getByText(/Live assistant is coming next/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What is Goalrail?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Is my repo ready for coding agents?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What is contract-first execution?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What does proof before approval mean?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'How is Goalrail different from an AI IDE?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What would a pilot fit check look like?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'What is AI delivery drift?' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'How should a team review AI-generated changes?' })).toBeInTheDocument();
+    expect(screen.getByText('Contract-first execution')).toBeInTheDocument();
+    expect(screen.getByText('Proof before approval')).toBeInTheDocument();
+    expect(screen.getByText('Repo readiness')).toBeInTheDocument();
+    expect(screen.getByText('AI delivery drift')).toBeInTheDocument();
+    expect(screen.getByText('This page answers from public Goalrail materials only.')).toBeInTheDocument();
+    expect(screen.getByText('It cannot scan your repository.')).toBeInTheDocument();
+    expect(screen.getByText('It does not execute code.')).toBeInTheDocument();
+    expect(screen.getByText('Do not paste secrets, private code, or customer data.')).toBeInTheDocument();
+    expect(screen.getByText(/Have a real workflow where AI is making your team faster but harder to control/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /request a pilot fit check/i }).getAttribute('href')).toContain('mailto:');
+    expect(screen.getByRole('link', { name: /view github/i })).toHaveAttribute('href', 'https://github.com/heurema/goalrail');
+    expect(screen.getByRole('link', { name: /view artifacts/i })).toHaveAttribute('href', '#artifacts');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(asMock(window.localStorage.getItem)).not.toHaveBeenCalled();
+    expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
+    expect(asMock(window.sessionStorage.getItem)).not.toHaveBeenCalled();
+    expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
+  });
+
+  it('updates the /start answer panel from local static question data', () => {
+    window.history.replaceState(null, '', '/start');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /Goalrail is a control layer/i })).toBeInTheDocument();
+
+    const proofQuestion = screen.getByRole('button', { name: 'What does proof before approval mean?' });
+    fireEvent.click(proofQuestion);
+
+    expect(proofQuestion).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('heading', { name: 'Output is not proof.' })).toBeInTheDocument();
+    expect(screen.getByText(/They should compare contract, diff, checks, artifacts, and remaining risk/i)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sets /start metadata for title, description, and Open Graph', () => {
+    window.history.replaceState(null, '', '/start');
+
+    render(<App />);
+
+    expect(document.title).toBe('Goalrail - AI-assisted delivery without losing control');
+    expect(document.head.querySelector('meta[name="description"]')).toHaveAttribute(
+      'content',
+      'Goalrail is a control layer for AI-assisted software delivery: from business goal to verified code change with contracts, proof, and human approval.'
+    );
+    expect(document.head.querySelector('meta[property="og:title"]')).toHaveAttribute(
+      'content',
+      'Ask Goalrail about AI-assisted delivery'
+    );
+    expect(document.head.querySelector('meta[property="og:description"]')).toHaveAttribute(
+      'content',
+      'From business goal to verified code change.'
+    );
   });
 
   it('renders EN and RU login screens without registration, SSO, or password reset', async () => {
