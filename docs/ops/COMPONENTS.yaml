@@ -148,10 +148,10 @@ components:
   runner_checkout:
     name: Runner Checkout Boundary
     status: docs_only
-    truth_owner: docs/adr/ADR-0008-runner-checkout-boundary.md
+    truth_owner: docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md
     implementation_paths: []
     public_claim_allowed: false
-    notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. The current MVP repository-access direction is runner-owned local credentials plus API-issued checkout instructions derived from WorkItem / RepoBinding context. A future runner should start as a separate binary/process with startup config limited to Goalrail connection and local credential file paths, while checkout instructions provide repository_url, repo_binding_id, ref, path_scope, and optional auth hint. Supported credential modes for the next docs boundary are Git HTTPS token file, SSH key file, and mounted workspace. No checkout job, checkout instruction, checkout receipt, runner clone/fetch, mounted-workspace checkout flow, provider credential storage, provider connection object, OAuth, provider client, gate, or proof exists yet.
+    notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. ADR-0028 now narrows the first implementation target to checkout instruction plus workspace receipt: create or return a checkout job from `WorkItem(planned)` / RepoBinding context, issue bounded checkout metadata to a separate runner process, and accept a runner-submitted checkout receipt with bounded metadata only. The current MVP repository-access direction is runner-owned local credentials plus API-issued checkout instructions; the API server stores no repository secrets and does not clone repositories. A future runner should live outside `apps/server`, with startup config limited to Goalrail connection and local credential file paths. Supported H1 credential modes are Git HTTPS token file, SSH key file, and mounted workspace. No checkout job, checkout instruction, checkout receipt, runner clone/fetch, mounted-workspace checkout flow, provider credential storage, provider connection object, OAuth, provider client, assignment, claiming, `Run`, execution, gate, or proof exists yet.
   advisory_panel:
     name: Advisory Panel
     status: planned

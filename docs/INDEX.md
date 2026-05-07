@@ -100,50 +100,51 @@ related_docs:
 57. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
 58. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
 59. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+60. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
 
 ### 7. Governance and change control
-60. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-61. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-62. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-63. `docs/product/GOALRAIL_RULE_STACK.md`
+61. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+62. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+63. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+64. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-64. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-65. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-66. `docs/ops/STATUS.md`
-67. `docs/ops/NEXT.md`
-68. `docs/ops/DECISIONS.md`
-69. `docs/ops/COMPONENTS.yaml`
-70. `docs/ops/BRANCH_PROTECTION.md`
-71. `docs/ops/REPO_STRUCTURE.md`
-72. `docs/ops/GO_CODE_GUIDE.md`
-73. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-74. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-75. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-76. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-77. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-78. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-79. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-80. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-81. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-82. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-83. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-84. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-85. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+65. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+66. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+67. `docs/ops/STATUS.md`
+68. `docs/ops/NEXT.md`
+69. `docs/ops/DECISIONS.md`
+70. `docs/ops/COMPONENTS.yaml`
+71. `docs/ops/BRANCH_PROTECTION.md`
+72. `docs/ops/REPO_STRUCTURE.md`
+73. `docs/ops/GO_CODE_GUIDE.md`
+74. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+75. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+76. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+77. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+78. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+79. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+80. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+81. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+82. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+83. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+84. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+85. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+86. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-86. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-87. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-88. `docs/reference/design/reference_screens/`
-89. `docs/reference/start-assistant/`
-90. `.goalrail/work/`
-91. `.goalrail/knowledge/`
-92. `.goalrail/public-kb/manifest.yaml`
-93. `.punk/publishing.toml`
-94. `.goalrail/flows/`
-95. `.goalrail/evals/`
-96. `docs/ops/PUBLISHING_MIGRATION.md`
-97. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+87. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+88. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+89. `docs/reference/design/reference_screens/`
+90. `docs/reference/start-assistant/`
+91. `.goalrail/work/`
+92. `.goalrail/knowledge/`
+93. `.goalrail/public-kb/manifest.yaml`
+94. `.punk/publishing.toml`
+95. `.goalrail/flows/`
+96. `.goalrail/evals/`
+97. `docs/ops/PUBLISHING_MIGRATION.md`
+98. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -230,6 +231,10 @@ related_docs:
   Console-backed server API, owner-only v0 authorization, canonical `User` plus
   `OrganizationMembership`, one-time temporary password handling, and no CLI
   user creation
+- `ADR-0028` — runner checkout instruction and workspace receipt boundary;
+  concrete H1 target for `WorkItem(planned)` to checkout preparation without
+  assignment, execution, `Run`, gate, proof, server-side clone, or server-side
+  repository secrets
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
