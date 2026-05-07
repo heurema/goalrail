@@ -212,8 +212,8 @@ related_docs:
 - `ADR-0019` — WorkItem planning controller / runner boundary
 - `ADR-0020` — Public Contract identity boundary
 - `ADR-0021` — WorkItemPlan pull lease boundary; typed planning queue and future lease protocol direction
-- `ADR-0024` — Minimal planning worker loop boundary; future thin
-  `goalrail-worker` polling loop over typed plan leases, without runner,
+- `ADR-0024` — Minimal planning worker loop boundary; first thin
+  `goalrail-worker` prototype polls typed plan leases, without runner,
   checkout, execution, direct DB writes, or WorkItem creation by the worker
 - `ADR-0022` — Installation boundary; running control-plane instance above
   Organization, with `self_hosted` and `saas` as the only deployment modes

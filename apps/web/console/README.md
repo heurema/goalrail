@@ -21,7 +21,11 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with three structured empty product surfaces: Contracts, Delivery Readiness, Proof
 - bottom-left Settings utility with Appearance theme presets and API-backed
-  Organization Users add/edit/temporary-password reset UI
+  Organization Users add/edit/temporary-password reset UI plus read-only
+  Repository context metadata
+- Settings / Users blocks self-demotion from owner, self membership
+  deactivation, and self temporary-password reset; own password changes use
+  the existing password-change flow
 - selected theme persists only as a local browser visual preference under `goalrail.console.theme`
 - locale is not persisted in browser storage; runtime switching updates i18next,
   `document.documentElement.lang`, and the URL `lng` query param
@@ -43,6 +47,13 @@ Delivery rule:
   `POST /v1/organizations/{organization_id}/users`,
   `PATCH /v1/organizations/{organization_id}/users/{user_id}`, and
   `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
+- Settings / Repository uses `/v1/me` to determine the current
+  `organization_id` and then consumes
+  `GET /v1/organizations/{organization_id}/repository-context`
+- Repository context data is server-owned metadata only: Organization summary,
+  active Project metadata, and active RepoBinding metadata
+- Repository context does not imply provider authorization, checkout
+  permission, readiness/proof status, execution status, or runner state
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:
@@ -50,4 +61,6 @@ Delivery rule:
   target role
 - generated temporary passwords are shown only from the immediate successful
   create/reset response and must not be stored in browser storage
+- user management remains Console/admin API-backed; there are no CLI
+  user-management commands
 - product surfaces, auth state, locale, users, and settings screen are not persisted

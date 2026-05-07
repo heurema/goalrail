@@ -19,18 +19,24 @@ import {
   patchOrganizationUser,
   resetOrganizationUserTemporaryPassword,
 } from './usersClient';
+import {
+  getOrganizationRepositoryContext,
+  isRepositoryContextClientError,
+} from './repositoryContextClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
+import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
 import StartPage from './StartPage';
 
 import './App.css';
 
 type SurfaceId = 'contracts' | 'delivery-readiness' | 'proof';
-type ScreenId = 'console' | 'settings-appearance' | 'settings-users';
+type ScreenId = 'console' | 'settings-appearance' | 'settings-users' | 'settings-repository';
 type ThemeId = 'goalrail-default' | 'catppuccin-mocha' | 'dracula' | 'nord' | 'solarized-dark' | 'gruvbox-dark';
 type MembershipRole = 'owner' | 'admin' | 'member' | 'viewer';
 type RoleFilter = OrganizationUserRole | 'all';
 type StatusFilter = OrganizationUserState | 'all';
 type UsersLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type RepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type AuthStatus =
   | 'unauthenticated'
@@ -130,6 +136,19 @@ function userRecordWithoutSecret(record: OrganizationUserRecord): OrganizationUs
   };
 }
 
+function isOwnerSelfActionBlocked(profile: MeResponse | null, record: OrganizationUserRecord | null, draft: UserDraft) {
+  if (!profile || !record || profile.user.id !== record.user.id || record.organization_membership.role !== 'owner') {
+    return null;
+  }
+  if (draft.role !== 'owner') {
+    return 'users.errors.selfOwnerDowngradeBlocked';
+  }
+  if (draft.state === 'inactive') {
+    return 'users.errors.selfDeactivationBlocked';
+  }
+  return null;
+}
+
 function isThemeId(value: string | null): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
@@ -200,6 +219,19 @@ function usersErrorMessage(error: unknown, t: (key: string, options?: Record<str
   return t('users.errors.generic');
 }
 
+function repositoryContextErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isRepositoryContextClientError(error)) {
+    const translated = t(`repository.errors.${error.code}`);
+    if (translated !== `repository.errors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status ? t('repository.errors.genericWithStatus', { status: error.status }) : t('repository.errors.generic');
+  }
+
+  return t('repository.errors.generic');
+}
+
 function isStartRoute() {
   if (typeof window === 'undefined') {
     return false;
@@ -227,6 +259,9 @@ function ConsoleApp() {
   const [users, setUsers] = useState<OrganizationUserRecord[]>([]);
   const [usersLoadStatus, setUsersLoadStatus] = useState<UsersLoadStatus>('idle');
   const [usersError, setUsersError] = useState('');
+  const [repositoryContext, setRepositoryContext] = useState<OrganizationRepositoryContextResponse | null>(null);
+  const [repositoryContextLoadStatus, setRepositoryContextLoadStatus] = useState<RepositoryContextLoadStatus>('idle');
+  const [repositoryContextError, setRepositoryContextError] = useState('');
   const [formError, setFormError] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState<OneTimeTemporaryPassword | null>(null);
   const [contractIdInput, setContractIdInput] = useState('');
@@ -244,6 +279,7 @@ function ConsoleApp() {
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
   const usersLoadSequence = useRef(0);
+  const repositoryContextLoadSequence = useRef(0);
   const authSessionSequence = useRef(0);
 
   useEffect(() => {
@@ -256,6 +292,14 @@ function ConsoleApp() {
     }
 
     void loadUsers();
+  }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (screen !== 'settings-repository' || authStatus !== 'authenticated') {
+      return;
+    }
+
+    void loadRepositoryContext();
   }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
 
   useEffect(() => {
@@ -275,7 +319,21 @@ function ConsoleApp() {
   const sessionRole = isMembershipRole(sessionRoleValue)
     ? translate(`membershipRoles.${sessionRoleValue}`)
     : sessionRoleValue ?? 'member';
+  const settingsKicker =
+    screen === 'settings-appearance'
+      ? translate('settings.appearanceKicker')
+      : screen === 'settings-users'
+        ? translate('settings.usersKicker')
+        : translate('settings.repositoryKicker');
+  const settingsLabel =
+    screen === 'settings-appearance'
+      ? translate('settings.appearanceLabel')
+      : screen === 'settings-users'
+        ? translate('settings.usersLabel')
+        : translate('settings.repositoryLabel');
   const editingRecord = editingId ? users.find((record) => record.user.id === editingId) ?? null : null;
+  const isEditingSelf = Boolean(editingRecord && profile?.user.id === editingRecord.user.id);
+  const isEditingOtherOwner = Boolean(editingRecord && !isEditingSelf && editingRecord.organization_membership.role === 'owner');
   const isResettingTemporaryPassword = resettingUserId !== null;
 
   async function handleLanguageChange(locale: ConsoleLocale) {
@@ -381,6 +439,7 @@ function ConsoleApp() {
     authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
     usersLoadSequence.current += 1;
+    repositoryContextLoadSequence.current += 1;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -391,6 +450,9 @@ function ConsoleApp() {
     setUsers([]);
     setUsersLoadStatus('idle');
     setUsersError('');
+    setRepositoryContext(null);
+    setRepositoryContextLoadStatus('idle');
+    setRepositoryContextError('');
     setFormError('');
     setTemporaryPassword(null);
     setResetTarget(null);
@@ -491,6 +553,44 @@ function ConsoleApp() {
     }
   }
 
+  async function loadRepositoryContext() {
+    const accessToken = tokens?.accessToken;
+    const organizationId = profile?.organization_membership.organization_id;
+
+    if (!accessToken || !organizationId) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    setRepositoryContextLoadStatus('loading');
+    setRepositoryContextError('');
+    const loadSequence = repositoryContextLoadSequence.current + 1;
+    repositoryContextLoadSequence.current = loadSequence;
+
+    try {
+      const result = await getOrganizationRepositoryContext({ accessToken, organizationId });
+      if (repositoryContextLoadSequence.current !== loadSequence) {
+        return;
+      }
+      setRepositoryContext(result);
+      setRepositoryContextLoadStatus('loaded');
+    } catch (error) {
+      if (repositoryContextLoadSequence.current !== loadSequence) {
+        return;
+      }
+      if (isRepositoryContextClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setRepositoryContext(null);
+      setRepositoryContextLoadStatus('error');
+      setRepositoryContextError(repositoryContextErrorMessage(error, translate));
+    }
+  }
+
   function openNewUser() {
     setEditingId(null);
     setDraft({ ...EMPTY_DRAFT });
@@ -535,6 +635,11 @@ function ConsoleApp() {
 
     if (!nextDraft.name || (!editingId && !nextDraft.email)) {
       setFormError(translate('users.validation.nameAndEmail'));
+      return;
+    }
+    const blockedSelfAction = isOwnerSelfActionBlocked(profile, editingRecord, nextDraft);
+    if (blockedSelfAction) {
+      setFormError(translate(blockedSelfAction));
       return;
     }
 
@@ -607,6 +712,11 @@ function ConsoleApp() {
   }
 
   function requestTemporaryPasswordReset(record: OrganizationUserRecord) {
+    if (profile?.user.id === record.user.id) {
+      setResetTarget(null);
+      setFormError(translate('users.errors.selfResetBlocked'));
+      return;
+    }
     setResetTarget(record);
     setResetError('');
   }
@@ -624,6 +734,12 @@ function ConsoleApp() {
     const accessToken = tokens?.accessToken;
     const organizationId = profile?.organization_membership.organization_id;
     if (!target) {
+      return;
+    }
+    if (profile?.user.id === target.user.id) {
+      setResetTarget(null);
+      setResetError('');
+      setFormError(translate('users.errors.selfResetBlocked'));
       return;
     }
     if (!accessToken || !organizationId) {
@@ -699,6 +815,12 @@ function ConsoleApp() {
   }, [roleFilter, searchQuery, statusFilter, users]);
 
   const visibleUserCount = visibleUsers.length;
+  const settingsMeta =
+    screen === 'settings-appearance'
+      ? translate('settings.presets', { count: THEMES.length })
+      : screen === 'settings-users'
+        ? translate('settings.records', { count: visibleUserCount })
+        : translate('settings.contexts', { count: repositoryContext?.contexts.length ?? 0 });
 
   const userRows = useMemo(
     () =>
@@ -892,18 +1014,14 @@ function ConsoleApp() {
       ) : (
         <section
           className="settingsSurface"
-          aria-label={screen === 'settings-appearance' ? translate('settings.appearanceLabel') : translate('settings.usersLabel')}
+          aria-label={settingsLabel}
         >
           <header className="surfaceHeader">
             <div>
-              <p className="kicker">{screen === 'settings-appearance' ? translate('settings.appearanceKicker') : translate('settings.usersKicker')}</p>
+              <p className="kicker">{settingsKicker}</p>
               <h2>{translate('nav.settings')}</h2>
             </div>
-            <p className="metaText">
-              {screen === 'settings-appearance'
-                ? translate('settings.presets', { count: THEMES.length })
-                : translate('settings.records', { count: visibleUserCount })}
-            </p>
+            <p className="metaText">{settingsMeta}</p>
           </header>
 
           <nav className="settingsSectionNav" aria-label={translate('settings.sections')}>
@@ -923,6 +1041,14 @@ function ConsoleApp() {
             >
               {translate('settings.users')}
             </button>
+            <button
+              aria-current={screen === 'settings-repository' ? 'page' : undefined}
+              className={screen === 'settings-repository' ? 'sectionButton active' : 'sectionButton'}
+              onClick={() => setScreen('settings-repository')}
+              type="button"
+            >
+              {translate('settings.repository')}
+            </button>
           </nav>
 
           <div className="settingsContent">
@@ -934,7 +1060,7 @@ function ConsoleApp() {
                 onThemeChange={updateTheme}
                 t={translate}
               />
-            ) : (
+            ) : screen === 'settings-users' ? (
               <>
                 <div className="usersHeader">
                   <div>
@@ -1040,6 +1166,15 @@ function ConsoleApp() {
                   </table>
                 </div>
               </>
+            ) : (
+              <RepositorySettings
+                loadStatus={repositoryContextLoadStatus}
+                onRetry={loadRepositoryContext}
+                repositoryContext={repositoryContext}
+                repositoryContextError={repositoryContextError}
+                sessionRole={sessionRole}
+                t={translate}
+              />
             )}
           </div>
         </section>
@@ -1116,15 +1251,18 @@ function ConsoleApp() {
               </label>
               ) : null}
 
+              {isEditingSelf ? <p className="fieldMessage">{translate('users.selfActionHelper')}</p> : null}
+              {isEditingOtherOwner ? <p className="fieldMessage">{translate('users.otherOwnerWarning')}</p> : null}
+
               {editingId && editingRecord ? (
                 <section className="resetCredentialPanel" aria-label={translate('users.resetTemporaryPassword')}>
                   <div>
                     <h4>{translate('users.resetTemporaryPassword')}</h4>
-                    <p>{translate('users.resetTemporaryPasswordCopy')}</p>
+                    <p>{isEditingSelf ? translate('users.selfResetBlockedCopy') : translate('users.resetTemporaryPasswordCopy')}</p>
                   </div>
                   <button
                     className="ghostButton dangerButton"
-                    disabled={isResettingTemporaryPassword}
+                    disabled={isResettingTemporaryPassword || isEditingSelf}
                     onClick={() => requestTemporaryPasswordReset(editingRecord)}
                     type="button"
                   >
@@ -1464,6 +1602,114 @@ function FieldRow({ label, value }: { label: string; value: string }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
+  );
+}
+
+function RepositorySettings({
+  loadStatus,
+  onRetry,
+  repositoryContext,
+  repositoryContextError,
+  sessionRole,
+  t,
+}: {
+  loadStatus: RepositoryContextLoadStatus;
+  onRetry: () => void;
+  repositoryContext: OrganizationRepositoryContextResponse | null;
+  repositoryContextError: string;
+  sessionRole: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const contexts = repositoryContext?.contexts ?? [];
+
+  return (
+    <div className="repositoryPanel">
+      <div className="repositoryHeader">
+        <div>
+          <h3>{t('repository.title')}</h3>
+          <p>{t('repository.copy')}</p>
+        </div>
+        <p className="themeDisclaimer">{t('repository.metadataOnly')}</p>
+      </div>
+
+      {loadStatus === 'loading' ? <p className="usersNotice" role="status">{t('repository.loading')}</p> : null}
+
+      {loadStatus === 'error' ? (
+        <div className="usersNotice usersNoticeError" role="alert">
+          <p>{repositoryContextError}</p>
+          <button className="ghostButton" onClick={onRetry} type="button">
+            {t('repository.retry')}
+          </button>
+        </div>
+      ) : null}
+
+      {repositoryContext ? (
+        <section className="repositoryOrgPanel" aria-label={t('repository.organization')}>
+          <div>
+            <span>{t('repository.organization')}</span>
+            <h4>{repositoryContext.organization.display_name || repositoryContext.organization.slug || repositoryContext.organization.id}</h4>
+          </div>
+          <dl className="repositoryKeyGrid">
+            <FieldRow label={t('repository.fields.organizationId')} value={repositoryContext.organization.id} />
+            <FieldRow label={t('repository.fields.organizationSlug')} value={repositoryContext.organization.slug || t('repository.emptyValue')} />
+            <FieldRow label={t('repository.fields.organizationState')} value={repositoryContext.organization.state || t('repository.emptyValue')} />
+            <FieldRow label={t('repository.fields.currentRole')} value={sessionRole} />
+          </dl>
+        </section>
+      ) : null}
+
+      {loadStatus === 'loaded' && contexts.length === 0 ? (
+        <section className="repositoryEmpty" aria-label={t('repository.emptyTitle')}>
+          <h4>{t('repository.emptyTitle')}</h4>
+          <p>{t('repository.emptyCopy')}</p>
+        </section>
+      ) : null}
+
+      {contexts.length > 0 ? (
+        <div className="repositoryContextGrid" aria-label={t('repository.contexts')}>
+          {contexts.map((context) => (
+            <RepositoryContextCard context={context} key={`${context.project.id}-${context.repo_binding.id}`} t={t} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RepositoryContextCard({
+  context,
+  t,
+}: {
+  context: RepositoryContextRecord;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  return (
+    <article className="repositoryCard">
+      <header>
+        <div>
+          <span>{t('repository.project')}</span>
+          <h4>{context.project.display_name || context.project.slug || context.project.id}</h4>
+        </div>
+        <span className="pill">{context.repo_binding.access_mode || t('repository.emptyValue')}</span>
+      </header>
+
+      <dl className="repositoryKeyGrid">
+        <FieldRow label={t('repository.fields.projectId')} value={context.project.id} />
+        <FieldRow label={t('repository.fields.projectSlug')} value={context.project.slug || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.projectState')} value={context.project.state || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.repoBindingId')} value={context.repo_binding.id} />
+        <FieldRow label={t('repository.fields.provider')} value={context.repo_binding.provider || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.repositoryFullName')} value={context.repo_binding.repository_full_name || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.repositoryUrl')} value={context.repo_binding.repository_url || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.defaultBranch')} value={context.repo_binding.default_branch || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.workflowBaseBranch')} value={context.repo_binding.workflow_base_branch || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.pathScope')} value={context.repo_binding.path_scope || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.repoBindingState')} value={context.repo_binding.state || t('repository.emptyValue')} />
+        <FieldRow label={t('repository.fields.updatedAt')} value={formatDateTime(context.repo_binding.updated_at)} />
+      </dl>
+
+      <p className="repositoryFootnote">{t('repository.accessModeFootnote')}</p>
+    </article>
   );
 }
 

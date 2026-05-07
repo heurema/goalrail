@@ -388,6 +388,80 @@ func TestProjectContextStoreGetsRepoBinding(t *testing.T) {
 	}
 }
 
+func TestProjectContextStoreGetsOrganization(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
+	query := &recordingProjectContextQuerier{
+		row: fakeProjectContextRow{
+			values: []any{
+				"018f0000-0000-7000-8000-000000000002",
+				"018f0000-0000-7000-8000-000000000006",
+				"goalrail-dev",
+				"Goalrail Dev",
+				"active",
+				now,
+				now,
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorAndQuerier(&recordingProjectContextExecer{}, query)
+
+	organization, ok, err := store.GetOrganization(ctx, "018f0000-0000-7000-8000-000000000002")
+	if err != nil {
+		t.Fatalf("GetOrganization() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("GetOrganization() ok = false, want true")
+	}
+	if organization.Slug != "goalrail-dev" || organization.DisplayName != "Goalrail Dev" {
+		t.Fatalf("organization = %#v, want persisted organization", organization)
+	}
+	if !strings.Contains(query.calls[0].sql, "FROM organizations") {
+		t.Fatalf("SQL = %q, want organizations select", query.calls[0].sql)
+	}
+}
+
+func TestProjectContextStoreListsActiveProjectRepoBindingContexts(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
+	rows := &recordingProjectContextRowsQuerier{
+		rows: &fakeProjectContextRows{
+			rows: []fakeProjectContextRow{
+				{values: projectRepoBindingRowValues(now, "018f0000-0000-7000-8000-000000000003", "github-heurema-goalrail", "018f0000-0000-7000-8000-000000000004", "heurema/goalrail")},
+				{values: projectRepoBindingRowValues(now.Add(time.Minute), "018f0000-0000-7000-8000-000000000013", "github-heurema-docs", "018f0000-0000-7000-8000-000000000014", "heurema/docs")},
+			},
+		},
+	}
+	store := NewProjectContextStoreWithExecutorQuerierAndRows(&recordingProjectContextExecer{}, nil, rows)
+
+	contexts, err := store.ListActiveProjectRepoBindingContexts(ctx, "018f0000-0000-7000-8000-000000000002")
+	if err != nil {
+		t.Fatalf("ListActiveProjectRepoBindingContexts() error = %v", err)
+	}
+	if got, want := len(contexts), 2; got != want {
+		t.Fatalf("contexts = %d, want %d", got, want)
+	}
+	if contexts[0].Project.Slug != "github-heurema-goalrail" || contexts[1].RepoBinding.RepositoryFullName != "heurema/docs" {
+		t.Fatalf("contexts = %#v, want ordered project/repo metadata", contexts)
+	}
+	if len(rows.calls) != 1 {
+		t.Fatalf("Query calls = %d, want 1", len(rows.calls))
+	}
+	call := rows.calls[0]
+	if !strings.Contains(call.sql, "FROM projects p") || !strings.Contains(call.sql, "JOIN repo_bindings rb") {
+		t.Fatalf("SQL = %q, want joined project/repo binding select", call.sql)
+	}
+	if !strings.Contains(call.sql, "p.state") || !strings.Contains(call.sql, "rb.state") {
+		t.Fatalf("SQL = %q, want active project and repo binding filters", call.sql)
+	}
+	if !strings.Contains(call.sql, "ORDER BY p.created_at ASC, p.id ASC, rb.created_at ASC, rb.id ASC") {
+		t.Fatalf("SQL = %q, want deterministic ordering", call.sql)
+	}
+	if got, want := len(call.args), 4; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
 func TestProjectContextStoreBuildsRepositoryContextSnapshotCreate(t *testing.T) {
 	ctx := context.Background()
 	exec := &recordingProjectContextExecer{}
@@ -547,6 +621,102 @@ func (r *recordingProjectContextQuerier) QueryRow(_ context.Context, sql string,
 		args: append([]any(nil), args...),
 	})
 	return r.row
+}
+
+type recordingProjectContextRowsQuerier struct {
+	calls []recordedExecCall
+	rows  pgx.Rows
+	err   error
+}
+
+func (r *recordingProjectContextRowsQuerier) Query(_ context.Context, sql string, args ...any) (pgx.Rows, error) {
+	r.calls = append(r.calls, recordedExecCall{
+		sql:  sql,
+		args: append([]any(nil), args...),
+	})
+	return r.rows, r.err
+}
+
+func projectRepoBindingRowValues(now time.Time, projectID string, projectSlug string, repoBindingID string, repositoryFullName string) []any {
+	return []any{
+		projectID,
+		"018f0000-0000-7000-8000-000000000002",
+		"018f0000-0000-7000-8000-000000000001",
+		projectSlug,
+		repositoryFullName,
+		"active",
+		now,
+		now,
+		repoBindingID,
+		"018f0000-0000-7000-8000-000000000002",
+		projectID,
+		"018f0000-0000-7000-8000-000000000001",
+		"",
+		"github",
+		"",
+		repositoryFullName,
+		"git@github.com:" + repositoryFullName + ".git",
+		"main",
+		"main",
+		".",
+		"metadata_only",
+		"active",
+		now,
+		now,
+	}
+}
+
+type fakeProjectContextRows struct {
+	rows   []fakeProjectContextRow
+	index  int
+	closed bool
+	err    error
+}
+
+func (r *fakeProjectContextRows) Close() {
+	r.closed = true
+}
+
+func (r *fakeProjectContextRows) Err() error {
+	return r.err
+}
+
+func (r *fakeProjectContextRows) CommandTag() pgconn.CommandTag {
+	return pgconn.NewCommandTag("SELECT 0")
+}
+
+func (r *fakeProjectContextRows) FieldDescriptions() []pgconn.FieldDescription {
+	return nil
+}
+
+func (r *fakeProjectContextRows) Next() bool {
+	if r.index >= len(r.rows) {
+		return false
+	}
+	r.index++
+	return true
+}
+
+func (r *fakeProjectContextRows) Scan(dest ...any) error {
+	if r.index == 0 || r.index > len(r.rows) {
+		return errors.New("scan called before next")
+	}
+	return r.rows[r.index-1].Scan(dest...)
+}
+
+func (r *fakeProjectContextRows) Values() ([]any, error) {
+	if r.index == 0 || r.index > len(r.rows) {
+		return nil, errors.New("values called before next")
+	}
+	return append([]any(nil), r.rows[r.index-1].values...), nil
+}
+
+func (r *fakeProjectContextRows) RawValues() [][]byte {
+	return nil
+}
+
+func (r *fakeProjectContextRows) Conn() *pgx.Conn {
+	return nil
 }
 
 type fakeProjectContextRow struct {

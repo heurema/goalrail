@@ -216,6 +216,51 @@ type RepositoryContextSnapshotResult struct {
 	Message           string                      `json:"message"`
 }
 
+type OrganizationRepositoryContextResult struct {
+	Organization OrganizationRepositoryContextOrganization `json:"organization"`
+	Contexts     []OrganizationRepositoryContext           `json:"contexts"`
+}
+
+type OrganizationRepositoryContextOrganization struct {
+	ID          OrganizationID `json:"id"`
+	Slug        string         `json:"slug"`
+	DisplayName string         `json:"display_name"`
+	State       EntityState    `json:"state"`
+}
+
+type OrganizationRepositoryContext struct {
+	Project     OrganizationRepositoryContextProject     `json:"project"`
+	RepoBinding OrganizationRepositoryContextRepoBinding `json:"repo_binding"`
+}
+
+type OrganizationRepositoryContextProject struct {
+	ID          ProjectID   `json:"id"`
+	Slug        string      `json:"slug"`
+	DisplayName string      `json:"display_name"`
+	State       EntityState `json:"state"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type OrganizationRepositoryContextRepoBinding struct {
+	ID                 RepoBindingID         `json:"id"`
+	Provider           string                `json:"provider"`
+	RepositoryFullName string                `json:"repository_full_name"`
+	RepositoryURL      string                `json:"repository_url"`
+	DefaultBranch      string                `json:"default_branch"`
+	WorkflowBaseBranch string                `json:"workflow_base_branch"`
+	PathScope          string                `json:"path_scope"`
+	AccessMode         RepoBindingAccessMode `json:"access_mode"`
+	State              EntityState           `json:"state"`
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+}
+
+type ProjectRepoBindingContext struct {
+	Project     Project     `json:"project"`
+	RepoBinding RepoBinding `json:"repo_binding"`
+}
+
 type ResolvedRepoBindingContext struct {
 	OrganizationID OrganizationID `json:"organization_id"`
 	ProjectID      ProjectID      `json:"project_id"`

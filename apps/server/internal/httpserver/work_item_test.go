@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
@@ -19,7 +20,7 @@ func TestPostContractPlansReturnsQueuedPlan(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)
 
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{"requested_by":{"kind":"user","id":"planner-requester"}}`)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","requested_by":{"kind":"user","id":"spoofed-requester"}}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
@@ -34,35 +35,98 @@ func TestPostContractPlansReturnsQueuedPlan(t *testing.T) {
 	if plan.ContractID != approved.ContractID || plan.ApprovedContractID != approved.ID || plan.RepoBindingID != approved.RepoBindingID {
 		t.Fatalf("plan ids = %q/%q/%q, want approved contract ids", plan.ContractID, plan.ApprovedContractID, plan.RepoBindingID)
 	}
-	if plan.RequestedBy.Kind != "user" || plan.RequestedBy.ID != "planner-requester" {
-		t.Fatalf("requested_by = %#v, want payload actor", plan.RequestedBy)
+	if plan.RequestedBy.Kind != "user" || plan.RequestedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("requested_by = %#v, want authenticated user actor", plan.RequestedBy)
 	}
 	if _, ok, err := server.workItems.GetByApprovedContractID(context.Background(), approved.ID); err != nil {
 		t.Fatalf("workItems.GetByApprovedContractID() error = %v", err)
 	} else if ok {
 		t.Fatal("plan creation materialized a WorkItem")
 	}
+	if len(server.workItemLeases.leases) != 0 || len(server.workItemProposals.proposals) != 0 {
+		t.Fatalf("leases/proposals = %d/%d, want 0/0", len(server.workItemLeases.leases), len(server.workItemProposals.proposals))
+	}
+}
+
+func TestPostContractPlansIsAuthenticatedAndIdempotent(t *testing.T) {
+	t.Run("invalid bearer token rejects before plan creation", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/018f0000-0000-7000-8000-000000000009/plans", `{}`)
+		assertErrorCode(t, response, http.StatusUnauthorized, "unauthorized")
+		if len(server.workItemPlans.plans) != 0 {
+			t.Fatalf("plans = %d, want 0 after auth failure", len(server.workItemPlans.plans))
+		}
+	})
+
+	t.Run("repeated create returns existing plan", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+
+		first := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{}`)
+		if first.code != http.StatusCreated {
+			t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
+		}
+		second := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{}`)
+		if second.code != http.StatusOK {
+			t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusOK, second.body)
+		}
+		var firstPlan, secondPlan spine.WorkItemPlan
+		decodeJSON(t, first.body, &firstPlan)
+		decodeJSON(t, second.body, &secondPlan)
+		if firstPlan.ID != secondPlan.ID {
+			t.Fatalf("plan ids = %q/%q, want same existing plan", firstPlan.ID, secondPlan.ID)
+		}
+		if len(server.workItemPlans.plans) != 1 {
+			t.Fatalf("plans = %d, want 1 after repeated create", len(server.workItemPlans.plans))
+		}
+	})
 }
 
 func TestPostContractPlansRejectsInvalidInputs(t *testing.T) {
 	t.Run("unknown contract", func(t *testing.T) {
 		server := testServer(t)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/missing/plans", `{"requested_by":{"kind":"user","id":"u1"}}`)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/missing/plans", `{}`)
 		assertErrorCode(t, response, http.StatusNotFound, "not_found")
 	})
 
 	t.Run("non-approved contract", func(t *testing.T) {
 		server := testServer(t)
 		contract := createContract(t, server)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/plans", `{"requested_by":{"kind":"user","id":"u1"}}`)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contract.ID)+"/plans", `{}`)
 		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
 	})
 
-	t.Run("missing requested_by", func(t *testing.T) {
+	t.Run("organization mismatch", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000999"),
+		})
+		approved := storeApprovedPlanningFixture(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
+		if len(server.workItemPlans.plans) != 0 {
+			t.Fatalf("plans = %d, want 0 after org mismatch", len(server.workItemPlans.plans))
+		}
+	})
+
+	t.Run("project expectation mismatch", func(t *testing.T) {
 		server := testServer(t)
 		approved := createApprovedContract(t, server)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{}`)
-		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{"project_id":"project-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.workItemPlans.plans) != 0 {
+			t.Fatalf("plans = %d, want 0 after project mismatch", len(server.workItemPlans.plans))
+		}
+	})
+
+	t.Run("repo binding expectation mismatch", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(approved.ContractID)+"/plans", `{"repo_binding_id":"repo-binding-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.workItemPlans.plans) != 0 {
+			t.Fatalf("plans = %d, want 0 after repo mismatch", len(server.workItemPlans.plans))
+		}
 	})
 }
 
@@ -449,13 +513,59 @@ func TestRemovedDirectTaskRouteAndListRoutesReturnNotFound(t *testing.T) {
 
 func createPlan(t *testing.T, server testServerDeps, contractID spine.ContractID) spine.WorkItemPlan {
 	t.Helper()
-	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contractID)+"/plans", `{"requested_by":{"kind":"user","id":"planner-requester"}}`)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts/"+string(contractID)+"/plans", `{}`)
 	if response.code != http.StatusCreated {
 		t.Fatalf("create plan status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
 	}
 	var plan spine.WorkItemPlan
 	decodeJSON(t, response.body, &plan)
 	return plan
+}
+
+func storeApprovedPlanningFixture(t *testing.T, server testServerDeps) spine.ApprovedContract {
+	t.Helper()
+
+	approvedID := spine.ApprovedContractID("approved-contract-fixture")
+	contractID := spine.ContractID("contract-fixture")
+	seedID := spine.ContractSeedID("contract-seed-fixture")
+	draftID := spine.ContractDraftID("contract-draft-fixture")
+	approved := spine.ApprovedContract{
+		ID:                 approvedID,
+		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
+		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		ContractID:         contractID,
+		ContractDraftID:    draftID,
+		ContractSeedID:     seedID,
+		GoalID:             "goal-fixture",
+		RepoBindingID:      "018f0000-0000-7000-8000-000000000004",
+		Title:              "Fixture approved contract",
+		IntentSummary:      "Fixture",
+		Scope:              []string{"Fixture scope"},
+		AcceptanceCriteria: []string{"Fixture acceptance"},
+		ProofExpectations:  []string{"Fixture proof expectation"},
+		ApprovedBy:         spine.ActorRef{Kind: "user", ID: "approver-fixture"},
+		ApprovedAt:         testTime(),
+		State:              spine.ApprovedContractStateApproved,
+	}
+	if err := server.approvedContracts.Create(context.Background(), approved); err != nil {
+		t.Fatalf("approvedContracts.Create() error = %v", err)
+	}
+	if err := server.contracts.Create(context.Background(), spine.Contract{
+		ID:                 contractID,
+		OrganizationID:     approved.OrganizationID,
+		ProjectID:          approved.ProjectID,
+		RepoBindingID:      approved.RepoBindingID,
+		GoalID:             approved.GoalID,
+		State:              spine.ContractStateApproved,
+		CurrentSeedID:      &seedID,
+		CurrentDraftID:     &draftID,
+		ApprovedSnapshotID: &approvedID,
+		CreatedAt:          testTime(),
+		UpdatedAt:          testTime(),
+	}); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+	return approved
 }
 
 func submitProposal(t *testing.T, server testServerDeps, planID spine.WorkItemPlanID, approvedContractID string) spine.WorkItemPlanProposal {

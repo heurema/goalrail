@@ -64,6 +64,9 @@ Use it together with:
 | Server WorkItem planning service logic | `apps/server/internal/workitem/` |
 | Server Postgres stores and store error sentinels | `apps/server/internal/store/` |
 | Server test-local fakes | The relevant `*_test.go` package file |
+| Go planning worker module | `apps/worker/` |
+| Canonical planning worker binary entrypoint | `apps/worker/cmd/goalrail-worker/` |
+| Worker-only internal packages and API DTOs | `apps/worker/internal/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shell | `apps/web/console/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |

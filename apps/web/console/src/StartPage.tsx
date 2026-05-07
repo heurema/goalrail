@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { startAnswers, startArtifacts, startQuestions } from './startPageData';
+import './StartPage.css';
 
 const START_PAGE_TITLE = 'Goalrail - AI-assisted delivery without losing control';
 const START_PAGE_DESCRIPTION =
