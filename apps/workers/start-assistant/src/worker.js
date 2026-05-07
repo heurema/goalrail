@@ -90,6 +90,9 @@ export async function handleStartAssistantRequest(request, env = {}, runtime = {
     if (!shaped.answer) {
       return unavailable('The assistant did not return an answer.');
     }
+    if (shaped.sources.length === 0) {
+      return unavailable('The assistant did not return a sourced answer.');
+    }
 
     return jsonResponse(answerEnvelope(shaped.answer, shaped.sources, shaped.suggested_questions, env), 200);
   } catch {
@@ -197,7 +200,7 @@ export function shapeOpenAIResponse(response, question) {
 
   return {
     answer: textParts.filter(Boolean).join('\n\n').trim(),
-    sources: dedupeSources(sources.length > 0 ? sources : DEFAULT_SOURCES),
+    sources: dedupeSources(sources),
     suggested_questions: suggestedQuestions(question),
   };
 }
@@ -275,6 +278,15 @@ function containsPastedCode(question) {
   ].some((pattern) => pattern.test(question));
 }
 
+function containsFileUploadIntent(question) {
+  return [
+    /\b(?:upload|attach|send|drop|submit|share)\b.{0,40}\b(?:file|files|zip|archive|pdf|docx?|spreadsheet|screenshot|folder)\b/i,
+    /\b(?:file|zip|archive|pdf|docx?|spreadsheet|screenshot|folder)\b.{0,40}\b(?:upload|attachment|attach|send|submit)\b/i,
+    /\bcan i upload\b/i,
+    /\bfile upload\b/i,
+  ].some((pattern) => pattern.test(question));
+}
+
 function refusalForQuestion(question) {
   const normalized = question.toLowerCase();
 
@@ -294,6 +306,14 @@ function refusalForQuestion(question) {
       answer:
         'I cannot process pasted code snippets from this public page. Describe the workflow, boundary, check, or review problem without including private code.',
       suggested_questions: ['Is my repo ready for coding agents?', 'How should a team review AI-generated changes?'],
+    };
+  }
+
+  if (containsFileUploadIntent(question)) {
+    return {
+      answer:
+        'I cannot accept file uploads from this public page. Describe the workflow or review problem without attaching files, private code, secrets, or customer data.',
+      suggested_questions: ['What would a pilot fit check look like?', 'Is my repo ready for coding agents?'],
     };
   }
 

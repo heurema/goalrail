@@ -237,6 +237,29 @@ function calculate() {
   assert.match(body.answer, /cannot process pasted code snippets/i);
 });
 
+test('refuses file upload prompts before provider calls', async () => {
+  let called = false;
+  const response = await handleStartAssistantRequest(
+    request({ question: 'Can I upload a zip file here?' }),
+    {
+      OPENAI_API_KEY: 'test-key',
+      OPENAI_START_MODEL: 'test-model',
+      OPENAI_START_VECTOR_STORE_ID: 'vs_test',
+    },
+    {
+      fetch: async () => {
+        called = true;
+        throw new Error('should not call provider');
+      },
+    }
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.equal(called, false);
+  assert.match(body.answer, /cannot accept file uploads/i);
+});
+
 test('calls OpenAI Responses API with file_search and shapes citations', async () => {
   let captured;
   const response = await handleStartAssistantRequest(
@@ -299,6 +322,41 @@ test('calls OpenAI Responses API with file_search and shapes citations', async (
       section: null,
     },
   ]);
+});
+
+test('returns unavailable when provider answer has no file citations', async () => {
+  const response = await handleStartAssistantRequest(
+    request({ question: 'What is proof before approval?' }),
+    {
+      OPENAI_API_KEY: 'test-key',
+      OPENAI_START_MODEL: 'test-model',
+      OPENAI_START_VECTOR_STORE_ID: 'vs_test',
+    },
+    {
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            output: [
+              {
+                type: 'message',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: 'Proof before approval means checking evidence before approval.',
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        ),
+    }
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 503);
+  assert.equal(body.error, 'assistant_unavailable');
+  assert.match(body.message, /sourced answer/i);
 });
 
 test('returns unavailable on provider failure', async () => {
