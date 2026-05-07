@@ -81,6 +81,33 @@ test('rejects over-limit questions', async () => {
   assert.equal(body.error, 'invalid_request');
 });
 
+test('rejects streaming request bodies once the byte limit is exceeded', async () => {
+  const encoder = new TextEncoder();
+  let pulls = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(encoder.encode('x'.repeat(9000)));
+      controller.close();
+    },
+  });
+
+  const response = await handleStartAssistantRequest(
+    new Request('https://goalrail.dev/api/start-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: stream,
+      duplex: 'half',
+    }),
+    MOCK_ENV
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 413);
+  assert.equal(body.error, 'invalid_request');
+  assert.equal(pulls, 1);
+});
+
 test('returns unavailable when provider config is missing', async () => {
   const response = await handleStartAssistantRequest(request({ question: 'What is Goalrail?' }), {});
   const body = await json(response);

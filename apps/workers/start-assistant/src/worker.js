@@ -51,17 +51,12 @@ export async function handleStartAssistantRequest(request, env = {}, runtime = {
     return jsonError('invalid_request', 'Request body is too large.', 413);
   }
 
-  let bodyText = '';
-  try {
-    bodyText = await request.text();
-  } catch {
-    return jsonError('invalid_request', 'Could not read request body.', 400);
+  const bodyRead = await readLimitedBody(request, MAX_BODY_BYTES);
+  if (!bodyRead.ok) {
+    return jsonError('invalid_request', bodyRead.message, bodyRead.status);
   }
 
-  if (byteLength(bodyText) > MAX_BODY_BYTES) {
-    return jsonError('invalid_request', 'Request body is too large.', 413);
-  }
-
+  const bodyText = bodyRead.text;
   let payload;
   try {
     payload = JSON.parse(bodyText);
@@ -407,6 +402,47 @@ function positiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function byteLength(value) {
-  return new TextEncoder().encode(value).length;
+async function readLimitedBody(request, maxBytes) {
+  if (!request.body) {
+    return { ok: true, text: '' };
+  }
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytesRead = 0;
+  let text = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Best-effort cancellation after the hard byte cap is reached.
+        }
+
+        return { ok: false, status: 413, message: 'Request body is too large.' };
+      }
+
+      text += decoder.decode(value, { stream: true });
+    }
+
+    text += decoder.decode();
+  } catch {
+    return { ok: false, status: 400, message: 'Could not read request body.' };
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Some runtimes release the lock when the stream closes or is cancelled.
+    }
+  }
+
+  return { ok: true, text };
 }
