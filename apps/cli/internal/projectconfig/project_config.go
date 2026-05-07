@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
+	"github.com/heurema/goalrail/apps/cli/internal/gitctx"
 )
 
 const (
@@ -58,12 +59,7 @@ func Preflight(gitRoot string, expected Config) error {
 		return nil
 	}
 
-	if existing.ServerURL != expected.ServerURL ||
-		(expected.ProjectID != "" && existing.ProjectID != expected.ProjectID) ||
-		existing.Repository.Provider != expected.Repository.Provider ||
-		existing.Repository.FullName != expected.Repository.FullName ||
-		existing.Repository.URL != expected.Repository.URL ||
-		existing.Repository.WorkflowBaseBranch != expected.Repository.WorkflowBaseBranch {
+	if !matchesKnownIdentity(existing, expected) {
 		return exitcode.ValidationError(errors.New(ConflictMessage))
 	}
 	return nil
@@ -102,6 +98,10 @@ func Write(gitRoot string, config Config) (string, error) {
 		if bytes.Equal(existing, content) {
 			return StatusUnchanged, nil
 		}
+		existingConfig, parseErr := ParseYAML(string(existing))
+		if parseErr == nil && matchesKnownIdentity(existingConfig, config) {
+			return StatusUnchanged, nil
+		}
 		return "", exitcode.ValidationError(errors.New("local .goalrail/project.yml already exists with different content; remove it or re-run with a future repair command"))
 	}
 	if !errors.Is(err, os.ErrNotExist) {
@@ -111,10 +111,93 @@ func Write(gitRoot string, config Config) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", exitcode.RuntimeError(fmt.Errorf("create .goalrail directory: %w", err))
 	}
-	if err := os.WriteFile(path, content, 0o644); err != nil {
+	if err := writeFileAtomic(path, content, 0o644); err != nil {
 		return "", exitcode.RuntimeError(fmt.Errorf("write local .goalrail/project.yml: %w", err))
 	}
 	return StatusWritten, nil
+}
+
+func matchesKnownIdentity(existing Config, expected Config) bool {
+	if expected.ServerURL != "" && existing.ServerURL != expected.ServerURL {
+		return false
+	}
+	if expected.OrganizationID != "" && existing.OrganizationID != expected.OrganizationID {
+		return false
+	}
+	if expected.ProjectID != "" && existing.ProjectID != expected.ProjectID {
+		return false
+	}
+	if expected.RepoBindingID != "" && existing.RepoBindingID != expected.RepoBindingID {
+		return false
+	}
+	if expected.Repository.Provider != "" && existing.Repository.Provider != expected.Repository.Provider {
+		return false
+	}
+	if expected.Repository.FullName != "" && existing.Repository.FullName != expected.Repository.FullName {
+		return false
+	}
+	if expected.Repository.URL != "" && !repositoryURLIdentityMatches(existing.Repository.URL, expected.Repository.URL) {
+		return false
+	}
+	if expected.Repository.WorkflowBaseBranch != "" && existing.Repository.WorkflowBaseBranch != expected.Repository.WorkflowBaseBranch {
+		return false
+	}
+	return true
+}
+
+func repositoryURLIdentityMatches(existing string, expected string) bool {
+	if existing == "" {
+		return false
+	}
+	existingRemote := gitctx.ParseRemoteURL(existing)
+	expectedRemote := gitctx.ParseRemoteURL(expected)
+	if existingRemote.ProviderHost == "" || expectedRemote.ProviderHost == "" ||
+		existingRemote.RepositoryFullName == "" || expectedRemote.RepositoryFullName == "" {
+		return existing == expected
+	}
+	return existingRemote.ProviderHost == expectedRemote.ProviderHost &&
+		existingRemote.RepositoryFullName == expectedRemote.RepositoryFullName
+}
+
+func writeFileAtomic(path string, content []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	temp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-")
+	if err != nil {
+		return err
+	}
+	tempName := temp.Name()
+	defer func() {
+		_ = os.Remove(tempName)
+	}()
+
+	if err := temp.Chmod(perm); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if _, err := temp.Write(content); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		_ = temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tempName, path); err != nil {
+		return err
+	}
+	tempName = ""
+
+	dirFile, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = dirFile.Close()
+	}()
+	return dirFile.Sync()
 }
 
 func EnsureLocalStateGitignore(gitRoot string) (string, error) {
@@ -205,89 +288,235 @@ func appendMissingIgnoreRules(raw string, missing []string) string {
 }
 
 func ParseYAML(raw string) (Config, error) {
-	raw = strings.TrimSuffix(raw, "\n")
-	lines := strings.Split(raw, "\n")
-	if len(lines) != 11 {
-		return Config{}, errors.New("unexpected line count")
-	}
-	if lines[5] != "" || lines[6] != "repository:" {
-		return Config{}, errors.New("unexpected repository block")
-	}
-
-	version, err := parseVersion(lines[0])
-	if err != nil {
+	parser := markerParser{}
+	if err := parser.parse(raw); err != nil {
 		return Config{}, err
 	}
+	if !parser.seenVersion {
+		return Config{}, errors.New("missing version")
+	}
+	version := parser.config.Version
 	if version != Version {
 		return Config{}, fmt.Errorf("unsupported version %d", version)
 	}
-
-	serverURL, err := parseString(lines[1], "server_url")
-	if err != nil {
-		return Config{}, err
+	for _, field := range []struct {
+		name string
+		seen bool
+	}{
+		{name: "server_url", seen: parser.seenServerURL},
+		{name: "organization_id", seen: parser.seenOrganizationID},
+		{name: "project_id", seen: parser.seenProjectID},
+		{name: "repo_binding_id", seen: parser.seenRepoBindingID},
+		{name: "repository.provider", seen: parser.seenProvider},
+		{name: "repository.full_name", seen: parser.seenFullName},
+		{name: "repository.url", seen: parser.seenRepositoryURL},
+		{name: "repository.workflow_base_branch", seen: parser.seenWorkflowBaseBranch},
+	} {
+		if !field.seen {
+			return Config{}, fmt.Errorf("missing %s", field.name)
+		}
 	}
-	organizationID, err := parseString(lines[2], "organization_id")
-	if err != nil {
-		return Config{}, err
-	}
-	projectID, err := parseString(lines[3], "project_id")
-	if err != nil {
-		return Config{}, err
-	}
-	repoBindingID, err := parseString(lines[4], "repo_binding_id")
-	if err != nil {
-		return Config{}, err
-	}
-	provider, err := parseString(lines[7], "  provider")
-	if err != nil {
-		return Config{}, err
-	}
-	fullName, err := parseString(lines[8], "  full_name")
-	if err != nil {
-		return Config{}, err
-	}
-	repositoryURL, err := parseString(lines[9], "  url")
-	if err != nil {
-		return Config{}, err
-	}
-	workflowBaseBranch, err := parseString(lines[10], "  workflow_base_branch")
-	if err != nil {
-		return Config{}, err
-	}
-
-	return Config{
-		Version:        version,
-		ServerURL:      serverURL,
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		RepoBindingID:  repoBindingID,
-		Repository: Repository{
-			Provider:           provider,
-			FullName:           fullName,
-			URL:                repositoryURL,
-			WorkflowBaseBranch: workflowBaseBranch,
-		},
-	}, nil
+	return parser.config, nil
 }
 
-func parseVersion(line string) (int, error) {
-	const prefix = "version: "
-	if !strings.HasPrefix(line, prefix) {
-		return 0, errors.New("missing version")
-	}
-	return strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, prefix)))
+type markerParser struct {
+	config                 Config
+	section                string
+	seenVersion            bool
+	seenServerURL          bool
+	seenOrganizationID     bool
+	seenProjectID          bool
+	seenRepoBindingID      bool
+	seenProvider           bool
+	seenFullName           bool
+	seenRepositoryURL      bool
+	seenWorkflowBaseBranch bool
 }
 
-func parseString(line string, key string) (string, error) {
-	prefix := key + ": "
-	if !strings.HasPrefix(line, prefix) {
-		return "", fmt.Errorf("missing %s", strings.TrimSpace(key))
+func (p *markerParser) parse(raw string) error {
+	for lineNumber, rawLine := range strings.Split(raw, "\n") {
+		line, err := stripYAMLComment(rawLine)
+		if err != nil {
+			return fmt.Errorf("line %d: %w", lineNumber+1, err)
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		trimmed := strings.TrimSpace(line)
+		if indent > 0 {
+			if p.section != "repository" {
+				continue
+			}
+			if err := p.parseRepositoryField(trimmed); err != nil {
+				return fmt.Errorf("line %d: %w", lineNumber+1, err)
+			}
+			continue
+		}
+
+		key, value, ok := strings.Cut(trimmed, ":")
+		if !ok {
+			return fmt.Errorf("line %d: expected key/value", lineNumber+1)
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "repository" {
+			if value != "" {
+				return fmt.Errorf("line %d: repository must be a block", lineNumber+1)
+			}
+			p.section = "repository"
+			continue
+		}
+		p.section = ""
+		if value == "" {
+			p.section = "__unknown_block__"
+			continue
+		}
+		if err := p.parseTopLevelField(key, value); err != nil {
+			return fmt.Errorf("line %d: %w", lineNumber+1, err)
+		}
 	}
-	value, err := strconv.Unquote(strings.TrimPrefix(line, prefix))
+	return nil
+}
+
+func (p *markerParser) parseTopLevelField(key string, value string) error {
+	switch key {
+	case "version":
+		version, err := parseYAMLInt(value)
+		if err != nil {
+			return err
+		}
+		if p.seenVersion {
+			return errors.New("duplicate version")
+		}
+		p.config.Version = version
+		p.seenVersion = true
+	case "server_url":
+		return p.setString(value, &p.seenServerURL, &p.config.ServerURL, key)
+	case "organization_id":
+		return p.setString(value, &p.seenOrganizationID, &p.config.OrganizationID, key)
+	case "project_id":
+		return p.setString(value, &p.seenProjectID, &p.config.ProjectID, key)
+	case "repo_binding_id":
+		return p.setString(value, &p.seenRepoBindingID, &p.config.RepoBindingID, key)
+	}
+	return nil
+}
+
+func (p *markerParser) parseRepositoryField(line string) error {
+	key, value, ok := strings.Cut(line, ":")
+	if !ok {
+		return errors.New("expected repository key/value")
+	}
+	key = strings.TrimSpace(key)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	switch key {
+	case "provider":
+		return p.setString(value, &p.seenProvider, &p.config.Repository.Provider, "repository.provider")
+	case "full_name":
+		return p.setString(value, &p.seenFullName, &p.config.Repository.FullName, "repository.full_name")
+	case "url":
+		return p.setString(value, &p.seenRepositoryURL, &p.config.Repository.URL, "repository.url")
+	case "workflow_base_branch":
+		return p.setString(value, &p.seenWorkflowBaseBranch, &p.config.Repository.WorkflowBaseBranch, "repository.workflow_base_branch")
+	}
+	return nil
+}
+
+func (p *markerParser) setString(value string, seen *bool, target *string, name string) error {
+	if *seen {
+		return fmt.Errorf("duplicate %s", name)
+	}
+	parsed, err := parseYAMLString(value)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return value, nil
+	*target = parsed
+	*seen = true
+	return nil
+}
+
+func stripYAMLComment(line string) (string, error) {
+	quote := rune(0)
+	escaped := false
+	for index, r := range line {
+		if escaped {
+			escaped = false
+			continue
+		}
+		switch r {
+		case '\\':
+			if quote == '"' {
+				escaped = true
+			}
+		case '"':
+			switch quote {
+			case 0:
+				quote = r
+			case r:
+				quote = 0
+			}
+		case '\'':
+			switch quote {
+			case 0:
+				quote = r
+			case r:
+				quote = 0
+			}
+		case '#':
+			if quote == 0 && isYAMLCommentStart(line, index) {
+				return strings.TrimRight(line[:index], " \t"), nil
+			}
+		}
+	}
+	if quote != 0 {
+		return "", errors.New("unterminated quoted string")
+	}
+	return line, nil
+}
+
+func isYAMLCommentStart(line string, index int) bool {
+	if index == 0 {
+		return true
+	}
+	previous := line[index-1]
+	return previous == ' ' || previous == '\t'
+}
+
+func parseYAMLInt(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if strings.HasPrefix(value, `"`) {
+		parsed, err := strconv.Unquote(value)
+		if err != nil {
+			return 0, err
+		}
+		value = parsed
+	}
+	return strconv.Atoi(strings.TrimSpace(value))
+}
+
+func parseYAMLString(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	switch {
+	case strings.HasPrefix(value, `"`):
+		return strconv.Unquote(value)
+	case strings.HasPrefix(value, `'`):
+		return parseSingleQuotedYAMLString(value)
+	default:
+		return value, nil
+	}
+}
+
+func parseSingleQuotedYAMLString(value string) (string, error) {
+	if len(value) < 2 || !strings.HasSuffix(value, `'`) {
+		return "", errors.New("unterminated single-quoted string")
+	}
+	inner := strings.TrimSuffix(strings.TrimPrefix(value, `'`), `'`)
+	return strings.ReplaceAll(inner, `''`, `'`), nil
 }
 
 func QuoteYAMLString(value string) string {
