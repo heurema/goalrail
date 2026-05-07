@@ -5,9 +5,11 @@ Real Goalrail console shell.
 Canonical source: `apps/web/console`.
 
 Current scope:
-- static public `/start` route for English global entry traffic; it uses local
-  quick questions and static answers only, with no assistant backend, repo scan,
-  code execution, analytics, cookies, sessions, or form submission
+- public `/start` route for English global entry traffic; it uses local quick
+  questions and static answers as fallback, and can submit short public
+  questions to same-origin `POST /api/start-chat` when the separate start
+  assistant Worker is routed; no browser OpenAI key, repo scan, code execution,
+  analytics, cookies, sessions, uploads, CRM, or chat history
 - multilingual EN/RU source using `react-i18next` + `i18next`
 - login-only entry screen with no registration path
 - auth client for the existing `apps/server` auth API:

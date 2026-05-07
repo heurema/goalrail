@@ -1,12 +1,12 @@
 # Decision Log Snippet - Start Assistant Worker
 
-Use this snippet for `docs/ops/DECISIONS.md` after the Stage 3A architecture is
-accepted.
+This snippet was applied to `docs/ops/DECISIONS.md` as D-0090 after the Stage 3A
+architecture was accepted.
 
 ## D-0090 - Start assistant live path uses a separate public-edge Worker
 
 Date: 2026-05-07
-Status: proposed
+Status: accepted
 
 Decision:
 

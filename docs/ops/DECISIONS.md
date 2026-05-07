@@ -2354,3 +2354,33 @@ Rationale:
   backend-created users while preserving ADR-0027's Console/admin boundary.
 - Revoking active sessions makes the `must_change_password` rotation effective
   for users who already had product sessions.
+
+## D-0090 — Start assistant live path uses a separate public-edge Worker
+Date: 2026-05-07
+Status: accepted
+
+Decision:
+- The live `/start` assistant uses a separate public-edge assistant Worker for
+  `POST /api/start-chat`.
+- The first live assistant slice does not run inside the core Goalrail API app.
+- Browser code does not call OpenAI directly.
+- The Worker answers only from an approved public KB retrieval index built from
+  an explicit GitHub whitelist.
+- GitHub remains the source of truth; the retrieval index is a compiled
+  artifact.
+- The first KB sync path starts manual, with GitHub Action sync added only after
+  chunk quality, source boundaries, and rollback are proven.
+- The first retrieval path is OpenAI Responses API with file_search.
+- Cloudflare AI Gateway may be introduced later only with payload logging
+  posture explicitly decided.
+- The assistant must not scan repositories, execute code, accept file uploads,
+  ingest private code, store chat history, add analytics/tracking, or imply broad
+  product maturity.
+
+Rationale:
+- Anonymous public assistant traffic has different abuse, privacy, and cost
+  boundaries than the authenticated product API.
+- A separate Worker keeps provider secrets server-side while isolating public
+  Q&A from canonical Goalrail state.
+- Manual KB sync first gives the team a reviewable path for public-source
+  quality before automating provider uploads.

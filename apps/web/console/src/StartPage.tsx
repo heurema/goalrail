@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 import { startAnswers, startArtifacts, startQuestions } from './startPageData';
 
@@ -7,6 +7,27 @@ const START_PAGE_DESCRIPTION =
   'Goalrail is a control layer for AI-assisted software delivery: from business goal to verified code change with contracts, proof, and human approval.';
 const START_PAGE_OG_TITLE = 'Ask Goalrail about AI-assisted delivery';
 const START_PAGE_OG_DESCRIPTION = 'From business goal to verified code change.';
+const START_ASSISTANT_UNAVAILABLE =
+  'The public Goalrail assistant is temporarily unavailable. Static overview and artifacts are still available.';
+
+type LiveAssistantStatus = 'idle' | 'loading' | 'answered' | 'error';
+
+interface LiveAssistantSource {
+  title: string;
+  path: string;
+  section?: string | null;
+}
+
+interface LiveAssistantResponse {
+  answer: string;
+  sources: LiveAssistantSource[];
+  suggested_questions: string[];
+  knowledge?: {
+    updated_at?: string | null;
+    commit_sha?: string | null;
+  };
+  disclaimer?: string;
+}
 
 function upsertNamedMeta(name: string, content: string) {
   let meta = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
@@ -34,11 +55,34 @@ function upsertPropertyMeta(property: string, content: string) {
 
 function StartPage() {
   const [activeQuestionId, setActiveQuestionId] = useState(startQuestions[0].id);
+  const [liveQuestion, setLiveQuestion] = useState('');
+  const [liveStatus, setLiveStatus] = useState<LiveAssistantStatus>('idle');
+  const [liveAnswer, setLiveAnswer] = useState<LiveAssistantResponse | null>(null);
+  const [liveError, setLiveError] = useState('');
   const activeQuestion = useMemo(
     () => startQuestions.find((question) => question.id === activeQuestionId) ?? startQuestions[0],
     [activeQuestionId]
   );
   const activeAnswer = startAnswers[activeQuestion.answerId] ?? startAnswers[startQuestions[0].answerId];
+  const displayedAnswer = liveAnswer
+    ? {
+        eyebrow: 'Public KB answer',
+        title: 'Source-grounded assistant response',
+        body: [liveAnswer.answer],
+        sources: liveAnswer.sources.map((source) =>
+          source.section ? `${source.title} / ${source.section}` : source.title || source.path
+        ),
+        nextQuestions: liveAnswer.suggested_questions,
+        knowledge: liveAnswer.knowledge,
+      }
+    : {
+        eyebrow: activeAnswer.eyebrow,
+        title: activeAnswer.title,
+        body: activeAnswer.body,
+        sources: activeAnswer.sources,
+        nextQuestions: activeAnswer.nextQuestions,
+        knowledge: null,
+      };
 
   useEffect(() => {
     document.title = START_PAGE_TITLE;
@@ -47,6 +91,51 @@ function StartPage() {
     upsertPropertyMeta('og:description', START_PAGE_OG_DESCRIPTION);
     upsertPropertyMeta('og:type', 'website');
   }, []);
+
+  async function handleLiveQuestionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const question = liveQuestion.trim();
+    if (!question || liveStatus === 'loading') {
+      return;
+    }
+
+    setLiveStatus('loading');
+    setLiveError('');
+
+    try {
+      const response = await fetch('/api/start-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const payload = (await response.json()) as Partial<LiveAssistantResponse> & { message?: string };
+
+      if (!response.ok || typeof payload.answer !== 'string') {
+        throw new Error(payload.message || START_ASSISTANT_UNAVAILABLE);
+      }
+
+      setLiveAnswer({
+        answer: payload.answer,
+        sources: Array.isArray(payload.sources) ? payload.sources : [],
+        suggested_questions: Array.isArray(payload.suggested_questions) ? payload.suggested_questions : [],
+        knowledge: payload.knowledge,
+        disclaimer: payload.disclaimer,
+      });
+      setLiveStatus('answered');
+    } catch (error) {
+      setLiveAnswer(null);
+      setLiveStatus('error');
+      setLiveError(error instanceof Error ? error.message : START_ASSISTANT_UNAVAILABLE);
+    }
+  }
+
+  function selectStaticQuestion(questionId: string) {
+    setActiveQuestionId(questionId);
+    setLiveAnswer(null);
+    setLiveStatus('idle');
+    setLiveError('');
+  }
 
   return (
     <main className="startPage">
@@ -76,24 +165,30 @@ function StartPage() {
             </p>
           </div>
 
-          <aside className="startAskPanel" aria-label="Static assistant preview">
+          <aside className="startAskPanel" aria-label="Public assistant entry">
             <div className="startPanelHeader">
               <span className="startPanelDot" aria-hidden="true" />
               <span>Guided entry</span>
-              <span className="startPanelStatus">static</span>
+              <span className="startPanelStatus">{liveStatus === 'answered' ? 'answered' : 'public kb'}</span>
             </div>
-            <div className="startAskBox">
+            <form className="startAskBox" onSubmit={handleLiveQuestionSubmit}>
               <textarea
                 aria-label="Ask Goalrail"
-                disabled
+                disabled={liveStatus === 'loading'}
+                onChange={(event) => setLiveQuestion(event.target.value)}
                 placeholder="Ask about repo readiness, contracts, proof, approval, or AI delivery drift..."
                 rows={2}
+                value={liveQuestion}
               />
-              <button disabled type="button">
-                Ask
+              <button disabled={!liveQuestion.trim() || liveStatus === 'loading'} type="submit">
+                {liveStatus === 'loading' ? 'Asking' : 'Ask'}
               </button>
-            </div>
-            <p className="startAskNote">Live assistant is coming next. For now, use the guided questions below.</p>
+            </form>
+            <p className={liveStatus === 'error' ? 'startAskNote error' : 'startAskNote'}>
+              {liveStatus === 'error'
+                ? liveError
+                : 'Answers use public Goalrail materials only. Static guide remains available below.'}
+            </p>
             <div className="startMiniArtifacts" aria-label="Delivery control path">
               <span>Goal</span>
               <span>Contract</span>
@@ -106,7 +201,7 @@ function StartPage() {
         <section className="startQuestionSection" id="questions" aria-labelledby="start-questions-title">
           <div className="startSectionHeader">
             <p className="kicker">Quick questions</p>
-            <h2 id="start-questions-title">Use the static guide while the live assistant is not connected.</h2>
+            <h2 id="start-questions-title">Use guided questions when you want a starting point.</h2>
           </div>
           <div className="startQuestionGrid">
             {startQuestions.map((question) => (
@@ -114,7 +209,7 @@ function StartPage() {
                 aria-pressed={question.id === activeQuestionId}
                 className={question.id === activeQuestionId ? 'startQuestionCard active' : 'startQuestionCard'}
                 key={question.id}
-                onClick={() => setActiveQuestionId(question.id)}
+                onClick={() => selectStaticQuestion(question.id)}
                 type="button"
               >
                 <span>{question.label}</span>
@@ -127,17 +222,27 @@ function StartPage() {
           <div className="startAnswerPanel">
             <div className="startAnswerRail" aria-hidden="true" />
             <div className="startAnswerContent">
-              <p className="kicker">{activeAnswer.eyebrow}</p>
-              <h2 id="start-answer-title">{activeAnswer.title}</h2>
-              {activeAnswer.body.map((paragraph) => (
+              <p className="kicker">{displayedAnswer.eyebrow}</p>
+              <h2 id="start-answer-title">{displayedAnswer.title}</h2>
+              {displayedAnswer.body.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
+              {liveAnswer?.disclaimer ? <p className="startAnswerDisclaimer">{liveAnswer.disclaimer}</p> : null}
             </div>
-            <aside className="startAnswerMeta" aria-label="Static answer source and follow-ups">
+            <aside className="startAnswerMeta" aria-label="Answer source and follow-ups">
+              {displayedAnswer.knowledge?.updated_at || displayedAnswer.knowledge?.commit_sha ? (
+                <div>
+                  <h3>Knowledge</h3>
+                  <ul>
+                    {displayedAnswer.knowledge.updated_at ? <li>Updated {displayedAnswer.knowledge.updated_at}</li> : null}
+                    {displayedAnswer.knowledge.commit_sha ? <li>Revision {displayedAnswer.knowledge.commit_sha}</li> : null}
+                  </ul>
+                </div>
+              ) : null}
               <div>
                 <h3>Sources</h3>
                 <ul>
-                  {activeAnswer.sources.map((source) => (
+                  {displayedAnswer.sources.map((source) => (
                     <li key={source}>{source}</li>
                   ))}
                 </ul>
@@ -145,7 +250,7 @@ function StartPage() {
               <div>
                 <h3>Related</h3>
                 <ul>
-                  {activeAnswer.nextQuestions.map((question) => (
+                  {displayedAnswer.nextQuestions.map((question) => (
                     <li key={question}>{question}</li>
                   ))}
                 </ul>
@@ -173,7 +278,7 @@ function StartPage() {
         <section className="startBoundaryCta" aria-labelledby="start-boundary-title">
           <div className="startBoundaryNote">
             <p className="kicker">Safety boundaries</p>
-            <h2 id="start-boundary-title">Static and public-safe.</h2>
+            <h2 id="start-boundary-title">Public-safe boundaries.</h2>
             <ul>
               <li>This page answers from public Goalrail materials only.</li>
               <li>It cannot scan your repository.</li>

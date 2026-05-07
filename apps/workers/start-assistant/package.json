@@ -1,0 +1,9 @@
+{
+  "name": "@goalrail/start-assistant-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/dev-server.js",
+    "test": "node --test"
+  }
+}

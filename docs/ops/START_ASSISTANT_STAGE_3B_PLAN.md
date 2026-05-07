@@ -86,6 +86,18 @@ Before adding that path, update:
 
 Do not add implementation under `apps/server` for the first assistant slice.
 
+Current implementation owner:
+
+```text
+apps/workers/start-assistant
+```
+
+The current package is dependency-free JavaScript Worker code with Node tests
+and a local mock dev server. It implements request validation, safe refusals,
+OpenAI Responses API file_search request shaping, response normalization, and
+the `/start` browser fetch path. It does not add deployment config, provider
+secrets, vector-store upload automation, or GitHub Action sync.
+
 ## Endpoint
 
 ```text

@@ -2792,6 +2792,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+  margin: 0;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -2834,6 +2835,10 @@ textarea:focus-visible {
   color: var(--mute);
   font-size: 12.5px;
   line-height: 1.45;
+}
+
+.startAskNote.error {
+  color: var(--warn);
 }
 
 .startMiniArtifacts {
@@ -2957,6 +2962,13 @@ textarea:focus-visible {
   color: var(--ink-2);
   font-size: 15.5px;
   line-height: 1.65;
+}
+
+.startAnswerContent .startAnswerDisclaimer {
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--mute);
+  font-size: 12px;
 }
 
 .startAnswerMeta {

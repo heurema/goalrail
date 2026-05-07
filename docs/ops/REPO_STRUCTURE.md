@@ -53,6 +53,8 @@ Use it together with:
 | Canonical server binary entrypoint | `apps/server/cmd/goalrail-server/` |
 | Server-only internal packages | `apps/server/internal/` |
 | Server DTOs and domain value types | `apps/server/internal/spine/` |
+| Public-edge Worker packages | `apps/workers/<worker>/` |
+| Start assistant Worker | `apps/workers/start-assistant/` |
 | Server intake service logic | `apps/server/internal/intake/` |
 | Server Goal promotion and readiness service logic | `apps/server/internal/goal/` |
 | Server clarification request and answer service logic | `apps/server/internal/clarification/` |
