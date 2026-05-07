@@ -485,6 +485,13 @@ Done means:
   the authenticated user, creates the ApprovedContract snapshot, moves the
   Contract to `approved`, and yields unavailable planned
   `next_action.kind=plan_work`
+- ✅ ADR-0026 pull-loop smoke coverage now pins the happy path from
+  `work start` through `work continue`, `work answer`, `contract draft`,
+  `contract update`, `contract submit`, and explicit
+  `contract approve --confirm-user-approval`; it asserts approval fails before
+  HTTP without the confirmation flag, final `plan_work` remains unavailable and
+  planned for Slice G, and approval does not create planning, execution, gate,
+  or proof side effects
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
