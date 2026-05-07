@@ -491,15 +491,21 @@ Done means:
   `project_id` and `repo_binding_id` expectations to authenticated
   `POST /v1/contracts/{id}/approvals`, derives `approved_by` server-side from
   the authenticated user, creates the ApprovedContract snapshot, moves the
-  Contract to `approved`, and yields unavailable planned
+  Contract to `approved`, and yields available
   `next_action.kind=plan_work`
+- ✅ `goalrail work plan --contract-id <contract_id>` validates the same
+  marker/login/org boundary, sends marker `project_id` and `repo_binding_id`
+  expectations to authenticated `POST /v1/contracts/{id}/plans`, derives
+  `requested_by` server-side from the authenticated user, creates or returns
+  one server-owned `WorkItemPlan`; newly created plans start `queued`, and
+  maps existing `queued` / `leased` / `proposal_submitted` / `accepted` plan
+  states to honest unavailable follow-up actions
 - ✅ ADR-0026 pull-loop smoke coverage now pins the happy path from
   `work start` through `work continue`, `work answer`, `contract draft`,
   `contract update`, `contract submit`, and explicit
   `contract approve --confirm-user-approval`; it asserts approval fails before
-  HTTP without the confirmation flag, final `plan_work` remains unavailable and
-  planned for Slice G, and approval does not create planning, execution, gate,
-  or proof side effects
+  HTTP without the confirmation flag and approval does not create planning,
+  execution, gate, or proof side effects
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -508,9 +514,10 @@ Done means:
 - no audit/hook/branch/verification setup from init
 - no WorkItem, audit request, Run, gate, proof, provider
   integration, provider shim, branch, PR, hook, clone, deploy-key setup,
-  planning, runner, or verification from
+  proposal, accepted WorkItem, runner, or verification from
   `work start`, `work continue`, `work answer`, `contract draft`,
-  `contract update`, `contract submit`, `contract approve`, or `agent install`
+  `contract update`, `contract submit`, `contract approve`, `work plan`, or
+  `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint
