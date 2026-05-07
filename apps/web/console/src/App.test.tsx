@@ -344,6 +344,7 @@ describe('App', () => {
     fireEvent.click(proofQuestion);
 
     expect(proofQuestion).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('textbox', { name: /ask goalrail/i })).toHaveValue('What does proof before approval mean?');
     expect(screen.getByRole('heading', { name: 'Output is not proof.' })).toBeInTheDocument();
     expect(screen.getByText(/They should compare contract, diff, checks, artifacts, and remaining risk/i)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
