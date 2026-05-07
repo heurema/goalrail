@@ -106,10 +106,10 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- Next bounded backend / worker implementation slice: planning proposal review
-  and acceptance bridge after the minimal `goalrail-worker` proposal transport.
-  It should keep accepted WorkItem materialization explicit and should not
-  start assignment, claiming, checkout, execution, gate, or proof.
+- Next bounded backend / worker implementation slice: start the runner /
+  checkout boundary design only after the compact smoke fixture through
+  `WorkItem(planned)` remains green. It should not start assignment, claiming,
+  checkout, execution, gate, or proof inside the smoke baseline.
 - Checkout, execution, gate, proof, assignment/claiming, queue, outbox,
   runtime registry, runner checkout credentials, provider OAuth,
   VcsConnection, token storage, provider clients, live metadata listing, `Run`,
@@ -504,6 +504,11 @@ Done means:
   `contract approve --confirm-user-approval`; it asserts approval fails before
   HTTP without the confirmation flag and approval does not create planning,
   execution, gate, or proof side effects
+- ✅ ADR-0026 / ADR-0024 smoke coverage now also pins the planning handoff:
+  `work plan`, lease/proposal submission with lease proof, `work plan status`,
+  and explicit `work proposal accept --confirm-user-acceptance` through
+  `WorkItem(planned)`, while still asserting no assignment, claiming, checkout,
+  execution, `Run`, receipt, `Decision`, `GateDecision`, or `Proof`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -845,13 +850,7 @@ Done means:
 
 ### Server follow-up slices
 
-1. Planning proposal review / acceptance bridge
-   - expose the next explicit step after the minimal worker submits a proposal
-   - keep proposal acceptance separate from worker proposal submission
-   - make WorkItem materialization explicit and auditable
-   - do not start assignment, claiming, checkout, execution, receipt, gate,
-     proof, runtime registry, direct DB writes, or runner behavior
-2. WorkItem assignment/claiming boundary design
+1. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
    - keep runner, execution, receipt, gate, and proof as later boundaries

@@ -319,6 +319,10 @@ Only call ` + "`goalrail contract approve --confirm-user-approval`" + ` after th
 
 If a Goalrail JSON response contains ` + "`next_action.kind=plan_work`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail work plan`" + ` with the returned Contract ID. This only creates or returns a server WorkItemPlan; newly created plans start queued. It does not acquire a lease, produce a proposal, create WorkItems, run code, verify, or create proof.
 
+If a Goalrail JSON response contains ` + "`next_action.kind=review_plan_proposal`" + ` and ` + "`next_action.available=true`" + `, call ` + "`goalrail work plan status`" + ` with the returned Plan ID. Show the proposed tasks to the user.
+
+Only call ` + "`goalrail work proposal accept --confirm-user-acceptance`" + ` after the user explicitly accepts the submitted WorkItemPlanProposal. Never infer plan acceptance from silence or from a generic continuation request.
+
 After the command returns, show a concise human summary with:
 
 - ` + "`intake_id`" + `
@@ -492,6 +496,43 @@ func commandsJSONContent() string {
         "WorkItemPlanLease",
         "WorkItemPlanProposal",
         "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "plan_status": {
+      "command": "goalrail work plan status --plan-id <plan_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "plan_id"
+      ],
+      "returns": [
+        "WorkItemPlan",
+        "WorkItemPlanProposal"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "accept_plan_proposal": {
+      "command": "goalrail work proposal accept --proposal-id <proposal_id> --confirm-user-acceptance --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "proposal_id",
+        "explicit_user_acceptance"
+      ],
+      "creates": [
+        "WorkItem"
+      ],
+      "does_not_create": [
         "Run",
         "Decision",
         "Proof"

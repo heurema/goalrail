@@ -34,6 +34,12 @@ Current implemented state:
 - `goalrail contract submit` submits a reviewed draft for explicit approval.
 - `goalrail contract approve --confirm-user-approval` approves a submitted
   Contract only after explicit user confirmation.
+- `goalrail work plan` creates or returns a server-owned WorkItemPlan for an
+  approved Contract.
+- `goalrail work plan status` reads authenticated plan/proposal status for
+  user review.
+- `goalrail work proposal accept --confirm-user-acceptance` accepts a submitted
+  WorkItemPlanProposal only after explicit user confirmation.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -136,6 +142,13 @@ Slice B updates `work start` so the returned continuation command is available:
   available local pull-loop step while the Contract remains in draft state.
 - Slice F adds `contract submit` and `contract approve` so reviewable drafts can
   move through explicit approval without starting planning.
+- Slice G1 adds `work plan` so approved Contracts can create or return a queued
+  WorkItemPlan without leases, proposals, or execution.
+- Slice G2 adds a minimal API-only planning worker that submits a deterministic
+  proposal through the typed lease API.
+- Slice G3 adds `work plan status` and `work proposal accept` so users can
+  review a submitted proposal and explicitly accept planned WorkItems before any
+  execution boundary.
 
 ### `goalrail work continue`
 
@@ -369,13 +382,71 @@ Contract plus approved snapshot, and create or return exactly one
 
 `work plan` returns an agent-facing envelope with `schema_version`,
 `display.summary`, `contract_id`, `plan_id`, `plan_state`, `repo_binding_id`,
-and a state-aware unavailable `next_action`: `queued` maps to
-`planning_worker_required` for Slice G2, `leased` maps to
-`planning_in_progress`, `proposal_submitted` maps to `review_plan_proposal`,
-`accepted` maps to `planned_workitems_exist`, and unknown states map to
-`blocked`. It does not acquire a lease, create a proposal, accept a proposal,
-create WorkItems, start a worker, run code, make gate decisions, or create
-proof.
+and a state-aware `next_action`: `queued` maps to `planning_worker_required`,
+`leased` maps to `planning_in_progress`, `proposal_submitted` maps to an
+available `review_plan_proposal` command that calls `goalrail work plan status`,
+`accepted` maps to unavailable `planned_workitems_ready`, and unknown states map
+to `blocked`. It does not acquire a lease, create a proposal, accept a
+proposal, create WorkItems, start a worker, run code, make gate decisions, or
+create proof.
+
+### `goalrail work plan status`
+
+`work plan status` reads the current plan and submitted proposal, when present:
+
+```bash
+goalrail work plan status --plan-id "<plan_id>" --format json
+```
+
+The CLI must load the local `.goalrail/project.yml` marker, require
+`project_id` and `repo_binding_id`, validate the stored CLI login/session,
+validate the marker Organization against `/v1/me`, and send the local marker
+`project_id` and `repo_binding_id` as server-side expectations.
+
+The server route is read-only but authenticated. It must validate the bearer
+token, load the active OrganizationMembership server-side, verify the plan
+Organization matches that membership, reject supplied project/repo expectations
+that do not match the plan, and return plan state plus the current proposal if
+one exists.
+
+`work plan status` returns `proposal_id`, `proposal_state`, and
+`proposed_tasks` when a proposal is available. State mapping is honest:
+`queued` remains `planning_worker_required`, `leased` remains
+`planning_in_progress`, `proposal_submitted` returns
+`next_action.kind=accept_proposal` with
+`goalrail work proposal accept --proposal-id <proposal_id>
+--confirm-user-acceptance --format json`, `accepted` maps to unavailable
+`planned_workitems_ready`, and unknown states map to `blocked`.
+
+### `goalrail work proposal accept`
+
+`work proposal accept` materializes planned WorkItems from a submitted proposal
+only after explicit user acceptance:
+
+```bash
+goalrail work proposal accept \
+  --proposal-id "<proposal_id>" \
+  --confirm-user-acceptance \
+  --format json
+```
+
+The CLI must reject calls missing `--confirm-user-acceptance` before HTTP. With
+the flag present, it performs the same local marker, login, and Organization
+preflight as other agent-facing commands, then sends local marker `project_id`
+and `repo_binding_id` as server-side expectations.
+
+The server must validate the bearer token, derive `accepted_by` from the
+authenticated user rather than trusting payload actor fields, load active
+OrganizationMembership server-side, verify the proposal/plan Organization
+matches that membership, reject supplied project/repo expectations before
+mutation, require a submitted proposal and `Plan(proposal_submitted)`, then
+materialize one or more durable `WorkItem(planned)` records. Acceptance must
+not assign, claim, run, checkout, submit receipts, make gate decisions, or
+create proof.
+
+After acceptance the CLI returns `created_task_ids` and
+`next_action.kind=planned_workitems_ready` with `available=false` and
+`planned_slice=H`.
 
 ### Clarification and contracts
 
@@ -402,8 +473,8 @@ This ADR does not implement:
 - repo-aware planning worker, runner-backed planner, or execution worker
   implementation
 - lease acquisition CLI
-- proposal submission or acceptance CLI
-- WorkItem materialization from the agent-facing CLI
+- proposal submission CLI
+- WorkItem assignment, claiming, or execution from the agent-facing CLI
 - runner checkout
 - execution
 - gate
@@ -421,10 +492,11 @@ pretending a universal server push channel exists.
 The server remains canonical and auditable. The CLI becomes the local bridge for
 repository context, auth, and transport. The agent remains a UX layer.
 
-Slices A-F establish the first usable
+Slices A-G3 establish the first usable
 start -> continue -> answer -> contract draft handle -> contract update ->
-submit -> explicit approve pull-loop without implying planning, runner, gate,
-or proof are available.
+submit -> explicit approve -> plan -> worker proposal -> explicit proposal
+acceptance pull-loop without implying assignment, runner, gate, or proof are
+available.
 
 ## Rejected alternatives
 
