@@ -652,6 +652,31 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('You do not have access to this Organization repository context.');
   });
 
+  it('ignores stale repository-context responses after auth state changes', async () => {
+    await loginSuccessfully();
+    const repositoryLookup = deferredResponse();
+    fetchMock.mockImplementationOnce(() => repositoryLookup.promise);
+
+    fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Repository$/i }));
+    await screen.findByRole('status');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ revoked: true }));
+    fireEvent.click(screen.getByRole('button', { name: /log out/i }));
+    await screen.findByLabelText(/^Email$/i);
+
+    await act(async () => {
+      repositoryLookup.resolve(jsonResponse(repositoryContextResponse([
+        repositoryContextRecord({ displayName: 'Stale Repository Context' }),
+      ])));
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stale Repository Context')).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Email$/i)).toBeInTheDocument();
+    });
+  });
+
   it('ignores stale user-list responses after auth state changes', async () => {
     await loginSuccessfully();
     const usersLookup = deferredResponse();

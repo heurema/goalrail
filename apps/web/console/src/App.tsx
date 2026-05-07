@@ -266,6 +266,7 @@ function App() {
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
   const usersLoadSequence = useRef(0);
+  const repositoryContextLoadSequence = useRef(0);
   const authSessionSequence = useRef(0);
 
   useEffect(() => {
@@ -425,6 +426,7 @@ function App() {
     authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
     usersLoadSequence.current += 1;
+    repositoryContextLoadSequence.current += 1;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -550,12 +552,20 @@ function App() {
 
     setRepositoryContextLoadStatus('loading');
     setRepositoryContextError('');
+    const loadSequence = repositoryContextLoadSequence.current + 1;
+    repositoryContextLoadSequence.current = loadSequence;
 
     try {
       const result = await getOrganizationRepositoryContext({ accessToken, organizationId });
+      if (repositoryContextLoadSequence.current !== loadSequence) {
+        return;
+      }
       setRepositoryContext(result);
       setRepositoryContextLoadStatus('loaded');
     } catch (error) {
+      if (repositoryContextLoadSequence.current !== loadSequence) {
+        return;
+      }
       if (isRepositoryContextClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
         setAuthError(translate('auth.invalidSession'));
