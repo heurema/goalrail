@@ -16,7 +16,8 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with three structured empty product surfaces: Contracts, Delivery Readiness, Proof
 - bottom-left Settings utility with Appearance theme presets and API-backed
-  Organization Users add/edit/temporary-password reset UI
+  Organization Users add/edit/temporary-password reset UI plus read-only
+  Repository context metadata
 - Settings / Users blocks self-demotion from owner, self membership
   deactivation, and self temporary-password reset; own password changes use
   the existing password-change flow
@@ -41,6 +42,13 @@ Delivery rule:
   `POST /v1/organizations/{organization_id}/users`,
   `PATCH /v1/organizations/{organization_id}/users/{user_id}`, and
   `POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets`
+- Settings / Repository uses `/v1/me` to determine the current
+  `organization_id` and then consumes
+  `GET /v1/organizations/{organization_id}/repository-context`
+- Repository context data is server-owned metadata only: Organization summary,
+  active Project metadata, and active RepoBinding metadata
+- Repository context does not imply provider authorization, checkout
+  permission, readiness/proof status, execution status, or runner state
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:

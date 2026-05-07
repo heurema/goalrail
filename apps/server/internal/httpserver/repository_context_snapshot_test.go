@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -22,6 +23,141 @@ func TestRepositoryContextSnapshotRequiresBearerAuth(t *testing.T) {
 	}
 	if !strings.Contains(response.body, "unauthorized") {
 		t.Fatalf("body = %q, want unauthorized", response.body)
+	}
+}
+
+func TestOrganizationRepositoryContextRequiresBearerAuth(t *testing.T) {
+	handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken}, fakeRepositoryContextSnapshotService{})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.GetOrganizationRepositoryContext), http.MethodGet, "/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context", "", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if !strings.Contains(response.body, "unauthorized") {
+		t.Fatalf("body = %q, want unauthorized", response.body)
+	}
+}
+
+func TestOrganizationRepositoryContextReturnsMetadataOnlyContexts(t *testing.T) {
+	handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepositoryContextSnapshotService{
+		readResult: spine.OrganizationRepositoryContextResult{
+			Organization: spine.OrganizationRepositoryContextOrganization{
+				ID:          "018f0000-0000-7000-8000-000000000002",
+				Slug:        "goalrail-dev",
+				DisplayName: "Goalrail Dev",
+				State:       spine.EntityStateActive,
+			},
+			Contexts: []spine.OrganizationRepositoryContext{
+				{
+					Project: spine.OrganizationRepositoryContextProject{
+						ID:          "018f0000-0000-7000-8000-000000000003",
+						Slug:        "github-heurema-goalrail",
+						DisplayName: "heurema/goalrail",
+						State:       spine.EntityStateActive,
+					},
+					RepoBinding: spine.OrganizationRepositoryContextRepoBinding{
+						ID:                 "018f0000-0000-7000-8000-000000000004",
+						Provider:           "github",
+						RepositoryFullName: "heurema/goalrail",
+						RepositoryURL:      "git@github.com:heurema/goalrail.git",
+						DefaultBranch:      "main",
+						WorkflowBaseBranch: "main",
+						PathScope:          ".",
+						AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
+						State:              spine.EntityStateActive,
+					},
+				},
+			},
+		},
+	})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.GetOrganizationRepositoryContext), http.MethodGet, "/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context", "", "Bearer access-token")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	if !strings.Contains(response.body, `"contexts":[`) || !strings.Contains(response.body, `"repository_full_name":"heurema/goalrail"`) {
+		t.Fatalf("body = %q, want repository context metadata", response.body)
+	}
+	if strings.Contains(response.body, "token") || strings.Contains(response.body, "credential") || strings.Contains(response.body, "password") || strings.Contains(response.body, "proof") || strings.Contains(response.body, "readiness") {
+		t.Fatalf("body leaked forbidden status or secret vocabulary: %s", response.body)
+	}
+	for _, forbidden := range []string{
+		"installation_id",
+		"organization_id",
+		"project_id",
+		"created_by_user_id",
+		"vcs_connection_id",
+		"repository_external_id",
+		"public_base_url",
+		"checkout_status",
+		"provider_authorization_state",
+	} {
+		if strings.Contains(response.body, forbidden) {
+			t.Fatalf("body leaked forbidden field %q: %s", forbidden, response.body)
+		}
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(response.body), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	organization := body["organization"].(map[string]any)
+	if _, ok := organization["installation_id"]; ok {
+		t.Fatalf("organization leaked installation_id: %#v", organization)
+	}
+	context := body["contexts"].([]any)[0].(map[string]any)
+	project := context["project"].(map[string]any)
+	if _, ok := project["created_by_user_id"]; ok {
+		t.Fatalf("project leaked created_by_user_id: %#v", project)
+	}
+	repoBinding := context["repo_binding"].(map[string]any)
+	if _, ok := repoBinding["vcs_connection_id"]; ok {
+		t.Fatalf("repo_binding leaked vcs_connection_id: %#v", repoBinding)
+	}
+	if _, ok := repoBinding["repository_external_id"]; ok {
+		t.Fatalf("repo_binding leaked repository_external_id: %#v", repoBinding)
+	}
+}
+
+func TestOrganizationRepositoryContextReturnsEmptyArray(t *testing.T) {
+	handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepositoryContextSnapshotService{
+		readResult: spine.OrganizationRepositoryContextResult{
+			Organization: spine.OrganizationRepositoryContextOrganization{ID: "018f0000-0000-7000-8000-000000000002", State: spine.EntityStateActive},
+			Contexts:     []spine.OrganizationRepositoryContext{},
+		},
+	})
+
+	response := doAuthRequest(t, http.HandlerFunc(handler.GetOrganizationRepositoryContext), http.MethodGet, "/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context", "", "Bearer access-token")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	if !strings.Contains(response.body, `"contexts":[]`) {
+		t.Fatalf("body = %q, want empty contexts array", response.body)
+	}
+}
+
+func TestOrganizationRepositoryContextMapsServiceErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "forbidden", err: repositorycontext.ErrForbidden, wantStatus: http.StatusForbidden, wantCode: "forbidden"},
+		{name: "validation", err: &repositorycontext.ValidationError{Field: "organization_id", Message: "must be a UUIDv7"}, wantStatus: http.StatusBadRequest, wantCode: "validation_failed"},
+		{name: "organization not found", err: repositorycontext.ErrOrganizationNotFound, wantStatus: http.StatusNotFound, wantCode: "not_found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := httpserver.NewRepositoryContextSnapshotHandler(fakeHTTPAuthService{profile: repoBindingProfile()}, fakeRepositoryContextSnapshotService{readErr: tt.err})
+
+			response := doAuthRequest(t, http.HandlerFunc(handler.GetOrganizationRepositoryContext), http.MethodGet, "/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context", "", "Bearer access-token")
+			if response.code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", response.code, tt.wantStatus, response.body)
+			}
+			if !strings.Contains(response.body, tt.wantCode) {
+				t.Fatalf("body = %q, want error code %q", response.body, tt.wantCode)
+			}
+		})
 	}
 }
 
@@ -87,8 +223,10 @@ func repositoryContextSnapshotJSON() string {
 }
 
 type fakeRepositoryContextSnapshotService struct {
-	result spine.RepositoryContextSnapshotResult
-	err    error
+	result     spine.RepositoryContextSnapshotResult
+	err        error
+	readResult spine.OrganizationRepositoryContextResult
+	readErr    error
 }
 
 func (s fakeRepositoryContextSnapshotService) RecordSnapshot(context.Context, repositorycontext.RecordInput) (spine.RepositoryContextSnapshotResult, error) {
@@ -99,4 +237,11 @@ func (s fakeRepositoryContextSnapshotService) RecordSnapshot(context.Context, re
 		return spine.RepositoryContextSnapshotResult{}, errors.New("missing test result")
 	}
 	return s.result, nil
+}
+
+func (s fakeRepositoryContextSnapshotService) GetOrganizationRepositoryContext(context.Context, repositorycontext.ReadOrganizationContextInput) (spine.OrganizationRepositoryContextResult, error) {
+	if s.readErr != nil {
+		return spine.OrganizationRepositoryContextResult{}, s.readErr
+	}
+	return s.readResult, nil
 }

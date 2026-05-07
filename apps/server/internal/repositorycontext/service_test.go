@@ -225,6 +225,260 @@ func TestRecordSnapshotResolvesConcurrentFingerprintRaceIdempotently(t *testing.
 	}
 }
 
+func TestGetOrganizationRepositoryContextReturnsActiveContextsForAllRoles(t *testing.T) {
+	roles := []spine.OrganizationMembershipRole{
+		spine.OrganizationMembershipRoleOwner,
+		spine.OrganizationMembershipRoleAdmin,
+		spine.OrganizationMembershipRoleMember,
+		spine.OrganizationMembershipRoleViewer,
+	}
+	for _, role := range roles {
+		t.Run(string(role), func(t *testing.T) {
+			store := newFakeStore()
+			store.organization = organizationFixture()
+			store.organizationOK = true
+			store.contexts = []spine.ProjectRepoBindingContext{projectRepoBindingContextFixture()}
+			service := newTestService(store, &fakeEventLog{})
+			input := validReadInput()
+			input.Membership.Role = role
+
+			result, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+			if err != nil {
+				t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+			}
+			if result.Organization.ID != testOrganizationID {
+				t.Fatalf("organization id = %q, want %q", result.Organization.ID, testOrganizationID)
+			}
+			if got := len(result.Contexts); got != 1 {
+				t.Fatalf("contexts = %d, want 1", got)
+			}
+			if result.Contexts[0].RepoBinding.AccessMode != spine.RepoBindingAccessModeMetadataOnly {
+				t.Fatalf("access mode = %q, want metadata_only", result.Contexts[0].RepoBinding.AccessMode)
+			}
+		})
+	}
+}
+
+func TestGetOrganizationRepositoryContextReturnsNarrowPublicDTO(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	store.contexts = []spine.ProjectRepoBindingContext{projectRepoBindingContextFixture()}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if got := result.Organization.ID; got != testOrganizationID {
+		t.Fatalf("organization id = %q, want %q", got, testOrganizationID)
+	}
+	if got := result.Contexts[0].Project.ID; got != testProjectID {
+		t.Fatalf("project id = %q, want %q", got, testProjectID)
+	}
+	if got := result.Contexts[0].RepoBinding.ID; got != testRepoBindingID {
+		t.Fatalf("repo binding id = %q, want %q", got, testRepoBindingID)
+	}
+	for _, forbidden := range []string{
+		"installation_id",
+		"organization_id",
+		"project_id",
+		"created_by_user_id",
+		"vcs_connection_id",
+		"repository_external_id",
+		"public_base_url",
+		"token",
+		"credential",
+		"proof",
+		"readiness",
+	} {
+		if bytes.Contains(body, []byte(forbidden)) {
+			t.Fatalf("response leaked %q: %s", forbidden, body)
+		}
+	}
+}
+
+func TestGetOrganizationRepositoryContextStripsRepositoryURLUserinfo(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "https://token:secret@github.com/heurema/goalrail.git"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "https://github.com/heurema/goalrail.git" {
+		t.Fatalf("repository_url = %q, want userinfo stripped", got)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if bytes.Contains(body, []byte("token")) || bytes.Contains(body, []byte("secret")) {
+		t.Fatalf("response leaked credentialed repository URL: %s", body)
+	}
+}
+
+func TestGetOrganizationRepositoryContextRedactsUnparseableRepositoryURL(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "https://token:secret@github.com/heurema/\nrepo.git"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	if got := result.Contexts[0].RepoBinding.RepositoryURL; got != "" {
+		t.Fatalf("repository_url = %q, want redacted empty value", got)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if bytes.Contains(body, []byte("token")) || bytes.Contains(body, []byte("secret")) {
+		t.Fatalf("response leaked unparseable credentialed repository URL: %s", body)
+	}
+}
+
+func TestGetOrganizationRepositoryContextStripsRepositoryURLQueryAndFragment(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "https://github.com/heurema/goalrail.git?token=secret#credential"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "https://github.com/heurema/goalrail.git" {
+		t.Fatalf("repository_url = %q, want query and fragment stripped", got)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if bytes.Contains(body, []byte("token")) || bytes.Contains(body, []byte("secret")) || bytes.Contains(body, []byte("credential")) {
+		t.Fatalf("response leaked repository URL query or fragment: %s", body)
+	}
+}
+
+func TestGetOrganizationRepositoryContextPreservesSafeSCPLikeRepositoryURL(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "git@github.com:heurema/goalrail.git?token=secret"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "git@github.com:heurema/goalrail.git" {
+		t.Fatalf("repository_url = %q, want safe SCP-like remote with query stripped", got)
+	}
+}
+
+func TestGetOrganizationRepositoryContextPreservesSafeSCPLikeRepositoryURLUsername(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "deploy@git.example.com:team/repo.git?token=secret"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	got := result.Contexts[0].RepoBinding.RepositoryURL
+	if got != "deploy@git.example.com:team/repo.git" {
+		t.Fatalf("repository_url = %q, want safe SCP-like remote with username and query stripped", got)
+	}
+}
+
+func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+	input := validReadInput()
+	input.OrganizationID = "018f0000-0000-7000-8000-000000000099"
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want ErrForbidden", err)
+	}
+	if store.getOrganizationCalls != 0 {
+		t.Fatalf("GetOrganization calls = %d, want 0 before authorization", store.getOrganizationCalls)
+	}
+}
+
+func TestGetOrganizationRepositoryContextReturnsEmptyContexts(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	if result.Contexts == nil {
+		t.Fatal("contexts = nil, want empty array slice")
+	}
+	if len(result.Contexts) != 0 {
+		t.Fatalf("contexts = %d, want 0", len(result.Contexts))
+	}
+}
+
+func TestGetOrganizationRepositoryContextAuthorizesCaseInsensitiveUUIDPath(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	service := newTestService(store, &fakeEventLog{})
+	input := validReadInput()
+	input.OrganizationID = spine.OrganizationID(strings.ToUpper(string(testOrganizationID)))
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), input)
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want nil", err)
+	}
+	if store.getOrganizationCalls != 1 {
+		t.Fatalf("GetOrganization calls = %d, want 1", store.getOrganizationCalls)
+	}
+}
+
+func TestGetOrganizationRepositoryContextRejectsUnknownOrganization(t *testing.T) {
+	store := newFakeStore()
+	service := newTestService(store, &fakeEventLog{})
+
+	_, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if !errors.Is(err, ErrOrganizationNotFound) {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v, want ErrOrganizationNotFound", err)
+	}
+}
+
 const (
 	testUserID         spine.UserID         = "018f0000-0000-7000-8000-000000000001"
 	testOrganizationID spine.OrganizationID = "018f0000-0000-7000-8000-000000000002"
@@ -267,29 +521,77 @@ func validInput() RecordInput {
 	}
 }
 
+func validReadInput() ReadOrganizationContextInput {
+	return ReadOrganizationContextInput{
+		AuthenticatedUserID: testUserID,
+		Membership: spine.OrganizationMembership{
+			ID:             "018f0000-0000-7000-8000-000000000005",
+			OrganizationID: testOrganizationID,
+			UserID:         testUserID,
+			Role:           spine.OrganizationMembershipRoleViewer,
+			State:          spine.EntityStateActive,
+		},
+		OrganizationID: testOrganizationID,
+	}
+}
+
+func organizationFixture() spine.Organization {
+	return spine.Organization{
+		ID:             testOrganizationID,
+		InstallationID: "018f0000-0000-7000-8000-000000000006",
+		Slug:           "goalrail-dev",
+		DisplayName:    "Goalrail Dev",
+		State:          spine.EntityStateActive,
+		CreatedAt:      testNow(),
+		UpdatedAt:      testNow(),
+	}
+}
+
+func projectRepoBindingContextFixture() spine.ProjectRepoBindingContext {
+	return spine.ProjectRepoBindingContext{
+		Project: spine.Project{
+			ID:              testProjectID,
+			OrganizationID:  testOrganizationID,
+			CreatedByUserID: testUserID,
+			Slug:            "github-heurema-goalrail",
+			DisplayName:     "heurema/goalrail",
+			State:           spine.EntityStateActive,
+			CreatedAt:       testNow(),
+			UpdatedAt:       testNow(),
+		},
+		RepoBinding: repoBindingFixture(),
+	}
+}
+
 func repoBindingFixture() spine.RepoBinding {
 	return spine.RepoBinding{
-		ID:                 testRepoBindingID,
-		OrganizationID:     testOrganizationID,
-		ProjectID:          testProjectID,
-		CreatedByUserID:    testUserID,
-		Provider:           "github",
-		RepositoryFullName: "heurema/goalrail",
-		RepositoryURL:      "git@github.com:heurema/goalrail.git",
-		DefaultBranch:      "main",
-		WorkflowBaseBranch: "main",
-		PathScope:          ".",
-		AccessMode:         spine.RepoBindingAccessModeMetadataOnly,
-		State:              spine.EntityStateActive,
-		CreatedAt:          testNow(),
-		UpdatedAt:          testNow(),
+		ID:                   testRepoBindingID,
+		OrganizationID:       testOrganizationID,
+		ProjectID:            testProjectID,
+		CreatedByUserID:      testUserID,
+		VcsConnectionID:      "vcs-connection-internal",
+		Provider:             "github",
+		RepositoryExternalID: "repo-external-internal",
+		RepositoryFullName:   "heurema/goalrail",
+		RepositoryURL:        "git@github.com:heurema/goalrail.git",
+		DefaultBranch:        "main",
+		WorkflowBaseBranch:   "main",
+		PathScope:            ".",
+		AccessMode:           spine.RepoBindingAccessModeMetadataOnly,
+		State:                spine.EntityStateActive,
+		CreatedAt:            testNow(),
+		UpdatedAt:            testNow(),
 	}
 }
 
 type fakeStore struct {
 	binding                  spine.RepoBinding
 	bindingOK                bool
+	organization             spine.Organization
+	organizationOK           bool
+	contexts                 []spine.ProjectRepoBindingContext
 	getBindingCalls          int
+	getOrganizationCalls     int
 	snapshotsByFingerprint   map[string]spine.RepositoryContextSnapshotRecord
 	createdSnapshots         []spine.RepositoryContextSnapshotRecord
 	createSnapshotErr        error
@@ -303,6 +605,18 @@ func newFakeStore() *fakeStore {
 func (s *fakeStore) GetRepoBinding(_ context.Context, _ spine.RepoBindingID) (spine.RepoBinding, bool, error) {
 	s.getBindingCalls++
 	return s.binding, s.bindingOK, nil
+}
+
+func (s *fakeStore) GetOrganization(_ context.Context, _ spine.OrganizationID) (spine.Organization, bool, error) {
+	s.getOrganizationCalls++
+	return s.organization, s.organizationOK, nil
+}
+
+func (s *fakeStore) ListActiveProjectRepoBindingContexts(_ context.Context, _ spine.OrganizationID) ([]spine.ProjectRepoBindingContext, error) {
+	if s.contexts == nil {
+		return []spine.ProjectRepoBindingContext{}, nil
+	}
+	return append([]spine.ProjectRepoBindingContext(nil), s.contexts...), nil
 }
 
 func (s *fakeStore) GetRepositoryContextSnapshotByFingerprint(_ context.Context, repoBindingID spine.RepoBindingID, fingerprint string) (spine.RepositoryContextSnapshotRecord, bool, error) {

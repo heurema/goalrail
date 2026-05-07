@@ -6,47 +6,48 @@ import (
 
 // RouteHandlers contains the concrete handlers wired by the app composition root.
 type RouteHandlers struct {
-	Livez                     http.Handler
-	Readyz                    http.Handler
-	Version                   http.Handler
-	AuthLogin                 http.Handler
-	CLILoginPage              http.Handler
-	CLILoginSubmit            http.Handler
-	AuthCLIExchange           http.Handler
-	AuthRefresh               http.Handler
-	AuthChangePassword        http.Handler
-	AuthLogout                http.Handler
-	Me                        http.Handler
-	OrganizationUsersList     http.Handler
-	OrganizationUsersCreate   http.Handler
-	OrganizationUsersPatch    http.Handler
-	OrganizationUsersReset    http.Handler
-	RepositoryContextInit     http.Handler
-	RepositoryContextSnapshot http.Handler
-	ProjectRepoBindingInit    http.Handler
-	IntakeSubmit              http.Handler
-	IntakeGet                 http.Handler
-	IntakePromote             http.Handler
-	GoalReadiness             http.Handler
-	GoalContinuation          http.Handler
-	ClarificationContinuation http.Handler
-	GoalClarificationRequests http.Handler
-	ContractCreate            http.Handler
-	ContractGet               http.Handler
-	ContractUpdate            http.Handler
-	ContractSubmit            http.Handler
-	ContractApprove           http.Handler
-	ContractPlans             http.Handler
-	PlanGet                   http.Handler
-	PlanLeases                http.Handler
-	PlanLeaseGet              http.Handler
-	PlanLeaseRenew            http.Handler
-	PlanProposals             http.Handler
-	ProposalGet               http.Handler
-	ProposalAcceptance        http.Handler
-	TaskGet                   http.Handler
-	ClarificationAnswers      http.Handler
-	ClarificationAnswerApply  http.Handler
+	Livez                         http.Handler
+	Readyz                        http.Handler
+	Version                       http.Handler
+	AuthLogin                     http.Handler
+	CLILoginPage                  http.Handler
+	CLILoginSubmit                http.Handler
+	AuthCLIExchange               http.Handler
+	AuthRefresh                   http.Handler
+	AuthChangePassword            http.Handler
+	AuthLogout                    http.Handler
+	Me                            http.Handler
+	OrganizationUsersList         http.Handler
+	OrganizationUsersCreate       http.Handler
+	OrganizationUsersPatch        http.Handler
+	OrganizationUsersReset        http.Handler
+	OrganizationRepositoryContext http.Handler
+	RepositoryContextInit         http.Handler
+	RepositoryContextSnapshot     http.Handler
+	ProjectRepoBindingInit        http.Handler
+	IntakeSubmit                  http.Handler
+	IntakeGet                     http.Handler
+	IntakePromote                 http.Handler
+	GoalReadiness                 http.Handler
+	GoalContinuation              http.Handler
+	ClarificationContinuation     http.Handler
+	GoalClarificationRequests     http.Handler
+	ContractCreate                http.Handler
+	ContractGet                   http.Handler
+	ContractUpdate                http.Handler
+	ContractSubmit                http.Handler
+	ContractApprove               http.Handler
+	ContractPlans                 http.Handler
+	PlanGet                       http.Handler
+	PlanLeases                    http.Handler
+	PlanLeaseGet                  http.Handler
+	PlanLeaseRenew                http.Handler
+	PlanProposals                 http.Handler
+	ProposalGet                   http.Handler
+	ProposalAcceptance            http.Handler
+	TaskGet                       http.Handler
+	ClarificationAnswers          http.Handler
+	ClarificationAnswerApply      http.Handler
 }
 
 // NewRouter builds the server router.
@@ -68,6 +69,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/organizations/{organization_id}/users", mustHandler("organization users create", handlers.OrganizationUsersCreate))
 	mux.Handle("PATCH /v1/organizations/{organization_id}/users/{user_id}", mustHandler("organization users patch", handlers.OrganizationUsersPatch))
 	mux.Handle("POST /v1/organizations/{organization_id}/users/{user_id}/temporary-password-resets", mustHandler("organization users temporary password reset", handlers.OrganizationUsersReset))
+	mux.Handle("GET /v1/organizations/{organization_id}/repository-context", mustHandler("organization repository context", handlers.OrganizationRepositoryContext))
 	mux.Handle("POST /v1/init/repository-context", mustHandler("repository context init", handlers.RepositoryContextInit))
 	mux.Handle("POST /v1/repo-bindings/{repo_binding_id}/context-snapshots", mustHandler("repository context snapshot", handlers.RepositoryContextSnapshot))
 	mux.Handle("POST /v1/projects/{project_id}/repo-bindings/init", mustHandler("project repo binding init", handlers.ProjectRepoBindingInit))
