@@ -260,10 +260,11 @@ func sanitizeRepositoryURL(raw string) string {
 	if err != nil {
 		return ""
 	}
-	if parsed.User == nil {
-		return raw
-	}
 	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
 	return parsed.String()
 }
 
