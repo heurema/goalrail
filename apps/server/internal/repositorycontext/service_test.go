@@ -328,6 +328,31 @@ func TestGetOrganizationRepositoryContextStripsRepositoryURLUserinfo(t *testing.
 	}
 }
 
+func TestGetOrganizationRepositoryContextRedactsUnparseableRepositoryURL(t *testing.T) {
+	store := newFakeStore()
+	store.organization = organizationFixture()
+	store.organizationOK = true
+	repoContext := projectRepoBindingContextFixture()
+	repoContext.RepoBinding.RepositoryURL = "https://token:secret@github.com/heurema/\nrepo.git"
+	store.contexts = []spine.ProjectRepoBindingContext{repoContext}
+	service := newTestService(store, &fakeEventLog{})
+
+	result, err := service.GetOrganizationRepositoryContext(context.Background(), validReadInput())
+	if err != nil {
+		t.Fatalf("GetOrganizationRepositoryContext() error = %v", err)
+	}
+	if got := result.Contexts[0].RepoBinding.RepositoryURL; got != "" {
+		t.Fatalf("repository_url = %q, want redacted empty value", got)
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if bytes.Contains(body, []byte("token")) || bytes.Contains(body, []byte("secret")) {
+		t.Fatalf("response leaked unparseable credentialed repository URL: %s", body)
+	}
+}
+
 func TestGetOrganizationRepositoryContextRejectsCrossOrganizationRead(t *testing.T) {
 	store := newFakeStore()
 	store.organization = organizationFixture()

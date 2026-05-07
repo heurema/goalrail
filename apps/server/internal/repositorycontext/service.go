@@ -257,7 +257,10 @@ func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.Organiza
 
 func sanitizeRepositoryURL(raw string) string {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.User == nil {
+	if err != nil {
+		return ""
+	}
+	if parsed.User == nil {
 		return raw
 	}
 	parsed.User = nil
