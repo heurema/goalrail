@@ -435,9 +435,9 @@ Done means:
   create a tiny root `AGENTS.md` shim only when missing; it does not overwrite
   existing root agent instructions and does not install Claude, Gemini, Cursor,
   Windsurf, Gravity, or other provider-specific adapters; the generated pack
-  includes `work continue`, `work answer`, `contract draft`, question_id-bound
-  structured clarification answer guidance, and local repository receipt
-  guidance
+  includes `work continue`, `work answer`, `contract draft`, `contract update`,
+  question_id-bound structured clarification answer guidance, structured
+  contract field update guidance, and local repository receipt guidance
 - ✅ `goalrail work start --body-file <path|->` supports agent-friendly task
   bodies from a file or stdin while returning a `goalrail.cli.v1` JSON envelope
   with `display.summary` and an available continuation command
@@ -459,8 +459,13 @@ Done means:
   uploading raw source bodies, sends the local marker `project_id` and
   `repo_binding_id` as server-validated expectations, calls authenticated
   create-or-return `/v1/contracts`, and returns `contract_id`,
-  `contract_state`, `local_repo_receipt`, and planned/unavailable
-  `update_contract`
+  `contract_state`, `local_repo_receipt`, and available `update_contract`
+- ✅ `goalrail contract update --contract-id <contract_id> --fields-file
+  <path|->` reads structured proposed field JSON from file/stdin, validates the
+  same marker/login/org boundary, sends marker `project_id` and
+  `repo_binding_id` expectations to authenticated `PATCH /v1/contracts/{id}`,
+  updates only current ContractDraft proposed fields, returns
+  `changed_fields`, and yields `next_action.kind=review_contract`
 - no keychain integration
 - no Organization selection UX or public Organization creation
 - no auth token, contract, work item, audit, proof, diff, memory, or runtime
@@ -469,8 +474,9 @@ Done means:
 - no audit/hook/branch/verification setup from init
 - no WorkItem, audit request, Run, gate, proof, provider
   integration, provider shim, branch, PR, hook, clone, deploy-key setup,
-  or contract field update CLI from `work start`, `work continue`,
-  `work answer`, `contract draft`, or `agent install`
+  submit/approval automation, planning, runner, or verification from
+  `work start`, `work continue`, `work answer`, `contract draft`,
+  `contract update`, or `agent install`
 - no proof retrieval
 - no public registration
 - no admin user creation endpoint

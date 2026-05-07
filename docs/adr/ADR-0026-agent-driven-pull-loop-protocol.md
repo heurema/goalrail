@@ -29,6 +29,8 @@ Current implemented state:
   the next agent-facing action.
 - `goalrail contract draft` creates or returns a server Contract draft handle
   for a ready Goal and returns a local repository receipt.
+- `goalrail contract update` submits structured proposed ContractDraft fields
+  after the local agent reads local code.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -127,6 +129,8 @@ Slice B updates `work start` so the returned continuation command is available:
   `next_action.kind=ask_user`.
 - Slice D adds `contract draft` so `next_action.kind=draft_contract` is an
   available local pull-loop step.
+- Slice E adds `contract update` so `next_action.kind=update_contract` is an
+  available local pull-loop step.
 
 ### `goalrail work continue`
 
@@ -224,8 +228,50 @@ duplicate draft state.
 
 `contract draft` returns an agent-facing envelope with `schema_version`,
 `display.summary`, `goal_id`, `contract_id`, `contract_state`,
-`local_repo_receipt`, and a planned unavailable `next_action.kind=update_contract`
-for a later slice.
+`local_repo_receipt`, and an available `next_action.kind=update_contract`.
+
+### `goalrail contract update`
+
+`contract update` submits proposed ContractDraft fields after the local agent
+has read the relevant local code:
+
+```bash
+goalrail contract update \
+  --contract-id "<contract_id>" \
+  --fields-file - \
+  --format json
+```
+
+The fields file is structured JSON. Supported editable fields use the current
+ContractDraft boundary: `title`, `intent_summary`, `proposed_scope`,
+`proposed_non_goals`, `proposed_constraints`,
+`proposed_acceptance_criteria`, `proposed_expected_checks`,
+`proposed_proof_expectations`, and `risk_hints`. The CLI also accepts
+`proposed_verification` as an agent-facing alias for
+`proposed_expected_checks`, plus structured `context_refs` and `unknowns` event
+metadata. It must reject malformed JSON and updates with no editable fields
+before mutation. Missing fields mean no change. Present empty strings, blank
+strings, empty arrays, or blank array items are rejected in Slice E rather than
+being interpreted as clear/no-op semantics.
+
+The CLI must load the local `.goalrail/project.yml` marker, require
+`project_id` and `repo_binding_id`, validate the stored CLI login/session,
+validate the marker Organization against `/v1/me`, and send the local marker
+`project_id` and `repo_binding_id` as server-side expectations. It must not
+upload raw source bodies.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, verify the Contract Organization matches
+that membership, derive the audit actor from the authenticated user, require
+`Contract(draft)`, and reject supplied project/repo expectations that do not
+match the Contract before mutation. It updates only the current internal
+ContractDraft proposed fields, appends `contract_draft.updated`, preserves
+`ContractDraft.state=draft`, and does not submit, approve, plan, run, gate, or
+create proof.
+
+`contract update` returns an agent-facing envelope with `schema_version`,
+`display.summary`, `contract_id`, `contract_state`, `changed_fields`, and
+`next_action.kind=review_contract`.
 
 ### Clarification and contracts
 
@@ -234,8 +280,8 @@ records ClarificationAnswer as canonical state. CLI and agents only transport
 questions and answers.
 
 No standalone `work context prepare` command is introduced in the MVP. Local
-code context begins with the bounded `contract draft` repository receipt, while
-draft field updates remain a later pull-loop slice.
+code context begins with the bounded `contract draft` repository receipt, then
+the agent uses local file reads to prepare structured `contract update` fields.
 
 ## Non-goals
 
@@ -249,7 +295,6 @@ This ADR does not implement:
 - server-side repository clone
 - raw source upload by default
 - standalone `work context prepare`
-- contract update CLI
 - WorkItem planning from draft Contract
 - runner checkout
 - execution
@@ -268,9 +313,10 @@ pretending a universal server push channel exists.
 The server remains canonical and auditable. The CLI becomes the local bridge for
 repository context, auth, and transport. The agent remains a UX layer.
 
-Slices A-D establish the first usable
-start -> continue -> answer -> contract draft handle pull-loop without implying
-contract field update, planning, runner, gate, or proof are available.
+Slices A-E establish the first usable
+start -> continue -> answer -> contract draft handle -> contract update
+pull-loop without implying submit/approval, planning, runner, gate, or proof
+are available.
 
 ## Rejected alternatives
 

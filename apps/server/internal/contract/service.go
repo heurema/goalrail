@@ -146,9 +146,15 @@ func (s *Service) Get(ctx context.Context, id spine.ContractID) (spine.Contract,
 	return s.getContract(ctx, id)
 }
 
-func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input spine.ContractDraftUpdateRequest) (spine.Contract, error) {
+func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input spine.ContractDraftUpdateRequest, membership spine.OrganizationMembership) (spine.Contract, error) {
 	contract, err := s.getContract(ctx, id)
 	if err != nil {
+		return spine.Contract{}, err
+	}
+	if err := authorizeContractMutation(membership, contract); err != nil {
+		return spine.Contract{}, err
+	}
+	if err := validateExpectedContractContext(input, contract); err != nil {
 		return spine.Contract{}, err
 	}
 	if contract.State != spine.ContractStateDraft {
@@ -243,6 +249,16 @@ func authorizeGoalContractCreation(membership spine.OrganizationMembership, goal
 	return nil
 }
 
+func authorizeContractMutation(membership spine.OrganizationMembership, contract spine.Contract) error {
+	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
+		return ErrMembershipRequired
+	}
+	if membership.OrganizationID != contract.OrganizationID {
+		return ErrOrganizationForbidden
+	}
+	return nil
+}
+
 func validateGoalID(goalID spine.GoalID) error {
 	text := strings.TrimSpace(string(goalID))
 	if text == "" {
@@ -263,6 +279,16 @@ func validateExpectedGoalContext(input spine.ContractCreateRequest, goal spine.G
 		return ErrProjectMismatch
 	}
 	if strings.TrimSpace(string(input.RepoBindingID)) != "" && input.RepoBindingID != goal.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
+}
+
+func validateExpectedContractContext(input spine.ContractDraftUpdateRequest, contract spine.Contract) error {
+	if strings.TrimSpace(string(input.ProjectID)) != "" && input.ProjectID != contract.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) != "" && input.RepoBindingID != contract.RepoBindingID {
 		return ErrRepoBindingMismatch
 	}
 	return nil

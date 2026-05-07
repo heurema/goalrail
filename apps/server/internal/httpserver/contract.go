@@ -15,7 +15,7 @@ import (
 type ContractService interface {
 	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
 	Get(context.Context, spine.ContractID) (spine.Contract, error)
-	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest) (spine.Contract, error)
+	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error)
 	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error)
 	Approve(context.Context, spine.ContractID, spine.ApproveContractDraftRequest) (spine.Contract, error)
 }
@@ -66,13 +66,24 @@ func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ContractHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.ContractDraftUpdateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
+	input.UpdatedBy = spine.ActorRef{
+		Kind:        "user",
+		ID:          string(profile.User.ID),
+		DisplayName: profile.User.DisplayName,
+	}
 
-	updated, err := h.service.UpdateDraft(r.Context(), spine.ContractID(r.PathValue("id")), input)
+	updated, err := h.service.UpdateDraft(r.Context(), spine.ContractID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

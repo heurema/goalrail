@@ -314,13 +314,13 @@ func TestServiceUpdatesEditableDraftFields(t *testing.T) {
 
 	updated, err := service.Update(context.Background(), created.ID, updateRequest(t, `{
 		"title": "Reviewed draft title",
-		"intent_summary": "Reviewed summary",
-		"proposed_scope": ["Reviewed scope"],
-		"proposed_acceptance_criteria": ["Reviewed acceptance"],
-		"proposed_non_goals": [],
-		"proposed_constraints": ["No schema changes"],
-		"proposed_expected_checks": ["go test ./..."],
-		"proposed_proof_expectations": ["Attach test output"],
+			"intent_summary": "Reviewed summary",
+			"proposed_scope": ["Reviewed scope"],
+			"proposed_acceptance_criteria": ["Reviewed acceptance"],
+			"proposed_non_goals": ["Do not change billing UI"],
+			"proposed_constraints": ["No schema changes"],
+			"proposed_expected_checks": ["go test ./..."],
+			"proposed_proof_expectations": ["Attach test output"],
 		"risk_hints": ["Low risk"]
 	}`))
 	if err != nil {
@@ -342,8 +342,8 @@ func TestServiceUpdatesEditableDraftFields(t *testing.T) {
 	if !reflect.DeepEqual(updated.ProposedAcceptanceCriteria, []string{"Reviewed acceptance"}) {
 		t.Fatalf("proposed_acceptance_criteria = %#v", updated.ProposedAcceptanceCriteria)
 	}
-	if !reflect.DeepEqual(updated.ProposedNonGoals, []string{}) {
-		t.Fatalf("proposed_non_goals = %#v, want empty slice", updated.ProposedNonGoals)
+	if !reflect.DeepEqual(updated.ProposedNonGoals, []string{"Do not change billing UI"}) {
+		t.Fatalf("proposed_non_goals = %#v", updated.ProposedNonGoals)
 	}
 	if !reflect.DeepEqual(updated.ProposedConstraints, []string{"No schema changes"}) {
 		t.Fatalf("proposed_constraints = %#v", updated.ProposedConstraints)
@@ -371,8 +371,8 @@ func TestServiceUpdatesEditableDraftFields(t *testing.T) {
 	}
 }
 
-func TestServiceUpdateAllowsEmptyCoreDraftArrays(t *testing.T) {
-	service, seeds, contracts, _, _ := draftService(t)
+func TestServiceRejectsEmptyOrBlankUpdateValues(t *testing.T) {
+	service, seeds, contracts, _, events := draftService(t)
 	seed := validDraftableSeed()
 	storeSeedWithContract(t, seeds, contracts, seed)
 	created, err := service.Create(context.Background(), seed.ID)
@@ -380,23 +380,29 @@ func TestServiceUpdateAllowsEmptyCoreDraftArrays(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	updated, err := service.Update(context.Background(), created.ID, updateRequest(t, `{
-		"proposed_scope": [],
-		"proposed_acceptance_criteria": [],
-		"proposed_proof_expectations": []
-	}`))
-	if err != nil {
-		t.Fatalf("Update() error = %v", err)
+	tests := []struct {
+		name    string
+		changes string
+		field   string
+	}{
+		{name: "empty array", changes: `{"proposed_scope": []}`, field: "changes.proposed_scope"},
+		{name: "blank array item", changes: `{"proposed_scope": [""]}`, field: "changes.proposed_scope[0]"},
+		{name: "blank string", changes: `{"title": " "}`, field: "changes.title"},
 	}
-
-	if updated.ProposedScope == nil || len(updated.ProposedScope) != 0 {
-		t.Fatalf("proposed_scope = %#v, want explicit empty slice", updated.ProposedScope)
-	}
-	if updated.ProposedAcceptanceCriteria == nil || len(updated.ProposedAcceptanceCriteria) != 0 {
-		t.Fatalf("proposed_acceptance_criteria = %#v, want explicit empty slice", updated.ProposedAcceptanceCriteria)
-	}
-	if updated.ProposedProofExpectations == nil || len(updated.ProposedProofExpectations) != 0 {
-		t.Fatalf("proposed_proof_expectations = %#v, want explicit empty slice", updated.ProposedProofExpectations)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.Update(context.Background(), created.ID, updateRequest(t, tt.changes))
+			var validationErr *contractdraft.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("Update() error = %v, want ValidationError", err)
+			}
+			if validationErr.Field != tt.field {
+				t.Fatalf("validation field = %q, want %q", validationErr.Field, tt.field)
+			}
+			if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftUpdated); got != 0 {
+				t.Fatalf("contract_draft.updated events = %d, want 0", got)
+			}
+		})
 	}
 }
 
