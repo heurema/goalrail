@@ -27,6 +27,8 @@ Current implemented state:
   agent-facing action.
 - `goalrail work answer` submits structured clarification answers and returns
   the next agent-facing action.
+- `goalrail contract draft` creates or returns a server Contract draft handle
+  for a ready Goal and returns a local repository receipt.
 - Server-side Goal readiness, ClarificationRequest, ClarificationAnswer,
   Contract lifecycle, approval, and WorkItem planning primitives exist.
 - Runner, checkout, execution, gate, proof, and provider-specific agent
@@ -123,6 +125,8 @@ Slice B updates `work start` so the returned continuation command is available:
   readiness.
 - Slice C adds `work answer` as the clarification answer bridge after
   `next_action.kind=ask_user`.
+- Slice D adds `contract draft` so `next_action.kind=draft_contract` is an
+  available local pull-loop step.
 
 ### `goalrail work continue`
 
@@ -146,7 +150,7 @@ creates exactly one open ClarificationRequest.
 Continuation `next_action` mapping:
 
 - `ready_for_contract_seed` returns `next_action.kind=draft_contract` with
-  `available=false`, `planned_slice=D`, and the planned
+  `available=true` and the
   `goalrail contract draft --goal-id <goal_id> --format json` command.
 - `needs_clarification` returns `next_action.kind=ask_user` with
   `available=true`, `blocking=true`, `request_id`, and questions.
@@ -191,15 +195,47 @@ runs explicit readiness reconciliation, and returns the same agent-facing
 Repeated answer submission for an already answered request returns an explicit
 conflict instead of creating an ambiguous duplicate canonical answer.
 
+### `goalrail contract draft`
+
+`contract draft` creates or returns a server Contract draft handle for a ready
+Goal:
+
+```bash
+goalrail contract draft --goal-id "<goal_id>" --format json
+```
+
+The CLI must load the local `.goalrail/project.yml` marker, validate the stored
+CLI login/session, validate the marker Organization against `/v1/me`, refresh
+local Project Scan evidence, and call the public Contract lifecycle API. The
+local repository receipt includes repository binding, HEAD SHA, baseline,
+overlay, dirty, partial, raw source upload flag, and freshness evidence where
+available. It must not upload raw source bodies.
+
+The server must validate the bearer token, load the active
+OrganizationMembership server-side, verify that the Goal belongs to that
+Organization, and require `Goal(ready_for_contract_seed)` before mutation. The
+CLI sends the local marker `project_id` and `repo_binding_id` as expectations;
+the server must reject the request before mutation if either expectation does
+not match the Goal. This prevents building a local repository receipt from the
+wrong local checkout. The server creates or returns the public Contract
+aggregate plus internal ContractSeed / ContractDraft records. Repeated calls
+for the same Goal return the existing Contract draft handle instead of creating
+duplicate draft state.
+
+`contract draft` returns an agent-facing envelope with `schema_version`,
+`display.summary`, `goal_id`, `contract_id`, `contract_state`,
+`local_repo_receipt`, and a planned unavailable `next_action.kind=update_contract`
+for a later slice.
+
 ### Clarification and contracts
 
 Clarification remains server-owned. The server creates ClarificationRequest and
 records ClarificationAnswer as canonical state. CLI and agents only transport
 questions and answers.
 
-No standalone `work context prepare` command is introduced in the MVP. Future
-local code context belongs inside a bounded `contract draft` helper, but no
-contract draft CLI is implemented by this pull-loop slice.
+No standalone `work context prepare` command is introduced in the MVP. Local
+code context begins with the bounded `contract draft` repository receipt, while
+draft field updates remain a later pull-loop slice.
 
 ## Non-goals
 
@@ -213,7 +249,8 @@ This ADR does not implement:
 - server-side repository clone
 - raw source upload by default
 - standalone `work context prepare`
-- contract draft CLI
+- contract update CLI
+- WorkItem planning from draft Contract
 - runner checkout
 - execution
 - gate
@@ -231,8 +268,9 @@ pretending a universal server push channel exists.
 The server remains canonical and auditable. The CLI becomes the local bridge for
 repository context, auth, and transport. The agent remains a UX layer.
 
-Slices A-C establish the first usable start -> continue -> answer pull-loop
-without implying contract drafting, runner, gate, or proof are available.
+Slices A-D establish the first usable
+start -> continue -> answer -> contract draft handle pull-loop without implying
+contract field update, planning, runner, gate, or proof are available.
 
 ## Rejected alternatives
 

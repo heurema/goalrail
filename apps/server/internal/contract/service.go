@@ -6,14 +6,23 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
+	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
 var (
 	ErrContractNotFound            = errors.New("contract not found")
+	ErrGoalNotFound                = errors.New("goal not found")
 	ErrInvalidContractState        = errors.New("contract state is not valid for this transition")
+	ErrInvalidGoalState            = errors.New("goal state is not valid for contract creation")
 	ErrContractCurrentDraftMissing = errors.New("contract current draft is missing")
 	ErrAlreadyApproved             = errors.New("contract already approved")
+	ErrMembershipRequired          = errors.New("active organization membership is required")
+	ErrOrganizationForbidden       = errors.New("user is not allowed to create contract for this goal")
+	ErrProjectMismatch             = errors.New("contract create project expectation does not match goal")
+	ErrRepoBindingMismatch         = errors.New("contract create repo binding expectation does not match goal")
 )
 
 type ValidationError struct {
@@ -30,6 +39,11 @@ func (e *ValidationError) Error() string {
 
 type Store interface {
 	Get(context.Context, spine.ContractID) (spine.Contract, bool, error)
+	GetByGoalID(context.Context, spine.GoalID) (spine.Contract, bool, error)
+}
+
+type GoalReader interface {
+	Get(context.Context, spine.GoalID) (spine.Goal, bool, error)
 }
 
 type TransactionRunner interface {
@@ -51,6 +65,7 @@ type ApprovalService interface {
 }
 
 type Service struct {
+	Goals     GoalReader
 	Contracts Store
 	Seeds     SeedCreator
 	Drafts    DraftService
@@ -58,8 +73,9 @@ type Service struct {
 	TxRunner  TransactionRunner
 }
 
-func NewService(contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, txRunner TransactionRunner) *Service {
+func NewService(goals GoalReader, contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, txRunner TransactionRunner) *Service {
 	return &Service{
+		Goals:     goals,
 		Contracts: contracts,
 		Seeds:     seeds,
 		Drafts:    drafts,
@@ -68,9 +84,31 @@ func NewService(contracts Store, seeds SeedCreator, drafts DraftService, approva
 	}
 }
 
-func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest) (spine.Contract, error) {
-	if strings.TrimSpace(string(input.GoalID)) == "" {
-		return spine.Contract{}, &ValidationError{Field: "goal_id", Message: "is required"}
+func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest, membership spine.OrganizationMembership) (spine.Contract, bool, error) {
+	if err := validateGoalID(input.GoalID); err != nil {
+		return spine.Contract{}, false, err
+	}
+
+	goal, ok, err := s.Goals.Get(ctx, input.GoalID)
+	if err != nil {
+		return spine.Contract{}, false, fmt.Errorf("get goal: %w", err)
+	}
+	if !ok {
+		return spine.Contract{}, false, ErrGoalNotFound
+	}
+	if err := authorizeGoalContractCreation(membership, goal); err != nil {
+		return spine.Contract{}, false, err
+	}
+	if err := validateExpectedGoalContext(input, goal); err != nil {
+		return spine.Contract{}, false, err
+	}
+	if existing, ok, err := s.Contracts.GetByGoalID(ctx, input.GoalID); err != nil {
+		return spine.Contract{}, false, fmt.Errorf("get contract by goal id: %w", err)
+	} else if ok {
+		return existing, false, nil
+	}
+	if goal.State != spine.GoalStateReadyForContractSeed {
+		return spine.Contract{}, false, fmt.Errorf("%w: %s", ErrInvalidGoalState, goal.State)
 	}
 
 	var seed spine.ContractSeed
@@ -89,9 +127,19 @@ func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest)
 	}
 
 	if err := s.TxRunner.RunReadCommitted(ctx, create); err != nil {
-		return spine.Contract{}, err
+		if errors.Is(err, contractseed.ErrAlreadySeeded) {
+			existing, ok, lookupErr := s.Contracts.GetByGoalID(ctx, input.GoalID)
+			if lookupErr != nil {
+				return spine.Contract{}, false, fmt.Errorf("get existing contract after already seeded: %w", lookupErr)
+			}
+			if ok {
+				return existing, false, nil
+			}
+		}
+		return spine.Contract{}, false, err
 	}
-	return s.getContract(ctx, draft.ContractID)
+	created, err := s.getContract(ctx, draft.ContractID)
+	return created, true, err
 }
 
 func (s *Service) Get(ctx context.Context, id spine.ContractID) (spine.Contract, error) {
@@ -183,4 +231,39 @@ func currentDraftID(contract spine.Contract) (spine.ContractDraftID, error) {
 		return "", ErrContractCurrentDraftMissing
 	}
 	return *contract.CurrentDraftID, nil
+}
+
+func authorizeGoalContractCreation(membership spine.OrganizationMembership, goal spine.Goal) error {
+	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
+		return ErrMembershipRequired
+	}
+	if membership.OrganizationID != goal.OrganizationID {
+		return ErrOrganizationForbidden
+	}
+	return nil
+}
+
+func validateGoalID(goalID spine.GoalID) error {
+	text := strings.TrimSpace(string(goalID))
+	if text == "" {
+		return &ValidationError{Field: "goal_id", Message: "is required"}
+	}
+	id, err := uuid.Parse(text)
+	if err != nil {
+		return &ValidationError{Field: "goal_id", Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: "goal_id", Message: "must be a UUIDv7"}
+	}
+	return nil
+}
+
+func validateExpectedGoalContext(input spine.ContractCreateRequest, goal spine.Goal) error {
+	if strings.TrimSpace(string(input.ProjectID)) != "" && input.ProjectID != goal.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) != "" && input.RepoBindingID != goal.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
 }

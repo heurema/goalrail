@@ -28,5 +28,7 @@ type Contract struct {
 }
 
 type ContractCreateRequest struct {
-	GoalID GoalID `json:"goal_id"`
+	GoalID        GoalID        `json:"goal_id"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
 }

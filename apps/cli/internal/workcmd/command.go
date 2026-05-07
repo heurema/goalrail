@@ -480,14 +480,13 @@ func buildContinueOutput(config projectconfig.Config, serverURL string, continua
 	switch state {
 	case "ready_for_contract_seed":
 		output.Display = spine.DisplaySummary{
-			Summary: "Goal is ready for contract seed. Contract drafting is the next planned step, but that CLI command is not available yet.",
+			Summary: "Goal is ready for contract seed. Draft the Contract handle next.",
 		}
 		output.NextAction = spine.NextAction{
-			Kind:         "draft_contract",
-			Blocking:     false,
-			Command:      fmt.Sprintf("goalrail contract draft --goal-id %s --format json", goalID),
-			Available:    false,
-			PlannedSlice: "D",
+			Kind:      "draft_contract",
+			Blocking:  false,
+			Command:   fmt.Sprintf("goalrail contract draft --goal-id %s --format json", goalID),
+			Available: true,
 		}
 	case "needs_clarification":
 		if continuation.ClarificationRequest == nil {
@@ -551,9 +550,13 @@ func renderAnswerText(output spine.WorkAnswerOutput) string {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, question.Text)
 		}
 	case "draft_contract":
-		fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
-		if output.NextAction.PlannedSlice != "" {
-			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.Available {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext planned command, not available yet: %s\n", output.NextAction.Command)
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
 		}
 	case "blocked":
 		fmt.Fprintf(&b, "\nNext action: blocked\n")
@@ -581,9 +584,13 @@ func renderContinueText(output spine.WorkContinueOutput) string {
 			fmt.Fprintf(&b, "%d. %s\n", i+1, question.Text)
 		}
 	case "draft_contract":
-		fmt.Fprintf(&b, "\nNext planned command: %s\n", output.NextAction.Command)
-		if output.NextAction.PlannedSlice != "" {
-			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.Available {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext planned command: %s\n", output.NextAction.Command)
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
 		}
 	case "blocked":
 		fmt.Fprintf(&b, "\nNext action: blocked\n")

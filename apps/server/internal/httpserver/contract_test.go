@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/heurema/goalrail/apps/server/internal/auth"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
@@ -92,6 +93,191 @@ func TestPostContractsCreatesDraftContract(t *testing.T) {
 		t.Fatalf("contract_draft.created events = %d, want 1", got)
 	}
 	assertNoForbiddenEventTypes(t, server.events.Events())
+}
+
+func TestPostContractsCreateOrReturnsExistingDraft(t *testing.T) {
+	server := testServer(t)
+	goal := createReadyForContractSeedGoal(t, server)
+
+	first := doJSON(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID))
+	if first.code != http.StatusCreated {
+		t.Fatalf("first status = %d, want %d: %s", first.code, http.StatusCreated, first.body)
+	}
+	var firstContract spine.Contract
+	decodeJSON(t, first.body, &firstContract)
+
+	second := doJSON(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID))
+	if second.code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusOK, second.body)
+	}
+	var secondContract spine.Contract
+	decodeJSON(t, second.body, &secondContract)
+	if secondContract.ID != firstContract.ID {
+		t.Fatalf("second contract id = %q, want %q", secondContract.ID, firstContract.ID)
+	}
+	if secondContract.CurrentDraftID == nil || firstContract.CurrentDraftID == nil || *secondContract.CurrentDraftID != *firstContract.CurrentDraftID {
+		t.Fatalf("second draft = %v, want %v", secondContract.CurrentDraftID, firstContract.CurrentDraftID)
+	}
+	if got := len(server.contracts.contracts); got != 1 {
+		t.Fatalf("contracts stored = %d, want 1", got)
+	}
+	if got := len(server.contractSeeds.seeds); got != 1 {
+		t.Fatalf("contract seeds stored = %d, want 1", got)
+	}
+	if got := len(server.contractDrafts.drafts); got != 1 {
+		t.Fatalf("contract drafts stored = %d, want 1", got)
+	}
+	if got := countEventType(server.events.Events(), contractseed.EventTypeContractSeedCreated); got != 1 {
+		t.Fatalf("contract_seed.created events = %d, want 1", got)
+	}
+	if got := countEventType(server.events.Events(), contractdraft.EventTypeContractDraftCreated); got != 1 {
+		t.Fatalf("contract_draft.created events = %d, want 1", got)
+	}
+}
+
+func TestPostContractsRequiresAuthBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	goal := createReadyForContractSeedGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID))
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+	if len(server.contracts.contracts) != 0 || len(server.contractSeeds.seeds) != 0 || len(server.contractDrafts.drafts) != 0 {
+		t.Fatal("contract state mutated despite failed auth")
+	}
+}
+
+func TestPostContractsRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	goal := createReadyForContractSeedGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID))
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "forbidden" {
+		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
+	}
+	if len(server.contracts.contracts) != 0 || len(server.contractSeeds.seeds) != 0 || len(server.contractDrafts.drafts) != 0 {
+		t.Fatal("contract state mutated despite org mismatch")
+	}
+}
+
+func TestPostContractsMalformedGoalIDReturnsValidationError(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", `{"goal_id":"not-a-uuid"}`)
+	if response.code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "validation_failed" {
+		t.Fatalf("error code = %q, want validation_failed", body.Error.Code)
+	}
+	if len(server.contracts.contracts) != 0 {
+		t.Fatal("contract state mutated despite malformed goal_id")
+	}
+}
+
+func TestPostContractsRejectsNotReadyGoalBeforeMutation(t *testing.T) {
+	server := testServer(t)
+	goal := spine.Goal{
+		ID:             "018f0000-0000-7000-8000-000000000106",
+		IntakeID:       "018f0000-0000-7000-8000-000000000105",
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		Title:          "Incomplete goal",
+		Summary:        "Needs more detail.",
+		State:          spine.GoalStateNeedsClarification,
+		CreatedAt:      testTime(),
+	}
+	if err := server.goals.Create(context.Background(), goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID))
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+	if len(server.contracts.contracts) != 0 || len(server.contractSeeds.seeds) != 0 || len(server.contractDrafts.drafts) != 0 {
+		t.Fatal("contract state mutated despite not-ready goal")
+	}
+}
+
+func TestPostContractsRejectsRepoBindingMismatchBeforeMutation(t *testing.T) {
+	server := testServer(t)
+	goal := createReadyForContractSeedGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", `{
+		"goal_id":"`+string(goal.ID)+`",
+		"project_id":"`+string(goal.ProjectID)+`",
+		"repo_binding_id":"018f0000-0000-7000-8000-000000009999"
+	}`)
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "project_context_mismatch" {
+		t.Fatalf("error code = %q, want project_context_mismatch", body.Error.Code)
+	}
+	if len(server.contracts.contracts) != 0 || len(server.contractSeeds.seeds) != 0 || len(server.contractDrafts.drafts) != 0 {
+		t.Fatal("contract state mutated despite repo binding mismatch")
+	}
+}
+
+func TestPostContractsRejectsProjectMismatchBeforeMutation(t *testing.T) {
+	server := testServer(t)
+	goal := createReadyForContractSeedGoal(t, server)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/contracts", `{
+		"goal_id":"`+string(goal.ID)+`",
+		"project_id":"018f0000-0000-7000-8000-000000009998",
+		"repo_binding_id":"`+string(goal.RepoBindingID)+`"
+	}`)
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "project_context_mismatch" {
+		t.Fatalf("error code = %q, want project_context_mismatch", body.Error.Code)
+	}
+	if len(server.contracts.contracts) != 0 || len(server.contractSeeds.seeds) != 0 || len(server.contractDrafts.drafts) != 0 {
+		t.Fatal("contract state mutated despite project mismatch")
+	}
 }
 
 func TestGetContractReturnsContractView(t *testing.T) {

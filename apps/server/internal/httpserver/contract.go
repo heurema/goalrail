@@ -13,7 +13,7 @@ import (
 )
 
 type ContractService interface {
-	Create(context.Context, spine.ContractCreateRequest) (spine.Contract, error)
+	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
 	Get(context.Context, spine.ContractID) (spine.Contract, error)
 	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest) (spine.Contract, error)
 	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest) (spine.Contract, error)
@@ -21,27 +21,38 @@ type ContractService interface {
 }
 
 type ContractHandler struct {
-	service ContractService
+	authService AuthService
+	service     ContractService
 }
 
-func NewContractHandler(service ContractService) *ContractHandler {
-	return &ContractHandler{service: service}
+func NewContractHandler(authService AuthService, service ContractService) *ContractHandler {
+	return &ContractHandler{authService: authService, service: service}
 }
 
 func (h *ContractHandler) Create(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.ContractCreateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
 
-	created, err := h.service.Create(r.Context(), input)
+	created, newlyCreated, err := h.service.Create(r.Context(), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
 
-	RespondJSON(w, http.StatusCreated, created)
+	status := http.StatusOK
+	if newlyCreated {
+		status = http.StatusCreated
+	}
+	RespondJSON(w, status, created)
 }
 
 func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +142,8 @@ func (h *ContractHandler) respondServiceError(w http.ResponseWriter, err error) 
 		RespondError(w, http.StatusBadRequest, "validation_failed", approvedCompletenessErr.Error())
 	case errors.Is(err, contract.ErrContractNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "contract not found")
+	case errors.Is(err, contract.ErrGoalNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "goal not found")
 	case errors.Is(err, contractseed.ErrGoalNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "goal not found")
 	case errors.Is(err, contractdraft.ErrContractSeedNotFound):
@@ -140,6 +153,8 @@ func (h *ContractHandler) respondServiceError(w http.ResponseWriter, err error) 
 	case errors.Is(err, approvedcontract.ErrContractDraftNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "contract draft not found")
 	case errors.Is(err, contractseed.ErrInvalidGoalState):
+		RespondError(w, http.StatusConflict, "invalid_state", "goal is not ready for contract")
+	case errors.Is(err, contract.ErrInvalidGoalState):
 		RespondError(w, http.StatusConflict, "invalid_state", "goal is not ready for contract")
 	case errors.Is(err, contract.ErrInvalidContractState):
 		RespondError(w, http.StatusConflict, "invalid_state", "contract state does not allow this transition")
@@ -153,6 +168,14 @@ func (h *ContractHandler) respondServiceError(w http.ResponseWriter, err error) 
 		RespondError(w, http.StatusConflict, "invalid_state", "contract draft is not ready for approval")
 	case errors.Is(err, contractseed.ErrAlreadySeeded):
 		RespondError(w, http.StatusConflict, "already_seeded", "goal already has contract")
+	case errors.Is(err, contract.ErrMembershipRequired):
+		RespondError(w, http.StatusForbidden, "membership_required", "active organization membership is required")
+	case errors.Is(err, contract.ErrOrganizationForbidden):
+		RespondError(w, http.StatusForbidden, "forbidden", "user is not allowed to create contract for this goal")
+	case errors.Is(err, contract.ErrProjectMismatch):
+		RespondError(w, http.StatusConflict, "project_context_mismatch", "request project does not match goal project")
+	case errors.Is(err, contract.ErrRepoBindingMismatch):
+		RespondError(w, http.StatusConflict, "project_context_mismatch", "request repo binding does not match goal repo binding")
 	case errors.Is(err, contractdraft.ErrAlreadyDrafted):
 		RespondError(w, http.StatusConflict, "already_drafted", "contract already has draft")
 	case errors.Is(err, contract.ErrAlreadyApproved):
