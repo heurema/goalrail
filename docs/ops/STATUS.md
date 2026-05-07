@@ -146,7 +146,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-seven kernel/CLI/server/domain boundary ADRs
+- twenty-eight kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -195,6 +195,11 @@ The project currently has:
 - ADR-0008 documents the first runner prototype direction as hosted-only read-only ephemeral checkout
 - hosted runner workers are expected to use pull-based / poll-based job leasing
 - customer-hosted runner remains documented but unimplemented
+- ADR-0028 documents the concrete runner checkout instruction and workspace
+  receipt boundary for the next implementation slice: `WorkItem(planned)` may
+  lead to a server-owned checkout job / instruction and a runner-submitted
+  checkout receipt, while WorkItem state remains `planned` and assignment,
+  claiming, execution, `Run`, gate, and proof remain deferred
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -357,7 +362,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-seven boundary ADRs exist
+- kernel schema note and twenty-eight boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -441,7 +446,10 @@ The project currently has:
   under `apps/worker`; it does not imply checkout, execution, direct DB writes,
   WorkItem creation by the worker, assignment/claiming, queue/outbox/runtime
   registry, `Run`, receipt, `GateDecision`, or `Proof`
-- the runner / repository checkout boundary is documented in ADR-0008, but no runner implementation exists yet
+- the runner / repository checkout boundary is documented in ADR-0008, and
+  ADR-0028 now defines the concrete checkout instruction / workspace receipt
+  boundary for H1; no runner implementation, checkout job, checkout receipt,
+  execution, gate, or proof exists yet
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
@@ -501,7 +509,7 @@ The project currently has:
 - no full manual-declared repository registration flow beyond repository-context and explicit metadata-only RepoBinding init
 - no runner-reported repository metadata flow
 - no runner registration, runner assignment, checkout request, checkout receipt,
-  planning controller, or worker implementation yet
+  planning controller, or runner implementation yet
 - no hosted runner pool implementation yet
 - no checkout job implementation yet
 - no customer-hosted runner installer/registration/auth yet

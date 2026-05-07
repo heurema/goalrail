@@ -13,6 +13,11 @@
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
 - `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
+- ADR-0028 now defines the runner checkout instruction and workspace receipt
+  boundary for H1: the next code slice may create or return a checkout job from
+  `WorkItem(planned)`, issue a bounded runner checkout instruction, and record a
+  runner-submitted workspace receipt without assignment, claiming, execution,
+  `Run`, gate, proof, server-side clone, or server-side repository secrets
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured
@@ -106,14 +111,14 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- Next bounded backend / worker implementation slice: start the runner /
-  checkout boundary design only after the compact smoke fixture through
-  `WorkItem(planned)` remains green. It should not start assignment, claiming,
-  checkout, execution, gate, or proof inside the smoke baseline.
-- Checkout, execution, gate, proof, assignment/claiming, queue, outbox,
-  runtime registry, runner checkout credentials, provider OAuth,
-  VcsConnection, token storage, provider clients, live metadata listing, `Run`,
-  and receipt behavior remain deferred.
+- Next bounded backend / runner implementation slice: H1 should implement only
+  checkout instruction plus workspace receipt, following ADR-0028. It should
+  keep WorkItems `planned`, use runner-owned local credentials, avoid
+  server-side clone and repository secrets, and still not start assignment,
+  claiming, execution, `Run`, gate, or proof.
+- Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
+  provider OAuth, VcsConnection, token storage, provider clients, live metadata
+  listing, `Run`, and execution receipt behavior remain deferred.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -799,18 +804,23 @@ Done means:
    - do not add server-side clone, provider OAuth, runner checkout,
      watcher/daemon, embeddings, ContractContextPack generation, gate, or proof
 2. Runner-owned repository checkout credential boundary
-   - define runner startup flags for Goalrail connection and local credential
-     file paths only
-   - define API-issued `CheckoutInstruction` fields, including
-     `repo_binding_id`, `repository_url`, `ref`, `path_scope`, and optional auth
-     hint
-   - define `CheckoutReceipt` / bounded metadata snapshot fields returned by
-     the runner
-   - define supported credential modes: Git HTTPS token file, SSH key file, and
+   - Status: DONE — ADR-0028 defines the H1 checkout instruction / workspace
+     receipt boundary.
+   - runner startup flags are limited to Goalrail connection, runner identity /
+     narrow runner auth input, and local credential file paths
+   - API-issued `CheckoutInstruction` fields include task / contract / plan /
+     proposal context, `repo_binding_id`, `repository_url`, `ref`,
+     `workflow_base_branch`, `path_scope`, `checkout_mode`, and optional
+     non-secret auth hint
+   - `CheckoutReceipt` fields include checkout job / task / runner identity,
+     checkout mode, `commit_sha`, baseline / overlay ids, dirty / partial
+     state, `raw_source_uploaded=false`, workspace / artifact refs, timing, and
+     cleanup metadata
+   - supported H1 credential modes: Git HTTPS token file, SSH key file, and
      mounted workspace
    - add no provider OAuth, VcsConnection, token storage, provider clients, live
-     metadata listing, checkout implementation, runner implementation, gate, or
-     proof
+     metadata listing, checkout implementation, runner implementation,
+     assignment, claiming, `Run`, execution, gate, or proof
 3. Organization / project / repo binding persistence boundary
    - ADR-0010 documents Goalrail `Organization`, `User`, `OrganizationMembership`, `Project`, `RepoBinding`, and `RepoBinding.access_mode`
    - direct `RepoBinding` stores repository reference in the MVP
@@ -820,13 +830,15 @@ Done means:
    - support the runner-owned credential path without requiring GitHub App,
      GitLab, or Bitbucket cloud connection
 4. Runner checkout prototype boundary
-   - start with a universal runner as a separate binary/process
+   - NEXT implementation target after ADR-0028
+   - start with a universal runner as a separate binary/process under an
+     `apps/runner` boundary
    - use pull-based / poll-based job leasing from the API server
    - perform read-only ephemeral checkout or use a mounted workspace and
      produce a checkout receipt with minimum evidence fields
    - do not implement provider OAuth, token storage, provider clients,
-     persistent mirrors, repository writes, arbitrary command execution, gate,
-     or proof
+     persistent mirrors, repository writes, arbitrary command execution,
+     assignment, claiming, `Run`, execution, gate, or proof
 5. Customer-hosted runner protocol boundary
    - define later customer-hosted runner protocol, registration/auth, and customer-owned repository credential flow
    - keep clone access inside customer infrastructure and return bounded artifacts only
