@@ -312,6 +312,27 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'What is contract-first execution?' })).toBeInTheDocument();
   });
 
+  it('keeps /start fallback message safe when assistant endpoint returns non-JSON', async () => {
+    window.history.replaceState(null, '', '/start');
+    fetchMock.mockResolvedValueOnce(
+      new Response('<html>bad gateway</html>', {
+        status: 502,
+        headers: { 'Content-Type': 'text/html' },
+      })
+    );
+
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: /ask goalrail/i }), {
+      target: { value: 'What is Goalrail?' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Ask$/i }));
+
+    await screen.findByText(/temporarily unavailable/i);
+    expect(screen.queryByText(/Unexpected token/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Goalrail is a control layer/i })).toBeInTheDocument();
+  });
+
   it('updates the /start answer panel from local static question data', () => {
     window.history.replaceState(null, '', '/start');
 

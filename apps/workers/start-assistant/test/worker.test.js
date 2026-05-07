@@ -342,6 +342,7 @@ test('calls OpenAI Responses API with file_search and shapes citations', async (
   assert.equal(captured.url, 'https://api.openai.com/v1/responses');
   assert.equal(captured.init.headers.Authorization, 'Bearer test-key');
   assert.equal(captured.body.model, 'test-model');
+  assert.equal(captured.body.tool_choice, 'required');
   assert.deepEqual(captured.body.tools, [
     {
       type: 'file_search',

@@ -128,7 +128,7 @@ export async function callOpenAIResponses(question, config, runtime = {}) {
         max_num_results: config.maxResults,
       },
     ],
-    tool_choice: 'auto',
+    tool_choice: 'required',
     max_output_tokens: 450,
     store: false,
     metadata: {

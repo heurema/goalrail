@@ -30,6 +30,22 @@ interface LiveAssistantResponse {
   disclaimer?: string;
 }
 
+type LiveAssistantPayload = Partial<LiveAssistantResponse> & { message?: string };
+
+async function readLiveAssistantPayload(response: Response): Promise<LiveAssistantPayload> {
+  const contentType = response.headers.get('Content-Type') ?? '';
+
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return {};
+  }
+
+  try {
+    return (await response.json()) as LiveAssistantPayload;
+  } catch {
+    return {};
+  }
+}
+
 function upsertNamedMeta(name: string, content: string) {
   let meta = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
 
@@ -110,7 +126,7 @@ function StartPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       });
-      const payload = (await response.json()) as Partial<LiveAssistantResponse> & { message?: string };
+      const payload = await readLiveAssistantPayload(response);
 
       if (!response.ok || typeof payload.answer !== 'string') {
         throw new Error(payload.message || START_ASSISTANT_UNAVAILABLE);
