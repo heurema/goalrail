@@ -105,14 +105,41 @@ The assistant should prefer canonical product docs over advisory docs when sourc
 
 ## Update model
 
-### MVP update
+### Current Stage 3C update
 
-On push to `main`:
+The current sync path is intentionally operator-triggered:
+
+1. pull requests and relevant `main` pushes build the public KB and run the
+   upload command in dry-run mode;
+2. live publish requires manual `workflow_dispatch`;
+3. publish requires `publish_to_worker=true` and confirmation text
+   `PUBLISH_START_ASSISTANT_KB`;
+4. publish runs in protected environment `start-assistant-kb-sync`;
+5. publish uploads a new OpenAI vector store;
+6. publish updates Worker runtime secrets for vector store ID, KB revision, and
+   KB updated timestamp;
+7. publish deploys the Worker route with `--keep-vars`;
+8. publish runs a live freshness smoke against `POST /api/start-chat`.
+
+The workflow is:
+
+```text
+.github/workflows/start-assistant-public-kb-sync.yml
+```
+
+This is not a broad automatic sync on every push. The manual approval boundary
+is deliberate until answer quality, provider cost, and rollback retention are
+proven.
+
+### Later automatic update
+
+After the operator-triggered path is stable, a later slice may move toward
+automatic publish on `main`:
 
 1. build public KB;
 2. upload to OpenAI vector store;
-3. store latest vector store ID and source revision in runtime config;
-4. optionally expire previous vector store.
+3. store latest vector store ID and source revision in runtime config or KV;
+4. expire previous vector stores according to retention policy.
 
 ### Later update
 

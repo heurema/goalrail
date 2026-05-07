@@ -53,12 +53,30 @@ Manual public KB commands:
 node scripts/start-assistant/build-public-kb.mjs
 node scripts/start-assistant/upload-public-kb-openai.mjs
 node scripts/start-assistant/upload-public-kb-openai.mjs --execute
+node scripts/start-assistant/upload-public-kb-openai.mjs --execute --quiet
 ```
 
 The upload command is dry-run by default. `--execute` requires `OPENAI_API_KEY`,
 uploads only the generated public KB document, creates a new OpenAI vector
 store, attaches the file through a vector-store file batch, and writes an
 ignored runtime manifest under `.goalrail/public-kb/dist/`.
+
+`--quiet` suppresses provider IDs and Worker config values in logs. Use it for
+CI/operator sync.
+
+Operator public KB sync:
+
+```bash
+GH_SAFE_ACCOUNT=t3chn gh workflow run start-assistant-public-kb-sync.yml \
+  -f publish_to_worker=true \
+  -f confirm=PUBLISH_START_ASSISTANT_KB
+```
+
+The workflow validates public KB builds without secrets on PRs and relevant
+`main` pushes. The live publish path requires protected environment
+`start-assistant-kb-sync`, uploads a new OpenAI file_search index, updates
+Worker runtime secrets through Wrangler, deploys the Worker route with
+`--keep-vars`, and runs a live freshness smoke.
 
 Local commands:
 

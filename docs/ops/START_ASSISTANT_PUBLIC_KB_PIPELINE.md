@@ -40,7 +40,45 @@ Verified live metadata as of 2026-05-07:
   suggested questions, and the safety disclaimer.
 
 Provider vector-store identifiers remain deployment-managed and are not
-recorded in this repository. GitHub Action sync is not live.
+recorded in this repository.
+
+## Current Stage 3C sync workflow
+
+The first automated sync path is operator-triggered, not automatic on every
+`main` push.
+
+Workflow:
+
+```text
+.github/workflows/start-assistant-public-kb-sync.yml
+```
+
+What it does without secrets:
+
+- runs on pull requests and `main` pushes that touch the public KB manifest,
+  whitelisted public source docs, or start-assistant scripts;
+- builds the public KB from `.goalrail/public-kb/manifest.yaml`;
+- runs the OpenAI upload command in dry-run mode;
+- uploads only public generated KB artifacts for review.
+
+What it does only on explicit operator dispatch:
+
+- requires `workflow_dispatch`;
+- requires `publish_to_worker=true`;
+- requires confirmation text `PUBLISH_START_ASSISTANT_KB`;
+- uses protected environment `start-assistant-kb-sync`;
+- requires deployment secrets `OPENAI_API_KEY`, `CLOUDFLARE_API_TOKEN`, and
+  `CLOUDFLARE_ACCOUNT_ID`;
+- uploads a new OpenAI file_search vector store through
+  `scripts/start-assistant/upload-public-kb-openai.mjs --execute --quiet`;
+- updates the Worker runtime secrets for the vector store ID, KB revision, and
+  KB updated timestamp through Wrangler;
+- deploys the Worker route with `--keep-vars`;
+- runs a live assistant freshness smoke after the Worker config update.
+
+The publish job does not print provider IDs or Worker config values to logs and
+does not commit generated manifests or provider identifiers. The
+`runtime-manifest.json` stays inside the workflow workspace.
 
 ## Whitelist model
 
@@ -220,16 +258,16 @@ to an update-in-place strategy with stronger validation.
 
 ## Runtime manifest storage
 
-Stage 3B acceptable options:
+Stage 3B / Stage 3C acceptable options:
 
 1. Static Worker config for the first manual smoke.
 2. Cloudflare KV for the latest manifest pointer.
 3. R2 for larger generated artifacts if the manifest grows.
 
-Default v0 recommendation:
+Current v0:
 
 ```text
-manual sync -> static Worker config or Worker secret/config variable
+operator-triggered GitHub Action -> Worker secrets
 ```
 
 Move to KV when the sync path becomes automated.
