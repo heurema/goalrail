@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
@@ -43,6 +44,35 @@ func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "no planning work available") {
 		t.Fatalf("logs = %q, want no-work message", logs.String())
+	}
+}
+
+func TestRunTreatsSleepCancellationAsCleanShutdown(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var leaseRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/plans/leases" {
+			leaseRequests.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+			cancel()
+			return
+		}
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	if err := Run(ctx, Config{
+		ServerURL:       server.URL,
+		WorkerID:        "planner-worker-1",
+		PollInterval:    time.Hour,
+		LeaseTTLSeconds: 900,
+	}); err != nil {
+		t.Fatalf("Run() error = %v, want clean shutdown", err)
+	}
+	if leaseRequests.Load() != 1 {
+		t.Fatalf("lease requests = %d, want 1", leaseRequests.Load())
 	}
 }
 

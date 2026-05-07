@@ -3,7 +3,6 @@ package planningworker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -78,6 +77,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	for {
 		result, err := r.Step(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
 			return err
 		}
 		if r.config.Once {
@@ -165,7 +167,7 @@ func sleepContext(ctx context.Context, duration time.Duration) error {
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("worker stopped: %w", ctx.Err())
+		return nil
 	case <-timer.C:
 		return nil
 	}
