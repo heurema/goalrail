@@ -3,8 +3,10 @@ package checkoutrunner
 import "time"
 
 type checkoutLeaseCreateRequest struct {
-	RunnerID   string `json:"runner_id"`
-	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+	ProjectID     string `json:"project_id"`
+	RepoBindingID string `json:"repo_binding_id"`
+	RunnerID      string `json:"runner_id"`
+	TTLSeconds    int    `json:"ttl_seconds,omitempty"`
 }
 
 type checkoutLease struct {

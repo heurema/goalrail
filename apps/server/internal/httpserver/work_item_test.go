@@ -664,7 +664,8 @@ func TestCheckoutJobLeaseAndReceiptRecordWorkspaceOnly(t *testing.T) {
 	var job spine.CheckoutJob
 	decodeJSON(t, jobResponse.body, &job)
 
-	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"runner_id":"runner-1"}`)
+	leaseBody := fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-1"}`, "018f0000-0000-7000-8000-000000000003", job.RepoBindingID)
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", leaseBody)
 	if leaseResponse.code != http.StatusCreated {
 		t.Fatalf("lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
 	}
@@ -763,12 +764,55 @@ func TestCheckoutRunnerRoutesRespectOrganizationBoundary(t *testing.T) {
 		}
 		server.checkoutJobs.jobs[job.ID] = job
 
-		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"runner_id":"runner-1"}`)
-		if response.code != http.StatusNoContent {
-			t.Fatalf("lease status = %d, want %d: %s", response.code, http.StatusNoContent, response.body)
-		}
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
 		if got := server.checkoutJobs.jobs[job.ID].State; got != spine.CheckoutJobStateQueued {
 			t.Fatalf("foreign checkout job state = %q, want queued", got)
+		}
+	})
+
+	t.Run("lease only sees requested project and repo binding scope", func(t *testing.T) {
+		server := testServer(t)
+		otherBinding := server.repoBindings.bindings["018f0000-0000-7000-8000-000000000004"]
+		otherBinding.ID = "018f0000-0000-7000-8000-000000000044"
+		otherBinding.RepositoryFullName = "heurema/other"
+		otherBinding.RepositoryURL = "https://github.com/heurema/other"
+		server.repoBindings.bindings[otherBinding.ID] = otherBinding
+
+		wantedJob := spine.CheckoutJob{
+			ID:             "checkout-job-wanted",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-wanted",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime().Add(time.Minute),
+			UpdatedAt:      testTime(),
+		}
+		otherJob := spine.CheckoutJob{
+			ID:             "checkout-job-other",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-other",
+			RepoBindingID:  otherBinding.ID,
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime(),
+			UpdatedAt:      testTime(),
+		}
+		server.checkoutJobs.jobs[wantedJob.ID] = wantedJob
+		server.checkoutJobs.jobs[otherJob.ID] = otherJob
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		if response.code != http.StatusCreated {
+			t.Fatalf("lease status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		}
+		var lease spine.CheckoutJobLeaseCreated
+		decodeJSON(t, response.body, &lease)
+		if lease.JobID != wantedJob.ID {
+			t.Fatalf("lease job = %q, want scoped job %q", lease.JobID, wantedJob.ID)
+		}
+		if got := server.checkoutJobs.jobs[otherJob.ID].State; got != spine.CheckoutJobStateQueued {
+			t.Fatalf("other repo checkout job state = %q, want queued", got)
 		}
 	})
 

@@ -67,6 +67,8 @@ type RepoBindingReader interface {
 
 type JobLeaseInput struct {
 	OrganizationID spine.OrganizationID
+	ProjectID      spine.ProjectID
+	RepoBindingID  spine.RepoBindingID
 	RunnerID       string
 	LeaseTokenHash string
 	LeaseExpiresAt time.Time
@@ -198,6 +200,17 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 	if runnerID == "" {
 		return spine.CheckoutJobLeaseCreated{}, false, &ValidationError{Field: "runner_id", Message: "is required"}
 	}
+	projectID := input.ProjectID
+	if strings.TrimSpace(string(projectID)) == "" {
+		return spine.CheckoutJobLeaseCreated{}, false, &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	repoBindingID := input.RepoBindingID
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		return spine.CheckoutJobLeaseCreated{}, false, &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if err := s.validateLeaseScope(ctx, projectID, repoBindingID, membership); err != nil {
+		return spine.CheckoutJobLeaseCreated{}, false, err
+	}
 	ttl, err := leaseTTL(input.TTLSeconds)
 	if err != nil {
 		return spine.CheckoutJobLeaseCreated{}, false, err
@@ -209,6 +222,8 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 	now := s.Clock.Now().UTC()
 	leaseInput := JobLeaseInput{
 		OrganizationID: membership.OrganizationID,
+		ProjectID:      projectID,
+		RepoBindingID:  repoBindingID,
 		RunnerID:       runnerID,
 		LeaseTokenHash: leaseTokenHash(token),
 		LeaseExpiresAt: now.Add(ttl),
@@ -317,6 +332,23 @@ func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, 
 		return spine.CheckoutReceipt{}, err
 	}
 	return receipt, nil
+}
+
+func (s *Service) validateLeaseScope(ctx context.Context, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership) error {
+	binding, ok, err := s.RepoBindings.GetRepoBinding(ctx, repoBindingID)
+	if err != nil {
+		return fmt.Errorf("get checkout lease repo binding: %w", err)
+	}
+	if !ok || binding.State != spine.EntityStateActive {
+		return ErrRepoBindingNotFound
+	}
+	if binding.OrganizationID != membership.OrganizationID {
+		return ErrOrganizationForbidden
+	}
+	if binding.ProjectID != projectID {
+		return ErrProjectMismatch
+	}
+	return nil
 }
 
 func (s *Service) loadAuthorizedTaskContext(ctx context.Context, taskID spine.WorkItemID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership) (spine.WorkItem, spine.RepoBinding, error) {

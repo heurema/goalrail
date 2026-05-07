@@ -44,10 +44,12 @@
   assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
   `GateDecision`, or `Proof`.
 - `apps/runner` now implements the first minimal API-only `goalrail-runner`
-  checkout receipt loop. It polls checkout job leases, receives bounded checkout
-  instructions, and submits workspace receipts with lease proof. It does not
-  clone/fetch repositories in H1, run commands, assign/claim WorkItems, create
-  `Run`, write `GateDecision`, create `Proof`, or add runtime registry behavior.
+  checkout receipt loop. It polls checkout job leases using an
+  operator-declared project / repo-binding scope, receives bounded checkout
+  instructions, validates them against that scope, and submits lease-qualified
+  workspace receipts with lease proof. It does not clone/fetch repositories in
+  H1, run commands, assign/claim WorkItems, create `Run`, write
+  `GateDecision`, create `Proof`, or add runtime registry behavior.
 - ADR-0022 now defines the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -822,13 +824,15 @@ Done means:
    - Status: DONE — ADR-0028 defines and H1 implements the checkout instruction
      / workspace receipt boundary.
    - runner startup flags are limited to Goalrail connection, runner identity /
-     narrow runner auth input, and local credential file paths
+     narrow runner auth input, operator-declared project / repo-binding lease
+     scope, and local credential file paths
    - API-issued `CheckoutInstruction` fields include task / contract / plan /
      proposal context, `repo_binding_id`, `repository_url`, `ref`,
      `workflow_base_branch`, `path_scope`, `checkout_mode`, and optional
      non-secret auth hint
    - `CheckoutReceipt` fields include checkout job / task / runner identity,
-     checkout mode, `commit_sha`, baseline / overlay ids, dirty / partial
+     checkout mode, a lease-qualified workspace reference, `commit_sha`,
+     baseline / overlay ids, dirty / partial
      state, `raw_source_uploaded=false`, workspace / artifact refs, timing, and
      cleanup metadata
    - supported H1 credential modes: Git HTTPS token file, SSH key file, and

@@ -2472,6 +2472,12 @@ func (s *fakeCheckoutJobStore) AcquireNextLease(_ context.Context, input checkou
 		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
 			continue
 		}
+		if input.ProjectID != "" && job.ProjectID != input.ProjectID {
+			continue
+		}
+		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
+			continue
+		}
 		if job.State == spine.CheckoutJobStateQueued || (job.State == spine.CheckoutJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
 			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
 				selected = job

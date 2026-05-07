@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/heurema/goalrail/apps/server/internal/checkout"
@@ -1401,6 +1402,42 @@ func validWorkItemRowValues() []any {
 		int32(1),
 		[]byte(`[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000601"}]`),
 		testStoreTime(),
+	}
+}
+
+func TestPostgresCheckoutJobStoreAcquireNextLeaseScopesByProjectAndRepoBinding(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{err: pgx.ErrNoRows}}
+	store := NewPostgresCheckoutJobStoreWithExecutorAndQuerier(exec, query)
+
+	_, ok, err := store.AcquireNextLease(ctx, checkout.JobLeaseInput{
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		RunnerID:       "runner-1",
+		LeaseTokenHash: "token-hash",
+		LeaseExpiresAt: testStoreTime().Add(time.Hour),
+		UpdatedAt:      testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("AcquireNextLease() error = %v", err)
+	}
+	if ok {
+		t.Fatal("AcquireNextLease() ok = true, want false for no rows")
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("query calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "organization_id = $1 AND project_id = $2 AND repo_binding_id = $3") {
+		t.Fatalf("acquire SQL = %q, want organization/project/repo scope filter", call.sql)
+	}
+	if got, want := len(call.args), 6; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	if len(exec.calls) != 0 {
+		t.Fatalf("exec calls = %d, want none when no scoped lease candidate exists", len(exec.calls))
 	}
 }
 

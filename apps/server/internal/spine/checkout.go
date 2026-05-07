@@ -55,8 +55,10 @@ type CheckoutJobCreateRequest struct {
 }
 
 type CheckoutJobLeaseCreateRequest struct {
-	RunnerID   string `json:"runner_id"`
-	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	RunnerID      string        `json:"runner_id"`
+	TTLSeconds    int           `json:"ttl_seconds,omitempty"`
 }
 
 type CheckoutJobLeaseCreated struct {

@@ -145,10 +145,13 @@ apps/runner/cmd/goalrail-runner
 apps/runner/internal/...
 ```
 
-The runner startup config should include Goalrail API connection and local
-credential file paths only, for example:
+The runner startup config should include Goalrail API connection, an
+operator-declared checkout lease scope, and local credential file paths, for
+example:
 
 - `--server-url` / `GOALRAIL_RUNNER_SERVER_URL`
+- `--project-id` / `GOALRAIL_RUNNER_PROJECT_ID`
+- `--repo-binding-id` / `GOALRAIL_RUNNER_REPO_BINDING_ID`
 - `--runner-id` / `GOALRAIL_RUNNER_ID`
 - `GOALRAIL_RUNNER_BEARER_TOKEN` for the current narrow API auth input
 - Git HTTPS token file
@@ -156,9 +159,15 @@ credential file paths only, for example:
 - known_hosts file
 - mounted workspace root, when using mounted workspace mode
 
-Runner startup config must not hard-code a repository URL, RepoBinding ID,
-checkout mode, task ID, branch, or path scope as canonical truth. Those arrive
-from API-issued checkout instructions.
+Until a dedicated runner registration / capability model exists, `project_id`
+and `repo_binding_id` are a fail-closed lease filter. They limit which checkout
+jobs the runner may receive; they are not the canonical checkout instruction.
+The runner must still validate each API-issued instruction against the requested
+scope before submitting a workspace receipt.
+
+Runner startup config must not hard-code a repository URL, checkout mode, task
+ID, branch, or path scope as canonical truth. Those arrive from API-issued
+checkout instructions.
 
 ## CheckoutInstruction v0 fields
 
@@ -294,7 +303,11 @@ The runner must:
 - run as a separate process from the API server
 - talk to Goalrail only through API routes
 - own local repository credentials
+- request checkout leases only for its operator-declared project / repo binding
+  scope
 - use API-issued checkout metadata for the bounded job
+- validate the leased instruction against the requested scope before submitting
+  a receipt
 - prepare a read-only ephemeral checkout or verify a mounted workspace
 - resolve the actual `commit_sha`
 - refresh or produce local baseline / overlay evidence where needed
@@ -311,6 +324,11 @@ The runner must not:
 - execute arbitrary customer commands in H1
 - create `Run`, receipt-for-execution, `Decision`, `GateDecision`, or `Proof`
 - create branches, commits, pull requests, or merge requests
+
+For H1's mounted-workspace prototype, the submitted `workspace_ref` is still an
+opaque runner-local reference, but it must be qualified per lease with checkout
+job / task / repo-binding identity. The static runner workspace root alone is
+not sufficient receipt identity for repeated jobs.
 
 If H1 uses local Git commands for checkout, they must be routed through a narrow
 allowlisted checkout helper. That helper may run Git checkout/fetch/status

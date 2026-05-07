@@ -3,6 +3,7 @@ package checkoutrunner
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 type Config struct {
 	ServerURL       string
 	BearerToken     string
+	ProjectID       string
+	RepoBindingID   string
 	RunnerID        string
 	WorkspaceRef    string
 	CommitSHA       string
@@ -98,8 +101,10 @@ func (r *Runner) Run(ctx context.Context) error {
 
 func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	lease, ok, err := r.client.acquireLease(ctx, checkoutLeaseCreateRequest{
-		RunnerID:   r.config.RunnerID,
-		TTLSeconds: r.config.LeaseTTLSeconds,
+		ProjectID:     r.config.ProjectID,
+		RepoBindingID: r.config.RepoBindingID,
+		RunnerID:      r.config.RunnerID,
+		TTLSeconds:    r.config.LeaseTTLSeconds,
 	})
 	if err != nil {
 		return "", err
@@ -110,18 +115,11 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	}
 	r.logger.Printf("acquired checkout lease job_id=%s task_id=%s", lease.JobID, lease.TaskID)
 
-	receipt, err := r.client.submitReceipt(ctx, lease.JobID, checkoutReceiptSubmitRequest{
-		LeaseToken:        lease.LeaseToken,
-		RunnerID:          r.config.RunnerID,
-		WorkspaceRef:      r.config.WorkspaceRef,
-		CommitSHA:         r.config.CommitSHA,
-		BaselineID:        r.config.BaselineID,
-		OverlayID:         r.config.OverlayID,
-		Dirty:             r.config.Dirty,
-		Partial:           r.config.Partial,
-		PartialReasons:    cloneNonBlankStrings(r.config.PartialReasons),
-		RawSourceUploaded: false,
-	})
+	receiptRequest, err := r.receiptRequestForLease(lease)
+	if err != nil {
+		return "", err
+	}
+	receipt, err := r.client.submitReceipt(ctx, lease.JobID, receiptRequest)
 	if err != nil {
 		switch apiErrorCode(err) {
 		case "lease_expired":
@@ -141,12 +139,56 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	return StepReceipt, nil
 }
 
+func (r *Runner) receiptRequestForLease(lease checkoutLease) (checkoutReceiptSubmitRequest, error) {
+	if err := r.validateLeaseInstruction(lease); err != nil {
+		return checkoutReceiptSubmitRequest{}, err
+	}
+	return checkoutReceiptSubmitRequest{
+		LeaseToken:        lease.LeaseToken,
+		RunnerID:          r.config.RunnerID,
+		WorkspaceRef:      workspaceRefForLease(r.config.WorkspaceRef, lease),
+		CommitSHA:         r.config.CommitSHA,
+		BaselineID:        r.config.BaselineID,
+		OverlayID:         r.config.OverlayID,
+		Dirty:             r.config.Dirty,
+		Partial:           r.config.Partial,
+		PartialReasons:    cloneNonBlankStrings(r.config.PartialReasons),
+		RawSourceUploaded: false,
+	}, nil
+}
+
+func (r *Runner) validateLeaseInstruction(lease checkoutLease) error {
+	instruction := lease.Instruction
+	if strings.TrimSpace(instruction.JobID) != "" && instruction.JobID != lease.JobID {
+		return fmt.Errorf("checkout lease instruction job_id %q does not match lease job_id %q", instruction.JobID, lease.JobID)
+	}
+	if strings.TrimSpace(instruction.TaskID) != "" && instruction.TaskID != lease.TaskID {
+		return fmt.Errorf("checkout lease instruction task_id %q does not match lease task_id %q", instruction.TaskID, lease.TaskID)
+	}
+	if strings.TrimSpace(instruction.RepoBindingID) == "" {
+		return errors.New("checkout lease instruction repo_binding_id is required")
+	}
+	if instruction.RepoBindingID != r.config.RepoBindingID {
+		return fmt.Errorf("checkout lease repo_binding_id %q does not match runner scope %q", instruction.RepoBindingID, r.config.RepoBindingID)
+	}
+	if instruction.RawSourceUploaded {
+		return errors.New("checkout lease instruction unexpectedly claims raw source upload")
+	}
+	return nil
+}
+
 func validateConfig(config Config) error {
 	if strings.TrimSpace(config.ServerURL) == "" {
 		return errors.New("server url is required")
 	}
 	if strings.TrimSpace(config.BearerToken) == "" {
 		return errors.New("runner bearer token is required")
+	}
+	if strings.TrimSpace(config.ProjectID) == "" {
+		return errors.New("project id is required")
+	}
+	if strings.TrimSpace(config.RepoBindingID) == "" {
+		return errors.New("repo binding id is required")
 	}
 	if strings.TrimSpace(config.RunnerID) == "" {
 		return errors.New("runner id is required")
@@ -164,6 +206,10 @@ func validateConfig(config Config) error {
 		return errors.New("lease ttl seconds must be non-negative")
 	}
 	return nil
+}
+
+func workspaceRefForLease(base string, lease checkoutLease) string {
+	return fmt.Sprintf("%s#checkout_job=%s;task=%s;repo_binding=%s", strings.TrimSpace(base), lease.JobID, lease.TaskID, lease.Instruction.RepoBindingID)
 }
 
 func cloneNonBlankStrings(values []string) []string {

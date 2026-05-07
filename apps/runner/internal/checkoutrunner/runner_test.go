@@ -33,6 +33,8 @@ func TestRunOnceNoWorkExitsCleanly(t *testing.T) {
 	if err := Run(context.Background(), Config{
 		ServerURL:       server.URL,
 		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -70,6 +72,8 @@ func TestRunTreatsSleepCancellationAsCleanShutdown(t *testing.T) {
 	if err := Run(ctx, Config{
 		ServerURL:       server.URL,
 		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -116,6 +120,8 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	if err := Run(context.Background(), Config{
 		ServerURL:       server.URL,
 		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
 		RunnerID:        "runner-1",
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
@@ -128,8 +134,8 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if leaseRequest.RunnerID != "runner-1" || leaseRequest.TTLSeconds != 900 {
-		t.Fatalf("lease request = %#v, want runner and ttl", leaseRequest)
+	if leaseRequest.ProjectID != "project-1" || leaseRequest.RepoBindingID != "repo-1" || leaseRequest.RunnerID != "runner-1" || leaseRequest.TTLSeconds != 900 {
+		t.Fatalf("lease request = %#v, want scoped runner lease request", leaseRequest)
 	}
 	if receiptRequests.Load() != 1 {
 		t.Fatalf("receipt requests = %d, want 1", receiptRequests.Load())
@@ -137,14 +143,57 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	if receiptRequest.LeaseToken != secretToken || receiptRequest.RunnerID != "runner-1" {
 		t.Fatalf("receipt lease proof = %#v, want runner lease proof", receiptRequest)
 	}
-	if receiptRequest.WorkspaceRef != "mounted:/workspace/goalrail" || receiptRequest.CommitSHA != "abc123" {
-		t.Fatalf("receipt workspace = %#v, want mounted workspace metadata", receiptRequest)
+	if receiptRequest.WorkspaceRef != "mounted:/workspace/goalrail#checkout_job=job-1;task=task-1;repo_binding=repo-1" || receiptRequest.CommitSHA != "abc123" {
+		t.Fatalf("receipt workspace = %#v, want lease-bound mounted workspace metadata", receiptRequest)
 	}
 	if receiptRequest.RawSourceUploaded {
 		t.Fatal("receipt request uploaded raw source")
 	}
 	if strings.Contains(logs.String(), secretToken) {
 		t.Fatalf("logs leaked checkout lease token: %q", logs.String())
+	}
+}
+
+func TestRunOnceRejectsLeaseOutsideRunnerScope(t *testing.T) {
+	t.Parallel()
+
+	const secretToken = "secret-checkout-token"
+	var receiptRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases":
+			assertBearer(t, r)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"job_id":"job-1","task_id":"task-1","state":"leased","runner_id":"runner-1","lease_token":"` + secretToken + `","lease_expires_at":"2026-05-07T13:00:00Z","instruction":{"job_id":"job-1","task_id":"task-1","repo_binding_id":"other-repo","access_mode":"customer_mounted_workspace","provider":"github","repository_full_name":"heurema/other","repository_url":"https://github.com/heurema/other","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"task-1"},"raw_source_uploaded":false},"created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/job-1/receipts":
+			receiptRequests.Add(1)
+			http.Error(w, "receipt should not be submitted", http.StatusInternalServerError)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	runner, err := NewRunner(Config{
+		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		LeaseTTLSeconds: 900,
+		Once:            true,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	if _, err := runner.Step(context.Background()); err == nil {
+		t.Fatal("Step() error = nil, want lease scope validation error")
+	}
+	if receiptRequests.Load() != 0 {
+		t.Fatalf("receipt requests = %d, want 0 after lease scope mismatch", receiptRequests.Load())
 	}
 }
 
@@ -188,6 +237,8 @@ func TestRunOnceLeaseConflictsDoNotRetryStaleReceipt(t *testing.T) {
 			runner, err := NewRunner(Config{
 				ServerURL:       server.URL,
 				BearerToken:     testBearerToken,
+				ProjectID:       "project-1",
+				RepoBindingID:   "repo-1",
 				RunnerID:        "runner-1",
 				WorkspaceRef:    "mounted:/workspace/goalrail",
 				CommitSHA:       "abc123",

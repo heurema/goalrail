@@ -163,6 +163,14 @@ func (s *PostgresCheckoutJobStore) AcquireNextLease(ctx context.Context, input c
 	if err != nil {
 		return spine.CheckoutJob{}, false, err
 	}
+	projectID, err := uuidValue(input.ProjectID, "checkout job lease project id")
+	if err != nil {
+		return spine.CheckoutJob{}, false, err
+	}
+	repoBindingID, err := uuidValue(input.RepoBindingID, "checkout job lease repo binding id")
+	if err != nil {
+		return spine.CheckoutJob{}, false, err
+	}
 	now := input.UpdatedAt.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
@@ -170,11 +178,11 @@ func (s *PostgresCheckoutJobStore) AcquireNextLease(ctx context.Context, input c
 	row := s.query.QueryRow(ctx, `
 SELECT id, organization_id, project_id, task_id, contract_id, approved_contract_id, plan_id, proposal_id, repo_binding_id, state, requested_by, instruction, current_runner_id, lease_token_hash, lease_expires_at, created_at, updated_at
 FROM checkout_jobs
-WHERE organization_id = $1 AND (state = $2 OR (state = $3 AND lease_expires_at <= $4))
+WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3 AND (state = $4 OR (state = $5 AND lease_expires_at <= $6))
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED
-`, orgID, spine.CheckoutJobStateQueued, spine.CheckoutJobStateLeased, now)
+`, orgID, projectID, repoBindingID, spine.CheckoutJobStateQueued, spine.CheckoutJobStateLeased, now)
 	job, err := scanCheckoutJob(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
