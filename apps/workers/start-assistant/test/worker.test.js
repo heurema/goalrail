@@ -43,6 +43,21 @@ test('rejects unsupported methods', async () => {
   assert.equal(body.error, 'method_not_allowed');
 });
 
+test('rejects off-path requests', async () => {
+  const response = await handleStartAssistantRequest(
+    new Request('https://goalrail.dev/api/other', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: 'What is Goalrail?' }),
+    }),
+    MOCK_ENV
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 404);
+  assert.equal(body.error, 'not_found');
+});
+
 test('rejects non-json content', async () => {
   const response = await handleStartAssistantRequest(
     request('question=hello', { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }),
@@ -183,6 +198,17 @@ test('refuses secret sharing requests before provider calls', async () => {
   assert.equal(response.status, 200);
   assert.equal(called, false);
   assert.match(body.answer, /do not share secrets/i);
+});
+
+test('allows benign secret-boundary questions without credential material', async () => {
+  const response = await handleStartAssistantRequest(
+    request({ question: 'How should teams think about secret risks in AI-assisted delivery?' }),
+    MOCK_ENV
+  );
+  const body = await json(response);
+
+  assert.equal(response.status, 200);
+  assert.doesNotMatch(body.answer, /do not share secrets/i);
 });
 
 test('refuses raw credential material before provider calls', async () => {

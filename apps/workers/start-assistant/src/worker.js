@@ -37,6 +37,11 @@ export default {
 };
 
 export async function handleStartAssistantRequest(request, env = {}, runtime = {}) {
+  const url = new URL(request.url);
+  if (url.pathname !== '/api/start-chat') {
+    return jsonError('not_found', 'Use POST /api/start-chat.', 404);
+  }
+
   if (request.method !== 'POST') {
     return jsonError('method_not_allowed', 'Use POST with an application/json body.', 405, { Allow: 'POST' });
   }
@@ -261,6 +266,14 @@ function containsCredentialMaterial(question) {
   ].some((pattern) => pattern.test(question));
 }
 
+function containsCredentialSharingIntent(question) {
+  return [
+    /\b(?:here is|this is|my|our|pasted|paste|leaked|exposed|shared|sending|send)\b.{0,60}\b(?:api[_\s-]?key|secret|password|credential|private token|access token|bearer token)\b/i,
+    /\b(?:api[_\s-]?key|secret|password|credential|private token|access token|bearer token)\b.{0,30}\b(?:is|=|:)\b/i,
+    /-----begin/i,
+  ].some((pattern) => pattern.test(question));
+}
+
 function containsPastedCode(question) {
   return [
     /```|~~~/,
@@ -292,7 +305,7 @@ function refusalForQuestion(question) {
 
   if (
     containsCredentialMaterial(question) ||
-    /(api[_\s-]?key|secret|password|credential|private token|access token|bearer token|-----begin)/i.test(question)
+    containsCredentialSharingIntent(question)
   ) {
     return {
       answer:
