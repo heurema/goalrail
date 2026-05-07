@@ -1330,6 +1330,38 @@ func TestRunProposalAcceptCreatesPlannedWorkItemsNextUnavailable(t *testing.T) {
 	}
 }
 
+func TestRenderProposalAcceptTextShowsAvailableCheckoutCommand(t *testing.T) {
+	t.Parallel()
+
+	output := spine.WorkProposalAcceptOutput{
+		ServerURL:       "https://goalrail.example",
+		ProjectID:       "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:   "018f0000-0000-7000-8000-000000000004",
+		ContractID:      "018f0000-0000-7000-8000-000000000009",
+		PlanID:          "018f0000-0000-7000-8000-000000000301",
+		ProposalID:      "018f0000-0000-7000-8000-000000000302",
+		ProposalState:   "accepted",
+		CreatedTaskIDs:  []string{"018f0000-0000-7000-8000-000000000401"},
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Accepted proposal.",
+		},
+		NextAction: spine.NextAction{
+			Kind:      "prepare_checkout",
+			Available: true,
+			Command:   "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json",
+		},
+	}
+
+	got := renderProposalAcceptText(output)
+	if !strings.Contains(got, "Next: goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json") {
+		t.Fatalf("renderProposalAcceptText() = %q, want checkout command", got)
+	}
+	if strings.Contains(got, "Next action: prepare a checkout job") {
+		t.Fatalf("renderProposalAcceptText() = %q, want concrete command instead of generic next action", got)
+	}
+}
+
 func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -1371,7 +1403,7 @@ func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	defer server.Close()
 	writeProjectConfigFixture(t, repoDir, server.URL)
 
-	output, err := runCheckoutPrepareJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "json")
+	output, err := runCheckoutPrepareJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--task-id", "018F0000-0000-7000-8000-000000000401", "--format", "json")
 	if err != nil {
 		t.Fatalf("Run(work checkout prepare) error = %v", err)
 	}

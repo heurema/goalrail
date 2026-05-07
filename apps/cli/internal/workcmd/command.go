@@ -665,6 +665,7 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 	if err := validateUUIDLike("task_id", normalizedTaskID); err != nil {
 		return err
 	}
+	normalizedTaskID = strings.ToLower(normalizedTaskID)
 	format, err := term.ParseFormat(*formatValue)
 	if err != nil {
 		return exitcode.UsageError(err)
@@ -866,9 +867,13 @@ func renderPlanText(output spine.WorkPlanOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	if output.NextAction.Kind != "" {
-		fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
-		if output.NextAction.PlannedSlice != "" {
-			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.Available && output.NextAction.Command != "" {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
 		}
 	}
 	return b.String()
@@ -920,9 +925,13 @@ func renderProposalAcceptText(output spine.WorkProposalAcceptOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	if output.NextAction.Kind != "" {
-		fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
-		if output.NextAction.PlannedSlice != "" {
-			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.Available && output.NextAction.Command != "" {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
 		}
 	}
 	return b.String()
@@ -1448,13 +1457,13 @@ func validateProposalAcceptanceContext(proposalID string, accepted workPlanAccep
 }
 
 func validateCheckoutJobContext(config projectconfig.Config, taskID string, job checkoutJobResponse) error {
-	if job.TaskID != taskID {
+	if !sameUUIDText(job.TaskID, taskID) {
 		return exitcode.ValidationError(errors.New("checkout job response task_id does not match requested WorkItem"))
 	}
 	if job.RepoBindingID != "" && string(job.RepoBindingID) != config.RepoBindingID {
 		return exitcode.ValidationError(errors.New("checkout job response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the WorkItem"))
 	}
-	if job.Instruction.TaskID != "" && job.Instruction.TaskID != taskID {
+	if job.Instruction.TaskID != "" && !sameUUIDText(job.Instruction.TaskID, taskID) {
 		return exitcode.ValidationError(errors.New("checkout instruction task_id does not match requested WorkItem"))
 	}
 	if job.Instruction.RepoBindingID != "" && string(job.Instruction.RepoBindingID) != config.RepoBindingID {
@@ -1464,6 +1473,10 @@ func validateCheckoutJobContext(config projectconfig.Config, taskID string, job 
 		return exitcode.ValidationError(errors.New("checkout instruction unexpectedly claims raw source upload"))
 	}
 	return nil
+}
+
+func sameUUIDText(left string, right string) bool {
+	return strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right))
 }
 
 func postIntake(ctx context.Context, client HTTPClient, session authstore.Session, payload intakeSubmission) (intakeAcceptedResponse, error) {
