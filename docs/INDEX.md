@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -113,25 +114,26 @@ related_docs:
 66. `docs/ops/NEXT.md`
 67. `docs/ops/DECISIONS.md`
 68. `docs/ops/COMPONENTS.yaml`
-69. `docs/ops/BRANCH_PROTECTION.md`
-70. `docs/ops/REPO_STRUCTURE.md`
-71. `docs/ops/GO_CODE_GUIDE.md`
-72. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-73. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-74. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-75. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+69. `docs/ops/INIT_LIFECYCLE.md`
+70. `docs/ops/BRANCH_PROTECTION.md`
+71. `docs/ops/REPO_STRUCTURE.md`
+72. `docs/ops/GO_CODE_GUIDE.md`
+73. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+74. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+75. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+76. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-76. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-77. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-78. `docs/reference/design/reference_screens/`
-79. `.goalrail/work/`
-80. `.goalrail/knowledge/`
-81. `.punk/publishing.toml`
-82. `.goalrail/flows/`
-83. `.goalrail/evals/`
-84. `docs/ops/PUBLISHING_MIGRATION.md`
-85. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+77. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+78. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+79. `docs/reference/design/reference_screens/`
+80. `.goalrail/work/`
+81. `.goalrail/knowledge/`
+82. `.punk/publishing.toml`
+83. `.goalrail/flows/`
+84. `.goalrail/evals/`
+85. `docs/ops/PUBLISHING_MIGRATION.md`
+86. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -231,6 +233,9 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
+  modes, local marker / snapshot / Project Scan distinctions, trust boundary,
+  and MVP partial-failure recovery direction
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
