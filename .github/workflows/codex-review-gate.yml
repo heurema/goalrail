@@ -32,8 +32,9 @@ jobs:
 
     steps:
       - name: Check Codex review threads
-        uses: heurema/repo-governance/actions/codex-review-gate@2413ba8db779a431d46505003870766b35b3ea57
+        uses: heurema/repo-governance/actions/codex-review-gate@a7e37be8dcd8e3468eb4094451bae3ee208bb5dc
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           review-author-logins: chatgpt-codex-connector
           ignore-outdated: 'true'
+          resolution-wait-seconds: '480'
