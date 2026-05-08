@@ -76,6 +76,52 @@ func TestCleanRepoBuildsBaselineAndCleanOverlay(t *testing.T) {
 	}
 }
 
+func TestBuildBaselineUsesSharedRepositoryShapeSignals(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupRepo(t)
+	for _, relativePath := range []string{
+		"go.mod",
+		"package.json",
+		"pnpm-lock.yaml",
+		"package-lock.json",
+		"yarn.lock",
+		"bun.lock",
+		"Cargo.toml",
+		"Cargo.lock",
+		"pyproject.toml",
+		"requirements.txt",
+		"poetry.lock",
+		"uv.lock",
+		"Gemfile",
+		"Gemfile.lock",
+		"composer.json",
+		"composer.lock",
+		"Dockerfile",
+		".github/workflows/ci.yml",
+	} {
+		writeFile(t, repoDir, relativePath, "metadata\n")
+	}
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "shape signals")
+
+	baseline, err := BuildBaseline(context.Background(), repoDir, "rb-1", DefaultBuildOptions())
+	if err != nil {
+		t.Fatalf("BuildBaseline() error = %v", err)
+	}
+
+	for _, want := range []string{"go", "node", "rust", "python", "ruby", "php", "docker"} {
+		requireContains(t, baseline.Shape.Toolchains, want, "toolchains")
+	}
+	for _, want := range []string{"pnpm", "npm", "yarn", "bun", "cargo", "poetry", "uv", "pip", "bundler", "composer"} {
+		requireContains(t, baseline.Shape.PackageManagers, want, "package managers")
+	}
+	requireContains(t, baseline.ReadinessSignals.CI, ".github/workflows/ci.yml", "CI readiness")
+	requireContains(t, baseline.Shape.Workspaces, ".", "workspaces")
+	requireContains(t, baseline.Shape.EntrypointCandidates, "Dockerfile", "entrypoint candidates")
+}
+
 func TestDirtyNonCriticalFileDoesNotMakeBaselineStale(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -427,4 +473,14 @@ func canonicalPath(t *testing.T, value string) string {
 
 func fixedNow() time.Time {
 	return time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+}
+
+func requireContains(t *testing.T, values []string, want string, label string) {
+	t.Helper()
+	for _, value := range values {
+		if value == want {
+			return
+		}
+	}
+	t.Fatalf("%s = %#v, want %q", label, values, want)
 }

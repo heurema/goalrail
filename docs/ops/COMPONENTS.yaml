@@ -240,6 +240,7 @@ components:
       - apps/cli/internal/agentcmd
       - apps/cli/internal/projectconfig
       - apps/cli/internal/projectscan
+      - apps/cli/internal/reposhape
       - apps/cli/internal/projectcmd
       - apps/cli/internal/workcmd
       - apps/cli/internal/readiness

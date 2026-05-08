@@ -5,6 +5,8 @@ import (
 	"context"
 	"path"
 	"strings"
+
+	"github.com/heurema/goalrail/apps/cli/internal/reposhape"
 )
 
 const (
@@ -192,45 +194,14 @@ func (s *baselineScanner) collectSignals(relativePath string) {
 		dir = "."
 	}
 
-	if isWorkspaceManifest(base) {
+	if reposhape.IsWorkspaceManifest(base) {
 		appendUnique(s.workspaceSet, dir)
 	}
-	switch base {
-	case "go.mod", "go.work":
-		appendUnique(s.toolchains, "go")
-	case "package.json":
-		appendUnique(s.toolchains, "node")
-	case "Cargo.toml":
-		appendUnique(s.toolchains, "rust")
-	case "pyproject.toml", "requirements.txt":
-		appendUnique(s.toolchains, "python")
-	case "Gemfile":
-		appendUnique(s.toolchains, "ruby")
-	case "composer.json":
-		appendUnique(s.toolchains, "php")
+	for _, toolchain := range reposhape.ToolchainsForPath(relativePath) {
+		appendUnique(s.toolchains, toolchain)
 	}
-
-	switch base {
-	case "pnpm-lock.yaml":
-		appendUnique(s.packageManagers, "pnpm")
-	case "package-lock.json":
-		appendUnique(s.packageManagers, "npm")
-	case "yarn.lock":
-		appendUnique(s.packageManagers, "yarn")
-	case "bun.lock", "bun.lockb":
-		appendUnique(s.packageManagers, "bun")
-	case "Cargo.lock":
-		appendUnique(s.packageManagers, "cargo")
-	case "poetry.lock":
-		appendUnique(s.packageManagers, "poetry")
-	case "uv.lock":
-		appendUnique(s.packageManagers, "uv")
-	case "requirements.txt":
-		appendUnique(s.packageManagers, "pip")
-	case "Gemfile.lock":
-		appendUnique(s.packageManagers, "bundler")
-	case "composer.lock":
-		appendUnique(s.packageManagers, "composer")
+	for _, packageManager := range reposhape.PackageManagersForPath(relativePath) {
+		appendUnique(s.packageManagers, packageManager)
 	}
 
 	if strings.HasSuffix(relativePath, "_test.go") || base == "pytest.ini" {
@@ -239,7 +210,7 @@ func (s *baselineScanner) collectSignals(relativePath string) {
 	if strings.Contains(relativePath, "/tests/") || strings.HasPrefix(relativePath, "tests/") {
 		appendUnique(s.tests, firstPathSegment(relativePath)+"/tests")
 	}
-	if strings.HasPrefix(relativePath, ".github/workflows/") {
+	if reposhape.IsCIWorkflowPath(relativePath) {
 		appendUnique(s.ci, relativePath)
 	}
 	if relativePath == "AGENTS.md" || relativePath == "CLAUDE.md" || relativePath == ".github/copilot-instructions.md" || strings.HasPrefix(relativePath, ".cursor/rules/") {
@@ -248,7 +219,7 @@ func (s *baselineScanner) collectSignals(relativePath string) {
 	if relativePath == "CODEOWNERS" || relativePath == ".github/CODEOWNERS" {
 		appendUnique(s.codeowners, relativePath)
 	}
-	if isEntrypointCandidate(relativePath) {
+	if reposhape.IsEntrypointCandidate(relativePath) {
 		appendUnique(s.entrypoints, relativePath)
 	}
 }
@@ -326,32 +297,6 @@ func hasSkipReason(receipts []SkipReceipt, reason string) bool {
 	for _, receipt := range receipts {
 		if receipt.Reason == reason {
 			return true
-		}
-	}
-	return false
-}
-
-func isWorkspaceManifest(base string) bool {
-	switch base {
-	case "go.mod", "go.work", "package.json", "Cargo.toml", "pyproject.toml", "requirements.txt", "Gemfile", "composer.json":
-		return true
-	default:
-		return false
-	}
-}
-
-func isEntrypointCandidate(relativePath string) bool {
-	base := path.Base(relativePath)
-	switch base {
-	case "Dockerfile", "docker-compose.yml", "compose.yml", "Makefile", "Taskfile.yml":
-		return true
-	}
-	if strings.HasSuffix(relativePath, "/main.go") {
-		parts := strings.Split(relativePath, "/")
-		for i, part := range parts {
-			if part == "cmd" && i+2 < len(parts) {
-				return true
-			}
 		}
 	}
 	return false

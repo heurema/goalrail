@@ -42,6 +42,42 @@ func TestCollectRepositoryInventoryDetectsWorkspaceManifests(t *testing.T) {
 	}
 }
 
+func TestCollectRepositoryInventoryUsesSharedMetadataSignals(t *testing.T) {
+	root := t.TempDir()
+	for _, relativePath := range []string{
+		"Cargo.lock",
+		"Gemfile",
+		"Gemfile.lock",
+		"composer.json",
+		"composer.lock",
+		"requirements.txt",
+		"apps/api/Dockerfile",
+	} {
+		writeInventoryFile(t, root, relativePath, "metadata\n")
+	}
+
+	inventory, err := collectRepositoryInventory(root)
+	if err != nil {
+		t.Fatalf("collectRepositoryInventory() error = %v", err)
+	}
+
+	for _, want := range []string{"ruby", "php", "python", "docker"} {
+		if !stringSliceContains(inventory.detectedToolchains, want) {
+			t.Fatalf("toolchains = %#v, want %q", inventory.detectedToolchains, want)
+		}
+	}
+	for _, want := range []string{"cargo", "bundler", "composer", "pip"} {
+		if !stringSliceContains(inventory.detectedPackageManagers, want) {
+			t.Fatalf("package managers = %#v, want %q", inventory.detectedPackageManagers, want)
+		}
+	}
+	for _, want := range []string{"Cargo.lock", "Gemfile.lock", "composer.lock", "apps/api/Dockerfile"} {
+		if !stringSliceContains(inventory.detectedPaths, want) {
+			t.Fatalf("detected paths = %#v, want %q", inventory.detectedPaths, want)
+		}
+	}
+}
+
 func TestRepositoryContextSnapshotAndProjectScanBaselineSharedShapeParity(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
