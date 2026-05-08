@@ -1764,7 +1764,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	contractService := contractsvc.NewService(goalStore, contractStore, contractSeedService, contractDraftService, approvedContractService, txRunner)
+	contractService := contractsvc.NewService(goalStore, contractStore, contractSeedService, contractDraftService, contractDraftStore, approvedContractService, txRunner)
 	contractHandler := httpserver.NewContractHandler(authService, contractService)
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)

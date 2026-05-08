@@ -186,7 +186,9 @@
   or drive lifecycle transitions. Selected Contract detail presents the public
   Contract aggregate only with one lifecycle status, linked ids, and calm
   timestamps; draft body, task, execution, gate, runner, and proof data remain
-  unavailable in that view.
+  unavailable in that view. The backend now exposes read-only current draft
+  body detail at `GET /v1/contracts/{id}/current-draft` for a future Console
+  rendering slice, but no frontend rendering exists yet.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
@@ -204,9 +206,11 @@
   as fallback, and keep existing visible state on transient errors. The
   minimum feed remains `GET /v1/qualification-feed?limit=50`; the Contracts
   rail/list uses `GET /v1/contracts?limit=50` plus the state filter, and
-  selected Contract detail uses `GET /v1/contracts/{id}`. Delivery Readiness
-  display now follows one primary status per card, D-0091 status priority, and
-  calm browser-local time labels.
+  selected Contract detail uses `GET /v1/contracts/{id}`. Read-only current
+  draft body detail is now available at
+  `GET /v1/contracts/{id}/current-draft` for later frontend use. Delivery
+  Readiness display now follows one primary status per card, D-0091 status
+  priority, and calm browser-local time labels.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
   activity timeline, UI clarification answer forms, or fake Proof/readiness
   data in that slice. Future `Agent working` requires a real daemon/status

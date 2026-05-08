@@ -51,6 +51,7 @@ func TestHTTPServerWithoutDatabaseReturnsUnavailableForProductRoutes(t *testing.
 		{name: "intake", method: http.MethodPost, path: "/v1/intakes", body: `{}`},
 		{name: "contract", method: http.MethodPost, path: "/v1/contracts", body: `{}`},
 		{name: "contract list", method: http.MethodGet, path: "/v1/contracts"},
+		{name: "contract current draft", method: http.MethodGet, path: "/v1/contracts/018f0000-0000-7000-8000-000000000c01/current-draft"},
 		{name: "auth login", method: http.MethodPost, path: "/v1/auth/login", body: `{}`},
 		{name: "CLI login page", method: http.MethodGet, path: "/cli/login"},
 		{name: "CLI login submit", method: http.MethodPost, path: "/cli/login", body: `{}`},

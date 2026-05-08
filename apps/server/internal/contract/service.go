@@ -8,21 +8,23 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
 
 var (
-	ErrContractNotFound            = errors.New("contract not found")
-	ErrGoalNotFound                = errors.New("goal not found")
-	ErrInvalidContractState        = errors.New("contract state is not valid for this transition")
-	ErrInvalidGoalState            = errors.New("goal state is not valid for contract creation")
-	ErrContractCurrentDraftMissing = errors.New("contract current draft is missing")
-	ErrAlreadyApproved             = errors.New("contract already approved")
-	ErrMembershipRequired          = errors.New("active organization membership is required")
-	ErrOrganizationForbidden       = errors.New("user is not allowed to create contract for this goal")
-	ErrProjectMismatch             = errors.New("contract create project expectation does not match goal")
-	ErrRepoBindingMismatch         = errors.New("contract create repo binding expectation does not match goal")
+	ErrContractNotFound             = errors.New("contract not found")
+	ErrGoalNotFound                 = errors.New("goal not found")
+	ErrInvalidContractState         = errors.New("contract state is not valid for this transition")
+	ErrInvalidGoalState             = errors.New("goal state is not valid for contract creation")
+	ErrContractCurrentDraftMissing  = errors.New("contract current draft is missing")
+	ErrContractCurrentDraftMismatch = errors.New("contract current draft does not belong to contract")
+	ErrAlreadyApproved              = errors.New("contract already approved")
+	ErrMembershipRequired           = errors.New("active organization membership is required")
+	ErrOrganizationForbidden        = errors.New("user is not allowed to create contract for this goal")
+	ErrProjectMismatch              = errors.New("contract create project expectation does not match goal")
+	ErrRepoBindingMismatch          = errors.New("contract create repo binding expectation does not match goal")
 )
 
 const (
@@ -66,17 +68,22 @@ type DraftService interface {
 	MarkReadyForApproval(context.Context, spine.ContractDraftID, spine.ContractDraftReadyForApprovalRequest) (spine.ContractDraft, error)
 }
 
+type DraftReader interface {
+	Get(context.Context, spine.ContractDraftID) (spine.ContractDraft, bool, error)
+}
+
 type ApprovalService interface {
 	ApproveDraft(context.Context, spine.ContractDraftID, spine.ApproveContractDraftRequest) (spine.ApprovedContract, error)
 }
 
 type Service struct {
-	Goals     GoalReader
-	Contracts Store
-	Seeds     SeedCreator
-	Drafts    DraftService
-	Approvals ApprovalService
-	TxRunner  TransactionRunner
+	Goals       GoalReader
+	Contracts   Store
+	Seeds       SeedCreator
+	Drafts      DraftService
+	DraftReader DraftReader
+	Approvals   ApprovalService
+	TxRunner    TransactionRunner
 }
 
 type ListInput struct {
@@ -88,14 +95,15 @@ type ListInput struct {
 	Limit         int
 }
 
-func NewService(goals GoalReader, contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, txRunner TransactionRunner) *Service {
+func NewService(goals GoalReader, contracts Store, seeds SeedCreator, drafts DraftService, draftReader DraftReader, approvals ApprovalService, txRunner TransactionRunner) *Service {
 	return &Service{
-		Goals:     goals,
-		Contracts: contracts,
-		Seeds:     seeds,
-		Drafts:    drafts,
-		Approvals: approvals,
-		TxRunner:  txRunner,
+		Goals:       goals,
+		Contracts:   contracts,
+		Seeds:       seeds,
+		Drafts:      drafts,
+		DraftReader: draftReader,
+		Approvals:   approvals,
+		TxRunner:    txRunner,
 	}
 }
 
@@ -201,6 +209,31 @@ func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest,
 
 func (s *Service) Get(ctx context.Context, id spine.ContractID) (spine.Contract, error) {
 	return s.getContract(ctx, id)
+}
+
+func (s *Service) CurrentDraft(ctx context.Context, id spine.ContractID, membership spine.OrganizationMembership) (spine.ContractDraft, error) {
+	contract, err := s.getContract(ctx, id)
+	if err != nil {
+		return spine.ContractDraft{}, err
+	}
+	if err := authorizeContractMutation(membership, contract); err != nil {
+		return spine.ContractDraft{}, err
+	}
+	draftID, err := currentDraftID(contract)
+	if err != nil {
+		return spine.ContractDraft{}, err
+	}
+	draft, ok, err := s.DraftReader.Get(ctx, draftID)
+	if err != nil {
+		return spine.ContractDraft{}, fmt.Errorf("get contract draft: %w", err)
+	}
+	if !ok {
+		return spine.ContractDraft{}, contractdraft.ErrContractDraftNotFound
+	}
+	if draft.ContractID != contract.ID || draft.OrganizationID != contract.OrganizationID {
+		return spine.ContractDraft{}, ErrContractCurrentDraftMismatch
+	}
+	return draft, nil
 }
 
 func (s *Service) UpdateDraft(ctx context.Context, id spine.ContractID, input spine.ContractDraftUpdateRequest, membership spine.OrganizationMembership) (spine.Contract, error) {

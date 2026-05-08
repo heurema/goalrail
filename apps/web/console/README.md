@@ -21,10 +21,11 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
   surfaces; Contracts consumes read-only `GET /v1/contracts` discovery and
-  renders a contract rail/list plus selected aggregate-only detail, while
-  Delivery Readiness consumes read-only `GET /v1/qualification-feed` while
-  authenticated and renders Qualification / Clarification / Contract / Blocked
-  lanes
+  renders a contract rail/list plus selected aggregate-only detail, while the
+  backend now exposes read-only current draft detail for a future rendering
+  slice; Delivery Readiness consumes read-only `GET /v1/qualification-feed`
+  while authenticated and renders Qualification / Clarification / Contract /
+  Blocked lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
   Organization Users add/edit/temporary-password reset UI plus read-only
   Repository context metadata
@@ -91,6 +92,9 @@ Delivery rule:
   show draft body details, task plans, execution evidence, gate decisions,
   proof artifacts, runner state, stage controls, execution/proof meters, or
   fake contract body sections.
+- The backend now exposes read-only current draft body detail at
+  `GET /v1/contracts/{id}/current-draft` for future selected Contract
+  rendering. This frontend source does not call or render that endpoint yet.
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:
@@ -159,7 +163,12 @@ When a selected contract is open:
 
 ```http
 GET /v1/contracts/{id}
+GET /v1/contracts/{id}/current-draft
 ```
+
+The current-draft endpoint is backend-only from this source's perspective:
+it exists for a future rendering slice, but selected Contract detail remains
+aggregate-only in `apps/web/console/src`.
 
 Backend read-only contract discovery for the Contracts rail/list:
 

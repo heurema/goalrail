@@ -153,6 +153,10 @@ func (s *capturingContractService) List(context.Context, contract.ListInput) (sp
 	return spine.ContractList{}, nil
 }
 
+func (s *capturingContractService) CurrentDraft(context.Context, spine.ContractID, spine.OrganizationMembership) (spine.ContractDraft, error) {
+	return spine.ContractDraft{}, nil
+}
+
 func (s *capturingContractService) UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error) {
 	s.updateCalled = true
 	return spine.Contract{}, nil
