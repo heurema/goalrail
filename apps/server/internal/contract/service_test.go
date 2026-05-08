@@ -300,6 +300,37 @@ func TestListRejectsInactiveMembershipAndInvalidFilters(t *testing.T) {
 	}
 }
 
+func TestGetScopesContractToActiveMembershipOrganization(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	created := storedContract("018f0000-0000-7000-8000-000000000c10", orgID, "018f0000-0000-7000-8000-000000000210", spine.ContractStateDraft)
+	if err := contractStore.Create(ctx, created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	got, err := service.Get(ctx, created.ID, activeMembership(orgID))
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.ID != created.ID || got.OrganizationID != orgID {
+		t.Fatalf("Get() = %#v, want contract %q in org %q", got, created.ID, orgID)
+	}
+
+	inactive := activeMembership(orgID)
+	inactive.State = spine.EntityStateInactive
+	if _, err := service.Get(ctx, created.ID, inactive); !errors.Is(err, contract.ErrMembershipRequired) {
+		t.Fatalf("Get() inactive membership error = %v, want ErrMembershipRequired", err)
+	}
+	if _, err := service.Get(ctx, created.ID, activeMembership("018f0000-0000-7000-8000-000000009999")); !errors.Is(err, contract.ErrOrganizationForbidden) {
+		t.Fatalf("Get() other organization error = %v, want ErrOrganizationForbidden", err)
+	}
+	if _, err := service.Get(ctx, "018f0000-0000-7000-8000-000000000c99", activeMembership(orgID)); !errors.Is(err, contract.ErrContractNotFound) {
+		t.Fatalf("Get() missing contract error = %v, want ErrContractNotFound", err)
+	}
+}
+
 func TestCurrentDraftReturnsDraftForActiveMembershipOrganization(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()

@@ -183,7 +183,8 @@
   contract rail/list with selected aggregate detail, supports state filtering
   plus manual refresh, keeps manual ID lookup as a secondary fallback, and does
   not create contracts, recompute readiness, create plans, or drive lifecycle
-  transitions. Selected Contract detail presents the public Contract aggregate
+  transitions. Selected Contract detail uses authenticated, organization-scoped,
+  read-only `GET /v1/contracts/{id}` and presents the public Contract aggregate
   with one lifecycle status, linked ids, calm timestamps, and the current draft
   body through read-only `GET /v1/contracts/{id}/current-draft` when
   `current_draft_id` is present; task, execution, gate, runner, and proof data

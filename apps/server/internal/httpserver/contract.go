@@ -18,7 +18,7 @@ import (
 
 type ContractService interface {
 	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
-	Get(context.Context, spine.ContractID) (spine.Contract, error)
+	Get(context.Context, spine.ContractID, spine.OrganizationMembership) (spine.Contract, error)
 	List(context.Context, contract.ListInput) (spine.ContractList, error)
 	CurrentDraft(context.Context, spine.ContractID, spine.OrganizationMembership) (spine.ContractDraft, error)
 	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error)
@@ -83,7 +83,13 @@ func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
-	contract, err := h.service.Get(r.Context(), spine.ContractID(r.PathValue("id")))
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
+	contract, err := h.service.Get(r.Context(), spine.ContractID(r.PathValue("id")), profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

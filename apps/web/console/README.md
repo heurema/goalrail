@@ -20,9 +20,10 @@ Current scope:
 - authenticated shell entry only after `/v1/me` succeeds
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
-  surfaces; Contracts consumes read-only `GET /v1/contracts` discovery and
-  renders a contract rail/list plus selected aggregate detail and current draft
-  body when available through read-only `GET /v1/contracts/{id}/current-draft`;
+  surfaces; Contracts consumes authenticated, organization-scoped, read-only
+  Contract endpoints: `GET /v1/contracts`, `GET /v1/contracts/{id}`, and
+  `GET /v1/contracts/{id}/current-draft`; it renders a contract rail/list plus
+  selected aggregate detail and current draft body when available;
   Delivery Readiness consumes read-only `GET /v1/qualification-feed`
   while authenticated and renders Qualification / Clarification / Contract /
   Blocked lanes
@@ -80,8 +81,8 @@ Delivery rule:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
   loads `GET /v1/contracts?limit=50` by default, supports a state filter and
   manual refresh, keeps manual ID lookup as a secondary fallback, and shows
-  selected detail through read-only `GET /v1/contracts/{id}` as the compact
-  public Contract aggregate only
+  selected detail through authenticated, organization-scoped, read-only
+  `GET /v1/contracts/{id}` as the compact public Contract aggregate only
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
@@ -164,9 +165,11 @@ GET /v1/contracts/{id}
 GET /v1/contracts/{id}/current-draft
 ```
 
-The current-draft endpoint is consumed only for the selected Contract's current
-draft body. If the selected Contract has no `current_draft_id`, the frontend
-does not call this endpoint and shows that no current draft is linked yet.
+All selected Contract read endpoints are bearer-authenticated,
+organization-scoped, and read-only. The current-draft endpoint is consumed only
+for the selected Contract's current draft body. If the selected Contract has no
+`current_draft_id`, the frontend does not call this endpoint and shows that no
+current draft is linked yet.
 
 Backend read-only contract discovery for the Contracts rail/list:
 
