@@ -81,10 +81,11 @@ Delivery rule:
 - The Contracts surface consumes authenticated, organization-scoped read-only
   Contract discovery at
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
-  loads `GET /v1/contracts?limit=50` by default, supports a state filter and
-  manual refresh, keeps manual ID lookup as a secondary fallback, and shows
-  selected detail through authenticated, organization-scoped, read-only
-  `GET /v1/contracts/{id}` as the compact public Contract aggregate only
+  loads `GET /v1/contracts?limit=50` by default, supports state and
+  repo-binding filters plus manual refresh, keeps manual ID lookup as a
+  secondary fallback, and shows selected detail through authenticated,
+  organization-scoped, read-only `GET /v1/contracts/{id}` as the compact public
+  Contract aggregate only
 - The Contracts surface also uses `/v1/me` to determine `organization_id` and
   reads `GET /v1/organizations/{organization_id}/repository-context` for a
   compact metadata-only context panel. If the selected Contract
@@ -204,8 +205,8 @@ wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
 - Delivery Readiness shows qualification state and handoff to Contracts, not
   lifecycle controls.
 - The Contracts surface is read-only, lists contracts from discovery, supports
-  state filtering plus manual refresh, and can show selected detail or a manual
-  ID lookup result.
+  state and repo-binding filtering plus manual refresh, and can show selected
+  detail or a manual ID lookup result.
 
 D-0091 display behavior:
 - Delivery Readiness cards show one frontend-projected primary status instead

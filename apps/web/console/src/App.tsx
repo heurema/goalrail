@@ -64,6 +64,7 @@ type RepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type ContractListLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractListStateFilter = ContractStateFilter | 'all';
+type ContractListRepoBindingFilter = string;
 type ContractSelectionSource = 'auto' | 'list' | 'manual' | 'linked' | null;
 type ContractDraftLoadStatus = 'idle' | 'loading' | 'loaded' | 'no_draft' | 'unavailable' | 'error';
 type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
@@ -106,6 +107,7 @@ interface ThemePreset {
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
 const CONTRACT_LIST_LIMIT = 50;
 const CONTRACT_STATE_FILTERS: ContractListStateFilter[] = ['all', 'draft', 'ready_for_approval', 'approved', 'seeded'];
+const ALL_REPOSITORIES_FILTER = 'all';
 const CONTRACT_REFRESH_INTERVAL_MS = 5000;
 const QUALIFICATION_FEED_LIMIT = 50;
 const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
@@ -400,6 +402,8 @@ function ConsoleApp() {
   const [contractListLoadStatus, setContractListLoadStatus] = useState<ContractListLoadStatus>('idle');
   const [contractListError, setContractListError] = useState('');
   const [contractListStateFilter, setContractListStateFilter] = useState<ContractListStateFilter>('all');
+  const [contractListRepoBindingFilter, setContractListRepoBindingFilter] =
+    useState<ContractListRepoBindingFilter>(ALL_REPOSITORIES_FILTER);
   const [contractDraft, setContractDraft] = useState<ContractDraftResponse | null>(null);
   const [contractDraftLoadStatus, setContractDraftLoadStatus] = useState<ContractDraftLoadStatus>('idle');
   const [contractDraftError, setContractDraftError] = useState('');
@@ -516,7 +520,7 @@ function ConsoleApp() {
       contractDraftRefreshInFlight.current = false;
       clearScheduledPoll();
     };
-  }, [activeSurface, authStatus, contractListStateFilter, screen, tokens?.accessToken]);
+  }, [activeSurface, authStatus, contractListRepoBindingFilter, contractListStateFilter, screen, tokens?.accessToken]);
 
   useEffect(() => {
     if (screen !== 'console' || activeSurface !== 'contracts' || authStatus !== 'authenticated') {
@@ -528,6 +532,16 @@ function ConsoleApp() {
 
     void loadRepositoryContext();
   }, [activeSurface, authStatus, profile?.organization_membership.organization_id, repositoryContextLoadStatus, screen, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (contractListRepoBindingFilter === ALL_REPOSITORIES_FILTER || repositoryContextLoadStatus === 'loading') {
+      return;
+    }
+    const contexts = repositoryContext?.contexts ?? [];
+    if (!contexts.some((context) => context.repo_binding.id === contractListRepoBindingFilter)) {
+      setContractListRepoBindingFilter(ALL_REPOSITORIES_FILTER);
+    }
+  }, [contractListRepoBindingFilter, repositoryContext, repositoryContextLoadStatus]);
 
   useEffect(() => {
     if (screen !== 'settings-users' || authStatus !== 'authenticated') {
@@ -811,6 +825,7 @@ function ConsoleApp() {
     setContractListLoadStatus('idle');
     setContractListError('');
     setContractListStateFilter('all');
+    setContractListRepoBindingFilter(ALL_REPOSITORIES_FILTER);
     setContractDraft(null);
     setContractDraftLoadStatus('idle');
     setContractDraftError('');
@@ -1014,6 +1029,7 @@ function ConsoleApp() {
     try {
       const result = await listContracts({
         accessToken,
+        repoBindingId: contractListRepoBindingFilter === ALL_REPOSITORIES_FILTER ? undefined : contractListRepoBindingFilter,
         state: contractListStateFilter === 'all' ? undefined : contractListStateFilter,
         limit: CONTRACT_LIST_LIMIT,
       });
@@ -1146,10 +1162,6 @@ function ConsoleApp() {
         selectedContractSnapshot.current = nextSnapshot;
         setContract((current) => (current?.id === selectedSummary.id ? { ...current, ...selectedSummary } : current));
         return;
-      }
-
-      if (selectionSource === 'auto' && contracts.length > 0) {
-        selectContractSummary(contracts[0], 'auto');
       }
       return;
     }
@@ -1680,13 +1692,17 @@ function ConsoleApp() {
             contractList={contractList}
             contractListError={contractListError}
             contractListLoadStatus={contractListLoadStatus}
+            contractListRepoBindingFilter={contractListRepoBindingFilter}
             contractListStateFilter={contractListStateFilter}
             loadStatus={contractLoadStatus}
             onContractIdChange={setContractIdInput}
+            onContractListRepoBindingFilterChange={setContractListRepoBindingFilter}
             onContractListStateFilterChange={setContractListStateFilter}
             onContractSelect={handleContractListSelection}
             onLookup={handleContractLookup}
             onRefresh={() => void refreshContractsSurface(true)}
+            repositoryContext={repositoryContext}
+            repositoryContextLoadStatus={repositoryContextLoadStatus}
             t={translate}
           />
         ) : null}
@@ -2064,13 +2080,17 @@ function ContractRailPanel({
   contractList,
   contractListError,
   contractListLoadStatus,
+  contractListRepoBindingFilter,
   contractListStateFilter,
   loadStatus,
   onContractIdChange,
+  onContractListRepoBindingFilterChange,
   onContractListStateFilterChange,
   onContractSelect,
   onLookup,
   onRefresh,
+  repositoryContext,
+  repositoryContextLoadStatus,
   t,
 }: {
   activeLocale: ConsoleLocale;
@@ -2080,18 +2100,25 @@ function ContractRailPanel({
   contractList: ContractListResponse;
   contractListError: string;
   contractListLoadStatus: ContractListLoadStatus;
+  contractListRepoBindingFilter: ContractListRepoBindingFilter;
   contractListStateFilter: ContractListStateFilter;
   loadStatus: ContractLoadStatus;
   onContractIdChange: (value: string) => void;
+  onContractListRepoBindingFilterChange: (value: ContractListRepoBindingFilter) => void;
   onContractListStateFilterChange: (value: ContractListStateFilter) => void;
   onContractSelect: (contract: ContractResponse) => void;
   onLookup: (event: FormEvent<HTMLFormElement>) => void;
   onRefresh: () => void;
+  repositoryContext: OrganizationRepositoryContextResponse | null;
+  repositoryContextLoadStatus: RepositoryContextLoadStatus;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const isLookupLoading = loadStatus === 'loading';
   const isListLoading = contractListLoadStatus === 'loading';
   const contracts = contractList.contracts;
+  const repositoryOptions = repositoryContext?.contexts ?? [];
+  const repositoryFilterDisabled = repositoryOptions.length === 0;
+  const repositoryFilterHintVisible = repositoryFilterDisabled && repositoryContextLoadStatus !== 'loading';
 
   return (
     <section className="contractRailPanel" aria-label={t('surfaces.contracts.ops.surfaceContext')}>
@@ -2116,6 +2143,25 @@ function ContractRailPanel({
             ))}
           </select>
         </label>
+        <label>
+          <span>{t('surfaces.contracts.repositoryFilterLabel')}</span>
+          <select
+            aria-label={t('surfaces.contracts.repositoryFilterLabel')}
+            disabled={repositoryFilterDisabled}
+            onChange={(event) => onContractListRepoBindingFilterChange(event.target.value)}
+            value={repositoryFilterDisabled ? ALL_REPOSITORIES_FILTER : contractListRepoBindingFilter}
+          >
+            <option value={ALL_REPOSITORIES_FILTER}>{t('surfaces.contracts.allRepositories')}</option>
+            {repositoryOptions.map((context) => (
+              <option key={context.repo_binding.id} value={context.repo_binding.id}>
+                {repositoryFilterOptionLabel(context, t)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {repositoryFilterHintVisible ? (
+          <p className="opsFilterNote">{t('surfaces.contracts.repositoryFilterUnavailable')}</p>
+        ) : null}
         <button className="ghostButton" disabled={isListLoading} onClick={onRefresh} type="button">
           {isListLoading ? t('surfaces.contracts.refreshing') : t('surfaces.contracts.refresh')}
         </button>
@@ -2188,6 +2234,19 @@ function ContractRailPanel({
       {contractError ? <p className="fieldMessage contractMessage" role="alert">{contractError}</p> : null}
     </section>
   );
+}
+
+function repositoryFilterOptionLabel(
+  context: RepositoryContextRecord,
+  t: (key: string, options?: Record<string, unknown>) => string
+) {
+  const emptyValue = t('repository.emptyValue');
+  const repositoryName = context.repo_binding.repository_full_name || emptyValue;
+  const repoBindingId = context.repo_binding.id || emptyValue;
+  const projectName = context.project.display_name || context.project.slug;
+  return projectName && projectName !== repositoryName
+    ? `${repositoryName} · ${repoBindingId} · ${projectName}`
+    : `${repositoryName} · ${repoBindingId}`;
 }
 
 function contractStateTone(state: ContractResponse['state']) {
