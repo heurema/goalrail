@@ -232,15 +232,38 @@ function repositoryContextErrorMessage(error: unknown, t: (key: string, options?
   return t('repository.errors.generic');
 }
 
-function isStartRoute() {
+function normalizedPathname() {
   if (typeof window === 'undefined') {
-    return false;
+    return '';
   }
 
-  return window.location.pathname.replace(/\/+$/, '') === '/start';
+  return window.location.pathname.replace(/\/+$/, '') || '/';
+}
+
+function isStartRoute() {
+  return normalizedPathname() === '/start';
+}
+
+function isRootRoute() {
+  return normalizedPathname() === '/';
+}
+
+function RootStartRedirect() {
+  useEffect(() => {
+    if (normalizedPathname() === '/') {
+      const target = `/start${window.location.search}${window.location.hash}`;
+      window.history.replaceState(window.history.state, '', target);
+    }
+  }, []);
+
+  return <StartPage />;
 }
 
 function App() {
+  if (isRootRoute()) {
+    return <RootStartRedirect />;
+  }
+
   return isStartRoute() ? <StartPage /> : <ConsoleApp />;
 }
 

@@ -8,14 +8,19 @@ import App from './App';
 import './i18n';
 import { theme } from './theme';
 
-function isStartRoute() {
-  return window.location.pathname.replace(/\/+$/, '') === '/start';
+function normalizedPathname() {
+  return window.location.pathname.replace(/\/+$/, '') || '/';
+}
+
+function isPublicStartSurfaceRoute() {
+  const pathname = normalizedPathname();
+  return pathname === '/' || pathname === '/start';
 }
 
 const app = <App />;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {isStartRoute() ? app : <MantineProvider theme={theme}>{app}</MantineProvider>}
+    {isPublicStartSurfaceRoute() ? app : <MantineProvider theme={theme}>{app}</MantineProvider>}
   </React.StrictMode>
 );

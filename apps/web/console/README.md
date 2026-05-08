@@ -41,6 +41,8 @@ Current scope:
   console deployment, while same-origin `POST /api/start-chat` is owned by the
   separate Cloudflare Worker, not by `apps/server`; external static serving
   must preserve SPA fallback for `/start`
+- live `https://goalrail.dev/` is a temporary public root entry that redirects
+  client-side to `/start` until a separate public landing page exists
 - local Vite dev proxies `/api/start-chat` to `https://goalrail.dev` by default
   so the public assistant works without a local Worker; set
   `START_ASSISTANT_PROXY_TARGET=http://127.0.0.1:8787` when intentionally
