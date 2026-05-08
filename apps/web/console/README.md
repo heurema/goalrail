@@ -21,9 +21,9 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
   surfaces; Contracts consumes read-only `GET /v1/contracts` discovery and
-  renders a contract rail/list plus selected aggregate-only detail, while the
-  backend now exposes read-only current draft detail for a future rendering
-  slice; Delivery Readiness consumes read-only `GET /v1/qualification-feed`
+  renders a contract rail/list plus selected aggregate detail and current draft
+  body when available through read-only `GET /v1/contracts/{id}/current-draft`;
+  Delivery Readiness consumes read-only `GET /v1/qualification-feed`
   while authenticated and renders Qualification / Clarification / Contract /
   Blocked lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
@@ -86,15 +86,13 @@ Delivery rule:
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
   permission, readiness/proof status, execution status, or runner state
-- Selected Contract detail presents only public Contract aggregate fields:
+- Selected Contract detail presents public Contract aggregate fields:
   `id`, `repo_binding_id`, `goal_id`, lifecycle `state`, current lifecycle
-  record ids when present, and calm created/updated timestamps. It does not
-  show draft body details, task plans, execution evidence, gate decisions,
-  proof artifacts, runner state, stage controls, execution/proof meters, or
-  fake contract body sections.
-- The backend now exposes read-only current draft body detail at
-  `GET /v1/contracts/{id}/current-draft` for future selected Contract
-  rendering. This frontend source does not call or render that endpoint yet.
+  record ids when present, calm created/updated timestamps, and the linked
+  current draft body when `current_draft_id` exists and
+  `GET /v1/contracts/{id}/current-draft` is available. It does not show task
+  plans, execution evidence, gate decisions, proof artifacts, runner state,
+  stage controls, execution/proof meters, or fake downstream body sections.
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:
@@ -166,9 +164,9 @@ GET /v1/contracts/{id}
 GET /v1/contracts/{id}/current-draft
 ```
 
-The current-draft endpoint is backend-only from this source's perspective:
-it exists for a future rendering slice, but selected Contract detail remains
-aggregate-only in `apps/web/console/src`.
+The current-draft endpoint is consumed only for the selected Contract's current
+draft body. If the selected Contract has no `current_draft_id`, the frontend
+does not call this endpoint and shows that no current draft is linked yet.
 
 Backend read-only contract discovery for the Contracts rail/list:
 
@@ -226,7 +224,9 @@ Linked contract handoff:
 - show compact contract id / title / state if available
 - offer `Open contract` navigation only
 - do not show `Draft contract` or other mutation actions
-- selected contract detail loads through read-only `GET /v1/contracts/{id}`
+- selected contract detail loads through read-only `GET /v1/contracts/{id}` and
+  renders the current draft body through read-only
+  `GET /v1/contracts/{id}/current-draft` when `current_draft_id` is present
 
 Backend discovery used by the frontend list/rail:
 

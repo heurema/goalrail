@@ -180,15 +180,14 @@
   organization-scoped, read-only Contract discovery:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
   It loads `GET /v1/contracts?limit=50` by default, renders a compact
-  contract rail/list with selected aggregate-only detail, supports state
-  filtering plus manual refresh, keeps manual ID lookup as a secondary
-  fallback, and does not create contracts, recompute readiness, create plans,
-  or drive lifecycle transitions. Selected Contract detail presents the public
-  Contract aggregate only with one lifecycle status, linked ids, and calm
-  timestamps; draft body, task, execution, gate, runner, and proof data remain
-  unavailable in that view. The backend now exposes read-only current draft
-  body detail at `GET /v1/contracts/{id}/current-draft` for a future Console
-  rendering slice, but no frontend rendering exists yet.
+  contract rail/list with selected aggregate detail, supports state filtering
+  plus manual refresh, keeps manual ID lookup as a secondary fallback, and does
+  not create contracts, recompute readiness, create plans, or drive lifecycle
+  transitions. Selected Contract detail presents the public Contract aggregate
+  with one lifecycle status, linked ids, calm timestamps, and the current draft
+  body through read-only `GET /v1/contracts/{id}/current-draft` when
+  `current_draft_id` is present; task, execution, gate, runner, and proof data
+  remain unavailable in that view.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
@@ -206,11 +205,10 @@
   as fallback, and keep existing visible state on transient errors. The
   minimum feed remains `GET /v1/qualification-feed?limit=50`; the Contracts
   rail/list uses `GET /v1/contracts?limit=50` plus the state filter, and
-  selected Contract detail uses `GET /v1/contracts/{id}`. Read-only current
-  draft body detail is now available at
-  `GET /v1/contracts/{id}/current-draft` for later frontend use. Delivery
-  Readiness display now follows one primary status per card, D-0091 status
-  priority, and calm browser-local time labels.
+  selected Contract detail uses `GET /v1/contracts/{id}` plus
+  `GET /v1/contracts/{id}/current-draft` when `current_draft_id` is linked.
+  Delivery Readiness display now follows one primary status per card, D-0091
+  status priority, and calm browser-local time labels.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
   activity timeline, UI clarification answer forms, or fake Proof/readiness
   data in that slice. Future `Agent working` requires a real daemon/status

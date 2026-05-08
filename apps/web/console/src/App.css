@@ -1838,6 +1838,112 @@ select:focus-visible {
   line-height: 1.5;
 }
 
+.opsDraftMetadata {
+  margin-bottom: 18px;
+}
+
+.opsDraftSectionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.opsDraftSection {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel-2) 78%, transparent);
+}
+
+.opsDraftSection h3 {
+  margin: 0 0 10px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.opsDraftSection ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 0 17px;
+  color: var(--ink-2);
+}
+
+.opsDraftSection li {
+  padding-left: 2px;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.opsDraftSection p {
+  margin: 0;
+  color: var(--mute-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.opsDraftEmpty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px dashed var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel-2) 72%, transparent);
+}
+
+.opsDraftEmpty span {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.opsDraftEmpty p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.opsSourceRef {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.opsSourceRef b,
+.opsSourceRef code,
+.opsSourceRef small {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.opsSourceRef b,
+.opsSourceRef small {
+  padding: 2px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--mute);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.opsSourceRef code {
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+}
+
 .opsDetailBlock {
   position: relative;
   display: flex;
@@ -2098,6 +2204,7 @@ select:focus-visible {
   }
 
   .opsAggregateGrid,
+  .opsDraftSectionGrid,
   .opsKeyGrid,
   .opsBottomPanel {
     grid-template-columns: 1fr;

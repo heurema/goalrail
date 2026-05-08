@@ -31,6 +31,10 @@ import {
   isContractListClientError,
   listContracts,
 } from './contractListClient';
+import {
+  getCurrentContractDraft,
+  isContractDraftClientError,
+} from './contractDraftClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
 import type {
@@ -38,6 +42,7 @@ import type {
   QualificationFeedResponse,
 } from './qualificationFeedClient';
 import type { ContractListResponse, ContractStateFilter } from './contractListClient';
+import type { ContractDraftResponse, ContractDraftSourceRef } from './contractDraftClient';
 import { READINESS_DISPLAY_LANES, projectReadinessDisplay, sortReadinessItems } from './readinessDisplay';
 import { formatCalmTimestamp } from './uiTime';
 import StartPage from './StartPage';
@@ -56,6 +61,7 @@ type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type ContractListLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractListStateFilter = ContractStateFilter | 'all';
 type ContractSelectionSource = 'auto' | 'list' | 'manual' | 'linked' | null;
+type ContractDraftLoadStatus = 'idle' | 'loading' | 'loaded' | 'no_draft' | 'unavailable' | 'error';
 type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ReadOnlyLoadResult = 'loaded' | 'error' | 'not_found' | 'skipped' | 'stale' | 'unauthorized';
 type AuthStatus =
@@ -285,6 +291,21 @@ function contractListErrorMessage(error: unknown, t: (key: string, options?: Rec
   return t('surfaces.contracts.listErrors.generic');
 }
 
+function contractDraftErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isContractDraftClientError(error)) {
+    const translated = t(`surfaces.contracts.draftErrors.${error.code}`);
+    if (translated !== `surfaces.contracts.draftErrors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status
+      ? t('surfaces.contracts.draftErrors.genericWithStatus', { status: error.status })
+      : t('surfaces.contracts.draftErrors.generic');
+  }
+
+  return t('surfaces.contracts.draftErrors.generic');
+}
+
 function normalizedPathname() {
   if (typeof window === 'undefined') {
     return '';
@@ -351,6 +372,9 @@ function ConsoleApp() {
   const [contractListLoadStatus, setContractListLoadStatus] = useState<ContractListLoadStatus>('idle');
   const [contractListError, setContractListError] = useState('');
   const [contractListStateFilter, setContractListStateFilter] = useState<ContractListStateFilter>('all');
+  const [contractDraft, setContractDraft] = useState<ContractDraftResponse | null>(null);
+  const [contractDraftLoadStatus, setContractDraftLoadStatus] = useState<ContractDraftLoadStatus>('idle');
+  const [contractDraftError, setContractDraftError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -362,12 +386,15 @@ function ConsoleApp() {
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
   const contractListLoadSequence = useRef(0);
+  const contractDraftLoadSequence = useRef(0);
   const selectedContractId = useRef<string | null>(null);
   const selectedContractSnapshot = useRef<ContractResponse | null>(null);
+  const selectedContractDraftSnapshot = useRef<ContractDraftResponse | null>(null);
   const contractSelectionSource = useRef<ContractSelectionSource>(null);
   const contractListRowsCount = useRef(0);
   const contractSurfacePollInFlight = useRef(false);
   const contractDetailRefreshInFlight = useRef(false);
+  const contractDraftRefreshInFlight = useRef(false);
   const usersLoadSequence = useRef(0);
   const repositoryContextLoadSequence = useRef(0);
   const qualificationFeedLoadSequence = useRef(0);
@@ -426,17 +453,11 @@ function ConsoleApp() {
 
       contractSurfacePollInFlight.current = true;
       try {
-        const selectedDetailAtPollStart = selectedContractId.current;
-        const listResult = await loadContractList(showLoading, {
+        const listResult = await refreshContractsSurface(showLoading, {
           silentTransientErrors: !showLoading,
         });
         if (cancelled || listResult === 'unauthorized') {
           return;
-        }
-        if (selectedDetailAtPollStart && selectedContractId.current === selectedDetailAtPollStart) {
-          await refreshSelectedContractDetail({
-            silentTransientErrors: true,
-          });
         }
       } finally {
         contractSurfacePollInFlight.current = false;
@@ -463,6 +484,8 @@ function ConsoleApp() {
       contractSurfacePollInFlight.current = false;
       contractListLoadSequence.current += 1;
       contractLookupSequence.current += 1;
+      contractDraftLoadSequence.current += 1;
+      contractDraftRefreshInFlight.current = false;
       clearScheduledPoll();
     };
   }, [activeSurface, authStatus, contractListStateFilter, screen, tokens?.accessToken]);
@@ -709,14 +732,17 @@ function ConsoleApp() {
     authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
     contractListLoadSequence.current += 1;
+    contractDraftLoadSequence.current += 1;
     usersLoadSequence.current += 1;
     repositoryContextLoadSequence.current += 1;
     qualificationFeedLoadSequence.current += 1;
     selectedContractId.current = null;
     selectedContractSnapshot.current = null;
+    selectedContractDraftSnapshot.current = null;
     contractSelectionSource.current = null;
     contractSurfacePollInFlight.current = false;
     contractDetailRefreshInFlight.current = false;
+    contractDraftRefreshInFlight.current = false;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -746,11 +772,118 @@ function ConsoleApp() {
     setContractListLoadStatus('idle');
     setContractListError('');
     setContractListStateFilter('all');
+    setContractDraft(null);
+    setContractDraftLoadStatus('idle');
+    setContractDraftError('');
   }
 
   async function handleContractLookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await loadContractById(contractIdInput, 'manual');
+  }
+
+  function clearContractDraftState(status: ContractDraftLoadStatus = 'idle', message = '') {
+    contractDraftLoadSequence.current += 1;
+    contractDraftRefreshInFlight.current = false;
+    selectedContractDraftSnapshot.current = null;
+    setContractDraft(null);
+    setContractDraftLoadStatus(status);
+    setContractDraftError(message);
+  }
+
+  async function loadContractDraftForContract(
+    contractRecord: ContractResponse,
+    options: { silentTransientErrors?: boolean } = {}
+  ): Promise<ReadOnlyLoadResult> {
+    const accessToken = tokens?.accessToken;
+    const contractId = contractRecord.id;
+    const draftId = contractRecord.current_draft_id;
+    const loadSequence = contractDraftLoadSequence.current + 1;
+    contractDraftLoadSequence.current = loadSequence;
+
+    if (!draftId) {
+      selectedContractDraftSnapshot.current = null;
+      setContractDraft(null);
+      setContractDraftLoadStatus('no_draft');
+      setContractDraftError('');
+      return 'skipped';
+    }
+
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return 'unauthorized';
+    }
+
+    contractDraftRefreshInFlight.current = true;
+    if (!options.silentTransientErrors) {
+      selectedContractDraftSnapshot.current = null;
+      setContractDraft(null);
+      setContractDraftLoadStatus('loading');
+      setContractDraftError('');
+    }
+
+    try {
+      const draft = await getCurrentContractDraft({
+        accessToken,
+        contractId,
+      });
+      if (contractDraftLoadSequence.current !== loadSequence || selectedContractId.current !== contractId) {
+        return 'stale';
+      }
+      selectedContractDraftSnapshot.current = draft;
+      setContractDraft(draft);
+      setContractDraftLoadStatus('loaded');
+      setContractDraftError('');
+      return 'loaded';
+    } catch (error) {
+      if (contractDraftLoadSequence.current !== loadSequence || selectedContractId.current !== contractId) {
+        return 'stale';
+      }
+      if (isContractDraftClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return 'unauthorized';
+      }
+      if (isContractDraftClientError(error) && (error.code === 'not_found' || error.code === 'invalid_state')) {
+        selectedContractDraftSnapshot.current = null;
+        setContractDraft(null);
+        setContractDraftLoadStatus('unavailable');
+        setContractDraftError(contractDraftErrorMessage(error, translate));
+        return 'not_found';
+      }
+
+      if (
+        options.silentTransientErrors
+        && selectedContractDraftSnapshot.current?.contract_id === contractId
+        && selectedContractDraftSnapshot.current?.id === draftId
+      ) {
+        setContractDraftLoadStatus('loaded');
+        setContractDraftError('');
+        return 'error';
+      }
+
+      selectedContractDraftSnapshot.current = null;
+      setContractDraft(null);
+      setContractDraftLoadStatus('error');
+      setContractDraftError(contractDraftErrorMessage(error, translate));
+      return 'error';
+    } finally {
+      if (contractDraftLoadSequence.current === loadSequence) {
+        contractDraftRefreshInFlight.current = false;
+      }
+    }
+  }
+
+  async function refreshSelectedContractDraft(
+    options: { silentTransientErrors?: boolean } = {}
+  ): Promise<ReadOnlyLoadResult> {
+    const selected = selectedContractSnapshot.current;
+    if (!selected || contractDraftRefreshInFlight.current) {
+      return 'skipped';
+    }
+
+    return loadContractDraftForContract(selected, options);
   }
 
   async function loadContractById(contractIdValue: string, selectionSource: Exclude<ContractSelectionSource, 'auto'> = 'manual') {
@@ -762,7 +895,10 @@ function ConsoleApp() {
       contractSelectionSource.current = null;
       setContractError(translate('surfaces.contracts.lookupMissing'));
       setContractLoadStatus('error');
+      selectedContractId.current = null;
+      selectedContractSnapshot.current = null;
       setContract(null);
+      clearContractDraftState();
       return;
     }
 
@@ -777,21 +913,30 @@ function ConsoleApp() {
     contractSelectionSource.current = selectionSource;
     setContractLoadStatus('loading');
     setContractError('');
+    selectedContractId.current = null;
+    selectedContractSnapshot.current = null;
     setContract(null);
+    clearContractDraftState();
 
     try {
       const found = await getContract(accessToken, contractId);
       if (contractLookupSequence.current !== lookupSequence) {
         return;
       }
+      selectedContractId.current = found.id;
+      selectedContractSnapshot.current = found;
       setContract(found);
       setContractIdInput(found.id);
       setContractLoadStatus('loaded');
+      await loadContractDraftForContract(found);
     } catch (error) {
       if (contractLookupSequence.current !== lookupSequence) {
         return;
       }
+      selectedContractId.current = null;
+      selectedContractSnapshot.current = null;
       setContract(null);
+      clearContractDraftState();
       if (isAuthClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
         setAuthError(authErrorMessage(error, translate));
@@ -860,6 +1005,25 @@ function ConsoleApp() {
     }
   }
 
+  async function refreshContractsSurface(
+    showLoading = true,
+    options: { silentTransientErrors?: boolean } = {}
+  ): Promise<ReadOnlyLoadResult> {
+    const selectedDetailAtRefreshStart = selectedContractId.current;
+    const listResult = await loadContractList(showLoading, options);
+    if (listResult !== 'loaded') {
+      return listResult;
+    }
+    if (selectedDetailAtRefreshStart && selectedContractId.current === selectedDetailAtRefreshStart) {
+      return refreshSelectedContractDetail(options);
+    }
+    if (selectedContractId.current) {
+      return refreshSelectedContractDraft(options);
+    }
+
+    return listResult;
+  }
+
   async function refreshSelectedContractDetail(
     options: { silentTransientErrors?: boolean } = {}
   ): Promise<ReadOnlyLoadResult> {
@@ -881,10 +1045,15 @@ function ConsoleApp() {
       if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
         return 'stale';
       }
+      selectedContractSnapshot.current = found;
       setContract(found);
       setContractIdInput(found.id);
       setContractLoadStatus('loaded');
       setContractError('');
+      const draftResult = await loadContractDraftForContract(found, options);
+      if (draftResult === 'unauthorized') {
+        return 'unauthorized';
+      }
       return 'loaded';
     } catch (error) {
       if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
@@ -896,7 +1065,10 @@ function ConsoleApp() {
         return 'unauthorized';
       }
       if (isAuthClientError(error) && error.code === 'not_found') {
+        selectedContractId.current = null;
+        selectedContractSnapshot.current = null;
         setContract(null);
+        clearContractDraftState();
         setContractLoadStatus('not_found');
         setContractError(translate('surfaces.contracts.notFound'));
         return 'not_found';
@@ -921,6 +1093,10 @@ function ConsoleApp() {
     if (selectedId) {
       const selectedSummary = contracts.find((record) => record.id === selectedId);
       if (selectedSummary) {
+        const nextSnapshot = selectedContractSnapshot.current?.id === selectedSummary.id
+          ? { ...selectedContractSnapshot.current, ...selectedSummary }
+          : selectedSummary;
+        selectedContractSnapshot.current = nextSnapshot;
         setContract((current) => (current?.id === selectedSummary.id ? { ...current, ...selectedSummary } : current));
         return;
       }
@@ -939,10 +1115,12 @@ function ConsoleApp() {
   function selectContractSummary(nextContract: ContractResponse, selectionSource: ContractSelectionSource) {
     contractSelectionSource.current = selectionSource;
     selectedContractId.current = nextContract.id;
+    selectedContractSnapshot.current = nextContract;
     setContractIdInput(nextContract.id);
     setContract(nextContract);
     setContractLoadStatus('loaded');
     setContractError('');
+    void loadContractDraftForContract(nextContract);
   }
 
   function handleContractListSelection(nextContract: ContractResponse) {
@@ -1461,7 +1639,7 @@ function ConsoleApp() {
             onContractListStateFilterChange={setContractListStateFilter}
             onContractSelect={handleContractListSelection}
             onLookup={handleContractLookup}
-            onRefresh={() => void loadContractList(true)}
+            onRefresh={() => void refreshContractsSurface(true)}
             t={translate}
           />
         ) : null}
@@ -1497,6 +1675,9 @@ function ConsoleApp() {
           <ContractSurfacePanel
             activeLocale={activeLocale}
             contract={contract}
+            contractDraft={contractDraft}
+            contractDraftError={contractDraftError}
+            contractDraftLoadStatus={contractDraftLoadStatus}
             loadStatus={contractLoadStatus}
             t={translate}
           />
@@ -1963,14 +2144,42 @@ function contractStateTone(state: ContractResponse['state']) {
   return state === 'approved' ? 'pass' : state === 'ready_for_approval' ? 'amber' : 'mauve';
 }
 
+const DRAFT_ARRAY_FIELDS = [
+  { key: 'proposed_scope', labelKey: 'surfaces.contracts.draftFields.proposedScope' },
+  { key: 'proposed_non_goals', labelKey: 'surfaces.contracts.draftFields.proposedNonGoals' },
+  { key: 'proposed_constraints', labelKey: 'surfaces.contracts.draftFields.proposedConstraints' },
+  { key: 'proposed_acceptance_criteria', labelKey: 'surfaces.contracts.draftFields.proposedAcceptanceCriteria' },
+  { key: 'proposed_expected_checks', labelKey: 'surfaces.contracts.draftFields.proposedExpectedChecks' },
+  { key: 'proposed_proof_expectations', labelKey: 'surfaces.contracts.draftFields.proposedProofExpectations' },
+  { key: 'risk_hints', labelKey: 'surfaces.contracts.draftFields.riskHints' },
+] as const satisfies ReadonlyArray<{
+  key: keyof Pick<
+    ContractDraftResponse,
+    | 'proposed_scope'
+    | 'proposed_non_goals'
+    | 'proposed_constraints'
+    | 'proposed_acceptance_criteria'
+    | 'proposed_expected_checks'
+    | 'proposed_proof_expectations'
+    | 'risk_hints'
+  >;
+  labelKey: string;
+}>;
+
 function ContractSurfacePanel({
   activeLocale,
   contract,
+  contractDraft,
+  contractDraftError,
+  contractDraftLoadStatus,
   loadStatus,
   t,
 }: {
   activeLocale: ConsoleLocale;
   contract: ContractResponse | null;
+  contractDraft: ContractDraftResponse | null;
+  contractDraftError: string;
+  contractDraftLoadStatus: ContractDraftLoadStatus;
   loadStatus: ContractLoadStatus;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
@@ -2004,7 +2213,7 @@ function ContractSurfacePanel({
         </div>
         <div className="opsContractHeading secondary">
           <span>{t('surfaces.contracts.ops.detailMode')}</span>
-          <b>{t('surfaces.contracts.ops.aggregateOnly')}</b>
+          <b>{t('surfaces.contracts.ops.readOnlyDetail')}</b>
         </div>
       </div>
 
@@ -2047,6 +2256,16 @@ function ContractSurfacePanel({
               ) : null}
             </div>
           </section>
+
+          <ContractDraftDetail
+            activeLocale={activeLocale}
+            contract={contract}
+            contractDraft={contractDraft}
+            contractDraftError={contractDraftError}
+            contractDraftLoadStatus={contractDraftLoadStatus}
+            loadStatus={loadStatus}
+            t={t}
+          />
         </div>
 
         <aside className="opsContractSide">
@@ -2054,11 +2273,10 @@ function ContractSurfacePanel({
             <div className="opsPanelHead compact">
               <div>
                 <div className="opsPanelKicker">{t('surfaces.contracts.unavailableTitle')}</div>
-                <div className="opsPanelId">{t('surfaces.contracts.ops.aggregateOnly')}</div>
+                <div className="opsPanelId">{t('surfaces.contracts.ops.downstreamDeferred')}</div>
               </div>
             </div>
             <div className="opsUnavailableList">
-              <p>{t('surfaces.contracts.draftBodyUnavailable')}</p>
               <p>{t('surfaces.contracts.downstreamUnavailable')}</p>
             </div>
           </section>
@@ -2066,6 +2284,197 @@ function ContractSurfacePanel({
       </div>
     </section>
   );
+}
+
+function ContractDraftDetail({
+  activeLocale,
+  contract,
+  contractDraft,
+  contractDraftError,
+  contractDraftLoadStatus,
+  loadStatus,
+  t,
+}: {
+  activeLocale: ConsoleLocale;
+  contract: ContractResponse | null;
+  contractDraft: ContractDraftResponse | null;
+  contractDraftError: string;
+  contractDraftLoadStatus: ContractDraftLoadStatus;
+  loadStatus: ContractLoadStatus;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const draftStateLabel = contractDraft ? draftStateDisplay(contractDraft.state, t) : t('surfaces.contracts.ops.none');
+  const draftRows: Array<{ label: string; value: string }> = contractDraft ? [
+    { label: t('surfaces.contracts.fields.draftId'), value: contractDraft.id },
+    { label: t('surfaces.contracts.fields.state'), value: draftStateLabel },
+    { label: t('surfaces.contracts.fields.createdAt'), value: formatCalmTimestamp(contractDraft.created_at, { locale: activeLocale }) },
+  ] : [];
+
+  return (
+    <section className="opsObject opsContractDraft" aria-label={t('surfaces.contracts.currentDraftAriaLabel')}>
+      <div className="opsPanelHead">
+        <div>
+          <div className="opsPanelKicker">{t('surfaces.contracts.currentDraftTitle')}</div>
+          <h2>{contractDraft?.title || t('surfaces.contracts.currentDraftFallbackTitle')}</h2>
+        </div>
+        {contractDraft ? (
+          <div className="opsPrimaryStatus" aria-label={t('surfaces.contracts.draftStateLabel')}>
+            <span>{t('surfaces.contracts.draftStateLabel')}</span>
+            <b className={contractDraft.state === 'ready_for_approval' ? 'amber' : 'mauve'}>{draftStateLabel}</b>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="opsObjectBody">
+        {contractDraft ? (
+          <>
+            <div className="opsSectionLead">
+              <span>{t('surfaces.contracts.draftFields.intentSummary')}</span>
+              <b>{contractDraft.intent_summary || t('surfaces.contracts.sectionPending')}</b>
+            </div>
+
+            <dl className="opsAggregateGrid opsDraftMetadata">
+              {draftRows.map((row) => (
+                <div key={row.label}>
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <div className="opsDraftSectionGrid">
+              {DRAFT_ARRAY_FIELDS.map((field) => (
+                <DraftArraySection
+                  emptyLabel={t('surfaces.contracts.sectionPending')}
+                  key={field.key}
+                  title={t(field.labelKey)}
+                  values={contractDraft[field.key]}
+                />
+              ))}
+              <DraftSourceRefsSection
+                emptyLabel={t('surfaces.contracts.sectionPending')}
+                refs={contractDraft.source_refs}
+                title={t('surfaces.contracts.draftFields.sourceRefs')}
+              />
+            </div>
+          </>
+        ) : (
+          <ContractDraftEmptyState
+            contract={contract}
+            contractDraftError={contractDraftError}
+            contractDraftLoadStatus={contractDraftLoadStatus}
+            loadStatus={loadStatus}
+            t={t}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ContractDraftEmptyState({
+  contract,
+  contractDraftError,
+  contractDraftLoadStatus,
+  loadStatus,
+  t,
+}: {
+  contract: ContractResponse | null;
+  contractDraftError: string;
+  contractDraftLoadStatus: ContractDraftLoadStatus;
+  loadStatus: ContractLoadStatus;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const message =
+    !contract
+      ? loadStatus === 'not_found'
+        ? t('surfaces.contracts.notFoundBody')
+        : t('surfaces.contracts.emptyBody')
+      : contractDraftLoadStatus === 'loading'
+        ? t('surfaces.contracts.draftLoading')
+        : contractDraftLoadStatus === 'no_draft'
+          ? t('surfaces.contracts.noCurrentDraft')
+          : contractDraftLoadStatus === 'unavailable'
+            ? contractDraftError || t('surfaces.contracts.draftUnavailable')
+            : contractDraftLoadStatus === 'error'
+              ? contractDraftError
+              : t('surfaces.contracts.draftWaiting');
+
+  return (
+    <div className="opsDraftEmpty" role={contractDraftLoadStatus === 'loading' ? 'status' : undefined}>
+      <span>{t('surfaces.contracts.currentDraftTitle')}</span>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function DraftArraySection({
+  emptyLabel,
+  title,
+  values,
+}: {
+  emptyLabel: string;
+  title: string;
+  values: string[];
+}) {
+  const visibleValues = Array.isArray(values) ? values : [];
+  return (
+    <section className="opsDraftSection">
+      <h3>{title}</h3>
+      {visibleValues.length > 0 ? (
+        <ul>
+          {visibleValues.map((value, index) => (
+            <li key={`${title}-${index}`}>{value}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>{emptyLabel}</p>
+      )}
+    </section>
+  );
+}
+
+function DraftSourceRefsSection({
+  emptyLabel,
+  refs,
+  title,
+}: {
+  emptyLabel: string;
+  refs: ContractDraftSourceRef[];
+  title: string;
+}) {
+  const visibleRefs = Array.isArray(refs) ? refs : [];
+  return (
+    <section className="opsDraftSection">
+      <h3>{title}</h3>
+      {visibleRefs.length > 0 ? (
+        <ul>
+          {visibleRefs.map((ref, index) => (
+            <li key={`${ref.kind}-${ref.id}-${index}`}>
+              <span className="opsSourceRef">
+                <b>{ref.kind}</b>
+                <code>{ref.id}</code>
+                {sourceRefExtras(ref).map(([key, value]) => (
+                  <small key={key}>{key}: {String(value)}</small>
+                ))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>{emptyLabel}</p>
+      )}
+    </section>
+  );
+}
+
+function sourceRefExtras(ref: ContractDraftSourceRef) {
+  return Object.entries(ref).filter(([key, value]) => key !== 'kind' && key !== 'id' && value !== undefined && value !== null);
+}
+
+function draftStateDisplay(state: string, t: (key: string, options?: Record<string, unknown>) => string) {
+  const translated = t(`contractStates.${state}`);
+  return translated === `contractStates.${state}` ? state : translated;
 }
 
 function FieldRow({ label, value }: { label: string; value: string }) {
