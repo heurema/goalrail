@@ -420,6 +420,116 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("existing execution receipt id/count = %q/%d, want %q/1", existingExecutionReceipt.ID, len(server.executionReceipts.receipts), executionReceipt.ID)
 	}
 	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+
+	diagnosticTaskID := accepted.CreatedTaskIDs[1]
+	diagnosticCheckoutJob, diagnosticCheckoutReceipt := createCheckoutReceipt(t, server, diagnosticTaskID)
+	diagnosticExecutionJob := createExecutionJob(t, server, diagnosticTaskID, diagnosticCheckoutReceipt.ID)
+	diagnosticLeaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-diagnostic"}`, contextProjectID, contextRepoBindingID))
+	if diagnosticLeaseResponse.code != http.StatusCreated {
+		t.Fatalf("diagnostic execution lease status = %d, want %d: %s", diagnosticLeaseResponse.code, http.StatusCreated, diagnosticLeaseResponse.body)
+	}
+	var diagnosticLease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, diagnosticLeaseResponse.body, &diagnosticLease)
+	if diagnosticLease.ExecutionJobID != diagnosticExecutionJob.ID || diagnosticLease.TaskID != diagnosticTaskID || diagnosticLease.CheckoutReceiptID != diagnosticCheckoutReceipt.ID || diagnosticLease.RunnerID != "runner-diagnostic" || diagnosticLease.LeaseToken == "" {
+		t.Fatalf("diagnostic execution lease = %#v, want lease for second task execution job", diagnosticLease)
+	}
+
+	diagnosticRunResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(diagnosticExecutionJob.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-diagnostic"}`, diagnosticLease.ID, diagnosticLease.LeaseToken))
+	if diagnosticRunResponse.code != http.StatusCreated {
+		t.Fatalf("diagnostic run start status = %d, want %d: %s", diagnosticRunResponse.code, http.StatusCreated, diagnosticRunResponse.body)
+	}
+	var diagnosticRun spine.Run
+	decodeJSON(t, diagnosticRunResponse.body, &diagnosticRun)
+	if diagnosticRun.ID == "" || diagnosticRun.ExecutionJobID != diagnosticExecutionJob.ID || diagnosticRun.ExecutionLeaseID != diagnosticLease.ID || diagnosticRun.TaskID != diagnosticTaskID || diagnosticRun.CheckoutReceiptID != diagnosticCheckoutReceipt.ID || diagnosticRun.State != spine.RunStateStarted {
+		t.Fatalf("diagnostic run = %#v, want started Run for diagnostic path", diagnosticRun)
+	}
+
+	commandPlanResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(diagnosticRun.ID)+"/command-plans", planCreateJSONWithContext(string(contextProjectID), string(contextRepoBindingID)))
+	if commandPlanResponse.code != http.StatusCreated {
+		t.Fatalf("diagnostic command plan status = %d, want %d: %s", commandPlanResponse.code, http.StatusCreated, commandPlanResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\""} {
+		if strings.Contains(commandPlanResponse.body, forbidden) {
+			t.Fatalf("diagnostic command plan response exposes forbidden field %s: %s", forbidden, commandPlanResponse.body)
+		}
+	}
+	var commandPlan spine.ExecutionCommandPlan
+	decodeJSON(t, commandPlanResponse.body, &commandPlan)
+	if commandPlan.RunID != diagnosticRun.ID || commandPlan.ExecutionJobID != diagnosticExecutionJob.ID || commandPlan.TaskID != diagnosticTaskID || commandPlan.CheckoutReceiptID != diagnosticCheckoutReceipt.ID {
+		t.Fatalf("diagnostic command plan = %#v, want diagnostic run/job/task/receipt trace", commandPlan)
+	}
+	if commandPlan.CommandKind != spine.ExecutionCommandKindBuiltinDiagnostic || commandPlan.Action != spine.ExecutionCommandActionWorkspaceStatus || commandPlan.ShellAllowed || len(commandPlan.Argv) != 0 || commandPlan.WorkingDirectory != "." || len(commandPlan.PathScope) != 1 || commandPlan.PathScope[0] != "." || commandPlan.RawSourceUploadAllowed {
+		t.Fatalf("diagnostic command plan policy = %#v, want fixed builtin diagnostic without shell/argv/raw source", commandPlan)
+	}
+	if commandPlan.TimeoutSeconds != 30 || commandPlan.MaxStdoutBytes != 0 || commandPlan.MaxStderrBytes != 0 || len(commandPlan.AllowedArtifactKinds) != 0 || commandPlan.State != spine.ExecutionCommandPlanStatePlanned {
+		t.Fatalf("diagnostic command plan limits/state = %#v, want metadata-only diagnostic policy", commandPlan)
+	}
+	if len(server.commandPlans.plans) != 1 {
+		t.Fatalf("command plans = %d, want 1", len(server.commandPlans.plans))
+	}
+
+	secondCommandPlanResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(diagnosticRun.ID)+"/command-plans", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"command_kind":"builtin_diagnostic","action":"workspace_status"}`, contextProjectID, contextRepoBindingID))
+	if secondCommandPlanResponse.code != http.StatusOK {
+		t.Fatalf("second diagnostic command plan status = %d, want %d: %s", secondCommandPlanResponse.code, http.StatusOK, secondCommandPlanResponse.body)
+	}
+	var existingCommandPlan spine.ExecutionCommandPlan
+	decodeJSON(t, secondCommandPlanResponse.body, &existingCommandPlan)
+	if existingCommandPlan.ID != commandPlan.ID || len(server.commandPlans.plans) != 1 {
+		t.Fatalf("existing command plan id/count = %q/%d, want %q/1", existingCommandPlan.ID, len(server.commandPlans.plans), commandPlan.ID)
+	}
+	if len(server.executionReceipts.receipts) != 1 {
+		t.Fatalf("execution receipts = %d, want only no-command receipt before diagnostic receipt", len(server.executionReceipts.receipts))
+	}
+
+	diagnosticReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(diagnosticRun.ID)+"/receipts", builtinDiagnosticReceiptBody(diagnosticExecutionJob.ID, diagnosticLease.ID, diagnosticLease.LeaseToken, "runner-diagnostic", commandPlan.ID))
+	if diagnosticReceiptResponse.code != http.StatusCreated {
+		t.Fatalf("diagnostic execution receipt status = %d, want %d: %s", diagnosticReceiptResponse.code, http.StatusCreated, diagnosticReceiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\""} {
+		if strings.Contains(diagnosticReceiptResponse.body, forbidden) {
+			t.Fatalf("diagnostic execution receipt response exposes forbidden field %s: %s", forbidden, diagnosticReceiptResponse.body)
+		}
+	}
+	var diagnosticReceipt spine.ExecutionReceipt
+	decodeJSON(t, diagnosticReceiptResponse.body, &diagnosticReceipt)
+	if diagnosticReceipt.CommandPlanID == nil || *diagnosticReceipt.CommandPlanID != commandPlan.ID || diagnosticReceipt.ExecutionMode != spine.ExecutionReceiptModeBuiltinDiagnostic || diagnosticReceipt.CommandKind != spine.ExecutionCommandKindBuiltinDiagnostic || diagnosticReceipt.Action != spine.ExecutionCommandActionWorkspaceStatus {
+		t.Fatalf("diagnostic receipt command metadata = %#v, want fixed builtin diagnostic metadata", diagnosticReceipt)
+	}
+	if diagnosticReceipt.ProcessStatus != spine.ExecutionReceiptStatusMetadataOnly || diagnosticReceipt.ExitCode != nil || diagnosticReceipt.RawSourceUploaded {
+		t.Fatalf("diagnostic receipt status = %#v, want metadata_only without exit/raw source", diagnosticReceipt)
+	}
+	if len(diagnosticReceipt.ArtifactRefs) != 0 || len(diagnosticReceipt.ChangedPathsSummary) != 0 || strings.Contains(diagnosticReceiptResponse.body, `"artifact_refs":null`) || strings.Contains(diagnosticReceiptResponse.body, `"changed_paths_summary":null`) {
+		t.Fatalf("diagnostic receipt artifact/path claims = %#v/%#v body=%s, want empty JSON arrays", diagnosticReceipt.ArtifactRefs, diagnosticReceipt.ChangedPathsSummary, diagnosticReceiptResponse.body)
+	}
+	if diagnosticReceipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || diagnosticReceipt.NextAction.Available || diagnosticReceipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
+		t.Fatalf("diagnostic receipt next_action = %#v, want unavailable gate_review", diagnosticReceipt.NextAction)
+	}
+	if got := server.runs.runs[diagnosticRun.ID].State; got != spine.RunStateReceiptSubmitted {
+		t.Fatalf("diagnostic run state = %q, want receipt_submitted", got)
+	}
+	if got := server.executionJobs.jobs[diagnosticExecutionJob.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+		t.Fatalf("diagnostic execution job state = %q, want receipt_submitted", got)
+	}
+	storedDiagnosticTask, ok, err := server.workItems.Get(context.Background(), diagnosticTaskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get(%s) after diagnostic receipt = %#v/%v/%v", diagnosticTaskID, storedDiagnosticTask, ok, err)
+	}
+	if storedDiagnosticTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("diagnostic task status = %q, want planned after builtin diagnostic receipt", storedDiagnosticTask.Status)
+	}
+	if len(server.checkoutJobs.jobs) != 2 || len(server.checkoutReceipts.receipts) != 2 || len(server.executionJobs.jobs) != 2 || len(server.runs.runs) != 2 || len(server.executionReceipts.receipts) != 2 {
+		t.Fatalf("runtime object counts checkout_jobs=%d checkout_receipts=%d execution_jobs=%d runs=%d execution_receipts=%d, want 2 each", len(server.checkoutJobs.jobs), len(server.checkoutReceipts.receipts), len(server.executionJobs.jobs), len(server.runs.runs), len(server.executionReceipts.receipts))
+	}
+	if storedDiagnosticCheckoutJob := server.checkoutJobs.jobs[diagnosticCheckoutJob.ID]; storedDiagnosticCheckoutJob.TaskID != diagnosticTaskID || storedDiagnosticCheckoutJob.State != spine.CheckoutJobStateReceiptSubmitted {
+		t.Fatalf("diagnostic checkout job = %#v, want receipt-submitted second task checkout", storedDiagnosticCheckoutJob)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionCommandPlanCreated); got != 1 {
+		t.Fatalf("execution_command_plan.created events = %d, want 1", got)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionReceiptSubmitted); got != 2 {
+		t.Fatalf("execution_receipt.submitted events = %d, want 2 including builtin diagnostic receipt", got)
+	}
+	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 }
 
 func contractCreateJSONWithContext(goalID spine.GoalID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID) string {
