@@ -166,11 +166,11 @@ wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
   lifecycle controls.
 - The Contracts surface is read-only and can show a selected contract by ID.
 
-Pending display refinements from D-0091:
-- Cards should converge on one primary status rather than duplicate status
-  chips.
-- Timestamps should use calm human-readable labels and avoid seconds, raw
-  ISO/RFC3339 strings, or timezone-heavy values on normal cards.
+D-0091 display behavior:
+- Delivery Readiness cards show one frontend-projected primary status instead
+  of duplicate readiness / next-action status chips.
+- Delivery Readiness cards use calm browser-local timestamp labels and avoid
+  seconds, raw ISO/RFC3339 strings, or timezone-heavy values on normal cards.
 
 Readiness primary statuses, in display priority:
 1. Needs answer

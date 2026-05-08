@@ -164,6 +164,9 @@
   clarification questions are rendered as read-only backend state, and linked
   Contract cards expose `Open contract` navigation through existing
   `GET /v1/contracts/{id}` only.
+  Delivery Readiness cards now use one frontend-projected primary status,
+  D-0091 display priority, and calm browser-local timestamps while preserving
+  read-only clarification question text and context.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
@@ -180,7 +183,9 @@
   active tab, skip scheduled polling while hidden, keep manual Refresh / Retry
   as fallback, and keep existing visible state on transient errors. The
   minimum feed remains `GET /v1/qualification-feed?limit=50`; selected
-  Contract detail uses `GET /v1/contracts/{id}`; optional future contract
+  Contract detail uses `GET /v1/contracts/{id}`. Delivery Readiness display now
+  follows one primary status per card, D-0091 status priority, and calm
+  browser-local time labels; optional future contract
   discovery should prefer authenticated, organization-scoped, read-only filtered
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
