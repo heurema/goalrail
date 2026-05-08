@@ -76,13 +76,15 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runPlan(ctx, out, workDir, args[1:], options)
 	case "proposal":
 		return runProposal(ctx, out, workDir, args[1:], options)
+	case "checkout":
+		return runCheckout(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown work command %q", args[0]))
 	}
 }
 
 func Usage() string {
-	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n\nRun goalrail work <command> --help for command usage.\n"
+	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n  checkout   prepare runner checkout instructions for planned WorkItems\n\nRun goalrail work <command> --help for command usage.\n"
 }
 
 func StartUsage() string {
@@ -111,6 +113,14 @@ func ProposalUsage() string {
 
 func ProposalAcceptUsage() string {
 	return "Usage: goalrail work proposal accept --proposal-id <proposal_id> --confirm-user-acceptance [--format text|json]\n\nAccepts a submitted WorkItemPlanProposal after explicit user acceptance and materializes server-owned WorkItem(planned) records.\n\nThis command does not assign, claim, run, checkout, gate, proof, or verify work.\n"
+}
+
+func CheckoutUsage() string {
+	return "Usage: goalrail work checkout <command> [options]\n\nCommands:\n  prepare   create or return a runner checkout job for a planned WorkItem\n\nRun goalrail work checkout <command> --help for command usage.\n"
+}
+
+func CheckoutPrepareUsage() string {
+	return "Usage: goalrail work checkout prepare --task-id <task_id> [--format text|json]\n\nCreates or returns a server-owned checkout job and checkout instruction for a planned WorkItem using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not assign, claim, execute commands, create Run, gate, proof, or verify work.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -612,6 +622,76 @@ func runProposalAccept(ctx context.Context, out *term.Output, workDir string, ar
 	return err
 }
 
+func runCheckout(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if len(args) == 0 {
+		_, err := fmt.Fprint(out.Stdout, CheckoutUsage())
+		return err
+	}
+	switch args[0] {
+	case "--help", "-h":
+		_, err := fmt.Fprint(out.Stdout, CheckoutUsage())
+		return err
+	case "prepare":
+		return runCheckoutPrepare(ctx, out, workDir, args[1:], options)
+	default:
+		return exitcode.UsageError(fmt.Errorf("unknown work checkout command %q", args[0]))
+	}
+}
+
+func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work checkout prepare", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	taskID := flags.String("task-id", "", "WorkItem ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, CheckoutPrepareUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedTaskID := strings.TrimSpace(*taskID)
+	if normalizedTaskID == "" {
+		return exitcode.UsageError(errors.New("--task-id is required"))
+	}
+	if err := validateUUIDLike("task_id", normalizedTaskID); err != nil {
+		return err
+	}
+	normalizedTaskID = strings.ToLower(normalizedTaskID)
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	work, err := loadWorkContext(ctx, workDir, options, "work checkout prepare")
+	if err != nil {
+		return err
+	}
+
+	job, err := postCheckoutJob(ctx, work.Client, work.Session, normalizedTaskID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateCheckoutJobContext(work.Config, normalizedTaskID, job); err != nil {
+		return err
+	}
+
+	output := buildCheckoutPrepareOutput(work.Config, work.ServerURL, job)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderCheckoutPrepareText(output))
+	return err
+}
+
 func renderStartText(output spine.WorkStartOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work intake started\n\n")
@@ -787,9 +867,13 @@ func renderPlanText(output spine.WorkPlanOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	if output.NextAction.Kind != "" {
-		fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
-		if output.NextAction.PlannedSlice != "" {
-			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		if output.NextAction.Available && output.NextAction.Command != "" {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
 		}
 	}
 	return b.String()
@@ -841,7 +925,35 @@ func renderProposalAcceptText(output spine.WorkProposalAcceptOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	if output.NextAction.Kind != "" {
-		fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+		if output.NextAction.Available && output.NextAction.Command != "" {
+			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
+		} else {
+			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+			if output.NextAction.PlannedSlice != "" {
+				fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+			}
+		}
+	}
+	return b.String()
+}
+
+func renderCheckoutPrepareText(output spine.WorkCheckoutPrepareOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Checkout job prepared\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Task: %s\n", output.TaskID)
+	fmt.Fprintf(&b, "Checkout job: %s\n", output.CheckoutJobID)
+	fmt.Fprintf(&b, "State: %s\n", output.CheckoutJobState)
+	fmt.Fprintf(&b, "Repository: %s\n", output.Instruction.RepositoryFullName)
+	fmt.Fprintf(&b, "Workflow base branch: %s\n", output.Instruction.WorkflowBaseBranch)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Kind != "" {
+		fmt.Fprintf(&b, "\nNext action: %s\n", output.NextAction.Kind)
 		if output.NextAction.PlannedSlice != "" {
 			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
 		}
@@ -951,12 +1063,44 @@ func buildProposalAcceptOutput(config projectconfig.Config, serverURL string, ac
 			Summary: fmt.Sprintf("Accepted the planning proposal and created %d planned WorkItem record(s). Execution is not available yet.", len(taskIDs)),
 		},
 		NextAction: spine.NextAction{
-			Kind:         "planned_workitems_ready",
-			Blocking:     false,
-			Available:    false,
-			PlannedSlice: "H",
+			Kind:      "prepare_checkout",
+			Blocking:  false,
+			Available: len(taskIDs) > 0,
+			Command:   firstCheckoutCommand(taskIDs),
 		},
 	}
+}
+
+func buildCheckoutPrepareOutput(config projectconfig.Config, serverURL string, job checkoutJobResponse) spine.WorkCheckoutPrepareOutput {
+	return spine.WorkCheckoutPrepareOutput{
+		SchemaVersion:    cliSchemaVersion,
+		Mode:             serverMode,
+		ServerURL:        serverURL,
+		OrganizationID:   config.OrganizationID,
+		ProjectID:        config.ProjectID,
+		RepoBindingID:    spine.RepoBindingID(config.RepoBindingID),
+		TaskID:           job.TaskID,
+		CheckoutJobID:    job.ID,
+		CheckoutJobState: job.State,
+		Instruction:      job.Instruction,
+		LocalConfigPath:  projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Prepared a runner checkout job and checkout instruction. Execution, Run, gate, and proof are not available in this step.",
+		},
+		NextAction: spine.NextAction{
+			Kind:         "runner_checkout_required",
+			Blocking:     true,
+			Available:    false,
+			PlannedSlice: "H2",
+		},
+	}
+}
+
+func firstCheckoutCommand(taskIDs []string) string {
+	if len(taskIDs) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("goalrail work checkout prepare --task-id %s --format json", taskIDs[0])
 }
 
 func planStateResult(state string, planID string, proposalID string) (string, spine.NextAction) {
@@ -1018,6 +1162,8 @@ func renderPlanNextActionText(kind string) string {
 		return "review the proposal with the user, then accept only with explicit user acceptance."
 	case "planned_workitems_ready":
 		return "planned WorkItems exist server-side; execution is a future step and is not available yet."
+	case "prepare_checkout":
+		return "prepare a checkout job for the first planned WorkItem; execution is not part of checkout preparation."
 	case "blocked":
 		return "blocked; inspect the WorkItemPlan state before continuing."
 	default:
@@ -1310,6 +1456,29 @@ func validateProposalAcceptanceContext(proposalID string, accepted workPlanAccep
 	return nil
 }
 
+func validateCheckoutJobContext(config projectconfig.Config, taskID string, job checkoutJobResponse) error {
+	if !sameUUIDText(job.TaskID, taskID) {
+		return exitcode.ValidationError(errors.New("checkout job response task_id does not match requested WorkItem"))
+	}
+	if job.RepoBindingID != "" && string(job.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("checkout job response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the WorkItem"))
+	}
+	if job.Instruction.TaskID != "" && !sameUUIDText(job.Instruction.TaskID, taskID) {
+		return exitcode.ValidationError(errors.New("checkout instruction task_id does not match requested WorkItem"))
+	}
+	if job.Instruction.RepoBindingID != "" && string(job.Instruction.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("checkout instruction repo_binding_id does not match local .goalrail/project.yml"))
+	}
+	if job.Instruction.RawSourceUploaded {
+		return exitcode.ValidationError(errors.New("checkout instruction unexpectedly claims raw source upload"))
+	}
+	return nil
+}
+
+func sameUUIDText(left string, right string) bool {
+	return strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right))
+}
+
 func postIntake(ctx context.Context, client HTTPClient, session authstore.Session, payload intakeSubmission) (intakeAcceptedResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -1557,6 +1726,52 @@ func postProposalAcceptance(ctx context.Context, client HTTPClient, session auth
 	return decoded, nil
 }
 
+func postCheckoutJob(ctx context.Context, client HTTPClient, session authstore.Session, taskID string, config projectconfig.Config) (checkoutJobResponse, error) {
+	payload := workPlanCreateRequest{
+		ProjectID:     config.ProjectID,
+		RepoBindingID: config.RepoBindingID,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return checkoutJobResponse{}, exitcode.RuntimeError(fmt.Errorf("encode checkout job request: %w", err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	endpoint := serverURL + "/v1/tasks/" + url.PathEscape(taskID) + "/checkout-jobs"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return checkoutJobResponse{}, exitcode.RuntimeError(fmt.Errorf("build checkout job request: %w", err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return checkoutJobResponse{}, exitcode.RuntimeError(fmt.Errorf("prepare checkout job on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+		return checkoutJobResponse{}, mapHTTPError("checkout job request", response, serverURL)
+	}
+	var decoded checkoutJobResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return checkoutJobResponse{}, exitcode.RuntimeError(fmt.Errorf("decode checkout job response: %w", err))
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return checkoutJobResponse{}, exitcode.RuntimeError(errors.New("checkout job response did not include id"))
+	}
+	if strings.TrimSpace(decoded.TaskID) == "" {
+		return checkoutJobResponse{}, exitcode.RuntimeError(errors.New("checkout job response did not include task_id"))
+	}
+	if strings.TrimSpace(decoded.State) == "" {
+		return checkoutJobResponse{}, exitcode.RuntimeError(errors.New("checkout job response did not include state"))
+	}
+	if strings.TrimSpace(decoded.Instruction.JobID) == "" {
+		return checkoutJobResponse{}, exitcode.RuntimeError(errors.New("checkout job response did not include instruction.job_id"))
+	}
+	return decoded, nil
+}
+
 func mapHTTPError(operation string, response *http.Response, serverURL string) error {
 	message := decodeServerErrorMessage(response.Body, response.StatusCode)
 	switch response.StatusCode {
@@ -1736,4 +1951,16 @@ type workPlanAcceptanceResponse struct {
 	ContractID     spine.ContractID `json:"contract_id"`
 	State          string           `json:"state"`
 	CreatedTaskIDs []string         `json:"created_task_ids"`
+}
+
+type checkoutJobResponse struct {
+	ID                 string                    `json:"id"`
+	TaskID             string                    `json:"task_id"`
+	ContractID         spine.ContractID          `json:"contract_id"`
+	ApprovedContractID string                    `json:"approved_contract_id"`
+	PlanID             string                    `json:"plan_id"`
+	ProposalID         string                    `json:"proposal_id"`
+	RepoBindingID      spine.RepoBindingID       `json:"repo_binding_id"`
+	State              string                    `json:"state"`
+	Instruction        spine.CheckoutInstruction `json:"instruction"`
 }

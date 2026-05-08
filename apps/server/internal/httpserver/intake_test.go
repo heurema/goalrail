@@ -12,6 +12,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
+	"github.com/heurema/goalrail/apps/server/internal/checkout"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/continuation"
 	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
@@ -55,6 +56,9 @@ type testServerDeps struct {
 	workItemPlans     *fakeWorkItemPlanStore
 	workItemLeases    *fakeWorkItemPlanLeaseStore
 	workItemProposals *fakeWorkItemPlanProposalStore
+	repoBindings      *fakeRepoBindingStore
+	checkoutJobs      *fakeCheckoutJobStore
+	checkoutReceipts  *fakeCheckoutReceiptStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
@@ -1733,6 +1737,9 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanStore := newFakeWorkItemPlanStore()
 	workItemLeaseStore := newFakeWorkItemPlanLeaseStore(workItemPlanStore)
 	workItemPlanProposalStore := newFakeWorkItemPlanProposalStore()
+	repoBindingStore := newFakeRepoBindingStore()
+	checkoutJobStore := newFakeCheckoutJobStore()
+	checkoutReceiptStore := newFakeCheckoutReceiptStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1753,9 +1760,11 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemLeaseStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
+	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,
@@ -1768,6 +1777,9 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		workItemPlans:     workItemPlanStore,
 		workItemLeases:    workItemLeaseStore,
 		workItemProposals: workItemPlanProposalStore,
+		repoBindings:      repoBindingStore,
+		checkoutJobs:      checkoutJobStore,
+		checkoutReceipts:  checkoutReceiptStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -2389,6 +2401,131 @@ func (s *fakeWorkItemPlanProposalStore) MarkAccepted(_ context.Context, id spine
 	return nil
 }
 
+type fakeRepoBindingStore struct {
+	bindings map[spine.RepoBindingID]spine.RepoBinding
+}
+
+func newFakeRepoBindingStore() *fakeRepoBindingStore {
+	binding := spine.RepoBinding{
+		ID:                 "018f0000-0000-7000-8000-000000000004",
+		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
+		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		CreatedByUserID:    "018f0000-0000-7000-8000-000000000001",
+		Provider:           "github",
+		RepositoryFullName: "heurema/goalrail",
+		RepositoryURL:      "https://github.com/heurema/goalrail",
+		DefaultBranch:      "main",
+		WorkflowBaseBranch: "main",
+		PathScope:          ".",
+		AccessMode:         spine.RepoBindingAccessModeCustomerMountedWorkspace,
+		State:              spine.EntityStateActive,
+		CreatedAt:          testTime(),
+		UpdatedAt:          testTime(),
+	}
+	return &fakeRepoBindingStore{bindings: map[spine.RepoBindingID]spine.RepoBinding{binding.ID: binding}}
+}
+
+func (s *fakeRepoBindingStore) GetRepoBinding(_ context.Context, id spine.RepoBindingID) (spine.RepoBinding, bool, error) {
+	binding, ok := s.bindings[id]
+	return binding, ok, nil
+}
+
+type fakeCheckoutJobStore struct {
+	jobs   map[spine.CheckoutJobID]spine.CheckoutJob
+	byTask map[spine.WorkItemID]spine.CheckoutJobID
+}
+
+func newFakeCheckoutJobStore() *fakeCheckoutJobStore {
+	return &fakeCheckoutJobStore{
+		jobs:   map[spine.CheckoutJobID]spine.CheckoutJob{},
+		byTask: map[spine.WorkItemID]spine.CheckoutJobID{},
+	}
+}
+
+func (s *fakeCheckoutJobStore) Create(_ context.Context, job spine.CheckoutJob) error {
+	s.jobs[job.ID] = job
+	s.byTask[job.TaskID] = job.ID
+	return nil
+}
+
+func (s *fakeCheckoutJobStore) Get(_ context.Context, id spine.CheckoutJobID) (spine.CheckoutJob, bool, error) {
+	if id == "malformed-id" {
+		return spine.CheckoutJob{}, false, spine.MalformedIDError{Field: "checkout job id", Reason: "must be uuid"}
+	}
+	job, ok := s.jobs[id]
+	return job, ok, nil
+}
+
+func (s *fakeCheckoutJobStore) GetByTaskID(_ context.Context, id spine.WorkItemID) (spine.CheckoutJob, bool, error) {
+	jobID, ok := s.byTask[id]
+	if !ok {
+		return spine.CheckoutJob{}, false, nil
+	}
+	job, ok := s.jobs[jobID]
+	return job, ok, nil
+}
+
+func (s *fakeCheckoutJobStore) AcquireNextLease(_ context.Context, input checkout.JobLeaseInput) (spine.CheckoutJob, bool, error) {
+	var selected spine.CheckoutJob
+	found := false
+	for _, job := range s.jobs {
+		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
+			continue
+		}
+		if input.ProjectID != "" && job.ProjectID != input.ProjectID {
+			continue
+		}
+		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
+			continue
+		}
+		if job.State == spine.CheckoutJobStateQueued || (job.State == spine.CheckoutJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
+				selected = job
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.CheckoutJob{}, false, nil
+	}
+	selected.State = spine.CheckoutJobStateLeased
+	selected.CurrentRunnerID = input.RunnerID
+	selected.LeaseTokenHash = input.LeaseTokenHash
+	selected.LeaseExpiresAt = &input.LeaseExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.jobs[selected.ID] = selected
+	return selected, true, nil
+}
+
+func (s *fakeCheckoutJobStore) MarkReceiptSubmitted(_ context.Context, id spine.CheckoutJobID, runnerID string, tokenHash string, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.CheckoutJobStateLeased || job.CurrentRunnerID != runnerID || job.LeaseTokenHash != tokenHash || job.LeaseExpiresAt == nil || !job.LeaseExpiresAt.After(updatedAt) {
+		return false, nil
+	}
+	job.State = spine.CheckoutJobStateReceiptSubmitted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
+type fakeCheckoutReceiptStore struct {
+	receipts map[spine.CheckoutReceiptID]spine.CheckoutReceipt
+	byJob    map[spine.CheckoutJobID]spine.CheckoutReceiptID
+}
+
+func newFakeCheckoutReceiptStore() *fakeCheckoutReceiptStore {
+	return &fakeCheckoutReceiptStore{
+		receipts: map[spine.CheckoutReceiptID]spine.CheckoutReceipt{},
+		byJob:    map[spine.CheckoutJobID]spine.CheckoutReceiptID{},
+	}
+}
+
+func (s *fakeCheckoutReceiptStore) Create(_ context.Context, receipt spine.CheckoutReceipt) error {
+	s.receipts[receipt.ID] = receipt
+	s.byJob[receipt.JobID] = receipt.ID
+	return nil
+}
+
 type fakeEventLog struct {
 	events []spine.Event
 }
@@ -2485,6 +2622,8 @@ type sequenceIDs struct {
 	workItemPlan      int
 	workItemPlanLease int
 	workItemProposal  int
+	checkoutJob       int
+	checkoutReceipt   int
 	event             int
 }
 
@@ -2556,6 +2695,16 @@ func (g *sequenceIDs) NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error
 func (g *sequenceIDs) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {
 	g.workItemProposal++
 	return spine.WorkItemPlanProposalID(fmt.Sprintf("proposal-%d", g.workItemProposal)), nil
+}
+
+func (g *sequenceIDs) NewCheckoutJobID() (spine.CheckoutJobID, error) {
+	g.checkoutJob++
+	return spine.CheckoutJobID(fmt.Sprintf("checkout-job-%d", g.checkoutJob)), nil
+}
+
+func (g *sequenceIDs) NewCheckoutReceiptID() (spine.CheckoutReceiptID, error) {
+	g.checkoutReceipt++
+	return spine.CheckoutReceiptID(fmt.Sprintf("checkout-receipt-%d", g.checkoutReceipt)), nil
 }
 
 func testTime() time.Time {

@@ -412,6 +412,50 @@ func TestInitMigrationCreatesWorkItemsTable(t *testing.T) {
 	if strings.Contains(sql, "CONSTRAINT work_items_approved_contract_id_unique UNIQUE (approved_contract_id)") {
 		t.Fatalf("work_items must not keep one-task-per-approved-contract unique constraint")
 	}
+	if strings.Contains(sql, "CREATE TABLE checkout_jobs") || strings.Contains(sql, "CREATE TABLE checkout_receipts") {
+		t.Fatalf("checkout tables must live in a follow-up migration, not 00001_init.sql")
+	}
+}
+
+func TestCheckoutMigrationCreatesCheckoutTables(t *testing.T) {
+	contents, err := FS.ReadFile("00002_checkout_jobs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE checkout_jobs",
+		"task_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE",
+		"current_runner_id TEXT NOT NULL DEFAULT ''",
+		"lease_token_hash TEXT NOT NULL DEFAULT ''",
+		"CONSTRAINT checkout_jobs_task_id_unique UNIQUE (task_id)",
+		"CONSTRAINT checkout_jobs_state_check CHECK (state IN ('queued', 'leased', 'receipt_submitted'))",
+		"CREATE INDEX checkout_jobs_organization_created_at_idx",
+		"CREATE INDEX checkout_jobs_project_created_at_idx",
+		"CREATE INDEX checkout_jobs_task_id_idx",
+		"CREATE INDEX checkout_jobs_state_created_at_idx",
+		"CREATE INDEX checkout_jobs_repo_binding_id_idx",
+		"CREATE INDEX checkout_jobs_lease_expires_at_idx",
+		"CREATE TABLE checkout_receipts",
+		"job_id UUID NOT NULL REFERENCES checkout_jobs(id) ON DELETE CASCADE",
+		"raw_source_uploaded BOOLEAN NOT NULL DEFAULT FALSE",
+		"CONSTRAINT checkout_receipts_job_id_unique UNIQUE (job_id)",
+		"CONSTRAINT checkout_receipts_no_raw_source_check CHECK (raw_source_uploaded = FALSE)",
+		"CREATE INDEX checkout_receipts_task_id_idx",
+		"CREATE INDEX checkout_receipts_repo_binding_id_idx",
+		"DROP TABLE IF EXISTS checkout_receipts;",
+		"DROP TABLE IF EXISTS checkout_jobs;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("checkout migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE checkout_jobs") > strings.Index(sql, "CREATE TABLE checkout_receipts") {
+		t.Fatalf("checkout_jobs must be created before checkout_receipts")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS checkout_receipts;") > strings.Index(sql, "DROP TABLE IF EXISTS checkout_jobs;") {
+		t.Fatalf("checkout_receipts must be dropped before checkout_jobs")
+	}
 }
 
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
