@@ -1,4 +1,5 @@
 import indexMarkup from '../index.html?raw';
+import startIndexMarkup from '../start/index.html?raw';
 import sidecarMainSourceText from '../server/cmd/goalrail-pilot-intake-ru/main.go?raw';
 import configSourceText from '../server/internal/pilotlead/config.go?raw';
 import digestSourceText from '../server/internal/pilotlead/digest.go?raw';
@@ -26,6 +27,10 @@ function startPageRuSource() {
 
 function indexHtml() {
   return indexMarkup;
+}
+
+function startIndexHtml() {
+  return startIndexMarkup;
 }
 
 function leadEndpointSource() {
@@ -364,6 +369,15 @@ describe('Pilot intake RU business-first landing', () => {
 
   it('keeps canonical metadata on pilot.goalrail.ru', () => {
     expect(indexHtml()).toContain('<link rel="canonical" href="https://pilot.goalrail.ru/" />');
+  });
+
+  it('serves RU start metadata from a static HTML entry', () => {
+    const html = startIndexHtml();
+
+    expect(html).toContain('<title>GoalRail - AI-разработка без потери контроля</title>');
+    expect(html).toContain('<link rel="canonical" href="https://goalrail.ru/start" />');
+    expect(html).toContain('<meta property="og:title" content="Спросите GoalRail про AI-assisted delivery" />');
+    expect(html).toContain('<meta property="og:description" content="От бизнес-цели до проверенного изменения в коде." />');
   });
 
   it('keeps network behavior narrowed to the local lead endpoint only', () => {

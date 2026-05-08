@@ -7,6 +7,7 @@ Russian pilot-intake landing prototype for Goalrail.
 - Static React + Vite + Mantine resource under `apps/web/pilot-intake-ru`
 - Owns the current Russian pilot landing at `/` for `pilot.goalrail.ru`
 - Also owns the adjacent Russian public start route at `/start`, targeted at `https://goalrail.ru/start`
+- Emits a separate static HTML entry for `/start` so crawlers see the RU start metadata without waiting for SPA hydration
 - Keeps `/` as a lead-capture/public landing prototype, not a product runtime
 - Keeps `/start` as a public assistant entry surface; it uses only same-origin `POST /api/start-chat` when that operator-managed route is wired
 
@@ -24,3 +25,6 @@ npm run pilot-intake-ru:build
 Local dev proxies `/api/start-chat` to `https://goalrail.dev` by default so
 `/start` can exercise the existing public start assistant. Use
 `START_ASSISTANT_PROXY_TARGET` to point at another operator-approved target.
+
+The production static server should serve `/start` from the built
+`dist/start/index.html` entry, while `/` continues to use `dist/index.html`.

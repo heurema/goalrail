@@ -67,7 +67,10 @@ boundary. The `/start` route is not owned by the lead sidecar and does not add
 repo scan, file upload, code execution, analytics, cookies, sessions, CRM, or
 new secrets. Its only live assistant call is same-origin `POST /api/start-chat`
 when an operator-managed reverse proxy route is wired to the existing public
-start-assistant boundary.
+start-assistant boundary. The Vite build emits a separate
+`dist/start/index.html` entry for this route so title, description, canonical,
+and Open Graph metadata are available in the served HTML instead of only after
+SPA hydration.
 
 ## Decision basis
 
@@ -135,6 +138,7 @@ start-assistant boundary.
 | Hosting path | operator-managed SSH static server per D-0051 |
 | Release root | `/srv/goalrail/pilot/releases` |
 | Current symlink | `/srv/goalrail/pilot/current` |
+| `/start` HTML entry | `dist/start/index.html`, served at exact path `/start` by operator-managed static routing |
 | Lead endpoint | `POST /api/pilot-lead` |
 | Endpoint source | `apps/web/pilot-intake-ru/server/cmd/goalrail-pilot-intake-ru` + `apps/web/pilot-intake-ru/server/internal/pilotlead` |
 | Server endpoint mode | Go sidecar `serve` mode on an operator-managed local listen address |

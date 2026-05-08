@@ -3,12 +3,6 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ruStartAnswers, ruStartArtifacts, ruStartQuestions } from './startPageRuData';
 import './StartPageRu.css';
 
-const RU_START_PAGE_TITLE = 'GoalRail - AI-разработка без потери контроля';
-const RU_START_PAGE_DESCRIPTION =
-  'GoalRail помогает командам использовать AI coding tools с контрактами, проверками, доказательствами и human approval.';
-const RU_START_PAGE_OG_TITLE = 'Спросите GoalRail про AI-assisted delivery';
-const RU_START_PAGE_OG_DESCRIPTION = 'От бизнес-цели до проверенного изменения в коде.';
-const RU_START_PAGE_CANONICAL = 'https://goalrail.ru/start';
 const RU_START_ASSISTANT_UNAVAILABLE =
   'Публичный ассистент GoalRail временно недоступен. Статический обзор и артефакты ниже остаются доступными.';
 
@@ -47,42 +41,6 @@ async function readLiveAssistantPayload(response: Response): Promise<LiveAssista
   }
 }
 
-function upsertNamedMeta(name: string, content: string) {
-  let meta = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`);
-
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.setAttribute('name', name);
-    document.head.appendChild(meta);
-  }
-
-  meta.setAttribute('content', content);
-}
-
-function upsertPropertyMeta(property: string, content: string) {
-  let meta = document.head.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
-
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.setAttribute('property', property);
-    document.head.appendChild(meta);
-  }
-
-  meta.setAttribute('content', content);
-}
-
-function upsertCanonicalLink(href: string) {
-  let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-
-  if (!link) {
-    link = document.createElement('link');
-    link.setAttribute('rel', 'canonical');
-    document.head.appendChild(link);
-  }
-
-  link.setAttribute('href', href);
-}
-
 function StartPageRu() {
   const [activeQuestionId, setActiveQuestionId] = useState(ruStartQuestions[0].id);
   const [liveQuestion, setLiveQuestion] = useState('');
@@ -101,15 +59,6 @@ function StartPageRu() {
         source.section ? `${source.title} / ${source.section}` : source.title || source.path,
       )
     : [];
-
-  useEffect(() => {
-    document.title = RU_START_PAGE_TITLE;
-    upsertNamedMeta('description', RU_START_PAGE_DESCRIPTION);
-    upsertPropertyMeta('og:title', RU_START_PAGE_OG_TITLE);
-    upsertPropertyMeta('og:description', RU_START_PAGE_OG_DESCRIPTION);
-    upsertPropertyMeta('og:type', 'website');
-    upsertCanonicalLink(RU_START_PAGE_CANONICAL);
-  }, []);
 
   useEffect(() => {
     const input = liveQuestionInputRef.current;
