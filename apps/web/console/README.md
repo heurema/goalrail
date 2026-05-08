@@ -21,9 +21,10 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
   surfaces; Contracts consumes read-only `GET /v1/contracts` discovery and
-  renders a contract rail/list plus selected detail, while Delivery Readiness
-  consumes read-only `GET /v1/qualification-feed` while authenticated and
-  renders Qualification / Clarification / Contract / Blocked lanes
+  renders a contract rail/list plus selected aggregate-only detail, while
+  Delivery Readiness consumes read-only `GET /v1/qualification-feed` while
+  authenticated and renders Qualification / Clarification / Contract / Blocked
+  lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
   Organization Users add/edit/temporary-password reset UI plus read-only
   Repository context metadata
@@ -78,11 +79,18 @@ Delivery rule:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
   loads `GET /v1/contracts?limit=50` by default, supports a state filter and
   manual refresh, keeps manual ID lookup as a secondary fallback, and shows
-  selected detail through read-only `GET /v1/contracts/{id}`
+  selected detail through read-only `GET /v1/contracts/{id}` as the compact
+  public Contract aggregate only
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
   permission, readiness/proof status, execution status, or runner state
+- Selected Contract detail presents only public Contract aggregate fields:
+  `id`, `repo_binding_id`, `goal_id`, lifecycle `state`, current lifecycle
+  record ids when present, and calm created/updated timestamps. It does not
+  show draft body details, task plans, execution evidence, gate decisions,
+  proof artifacts, runner state, stage controls, execution/proof meters, or
+  fake contract body sections.
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:

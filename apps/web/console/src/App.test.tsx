@@ -704,7 +704,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /^Proof$/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/contract workspace/i)).toBeInTheDocument();
     expect(screen.getAllByText('Not selected').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Select a contract to review its state and delivery scope/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Select a contract to review the public aggregate returned by the API/i).length).toBeGreaterThan(0);
     expect(document.body).not.toHaveTextContent(
       /trialops-demo|C-0147|fake queue|fake pass|fake fail|backend available|endpoint|GET \/v1\/contracts|prefilled/i
     );
@@ -772,6 +772,43 @@ describe('App', () => {
     expect(contractList).not.toHaveTextContent(/2026-05-08T10:00:00Z|2026-05-07T09:10:00Z/);
     expect(screen.getByText('draft-list-draft')).toBeInTheDocument();
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
+  });
+
+  it('renders selected contract detail as an aggregate-only read-only panel', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-ready-detail',
+        goal_id: 'goal-ready-detail',
+        repo_binding_id: 'repo-ready-detail',
+        state: 'ready_for_approval',
+        current_seed_id: 'seed-ready-detail',
+        current_draft_id: 'draft-ready-detail',
+        approved_snapshot_id: 'approved-ready-detail',
+        created_at: '2024-01-02T03:04:05Z',
+        updated_at: '2024-01-03T04:05:06Z',
+      }),
+    ]);
+
+    const detail = screen.getByLabelText(/selected contract detail/i);
+    const workspace = screen.getByLabelText(/contract workspace/i);
+    const primaryStatus = within(detail).getByLabelText(/lifecycle status/i);
+
+    expect(primaryStatus).toHaveTextContent('Ready for approval');
+    expect(within(detail).getAllByText('Ready for approval')).toHaveLength(1);
+    expect(detail).toHaveTextContent('contract-ready-detail');
+    expect(detail).toHaveTextContent('goal-ready-detail');
+    expect(detail).toHaveTextContent('repo-ready-detail');
+    expect(detail).toHaveTextContent('seed-ready-detail');
+    expect(detail).toHaveTextContent('draft-ready-detail');
+    expect(detail).toHaveTextContent('approved-ready-detail');
+    expect(detail).toHaveTextContent('2 Jan');
+    expect(detail).toHaveTextContent('3 Jan');
+    expect(detail).not.toHaveTextContent(/2024-01-02T03:04:05Z|2024-01-03T04:05:06Z|03:04:05|04:05:06/);
+    expect(workspace).toHaveTextContent('Draft body details are not exposed by this API slice yet.');
+    expect(workspace).toHaveTextContent('Task, execution, gate, and proof data are not available in this Console view yet.');
+    expect(workspace).not.toHaveTextContent(
+      /Execution evidence|Work items|Stage controls|Record activity|Active stage|Queued proof|Active execution|Runner state|Task plan|Gate decision|Contract state meters/i
+    );
   });
 
   it('selecting a contract row loads selected detail through the read-only contract endpoint', async () => {

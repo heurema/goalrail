@@ -1350,6 +1350,7 @@ function ConsoleApp() {
       {screen === 'console' ? (
         activeSurface === 'contracts' ? (
           <ContractSurfacePanel
+            activeLocale={activeLocale}
             contract={contract}
             loadStatus={contractLoadStatus}
             t={translate}
@@ -1818,114 +1819,87 @@ function contractStateTone(state: ContractResponse['state']) {
 }
 
 function ContractSurfacePanel({
+  activeLocale,
   contract,
   loadStatus,
   t,
 }: {
+  activeLocale: ConsoleLocale;
   contract: ContractResponse | null;
   loadStatus: ContractLoadStatus;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const stateLabel = contract ? t(`contractStates.${contract.state}`) : t('surfaces.contracts.notSelected');
-  const sectionIds = ['intent', 'scope', 'acceptance', 'proof'] as const;
-  const stageIds = ['goalIntake', 'clarification', 'workingContract', 'workItems', 'executionEvidence', 'verification', 'proof', 'approval'] as const;
-  const stateStageIndex = contract?.state === 'approved'
-    ? 7
-    : contract?.state === 'ready_for_approval'
-      ? 6
-      : contract?.state === 'draft'
-        ? 2
-        : contract?.state === 'seeded'
-          ? 2
-          : -1;
-  const contractPercent = contract ? Math.max(18, Math.round(((stateStageIndex + 1) / stageIds.length) * 100)) : 0;
-  const executionPercent = contract?.state === 'approved' ? 72 : contract ? 18 : 0;
-  const proofPercent = contract?.state === 'approved' ? 100 : contract?.state === 'ready_for_approval' ? 64 : 0;
   const statusTone = contract?.state === 'approved' ? 'pass' : contract?.state === 'ready_for_approval' ? 'amber' : contract ? 'mauve' : 'muted';
-  const activeStageId = stageIds.find((_, index) => index === stateStageIndex);
+  const summaryRows: Array<{ label: string; value: string; title?: string }> = contract ? [
+    { label: t('surfaces.contracts.fields.id'), value: contract.id },
+    { label: t('surfaces.contracts.fields.goalId'), value: contract.goal_id },
+    { label: t('surfaces.contracts.fields.repoBindingId'), value: contract.repo_binding_id },
+    {
+      label: t('surfaces.contracts.fields.createdAt'),
+      value: formatCalmTimestamp(contract.created_at, { locale: activeLocale }),
+      title: contract.created_at,
+    },
+    {
+      label: t('surfaces.contracts.fields.updatedAt'),
+      value: formatCalmTimestamp(contract.updated_at, { locale: activeLocale }),
+      title: contract.updated_at,
+    },
+    ...(contract.current_seed_id ? [{ label: t('surfaces.contracts.fields.seedId'), value: contract.current_seed_id }] : []),
+    ...(contract.current_draft_id ? [{ label: t('surfaces.contracts.fields.draftId'), value: contract.current_draft_id }] : []),
+    ...(contract.approved_snapshot_id ? [{ label: t('surfaces.contracts.fields.approvedSnapshotId'), value: contract.approved_snapshot_id }] : []),
+  ] : [];
 
   return (
     <section className="contractSurface opsContractSurface" aria-label={t('surfaces.contracts.ariaLabel')}>
       <div className="opsContractTopbar">
-        <div className="opsMeters" aria-label={t('surfaces.contracts.ops.meters')}>
-          <ContractMeter tone="amber" label={t('surfaces.contracts.ops.contractMeter')} value={stateLabel} percent={contractPercent} />
-          <ContractMeter tone="mauve" label={t('surfaces.contracts.ops.executionMeter')} value={contract ? t('surfaces.contracts.ops.executionQueued') : t('surfaces.contracts.ops.queued')} percent={executionPercent} />
-          <ContractMeter tone="pass" label={t('surfaces.contracts.ops.proofMeter')} value={contract?.state === 'approved' ? t('surfaces.contracts.ops.proofReady') : t('surfaces.contracts.ops.queued')} percent={proofPercent} />
+        <div className="opsContractHeading">
+          <span>{t('surfaces.contracts.ops.surface')}</span>
+          <b>{t('surfaces.contracts.nav')}</b>
         </div>
-
-        <div className="opsTopbarState">
-          <div className="opsStateChip">
-            <span>{t('surfaces.contracts.ops.surface')}</span>
-            <b>{t('surfaces.contracts.nav')}</b>
-          </div>
-          <div className="opsStateChip">
-            <span>{t('surfaces.contracts.ops.status')}</span>
-            <b>{stateLabel}</b>
-          </div>
+        <div className="opsContractHeading secondary">
+          <span>{t('surfaces.contracts.ops.detailMode')}</span>
+          <b>{t('surfaces.contracts.ops.aggregateOnly')}</b>
         </div>
       </div>
 
-      <div className="opsContractLayout">
+      <div className="opsContractLayout opsContractDetailLayout">
         <div className="opsContractCanvas">
-          <section className="opsSpine">
-            <div className="opsPanelHead">
-              <div>
-                <div className="opsPanelKicker">{contract ? t('surfaces.contracts.ops.contractLoaded') : t('surfaces.contracts.ops.contractNotSelected')}</div>
-                <div className="opsPanelId">{contract ? contract.id : t('surfaces.contracts.emptyValue')}</div>
-              </div>
-              <div className="opsTags">
-                <span className="opsTag mauve">{contract?.repo_binding_id ?? t('surfaces.contracts.ops.noRepo')}</span>
-                <span className={`opsTag ${statusTone}`}>{stateLabel}</span>
-              </div>
-            </div>
-
-            <div className="opsStageRail" aria-label={t('surfaces.contracts.lifecycle')}>
-              {stageIds.map((stage, index) => {
-                const stageClass = stateStageIndex < 0 ? 'queued' : index < stateStageIndex ? 'done' : index === stateStageIndex ? 'active' : 'queued';
-                return (
-                  <div className={`opsStage ${stageClass}`} key={stage}>
-                    <span className="opsStageNode" />
-                    <span className="opsStageConnector" />
-                    <b>{t(`surfaces.contracts.ops.stages.${stage}`)}</b>
-                    <small>{t(`surfaces.contracts.ops.stageStates.${stageClass}`)}</small>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="opsActiveSummary">
-              <span>{t('surfaces.contracts.ops.activeStage')}</span>
-              <b>{activeStageId ? t(`surfaces.contracts.ops.stages.${activeStageId}`) : t('surfaces.contracts.ops.none')}</b>
-              <small>{contract ? `${t('surfaces.contracts.fields.goalId')} ${contract.goal_id}` : t('surfaces.contracts.emptyBody')}</small>
-            </div>
-          </section>
-
-          <section className="opsObject">
+          <section className="opsObject opsContractAggregate" aria-label={t('surfaces.contracts.selectedDetailAriaLabel')}>
             <div className="opsPanelHead">
               <div>
                 <div className="opsPanelKicker">{t('surfaces.contracts.ops.selectedContract')}</div>
                 <h2>{contract ? contract.id : t('surfaces.contracts.notSelected')}</h2>
               </div>
-              <div className="opsTags">
-                <span className="opsTag">{t('surfaces.contracts.ops.liveConsole')}</span>
-                <span className={`opsTag ${statusTone}`}>{stateLabel}</span>
-              </div>
+              {contract ? (
+                <div className="opsPrimaryStatus" aria-label={t('surfaces.contracts.primaryStatusLabel')}>
+                  <span>{t('surfaces.contracts.primaryStatusLabel')}</span>
+                  <b className={statusTone}>{stateLabel}</b>
+                </div>
+              ) : null}
             </div>
 
             <div className="opsObjectBody">
               <div className="opsSectionLead">
-                <span>{t('surfaces.contracts.sectionsTitle')}</span>
-                <b>{contract ? t('surfaces.contracts.calloutLoaded') : loadStatus === 'not_found' ? t('surfaces.contracts.notFoundBody') : t('surfaces.contracts.emptyBody')}</b>
+                <span>{t('surfaces.contracts.aggregateTitle')}</span>
+                <b>
+                  {contract
+                    ? t('surfaces.contracts.aggregateLoaded')
+                    : loadStatus === 'not_found'
+                      ? t('surfaces.contracts.notFoundBody')
+                      : t('surfaces.contracts.emptyBody')}
+                </b>
               </div>
-              <div className="opsDetailGrid">
-                {sectionIds.map((section) => (
-                  <article className="opsDetailBlock" key={section}>
-                    <span>{t(`surfaces.contracts.sections.${section}.title`)}</span>
-                    <h4>{t(`surfaces.contracts.sections.${section}.title`)}</h4>
-                    <p>{contract ? t('surfaces.contracts.sectionPending') : t('surfaces.contracts.sectionEmpty')}</p>
-                  </article>
-                ))}
-              </div>
+              {contract ? (
+                <dl className="opsAggregateGrid">
+                  {summaryRows.map((row) => (
+                    <div key={row.label}>
+                      <dt>{row.label}</dt>
+                      <dd title={row.title}>{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
             </div>
           </section>
         </div>
@@ -1934,84 +1908,18 @@ function ContractSurfacePanel({
           <section className="opsSideCard">
             <div className="opsPanelHead compact">
               <div>
-                <div className="opsPanelKicker">{t('surfaces.contracts.ops.projectContext')}</div>
-                <div className="opsPanelId">{contract?.repo_binding_id ?? t('surfaces.contracts.emptyValue')}</div>
+                <div className="opsPanelKicker">{t('surfaces.contracts.unavailableTitle')}</div>
+                <div className="opsPanelId">{t('surfaces.contracts.ops.aggregateOnly')}</div>
               </div>
             </div>
-            <dl className="opsKeyGrid">
-              <FieldRow label={t('surfaces.contracts.fields.repoBindingId')} value={contract?.repo_binding_id ?? t('surfaces.contracts.emptyValue')} />
-              <FieldRow label={t('surfaces.contracts.fields.goalId')} value={contract?.goal_id ?? t('surfaces.contracts.emptyValue')} />
-              <FieldRow label={t('surfaces.contracts.fields.seedId')} value={contract?.current_seed_id ?? t('surfaces.contracts.emptyValue')} />
-              <FieldRow label={t('surfaces.contracts.fields.draftId')} value={contract?.current_draft_id ?? t('surfaces.contracts.emptyValue')} />
-            </dl>
-            <div className="opsSelectionStrip">
-              <span>{contract?.id ?? t('surfaces.contracts.notSelected')}</span>
-              <span>{stateLabel}</span>
-              <span>{contract ? t('surfaces.contracts.ops.liveData') : t('surfaces.contracts.ops.noSelection')}</span>
-            </div>
-          </section>
-
-          <section className="opsSideCard muted">
-            <div className="opsPanelHead compact">
-              <div>
-                <div className="opsPanelKicker">{t('surfaces.contracts.ops.ambiguityInspector')}</div>
-                <div className="opsPanelId">{t('surfaces.contracts.ops.inputs')}</div>
-              </div>
-            </div>
-            <div className="opsInspectorList">
-              {sectionIds.map((section) => (
-                <div className="opsInspectorRow" key={section}>
-                  <b>{t(`surfaces.contracts.sections.${section}.title`)}</b>
-                  <span>{contract ? t('surfaces.contracts.sectionPending') : t('surfaces.contracts.sectionEmpty')}</span>
-                  <small>{contract ? t('surfaces.contracts.ops.pending') : t('surfaces.contracts.ops.empty')}</small>
-                </div>
-              ))}
+            <div className="opsUnavailableList">
+              <p>{t('surfaces.contracts.draftBodyUnavailable')}</p>
+              <p>{t('surfaces.contracts.downstreamUnavailable')}</p>
             </div>
           </section>
         </aside>
-
-        <section className="opsBottomPanel">
-          <article className="opsSideCard">
-            <div className="opsPanelHead compact">
-              <div>
-                <div className="opsPanelKicker">{t('surfaces.contracts.ops.workspaceActivity')}</div>
-                <div className="opsPanelId">{t('surfaces.contracts.ops.contractEventsOnly')}</div>
-              </div>
-            </div>
-            <div className="opsActivityRow">
-              <span>{contract ? formatDateTime(contract.updated_at) : t('surfaces.contracts.emptyValue')}</span>
-              <div>
-                <b>{contract ? t('surfaces.contracts.ops.contractLoaded') : t('surfaces.contracts.ops.waitingForContract')}</b>
-                <p>{contract ? contract.id : t('surfaces.contracts.emptyBody')}</p>
-              </div>
-              <small>{contract ? t('surfaces.contracts.ops.event') : t('surfaces.contracts.ops.idle')}</small>
-            </div>
-          </article>
-
-          <article className="opsSideCard">
-            <div className="opsPanelHead compact">
-              <div>
-                <div className="opsPanelKicker">{t('surfaces.contracts.ops.stageControls')}</div>
-                <div className="opsPanelId">{t('surfaces.contracts.ops.liveConsoleOnly')}</div>
-              </div>
-            </div>
-            <p className="opsControlCopy">{contract ? t('surfaces.contracts.ops.stageControlLoaded') : t('surfaces.contracts.ops.stageControlEmpty')}</p>
-          </article>
-        </section>
       </div>
     </section>
-  );
-}
-
-function ContractMeter({ label, percent, tone, value }: { label: string; percent: number; tone: 'amber' | 'mauve' | 'pass'; value: string }) {
-  return (
-    <div className={`opsMeter ${tone}`}>
-      <div>
-        <span>{label}</span>
-        <b>{value}</b>
-      </div>
-      <i><span style={{ width: `${percent}%` }} /></i>
-    </div>
   );
 }
 
