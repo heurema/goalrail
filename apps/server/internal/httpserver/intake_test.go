@@ -62,6 +62,7 @@ type testServerDeps struct {
 	checkoutReceipts  *fakeCheckoutReceiptStore
 	executionJobs     *fakeExecutionJobStore
 	runs              *fakeRunStore
+	commandPlans      *fakeExecutionCommandPlanStore
 	executionReceipts *fakeExecutionReceiptStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
@@ -1746,6 +1747,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	checkoutReceiptStore := newFakeCheckoutReceiptStore()
 	executionJobStore := newFakeExecutionJobStore()
 	runStore := newFakeRunStore()
+	commandPlanStore := newFakeExecutionCommandPlanStore()
 	executionReceiptStore := newFakeExecutionReceiptStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
@@ -1769,7 +1771,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
 	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
-	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, executionReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, commandPlanStore, executionReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
@@ -1791,6 +1793,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		checkoutReceipts:  checkoutReceiptStore,
 		executionJobs:     executionJobStore,
 		runs:              runStore,
+		commandPlans:      commandPlanStore,
 		executionReceipts: executionReceiptStore,
 		events:            events,
 		idFactory:         ids,
@@ -2710,6 +2713,46 @@ func (s *fakeRunStore) MarkReceiptSubmitted(_ context.Context, id spine.RunID, f
 	return true, nil
 }
 
+type fakeExecutionCommandPlanStore struct {
+	plans map[spine.ExecutionCommandPlanID]spine.ExecutionCommandPlan
+	byKey map[string]spine.ExecutionCommandPlanID
+}
+
+func newFakeExecutionCommandPlanStore() *fakeExecutionCommandPlanStore {
+	return &fakeExecutionCommandPlanStore{
+		plans: map[spine.ExecutionCommandPlanID]spine.ExecutionCommandPlan{},
+		byKey: map[string]spine.ExecutionCommandPlanID{},
+	}
+}
+
+func (s *fakeExecutionCommandPlanStore) Create(_ context.Context, plan spine.ExecutionCommandPlan) error {
+	key := executionCommandPlanKey(plan.RunID, plan.CommandKind, plan.Action)
+	if _, ok := s.byKey[key]; ok {
+		return fmt.Errorf("execution command plan already planned")
+	}
+	s.plans[plan.ID] = plan
+	s.byKey[key] = plan.ID
+	return nil
+}
+
+func (s *fakeExecutionCommandPlanStore) Get(_ context.Context, id spine.ExecutionCommandPlanID) (spine.ExecutionCommandPlan, bool, error) {
+	plan, ok := s.plans[id]
+	return plan, ok, nil
+}
+
+func (s *fakeExecutionCommandPlanStore) GetByRunAndAction(_ context.Context, runID spine.RunID, kind string, action string) (spine.ExecutionCommandPlan, bool, error) {
+	planID, ok := s.byKey[executionCommandPlanKey(runID, kind, action)]
+	if !ok {
+		return spine.ExecutionCommandPlan{}, false, nil
+	}
+	plan, ok := s.plans[planID]
+	return plan, ok, nil
+}
+
+func executionCommandPlanKey(runID spine.RunID, kind string, action string) string {
+	return string(runID) + "\x00" + kind + "\x00" + action
+}
+
 type fakeExecutionReceiptStore struct {
 	receipts map[spine.ExecutionReceiptID]spine.ExecutionReceipt
 	byRun    map[spine.RunID]spine.ExecutionReceiptID
@@ -2841,6 +2884,7 @@ type sequenceIDs struct {
 	executionJob      int
 	executionLease    int
 	run               int
+	commandPlan       int
 	executionReceipt  int
 	event             int
 }
@@ -2938,6 +2982,11 @@ func (g *sequenceIDs) NewExecutionLeaseID() (spine.ExecutionLeaseID, error) {
 func (g *sequenceIDs) NewRunID() (spine.RunID, error) {
 	g.run++
 	return spine.RunID(fmt.Sprintf("run-%d", g.run)), nil
+}
+
+func (g *sequenceIDs) NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error) {
+	g.commandPlan++
+	return spine.ExecutionCommandPlanID(fmt.Sprintf("execution-command-plan-%d", g.commandPlan)), nil
 }
 
 func (g *sequenceIDs) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {

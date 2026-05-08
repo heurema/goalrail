@@ -40,10 +40,10 @@
   `goalrail-runner --mode execution-receipt`; receipts are no-command evidence
   inputs, not task completion, GateDecision, or Proof. H2.3+ smoke coverage now
   pins this receipt path without command execution, gate, or proof
-- ADR-0030 now defines the H2.4 bounded command execution boundary docs-first:
-  command execution is still not implemented, arbitrary shell stays forbidden,
-  and the first future implementation should be a fixed
-  `builtin_diagnostic/workspace_status` action rather than project commands
+- ADR-0030 defines the H2.4 bounded command execution boundary; H2.4.1 now
+  implements only the fixed `builtin_diagnostic/workspace_status` command-plan
+  plus command-metadata receipt path. Arbitrary shell, project commands,
+  provider adapters, GateDecision, and Proof remain deferred.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -196,12 +196,10 @@
   `Run(started)` creation with lease proof; H2.2+ smoke coverage now pins that
   transition. H2.3 now implements metadata-only `ExecutionReceipt` submission
   for started Runs without command execution, and H2.3+ smoke coverage pins
-  that no-command receipt path. WorkItems still remain `planned`; assignment,
-  claiming, command execution, gate, and proof are still deferred.
-- H2.4 is docs-first in ADR-0030. The next implementation slice should be
-  `builtin_diagnostic/workspace_status` command-plan plus receipt plumbing only,
-  still without arbitrary shell, project test commands, provider adapters,
-  GateDecision, or Proof.
+  that no-command receipt path. H2.4.1 implements only fixed
+  `builtin_diagnostic/workspace_status` command-plan plus receipt plumbing.
+  WorkItems still remain `planned`; assignment, claiming, arbitrary
+  shell/project command execution, gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and command execution behavior remain deferred.
@@ -929,10 +927,10 @@ Done means:
      without receipts, and remains no-command evidence input, not task
      completion, `GateDecision`, or `Proof`; H2.3+ smoke coverage pins this
      path through `Run(receipt_submitted)` / `ExecutionJob(receipt_submitted)`
-   - H2.4 is docs-first in ADR-0030; command execution remains unimplemented,
-     and the first future code slice should use a fixed server-authorized
-     `builtin_diagnostic/workspace_status` action rather than arbitrary shell,
-     project commands, provider adapters, or LLM coding-agent integration
+   - H2.4.1 implements the fixed server-authorized
+     `builtin_diagnostic/workspace_status` action as command-plan plus
+     command-metadata receipt plumbing, without arbitrary shell, project
+     commands, provider adapters, or LLM coding-agent integration
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

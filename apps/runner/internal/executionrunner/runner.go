@@ -12,21 +12,22 @@ import (
 )
 
 type Config struct {
-	ServerURL       string
-	BearerToken     string
-	ProjectID       string
-	RepoBindingID   string
-	RunnerID        string
-	WorkspaceRef    string
-	CommitSHA       string
-	BaselineID      string
-	OverlayID       string
-	SubmitReceipt   bool
-	PollInterval    time.Duration
-	LeaseTTLSeconds int
-	Once            bool
-	HTTPClient      *http.Client
-	LogWriter       io.Writer
+	ServerURL         string
+	BearerToken       string
+	ProjectID         string
+	RepoBindingID     string
+	RunnerID          string
+	WorkspaceRef      string
+	CommitSHA         string
+	BaselineID        string
+	OverlayID         string
+	SubmitReceipt     bool
+	BuiltinDiagnostic bool
+	PollInterval      time.Duration
+	LeaseTTLSeconds   int
+	Once              bool
+	HTTPClient        *http.Client
+	LogWriter         io.Writer
 }
 
 type Runner struct {
@@ -137,6 +138,56 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 		}
 	}
 	r.logger.Printf("started run run_id=%s execution_job_id=%s task_id=%s", run.ID, run.ExecutionJobID, run.TaskID)
+	if r.config.BuiltinDiagnostic {
+		plan, err := r.client.createCommandPlan(ctx, run.ID, executionCommandPlanRequest{
+			ProjectID:     r.config.ProjectID,
+			RepoBindingID: r.config.RepoBindingID,
+			CommandKind:   "builtin_diagnostic",
+			Action:        "workspace_status",
+		})
+		if err != nil {
+			return "", err
+		}
+		if err := r.validateBuiltinDiagnosticPlan(plan, lease, run); err != nil {
+			return "", err
+		}
+		startedAt := time.Now().UTC()
+		finishedAt := startedAt
+		receipt, err := r.client.submitReceipt(ctx, run.ID, executionReceiptRequest{
+			ExecutionJobID:      run.ExecutionJobID,
+			LeaseID:             lease.ID,
+			LeaseToken:          lease.LeaseToken,
+			RunnerID:            r.config.RunnerID,
+			WorkspaceRef:        r.config.WorkspaceRef,
+			CommitSHA:           r.config.CommitSHA,
+			BaselineID:          r.config.BaselineID,
+			OverlayID:           r.config.OverlayID,
+			ExecutionMode:       "builtin_diagnostic",
+			CommandPlanID:       plan.ID,
+			CommandKind:         "builtin_diagnostic",
+			Action:              "workspace_status",
+			ProcessStatus:       "metadata_only",
+			ArtifactRefs:        []string{},
+			ChangedPathsSummary: []string{},
+			RawSourceUploaded:   false,
+			RunnerStartedAt:     &startedAt,
+			RunnerFinishedAt:    &finishedAt,
+		})
+		if err != nil {
+			switch apiErrorCode(err) {
+			case "lease_expired":
+				r.logger.Printf("execution lease expired before builtin diagnostic receipt execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepLeaseExpired, nil
+			case "invalid_lease":
+				r.logger.Printf("execution lease rejected before builtin diagnostic receipt execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepInvalidLease, nil
+			default:
+				return "", err
+			}
+		}
+		r.logger.Printf("submitted builtin diagnostic execution receipt receipt_id=%s run_id=%s execution_job_id=%s command_plan_id=%s", receipt.ID, receipt.RunID, receipt.ExecutionJobID, receipt.CommandPlanID)
+		return StepReceiptSubmitted, nil
+	}
 	if r.config.SubmitReceipt {
 		receipt, err := r.client.submitReceipt(ctx, run.ID, executionReceiptRequest{
 			ExecutionJobID:      run.ExecutionJobID,
@@ -190,6 +241,58 @@ func (r *Runner) validateLease(lease executionLease) error {
 	return nil
 }
 
+func (r *Runner) validateBuiltinDiagnosticPlan(plan executionCommandPlan, lease executionLease, run runStarted) error {
+	if plan.ProjectID != r.config.ProjectID {
+		return fmt.Errorf("execution command plan project_id %q does not match runner scope %q", plan.ProjectID, r.config.ProjectID)
+	}
+	if plan.RepoBindingID != r.config.RepoBindingID {
+		return fmt.Errorf("execution command plan repo_binding_id %q does not match runner scope %q", plan.RepoBindingID, r.config.RepoBindingID)
+	}
+	if plan.ExecutionJobID != lease.ExecutionJobID || plan.ExecutionJobID != run.ExecutionJobID {
+		return fmt.Errorf("execution command plan job id %q does not match leased/run job %q/%q", plan.ExecutionJobID, lease.ExecutionJobID, run.ExecutionJobID)
+	}
+	if plan.RunID != run.ID {
+		return fmt.Errorf("execution command plan run id %q does not match run %q", plan.RunID, run.ID)
+	}
+	if plan.TaskID != lease.TaskID || plan.TaskID != run.TaskID {
+		return fmt.Errorf("execution command plan task id %q does not match leased/run task %q/%q", plan.TaskID, lease.TaskID, run.TaskID)
+	}
+	if plan.CheckoutReceiptID != lease.CheckoutReceiptID || plan.CheckoutReceiptID != run.CheckoutReceiptID {
+		return fmt.Errorf("execution command plan checkout receipt id %q does not match leased/run receipt %q/%q", plan.CheckoutReceiptID, lease.CheckoutReceiptID, run.CheckoutReceiptID)
+	}
+	if plan.CommandKind != "builtin_diagnostic" {
+		return fmt.Errorf("unsupported execution command kind %q", plan.CommandKind)
+	}
+	if plan.Action != "workspace_status" {
+		return fmt.Errorf("unsupported execution command action %q", plan.Action)
+	}
+	if plan.ShellAllowed {
+		return errors.New("execution command plan unexpectedly allows shell")
+	}
+	if len(plan.Argv) != 0 {
+		return fmt.Errorf("execution command plan argv must be empty for builtin diagnostic, got %d arguments", len(plan.Argv))
+	}
+	if plan.WorkingDirectory != "." {
+		return fmt.Errorf("execution command plan working directory %q is outside builtin diagnostic scope", plan.WorkingDirectory)
+	}
+	if len(plan.PathScope) != 1 || plan.PathScope[0] != "." {
+		return fmt.Errorf("execution command plan path scope %#v is outside builtin diagnostic scope", plan.PathScope)
+	}
+	if plan.TimeoutSeconds != 30 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 {
+		return fmt.Errorf("execution command plan output/timeout policy = %d/%d/%d, want 30/0/0", plan.TimeoutSeconds, plan.MaxStdoutBytes, plan.MaxStderrBytes)
+	}
+	if len(plan.AllowedArtifactKinds) != 0 {
+		return fmt.Errorf("execution command plan allowed artifacts = %#v, want none", plan.AllowedArtifactKinds)
+	}
+	if plan.RawSourceUploadAllowed {
+		return errors.New("execution command plan unexpectedly allows raw source upload")
+	}
+	if plan.State != "planned" {
+		return fmt.Errorf("execution command plan state %q is not planned", plan.State)
+	}
+	return nil
+}
+
 func validateConfig(config Config) error {
 	if strings.TrimSpace(config.ServerURL) == "" {
 		return errors.New("server url is required")
@@ -206,7 +309,7 @@ func validateConfig(config Config) error {
 	if strings.TrimSpace(config.RunnerID) == "" {
 		return errors.New("runner id is required")
 	}
-	if config.SubmitReceipt {
+	if config.SubmitReceipt || config.BuiltinDiagnostic {
 		if strings.TrimSpace(config.WorkspaceRef) == "" {
 			return errors.New("workspace ref is required for execution receipt mode")
 		}

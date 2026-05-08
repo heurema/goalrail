@@ -13,6 +13,7 @@ type ExecutionService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.ExecutionJobCreateRequest, spine.OrganizationMembership) (spine.ExecutionJob, bool, error)
 	AcquireNextLease(context.Context, spine.ExecutionJobLeaseCreateRequest, spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error)
 	StartRun(context.Context, spine.ExecutionJobID, spine.RunStartRequest, spine.OrganizationMembership) (spine.Run, bool, error)
+	CreateOrReturnBuiltinDiagnosticCommandPlan(context.Context, spine.RunID, spine.ExecutionCommandPlanCreateRequest, spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error)
 	SubmitReceipt(context.Context, spine.RunID, spine.ExecutionReceiptSubmitRequest, spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error)
 }
 
@@ -95,6 +96,29 @@ func (h *ExecutionHandler) StartRun(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, status, run)
 }
 
+func (h *ExecutionHandler) CreateCommandPlan(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	var input spine.ExecutionCommandPlanCreateRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	plan, created, err := h.service.CreateOrReturnBuiltinDiagnosticCommandPlan(r.Context(), spine.RunID(r.PathValue("id")), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	RespondJSON(w, status, plan)
+}
+
 func (h *ExecutionHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
 	if err != nil {
@@ -138,6 +162,8 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusNotFound, "not_found", "execution job not found")
 	case errors.Is(err, execution.ErrRunNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "run not found")
+	case errors.Is(err, execution.ErrExecutionCommandPlanNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "execution command plan not found")
 	case errors.Is(err, execution.ErrInvalidWorkItemState):
 		RespondError(w, http.StatusConflict, "invalid_state", "work item is not planned")
 	case errors.Is(err, execution.ErrInvalidCheckoutState):
@@ -146,6 +172,8 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusConflict, "invalid_state", "execution job state does not allow this transition")
 	case errors.Is(err, execution.ErrInvalidRunState):
 		RespondError(w, http.StatusConflict, "invalid_state", "run state does not allow this transition")
+	case errors.Is(err, execution.ErrInvalidCommandPlan):
+		RespondError(w, http.StatusConflict, "invalid_command_plan", "execution command plan is invalid")
 	case errors.Is(err, execution.ErrLeaseExpired):
 		RespondError(w, http.StatusConflict, "lease_expired", "execution job lease expired")
 	case errors.Is(err, execution.ErrInvalidLease):

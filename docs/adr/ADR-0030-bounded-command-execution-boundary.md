@@ -28,8 +28,8 @@ secret redaction, and future gate/proof interpretation risk.
 Goalrail must not grow from a typed runtime boundary into a generic arbitrary
 shell platform by accident.
 
-This ADR is documentation-only. It defines the smallest safe command execution
-boundary before any code implements command execution.
+This ADR was introduced as a documentation-first boundary before code changed.
+H2.4.1 now implements the first bounded diagnostic slice described below.
 
 ## Decision
 
@@ -273,7 +273,7 @@ Recommended first code slice after this ADR:
 H2.4.1 - builtin diagnostic command plan and receipt
 ```
 
-H2.4.1 should add:
+H2.4.1 adds:
 
 - server-owned command plan creation or return for `Run(started)`
 - one command kind: `builtin_diagnostic`
@@ -285,6 +285,20 @@ H2.4.1 should add:
   GateDecision, no Proof, and no WorkItem status transition
 
 H2.4.1 must not add real project command execution.
+
+Implementation routes:
+
+- `POST /v1/runs/{id}/command-plans`
+- `POST /v1/runs/{id}/receipts` with
+  `execution_mode="builtin_diagnostic"`
+
+Runner mode:
+
+- `goalrail-runner --mode execution-diagnostic`
+
+The H2.4.1 runner still does not call `os/exec`, spawn a shell, invoke package
+managers, run project tests, call provider APIs, or upload raw source. The
+receipt remains command metadata only and leaves Gate / Proof unavailable.
 
 ## Test plan for H2.4.1
 

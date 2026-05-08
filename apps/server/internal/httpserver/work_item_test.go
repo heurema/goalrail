@@ -1024,6 +1024,98 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 	}
 }
 
+func TestExecutionCommandPlanAndBuiltinDiagnosticReceipt(t *testing.T) {
+	server := testServer(t)
+	job, lease := createLeasedExecutionJob(t, server)
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+
+	planResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q}`, job.RepoBindingID))
+	if planResponse.code != http.StatusCreated {
+		t.Fatalf("command plan status = %d, want %d: %s", planResponse.code, http.StatusCreated, planResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\""} {
+		if strings.Contains(planResponse.body, forbidden) {
+			t.Fatalf("command plan response exposes forbidden field %s: %s", forbidden, planResponse.body)
+		}
+	}
+	var plan spine.ExecutionCommandPlan
+	decodeJSON(t, planResponse.body, &plan)
+	if plan.ID == "" || plan.RunID != run.ID || plan.ExecutionJobID != job.ID || plan.TaskID != run.TaskID || plan.CheckoutReceiptID != run.CheckoutReceiptID || plan.RepoBindingID != job.RepoBindingID {
+		t.Fatalf("command plan = %#v, want run/job/task/receipt scoped plan", plan)
+	}
+	if plan.CommandKind != spine.ExecutionCommandKindBuiltinDiagnostic || plan.Action != spine.ExecutionCommandActionWorkspaceStatus || plan.ShellAllowed || len(plan.Argv) != 0 || plan.WorkingDirectory != "." || len(plan.PathScope) != 1 || plan.PathScope[0] != "." || plan.RawSourceUploadAllowed {
+		t.Fatalf("command plan policy = %#v, want fixed builtin diagnostic without shell/argv/raw source", plan)
+	}
+	if plan.TimeoutSeconds != 30 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 || len(plan.AllowedArtifactKinds) != 0 || plan.State != spine.ExecutionCommandPlanStatePlanned {
+		t.Fatalf("command plan limits/state = %#v, want diagnostic metadata-only policy", plan)
+	}
+	if len(server.commandPlans.plans) != 1 {
+		t.Fatalf("command plans = %d, want 1", len(server.commandPlans.plans))
+	}
+	if len(server.executionReceipts.receipts) != 0 {
+		t.Fatalf("execution receipts = %d, want 0 after command plan creation", len(server.executionReceipts.receipts))
+	}
+	if got := server.runs.runs[run.ID].State; got != spine.RunStateStarted {
+		t.Fatalf("run state = %q, want started after command plan creation", got)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionCommandPlanCreated); got != 1 {
+		t.Fatalf("execution_command_plan.created events = %d, want 1", got)
+	}
+
+	secondPlanResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"builtin_diagnostic","action":"workspace_status"}`, job.RepoBindingID))
+	if secondPlanResponse.code != http.StatusOK {
+		t.Fatalf("second command plan status = %d, want %d: %s", secondPlanResponse.code, http.StatusOK, secondPlanResponse.body)
+	}
+	var existingPlan spine.ExecutionCommandPlan
+	decodeJSON(t, secondPlanResponse.body, &existingPlan)
+	if existingPlan.ID != plan.ID || len(server.commandPlans.plans) != 1 {
+		t.Fatalf("existing command plan id/count = %q/%d, want %q/1", existingPlan.ID, len(server.commandPlans.plans), plan.ID)
+	}
+
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", builtinDiagnosticReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("builtin diagnostic receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(receiptResponse.body, forbidden) {
+			t.Fatalf("builtin diagnostic receipt response exposes forbidden field %s: %s", forbidden, receiptResponse.body)
+		}
+	}
+	var receipt spine.ExecutionReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.CommandPlanID == nil || *receipt.CommandPlanID != plan.ID || receipt.ExecutionMode != spine.ExecutionReceiptModeBuiltinDiagnostic || receipt.CommandKind != spine.ExecutionCommandKindBuiltinDiagnostic || receipt.Action != spine.ExecutionCommandActionWorkspaceStatus {
+		t.Fatalf("builtin diagnostic receipt command metadata = %#v, want fixed command plan metadata", receipt)
+	}
+	if receipt.ProcessStatus != spine.ExecutionReceiptStatusMetadataOnly || receipt.ExitCode != nil || receipt.RawSourceUploaded {
+		t.Fatalf("builtin diagnostic receipt status = %#v, want metadata_only without exit/raw source", receipt)
+	}
+	if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 || strings.Contains(receiptResponse.body, `"artifact_refs":null`) || strings.Contains(receiptResponse.body, `"changed_paths_summary":null`) {
+		t.Fatalf("builtin diagnostic artifact/path claims = %#v/%#v body=%s, want empty arrays", receipt.ArtifactRefs, receipt.ChangedPathsSummary, receiptResponse.body)
+	}
+	if receipt.RunnerStartedAt == nil || receipt.RunnerFinishedAt == nil {
+		t.Fatalf("builtin diagnostic runner timing = %#v/%#v, want runner timestamps", receipt.RunnerStartedAt, receipt.RunnerFinishedAt)
+	}
+	if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
+		t.Fatalf("run state = %q, want receipt_submitted", got)
+	}
+	if got := server.executionJobs.jobs[job.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+		t.Fatalf("execution job state = %q, want receipt_submitted", got)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() after builtin diagnostic receipt = %#v/%v/%v", storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after builtin diagnostic receipt", storedTask.Status)
+	}
+	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+}
+
 func TestExecutionRunnerRoutesCanRecoverReceiptAfterExpiredRunStartedLease(t *testing.T) {
 	server := testServer(t)
 	job, lease := createLeasedExecutionJob(t, server)
@@ -1077,6 +1169,8 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
 		run := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/execution-job-1/runs", `{"lease_id":"execution-lease-1","lease_token":"secret","runner_id":"runner-1"}`)
 		assertErrorCode(t, run, http.StatusUnauthorized, "unauthorized")
+		commandPlan := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-1/command-plans", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004"}`)
+		assertErrorCode(t, commandPlan, http.StatusUnauthorized, "unauthorized")
 		receipt := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-1/receipts", executionReceiptBody("execution-job-1", "execution-lease-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 		assertErrorCode(t, receipt, http.StatusUnauthorized, "unauthorized")
 		if len(server.runs.runs) != 0 {
@@ -1084,6 +1178,9 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		}
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after auth failure", len(server.executionReceipts.receipts))
+		}
+		if len(server.commandPlans.plans) != 0 {
+			t.Fatalf("command plans = %d, want 0 after auth failure", len(server.commandPlans.plans))
 		}
 	})
 
@@ -1216,6 +1313,47 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 			t.Fatalf("execution receipts = %d, want 0 after artifact/path claim", len(server.executionReceipts.receipts))
 		}
 	})
+
+	t.Run("command plan rejects non-started run", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		run := spine.Run{
+			ID:                "run-invalid-command-plan-state",
+			ExecutionJobID:    job.ID,
+			ExecutionLeaseID:  lease.ID,
+			TaskID:            lease.TaskID,
+			CheckoutReceiptID: lease.CheckoutReceiptID,
+			RunnerID:          "runner-1",
+			State:             spine.RunStateReceiptSubmitted,
+			StartedAt:         testTime(),
+			CreatedAt:         testTime(),
+			UpdatedAt:         testTime(),
+		}
+		if err := server.runs.Create(context.Background(), run); err != nil {
+			t.Fatalf("runs.Create() error = %v", err)
+		}
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q}`, job.RepoBindingID))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
+		if len(server.commandPlans.plans) != 0 {
+			t.Fatalf("command plans = %d, want 0 after invalid run state", len(server.commandPlans.plans))
+		}
+	})
+
+	t.Run("builtin diagnostic receipt rejects missing command plan", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		if runResponse.code != http.StatusCreated {
+			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+		}
+		var run spine.Run
+		decodeJSON(t, runResponse.body, &run)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", builtinDiagnosticReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "execution-command-plan-missing"))
+		assertErrorCode(t, response, http.StatusNotFound, "not_found")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after missing command plan", len(server.executionReceipts.receipts))
+		}
+	})
 }
 
 func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
@@ -1304,6 +1442,10 @@ func createLeasedExecutionJob(t *testing.T, server testServerDeps) (spine.Execut
 
 func executionReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, workspaceRef string, commitSHA string, rawSourceUploaded bool) string {
 	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":%q,"commit_sha":%q,"baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t}`, jobID, leaseID, leaseToken, runnerID, workspaceRef, commitSHA, rawSourceUploaded)
+}
+
+func builtinDiagnosticReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, planID spine.ExecutionCommandPlanID) string {
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"builtin_diagnostic","command_plan_id":%q,"command_kind":"builtin_diagnostic","action":"workspace_status","process_status":"metadata_only","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":false,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, jobID, leaseID, leaseToken, runnerID, planID)
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {

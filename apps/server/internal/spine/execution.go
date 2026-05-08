@@ -8,6 +8,8 @@ type ExecutionLeaseID string
 
 type RunID string
 
+type ExecutionCommandPlanID string
+
 type ExecutionReceiptID string
 
 type ExecutionJobState string
@@ -36,10 +38,22 @@ const (
 
 const (
 	ExecutionReceiptModeNoCommand          = "no_command"
+	ExecutionReceiptModeBuiltinDiagnostic  = "builtin_diagnostic"
 	ExecutionReceiptStatusNotExecuted      = "not_executed"
 	ExecutionReceiptStatusMetadataOnly     = "metadata_only"
 	ExecutionReceiptNextActionGateReview   = "gate_review"
 	ExecutionReceiptNextActionPlannedSlice = "I"
+)
+
+type ExecutionCommandPlanState string
+
+const (
+	ExecutionCommandPlanStatePlanned ExecutionCommandPlanState = "planned"
+)
+
+const (
+	ExecutionCommandKindBuiltinDiagnostic = "builtin_diagnostic"
+	ExecutionCommandActionWorkspaceStatus = "workspace_status"
 )
 
 type ExecutionJob struct {
@@ -128,47 +142,89 @@ type Run struct {
 	UpdatedAt         time.Time         `json:"updated_at"`
 }
 
+type ExecutionCommandPlanCreateRequest struct {
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	CommandKind   string        `json:"command_kind,omitempty"`
+	Action        string        `json:"action,omitempty"`
+}
+
+type ExecutionCommandPlan struct {
+	ID                     ExecutionCommandPlanID    `json:"id"`
+	OrganizationID         OrganizationID            `json:"-"`
+	ProjectID              ProjectID                 `json:"project_id"`
+	RepoBindingID          RepoBindingID             `json:"repo_binding_id"`
+	TaskID                 WorkItemID                `json:"task_id"`
+	CheckoutReceiptID      CheckoutReceiptID         `json:"checkout_receipt_id"`
+	ExecutionJobID         ExecutionJobID            `json:"execution_job_id"`
+	RunID                  RunID                     `json:"run_id"`
+	CommandKind            string                    `json:"command_kind"`
+	Action                 string                    `json:"action"`
+	ShellAllowed           bool                      `json:"shell_allowed"`
+	Argv                   []string                  `json:"argv"`
+	WorkingDirectory       string                    `json:"working_directory"`
+	PathScope              []string                  `json:"path_scope"`
+	TimeoutSeconds         int                       `json:"timeout_seconds"`
+	MaxStdoutBytes         int                       `json:"max_stdout_bytes"`
+	MaxStderrBytes         int                       `json:"max_stderr_bytes"`
+	AllowedArtifactKinds   []string                  `json:"allowed_artifact_kinds"`
+	RawSourceUploadAllowed bool                      `json:"raw_source_upload_allowed"`
+	State                  ExecutionCommandPlanState `json:"state"`
+	CreatedAt              time.Time                 `json:"created_at"`
+	UpdatedAt              time.Time                 `json:"updated_at"`
+}
+
 type ExecutionReceiptSubmitRequest struct {
-	ExecutionJobID      ExecutionJobID   `json:"execution_job_id"`
-	LeaseID             ExecutionLeaseID `json:"lease_id"`
-	LeaseToken          string           `json:"lease_token"`
-	RunnerID            string           `json:"runner_id"`
-	WorkspaceRef        string           `json:"workspace_ref"`
-	CommitSHA           string           `json:"commit_sha"`
-	BaselineID          string           `json:"baseline_id,omitempty"`
-	OverlayID           string           `json:"overlay_id,omitempty"`
-	ExecutionMode       string           `json:"execution_mode"`
-	ProcessStatus       string           `json:"process_status"`
-	ExitCode            *int             `json:"exit_code,omitempty"`
-	ArtifactRefs        []string         `json:"artifact_refs,omitempty"`
-	ChangedPathsSummary []string         `json:"changed_paths_summary,omitempty"`
-	RawSourceUploaded   bool             `json:"raw_source_uploaded"`
+	ExecutionJobID      ExecutionJobID         `json:"execution_job_id"`
+	LeaseID             ExecutionLeaseID       `json:"lease_id"`
+	LeaseToken          string                 `json:"lease_token"`
+	RunnerID            string                 `json:"runner_id"`
+	WorkspaceRef        string                 `json:"workspace_ref"`
+	CommitSHA           string                 `json:"commit_sha"`
+	BaselineID          string                 `json:"baseline_id,omitempty"`
+	OverlayID           string                 `json:"overlay_id,omitempty"`
+	ExecutionMode       string                 `json:"execution_mode"`
+	CommandPlanID       ExecutionCommandPlanID `json:"command_plan_id,omitempty"`
+	CommandKind         string                 `json:"command_kind,omitempty"`
+	Action              string                 `json:"action,omitempty"`
+	ProcessStatus       string                 `json:"process_status"`
+	ExitCode            *int                   `json:"exit_code,omitempty"`
+	ArtifactRefs        []string               `json:"artifact_refs,omitempty"`
+	ChangedPathsSummary []string               `json:"changed_paths_summary,omitempty"`
+	RawSourceUploaded   bool                   `json:"raw_source_uploaded"`
+	RunnerStartedAt     *time.Time             `json:"runner_started_at,omitempty"`
+	RunnerFinishedAt    *time.Time             `json:"runner_finished_at,omitempty"`
 }
 
 type ExecutionReceipt struct {
-	ID                  ExecutionReceiptID  `json:"id"`
-	RunID               RunID               `json:"run_id"`
-	ExecutionJobID      ExecutionJobID      `json:"execution_job_id"`
-	ExecutionLeaseID    ExecutionLeaseID    `json:"execution_lease_id"`
-	TaskID              WorkItemID          `json:"task_id"`
-	CheckoutReceiptID   CheckoutReceiptID   `json:"checkout_receipt_id"`
-	RepoBindingID       RepoBindingID       `json:"repo_binding_id"`
-	RunnerID            string              `json:"runner_id"`
-	WorkspaceRef        string              `json:"workspace_ref"`
-	CommitSHA           string              `json:"commit_sha"`
-	BaselineID          string              `json:"baseline_id,omitempty"`
-	OverlayID           string              `json:"overlay_id,omitempty"`
-	ExecutionMode       string              `json:"execution_mode"`
-	ProcessStatus       string              `json:"process_status"`
-	ExitCode            *int                `json:"exit_code,omitempty"`
-	ArtifactRefs        []string            `json:"artifact_refs"`
-	ChangedPathsSummary []string            `json:"changed_paths_summary"`
-	RawSourceUploaded   bool                `json:"raw_source_uploaded"`
-	StartedAt           time.Time           `json:"started_at"`
-	FinishedAt          time.Time           `json:"finished_at"`
-	CreatedAt           time.Time           `json:"created_at"`
-	UpdatedAt           time.Time           `json:"updated_at"`
-	NextAction          ExecutionNextAction `json:"next_action"`
+	ID                  ExecutionReceiptID      `json:"id"`
+	RunID               RunID                   `json:"run_id"`
+	ExecutionJobID      ExecutionJobID          `json:"execution_job_id"`
+	ExecutionLeaseID    ExecutionLeaseID        `json:"execution_lease_id"`
+	TaskID              WorkItemID              `json:"task_id"`
+	CheckoutReceiptID   CheckoutReceiptID       `json:"checkout_receipt_id"`
+	RepoBindingID       RepoBindingID           `json:"repo_binding_id"`
+	RunnerID            string                  `json:"runner_id"`
+	WorkspaceRef        string                  `json:"workspace_ref"`
+	CommitSHA           string                  `json:"commit_sha"`
+	BaselineID          string                  `json:"baseline_id,omitempty"`
+	OverlayID           string                  `json:"overlay_id,omitempty"`
+	ExecutionMode       string                  `json:"execution_mode"`
+	CommandPlanID       *ExecutionCommandPlanID `json:"command_plan_id,omitempty"`
+	CommandKind         string                  `json:"command_kind,omitempty"`
+	Action              string                  `json:"action,omitempty"`
+	ProcessStatus       string                  `json:"process_status"`
+	ExitCode            *int                    `json:"exit_code,omitempty"`
+	ArtifactRefs        []string                `json:"artifact_refs"`
+	ChangedPathsSummary []string                `json:"changed_paths_summary"`
+	RawSourceUploaded   bool                    `json:"raw_source_uploaded"`
+	RunnerStartedAt     *time.Time              `json:"runner_started_at,omitempty"`
+	RunnerFinishedAt    *time.Time              `json:"runner_finished_at,omitempty"`
+	StartedAt           time.Time               `json:"started_at"`
+	FinishedAt          time.Time               `json:"finished_at"`
+	CreatedAt           time.Time               `json:"created_at"`
+	UpdatedAt           time.Time               `json:"updated_at"`
+	NextAction          ExecutionNextAction     `json:"next_action"`
 }
 
 type ExecutionNextAction struct {

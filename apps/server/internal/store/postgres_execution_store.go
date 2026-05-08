@@ -710,6 +710,258 @@ func runColumns() []string {
 	}
 }
 
+type PostgresExecutionCommandPlanStore struct {
+	exec  postgresExecer
+	query postgresRowQuerier
+	psql  squirrel.StatementBuilderType
+}
+
+func NewPostgresExecutionCommandPlanStore(pool *pgxpool.Pool) *PostgresExecutionCommandPlanStore {
+	db := newPostgresDB(pool)
+	return NewPostgresExecutionCommandPlanStoreWithExecutorAndQuerier(db, db)
+}
+
+func NewPostgresExecutionCommandPlanStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresExecutionCommandPlanStore {
+	return &PostgresExecutionCommandPlanStore{
+		exec:  exec,
+		query: query,
+		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
+	}
+}
+
+func (s *PostgresExecutionCommandPlanStore) Create(ctx context.Context, plan spine.ExecutionCommandPlan) error {
+	id, err := uuidValue(plan.ID, "execution command plan id")
+	if err != nil {
+		return err
+	}
+	orgID, err := uuidValue(plan.OrganizationID, "execution command plan organization id")
+	if err != nil {
+		return err
+	}
+	projectID, err := uuidValue(plan.ProjectID, "execution command plan project id")
+	if err != nil {
+		return err
+	}
+	repoBindingID, err := uuidValue(plan.RepoBindingID, "execution command plan repo binding id")
+	if err != nil {
+		return err
+	}
+	taskID, err := uuidValue(plan.TaskID, "execution command plan task id")
+	if err != nil {
+		return err
+	}
+	checkoutReceiptID, err := uuidValue(plan.CheckoutReceiptID, "execution command plan checkout receipt id")
+	if err != nil {
+		return err
+	}
+	jobID, err := uuidValue(plan.ExecutionJobID, "execution command plan job id")
+	if err != nil {
+		return err
+	}
+	runID, err := uuidValue(plan.RunID, "execution command plan run id")
+	if err != nil {
+		return err
+	}
+	argv, err := json.Marshal(nonNilStrings(plan.Argv))
+	if err != nil {
+		return fmt.Errorf("marshal execution command plan argv: %w", err)
+	}
+	pathScope, err := json.Marshal(nonNilStrings(plan.PathScope))
+	if err != nil {
+		return fmt.Errorf("marshal execution command plan path scope: %w", err)
+	}
+	allowedArtifacts, err := json.Marshal(nonNilStrings(plan.AllowedArtifactKinds))
+	if err != nil {
+		return fmt.Errorf("marshal execution command plan allowed artifacts: %w", err)
+	}
+	stmt := s.psql.
+		Insert("execution_command_plans").
+		Columns(
+			"id",
+			"organization_id",
+			"project_id",
+			"repo_binding_id",
+			"task_id",
+			"checkout_receipt_id",
+			"execution_job_id",
+			"run_id",
+			"command_kind",
+			"action",
+			"shell_allowed",
+			"argv",
+			"working_directory",
+			"path_scope",
+			"timeout_seconds",
+			"max_stdout_bytes",
+			"max_stderr_bytes",
+			"allowed_artifact_kinds",
+			"raw_source_upload_allowed",
+			"state",
+			"created_at",
+			"updated_at",
+		).
+		Values(
+			id,
+			orgID,
+			projectID,
+			repoBindingID,
+			taskID,
+			checkoutReceiptID,
+			jobID,
+			runID,
+			plan.CommandKind,
+			plan.Action,
+			plan.ShellAllowed,
+			argv,
+			plan.WorkingDirectory,
+			pathScope,
+			plan.TimeoutSeconds,
+			plan.MaxStdoutBytes,
+			plan.MaxStderrBytes,
+			allowedArtifacts,
+			plan.RawSourceUploadAllowed,
+			plan.State,
+			plan.CreatedAt.UTC(),
+			plan.UpdatedAt.UTC(),
+		)
+	if err := execSQL(ctx, s.exec, "create execution command plan", stmt); err != nil {
+		if uniqueViolationConstraint(err) == "execution_command_plans_run_action_unique" {
+			return ErrExecutionCommandPlanAlreadyPlanned
+		}
+		if isUniqueViolation(err) {
+			return ErrExecutionCommandPlanAlreadyExists
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *PostgresExecutionCommandPlanStore) Get(ctx context.Context, id spine.ExecutionCommandPlanID) (spine.ExecutionCommandPlan, bool, error) {
+	parsedID, err := uuidValue(id, "execution command plan id")
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	return s.getCommandPlan(ctx, "get execution command plan", squirrel.Eq{"id": parsedID})
+}
+
+func (s *PostgresExecutionCommandPlanStore) GetByRunAndAction(ctx context.Context, runID spine.RunID, kind string, action string) (spine.ExecutionCommandPlan, bool, error) {
+	parsedRunID, err := uuidValue(runID, "execution command plan run id")
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	return s.getCommandPlan(ctx, "get execution command plan by run and action", squirrel.Eq{
+		"run_id":       parsedRunID,
+		"command_kind": kind,
+		"action":       action,
+	})
+}
+
+func (s *PostgresExecutionCommandPlanStore) getCommandPlan(ctx context.Context, op string, where squirrel.Eq) (spine.ExecutionCommandPlan, bool, error) {
+	stmt := s.psql.Select(executionCommandPlanColumns()...).From("execution_command_plans").Where(where)
+	row, err := queryRow(ctx, s.query, op, stmt)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	plan, err := scanExecutionCommandPlan(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.ExecutionCommandPlan{}, false, nil
+		}
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("%s: %w", op, err)
+	}
+	return plan, true, nil
+}
+
+func scanExecutionCommandPlan(row pgx.Row) (spine.ExecutionCommandPlan, error) {
+	var plan spine.ExecutionCommandPlan
+	var id string
+	var orgID string
+	var projectID string
+	var repoBindingID string
+	var taskID string
+	var checkoutReceiptID string
+	var jobID string
+	var runID string
+	var state string
+	var argv []byte
+	var pathScope []byte
+	var allowedArtifacts []byte
+	if err := row.Scan(
+		&id,
+		&orgID,
+		&projectID,
+		&repoBindingID,
+		&taskID,
+		&checkoutReceiptID,
+		&jobID,
+		&runID,
+		&plan.CommandKind,
+		&plan.Action,
+		&plan.ShellAllowed,
+		&argv,
+		&plan.WorkingDirectory,
+		&pathScope,
+		&plan.TimeoutSeconds,
+		&plan.MaxStdoutBytes,
+		&plan.MaxStderrBytes,
+		&allowedArtifacts,
+		&plan.RawSourceUploadAllowed,
+		&state,
+		&plan.CreatedAt,
+		&plan.UpdatedAt,
+	); err != nil {
+		return spine.ExecutionCommandPlan{}, err
+	}
+	plan.ID = spine.ExecutionCommandPlanID(id)
+	plan.OrganizationID = spine.OrganizationID(orgID)
+	plan.ProjectID = spine.ProjectID(projectID)
+	plan.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	plan.TaskID = spine.WorkItemID(taskID)
+	plan.CheckoutReceiptID = spine.CheckoutReceiptID(checkoutReceiptID)
+	plan.ExecutionJobID = spine.ExecutionJobID(jobID)
+	plan.RunID = spine.RunID(runID)
+	plan.State = spine.ExecutionCommandPlanState(state)
+	if err := json.Unmarshal(argv, &plan.Argv); err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("unmarshal execution command plan argv: %w", err)
+	}
+	if err := json.Unmarshal(pathScope, &plan.PathScope); err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("unmarshal execution command plan path scope: %w", err)
+	}
+	if err := json.Unmarshal(allowedArtifacts, &plan.AllowedArtifactKinds); err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("unmarshal execution command plan allowed artifact kinds: %w", err)
+	}
+	plan.CreatedAt = plan.CreatedAt.UTC()
+	plan.UpdatedAt = plan.UpdatedAt.UTC()
+	return plan, nil
+}
+
+func executionCommandPlanColumns() []string {
+	return []string{
+		"id",
+		"organization_id",
+		"project_id",
+		"repo_binding_id",
+		"task_id",
+		"checkout_receipt_id",
+		"execution_job_id",
+		"run_id",
+		"command_kind",
+		"action",
+		"shell_allowed",
+		"argv",
+		"working_directory",
+		"path_scope",
+		"timeout_seconds",
+		"max_stdout_bytes",
+		"max_stderr_bytes",
+		"allowed_artifact_kinds",
+		"raw_source_upload_allowed",
+		"state",
+		"created_at",
+		"updated_at",
+	}
+}
+
 type PostgresExecutionReceiptStore struct {
 	exec  postgresExecer
 	query postgresRowQuerier
@@ -770,6 +1022,21 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 	if receipt.ExitCode != nil {
 		exitCode = *receipt.ExitCode
 	}
+	var commandPlanID any
+	if receipt.CommandPlanID != nil {
+		commandPlanID, err = uuidValue(*receipt.CommandPlanID, "execution receipt command plan id")
+		if err != nil {
+			return err
+		}
+	}
+	var runnerStartedAt any
+	if receipt.RunnerStartedAt != nil {
+		runnerStartedAt = receipt.RunnerStartedAt.UTC()
+	}
+	var runnerFinishedAt any
+	if receipt.RunnerFinishedAt != nil {
+		runnerFinishedAt = receipt.RunnerFinishedAt.UTC()
+	}
 	stmt := s.psql.
 		Insert("execution_receipts").
 		Columns(
@@ -786,11 +1053,16 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			"baseline_id",
 			"overlay_id",
 			"execution_mode",
+			"command_plan_id",
+			"command_kind",
+			"action",
 			"process_status",
 			"exit_code",
 			"artifact_refs",
 			"changed_paths_summary",
 			"raw_source_uploaded",
+			"runner_started_at",
+			"runner_finished_at",
 			"started_at",
 			"finished_at",
 			"created_at",
@@ -810,11 +1082,16 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			receipt.BaselineID,
 			receipt.OverlayID,
 			receipt.ExecutionMode,
+			commandPlanID,
+			receipt.CommandKind,
+			receipt.Action,
 			receipt.ProcessStatus,
 			exitCode,
 			artifactRefs,
 			changedPaths,
 			receipt.RawSourceUploaded,
+			runnerStartedAt,
+			runnerFinishedAt,
 			receipt.StartedAt.UTC(),
 			receipt.FinishedAt.UTC(),
 			receipt.CreatedAt.UTC(),
@@ -861,9 +1138,12 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	var taskID string
 	var checkoutReceiptID string
 	var repoBindingID string
+	var commandPlanID pgtype.UUID
 	var artifactRefs []byte
 	var changedPaths []byte
 	var exitCode pgtype.Int4
+	var runnerStartedAt pgtype.Timestamptz
+	var runnerFinishedAt pgtype.Timestamptz
 	if err := row.Scan(
 		&id,
 		&runID,
@@ -878,11 +1158,16 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 		&receipt.BaselineID,
 		&receipt.OverlayID,
 		&receipt.ExecutionMode,
+		&commandPlanID,
+		&receipt.CommandKind,
+		&receipt.Action,
 		&receipt.ProcessStatus,
 		&exitCode,
 		&artifactRefs,
 		&changedPaths,
 		&receipt.RawSourceUploaded,
+		&runnerStartedAt,
+		&runnerFinishedAt,
 		&receipt.StartedAt,
 		&receipt.FinishedAt,
 		&receipt.CreatedAt,
@@ -897,6 +1182,10 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	receipt.TaskID = spine.WorkItemID(taskID)
 	receipt.CheckoutReceiptID = spine.CheckoutReceiptID(checkoutReceiptID)
 	receipt.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	if value := uuidString(commandPlanID); value != "" {
+		planID := spine.ExecutionCommandPlanID(value)
+		receipt.CommandPlanID = &planID
+	}
 	if exitCode.Valid {
 		value := int(exitCode.Int32)
 		receipt.ExitCode = &value
@@ -909,6 +1198,14 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	}
 	receipt.StartedAt = receipt.StartedAt.UTC()
 	receipt.FinishedAt = receipt.FinishedAt.UTC()
+	if runnerStartedAt.Valid {
+		value := runnerStartedAt.Time.UTC()
+		receipt.RunnerStartedAt = &value
+	}
+	if runnerFinishedAt.Valid {
+		value := runnerFinishedAt.Time.UTC()
+		receipt.RunnerFinishedAt = &value
+	}
 	receipt.CreatedAt = receipt.CreatedAt.UTC()
 	receipt.UpdatedAt = receipt.UpdatedAt.UTC()
 	receipt.NextAction = spine.ExecutionNextAction{
@@ -935,11 +1232,16 @@ func executionReceiptColumns() []string {
 		"baseline_id",
 		"overlay_id",
 		"execution_mode",
+		"command_plan_id",
+		"command_kind",
+		"action",
 		"process_status",
 		"exit_code",
 		"artifact_refs",
 		"changed_paths_summary",
 		"raw_source_uploaded",
+		"runner_started_at",
+		"runner_finished_at",
 		"started_at",
 		"finished_at",
 		"created_at",
