@@ -123,11 +123,12 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
-- H1 checkout instruction plus workspace receipt is implemented. The next
-  bounded delivery-runtime slice must start after a fresh runner/execution
-  boundary review and should not assume checkout receipt means code execution.
-  WorkItems still remain `planned`; assignment, claiming, execution, `Run`,
-  gate, and proof are still deferred.
+- H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
+  coverage now pins `work checkout prepare` through runner checkout lease and
+  persisted `CheckoutReceipt`. The next bounded delivery-runtime slice must
+  start after a fresh runner/execution boundary review and should not assume
+  checkout receipt means code execution. WorkItems still remain `planned`;
+  assignment, claiming, execution, `Run`, gate, and proof are still deferred.
 - Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
   provider OAuth, VcsConnection, token storage, provider clients, live metadata
   listing, `Run`, and execution receipt behavior remain deferred.
@@ -822,7 +823,8 @@ Done means:
      watcher/daemon, embeddings, ContractContextPack generation, gate, or proof
 2. Runner-owned repository checkout credential boundary
    - Status: DONE — ADR-0028 defines and H1 implements the checkout instruction
-     / workspace receipt boundary.
+     / workspace receipt boundary; H1+ smoke coverage pins checkout prepare
+     through runner lease and persisted checkout receipt.
    - runner startup flags are limited to Goalrail connection, runner identity /
      narrow runner auth input, operator-declared project / repo-binding lease
      scope, and local credential file paths

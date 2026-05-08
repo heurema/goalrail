@@ -168,6 +168,92 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("work_item.created events = %d, want %d", got, len(accepted.CreatedTaskIDs))
 	}
 	assertNoForbiddenWorkItemSideEffects(t, server.events.Events())
+
+	taskID := accepted.CreatedTaskIDs[0]
+	contextProjectID := created.ProjectID
+	contextRepoBindingID := created.RepoBindingID
+	checkoutJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", planCreateJSONWithContext(string(contextProjectID), string(contextRepoBindingID)))
+	if checkoutJobResponse.code != http.StatusCreated {
+		t.Fatalf("checkout job status = %d, want %d: %s", checkoutJobResponse.code, http.StatusCreated, checkoutJobResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"proof_id\""} {
+		if strings.Contains(checkoutJobResponse.body, forbidden) {
+			t.Fatalf("checkout job response exposes forbidden field %s: %s", forbidden, checkoutJobResponse.body)
+		}
+	}
+	var checkoutJob spine.CheckoutJob
+	decodeJSON(t, checkoutJobResponse.body, &checkoutJob)
+	if checkoutJob.TaskID != taskID || checkoutJob.State != spine.CheckoutJobStateQueued {
+		t.Fatalf("checkout job = %#v, want queued job for task %q", checkoutJob, taskID)
+	}
+	if checkoutJob.ContractID != contract.ID || checkoutJob.PlanID != plan.ID || checkoutJob.ProposalID != proposal.ID || checkoutJob.RepoBindingID != contextRepoBindingID {
+		t.Fatalf("checkout job trace = %#v, want contract/plan/proposal/repo trace", checkoutJob)
+	}
+	if checkoutJob.Instruction.JobID != checkoutJob.ID || checkoutJob.Instruction.TaskID != taskID || checkoutJob.Instruction.RepoBindingID != contextRepoBindingID {
+		t.Fatalf("checkout instruction identity = %#v, want job/task/repo-bound instruction", checkoutJob.Instruction)
+	}
+	if checkoutJob.Instruction.RepositoryFullName == "" || checkoutJob.Instruction.WorkflowBaseBranch == "" || checkoutJob.Instruction.RawSourceUploaded {
+		t.Fatalf("checkout instruction repository/raw-source = %#v, want metadata-only instruction", checkoutJob.Instruction)
+	}
+
+	secondCheckoutJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", planCreateJSONWithContext(string(contextProjectID), string(contextRepoBindingID)))
+	if secondCheckoutJobResponse.code != http.StatusOK {
+		t.Fatalf("second checkout job status = %d, want %d: %s", secondCheckoutJobResponse.code, http.StatusOK, secondCheckoutJobResponse.body)
+	}
+	var existingCheckoutJob spine.CheckoutJob
+	decodeJSON(t, secondCheckoutJobResponse.body, &existingCheckoutJob)
+	if existingCheckoutJob.ID != checkoutJob.ID || len(server.checkoutJobs.jobs) != 1 {
+		t.Fatalf("existing checkout job id/count = %q/%d, want %q/1", existingCheckoutJob.ID, len(server.checkoutJobs.jobs), checkoutJob.ID)
+	}
+
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-smoke"}`, contextProjectID, contextRepoBindingID))
+	if leaseResponse.code != http.StatusCreated {
+		t.Fatalf("checkout lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
+	}
+	if strings.Contains(leaseResponse.body, "lease_token_hash") {
+		t.Fatalf("checkout lease response exposes token hash: %s", leaseResponse.body)
+	}
+	var checkoutLease spine.CheckoutJobLeaseCreated
+	decodeJSON(t, leaseResponse.body, &checkoutLease)
+	if checkoutLease.JobID != checkoutJob.ID || checkoutLease.TaskID != taskID || checkoutLease.RunnerID != "runner-smoke" || checkoutLease.LeaseToken == "" {
+		t.Fatalf("checkout lease = %#v, want scoped lease with raw token only in lease response", checkoutLease)
+	}
+	if checkoutLease.Instruction.RawSourceUploaded || checkoutLease.Instruction.RepoBindingID != contextRepoBindingID {
+		t.Fatalf("checkout lease instruction = %#v, want no raw source and matching repo", checkoutLease.Instruction)
+	}
+
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(checkoutJob.ID)+"/receipts", fmt.Sprintf(`{"lease_token":%q,"runner_id":"runner-smoke","workspace_ref":"mounted:/workspace/goalrail#checkout_job=%s;task=%s;repo_binding=%s","commit_sha":"abc123","baseline_id":"baseline-smoke","overlay_id":"overlay-smoke","dirty":false,"partial":false,"raw_source_uploaded":false}`, checkoutLease.LeaseToken, checkoutJob.ID, taskID, contextRepoBindingID))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("checkout receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"proof_id\""} {
+		if strings.Contains(receiptResponse.body, forbidden) {
+			t.Fatalf("checkout receipt response exposes forbidden field %s: %s", forbidden, receiptResponse.body)
+		}
+	}
+	var receipt spine.CheckoutReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.JobID != checkoutJob.ID || receipt.TaskID != taskID || receipt.RunnerID != "runner-smoke" || receipt.RawSourceUploaded {
+		t.Fatalf("checkout receipt = %#v, want runner workspace metadata without raw source", receipt)
+	}
+	if receipt.BaselineID != "baseline-smoke" || receipt.OverlayID != "overlay-smoke" || receipt.CommitSHA != "abc123" {
+		t.Fatalf("checkout receipt evidence fields = %#v, want smoke metadata", receipt)
+	}
+	storedCheckoutJob := server.checkoutJobs.jobs[checkoutJob.ID]
+	if storedCheckoutJob.State != spine.CheckoutJobStateReceiptSubmitted {
+		t.Fatalf("checkout job state = %q, want receipt_submitted", storedCheckoutJob.State)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get(%s) = %#v/%v/%v", taskID, storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("work item status = %q, want planned after checkout receipt", storedTask.Status)
+	}
+	if len(server.checkoutReceipts.receipts) != 1 {
+		t.Fatalf("checkout receipts = %d, want 1", len(server.checkoutReceipts.receipts))
+	}
+	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
 }
 
 func contractCreateJSONWithContext(goalID spine.GoalID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID) string {
