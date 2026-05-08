@@ -1010,6 +1010,36 @@ select:focus-visible {
   background: var(--bg);
 }
 
+.opsContractHeading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.opsContractHeading.secondary {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.opsContractHeading span {
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.opsContractHeading b {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .opsMeters {
   display: flex;
   align-items: center;
@@ -1043,6 +1073,8 @@ select:focus-visible {
 .opsGroupLabel,
 .opsPanelKicker,
 .opsSectionLead span,
+.opsPrimaryStatus span,
+.opsAggregateGrid dt,
 .opsDetailBlock > span,
 .opsKeyGrid dt,
 .opsMono {
@@ -1449,6 +1481,10 @@ select:focus-visible {
   overflow: hidden;
 }
 
+.opsContractDetailLayout {
+  grid-template-rows: minmax(0, 1fr);
+}
+
 .opsContractCanvas {
   display: flex;
   min-width: 0;
@@ -1482,6 +1518,10 @@ select:focus-visible {
   flex: 1 1 auto;
   min-height: 380px;
   flex-direction: column;
+}
+
+.opsContractAggregate {
+  min-height: 0;
 }
 
 .opsPanelHead {
@@ -1532,6 +1572,57 @@ select:focus-visible {
   justify-content: flex-end;
   gap: 6px;
   min-width: 0;
+}
+
+.opsPrimaryStatus {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.opsPrimaryStatus span {
+  color: var(--mute);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+}
+
+.opsPrimaryStatus b {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 3px 9px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.opsPrimaryStatus b.mauve {
+  border-color: var(--ops-mauve-soft);
+  color: var(--ops-mauve);
+}
+
+.opsPrimaryStatus b.amber {
+  border-color: var(--ops-amber-soft);
+  color: var(--ops-amber);
+}
+
+.opsPrimaryStatus b.pass {
+  border-color: var(--ops-pass-soft);
+  color: var(--ops-pass);
 }
 
 .opsStageRail {
@@ -1717,6 +1808,36 @@ select:focus-visible {
   gap: 12px;
 }
 
+.opsAggregateGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+  margin: 0;
+}
+
+.opsAggregateGrid > div {
+  min-width: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.opsAggregateGrid dt {
+  margin-bottom: 5px;
+  color: var(--mute);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.opsAggregateGrid dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .opsDetailBlock {
   position: relative;
   display: flex;
@@ -1792,6 +1913,19 @@ select:focus-visible {
 
 .opsSideCard > :last-child {
   padding-bottom: 14px;
+}
+
+.opsUnavailableList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.opsUnavailableList p {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .opsKeyGrid {
@@ -1963,6 +2097,7 @@ select:focus-visible {
     min-height: 300px;
   }
 
+  .opsAggregateGrid,
   .opsKeyGrid,
   .opsBottomPanel {
     grid-template-columns: 1fr;

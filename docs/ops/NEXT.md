@@ -173,9 +173,13 @@
   organization-scoped, read-only Contract discovery:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
   It loads `GET /v1/contracts?limit=50` by default, renders a compact
-  contract rail/list with selected detail, supports state filtering plus manual
-  refresh, keeps manual ID lookup as a secondary fallback, and does not create
-  contracts, recompute readiness, create plans, or drive lifecycle transitions.
+  contract rail/list with selected aggregate-only detail, supports state
+  filtering plus manual refresh, keeps manual ID lookup as a secondary
+  fallback, and does not create contracts, recompute readiness, create plans,
+  or drive lifecycle transitions. Selected Contract detail presents the public
+  Contract aggregate only with one lifecycle status, linked ids, and calm
+  timestamps; draft body, task, execution, gate, runner, and proof data remain
+  unavailable in that view.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
