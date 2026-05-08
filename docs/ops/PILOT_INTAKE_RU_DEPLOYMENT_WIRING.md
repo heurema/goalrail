@@ -60,6 +60,15 @@ repo integration, runtime execution, broad backend platform, CI/CD deployment
 workflow, deploy script, concrete reverse-proxy config, or repo-side server
 config was added.
 
+2026-05-08 update: the same static app now also contains an adjacent Russian
+`/start` public assistant entry route for `https://goalrail.ru/start`. The
+pilot landing at `/` remains unchanged and keeps the D-0056 lead-capture
+boundary. The `/start` route is not owned by the lead sidecar and does not add
+repo scan, file upload, code execution, analytics, cookies, sessions, CRM, or
+new secrets. Its only live assistant call is same-origin `POST /api/start-chat`
+when an operator-managed reverse proxy route is wired to the existing public
+start-assistant boundary.
+
 ## Decision basis
 
 - D-0047 remains in force except for the narrow D-0056 lead-capture exception:
@@ -121,6 +130,7 @@ config was added.
 | Domain | `pilot.goalrail.ru` |
 | Canonical URL | `https://pilot.goalrail.ru/` |
 | Public path | `/` |
+| Adjacent start path | `https://goalrail.ru/start` served by the same static app when apex DNS/TLS is wired |
 | App | `apps/web/pilot-intake-ru` |
 | Hosting path | operator-managed SSH static server per D-0051 |
 | Release root | `/srv/goalrail/pilot/releases` |

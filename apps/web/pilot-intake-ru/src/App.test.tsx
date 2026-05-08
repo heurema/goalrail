@@ -8,6 +8,7 @@ import storeSourceText from '../server/internal/pilotlead/store.go?raw';
 import timeSourceText from '../server/internal/pilotlead/time.go?raw';
 import typesSourceText from '../server/internal/pilotlead/types.go?raw';
 import appSourceText from './App.tsx?raw';
+import startPageRuSourceText from './StartPageRu.tsx?raw';
 
 import { screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -17,6 +18,10 @@ import { render, userEvent } from '../test-utils';
 
 function appSource() {
   return appSourceText;
+}
+
+function startPageRuSource() {
+  return startPageRuSourceText;
 }
 
 function indexHtml() {
@@ -51,6 +56,7 @@ function pilotMailSource() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.history.pushState({}, '', '/');
 });
 
 describe('Pilot intake RU business-first landing', () => {
@@ -60,6 +66,83 @@ describe('Pilot intake RU business-first landing', () => {
     expect(screen.getByRole('heading', { name: 'ИИ-кодинг без хаоса' })).toBeInTheDocument();
     expect(screen.getByText(/2 недели · 1 команда · 1 участок продукта/i)).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Обсудить пилот' }).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the pilot landing on / and renders the RU start page only on /start', () => {
+    const { unmount } = render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'ИИ-кодинг без хаоса' })).toBeInTheDocument();
+
+    unmount();
+    window.history.pushState({}, '', '/start');
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: 'Спросите GoalRail про AI-assisted delivery.' })).toBeInTheDocument();
+    expect(screen.getByText('От бизнес-цели до проверенного изменения в коде.')).toBeInTheDocument();
+  });
+
+  it('fills the RU start input from a quick question without calling the assistant', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.pushState({}, '', '/start');
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Что такое contract-first execution?' }));
+
+    expect(screen.getByRole('textbox', { name: 'Спросить GoalRail' })).toHaveValue(
+      'Что такое contract-first execution?',
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('posts RU start questions to the same-origin start assistant endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          answer: 'GoalRail держит AI-разработку в границах контракта, проверок, proof и approval.',
+          sources: [
+            {
+              title: 'Goalrail Global Start Assistant',
+              path: 'docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md',
+              section: 'Assistant behavior',
+            },
+          ],
+          suggested_questions: ['Что значит proof before approval?'],
+          knowledge: {
+            updated_at: '2026-05-08T06:00:00Z',
+            commit_sha: 'abc123',
+          },
+          disclaimer: 'Эта страница не может сканировать репозитории или выполнять код.',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.pushState({}, '', '/start');
+
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByRole('textbox', { name: 'Спросить GoalRail' }), 'Что такое GoalRail?');
+    await user.click(screen.getByRole('button', { name: 'Спросить' }));
+
+    await screen.findByRole('heading', { name: 'Ответ source-grounded ассистента' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/start-chat',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: 'Что такое GoalRail?' }),
+      }),
+    );
+    expect(screen.getByText(/держит AI-разработку/i)).toBeInTheDocument();
+    expect(screen.getByText('Goalrail Global Start Assistant / Assistant behavior')).toBeInTheDocument();
+    expect(screen.getByText('Revision abc123')).toBeInTheDocument();
   });
 
   it('renders hero copy about existing AI tools and illustrative report status', () => {
@@ -287,6 +370,18 @@ describe('Pilot intake RU business-first landing', () => {
     const source = `${appSource()}\n${indexHtml()}`;
 
     expect(source).toMatch(/fetch\('\/api\/pilot-lead'/);
+    expect(source).not.toMatch(/fetch\s*\(\s*['"]https?:\/\//i);
+    expect(source).not.toMatch(/XMLHttpRequest/i);
+    expect(source).not.toMatch(/sendBeacon/i);
+    expect(source).not.toMatch(/localStorage|sessionStorage|indexedDB/i);
+    expect(source).not.toMatch(/gtag|googletagmanager|mixpanel|sentry|datadog/i);
+    expect(source).not.toMatch(/input\s+type=["']file["']/i);
+  });
+
+  it('keeps the RU start page narrowed to the same-origin start assistant endpoint', () => {
+    const source = startPageRuSource();
+
+    expect(source).toMatch(/fetch\('\/api\/start-chat'/);
     expect(source).not.toMatch(/fetch\s*\(\s*['"]https?:\/\//i);
     expect(source).not.toMatch(/XMLHttpRequest/i);
     expect(source).not.toMatch(/sendBeacon/i);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import StartPageRu from './StartPageRu';
 import './App.css';
 
 type LeadSubmitState = 'idle' | 'submitting' | 'success' | 'error';
@@ -155,7 +156,11 @@ function isValidEmail(value: string) {
   return email.length > 0 && email.length <= 254 && emailPattern.test(email);
 }
 
-function App() {
+function isStartRoute() {
+  return window.location.pathname.replace(/\/+$/, '') === '/start';
+}
+
+function PilotLanding() {
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const highlightTimerRef = useRef<number | null>(null);
   const [emailHighlighted, setEmailHighlighted] = useState(false);
@@ -614,6 +619,14 @@ function App() {
       </div>
     </div>
   );
+}
+
+function App() {
+  if (isStartRoute()) {
+    return <StartPageRu />;
+  }
+
+  return <PilotLanding />;
 }
 
 export default App;
