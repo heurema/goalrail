@@ -88,6 +88,15 @@ describe('Pilot intake RU business-first landing', () => {
     expect(screen.getByText('От бизнес-цели до проверенного изменения в коде.')).toBeInTheDocument();
   });
 
+  it('renders the RU start page when static hosting serves /start/index.html directly', async () => {
+    window.history.pushState({}, '', '/start/index.html');
+    render(<App />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Спросите GoalRail про AI-assisted delivery.' }),
+    ).toBeInTheDocument();
+  });
+
   it('fills the RU start input from a quick question without calling the assistant', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

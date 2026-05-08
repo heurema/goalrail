@@ -158,7 +158,8 @@ function isValidEmail(value: string) {
 }
 
 function isStartRoute() {
-  return window.location.pathname.replace(/\/+$/, '') === '/start';
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  return pathname === '/start' || pathname === '/start/index.html';
 }
 
 function PilotLanding() {
