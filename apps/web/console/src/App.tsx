@@ -27,17 +27,10 @@ import {
   isQualificationFeedClientError,
   listQualificationFeed,
 } from './qualificationFeedClient';
-import {
-  answerClarification,
-  continueGoal,
-  draftContract,
-  isGoalActionsClientError,
-} from './goalActionsClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
 import type {
   QualificationFeedItem,
-  QualificationFeedQuestion,
   QualificationFeedResponse,
   QualificationLane,
 } from './qualificationFeedClient';
@@ -55,8 +48,6 @@ type UsersLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type RepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
 type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
-type QualificationAnswerDrafts = Record<string, Record<string, string>>;
-type QualificationAnswerErrors = Record<string, string>;
 type AuthStatus =
   | 'unauthenticated'
   | 'logging_in'
@@ -96,7 +87,6 @@ const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
 const QUALIFICATION_FEED_LIMIT = 50;
 const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
 const QUALIFICATION_FEED_LANES = ['qualification', 'clarification', 'contract', 'blocked'] as const;
-const TEXT_CLARIFICATION_MAPPINGS = new Set(['goal.summary', 'goal.scope_hint', 'goal.acceptance_hint']);
 const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
 const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
 const USER_STATUSES: OrganizationUserState[] = ['active', 'inactive'];
@@ -268,19 +258,6 @@ function qualificationFeedErrorMessage(error: unknown, t: (key: string, options?
   return t('qualificationFeed.errors.generic');
 }
 
-function goalActionErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
-  if (isGoalActionsClientError(error)) {
-    const translated = t(`qualificationFeed.errors.${error.code}`);
-    if (translated !== `qualificationFeed.errors.${error.code}`) {
-      return translated;
-    }
-
-    return error.status ? t('qualificationFeed.errors.genericWithStatus', { status: error.status }) : t('qualificationFeed.errors.generic');
-  }
-
-  return t('qualificationFeed.errors.generic');
-}
-
 function normalizedPathname() {
   if (typeof window === 'undefined') {
     return '';
@@ -337,10 +314,6 @@ function ConsoleApp() {
   const [qualificationFeed, setQualificationFeed] = useState<QualificationFeedResponse>({ items: [] });
   const [qualificationFeedLoadStatus, setQualificationFeedLoadStatus] = useState<QualificationFeedLoadStatus>('idle');
   const [qualificationFeedError, setQualificationFeedError] = useState('');
-  const [qualificationActionGoalId, setQualificationActionGoalId] = useState<string | null>(null);
-  const [qualificationActionError, setQualificationActionError] = useState('');
-  const [qualificationAnswerDrafts, setQualificationAnswerDrafts] = useState<QualificationAnswerDrafts>({});
-  const [qualificationAnswerErrors, setQualificationAnswerErrors] = useState<QualificationAnswerErrors>({});
   const [formError, setFormError] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState<OneTimeTemporaryPassword | null>(null);
   const [contractIdInput, setContractIdInput] = useState('');
@@ -397,8 +370,18 @@ function ConsoleApp() {
     let cancelled = false;
     let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
 
+    function scheduleNextPoll() {
+      timeoutId = window.setTimeout(() => {
+        void poll(false);
+      }, QUALIFICATION_FEED_POLL_INTERVAL_MS);
+    }
+
     async function poll(showLoading: boolean) {
       if (cancelled) {
+        return;
+      }
+      if (document.hidden) {
+        scheduleNextPoll();
         return;
       }
       const loadSequence = qualificationFeedLoadSequence.current + 1;
@@ -432,17 +415,28 @@ function ConsoleApp() {
         setQualificationFeedError(qualificationFeedErrorMessage(error, translate));
       } finally {
         if (!cancelled) {
-          timeoutId = window.setTimeout(() => {
-            void poll(false);
-          }, QUALIFICATION_FEED_POLL_INTERVAL_MS);
+          scheduleNextPoll();
         }
       }
     }
 
+    function handleVisibilityChange() {
+      if (cancelled || document.hidden) {
+        return;
+      }
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+      void poll(false);
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     void poll(qualificationFeedLoadStatus === 'idle');
 
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       qualificationFeedLoadSequence.current += 1;
       if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId);
@@ -605,10 +599,6 @@ function ConsoleApp() {
     setQualificationFeed({ items: [] });
     setQualificationFeedLoadStatus('idle');
     setQualificationFeedError('');
-    setQualificationActionGoalId(null);
-    setQualificationActionError('');
-    setQualificationAnswerDrafts({});
-    setQualificationAnswerErrors({});
     setFormError('');
     setTemporaryPassword(null);
     setResetTarget(null);
@@ -622,7 +612,11 @@ function ConsoleApp() {
 
   async function handleContractLookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const contractId = contractIdInput.trim();
+    await loadContractById(contractIdInput);
+  }
+
+  async function loadContractById(contractIdValue: string) {
+    const contractId = contractIdValue.trim();
     const accessToken = tokens?.accessToken;
 
     if (!contractId) {
@@ -670,6 +664,17 @@ function ConsoleApp() {
       setContractLoadStatus('error');
       setContractError(authErrorMessage(error, translate));
     }
+  }
+
+  async function openLinkedContract(contractId: string) {
+    const nextContractId = contractId.trim();
+    if (!nextContractId) {
+      return;
+    }
+    setScreen('console');
+    setActiveSurface('contracts');
+    setContractIdInput(nextContractId);
+    await loadContractById(nextContractId);
   }
 
   async function loadUsers() {
@@ -782,118 +787,6 @@ function ConsoleApp() {
 
       setQualificationFeedLoadStatus('error');
       setQualificationFeedError(qualificationFeedErrorMessage(error, translate));
-    }
-  }
-
-  function updateQualificationAnswer(goalId: string, questionId: string, value: string) {
-    setQualificationAnswerDrafts((currentDrafts) => ({
-      ...currentDrafts,
-      [goalId]: {
-        ...(currentDrafts[goalId] ?? {}),
-        [questionId]: value,
-      },
-    }));
-    setQualificationAnswerErrors((currentErrors) => {
-      if (!currentErrors[goalId]) {
-        return currentErrors;
-      }
-      const nextErrors = { ...currentErrors };
-      delete nextErrors[goalId];
-      return nextErrors;
-    });
-  }
-
-  async function handleQualificationAction(item: QualificationFeedItem) {
-    if (!item.next_action.available || !isSupportedQualificationAction(item)) {
-      return;
-    }
-
-    const accessToken = tokens?.accessToken;
-    if (!accessToken) {
-      resetAuthState();
-      setAuthError(translate('auth.invalidSession'));
-      return;
-    }
-
-    const mutationSessionSequence = authSessionSequence.current;
-    setQualificationActionGoalId(item.goal_id);
-    setQualificationActionError('');
-    setQualificationAnswerErrors((currentErrors) => {
-      if (!currentErrors[item.goal_id]) {
-        return currentErrors;
-      }
-      const nextErrors = { ...currentErrors };
-      delete nextErrors[item.goal_id];
-      return nextErrors;
-    });
-
-    try {
-      if (item.next_action.kind === 'continue_goal') {
-        await continueGoal({
-          accessToken,
-          goalId: item.goal_id,
-        });
-      } else if (item.next_action.kind === 'answer_clarification') {
-        const clarificationRequest = item.open_clarification_request;
-        const questions = clarificationRequest?.questions ?? [];
-        const answersByQuestionID = qualificationAnswerDrafts[item.goal_id] ?? {};
-        const unsupportedAnswer = questions.find((question) => !isSupportedClarificationQuestion(question));
-        if (unsupportedAnswer) {
-          setQualificationAnswerErrors((currentErrors) => ({
-            ...currentErrors,
-            [item.goal_id]: translate('qualificationFeed.unsupportedAnswer'),
-          }));
-          return;
-        }
-        const missingAnswer = questions.find((question) => !answersByQuestionID[question.id]?.trim());
-        if (!clarificationRequest || questions.length === 0 || missingAnswer) {
-          setQualificationAnswerErrors((currentErrors) => ({
-            ...currentErrors,
-            [item.goal_id]: translate('qualificationFeed.answerRequired'),
-          }));
-          return;
-        }
-
-        await answerClarification({
-          accessToken,
-          clarificationRequestId: clarificationRequest.id,
-          answers: questions.map((question) => ({
-            question_id: question.id,
-            value: (answersByQuestionID[question.id] ?? '').trim(),
-          })),
-        });
-      } else if (item.next_action.kind === 'draft_contract') {
-        await draftContract({
-          accessToken,
-          goalId: item.goal_id,
-        });
-      }
-      if (authSessionSequence.current !== mutationSessionSequence) {
-        return;
-      }
-      setQualificationAnswerDrafts((currentDrafts) => {
-        if (!currentDrafts[item.goal_id]) {
-          return currentDrafts;
-        }
-        const nextDrafts = { ...currentDrafts };
-        delete nextDrafts[item.goal_id];
-        return nextDrafts;
-      });
-      await loadQualificationFeedOnce();
-    } catch (error) {
-      if (authSessionSequence.current !== mutationSessionSequence) {
-        return;
-      }
-      if (isGoalActionsClientError(error) && error.code === 'unauthorized') {
-        resetAuthState();
-        setAuthError(translate('auth.invalidSession'));
-        return;
-      }
-      setQualificationActionError(goalActionErrorMessage(error, translate));
-    } finally {
-      if (authSessionSequence.current === mutationSessionSequence) {
-        setQualificationActionGoalId(null);
-      }
     }
   }
 
@@ -1316,14 +1209,9 @@ function ConsoleApp() {
           />
         ) : activeSurface === 'delivery-readiness' ? (
           <QualificationFeedSurfacePanel
-            actionError={qualificationActionError}
-            actionGoalId={qualificationActionGoalId}
-            answerDrafts={qualificationAnswerDrafts}
-            answerErrors={qualificationAnswerErrors}
             feed={qualificationFeed}
             loadStatus={qualificationFeedLoadStatus}
-            onAction={handleQualificationAction}
-            onAnswerChange={updateQualificationAnswer}
+            onOpenContract={openLinkedContract}
             onRetry={loadQualificationFeedOnce}
             qualificationFeedError={qualificationFeedError}
             t={translate}
@@ -2042,26 +1930,16 @@ function formatDateTime(value: string) {
 }
 
 function QualificationFeedSurfacePanel({
-  actionError,
-  actionGoalId,
-  answerDrafts,
-  answerErrors,
   feed,
   loadStatus,
-  onAction,
-  onAnswerChange,
+  onOpenContract,
   onRetry,
   qualificationFeedError,
   t,
 }: {
-  actionError: string;
-  actionGoalId: string | null;
-  answerDrafts: QualificationAnswerDrafts;
-  answerErrors: QualificationAnswerErrors;
   feed: QualificationFeedResponse;
   loadStatus: QualificationFeedLoadStatus;
-  onAction: (item: QualificationFeedItem) => void;
-  onAnswerChange: (goalId: string, questionId: string, value: string) => void;
+  onOpenContract: (contractId: string) => void;
   onRetry: () => void;
   qualificationFeedError: string;
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -2087,6 +1965,9 @@ function QualificationFeedSurfacePanel({
               {t(`qualificationFeed.lanes.${lane}`)}
             </span>
           ))}
+          <button className="ghostButton" onClick={onRetry} type="button">
+            {t('qualificationFeed.refresh')}
+          </button>
         </div>
       </header>
 
@@ -2098,12 +1979,6 @@ function QualificationFeedSurfacePanel({
           <button className="ghostButton" onClick={onRetry} type="button">
             {t('qualificationFeed.retry')}
           </button>
-        </div>
-      ) : null}
-
-      {actionError ? (
-        <div className="usersNotice usersNoticeError" role="alert">
-          <p>{actionError}</p>
         </div>
       ) : null}
 
@@ -2124,13 +1999,9 @@ function QualificationFeedSurfacePanel({
             <div className="qualificationCards">
               {laneItems.map((item) => (
                 <QualificationFeedCard
-                  answerDraft={answerDrafts[item.goal_id] ?? {}}
-                  answerError={answerErrors[item.goal_id] ?? ''}
-                  isActionPending={actionGoalId === item.goal_id}
                   item={item}
                   key={`${item.intake_id}-${item.goal_id}`}
-                  onAction={onAction}
-                  onAnswerChange={onAnswerChange}
+                  onOpenContract={onOpenContract}
                   t={t}
                 />
               ))}
@@ -2146,30 +2017,18 @@ function QualificationFeedSurfacePanel({
 }
 
 function QualificationFeedCard({
-  answerDraft,
-  answerError,
-  isActionPending,
   item,
-  onAction,
-  onAnswerChange,
+  onOpenContract,
   t,
 }: {
-  answerDraft: Record<string, string>;
-  answerError: string;
-  isActionPending: boolean;
   item: QualificationFeedItem;
-  onAction: (item: QualificationFeedItem) => void;
-  onAnswerChange: (goalId: string, questionId: string, value: string) => void;
+  onOpenContract: (contractId: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const questionCount = item.open_clarification_request?.questions.length ?? 0;
   const readinessReasonCodes = item.readiness.reason_codes ?? [];
   const contractState = item.linked_contract ? t(`contractStates.${item.linked_contract.state}`) : t('qualificationFeed.noContract');
-  const actionSupported = isSupportedQualificationAction(item);
-  const actionDisabled = isActionPending || !item.next_action.available || !actionSupported;
-  const unsupportedQuestion = item.next_action.kind === 'answer_clarification'
-    ? item.open_clarification_request?.questions.find((question) => !isSupportedClarificationQuestion(question))
-    : undefined;
+  const primaryStatus = qualificationPrimaryStatus(item);
 
   return (
     <article className={`qualificationCard ${qualificationTone(item.lane)}`}>
@@ -2192,8 +2051,8 @@ function QualificationFeedCard({
         <span className={item.readiness.ready ? 'opsPill pass' : 'opsPill amber'}>
           {item.readiness.ready ? t('qualificationFeed.ready') : t('qualificationFeed.notReady')}
         </span>
-        <span className={item.next_action.blocking ? 'opsPill amber' : 'opsPill muted'}>
-          {t(`qualificationFeed.actions.${item.next_action.kind}`)}
+        <span className={`opsPill ${primaryStatus === 'contractLinked' ? 'pass' : primaryStatus === 'blocked' || primaryStatus === 'needsAnswer' ? 'amber' : 'muted'}`}>
+          {t(`qualificationFeed.readOnlyStates.${primaryStatus}`)}
         </span>
       </div>
 
@@ -2210,81 +2069,45 @@ function QualificationFeedCard({
         <span>{formatDateTime(item.created_at)}</span>
       </footer>
 
-      {item.next_action.kind === 'answer_clarification' && item.open_clarification_request ? (
-        <div className="qualificationAnswerForm">
-          {item.open_clarification_request.questions.map((question) => {
-            const questionSupported = isSupportedClarificationQuestion(question);
-            return (
-              <label className="qualificationAnswerField" key={question.id}>
-                <span>{question.text}</span>
-                <small>{question.why_needed || question.maps_to}</small>
-                {questionSupported ? (
-                  <textarea
-                    aria-label={question.text}
-                    disabled={isActionPending}
-                    onChange={(event) => onAnswerChange(item.goal_id, question.id, event.target.value)}
-                    rows={3}
-                    value={answerDraft[question.id] ?? ''}
-                  />
-                ) : (
-                  <textarea
-                    aria-label={question.text}
-                    disabled
-                    readOnly
-                    rows={2}
-                    value={unsupportedClarificationQuestionMessage(question, t)}
-                  />
-                )}
-              </label>
-            );
-          })}
-          {unsupportedQuestion ? (
-            <p className="fieldMessage qualificationAnswerUnsupported">{t('qualificationFeed.unsupportedAnswer')}</p>
-          ) : null}
-          {answerError ? <p className="fieldMessage qualificationAnswerError" role="alert">{answerError}</p> : null}
+      {item.open_clarification_request ? (
+        <div className="qualificationQuestionList" aria-label={t('qualificationFeed.questions')}>
+          <span>{t('qualificationFeed.questions')}</span>
+          {item.open_clarification_request.questions.map((question) => (
+            <div className="qualificationQuestion" key={question.id}>
+              <b>{question.text}</b>
+              <small>{question.why_needed || question.maps_to}</small>
+            </div>
+          ))}
         </div>
       ) : null}
 
-      {item.next_action.kind !== 'none' ? (
+      {item.linked_contract ? (
         <button
-          className="qualificationActionButton"
-          disabled={actionDisabled}
-          onClick={() => onAction(item)}
+          className="qualificationNavigationButton"
+          onClick={() => onOpenContract(item.linked_contract?.id ?? '')}
           type="button"
         >
-          {isActionPending ? t('qualificationFeed.actionRunning') : t(`qualificationFeed.actions.${item.next_action.kind}`)}
+          {t('qualificationFeed.openContract')}
         </button>
       ) : null}
     </article>
   );
 }
 
-function isSupportedQualificationAction(item: QualificationFeedItem) {
-  if (item.next_action.kind === 'continue_goal') {
-    return true;
+function qualificationPrimaryStatus(item: QualificationFeedItem) {
+  if (item.linked_contract) {
+    return 'contractLinked';
   }
-  if (item.next_action.kind === 'draft_contract') {
-    return true;
+  if (item.lane === 'blocked' || item.goal_state === 'rejected' || item.next_action.kind === 'blocked') {
+    return 'blocked';
   }
-  if (item.next_action.kind === 'answer_clarification') {
-    const questions = item.open_clarification_request?.questions ?? [];
-    return questions.length > 0 && questions.every((question) => isSupportedClarificationQuestion(question));
+  if (item.open_clarification_request || item.next_action.kind === 'answer_clarification') {
+    return 'needsAnswer';
   }
-  return false;
-}
-
-function isSupportedClarificationQuestion(question: QualificationFeedQuestion) {
-  return question.answer_type === 'text' && TEXT_CLARIFICATION_MAPPINGS.has(question.maps_to);
-}
-
-function unsupportedClarificationQuestionMessage(
-  question: QualificationFeedQuestion,
-  t: (key: string, options?: Record<string, unknown>) => string
-) {
-  if (question.maps_to === 'goal.intent_owner') {
-    return t('qualificationFeed.actorSelectionRequired');
+  if (item.readiness.ready || item.goal_state === 'ready_for_contract_seed') {
+    return 'readyForContract';
   }
-  return t('qualificationFeed.unsupportedQuestion');
+  return 'needsQualification';
 }
 
 function qualificationBoardLane(item: QualificationFeedItem): (typeof QUALIFICATION_FEED_LANES)[number] {

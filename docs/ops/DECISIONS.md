@@ -2459,8 +2459,9 @@ Primary status model:
   should not show seconds, raw ISO/RFC3339 strings, or timezone-heavy values.
 
 Current implementation note:
-- This is a product/UX boundary decision and future implementation target. It
-  does not claim the current Console has already removed mutation controls.
+- The first bounded frontend implementation slice has removed production
+  Delivery Readiness mutation controls from the Console while preserving
+  read-only feed polling and linked-contract navigation.
 
 Explicit non-goals:
 - no daemon in this slice

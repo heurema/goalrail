@@ -18,6 +18,7 @@ apps/runner/goalrail-runner
 .vscode/
 .playwright-mcp/
 .goalrail/public-kb/dist/
+.signum/
 
 # Punk publishing runtime artifacts
 .punk/publishing/
