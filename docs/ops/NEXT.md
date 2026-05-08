@@ -134,11 +134,13 @@
   permission to clone; the API server stores no repository secrets in the MVP.
 - H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
   coverage now pins `work checkout prepare` through runner checkout lease and
-  persisted `CheckoutReceipt`. The next bounded delivery-runtime slice must
-  be H2.2 runner execution lease plus explicit `Run` start with lease proof,
-  not command execution. WorkItems still remain `planned`; assignment,
-  claiming, command execution, execution receipt, gate, and proof are still
-  deferred.
+  persisted `CheckoutReceipt`. H2.1 execution preparation is implemented, and
+  H2.1+ smoke coverage now pins the path from `CheckoutReceipt` to
+  `ExecutionJob(queued)` without `Run`, execution receipt, gate, or proof. The
+  next bounded delivery-runtime slice must be H2.2 runner execution lease plus
+  explicit `Run` start with lease proof, not command execution. WorkItems still
+  remain `planned`; assignment, claiming, command execution, execution receipt,
+  gate, and proof are still deferred.
 - Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
   provider OAuth, VcsConnection, token storage, provider clients, live metadata
   listing, `Run`, and execution receipt behavior remain deferred.
@@ -853,7 +855,9 @@ Done means:
      live metadata listing, actual clone/fetch checkout implementation,
      assignment, claiming, `Run`, execution, gate, or proof
 3. Run / execution receipt boundary
-   - NEXT implementation target after ADR-0029
+   - H2.1 implemented `ExecutionJob(queued)` preparation from
+     `WorkItem(planned)` plus `CheckoutReceipt`; H2.1+ smoke coverage pins that
+     regression baseline
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 )
@@ -252,6 +253,51 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 	}
 	if len(server.checkoutReceipts.receipts) != 1 {
 		t.Fatalf("checkout receipts = %d, want 1", len(server.checkoutReceipts.receipts))
+	}
+	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
+
+	executionJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"checkout_receipt_id":%q}`, contextProjectID, contextRepoBindingID, receipt.ID))
+	if executionJobResponse.code != http.StatusCreated {
+		t.Fatalf("execution job status = %d, want %d: %s", executionJobResponse.code, http.StatusCreated, executionJobResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(executionJobResponse.body, forbidden) {
+			t.Fatalf("execution job response exposes forbidden field %s: %s", forbidden, executionJobResponse.body)
+		}
+	}
+	var executionJob spine.ExecutionJob
+	decodeJSON(t, executionJobResponse.body, &executionJob)
+	if executionJob.TaskID != taskID || executionJob.CheckoutReceiptID != receipt.ID || executionJob.CheckoutJobID != checkoutJob.ID || executionJob.State != spine.ExecutionJobStateQueued {
+		t.Fatalf("execution job = %#v, want queued job for task/checkout receipt", executionJob)
+	}
+	if executionJob.ContractID != contract.ID || executionJob.PlanID != plan.ID || executionJob.ProposalID != proposal.ID || executionJob.RepoBindingID != contextRepoBindingID {
+		t.Fatalf("execution job trace = %#v, want contract/plan/proposal/repo trace", executionJob)
+	}
+	storedTaskAfterExecutionPrepare, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get(%s) after execution prepare = %#v/%v/%v", taskID, storedTaskAfterExecutionPrepare, ok, err)
+	}
+	if storedTaskAfterExecutionPrepare.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("work item status = %q, want planned after execution job prepare", storedTaskAfterExecutionPrepare.Status)
+	}
+	if len(server.executionJobs.jobs) != 1 {
+		t.Fatalf("execution jobs = %d, want 1", len(server.executionJobs.jobs))
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionJobCreated); got != 1 {
+		t.Fatalf("execution_job.created events = %d, want 1", got)
+	}
+
+	secondExecutionJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"checkout_receipt_id":%q}`, contextProjectID, contextRepoBindingID, receipt.ID))
+	if secondExecutionJobResponse.code != http.StatusOK {
+		t.Fatalf("second execution job status = %d, want %d: %s", secondExecutionJobResponse.code, http.StatusOK, secondExecutionJobResponse.body)
+	}
+	var existingExecutionJob spine.ExecutionJob
+	decodeJSON(t, secondExecutionJobResponse.body, &existingExecutionJob)
+	if existingExecutionJob.ID != executionJob.ID || len(server.executionJobs.jobs) != 1 {
+		t.Fatalf("existing execution job id/count = %q/%d, want %q/1", existingExecutionJob.ID, len(server.executionJobs.jobs), executionJob.ID)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionJobCreated); got != 1 {
+		t.Fatalf("execution_job.created events = %d, want no duplicate event", got)
 	}
 	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
 }
