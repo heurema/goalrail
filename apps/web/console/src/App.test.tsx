@@ -112,6 +112,41 @@ function contractResponse(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function contractDraftResponse(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: '018f0000-0000-7000-8000-000000000104',
+    contract_id: '018f0000-0000-7000-8000-000000000101',
+    contract_seed_id: '018f0000-0000-7000-8000-000000000103',
+    goal_id: '018f0000-0000-7000-8000-000000000102',
+    repo_binding_id: '018f0000-0000-7000-8000-000000000004',
+    title: 'Render selected contract current draft',
+    intent_summary: 'Show the draft body from the read-only current draft endpoint.',
+    proposed_scope: ['Render draft title and body'],
+    proposed_non_goals: ['Do not add lifecycle mutation controls'],
+    proposed_constraints: ['Keep the Console read-only'],
+    proposed_acceptance_criteria: ['Draft fields render in selected detail'],
+    proposed_expected_checks: ['npm --prefix apps/web/console run test'],
+    proposed_proof_expectations: ['Validation commands pass'],
+    risk_hints: ['Keep aggregate detail visible on draft errors'],
+    source_refs: [{ kind: 'contract_seed', id: '018f0000-0000-7000-8000-000000000103' }],
+    state: 'draft',
+    created_at: '2026-05-08T10:00:00Z',
+    ...overrides,
+  };
+}
+
+function draftResponseForContract(contractRecord: unknown, overrides: Partial<Record<string, unknown>> = {}) {
+  const record = contractRecord as Record<string, unknown>;
+  return contractDraftResponse({
+    id: String(record.current_draft_id ?? '018f0000-0000-7000-8000-000000000104'),
+    contract_id: String(record.id ?? '018f0000-0000-7000-8000-000000000101'),
+    contract_seed_id: String(record.current_seed_id ?? '018f0000-0000-7000-8000-000000000103'),
+    goal_id: String(record.goal_id ?? '018f0000-0000-7000-8000-000000000102'),
+    repo_binding_id: String(record.repo_binding_id ?? '018f0000-0000-7000-8000-000000000004'),
+    ...overrides,
+  });
+}
+
 function contractListResponse(contracts: unknown[] = []) {
   return {
     contracts,
@@ -251,11 +286,20 @@ async function setLocale(locale: 'en' | 'ru') {
   document.documentElement.lang = locale;
 }
 
-async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'owner', contracts: unknown[] = []) {
+async function loginSuccessfully(
+  locale: 'en' | 'ru' = 'en',
+  membershipRole = 'owner',
+  contracts: unknown[] = [],
+  initialDraftOverrides: Partial<Record<string, unknown>> | null = {}
+) {
   await setLocale(locale);
   fetchMock.mockResolvedValueOnce(jsonResponse(loginResponse()));
   fetchMock.mockResolvedValueOnce(jsonResponse(meResponse({ role: membershipRole })));
   fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse(contracts)));
+  const firstContract = contracts[0] as Record<string, unknown> | undefined;
+  if (firstContract?.current_draft_id && initialDraftOverrides !== null) {
+    fetchMock.mockResolvedValueOnce(jsonResponse(draftResponseForContract(firstContract, initialDraftOverrides)));
+  }
   render(<App />);
 
   fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'owner@example.com' } });
@@ -278,12 +322,20 @@ async function flushAsyncWork() {
   });
 }
 
-async function restartContractsPollingWithFakeTimers(contracts: unknown[] = [], detail?: unknown) {
+async function restartContractsPollingWithFakeTimers(
+  contracts: unknown[] = [],
+  detail?: unknown,
+  draftOverrides: Partial<Record<string, unknown>> | null = {}
+) {
   fireEvent.click(screen.getByRole('button', { name: /settings/i }));
   vi.useFakeTimers();
   fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse(contracts)));
   if (detail) {
     fetchMock.mockResolvedValueOnce(jsonResponse(detail));
+    const detailRecord = detail as Record<string, unknown>;
+    if (detailRecord.current_draft_id && draftOverrides !== null) {
+      fetchMock.mockResolvedValueOnce(jsonResponse(draftResponseForContract(detailRecord, draftOverrides)));
+    }
   }
   fireEvent.click(screen.getByRole('button', { name: /^Contracts$/i }));
   await flushAsyncWork();
@@ -741,12 +793,13 @@ describe('App', () => {
     );
 
     fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse()));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse()));
     fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
       target: { value: '018f0000-0000-7000-8000-000000000101' },
     });
     fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
 
-    await screen.findByText('018f0000-0000-7000-8000-000000000104');
+    await screen.findByText('Render selected contract current draft');
     expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/018f0000-0000-7000-8000-000000000101');
     expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
@@ -801,7 +854,7 @@ describe('App', () => {
     expect(contractList).toHaveTextContent('Approved');
     expect(contractList).toHaveTextContent(/May|Today|Yesterday|ago|just now/);
     expect(contractList).not.toHaveTextContent(/2026-05-08T10:00:00Z|2026-05-07T09:10:00Z/);
-    expect(screen.getByText('draft-list-draft')).toBeInTheDocument();
+    expect(screen.getAllByText('draft-list-draft').length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
   });
 
@@ -816,6 +869,11 @@ describe('App', () => {
         current_draft_id: 'draft-refreshed',
       }),
     ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-refreshed',
+      contract_id: 'contract-refreshed',
+      goal_id: 'goal-refreshed',
+    })));
 
     await act(async () => {
       vi.advanceTimersByTime(5000);
@@ -847,6 +905,10 @@ describe('App', () => {
         current_draft_id: 'draft-filter-refresh',
       }),
     ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-filter-refresh',
+      contract_id: 'contract-filter-refresh',
+    })));
 
     await act(async () => {
       vi.advanceTimersByTime(5000);
@@ -885,6 +947,11 @@ describe('App', () => {
         current_draft_id: 'draft-visible-again',
       }),
     ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-visible-again',
+      contract_id: 'contract-visible-again',
+      goal_id: 'goal-visible-again',
+    })));
     Object.defineProperty(document, 'hidden', {
       configurable: true,
       value: false,
@@ -901,7 +968,7 @@ describe('App', () => {
     expectNoWorkflowMutationRequests();
   });
 
-  it('renders selected contract detail as an aggregate-only read-only panel', async () => {
+  it('renders selected contract detail with the current draft body as read-only content', async () => {
     await loginSuccessfully('en', 'owner', [
       contractResponse({
         id: 'contract-ready-detail',
@@ -914,11 +981,31 @@ describe('App', () => {
         created_at: '2024-01-02T03:04:05Z',
         updated_at: '2024-01-03T04:05:06Z',
       }),
-    ]);
+    ], {
+      id: 'draft-ready-detail',
+      contract_id: 'contract-ready-detail',
+      contract_seed_id: 'seed-ready-detail',
+      goal_id: 'goal-ready-detail',
+      repo_binding_id: 'repo-ready-detail',
+      title: 'Draft title for ready detail',
+      intent_summary: 'Intent summary for the read-only selected draft.',
+      proposed_scope: ['Render proposed scope item'],
+      proposed_non_goals: ['Do not add approve controls'],
+      proposed_constraints: ['Keep browser state read-only'],
+      proposed_acceptance_criteria: ['Acceptance criterion is visible'],
+      proposed_expected_checks: ['Expected check is visible'],
+      proposed_proof_expectations: ['Proof expectation is visible'],
+      risk_hints: ['Risk hint is visible'],
+      source_refs: [{ kind: 'contract_seed', id: 'seed-ready-detail' }],
+      state: 'ready_for_approval',
+      created_at: '2024-01-04T05:06:07Z',
+    });
 
     const detail = screen.getByLabelText(/selected contract detail/i);
     const workspace = screen.getByLabelText(/contract workspace/i);
     const primaryStatus = within(detail).getByLabelText(/lifecycle status/i);
+    await screen.findByText('Draft title for ready detail');
+    const draftDetail = screen.getByLabelText(/current draft detail/i);
 
     expect(primaryStatus).toHaveTextContent('Ready for approval');
     expect(within(detail).getAllByText('Ready for approval')).toHaveLength(1);
@@ -931,11 +1018,38 @@ describe('App', () => {
     expect(detail).toHaveTextContent('2 Jan');
     expect(detail).toHaveTextContent('3 Jan');
     expect(detail).not.toHaveTextContent(/2024-01-02T03:04:05Z|2024-01-03T04:05:06Z|03:04:05|04:05:06/);
-    expect(workspace).toHaveTextContent('Draft body details are not exposed by this API slice yet.');
+    expect(draftDetail).toHaveTextContent('Draft title for ready detail');
+    expect(draftDetail).toHaveTextContent('Intent summary for the read-only selected draft.');
+    expect(draftDetail).toHaveTextContent('Render proposed scope item');
+    expect(draftDetail).toHaveTextContent('Do not add approve controls');
+    expect(draftDetail).toHaveTextContent('Keep browser state read-only');
+    expect(draftDetail).toHaveTextContent('Acceptance criterion is visible');
+    expect(draftDetail).toHaveTextContent('Expected check is visible');
+    expect(draftDetail).toHaveTextContent('Proof expectation is visible');
+    expect(draftDetail).toHaveTextContent('Risk hint is visible');
+    expect(draftDetail).toHaveTextContent('contract_seed');
+    expect(draftDetail).toHaveTextContent('seed-ready-detail');
+    expect(draftDetail).toHaveTextContent('4 Jan');
+    expect(draftDetail).not.toHaveTextContent(/2024-01-04T05:06:07Z|05:06:07/);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/contract-ready-detail/current-draft');
     expect(workspace).toHaveTextContent('Task, execution, gate, and proof data are not available in this Console view yet.');
     expect(workspace).not.toHaveTextContent(
       /Execution evidence|Work items|Stage controls|Record activity|Active stage|Queued proof|Active execution|Runner state|Task plan|Gate decision|Contract state meters/i
     );
+  });
+
+  it('does not call current draft detail when the selected Contract has no current_draft_id', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-without-draft',
+        goal_id: 'goal-without-draft',
+        current_draft_id: undefined,
+      }),
+    ]);
+
+    expect(await screen.findByText('No current draft is linked yet.')).toBeInTheDocument();
+    expect(screen.getAllByText('contract-without-draft').length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => url.includes('/current-draft'))).toBe(false);
   });
 
   it('selecting a contract row loads selected detail through the read-only contract endpoint', async () => {
@@ -958,20 +1072,55 @@ describe('App', () => {
       state: 'approved',
       current_draft_id: 'draft-list-approved-detail',
     })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-list-approved-detail',
+      contract_id: 'contract-list-approved',
+      goal_id: 'goal-list-approved',
+      title: 'Approved row draft title',
+      intent_summary: 'Approved row draft intent summary.',
+    })));
 
     const contractList = screen.getByLabelText(/contracts list/i);
     fireEvent.click(within(contractList).getByRole('button', { name: /contract-list-approved/i }));
 
-    expect(await screen.findByText('draft-list-approved-detail')).toBeInTheDocument();
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-list-approved');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(await screen.findByText('Approved row draft title')).toBeInTheDocument();
+    const selectedDetailCall = fetchMock.mock.calls.find(([url]) => String(url) === '/v1/contracts/contract-list-approved');
+    const selectedDraftCall = fetchMock.mock.calls.find(([url]) => String(url) === '/v1/contracts/contract-list-approved/current-draft');
+    expect(selectedDetailCall).toBeDefined();
+    expect(selectedDetailCall?.[1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
         headers: { Authorization: 'Bearer access-token' },
       })
     );
+    expect(selectedDraftCall).toBeDefined();
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts\/contract-list-approved\/(submissions|approvals|plans)/.test(url))).toBe(false);
+  });
+
+  it.each([
+    ['invalid_state', 409],
+    ['not_found', 404],
+  ])('shows an honest unavailable draft message for %s without clearing aggregate detail', async (code, status) => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
+      id: `contract-draft-${code}`,
+      goal_id: `goal-draft-${code}`,
+      repo_binding_id: `repo-draft-${code}`,
+      current_draft_id: `draft-${code}`,
+    })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope(code), status));
+
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: `contract-draft-${code}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    expect(await screen.findByText('Current draft is unavailable for this Contract.')).toBeInTheDocument();
+    const detail = screen.getByLabelText(/selected contract detail/i);
+    expect(detail).toHaveTextContent(`contract-draft-${code}`);
+    expect(detail).toHaveTextContent(`goal-draft-${code}`);
+    expect(detail).toHaveTextContent(`repo-draft-${code}`);
   });
 
   it('periodically refreshes selected Contract detail through the read-only detail endpoint', async () => {
@@ -993,7 +1142,7 @@ describe('App', () => {
       goal_id: 'goal-selected-refresh',
       current_draft_id: 'draft-before-refresh',
     }));
-    expect(screen.getByText('draft-before-refresh')).toBeInTheDocument();
+    expect(screen.getAllByText('draft-before-refresh').length).toBeGreaterThan(0);
     fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
       contractResponse({
         id: 'contract-selected-refresh',
@@ -1006,6 +1155,13 @@ describe('App', () => {
       goal_id: 'goal-selected-refresh',
       current_draft_id: 'draft-after-refresh',
     })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-after-refresh',
+      contract_id: 'contract-selected-refresh',
+      goal_id: 'goal-selected-refresh',
+      title: 'Draft after scheduled refresh',
+      intent_summary: 'Scheduled refresh fetched the current draft body.',
+    })));
 
     await act(async () => {
       vi.advanceTimersByTime(5000);
@@ -1013,8 +1169,9 @@ describe('App', () => {
     });
     await flushAsyncWork();
 
-    expect(screen.getByText('draft-after-refresh')).toBeInTheDocument();
+    expect(screen.getByText('Draft after scheduled refresh')).toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/contract-selected-refresh');
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/contract-selected-refresh/current-draft');
     expectNoWorkflowMutationRequests();
   });
 
@@ -1052,8 +1209,66 @@ describe('App', () => {
     });
     await flushAsyncWork();
 
-    expect(screen.getByText('draft-detail-stable')).toBeInTheDocument();
+    expect(screen.getAllByText('draft-detail-stable').length).toBeGreaterThan(0);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps the visible current draft body on transient scheduled draft refresh errors', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-draft-stable',
+        goal_id: 'goal-draft-stable',
+        current_draft_id: 'draft-body-stable',
+      }),
+    ], {
+      id: 'draft-body-stable',
+      contract_id: 'contract-draft-stable',
+      goal_id: 'goal-draft-stable',
+      title: 'Stable draft body title',
+      intent_summary: 'Stable draft body intent summary.',
+    });
+    await restartContractsPollingWithFakeTimers([
+      contractResponse({
+        id: 'contract-draft-stable',
+        goal_id: 'goal-draft-stable',
+        current_draft_id: 'draft-body-stable',
+      }),
+    ], contractResponse({
+      id: 'contract-draft-stable',
+      goal_id: 'goal-draft-stable',
+      current_draft_id: 'draft-body-stable',
+    }), {
+      id: 'draft-body-stable',
+      contract_id: 'contract-draft-stable',
+      goal_id: 'goal-draft-stable',
+      title: 'Stable draft body title',
+      intent_summary: 'Stable draft body intent summary.',
+    });
+    expect(screen.getByText('Stable draft body title')).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-draft-stable',
+        goal_id: 'goal-draft-stable',
+        current_draft_id: 'draft-body-stable',
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
+      id: 'contract-draft-stable',
+      goal_id: 'goal-draft-stable',
+      current_draft_id: 'draft-body-stable',
+    })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('server_error'), 503));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByText('Stable draft body title')).toBeInTheDocument();
+    expect(screen.getByText('Stable draft body intent summary.')).toBeInTheDocument();
+    expect(screen.queryByText('Goalrail server returned an error. Code: 503.')).not.toBeInTheDocument();
     expectNoWorkflowMutationRequests();
   });
 
@@ -1108,6 +1323,12 @@ describe('App', () => {
         current_draft_id: 'draft-ready',
       }),
     ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractDraftResponse({
+      id: 'draft-ready',
+      contract_id: 'contract-ready',
+      goal_id: 'goal-ready',
+      title: 'Filtered contract draft title',
+    })));
 
     fireEvent.change(screen.getByLabelText(/^State$/i), {
       target: { value: 'ready_for_approval' },
@@ -1117,7 +1338,7 @@ describe('App', () => {
       expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?state=ready_for_approval&limit=50');
     });
     expect(within(screen.getByLabelText(/contracts list/i)).getByText('contract-ready')).toBeInTheDocument();
-    expect(screen.getByText('draft-ready')).toBeInTheDocument();
+    expect(screen.getByText('Filtered contract draft title')).toBeInTheDocument();
     const requestURLs = fetchMock.mock.calls.map(([url]) => String(url));
     expect(requestURLs.some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
     expect(requestURLs.some((url) => /\/v1\/contracts\/.*\/(submissions|approvals|plans)/.test(url))).toBe(false);
@@ -1140,7 +1361,7 @@ describe('App', () => {
     const contractList = screen.getByLabelText(/contracts list/i);
     expect(contractList).toHaveTextContent('contract-stable');
     expect(contractList).toHaveTextContent('goal-stable');
-    expect(screen.getByText('draft-stable')).toBeInTheDocument();
+    expect(screen.getAllByText('draft-stable').length).toBeGreaterThan(0);
   });
 
   it('loads the qualification feed with one primary status, calm timestamps, and no action calls', async () => {
@@ -1522,21 +1743,39 @@ describe('App', () => {
     expect(contractLane).toHaveTextContent('Draft');
     expect(contractLane).toHaveTextContent('Contract linked');
 
-    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
-      id: 'contract-linked',
-      goal_id: 'goal-linked',
-      current_draft_id: 'draft-linked',
-    })));
-    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
-      contractResponse({
-        id: 'contract-linked',
-        goal_id: 'goal-linked',
-        current_draft_id: 'draft-linked',
-      }),
-    ])));
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const requestURL = String(url);
+      if (requestURL === '/v1/contracts/contract-linked') {
+        return Promise.resolve(jsonResponse(contractResponse({
+          id: 'contract-linked',
+          goal_id: 'goal-linked',
+          current_draft_id: 'draft-linked',
+        })));
+      }
+      if (requestURL === '/v1/contracts/contract-linked/current-draft') {
+        return Promise.resolve(jsonResponse(contractDraftResponse({
+          id: 'draft-linked',
+          contract_id: 'contract-linked',
+          goal_id: 'goal-linked',
+          title: 'Linked contract draft title',
+          intent_summary: 'Linked contract draft intent summary.',
+        })));
+      }
+      if (requestURL === '/v1/contracts?limit=50') {
+        return Promise.resolve(jsonResponse(contractListResponse([
+          contractResponse({
+            id: 'contract-linked',
+            goal_id: 'goal-linked',
+            current_draft_id: 'draft-linked',
+          }),
+        ])));
+      }
+
+      return Promise.resolve(jsonResponse(contractListResponse([])));
+    });
     fireEvent.click(within(contractLane).getByRole('button', { name: /^Open contract$/i }));
 
-    expect(await screen.findByText('draft-linked')).toBeInTheDocument();
+    expect(await screen.findByText('Linked contract draft title')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
     const linkedContractDetailCall = fetchMock.mock.calls.find(([url]) => String(url) === '/v1/contracts/contract-linked');
     expect(linkedContractDetailCall).toBeDefined();
