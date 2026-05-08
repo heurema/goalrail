@@ -166,6 +166,25 @@
   not appear in Console yet; current CLI `work start` treats that as a
   command/server failure, and a later received-intake lane or recovery feed can
   be added if this becomes operationally relevant.
+- Planned Console Goal / Contract dashboard alignment: D-0091 now records the
+  production direction as
+  `Agent -> Goalrail CLI -> Goalrail Server canonical state -> Console read-only dashboard`.
+  The current Console prototype still has explicit user-triggered mutation
+  actions; the later bounded implementation slice should remove those
+  production controls and keep Delivery Readiness / Contracts as read-only
+  Intent & Oversight surfaces. Planned behavior is simple frontend periodic
+  polling of read-only endpoints, not true long polling, SSE, WebSocket,
+  daemon, or event stream: initial authenticated refresh, repeat about every
+  5-10 seconds in an active tab, pause/reduce while hidden, keep manual Refresh
+  as fallback, and keep existing visible state on transient errors. The minimum
+  feed remains `GET /v1/qualification-feed?limit=50`; selected Contract detail
+  uses `GET /v1/contracts/{id}`; optional future contract discovery should
+  prefer authenticated, organization-scoped, read-only filtered
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
+  Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
+  activity timeline, UI clarification answer forms, or fake Proof/readiness
+  data in that slice. Future `Agent working` requires a real daemon/status
+  heartbeat source of truth and remains deferred.
 - H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
   coverage now pins `work checkout prepare` through runner checkout lease and
   persisted `CheckoutReceipt`. H2.1 execution preparation is implemented, and
