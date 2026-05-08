@@ -57,6 +57,7 @@ type ContractListLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractListStateFilter = ContractStateFilter | 'all';
 type ContractSelectionSource = 'auto' | 'list' | 'manual' | 'linked' | null;
 type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type ReadOnlyLoadResult = 'loaded' | 'error' | 'not_found' | 'skipped' | 'stale' | 'unauthorized';
 type AuthStatus =
   | 'unauthenticated'
   | 'logging_in'
@@ -95,6 +96,7 @@ interface ThemePreset {
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
 const CONTRACT_LIST_LIMIT = 50;
 const CONTRACT_STATE_FILTERS: ContractListStateFilter[] = ['all', 'draft', 'ready_for_approval', 'approved', 'seeded'];
+const CONTRACT_REFRESH_INTERVAL_MS = 5000;
 const QUALIFICATION_FEED_LIMIT = 50;
 const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
 const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
@@ -360,9 +362,12 @@ function ConsoleApp() {
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
   const contractListLoadSequence = useRef(0);
-  const lastContractListStateFilter = useRef<ContractListStateFilter | null>(null);
   const selectedContractId = useRef<string | null>(null);
+  const selectedContractSnapshot = useRef<ContractResponse | null>(null);
   const contractSelectionSource = useRef<ContractSelectionSource>(null);
+  const contractListRowsCount = useRef(0);
+  const contractSurfacePollInFlight = useRef(false);
+  const contractDetailRefreshInFlight = useRef(false);
   const usersLoadSequence = useRef(0);
   const repositoryContextLoadSequence = useRef(0);
   const qualificationFeedLoadSequence = useRef(0);
@@ -374,7 +379,93 @@ function ConsoleApp() {
 
   useEffect(() => {
     selectedContractId.current = contract?.id ?? null;
-  }, [contract?.id]);
+    selectedContractSnapshot.current = contract;
+  }, [contract]);
+
+  useEffect(() => {
+    contractListRowsCount.current = contractList.contracts.length;
+  }, [contractList.contracts.length]);
+
+  useEffect(() => {
+    if (screen !== 'console' || activeSurface !== 'contracts' || authStatus !== 'authenticated') {
+      return;
+    }
+
+    const accessToken = tokens?.accessToken ?? '';
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+
+    function clearScheduledPoll() {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+    }
+
+    function scheduleNextPoll() {
+      clearScheduledPoll();
+      timeoutId = window.setTimeout(() => {
+        void poll(false);
+      }, CONTRACT_REFRESH_INTERVAL_MS);
+    }
+
+    async function poll(showLoading: boolean) {
+      if (cancelled || contractSurfacePollInFlight.current) {
+        return;
+      }
+      if (document.hidden) {
+        scheduleNextPoll();
+        return;
+      }
+
+      contractSurfacePollInFlight.current = true;
+      try {
+        const selectedDetailAtPollStart = selectedContractId.current;
+        const listResult = await loadContractList(showLoading, {
+          silentTransientErrors: !showLoading,
+        });
+        if (cancelled || listResult === 'unauthorized') {
+          return;
+        }
+        if (selectedDetailAtPollStart && selectedContractId.current === selectedDetailAtPollStart) {
+          await refreshSelectedContractDetail({
+            silentTransientErrors: true,
+          });
+        }
+      } finally {
+        contractSurfacePollInFlight.current = false;
+        if (!cancelled) {
+          scheduleNextPoll();
+        }
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (cancelled || document.hidden) {
+        return;
+      }
+      clearScheduledPoll();
+      void poll(false);
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    void poll(contractListLoadStatus === 'idle');
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      contractSurfacePollInFlight.current = false;
+      contractListLoadSequence.current += 1;
+      contractLookupSequence.current += 1;
+      clearScheduledPoll();
+    };
+  }, [activeSurface, authStatus, contractListStateFilter, screen, tokens?.accessToken]);
 
   useEffect(() => {
     if (screen !== 'settings-users' || authStatus !== 'authenticated') {
@@ -391,18 +482,6 @@ function ConsoleApp() {
 
     void loadRepositoryContext();
   }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
-
-  useEffect(() => {
-    if (screen !== 'console' || activeSurface !== 'contracts' || authStatus !== 'authenticated') {
-      return;
-    }
-
-    if (contractListLoadStatus !== 'idle' && lastContractListStateFilter.current === contractListStateFilter) {
-      return;
-    }
-
-    void loadContractList(contractListLoadStatus === 'idle');
-  }, [activeSurface, authStatus, contractListLoadStatus, contractListStateFilter, screen, tokens?.accessToken]);
 
   useEffect(() => {
     if (screen !== 'console' || activeSurface !== 'delivery-readiness' || authStatus !== 'authenticated') {
@@ -630,12 +709,14 @@ function ConsoleApp() {
     authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
     contractListLoadSequence.current += 1;
-    lastContractListStateFilter.current = null;
     usersLoadSequence.current += 1;
     repositoryContextLoadSequence.current += 1;
     qualificationFeedLoadSequence.current += 1;
     selectedContractId.current = null;
+    selectedContractSnapshot.current = null;
     contractSelectionSource.current = null;
+    contractSurfacePollInFlight.current = false;
+    contractDetailRefreshInFlight.current = false;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -726,21 +807,25 @@ function ConsoleApp() {
     }
   }
 
-  async function loadContractList(showLoading = true) {
+  async function loadContractList(
+    showLoading = true,
+    options: { silentTransientErrors?: boolean } = {}
+  ): Promise<ReadOnlyLoadResult> {
     const accessToken = tokens?.accessToken;
     if (!accessToken) {
       resetAuthState();
       setAuthError(translate('auth.invalidSession'));
-      return;
+      return 'unauthorized';
     }
 
     const loadSequence = contractListLoadSequence.current + 1;
     contractListLoadSequence.current = loadSequence;
-    lastContractListStateFilter.current = contractListStateFilter;
     if (showLoading) {
       setContractListLoadStatus('loading');
     }
-    setContractListError('');
+    if (!options.silentTransientErrors) {
+      setContractListError('');
+    }
 
     try {
       const result = await listContracts({
@@ -749,23 +834,83 @@ function ConsoleApp() {
         limit: CONTRACT_LIST_LIMIT,
       });
       if (contractListLoadSequence.current !== loadSequence) {
-        return;
+        return 'stale';
       }
       setContractList(result);
       setContractListLoadStatus('loaded');
+      setContractListError('');
       reconcileContractListSelection(result.contracts);
+      return 'loaded';
     } catch (error) {
       if (contractListLoadSequence.current !== loadSequence) {
-        return;
+        return 'stale';
       }
       if (isContractListClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
         setAuthError(translate('auth.invalidSession'));
-        return;
+        return 'unauthorized';
       }
 
+      if (options.silentTransientErrors && contractListRowsCount.current > 0) {
+        return 'error';
+      }
       setContractListLoadStatus('error');
       setContractListError(contractListErrorMessage(error, translate));
+      return 'error';
+    }
+  }
+
+  async function refreshSelectedContractDetail(
+    options: { silentTransientErrors?: boolean } = {}
+  ): Promise<ReadOnlyLoadResult> {
+    const accessToken = tokens?.accessToken;
+    const contractId = selectedContractId.current;
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return 'unauthorized';
+    }
+    if (!contractId || contractDetailRefreshInFlight.current) {
+      return 'skipped';
+    }
+
+    contractDetailRefreshInFlight.current = true;
+    const lookupSequence = contractLookupSequence.current;
+    try {
+      const found = await getContract(accessToken, contractId);
+      if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
+        return 'stale';
+      }
+      setContract(found);
+      setContractIdInput(found.id);
+      setContractLoadStatus('loaded');
+      setContractError('');
+      return 'loaded';
+    } catch (error) {
+      if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
+        return 'stale';
+      }
+      if (isAuthClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(authErrorMessage(error, translate));
+        return 'unauthorized';
+      }
+      if (isAuthClientError(error) && error.code === 'not_found') {
+        setContract(null);
+        setContractLoadStatus('not_found');
+        setContractError(translate('surfaces.contracts.notFound'));
+        return 'not_found';
+      }
+
+      if (options.silentTransientErrors && selectedContractSnapshot.current?.id === contractId) {
+        setContractLoadStatus('loaded');
+        return 'error';
+      }
+      setContractLoadStatus('error');
+      setContractError(authErrorMessage(error, translate));
+      return 'error';
+    } finally {
+      contractDetailRefreshInFlight.current = false;
     }
   }
 
