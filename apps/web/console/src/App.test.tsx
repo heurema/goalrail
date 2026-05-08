@@ -194,7 +194,7 @@ describe('App', () => {
   beforeEach(async () => {
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/console');
     document.title = 'Goalrail';
     window.localStorage.clear();
     window.sessionStorage.clear();
@@ -205,6 +205,21 @@ describe('App', () => {
     asMock(window.sessionStorage.getItem).mockClear();
     asMock(window.sessionStorage.setItem).mockClear();
     await setLocale('en');
+  });
+
+  it('redirects the public root route to /start without backend calls or browser storage writes', async () => {
+    window.history.replaceState(null, '', '/');
+
+    render(<App />);
+
+    expect(screen.getByRole('heading', { name: /ask goalrail about ai-assisted delivery/i })).toBeInTheDocument();
+    expect(screen.getByText('From business goal to verified code change.')).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe('/start'));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem).not.toHaveBeenCalled();
+    expect(window.localStorage.setItem).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem).not.toHaveBeenCalled();
+    expect(window.sessionStorage.setItem).not.toHaveBeenCalled();
   });
 
   it('renders the /start page without initial backend calls or browser storage writes', () => {

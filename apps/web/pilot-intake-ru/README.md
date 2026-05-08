@@ -7,6 +7,8 @@ Russian pilot-intake landing prototype for Goalrail.
 - Static React + Vite + Mantine resource under `apps/web/pilot-intake-ru`
 - Owns the current Russian pilot landing at `/` for `pilot.goalrail.ru`
 - Also owns the adjacent Russian public start route at `/start`, targeted at `https://goalrail.ru/start`
+- Production routing may redirect the apex `https://goalrail.ru/` root to
+  `/start`; `https://pilot.goalrail.ru/` must remain the pilot landing root
 - Emits a separate static HTML entry for `/start` so crawlers see the RU start metadata without waiting for SPA hydration
 - Keeps `/` as a lead-capture/public landing prototype, not a product runtime
 - Keeps `/start` as a public assistant entry surface; it uses only same-origin `POST /api/start-chat` when that operator-managed route is wired
