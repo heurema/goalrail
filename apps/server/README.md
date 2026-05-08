@@ -1,9 +1,10 @@
 # Goalrail Server
 
 This server is still an early prototype. Existing intake, Goal readiness,
-public Contract lifecycle, ContractSeed creation, ContractDraft
-creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
-WorkItem planning, auth credential/session, and event log flows require
+read-only qualification feed, public Contract lifecycle, ContractSeed creation,
+ContractDraft creation/update, ContractDraft ready_for_approval,
+ApprovedContract approval, WorkItem planning, auth credential/session, and
+event log flows require
 Postgres-backed state. The production server wiring no longer falls back to
 in-memory product state when database configuration is absent.
 Map-backed in-memory product/auth stores have been removed from
@@ -377,6 +378,19 @@ Then promote and check readiness:
 curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/goals
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
+
+Read the current intent / qualification feed without mutating Goal readiness or
+creating clarification requests:
+
+```bash
+curl -sS "http://localhost:8080/v1/qualification-feed?repo_binding_id=018f0000-0000-7000-8000-000000000004&limit=50" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+The feed is scoped to the authenticated caller's active OrganizationMembership.
+It joins existing IntakeRecord, Goal, open ClarificationRequest, RepoBinding,
+and linked Contract state into a derived read model. Optional filters are
+`project_id`, `repo_binding_id`, `state` / `goal_state`, and `limit`.
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ClarificationRequest`,
 `ClarificationAnswer`, the public `Contract` aggregate, `ContractSeed`,
