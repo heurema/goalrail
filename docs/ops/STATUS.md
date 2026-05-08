@@ -341,6 +341,13 @@ The project currently has:
   remains local-only and does not add server baseline persistence, server clone,
   source upload, background daemon, runner, context-pack generation, gate, or
   proof.
+- The `goalrail init` stabilization sequence through INIT-07 is complete and
+  recorded in `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. This is an
+  operational checkpoint for bounded init behavior, marker safety, advisory
+  snapshot / Project Scan warnings, retry context, and shared metadata-only
+  repository-shape signal guardrails; it does not add server clone, source
+  upload, repair command, runner, gate, proof, checkout, provider integration,
+  schema/API/DB changes, or runtime execution behavior.
 - ADR-0027 documents the Organization user management boundary:
   regular Organization users are created through Console UI backed by
   server API, not through CLI user creation; canonical identity is `User`,

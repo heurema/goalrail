@@ -32,6 +32,11 @@
   creates or returns `ExecutionJob(queued)` from `WorkItem(planned)` plus
   `CheckoutReceipt` without creating `Run`, leasing execution, running
   commands, creating execution receipt, gate, or proof
+- `goalrail init` stabilization is complete through INIT-07 and recorded in
+  `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
+  safe options are limited to narrow advisory snapshot / Project Scan
+  cancellation semantics cleanup, a marker repair design note, or an optional
+  small collector spike only after deciding whether the MVP needs it.
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured
