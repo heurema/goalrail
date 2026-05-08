@@ -986,6 +986,9 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 	if receiptResult.ExecutionMode != spine.ExecutionReceiptModeNoCommand || receiptResult.ProcessStatus != spine.ExecutionReceiptStatusNotExecuted || receiptResult.ExitCode != nil || receiptResult.RawSourceUploaded {
 		t.Fatalf("execution receipt mode/status = %#v, want no-command metadata-only receipt", receiptResult)
 	}
+	if len(receiptResult.ArtifactRefs) != 0 || len(receiptResult.ChangedPathsSummary) != 0 || strings.Contains(receiptResponse.body, `"artifact_refs":null`) || strings.Contains(receiptResponse.body, `"changed_paths_summary":null`) {
+		t.Fatalf("execution receipt artifact/path claims = %#v/%#v body=%s, want empty JSON arrays", receiptResult.ArtifactRefs, receiptResult.ChangedPathsSummary, receiptResponse.body)
+	}
 	if receiptResult.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || receiptResult.NextAction.Available {
 		t.Fatalf("execution receipt next_action = %#v, want unavailable gate_review", receiptResult.NextAction)
 	}

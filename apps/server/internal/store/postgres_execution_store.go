@@ -721,11 +721,11 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 	if err != nil {
 		return err
 	}
-	artifactRefs, err := json.Marshal(receipt.ArtifactRefs)
+	artifactRefs, err := json.Marshal(nonNilStrings(receipt.ArtifactRefs))
 	if err != nil {
 		return fmt.Errorf("marshal execution receipt artifact refs: %w", err)
 	}
-	changedPaths, err := json.Marshal(receipt.ChangedPathsSummary)
+	changedPaths, err := json.Marshal(nonNilStrings(receipt.ChangedPathsSummary))
 	if err != nil {
 		return fmt.Errorf("marshal execution receipt changed paths summary: %w", err)
 	}
