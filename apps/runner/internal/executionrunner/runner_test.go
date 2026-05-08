@@ -97,6 +97,86 @@ func TestStepAcquiresExecutionLeaseAndStartsRun(t *testing.T) {
 	}
 }
 
+func TestStepSubmitsNoCommandExecutionReceipt(t *testing.T) {
+	const secretToken = "secret-execution-token"
+	var receiptRequest executionReceiptRequest
+	var receiptRequests atomic.Int32
+	var commandRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+			receiptRequests.Add(1)
+			decodeStrict(t, r, &receiptRequest)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"execution-receipt-1","run_id":"run-1","execution_job_id":"execution-job-1","runner_id":"runner-1","execution_mode":"no_command","process_status":"not_executed"}`))
+		default:
+			if strings.Contains(r.URL.Path, "commands") || strings.Contains(r.URL.Path, "exec") {
+				commandRequests.Add(1)
+			}
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	runner, err := NewRunner(Config{
+		ServerURL:       server.URL,
+		BearerToken:     "runner-token",
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		BaselineID:      "baseline-1",
+		OverlayID:       "overlay-1",
+		SubmitReceipt:   true,
+		PollInterval:    time.Millisecond,
+		LeaseTTLSeconds: 900,
+		Once:            true,
+		LogWriter:       &logs,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	result, err := runner.Step(context.Background())
+	if err != nil {
+		t.Fatalf("Step() error = %v", err)
+	}
+	if result != StepReceiptSubmitted {
+		t.Fatalf("Step() = %q, want %q", result, StepReceiptSubmitted)
+	}
+	if receiptRequests.Load() != 1 {
+		t.Fatalf("receipt requests = %d, want 1", receiptRequests.Load())
+	}
+	if receiptRequest.ExecutionJobID != "execution-job-1" || receiptRequest.LeaseToken != secretToken || receiptRequest.RunnerID != "runner-1" {
+		t.Fatalf("receipt proof = %#v, want lease-backed run proof", receiptRequest)
+	}
+	if receiptRequest.ExecutionMode != "no_command" || receiptRequest.ProcessStatus != "not_executed" || receiptRequest.RawSourceUploaded {
+		t.Fatalf("receipt mode/status = %#v, want no-command metadata receipt", receiptRequest)
+	}
+	if receiptRequest.WorkspaceRef != "mounted:/workspace/goalrail" || receiptRequest.CommitSHA != "abc123" {
+		t.Fatalf("receipt workspace metadata = %#v, want configured metadata", receiptRequest)
+	}
+	if commandRequests.Load() != 0 {
+		t.Fatalf("command requests = %d, want no command execution calls", commandRequests.Load())
+	}
+	if strings.Contains(logs.String(), secretToken) {
+		t.Fatalf("logs leaked execution lease token: %q", logs.String())
+	}
+	for _, forbidden := range []string{"executed command", "gate", "proof"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("logs = %q, want no %q claim", logs.String(), forbidden)
+		}
+	}
+}
+
 func TestStepDoesNotRetryStaleExecutionLeaseProof(t *testing.T) {
 	for _, tt := range []struct {
 		name string

@@ -120,6 +120,37 @@ func (c *apiClient) startRun(ctx context.Context, executionJobID string, input r
 	return decoded, nil
 }
 
+func (c *apiClient) submitReceipt(ctx context.Context, runID string, input executionReceiptRequest) (executionReceipt, error) {
+	body, err := json.Marshal(input)
+	if err != nil {
+		return executionReceipt{}, fmt.Errorf("encode execution receipt request: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/runs/"+url.PathEscape(runID)+"/receipts", bytes.NewReader(body))
+	if err != nil {
+		return executionReceipt{}, fmt.Errorf("build execution receipt request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	c.authorize(request)
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return executionReceipt{}, fmt.Errorf("submit execution receipt: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+		return executionReceipt{}, decodeAPIError(response)
+	}
+	var decoded executionReceipt
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return executionReceipt{}, fmt.Errorf("decode execution receipt: %w", err)
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return executionReceipt{}, errors.New("execution receipt response is missing id")
+	}
+	return decoded, nil
+}
+
 func (c *apiClient) authorize(request *http.Request) {
 	if c.bearerToken != "" {
 		request.Header.Set("Authorization", "Bearer "+c.bearerToken)

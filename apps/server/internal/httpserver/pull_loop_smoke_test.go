@@ -366,6 +366,47 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("existing run id/count = %q/%d, want %q/1", existingRun.ID, len(server.runs.runs), run.ID)
 	}
 	assertNoForbiddenPostRunSideEffects(t, server.events.Events())
+
+	executionReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(executionJob.ID, executionLease.LeaseToken, "runner-smoke", "mounted:/workspace/goalrail#run="+string(run.ID), "abc123", false))
+	if executionReceiptResponse.code != http.StatusCreated {
+		t.Fatalf("execution receipt status = %d, want %d: %s", executionReceiptResponse.code, http.StatusCreated, executionReceiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(executionReceiptResponse.body, forbidden) {
+			t.Fatalf("execution receipt response exposes forbidden field %s: %s", forbidden, executionReceiptResponse.body)
+		}
+	}
+	var executionReceipt spine.ExecutionReceipt
+	decodeJSON(t, executionReceiptResponse.body, &executionReceipt)
+	if executionReceipt.ID == "" || executionReceipt.RunID != run.ID || executionReceipt.ExecutionJobID != executionJob.ID || executionReceipt.ExecutionLeaseID != executionLease.ID || executionReceipt.TaskID != taskID || executionReceipt.CheckoutReceiptID != receipt.ID || executionReceipt.RunnerID != "runner-smoke" {
+		t.Fatalf("execution receipt = %#v, want receipt bound to run/job/lease/task", executionReceipt)
+	}
+	if executionReceipt.ExecutionMode != spine.ExecutionReceiptModeNoCommand || executionReceipt.ProcessStatus != spine.ExecutionReceiptStatusNotExecuted || executionReceipt.ExitCode != nil || executionReceipt.RawSourceUploaded {
+		t.Fatalf("execution receipt mode/status = %#v, want no-command metadata-only receipt", executionReceipt)
+	}
+	if executionReceipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || executionReceipt.NextAction.Available || executionReceipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
+		t.Fatalf("execution receipt next_action = %#v, want unavailable gate_review", executionReceipt.NextAction)
+	}
+	if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
+		t.Fatalf("run state = %q, want receipt_submitted", got)
+	}
+	if got := server.executionJobs.jobs[executionJob.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+		t.Fatalf("execution job state = %q, want receipt_submitted", got)
+	}
+	if len(server.executionReceipts.receipts) != 1 {
+		t.Fatalf("execution receipts = %d, want 1", len(server.executionReceipts.receipts))
+	}
+	storedTaskAfterExecutionReceipt, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get(%s) after execution receipt = %#v/%v/%v", taskID, storedTaskAfterExecutionReceipt, ok, err)
+	}
+	if storedTaskAfterExecutionReceipt.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("work item status = %q, want planned after execution receipt", storedTaskAfterExecutionReceipt.Status)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionReceiptSubmitted); got != 1 {
+		t.Fatalf("execution_receipt.submitted events = %d, want 1", got)
+	}
+	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 }
 
 func contractCreateJSONWithContext(goalID spine.GoalID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID) string {
