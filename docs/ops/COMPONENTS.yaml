@@ -1,5 +1,5 @@
 schema_version: goalrail.components.v0
-updated_at: 2026-05-07
+updated_at: 2026-05-08
 authority: operational
 status_anchor: true
 components:
@@ -162,6 +162,13 @@ components:
       - apps/runner/internal/checkoutrunner
     public_claim_allowed: false
     notes: ADR-0008 defines repository checkout, workspace preparation, code inspection, and check execution behind a dedicated runner boundary. H1 implements the first checkout instruction plus workspace receipt prototype: authenticated `POST /v1/tasks/{id}/checkout-jobs` creates or returns one checkout job for `WorkItem(planned)` after active OrganizationMembership and project/repo expectation checks; bearer-authenticated runner-facing `POST /v1/checkout-jobs/leases` requires requested `project_id` and `repo_binding_id`, verifies them against the authenticated OrganizationMembership organization, and leases one queued checkout job from that organization/project/repo scope with a one-time raw lease token; bearer-authenticated runner-facing `POST /v1/checkout-jobs/{id}/receipts` checks the checkout job organization before accepting bounded workspace metadata with lease proof and `raw_source_uploaded=false`. Checkout jobs and receipts are durable in Postgres when structured DB config is present. `goalrail work checkout prepare --task-id <task_id>` exposes the agent-facing preparation command and returns `runner_checkout_required` as the next unavailable step. A separate minimal `goalrail-runner` prototype lives under `apps/runner`, talks only to the API server with `GOALRAIL_RUNNER_BEARER_TOKEN`, polls checkout leases using `GOALRAIL_RUNNER_PROJECT_ID` / `GOALRAIL_RUNNER_REPO_BINDING_ID` as a fail-closed lease scope, validates each API-issued instruction against that scope, and submits lease-qualified workspace receipts from configured local workspace metadata. The API server stores no repository secrets, does not clone repositories, and does not receive raw source bodies. The runner has local API DTOs and must not import `apps/server/internal`, Postgres/store packages, or command execution packages. H1 does not implement actual clone/fetch, provider credential storage, provider connection object, OAuth, provider client, assignment, claiming, arbitrary command execution, `Run`, execution receipt, gate, proof, or checkout receipt trust/attestation.
+  run_execution:
+    name: Run Execution Boundary
+    status: planned
+    truth_owner: docs/adr/ADR-0029-run-execution-receipt-boundary.md
+    implementation_paths: []
+    public_claim_allowed: false
+    notes: ADR-0029 defines the next docs-first H2 runtime boundary after checkout receipt. The accepted direction is a server-owned `ExecutionJob` as the leaseable execution-preparation object, with `Run` created only when a runner explicitly starts execution using valid lease proof. Execution receipts are runner-submitted evidence inputs and are not `GateDecision`, `Proof`, acceptance, or verification verdicts. No execution job store, execution lease route, run start route, execution receipt route, runtime adapter, arbitrary command execution, assignment, claiming, branch/commit/PR creation, gate, proof, raw source upload, provider adapter, or dedicated runner registration/token protocol is implemented yet.
   advisory_panel:
     name: Advisory Panel
     status: planned
