@@ -70,6 +70,66 @@ func TestProjectScanBuildsBaselineAndOverlayWithoutServer(t *testing.T) {
 	}
 }
 
+func TestProjectScanRefreshRebuildsCachedBaseline(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, cacheRoot := setupRepoWithStubCachedBaseline(t)
+
+	output, err := runProjectJSON(t, repoDir, []string{"scan", "--format", "json", "--refresh"}, cacheRoot)
+	if err != nil {
+		t.Fatalf("Run(project scan --refresh) error = %v", err)
+	}
+
+	assertProjectScanRebuiltCachedBaseline(t, output)
+}
+
+func TestProjectScanRerunStillRebuildsCachedBaseline(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, cacheRoot := setupRepoWithStubCachedBaseline(t)
+
+	output, err := runProjectJSON(t, repoDir, []string{"scan", "--format", "json", "--rerun"}, cacheRoot)
+	if err != nil {
+		t.Fatalf("Run(project scan --rerun) error = %v", err)
+	}
+
+	assertProjectScanRebuiltCachedBaseline(t, output)
+}
+
+func TestProjectScanRefreshAndRerunAccepted(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, cacheRoot := setupRepoWithStubCachedBaseline(t)
+
+	output, err := runProjectJSON(t, repoDir, []string{"scan", "--format", "json", "--refresh", "--rerun"}, cacheRoot)
+	if err != nil {
+		t.Fatalf("Run(project scan --refresh --rerun) error = %v", err)
+	}
+
+	assertProjectScanRebuiltCachedBaseline(t, output)
+}
+
+func TestProjectScanHelpIncludesRefresh(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"scan", "--help"}, Options{CacheRoot: t.TempDir(), Now: fixedNow})
+	if err != nil {
+		t.Fatalf("Run(project scan --help) error = %v", err)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "--refresh") {
+		t.Fatalf("stdout = %q, want --refresh", got)
+	}
+	if !strings.Contains(got, "--rerun") {
+		t.Fatalf("stdout = %q, want --rerun", got)
+	}
+}
+
 func TestProjectStatusDoesNotRebuildStaleBaseline(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -162,6 +222,59 @@ func runProjectJSON(t *testing.T, repoDir string, args []string, cacheRoot strin
 		t.Fatalf("decode project JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
+}
+
+func setupRepoWithStubCachedBaseline(t *testing.T) (string, string) {
+	t.Helper()
+
+	repoDir := setupRepo(t)
+	writeFile(t, repoDir, "go.mod", "module example.com/repo\n")
+	writeFile(t, repoDir, "main_test.go", "package main\n")
+	writeProjectConfig(t, repoDir)
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "shape")
+	head := gitOutputForTest(t, repoDir, "rev-parse", "--verify", "HEAD")
+
+	cacheRoot := t.TempDir()
+	cache := projectscan.NewCache(cacheRoot)
+	baseline := projectscan.RepositoryBaselineProfile{
+		RepositoryBaselineProfileID: projectscan.BaselineProfileID("018f0000-0000-7000-8000-000000000004", repoDir, head, projectscan.SchemaVersion),
+		RepoBindingID:               "018f0000-0000-7000-8000-000000000004",
+		CanonicalRepoRoot:           repoDir,
+		HeadSHA:                     head,
+		SchemaVersion:               projectscan.SchemaVersion,
+		Status:                      projectscan.BaselineStatusQuick,
+	}
+	if err := cache.WriteBaseline(baseline); err != nil {
+		t.Fatalf("WriteBaseline() error = %v", err)
+	}
+	return repoDir, cacheRoot
+}
+
+func assertProjectScanRebuiltCachedBaseline(t *testing.T, output Output) {
+	t.Helper()
+
+	if output.Baseline == nil {
+		t.Fatal("baseline = nil, want rebuilt baseline")
+	}
+	if !output.BaselineRebuilt {
+		t.Fatal("baseline_rebuilt = false, want true")
+	}
+	if !containsString(output.Baseline.Receipts.Scanned, "go.mod") {
+		t.Fatalf("scanned paths = %v, want go.mod from rebuilt baseline", output.Baseline.Receipts.Scanned)
+	}
+	if output.Freshness.Status != projectscan.FreshnessFresh {
+		t.Fatalf("freshness = %q, want fresh", output.Freshness.Status)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func writeProjectConfig(t *testing.T, repoDir string) {
