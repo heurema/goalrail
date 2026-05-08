@@ -9,12 +9,17 @@ interface RenderOptions {
   children?: ReactNode;
 }
 
-function isStartRoute() {
-  return window.location.pathname.replace(/\/+$/, '') === '/start';
+function normalizedPathname() {
+  return window.location.pathname.replace(/\/+$/, '') || '/';
+}
+
+function isPublicStartSurfaceRoute() {
+  const pathname = normalizedPathname();
+  return pathname === '/' || pathname === '/start';
 }
 
 export function render(ui: ReactNode) {
-  if (isStartRoute()) {
+  if (isPublicStartSurfaceRoute()) {
     return testingLibraryRender(<>{ui}</>);
   }
 

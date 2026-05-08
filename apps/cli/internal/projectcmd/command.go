@@ -65,6 +65,7 @@ func runScan(ctx context.Context, out *term.Output, workDir string, args []strin
 	flags := flag.NewFlagSet("goalrail project scan", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+	refresh := flags.Bool("refresh", false, "refresh the local Project Scan baseline cache for the current HEAD")
 	rerun := flags.Bool("rerun", false, "rebuild the local RepositoryBaselineProfile for the current HEAD")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -95,7 +96,7 @@ func runScan(ctx context.Context, out *term.Output, workDir string, args []strin
 	if err != nil {
 		return exitcode.RuntimeError(fmt.Errorf("read project scan cache: %w", err))
 	}
-	needsRebuild := *rerun || !ok || baseline.SchemaVersion != projectscan.SchemaVersion || baseline.HeadSHA != facts.HeadSHA
+	needsRebuild := *refresh || *rerun || !ok || baseline.SchemaVersion != projectscan.SchemaVersion || baseline.HeadSHA != facts.HeadSHA
 	rebuilt := false
 	if needsRebuild {
 		built, err := projectscan.BuildBaseline(ctx, facts.CanonicalRepoRoot, config.RepoBindingID, projectscan.DefaultBuildOptions())
@@ -230,7 +231,7 @@ func Usage() string {
 }
 
 func ScanUsage() string {
-	return "Usage: goalrail project scan [--format text|json] [--rerun]\n\nBuilds or refreshes the local Project Scan v0 RepositoryBaselineProfile for the current committed HEAD and refreshes the WorkspaceOverlay. Requires a Git worktree with .goalrail/project.yml. It does not call the server, clone repositories, run checks, upload source, create a context pack, gate, or proof.\n"
+	return "Usage: goalrail project scan [--format text|json] [--refresh] [--rerun]\n\nBuilds or refreshes the local Project Scan v0 RepositoryBaselineProfile for the current committed HEAD and refreshes the WorkspaceOverlay. Use --refresh to force a local baseline cache refresh; --rerun remains supported for compatibility. Requires a Git worktree with .goalrail/project.yml. It does not call the server, clone repositories, run checks, upload source, create a context pack, gate, or proof.\n"
 }
 
 func StatusUsage() string {
