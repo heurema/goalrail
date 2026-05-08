@@ -49,7 +49,10 @@ H2.2 adds runner-scoped execution leases plus explicit `Run(started)` creation
 with lease proof; H2.2+ smoke coverage now pins execution lease acquisition
 through `Run(started)`; H2.3 now adds metadata-only `ExecutionReceipt`
 submission with lease/run proof and no command execution, and H2.3+ smoke
-coverage pins that receipt path while gate and proof remain deferred;
+coverage pins that receipt path; ADR-0030 now defines the next bounded command
+execution boundary as docs-only, with the first future implementation limited
+to a fixed built-in diagnostic action while arbitrary shell, project commands,
+gate, and proof remain deferred;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -236,6 +239,12 @@ The project currently has:
   `run_started` jobs without receipts. H2.3+ smoke coverage pins this
   no-command receipt path. It does not execute commands, decide gates, or create
   proof.
+- ADR-0030 documents the H2.4 bounded command execution boundary as the next
+  runtime design step. It keeps shell execution, user-provided command strings,
+  project commands, provider adapters, LLM coding-agent integration,
+  `GateDecision`, and `Proof` out of the current implementation, and recommends
+  the first future code slice use a fixed `builtin_diagnostic/workspace_status`
+  action rather than arbitrary shell or repo tests.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -528,6 +537,10 @@ The project currently has:
   metadata-only `ExecutionReceipt` submission for started Runs, and H2.3+
   smoke coverage pins that no-command receipt transition; receipts remain
   separate from Gate / Proof verdicts and do not claim command execution
+- ADR-0030 defines the next command execution boundary before code: the first
+  future execution mode should be a server-authorized `builtin_diagnostic`
+  command plan and runner-owned `workspace_status` action, with no arbitrary
+  shell or project command execution
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
