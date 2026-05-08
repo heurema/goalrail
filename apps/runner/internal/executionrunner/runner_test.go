@@ -46,6 +46,7 @@ func TestStepAcquiresExecutionLeaseAndStartsRun(t *testing.T) {
 	var leaseRequest executionLeaseCreateRequest
 	var runRequest runStartRequest
 	var runRequests atomic.Int32
+	var unexpectedRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -59,6 +60,7 @@ func TestStepAcquiresExecutionLeaseAndStartsRun(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","runner_id":"runner-1","state":"started"}`))
 		default:
+			unexpectedRequests.Add(1)
 			http.NotFound(w, r)
 		}
 	}))
@@ -82,8 +84,16 @@ func TestStepAcquiresExecutionLeaseAndStartsRun(t *testing.T) {
 	if runRequest.LeaseID != "lease-1" || runRequest.LeaseToken != secretToken || runRequest.RunnerID != "runner-1" {
 		t.Fatalf("run start proof = %#v, want lease proof", runRequest)
 	}
+	if unexpectedRequests.Load() != 0 {
+		t.Fatalf("unexpected requests = %d, want no execution receipt or command-execution calls", unexpectedRequests.Load())
+	}
 	if strings.Contains(logs.String(), secretToken) {
 		t.Fatalf("logs leaked execution lease token: %q", logs.String())
+	}
+	for _, forbidden := range []string{"execution receipt", "executed command"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("logs = %q, want no %q claim", logs.String(), forbidden)
+		}
 	}
 }
 

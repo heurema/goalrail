@@ -300,6 +300,72 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("execution_job.created events = %d, want no duplicate event", got)
 	}
 	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
+
+	executionLeaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-smoke"}`, contextProjectID, contextRepoBindingID))
+	if executionLeaseResponse.code != http.StatusCreated {
+		t.Fatalf("execution lease status = %d, want %d: %s", executionLeaseResponse.code, http.StatusCreated, executionLeaseResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token_hash\"", "\"run_id\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(executionLeaseResponse.body, forbidden) {
+			t.Fatalf("execution lease response exposes forbidden field %s: %s", forbidden, executionLeaseResponse.body)
+		}
+	}
+	var executionLease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, executionLeaseResponse.body, &executionLease)
+	if executionLease.ID == "" || executionLease.ExecutionJobID != executionJob.ID || executionLease.TaskID != taskID || executionLease.CheckoutReceiptID != receipt.ID || executionLease.RunnerID != "runner-smoke" || executionLease.LeaseToken == "" {
+		t.Fatalf("execution lease = %#v, want scoped execution lease with one-time token", executionLease)
+	}
+	if executionLease.ExecutionJob.State != spine.ExecutionJobStateLeased {
+		t.Fatalf("leased execution job state = %q, want leased", executionLease.ExecutionJob.State)
+	}
+	if len(server.runs.runs) != 0 {
+		t.Fatalf("runs = %d, want no Run after execution lease acquisition", len(server.runs.runs))
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionJobLeased); got != 1 {
+		t.Fatalf("execution_job.leased events = %d, want 1", got)
+	}
+
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(executionJob.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-smoke"}`, executionLease.ID, executionLease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(runResponse.body, forbidden) {
+			t.Fatalf("run start response exposes forbidden field %s: %s", forbidden, runResponse.body)
+		}
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+	if run.ID == "" || run.ExecutionJobID != executionJob.ID || run.ExecutionLeaseID != executionLease.ID || run.TaskID != taskID || run.CheckoutReceiptID != receipt.ID || run.RunnerID != "runner-smoke" || run.State != spine.RunStateStarted {
+		t.Fatalf("run = %#v, want started Run bound to execution lease", run)
+	}
+	if got := server.executionJobs.jobs[executionJob.ID].State; got != spine.ExecutionJobStateRunStarted {
+		t.Fatalf("execution job state = %q, want run_started", got)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeRunStarted); got != 1 {
+		t.Fatalf("run.started events = %d, want 1", got)
+	}
+	storedTaskAfterRunStart, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get(%s) after run start = %#v/%v/%v", taskID, storedTaskAfterRunStart, ok, err)
+	}
+	if storedTaskAfterRunStart.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("work item status = %q, want planned after run start", storedTaskAfterRunStart.Status)
+	}
+	if len(server.runs.runs) != 1 {
+		t.Fatalf("runs = %d, want exactly one started Run", len(server.runs.runs))
+	}
+
+	secondRunResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(executionJob.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-smoke"}`, executionLease.ID, executionLease.LeaseToken))
+	if secondRunResponse.code != http.StatusOK {
+		t.Fatalf("second run start status = %d, want %d: %s", secondRunResponse.code, http.StatusOK, secondRunResponse.body)
+	}
+	var existingRun spine.Run
+	decodeJSON(t, secondRunResponse.body, &existingRun)
+	if existingRun.ID != run.ID || len(server.runs.runs) != 1 {
+		t.Fatalf("existing run id/count = %q/%d, want %q/1", existingRun.ID, len(server.runs.runs), run.ID)
+	}
+	assertNoForbiddenPostRunSideEffects(t, server.events.Events())
 }
 
 func contractCreateJSONWithContext(goalID spine.GoalID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID) string {
