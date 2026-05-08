@@ -130,7 +130,7 @@ func ExecutionUsage() string {
 }
 
 func ExecutionPrepareUsage() string {
-	return "Usage: goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> [--format text|json]\n\nCreates or returns a server-owned ExecutionJob for a planned WorkItem and checkout receipt using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not create Run, lease execution, execute commands, create execution receipt, gate, proof, or verify work.\n"
+	return "Usage: goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> [--format text|json]\n\nCreates or returns a server-owned ExecutionJob for a planned WorkItem and checkout receipt using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not start a Run, execute commands, create execution receipt, gate, proof, or verify work.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -1222,13 +1222,13 @@ func buildExecutionPrepareOutput(config projectconfig.Config, serverURL string, 
 		ExecutionJobState: job.State,
 		LocalConfigPath:   projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
-			Summary: "Execution preparation queued. No Run was created and no command was executed.",
+			Summary: "Execution preparation queued. No Run was created by this command; a runner must lease it to start a Run, and no command was executed.",
 		},
 		NextAction: spine.NextAction{
 			Kind:         "runner_execution_required",
 			Blocking:     true,
 			Available:    false,
-			PlannedSlice: "H2.2",
+			PlannedSlice: "H2.3",
 		},
 	}
 }

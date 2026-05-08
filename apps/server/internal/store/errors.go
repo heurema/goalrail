@@ -49,6 +49,10 @@ var (
 	ErrExecutionJobAlreadyExists   = errors.New("execution job already exists")
 	ErrExecutionJobAlreadyPrepared = errors.New("work item checkout receipt already has execution job")
 	ErrExecutionJobNotFound        = errors.New("execution job not found")
+	ErrExecutionLeaseAlreadyExists = errors.New("execution lease already exists")
+	ErrExecutionLeaseNotFound      = errors.New("execution lease not found")
+	ErrRunAlreadyExists            = errors.New("run already exists")
+	ErrRunNotFound                 = errors.New("run not found")
 )
 
 type uniqueConstraintError struct {

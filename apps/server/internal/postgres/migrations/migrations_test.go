@@ -489,6 +489,40 @@ func TestExecutionMigrationCreatesExecutionJobTable(t *testing.T) {
 	}
 }
 
+func TestExecutionLeaseRunMigrationAddsRunStartBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00004_execution_leases_runs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN current_lease_id UUID NULL",
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued', 'leased', 'run_started'))",
+		"CREATE TABLE execution_leases",
+		"lease_token_hash TEXT NOT NULL",
+		"CONSTRAINT execution_leases_state_check CHECK (state IN ('active', 'expired', 'run_started'))",
+		"CREATE TABLE runs",
+		"execution_job_id UUID NOT NULL REFERENCES execution_jobs(id) ON DELETE CASCADE",
+		"execution_lease_id UUID NOT NULL REFERENCES execution_leases(id) ON DELETE CASCADE",
+		"CONSTRAINT runs_execution_job_id_unique UNIQUE (execution_job_id)",
+		"CONSTRAINT runs_execution_lease_id_unique UNIQUE (execution_lease_id)",
+		"CONSTRAINT runs_state_check CHECK (state IN ('started'))",
+		"DROP TABLE IF EXISTS runs;",
+		"DROP TABLE IF EXISTS execution_leases;",
+		"WHERE state IN ('leased', 'run_started')",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution lease/run migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE execution_receipts") || strings.Contains(sql, "CREATE TABLE gate_decisions") || strings.Contains(sql, "CREATE TABLE proofs") {
+		t.Fatalf("execution lease/run migration must not create receipt, gate, or proof tables")
+	}
+	if strings.Contains(sql, "lease_token TEXT") {
+		t.Fatalf("execution lease migration must not store raw lease token")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

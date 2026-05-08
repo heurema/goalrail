@@ -97,16 +97,44 @@ H2.1 must not add:
 - server-side repository credentials
 - raw source upload by default
 
-Later H2 slices may add:
+Second implementation slice:
+
+```text
+H2.2 - execution lease plus explicit Run start
+```
+
+H2.2 adds:
 
 - runner-facing execution job lease route
 - runner-facing run-start route that creates `Run` only with valid lease proof
+- a runner `execution-start` mode that leases an execution job and starts a Run
+  without executing commands
+
+H2.2 must not add:
+
+- execution receipt
+- command execution
+- arbitrary shell command execution
+- generic runtime adapter platform
+- LLM coding-agent integration
+- assignment or claiming
+- branch creation, commit creation, pull request creation, or merge request
+  creation
+- GateDecision
+- Proof
+- provider OAuth or provider clients
+- server-side repository clone
+- server-side repository credentials
+- raw source upload by default
+
+Later H2 slices may add:
+
 - runner-facing execution receipt submission route for bounded metadata
 - state-aware next actions that keep Gate / Proof unavailable
 
 Later H2 slices must still not add:
 
-- arbitrary shell command execution
+- arbitrary shell command execution without a separate bounded adapter decision
 - generic runtime adapter platform
 - LLM coding-agent integration
 - assignment or claiming
@@ -476,11 +504,15 @@ After run preparation:
 {
   "kind": "execution_runner_required",
   "available": false,
-  "planned_slice": "H2.2"
+  "planned_slice": "H2.3"
 }
 ```
 
-If a later H2 slice includes runner run-start and receipt submission, the next action after
+H2.2 keeps this agent-facing action unavailable because the next step belongs to
+the runner. Runner start creates `Run(started)` but does not execute commands or
+submit an execution receipt.
+
+If a later H2 slice includes execution receipt submission, the next action after
 execution receipt should be:
 
 ```json
@@ -510,10 +542,16 @@ Later H2 slices should test:
 - raw execution lease token is returned only once and stored only as hash
 - Run start requires valid lease proof
 - Run is not created by lease acquisition alone
+- Run start creates `Run(started)`
+- repeated Run start does not create duplicate Runs
+- Run start does not execute commands
+- WorkItem remains `planned`
+
+Later execution receipt slices should test:
+
 - execution receipt requires valid Run / lease proof
 - execution receipt with `raw_source_uploaded=true` is rejected
 - execution receipt does not create GateDecision or Proof
-- WorkItem remains `planned`
 - no assignment, claiming, branch, commit, pull request, or merge request is
   created
 - runner does not import server internals, stores, Postgres, or arbitrary

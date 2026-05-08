@@ -161,14 +161,14 @@
   coverage now pins `work checkout prepare` through runner checkout lease and
   persisted `CheckoutReceipt`. H2.1 execution preparation is implemented, and
   H2.1+ smoke coverage now pins the path from `CheckoutReceipt` to
-  `ExecutionJob(queued)` without `Run`, execution receipt, gate, or proof. The
-  next bounded delivery-runtime slice must be H2.2 runner execution lease plus
-  explicit `Run` start with lease proof, not command execution. WorkItems still
-  remain `planned`; assignment, claiming, command execution, execution receipt,
-  gate, and proof are still deferred.
-- Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
-  provider OAuth, VcsConnection, token storage, provider clients, live metadata
-  listing, `Run`, and execution receipt behavior remain deferred.
+  `ExecutionJob(queued)` without `Run`, execution receipt, gate, or proof.
+  H2.2 now implements runner execution lease acquisition plus explicit
+  `Run(started)` creation with lease proof. WorkItems still remain `planned`;
+  assignment, claiming, command execution, execution receipt, gate, and proof
+  are still deferred.
+- Execution receipt, gate, proof, assignment/claiming, queue, outbox, runtime
+  registry, provider OAuth, VcsConnection, token storage, provider clients, live
+  metadata listing, and command execution behavior remain deferred.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -883,6 +883,9 @@ Done means:
    - H2.1 implemented `ExecutionJob(queued)` preparation from
      `WorkItem(planned)` plus `CheckoutReceipt`; H2.1+ smoke coverage pins that
      regression baseline
+   - H2.2 implemented runner execution lease acquisition and explicit
+     `Run(started)` creation with lease proof, without command execution or
+     execution receipt submission
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

@@ -889,6 +889,162 @@ func TestPostTaskExecutionJobsRejectsBoundaryFailures(t *testing.T) {
 	})
 }
 
+func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	taskID := accepted.CreatedTaskIDs[0]
+	_, receipt := createCheckoutReceipt(t, server, taskID)
+	job := createExecutionJob(t, server, taskID, receipt.ID)
+
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"runner_id":"runner-1"}`, job.RepoBindingID))
+	if leaseResponse.code != http.StatusCreated {
+		t.Fatalf("execution lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token_hash\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(leaseResponse.body, forbidden) {
+			t.Fatalf("execution lease response exposes forbidden field %s: %s", forbidden, leaseResponse.body)
+		}
+	}
+	var lease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, leaseResponse.body, &lease)
+	if lease.ID == "" || lease.ExecutionJobID != job.ID || lease.TaskID != taskID || lease.CheckoutReceiptID != receipt.ID || lease.RunnerID != "runner-1" || lease.LeaseToken == "" {
+		t.Fatalf("execution lease = %#v, want scoped lease with one-time token", lease)
+	}
+	if lease.ExecutionJob.State != spine.ExecutionJobStateLeased {
+		t.Fatalf("lease execution job state = %q, want leased", lease.ExecutionJob.State)
+	}
+	if len(server.runs.runs) != 0 {
+		t.Fatalf("runs = %d, want no Run after lease acquisition", len(server.runs.runs))
+	}
+	storedJob := server.executionJobs.jobs[job.ID]
+	if storedJob.State != spine.ExecutionJobStateLeased || storedJob.CurrentLeaseID == nil || *storedJob.CurrentLeaseID != lease.ID || storedJob.LeaseTokenHash == "" || storedJob.LeaseTokenHash == lease.LeaseToken {
+		t.Fatalf("stored execution job lease fields = %#v, want hashed lease proof only", storedJob)
+	}
+
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(runResponse.body, forbidden) {
+			t.Fatalf("run response exposes forbidden field %s: %s", forbidden, runResponse.body)
+		}
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+	if run.ID == "" || run.ExecutionJobID != job.ID || run.ExecutionLeaseID != lease.ID || run.TaskID != taskID || run.CheckoutReceiptID != receipt.ID || run.RunnerID != "runner-1" || run.State != spine.RunStateStarted {
+		t.Fatalf("run = %#v, want started run bound to execution lease", run)
+	}
+	if got := server.executionJobs.jobs[job.ID].State; got != spine.ExecutionJobStateRunStarted {
+		t.Fatalf("execution job state = %q, want run_started", got)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() = %#v/%v/%v", storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after run start", storedTask.Status)
+	}
+	assertNoForbiddenPostRunSideEffects(t, server.events.Events())
+	if got := countEventType(server.events.Events(), execution.EventTypeRunStarted); got != 1 {
+		t.Fatalf("run.started events = %d, want 1", got)
+	}
+
+	secondRunResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if secondRunResponse.code != http.StatusOK {
+		t.Fatalf("second run start status = %d, want %d: %s", secondRunResponse.code, http.StatusOK, secondRunResponse.body)
+	}
+	var existing spine.Run
+	decodeJSON(t, secondRunResponse.body, &existing)
+	if existing.ID != run.ID || len(server.runs.runs) != 1 {
+		t.Fatalf("existing run id/count = %q/%d, want %q/1", existing.ID, len(server.runs.runs), run.ID)
+	}
+
+	wrongProofResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":"wrong-token","runner_id":"runner-1"}`, lease.ID))
+	assertErrorCode(t, wrongProofResponse, http.StatusConflict, "invalid_lease")
+	if len(server.runs.runs) != 1 {
+		t.Fatalf("runs = %d, want no duplicate run after wrong repeated proof", len(server.runs.runs))
+	}
+}
+
+func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
+	t.Run("unauthenticated rejects before mutation", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+		lease := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
+		run := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/execution-job-1/runs", `{"lease_id":"execution-lease-1","lease_token":"secret","runner_id":"runner-1"}`)
+		assertErrorCode(t, run, http.StatusUnauthorized, "unauthorized")
+		if len(server.runs.runs) != 0 {
+			t.Fatalf("runs = %d, want 0 after auth failure", len(server.runs.runs))
+		}
+	})
+
+	t.Run("no queued execution job returns no work", func(t *testing.T) {
+		server := testServer(t)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		if response.code != http.StatusNoContent {
+			t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNoContent, response.body)
+		}
+		if len(server.runs.runs) != 0 {
+			t.Fatalf("runs = %d, want no Run after no-work lease", len(server.runs.runs))
+		}
+	})
+
+	t.Run("lease rejects foreign organization scope", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+		})
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
+	})
+
+	t.Run("lease rejects project expectation mismatch", func(t *testing.T) {
+		server := testServer(t)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", `{"project_id":"project-mismatch","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+	})
+
+	t.Run("run start rejects invalid lease proof", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":"wrong-token","runner_id":"runner-1"}`, lease.ID))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_lease")
+		if len(server.runs.runs) != 0 {
+			t.Fatalf("runs = %d, want 0 after invalid lease token", len(server.runs.runs))
+		}
+	})
+
+	t.Run("run start rejects wrong runner", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-other"}`, lease.ID, lease.LeaseToken))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_lease")
+		if len(server.runs.runs) != 0 {
+			t.Fatalf("runs = %d, want 0 after wrong runner", len(server.runs.runs))
+		}
+	})
+
+	t.Run("run start rejects expired lease", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		storedJob := server.executionJobs.jobs[job.ID]
+		expiredAt := testTime().Add(-time.Minute)
+		storedJob.LeaseExpiresAt = &expiredAt
+		server.executionJobs.jobs[job.ID] = storedJob
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		assertErrorCode(t, response, http.StatusConflict, "lease_expired")
+		if len(server.runs.runs) != 0 {
+			t.Fatalf("runs = %d, want 0 after expired lease", len(server.runs.runs))
+		}
+	})
+}
+
 func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 	t.Run("unauthenticated rejects before job creation", func(t *testing.T) {
 		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
@@ -940,6 +1096,37 @@ func createCheckoutReceipt(t *testing.T, server testServerDeps, taskID spine.Wor
 	var receipt spine.CheckoutReceipt
 	decodeJSON(t, receiptResponse.body, &receipt)
 	return job, receipt
+}
+
+func createExecutionJob(t *testing.T, server testServerDeps, taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) spine.ExecutionJob {
+	t.Helper()
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", fmt.Sprintf(`{"checkout_receipt_id":%q}`, receiptID))
+	if response.code != http.StatusCreated && response.code != http.StatusOK {
+		t.Fatalf("create execution job status = %d, want success: %s", response.code, response.body)
+	}
+	var job spine.ExecutionJob
+	decodeJSON(t, response.body, &job)
+	return job
+}
+
+func createLeasedExecutionJob(t *testing.T, server testServerDeps) (spine.ExecutionJob, spine.ExecutionJobLeaseCreated) {
+	t.Helper()
+
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	taskID := accepted.CreatedTaskIDs[0]
+	_, receipt := createCheckoutReceipt(t, server, taskID)
+	job := createExecutionJob(t, server, taskID, receipt.ID)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"runner_id":"runner-1"}`, job.RepoBindingID))
+	if response.code != http.StatusCreated {
+		t.Fatalf("execution lease status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	var lease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, response.body, &lease)
+	return job, lease
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {
@@ -1329,6 +1516,26 @@ func assertNoForbiddenRuntimeSideEffects(t *testing.T, events []spine.Event) {
 	for _, event := range events {
 		if forbidden[event.Type] {
 			t.Fatalf("forbidden runtime event type appended: %s", event.Type)
+		}
+	}
+}
+
+func assertNoForbiddenPostRunSideEffects(t *testing.T, events []spine.Event) {
+	t.Helper()
+
+	forbidden := map[string]bool{
+		"work_item.assigned":    true,
+		"work_item.claimed":     true,
+		"receipt.created":       true,
+		"receipt.submitted":     true,
+		"decision.created":      true,
+		"gate_decision.created": true,
+		"gate.decision_written": true,
+		"proof.created":         true,
+	}
+	for _, event := range events {
+		if forbidden[event.Type] {
+			t.Fatalf("forbidden post-run event type appended: %s", event.Type)
 		}
 	}
 }

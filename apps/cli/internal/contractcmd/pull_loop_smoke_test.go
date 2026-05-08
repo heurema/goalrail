@@ -221,7 +221,7 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("work execution prepare smoke error = %v", err)
 	}
 	assertSmokeSchema(t, executionPrepared.SchemaVersion)
-	assertNextAction(t, executionPrepared.NextAction, "runner_execution_required", false, true, "H2.2")
+	assertNextAction(t, executionPrepared.NextAction, "runner_execution_required", false, true, "H2.3")
 	if executionPrepared.TaskID != smokeWorkItemID || executionPrepared.CheckoutReceiptID != smokeCheckoutReceiptID || executionPrepared.ExecutionJobID != smokeExecutionJobID || executionPrepared.ExecutionJobState != "queued" {
 		t.Fatalf("execution prepare output = %#v, want queued execution job for task/receipt", executionPrepared)
 	}

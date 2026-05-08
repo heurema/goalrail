@@ -53,6 +53,7 @@ type postgresStores struct {
 	checkoutJobs          *store.PostgresCheckoutJobStore
 	checkoutReceipts      *store.PostgresCheckoutReceiptStore
 	executionJobs         *store.PostgresExecutionJobStore
+	runs                  *store.PostgresRunStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
 	userManagement        *store.PostgresUserManagementStore
@@ -77,6 +78,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		checkoutJobs:          store.NewPostgresCheckoutJobStore(pool),
 		checkoutReceipts:      store.NewPostgresCheckoutReceiptStore(pool),
 		executionJobs:         store.NewPostgresExecutionJobStore(pool),
+		runs:                  store.NewPostgresRunStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
 		userManagement:        store.NewPostgresUserManagementStore(pool),
@@ -122,7 +124,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
 		checkout:          checkout.NewService(stores.workItems, stores.projectContext, stores.checkoutJobs, stores.checkoutReceipts, stores.events, txRunner, checkout.SystemClock{}, checkout.UUIDGenerator{}),
-		execution:         execution.NewService(stores.workItems, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{}),
+		execution:         execution.NewService(stores.workItems, stores.projectContext, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.runs, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{}),
 		repoBinding:       repoBindingService,
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
@@ -245,6 +247,8 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		TaskExecutionJobs:             http.HandlerFunc(h.execution.CreateJob),
 		CheckoutJobLeases:             http.HandlerFunc(h.checkout.AcquireLease),
 		CheckoutJobReceipts:           http.HandlerFunc(h.checkout.SubmitReceipt),
+		ExecutionJobLeases:            http.HandlerFunc(h.execution.AcquireLease),
+		ExecutionJobRuns:              http.HandlerFunc(h.execution.StartRun),
 		ClarificationAnswers:          http.HandlerFunc(h.clarification.RecordAnswer),
 		ClarificationAnswerApply:      http.HandlerFunc(h.clarification.ApplyAnswer),
 	}
@@ -324,6 +328,8 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		TaskExecutionJobs:             unavailable,
 		CheckoutJobLeases:             unavailable,
 		CheckoutJobReceipts:           unavailable,
+		ExecutionJobLeases:            unavailable,
+		ExecutionJobRuns:              unavailable,
 		ClarificationAnswers:          unavailable,
 		ClarificationAnswerApply:      unavailable,
 	}

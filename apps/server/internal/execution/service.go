@@ -2,6 +2,10 @@ package execution
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,24 +19,37 @@ import (
 
 const (
 	EventTypeExecutionJobCreated = "execution_job.created"
+	EventTypeExecutionJobLeased  = "execution_job.leased"
+	EventTypeRunStarted          = "run.started"
 
 	EntityTypeExecutionJob = "ExecutionJob"
+	EntityTypeRun          = "Run"
 
 	ExecutionModePrepareV0 = "prepare_v0"
+
+	defaultLeaseTTL = 15 * time.Minute
+	minLeaseTTL     = 30 * time.Second
+	maxLeaseTTL     = 60 * time.Minute
 )
 
 var (
 	ErrWorkItemNotFound        = errors.New("work item not found")
+	ErrRepoBindingNotFound     = errors.New("repo binding not found")
 	ErrCheckoutReceiptNotFound = errors.New("checkout receipt not found")
 	ErrCheckoutJobNotFound     = errors.New("checkout job not found")
+	ErrExecutionJobNotFound    = errors.New("execution job not found")
 	ErrInvalidWorkItemState    = errors.New("work item state does not allow execution preparation")
 	ErrInvalidCheckoutState    = errors.New("checkout job state does not allow execution preparation")
+	ErrInvalidExecutionState   = errors.New("execution job state does not allow this transition")
+	ErrLeaseExpired            = errors.New("execution job lease expired")
+	ErrInvalidLease            = errors.New("execution job lease is invalid")
 	ErrMembershipRequired      = errors.New("active organization membership is required")
 	ErrOrganizationForbidden   = errors.New("user is not allowed to prepare execution for this work item")
 	ErrProjectMismatch         = errors.New("execution project expectation does not match work item")
 	ErrRepoBindingMismatch     = errors.New("execution repo binding expectation does not match work item")
 	ErrCheckoutReceiptMismatch = errors.New("checkout receipt does not match work item")
 	ErrRawSourceUploaded       = errors.New("checkout receipt must not upload raw source")
+	ErrRunAlreadyStarted       = errors.New("execution job already has run")
 )
 
 type ValidationError struct {
@@ -51,6 +68,10 @@ type WorkItemReader interface {
 	Get(context.Context, spine.WorkItemID) (spine.WorkItem, bool, error)
 }
 
+type RepoBindingReader interface {
+	GetRepoBinding(context.Context, spine.RepoBindingID) (spine.RepoBinding, bool, error)
+}
+
 type CheckoutReceiptReader interface {
 	Get(context.Context, spine.CheckoutReceiptID) (spine.CheckoutReceipt, bool, error)
 }
@@ -59,9 +80,29 @@ type CheckoutJobReader interface {
 	Get(context.Context, spine.CheckoutJobID) (spine.CheckoutJob, bool, error)
 }
 
+type JobLeaseInput struct {
+	ID             spine.ExecutionLeaseID
+	OrganizationID spine.OrganizationID
+	ProjectID      spine.ProjectID
+	RepoBindingID  spine.RepoBindingID
+	RunnerID       string
+	LeaseTokenHash string
+	ExpiresAt      time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
 type JobStore interface {
 	Create(context.Context, spine.ExecutionJob) error
+	Get(context.Context, spine.ExecutionJobID) (spine.ExecutionJob, bool, error)
 	GetByTaskAndCheckoutReceipt(context.Context, spine.WorkItemID, spine.CheckoutReceiptID) (spine.ExecutionJob, bool, error)
+	AcquireNextLease(context.Context, JobLeaseInput) (spine.ExecutionLease, spine.ExecutionJob, bool, error)
+	MarkRunStarted(context.Context, spine.ExecutionJobID, spine.ExecutionLeaseID, string, string, time.Time) (bool, error)
+}
+
+type RunStore interface {
+	Create(context.Context, spine.Run) error
+	GetByExecutionLease(context.Context, spine.ExecutionLeaseID) (spine.Run, bool, error)
 }
 
 type EventLog interface {
@@ -78,26 +119,32 @@ type Clock interface {
 
 type IDGenerator interface {
 	NewExecutionJobID() (spine.ExecutionJobID, error)
+	NewExecutionLeaseID() (spine.ExecutionLeaseID, error)
+	NewRunID() (spine.RunID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
 	WorkItems        WorkItemReader
+	RepoBindings     RepoBindingReader
 	CheckoutReceipts CheckoutReceiptReader
 	CheckoutJobs     CheckoutJobReader
 	Jobs             JobStore
+	Runs             RunStore
 	Events           EventLog
 	TxRunner         TransactionRunner
 	Clock            Clock
 	IDs              IDGenerator
 }
 
-func NewService(workItems WorkItemReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		WorkItems:        workItems,
+		RepoBindings:     repoBindings,
 		CheckoutReceipts: checkoutReceipts,
 		CheckoutJobs:     checkoutJobs,
 		Jobs:             jobs,
+		Runs:             runs,
 		Events:           events,
 		TxRunner:         txRunner,
 		Clock:            clock,
@@ -172,6 +219,203 @@ func (s *Service) CreateOrReturnJob(ctx context.Context, taskID spine.WorkItemID
 	return job, true, nil
 }
 
+func (s *Service) AcquireNextLease(ctx context.Context, input spine.ExecutionJobLeaseCreateRequest, membership spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error) {
+	if err := requireActiveMembership(membership); err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, err
+	}
+	runnerID := strings.TrimSpace(input.RunnerID)
+	if runnerID == "" {
+		return spine.ExecutionJobLeaseCreated{}, false, &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	projectID := input.ProjectID
+	if strings.TrimSpace(string(projectID)) == "" {
+		return spine.ExecutionJobLeaseCreated{}, false, &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	repoBindingID := input.RepoBindingID
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		return spine.ExecutionJobLeaseCreated{}, false, &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if err := s.validateLeaseScope(ctx, projectID, repoBindingID, membership); err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, err
+	}
+	ttl, err := leaseTTL(input.TTLSeconds)
+	if err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, err
+	}
+	leaseID, err := s.IDs.NewExecutionLeaseID()
+	if err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, fmt.Errorf("new execution lease id: %w", err)
+	}
+	token, err := newLeaseToken()
+	if err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, fmt.Errorf("new execution lease token: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	leaseInput := JobLeaseInput{
+		ID:             leaseID,
+		OrganizationID: membership.OrganizationID,
+		ProjectID:      projectID,
+		RepoBindingID:  repoBindingID,
+		RunnerID:       runnerID,
+		LeaseTokenHash: leaseTokenHash(token),
+		ExpiresAt:      now.Add(ttl),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	var lease spine.ExecutionLease
+	var job spine.ExecutionJob
+	var ok bool
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		var acquireErr error
+		lease, job, ok, acquireErr = s.Jobs.AcquireNextLease(txCtx, leaseInput)
+		if acquireErr != nil {
+			return fmt.Errorf("acquire execution job lease: %w", acquireErr)
+		}
+		if !ok {
+			return nil
+		}
+		event, err := s.event(EventTypeExecutionJobLeased, EntityTypeExecutionJob, string(job.ID), job.OrganizationID, job.ProjectID, job.RepoBindingID, now, map[string]any{
+			"execution_job_id":    job.ID,
+			"execution_lease_id":  lease.ID,
+			"task_id":             job.TaskID,
+			"checkout_receipt_id": job.CheckoutReceiptID,
+			"repo_binding_id":     job.RepoBindingID,
+			"runner_id":           runnerID,
+		})
+		if err != nil {
+			return err
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append execution job leased event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.ExecutionJobLeaseCreated{}, false, err
+	}
+	if !ok {
+		return spine.ExecutionJobLeaseCreated{}, false, nil
+	}
+	return spine.ExecutionJobLeaseCreated{
+		ID:                lease.ID,
+		ExecutionJobID:    lease.ExecutionJobID,
+		TaskID:            lease.TaskID,
+		CheckoutReceiptID: lease.CheckoutReceiptID,
+		RepoBindingID:     lease.RepoBindingID,
+		RunnerID:          lease.RunnerID,
+		State:             lease.State,
+		LeaseToken:        token,
+		ExpiresAt:         lease.ExpiresAt,
+		ExecutionJob:      job,
+		CreatedAt:         lease.CreatedAt,
+		UpdatedAt:         lease.UpdatedAt,
+	}, true, nil
+}
+
+func (s *Service) StartRun(ctx context.Context, jobID spine.ExecutionJobID, input spine.RunStartRequest, membership spine.OrganizationMembership) (spine.Run, bool, error) {
+	if err := validateRunStartInput(input); err != nil {
+		return spine.Run{}, false, err
+	}
+	job, ok, err := s.Jobs.Get(ctx, jobID)
+	if err != nil {
+		return spine.Run{}, false, fmt.Errorf("get execution job: %w", err)
+	}
+	if !ok {
+		return spine.Run{}, false, ErrExecutionJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.Run{}, false, err
+	}
+	now := s.Clock.Now().UTC()
+	if existing, ok, err := s.Runs.GetByExecutionLease(ctx, input.LeaseID); err != nil {
+		return spine.Run{}, false, fmt.Errorf("get run by execution lease: %w", err)
+	} else if ok {
+		if existing.ExecutionJobID != job.ID {
+			return spine.Run{}, false, ErrInvalidLease
+		}
+		if err := validateCurrentLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+			return spine.Run{}, false, err
+		}
+		return existing, false, nil
+	}
+	if job.State != spine.ExecutionJobStateLeased {
+		if job.State == spine.ExecutionJobStateRunStarted {
+			return spine.Run{}, false, ErrRunAlreadyStarted
+		}
+		return spine.Run{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
+	}
+	if err := validateLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+		return spine.Run{}, false, err
+	}
+	runID, err := s.IDs.NewRunID()
+	if err != nil {
+		return spine.Run{}, false, fmt.Errorf("new run id: %w", err)
+	}
+	run := spine.Run{
+		ID:                runID,
+		ExecutionJobID:    job.ID,
+		ExecutionLeaseID:  input.LeaseID,
+		TaskID:            job.TaskID,
+		CheckoutReceiptID: job.CheckoutReceiptID,
+		RunnerID:          strings.TrimSpace(input.RunnerID),
+		State:             spine.RunStateStarted,
+		StartedAt:         now,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	event, err := s.event(EventTypeRunStarted, EntityTypeRun, string(run.ID), job.OrganizationID, job.ProjectID, job.RepoBindingID, now, map[string]any{
+		"run_id":              run.ID,
+		"execution_job_id":    run.ExecutionJobID,
+		"execution_lease_id":  run.ExecutionLeaseID,
+		"task_id":             run.TaskID,
+		"checkout_receipt_id": run.CheckoutReceiptID,
+		"runner_id":           run.RunnerID,
+	})
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.Runs.Create(txCtx, run); err != nil {
+			return fmt.Errorf("create run: %w", err)
+		}
+		updated, err := s.Jobs.MarkRunStarted(txCtx, job.ID, input.LeaseID, run.RunnerID, leaseTokenHash(input.LeaseToken), now)
+		if err != nil {
+			return fmt.Errorf("mark execution job run started: %w", err)
+		}
+		if !updated {
+			return ErrInvalidLease
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append run started event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		if existing, ok, lookupErr := s.Runs.GetByExecutionLease(ctx, input.LeaseID); lookupErr != nil {
+			return spine.Run{}, false, fmt.Errorf("get run by execution lease after start failure: %w", lookupErr)
+		} else if ok {
+			return existing, false, nil
+		}
+		return spine.Run{}, false, err
+	}
+	return run, true, nil
+}
+
+func (s *Service) validateLeaseScope(ctx context.Context, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership) error {
+	binding, ok, err := s.RepoBindings.GetRepoBinding(ctx, repoBindingID)
+	if err != nil {
+		return fmt.Errorf("get execution lease repo binding: %w", err)
+	}
+	if !ok || binding.State != spine.EntityStateActive {
+		return ErrRepoBindingNotFound
+	}
+	if binding.OrganizationID != membership.OrganizationID {
+		return ErrOrganizationForbidden
+	}
+	if binding.ProjectID != projectID {
+		return ErrProjectMismatch
+	}
+	return nil
+}
+
 func (s *Service) loadAuthorizedContext(ctx context.Context, taskID spine.WorkItemID, input spine.ExecutionJobCreateRequest, membership spine.OrganizationMembership) (spine.WorkItem, spine.CheckoutReceipt, spine.CheckoutJob, error) {
 	task, ok, err := s.WorkItems.Get(ctx, taskID)
 	if err != nil {
@@ -237,6 +481,19 @@ func validateCreateInput(input spine.ExecutionJobCreateRequest) error {
 	return nil
 }
 
+func validateRunStartInput(input spine.RunStartRequest) error {
+	if strings.TrimSpace(string(input.LeaseID)) == "" {
+		return &ValidationError{Field: "lease_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.LeaseToken) == "" {
+		return &ValidationError{Field: "lease_token", Message: "is required"}
+	}
+	if strings.TrimSpace(input.RunnerID) == "" {
+		return &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	return nil
+}
+
 func validateActor(field string, actor spine.ActorRef) error {
 	if strings.TrimSpace(actor.Kind) == "" {
 		return &ValidationError{Field: field + ".kind", Message: "is required"}
@@ -262,6 +519,56 @@ func requireActiveMembership(membership spine.OrganizationMembership) error {
 		return ErrMembershipRequired
 	}
 	return nil
+}
+
+func validateLeaseProof(job spine.ExecutionJob, leaseID spine.ExecutionLeaseID, runnerID string, tokenHash string, now time.Time) error {
+	if job.State != spine.ExecutionJobStateLeased {
+		return fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
+	}
+	return validateCurrentLeaseProof(job, leaseID, runnerID, tokenHash, now)
+}
+
+func validateCurrentLeaseProof(job spine.ExecutionJob, leaseID spine.ExecutionLeaseID, runnerID string, tokenHash string, now time.Time) error {
+	if job.CurrentLeaseID == nil || *job.CurrentLeaseID != leaseID {
+		return ErrInvalidLease
+	}
+	if strings.TrimSpace(job.CurrentRunnerID) != strings.TrimSpace(runnerID) {
+		return ErrInvalidLease
+	}
+	if strings.TrimSpace(job.LeaseTokenHash) == "" || job.LeaseTokenHash != tokenHash {
+		return ErrInvalidLease
+	}
+	if job.LeaseExpiresAt == nil || !job.LeaseExpiresAt.After(now) {
+		return ErrLeaseExpired
+	}
+	return nil
+}
+
+func leaseTTL(seconds int) (time.Duration, error) {
+	if seconds == 0 {
+		return defaultLeaseTTL, nil
+	}
+	ttl := time.Duration(seconds) * time.Second
+	if ttl < minLeaseTTL {
+		return 0, &ValidationError{Field: "ttl_seconds", Message: "must be at least 30"}
+	}
+	if ttl > maxLeaseTTL {
+		return 0, &ValidationError{Field: "ttl_seconds", Message: "must be at most 3600"}
+	}
+	return ttl, nil
+}
+
+func newLeaseToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
+}
+
+func leaseTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Service) event(eventType string, entityType string, entityID string, organizationID spine.OrganizationID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, occurredAt time.Time, payload any) (spine.Event, error) {
@@ -300,6 +607,22 @@ func (UUIDGenerator) NewExecutionJobID() (spine.ExecutionJobID, error) {
 		return "", err
 	}
 	return spine.ExecutionJobID(id.String()), nil
+}
+
+func (UUIDGenerator) NewExecutionLeaseID() (spine.ExecutionLeaseID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.ExecutionLeaseID(id.String()), nil
+}
+
+func (UUIDGenerator) NewRunID() (spine.RunID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.RunID(id.String()), nil
 }
 
 func (UUIDGenerator) NewEventID() (spine.EventID, error) {

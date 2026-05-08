@@ -327,9 +327,9 @@ If a Goalrail JSON response contains ` + "`next_action.kind=prepare_checkout`" +
 
 If a Goalrail JSON response contains ` + "`next_action.kind=runner_checkout_required`" + `, explain that a runner process must submit a workspace receipt before execution can be designed. Do not perform checkout by chat, do not run arbitrary commands as proof, and do not claim execution.
 
-If a Goalrail JSON response or runner handoff includes a ` + "`task_id`" + ` and ` + "`checkout_receipt_id`" + `, and the user asks to prepare execution, call ` + "`goalrail work execution prepare`" + `. This creates or returns a server-owned ExecutionJob only. It does not create Run, lease execution, execute commands, create execution receipt, gate, or proof.
+If a Goalrail JSON response or runner handoff includes a ` + "`task_id`" + ` and ` + "`checkout_receipt_id`" + `, and the user asks to prepare execution, call ` + "`goalrail work execution prepare`" + `. This creates or returns a server-owned ExecutionJob only. It does not start Run, execute commands, create execution receipt, gate, or proof.
 
-If a Goalrail JSON response contains ` + "`next_action.kind=runner_execution_required`" + `, explain that runner execution start is a future slice. Do not run commands by chat and do not claim execution.
+If a Goalrail JSON response contains ` + "`next_action.kind=runner_execution_required`" + `, explain that a runner must lease the ExecutionJob and explicitly start a Run before later execution receipt work. Do not run commands by chat and do not claim command execution, receipt, gate, or proof.
 
 After the command returns, show a concise human summary with:
 
