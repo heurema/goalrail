@@ -32,6 +32,13 @@
   creates or returns `ExecutionJob(queued)` from `WorkItem(planned)` plus
   `CheckoutReceipt` without creating `Run`, leasing execution, running
   commands, creating execution receipt, gate, or proof
+- H2.2 now implements runner execution lease acquisition and explicit
+  `Run(started)` creation with lease proof; H2.2+ smoke coverage pins that
+  transition without command execution, receipt, gate, or proof
+- H2.3 now implements metadata-only `ExecutionReceipt` submission for started
+  Runs through `POST /v1/runs/{id}/receipts` and
+  `goalrail-runner --mode execution-receipt`; receipts are no-command evidence
+  inputs, not task completion, GateDecision, or Proof
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -46,7 +53,7 @@
 - ADR-0015 now defines the `ContractDraft` review/update boundary, and the server can update proposed draft fields while keeping state `draft`; approval remains a later boundary
 - ADR-0016 now defines the `ContractDraft ready_for_approval` boundary, and the server implements it as an explicit `draft -> ready_for_approval` transition with completeness checks and `marked_by` audit identity; approval, approved Contract, work item, gate, and proof remain later boundaries
 - ADR-0017 now defines the Contract approval boundary from `ContractDraft(ready_for_approval)` to `ApprovedContract`; the server implements it as explicit ApprovedContract snapshot creation with `approved_by` and `contract.approved`; approval does not start execution, gate, or proof
-- ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, execution, Run, execution receipt, gate, and proof remain later boundaries
+- ADR-0018 now defines the WorkItem planning boundary from `ApprovedContract(approved)` to `WorkItem(planned)`; WorkItems remain non-executable while assignment, claiming, command execution, gate, and proof remain later boundaries
 - ADR-0019 now qualifies WorkItem planning with a Kubernetes-style control-plane split: the API server owns canonical state and accepted WorkItems, while repo-aware planning computation belongs behind worker / controller / runner boundaries; the public `plans` / `proposals` / `acceptance` API has landed, and the first minimal API-only planning worker exists under `apps/worker`, while worker controller / runner execution-side implementation remains deferred
 - ADR-0020 now defines the public Contract identity boundary: public API should use one stable `Contract` aggregate and `contract_id`, while `ContractSeed`, `ContractDraft`, and `ApprovedContract` remain internal lifecycle records; the server now implements the smallest aggregate/store/linkage boundary and public `/v1/contracts` lifecycle façade routes
 - ADR-0021 now defines and the server implements the typed WorkItemPlan pull lease boundary: planning workers create `WorkItemPlanLease` reservations through the API server using `POST /v1/plans/leases`; `WorkItemPlan(state=queued)` remains the typed planning queue item, proposal submission requires lease proof, no generic queue platform is accepted, and no generic worker controller exists
@@ -58,12 +65,14 @@
   assignment/claiming, queue/outbox/runtime registry, `Run`, receipt,
   `GateDecision`, or `Proof`.
 - `apps/runner` now implements the first minimal API-only `goalrail-runner`
-  checkout receipt loop. It polls checkout job leases using an
-  operator-declared project / repo-binding scope, receives bounded checkout
-  instructions, validates them against that scope, and submits lease-qualified
-  workspace receipts with lease proof. It does not clone/fetch repositories in
-  H1, run commands, assign/claim WorkItems, create `Run`, write
-  `GateDecision`, create `Proof`, or add runtime registry behavior.
+  checkout receipt, execution-start, and execution-receipt loops. It polls
+  checkout and execution leases using an operator-declared project /
+  repo-binding scope, validates leased instructions against that scope, submits
+  lease-qualified workspace receipts, starts `Run(started)` with execution
+  lease proof, and can submit one no-command metadata `ExecutionReceipt`. It
+  does not clone/fetch repositories in H1/H2.3, run commands, assign/claim
+  WorkItems, write `GateDecision`, create `Proof`, or add runtime registry
+  behavior.
 - ADR-0022 now defines the Installation boundary above Organization:
   `Installation` is the concrete running Goalrail control plane / instance,
   Organization remains the tenant/workspace boundary, `self_hosted` and `saas`
@@ -164,9 +173,10 @@
   `ExecutionJob(queued)` without `Run`, execution receipt, gate, or proof.
   H2.2 now implements runner execution lease acquisition plus explicit
   `Run(started)` creation with lease proof; H2.2+ smoke coverage now pins that
-  transition. WorkItems still remain `planned`; assignment, claiming, command
-  execution, execution receipt, gate, and proof are still deferred.
-- Execution receipt, gate, proof, assignment/claiming, queue, outbox, runtime
+  transition. H2.3 now implements metadata-only `ExecutionReceipt` submission
+  for started Runs without command execution. WorkItems still remain `planned`;
+  assignment, claiming, command execution, gate, and proof are still deferred.
+- Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and command execution behavior remain deferred.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
@@ -886,6 +896,12 @@ Done means:
    - H2.2 implemented runner execution lease acquisition and explicit
      `Run(started)` creation with lease proof, without command execution or
      execution receipt submission; H2.2+ smoke coverage pins this boundary
+   - H2.3 implements metadata-only `ExecutionReceipt` submission for started
+     Runs through a runner-facing receipt route and `goalrail-runner --mode
+     execution-receipt`; receipt submission carries explicit `lease_id` plus
+     `lease_token`, supports re-lease recovery for expired `run_started` jobs
+     without receipts, and remains no-command evidence input, not task
+     completion, `GateDecision`, or `Proof`
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
@@ -922,7 +938,8 @@ Done means:
 2. Marker-backed work command hardening
    - decide whether later work-start UX needs a server-owned composite endpoint
      for Intake + Goal atomicity before adding audit
-   - keep Contract, WorkItem, audit, runner, gate, and proof deferred
+   - keep Contract, WorkItem, audit, runner-owned runtime, gate, and proof
+     changes out of this CLI hardening slice
 3. Contract draft/approval flow integration
    - connect `goalrail contract validate` to real contract draft and approval state
    - preserve field-level validation findings
@@ -935,13 +952,15 @@ Done means:
 1. WorkItem assignment/claiming boundary design
    - define the smallest explicit transition after the accepted-proposal
      planning boundary
-   - keep runner, execution, receipt, gate, and proof as later boundaries
+   - keep assignment/claiming separate from the existing runner-owned
+     checkout/execution records, and keep command execution, gate, and proof as
+     separate later boundaries
    - do not start execution from assignment/claiming
    - preserve `owner_hint` as advisory unless a later boundary upgrades it
-3. Runner boundary design
-   - define the hosted runner protocol and checkout boundary before any code
-     execution work
-   - keep execution, gate, and proof deferred
+3. Runner registration / runtime hardening
+   - define dedicated runner registration, runner token, and trust hardening
+     before production command execution work
+   - keep command execution, gate, and proof deferred
 5. CLI-to-server intake submit integration
    - submit intake from the CLI to the server once the API boundary exists
    - keep the CLI as an adapter, not a canonical state owner

@@ -18,12 +18,14 @@ import (
 )
 
 const (
-	EventTypeExecutionJobCreated = "execution_job.created"
-	EventTypeExecutionJobLeased  = "execution_job.leased"
-	EventTypeRunStarted          = "run.started"
+	EventTypeExecutionJobCreated       = "execution_job.created"
+	EventTypeExecutionJobLeased        = "execution_job.leased"
+	EventTypeRunStarted                = "run.started"
+	EventTypeExecutionReceiptSubmitted = "execution_receipt.submitted"
 
-	EntityTypeExecutionJob = "ExecutionJob"
-	EntityTypeRun          = "Run"
+	EntityTypeExecutionJob     = "ExecutionJob"
+	EntityTypeRun              = "Run"
+	EntityTypeExecutionReceipt = "ExecutionReceipt"
 
 	ExecutionModePrepareV0 = "prepare_v0"
 
@@ -33,23 +35,26 @@ const (
 )
 
 var (
-	ErrWorkItemNotFound        = errors.New("work item not found")
-	ErrRepoBindingNotFound     = errors.New("repo binding not found")
-	ErrCheckoutReceiptNotFound = errors.New("checkout receipt not found")
-	ErrCheckoutJobNotFound     = errors.New("checkout job not found")
-	ErrExecutionJobNotFound    = errors.New("execution job not found")
-	ErrInvalidWorkItemState    = errors.New("work item state does not allow execution preparation")
-	ErrInvalidCheckoutState    = errors.New("checkout job state does not allow execution preparation")
-	ErrInvalidExecutionState   = errors.New("execution job state does not allow this transition")
-	ErrLeaseExpired            = errors.New("execution job lease expired")
-	ErrInvalidLease            = errors.New("execution job lease is invalid")
-	ErrMembershipRequired      = errors.New("active organization membership is required")
-	ErrOrganizationForbidden   = errors.New("user is not allowed to prepare execution for this work item")
-	ErrProjectMismatch         = errors.New("execution project expectation does not match work item")
-	ErrRepoBindingMismatch     = errors.New("execution repo binding expectation does not match work item")
-	ErrCheckoutReceiptMismatch = errors.New("checkout receipt does not match work item")
-	ErrRawSourceUploaded       = errors.New("checkout receipt must not upload raw source")
-	ErrRunAlreadyStarted       = errors.New("execution job already has run")
+	ErrWorkItemNotFound           = errors.New("work item not found")
+	ErrRepoBindingNotFound        = errors.New("repo binding not found")
+	ErrCheckoutReceiptNotFound    = errors.New("checkout receipt not found")
+	ErrCheckoutJobNotFound        = errors.New("checkout job not found")
+	ErrExecutionJobNotFound       = errors.New("execution job not found")
+	ErrRunNotFound                = errors.New("run not found")
+	ErrInvalidWorkItemState       = errors.New("work item state does not allow execution preparation")
+	ErrInvalidCheckoutState       = errors.New("checkout job state does not allow execution preparation")
+	ErrInvalidExecutionState      = errors.New("execution job state does not allow this transition")
+	ErrInvalidRunState            = errors.New("run state does not allow this transition")
+	ErrLeaseExpired               = errors.New("execution job lease expired")
+	ErrInvalidLease               = errors.New("execution job lease is invalid")
+	ErrMembershipRequired         = errors.New("active organization membership is required")
+	ErrOrganizationForbidden      = errors.New("user is not allowed to prepare execution for this work item")
+	ErrProjectMismatch            = errors.New("execution project expectation does not match work item")
+	ErrRepoBindingMismatch        = errors.New("execution repo binding expectation does not match work item")
+	ErrCheckoutReceiptMismatch    = errors.New("checkout receipt does not match work item")
+	ErrRawSourceUploaded          = errors.New("checkout receipt must not upload raw source")
+	ErrExecutionRawSourceUploaded = errors.New("execution receipt must not upload raw source")
+	ErrRunAlreadyStarted          = errors.New("execution job already has run")
 )
 
 type ValidationError struct {
@@ -98,11 +103,20 @@ type JobStore interface {
 	GetByTaskAndCheckoutReceipt(context.Context, spine.WorkItemID, spine.CheckoutReceiptID) (spine.ExecutionJob, bool, error)
 	AcquireNextLease(context.Context, JobLeaseInput) (spine.ExecutionLease, spine.ExecutionJob, bool, error)
 	MarkRunStarted(context.Context, spine.ExecutionJobID, spine.ExecutionLeaseID, string, string, time.Time) (bool, error)
+	MarkReceiptSubmitted(context.Context, spine.ExecutionJobID, time.Time) (bool, error)
 }
 
 type RunStore interface {
 	Create(context.Context, spine.Run) error
+	Get(context.Context, spine.RunID) (spine.Run, bool, error)
 	GetByExecutionLease(context.Context, spine.ExecutionLeaseID) (spine.Run, bool, error)
+	GetByExecutionJob(context.Context, spine.ExecutionJobID) (spine.Run, bool, error)
+	MarkReceiptSubmitted(context.Context, spine.RunID, time.Time, time.Time) (bool, error)
+}
+
+type ExecutionReceiptStore interface {
+	Create(context.Context, spine.ExecutionReceipt) error
+	GetByRun(context.Context, spine.RunID) (spine.ExecutionReceipt, bool, error)
 }
 
 type EventLog interface {
@@ -121,34 +135,37 @@ type IDGenerator interface {
 	NewExecutionJobID() (spine.ExecutionJobID, error)
 	NewExecutionLeaseID() (spine.ExecutionLeaseID, error)
 	NewRunID() (spine.RunID, error)
+	NewExecutionReceiptID() (spine.ExecutionReceiptID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
-	WorkItems        WorkItemReader
-	RepoBindings     RepoBindingReader
-	CheckoutReceipts CheckoutReceiptReader
-	CheckoutJobs     CheckoutJobReader
-	Jobs             JobStore
-	Runs             RunStore
-	Events           EventLog
-	TxRunner         TransactionRunner
-	Clock            Clock
-	IDs              IDGenerator
+	WorkItems         WorkItemReader
+	RepoBindings      RepoBindingReader
+	CheckoutReceipts  CheckoutReceiptReader
+	CheckoutJobs      CheckoutJobReader
+	Jobs              JobStore
+	Runs              RunStore
+	ExecutionReceipts ExecutionReceiptStore
+	Events            EventLog
+	TxRunner          TransactionRunner
+	Clock             Clock
+	IDs               IDGenerator
 }
 
-func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, executionReceipts ExecutionReceiptStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
-		WorkItems:        workItems,
-		RepoBindings:     repoBindings,
-		CheckoutReceipts: checkoutReceipts,
-		CheckoutJobs:     checkoutJobs,
-		Jobs:             jobs,
-		Runs:             runs,
-		Events:           events,
-		TxRunner:         txRunner,
-		Clock:            clock,
-		IDs:              ids,
+		WorkItems:         workItems,
+		RepoBindings:      repoBindings,
+		CheckoutReceipts:  checkoutReceipts,
+		CheckoutJobs:      checkoutJobs,
+		Jobs:              jobs,
+		Runs:              runs,
+		ExecutionReceipts: executionReceipts,
+		Events:            events,
+		TxRunner:          txRunner,
+		Clock:             clock,
+		IDs:               ids,
 	}
 }
 
@@ -339,7 +356,17 @@ func (s *Service) StartRun(ctx context.Context, jobID spine.ExecutionJobID, inpu
 	}
 	if job.State != spine.ExecutionJobStateLeased {
 		if job.State == spine.ExecutionJobStateRunStarted {
-			return spine.Run{}, false, ErrRunAlreadyStarted
+			if err := validateCurrentLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+				return spine.Run{}, false, err
+			}
+			existing, ok, err := s.Runs.GetByExecutionJob(ctx, job.ID)
+			if err != nil {
+				return spine.Run{}, false, fmt.Errorf("get run by execution job: %w", err)
+			}
+			if !ok {
+				return spine.Run{}, false, ErrRunNotFound
+			}
+			return existing, false, nil
 		}
 		return spine.Run{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
 	}
@@ -397,6 +424,125 @@ func (s *Service) StartRun(ctx context.Context, jobID spine.ExecutionJobID, inpu
 		return spine.Run{}, false, err
 	}
 	return run, true, nil
+}
+
+func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input spine.ExecutionReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error) {
+	if err := validateReceiptInput(input); err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	run, ok, err := s.Runs.Get(ctx, runID)
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("get run: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionReceipt{}, false, ErrRunNotFound
+	}
+	if input.ExecutionJobID != run.ExecutionJobID {
+		return spine.ExecutionReceipt{}, false, ErrInvalidLease
+	}
+	job, ok, err := s.Jobs.Get(ctx, run.ExecutionJobID)
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("get execution job: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionReceipt{}, false, ErrExecutionJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	now := s.Clock.Now().UTC()
+	if err := validateCurrentLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	if existing, ok, err := s.ExecutionReceipts.GetByRun(ctx, run.ID); err != nil {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("get execution receipt by run: %w", err)
+	} else if ok {
+		return existing, false, nil
+	}
+	if run.State != spine.RunStateStarted {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("%w: %s", ErrInvalidRunState, run.State)
+	}
+	if job.State != spine.ExecutionJobStateRunStarted {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
+	}
+	receiptID, err := s.IDs.NewExecutionReceiptID()
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("new execution receipt id: %w", err)
+	}
+	receipt := spine.ExecutionReceipt{
+		ID:                  receiptID,
+		RunID:               run.ID,
+		ExecutionJobID:      run.ExecutionJobID,
+		ExecutionLeaseID:    input.LeaseID,
+		TaskID:              run.TaskID,
+		CheckoutReceiptID:   run.CheckoutReceiptID,
+		RepoBindingID:       job.RepoBindingID,
+		RunnerID:            strings.TrimSpace(input.RunnerID),
+		WorkspaceRef:        strings.TrimSpace(input.WorkspaceRef),
+		CommitSHA:           strings.TrimSpace(input.CommitSHA),
+		BaselineID:          strings.TrimSpace(input.BaselineID),
+		OverlayID:           strings.TrimSpace(input.OverlayID),
+		ExecutionMode:       spine.ExecutionReceiptModeNoCommand,
+		ProcessStatus:       strings.TrimSpace(input.ProcessStatus),
+		ArtifactRefs:        append([]string{}, input.ArtifactRefs...),
+		ChangedPathsSummary: append([]string{}, input.ChangedPathsSummary...),
+		RawSourceUploaded:   false,
+		StartedAt:           run.StartedAt.UTC(),
+		FinishedAt:          now,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+		NextAction: spine.ExecutionNextAction{
+			Kind:         spine.ExecutionReceiptNextActionGateReview,
+			Blocking:     true,
+			Available:    false,
+			PlannedSlice: spine.ExecutionReceiptNextActionPlannedSlice,
+		},
+	}
+	event, err := s.event(EventTypeExecutionReceiptSubmitted, EntityTypeExecutionReceipt, string(receipt.ID), job.OrganizationID, job.ProjectID, job.RepoBindingID, now, map[string]any{
+		"execution_receipt_id": receipt.ID,
+		"run_id":               receipt.RunID,
+		"execution_job_id":     receipt.ExecutionJobID,
+		"task_id":              receipt.TaskID,
+		"checkout_receipt_id":  receipt.CheckoutReceiptID,
+		"repo_binding_id":      receipt.RepoBindingID,
+		"runner_id":            receipt.RunnerID,
+		"execution_mode":       receipt.ExecutionMode,
+		"process_status":       receipt.ProcessStatus,
+	})
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.ExecutionReceipts.Create(txCtx, receipt); err != nil {
+			return fmt.Errorf("create execution receipt: %w", err)
+		}
+		runUpdated, err := s.Runs.MarkReceiptSubmitted(txCtx, run.ID, receipt.FinishedAt, now)
+		if err != nil {
+			return fmt.Errorf("mark run receipt submitted: %w", err)
+		}
+		if !runUpdated {
+			return ErrInvalidRunState
+		}
+		jobUpdated, err := s.Jobs.MarkReceiptSubmitted(txCtx, job.ID, now)
+		if err != nil {
+			return fmt.Errorf("mark execution job receipt submitted: %w", err)
+		}
+		if !jobUpdated {
+			return ErrInvalidExecutionState
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append execution receipt submitted event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		if existing, ok, lookupErr := s.ExecutionReceipts.GetByRun(ctx, run.ID); lookupErr != nil {
+			return spine.ExecutionReceipt{}, false, fmt.Errorf("get execution receipt by run after submit failure: %w", lookupErr)
+		} else if ok {
+			return existing, false, nil
+		}
+		return spine.ExecutionReceipt{}, false, err
+	}
+	return receipt, true, nil
 }
 
 func (s *Service) validateLeaseScope(ctx context.Context, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership) error {
@@ -490,6 +636,48 @@ func validateRunStartInput(input spine.RunStartRequest) error {
 	}
 	if strings.TrimSpace(input.RunnerID) == "" {
 		return &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	return nil
+}
+
+func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
+	if strings.TrimSpace(string(input.ExecutionJobID)) == "" {
+		return &ValidationError{Field: "execution_job_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.LeaseID)) == "" {
+		return &ValidationError{Field: "lease_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.LeaseToken) == "" {
+		return &ValidationError{Field: "lease_token", Message: "is required"}
+	}
+	if strings.TrimSpace(input.RunnerID) == "" {
+		return &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.WorkspaceRef) == "" {
+		return &ValidationError{Field: "workspace_ref", Message: "is required"}
+	}
+	if strings.TrimSpace(input.CommitSHA) == "" {
+		return &ValidationError{Field: "commit_sha", Message: "is required"}
+	}
+	if strings.TrimSpace(input.ExecutionMode) != spine.ExecutionReceiptModeNoCommand {
+		return &ValidationError{Field: "execution_mode", Message: "must be no_command"}
+	}
+	switch strings.TrimSpace(input.ProcessStatus) {
+	case spine.ExecutionReceiptStatusNotExecuted, spine.ExecutionReceiptStatusMetadataOnly:
+	default:
+		return &ValidationError{Field: "process_status", Message: "must be not_executed or metadata_only"}
+	}
+	if input.ExitCode != nil {
+		return &ValidationError{Field: "exit_code", Message: "must be omitted for no_command receipts"}
+	}
+	if len(input.ArtifactRefs) != 0 {
+		return &ValidationError{Field: "artifact_refs", Message: "must be empty for no_command receipts"}
+	}
+	if len(input.ChangedPathsSummary) != 0 {
+		return &ValidationError{Field: "changed_paths_summary", Message: "must be empty for no_command receipts"}
+	}
+	if input.RawSourceUploaded {
+		return ErrExecutionRawSourceUploaded
 	}
 	return nil
 }
@@ -623,6 +811,14 @@ func (UUIDGenerator) NewRunID() (spine.RunID, error) {
 		return "", err
 	}
 	return spine.RunID(id.String()), nil
+}
+
+func (UUIDGenerator) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.ExecutionReceiptID(id.String()), nil
 }
 
 func (UUIDGenerator) NewEventID() (spine.EventID, error) {

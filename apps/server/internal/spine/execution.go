@@ -8,12 +8,15 @@ type ExecutionLeaseID string
 
 type RunID string
 
+type ExecutionReceiptID string
+
 type ExecutionJobState string
 
 const (
-	ExecutionJobStateQueued     ExecutionJobState = "queued"
-	ExecutionJobStateLeased     ExecutionJobState = "leased"
-	ExecutionJobStateRunStarted ExecutionJobState = "run_started"
+	ExecutionJobStateQueued           ExecutionJobState = "queued"
+	ExecutionJobStateLeased           ExecutionJobState = "leased"
+	ExecutionJobStateRunStarted       ExecutionJobState = "run_started"
+	ExecutionJobStateReceiptSubmitted ExecutionJobState = "receipt_submitted"
 )
 
 type ExecutionLeaseState string
@@ -26,7 +29,18 @@ const (
 
 type RunState string
 
-const RunStateStarted RunState = "started"
+const (
+	RunStateStarted          RunState = "started"
+	RunStateReceiptSubmitted RunState = "receipt_submitted"
+)
+
+const (
+	ExecutionReceiptModeNoCommand          = "no_command"
+	ExecutionReceiptStatusNotExecuted      = "not_executed"
+	ExecutionReceiptStatusMetadataOnly     = "metadata_only"
+	ExecutionReceiptNextActionGateReview   = "gate_review"
+	ExecutionReceiptNextActionPlannedSlice = "I"
+)
 
 type ExecutionJob struct {
 	ID                 ExecutionJobID         `json:"id"`
@@ -109,6 +123,57 @@ type Run struct {
 	RunnerID          string            `json:"runner_id"`
 	State             RunState          `json:"state"`
 	StartedAt         time.Time         `json:"started_at"`
+	FinishedAt        *time.Time        `json:"finished_at,omitempty"`
 	CreatedAt         time.Time         `json:"created_at"`
 	UpdatedAt         time.Time         `json:"updated_at"`
+}
+
+type ExecutionReceiptSubmitRequest struct {
+	ExecutionJobID      ExecutionJobID   `json:"execution_job_id"`
+	LeaseID             ExecutionLeaseID `json:"lease_id"`
+	LeaseToken          string           `json:"lease_token"`
+	RunnerID            string           `json:"runner_id"`
+	WorkspaceRef        string           `json:"workspace_ref"`
+	CommitSHA           string           `json:"commit_sha"`
+	BaselineID          string           `json:"baseline_id,omitempty"`
+	OverlayID           string           `json:"overlay_id,omitempty"`
+	ExecutionMode       string           `json:"execution_mode"`
+	ProcessStatus       string           `json:"process_status"`
+	ExitCode            *int             `json:"exit_code,omitempty"`
+	ArtifactRefs        []string         `json:"artifact_refs,omitempty"`
+	ChangedPathsSummary []string         `json:"changed_paths_summary,omitempty"`
+	RawSourceUploaded   bool             `json:"raw_source_uploaded"`
+}
+
+type ExecutionReceipt struct {
+	ID                  ExecutionReceiptID  `json:"id"`
+	RunID               RunID               `json:"run_id"`
+	ExecutionJobID      ExecutionJobID      `json:"execution_job_id"`
+	ExecutionLeaseID    ExecutionLeaseID    `json:"execution_lease_id"`
+	TaskID              WorkItemID          `json:"task_id"`
+	CheckoutReceiptID   CheckoutReceiptID   `json:"checkout_receipt_id"`
+	RepoBindingID       RepoBindingID       `json:"repo_binding_id"`
+	RunnerID            string              `json:"runner_id"`
+	WorkspaceRef        string              `json:"workspace_ref"`
+	CommitSHA           string              `json:"commit_sha"`
+	BaselineID          string              `json:"baseline_id,omitempty"`
+	OverlayID           string              `json:"overlay_id,omitempty"`
+	ExecutionMode       string              `json:"execution_mode"`
+	ProcessStatus       string              `json:"process_status"`
+	ExitCode            *int                `json:"exit_code,omitempty"`
+	ArtifactRefs        []string            `json:"artifact_refs"`
+	ChangedPathsSummary []string            `json:"changed_paths_summary"`
+	RawSourceUploaded   bool                `json:"raw_source_uploaded"`
+	StartedAt           time.Time           `json:"started_at"`
+	FinishedAt          time.Time           `json:"finished_at"`
+	CreatedAt           time.Time           `json:"created_at"`
+	UpdatedAt           time.Time           `json:"updated_at"`
+	NextAction          ExecutionNextAction `json:"next_action"`
+}
+
+type ExecutionNextAction struct {
+	Kind         string `json:"kind"`
+	Blocking     bool   `json:"blocking"`
+	Available    bool   `json:"available"`
+	PlannedSlice string `json:"planned_slice,omitempty"`
 }

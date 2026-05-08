@@ -13,6 +13,7 @@ type ExecutionService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.ExecutionJobCreateRequest, spine.OrganizationMembership) (spine.ExecutionJob, bool, error)
 	AcquireNextLease(context.Context, spine.ExecutionJobLeaseCreateRequest, spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error)
 	StartRun(context.Context, spine.ExecutionJobID, spine.RunStartRequest, spine.OrganizationMembership) (spine.Run, bool, error)
+	SubmitReceipt(context.Context, spine.RunID, spine.ExecutionReceiptSubmitRequest, spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error)
 }
 
 type ExecutionHandler struct {
@@ -94,6 +95,29 @@ func (h *ExecutionHandler) StartRun(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, status, run)
 }
 
+func (h *ExecutionHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	var input spine.ExecutionReceiptSubmitRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	receipt, created, err := h.service.SubmitReceipt(r.Context(), spine.RunID(r.PathValue("id")), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	RespondJSON(w, status, receipt)
+}
+
 func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error) {
 	var validationErr *execution.ValidationError
 	var malformedID spine.MalformedIDError
@@ -112,12 +136,16 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusNotFound, "not_found", "checkout job not found")
 	case errors.Is(err, execution.ErrExecutionJobNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "execution job not found")
+	case errors.Is(err, execution.ErrRunNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "run not found")
 	case errors.Is(err, execution.ErrInvalidWorkItemState):
 		RespondError(w, http.StatusConflict, "invalid_state", "work item is not planned")
 	case errors.Is(err, execution.ErrInvalidCheckoutState):
 		RespondError(w, http.StatusConflict, "invalid_state", "checkout job receipt has not been submitted")
 	case errors.Is(err, execution.ErrInvalidExecutionState):
 		RespondError(w, http.StatusConflict, "invalid_state", "execution job state does not allow this transition")
+	case errors.Is(err, execution.ErrInvalidRunState):
+		RespondError(w, http.StatusConflict, "invalid_state", "run state does not allow this transition")
 	case errors.Is(err, execution.ErrLeaseExpired):
 		RespondError(w, http.StatusConflict, "lease_expired", "execution job lease expired")
 	case errors.Is(err, execution.ErrInvalidLease):
@@ -126,6 +154,8 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusConflict, "already_started", "execution job already has a run")
 	case errors.Is(err, execution.ErrRawSourceUploaded):
 		RespondError(w, http.StatusBadRequest, "validation_failed", "checkout receipt must not upload raw source")
+	case errors.Is(err, execution.ErrExecutionRawSourceUploaded):
+		RespondError(w, http.StatusBadRequest, "validation_failed", "execution receipt must not upload raw source")
 	case errors.Is(err, execution.ErrMembershipRequired):
 		RespondError(w, http.StatusForbidden, "membership_required", "active organization membership is required")
 	case errors.Is(err, execution.ErrOrganizationForbidden):

@@ -17,6 +17,11 @@ type Config struct {
 	ProjectID       string
 	RepoBindingID   string
 	RunnerID        string
+	WorkspaceRef    string
+	CommitSHA       string
+	BaselineID      string
+	OverlayID       string
+	SubmitReceipt   bool
 	PollInterval    time.Duration
 	LeaseTTLSeconds int
 	Once            bool
@@ -33,11 +38,12 @@ type Runner struct {
 type StepResult string
 
 const (
-	StepNoWork         StepResult = "no_work"
-	StepRunStarted     StepResult = "run_started"
-	StepLeaseExpired   StepResult = "lease_expired"
-	StepInvalidLease   StepResult = "invalid_lease"
-	StepAlreadyHandled StepResult = "already_handled"
+	StepNoWork           StepResult = "no_work"
+	StepRunStarted       StepResult = "run_started"
+	StepReceiptSubmitted StepResult = "receipt_submitted"
+	StepLeaseExpired     StepResult = "lease_expired"
+	StepInvalidLease     StepResult = "invalid_lease"
+	StepAlreadyHandled   StepResult = "already_handled"
 )
 
 func Run(ctx context.Context, config Config) error {
@@ -131,6 +137,37 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 		}
 	}
 	r.logger.Printf("started run run_id=%s execution_job_id=%s task_id=%s", run.ID, run.ExecutionJobID, run.TaskID)
+	if r.config.SubmitReceipt {
+		receipt, err := r.client.submitReceipt(ctx, run.ID, executionReceiptRequest{
+			ExecutionJobID:      run.ExecutionJobID,
+			LeaseID:             lease.ID,
+			LeaseToken:          lease.LeaseToken,
+			RunnerID:            r.config.RunnerID,
+			WorkspaceRef:        r.config.WorkspaceRef,
+			CommitSHA:           r.config.CommitSHA,
+			BaselineID:          r.config.BaselineID,
+			OverlayID:           r.config.OverlayID,
+			ExecutionMode:       "no_command",
+			ProcessStatus:       "not_executed",
+			ArtifactRefs:        []string{},
+			ChangedPathsSummary: []string{},
+			RawSourceUploaded:   false,
+		})
+		if err != nil {
+			switch apiErrorCode(err) {
+			case "lease_expired":
+				r.logger.Printf("execution lease expired before receipt submission execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepLeaseExpired, nil
+			case "invalid_lease":
+				r.logger.Printf("execution lease rejected before receipt submission execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepInvalidLease, nil
+			default:
+				return "", err
+			}
+		}
+		r.logger.Printf("submitted no-command execution receipt receipt_id=%s run_id=%s execution_job_id=%s", receipt.ID, receipt.RunID, receipt.ExecutionJobID)
+		return StepReceiptSubmitted, nil
+	}
 	return StepRunStarted, nil
 }
 
@@ -168,6 +205,14 @@ func validateConfig(config Config) error {
 	}
 	if strings.TrimSpace(config.RunnerID) == "" {
 		return errors.New("runner id is required")
+	}
+	if config.SubmitReceipt {
+		if strings.TrimSpace(config.WorkspaceRef) == "" {
+			return errors.New("workspace ref is required for execution receipt mode")
+		}
+		if strings.TrimSpace(config.CommitSHA) == "" {
+			return errors.New("commit sha is required for execution receipt mode")
+		}
 	}
 	if config.PollInterval < 0 {
 		return errors.New("poll interval must be non-negative")

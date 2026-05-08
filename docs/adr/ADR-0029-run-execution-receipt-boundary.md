@@ -127,13 +127,26 @@ H2.2 must not add:
 - server-side repository credentials
 - raw source upload by default
 
-Later H2 slices may add:
+Third implementation slice:
 
-- runner-facing execution receipt submission route for bounded metadata
+```text
+H2.3 - execution receipt boundary without command execution
+```
+
+H2.3 adds:
+
+- runner-facing execution receipt submission route for bounded metadata:
+  `POST /v1/runs/{id}/receipts`
+- a runner `execution-receipt` mode that leases an execution job, starts a Run,
+  and submits one metadata-only / no-command `ExecutionReceipt`
+- receipt submission carries explicit `lease_id` plus `lease_token` so a runner
+  can recover an expired `run_started` job with a fresh lease and submit the
+  receipt without creating a duplicate `Run`
 - state-aware next actions that keep Gate / Proof unavailable
 
-Later H2 slices must still not add:
+H2.3 must not add:
 
+- command execution
 - arbitrary shell command execution without a separate bounded adapter decision
 - generic runtime adapter platform
 - LLM coding-agent integration
@@ -147,9 +160,11 @@ Later H2 slices must still not add:
 - server-side repository credentials
 - raw source upload by default
 
-If a later H2 slice cannot record a meaningful execution receipt without running commands,
-it may stop at execution job leasing and run-start state, but it must not
-pretend execution occurred.
+The first H2.3 receipt is explicitly `execution_mode = "no_command"` with
+`process_status = "not_executed"` or `metadata_only`, no `exit_code`, empty
+`artifact_refs`, and empty `changed_paths_summary`. It is evidence that a runner
+reported bounded metadata for a started Run, not evidence that task commands ran
+or that acceptance criteria passed.
 
 ## Object model
 
@@ -301,6 +316,8 @@ Rules:
 
 - `raw_source_uploaded` must be `false` until a later artifact boundary
   explicitly allows otherwise
+- in H2.3 `execution_mode=no_command` receipts must keep `artifact_refs` and
+  `changed_paths_summary` empty
 - `artifact_refs` are references, not proof
 - `changed_paths_summary` is runner-reported metadata, not source truth
 - execution receipt does not write `GateDecision`
@@ -367,7 +384,8 @@ Purpose:
   RepoBinding
 - runner validates the instruction against local scope and workspace context
 - runner starts one `Run` with lease proof
-- runner submits one execution receipt with lease / run proof
+- runner submits one execution receipt with explicit `lease_id`, `lease_token`,
+  and run proof
 
 The route names may be adjusted during implementation, but the boundary must
 preserve separate job creation, lease acquisition, Run start, and receipt

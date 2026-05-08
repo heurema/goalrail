@@ -523,6 +523,41 @@ func TestExecutionLeaseRunMigrationAddsRunStartBoundary(t *testing.T) {
 	}
 }
 
+func TestExecutionReceiptMigrationAddsMetadataOnlyReceiptBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00005_execution_receipts.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued', 'leased', 'run_started', 'receipt_submitted'))",
+		"ADD COLUMN finished_at TIMESTAMPTZ NULL",
+		"CONSTRAINT runs_state_check CHECK (state IN ('started', 'receipt_submitted'))",
+		"CREATE TABLE execution_receipts",
+		"run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE",
+		"execution_job_id UUID NOT NULL REFERENCES execution_jobs(id) ON DELETE CASCADE",
+		"execution_lease_id UUID NOT NULL REFERENCES execution_leases(id) ON DELETE CASCADE",
+		"CONSTRAINT execution_receipts_run_id_unique UNIQUE (run_id)",
+		"CONSTRAINT execution_receipts_mode_check CHECK (execution_mode = 'no_command')",
+		"CONSTRAINT execution_receipts_no_exit_code_check CHECK (exit_code IS NULL)",
+		"CONSTRAINT execution_receipts_no_artifacts_check CHECK (artifact_refs = '[]'::jsonb)",
+		"CONSTRAINT execution_receipts_no_changed_paths_check CHECK (changed_paths_summary = '[]'::jsonb)",
+		"CONSTRAINT execution_receipts_no_raw_source_check CHECK (raw_source_uploaded = FALSE)",
+		"DROP TABLE IF EXISTS execution_receipts;",
+		"WHERE state = 'receipt_submitted'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution receipt migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE gate_decisions") || strings.Contains(sql, "CREATE TABLE proofs") {
+		t.Fatalf("execution receipt migration must not create gate or proof tables")
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("execution receipt migration must not store lease tokens")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

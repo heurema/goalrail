@@ -968,6 +968,106 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 	if len(server.runs.runs) != 1 {
 		t.Fatalf("runs = %d, want no duplicate run after wrong repeated proof", len(server.runs.runs))
 	}
+
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("execution receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(receiptResponse.body, forbidden) {
+			t.Fatalf("execution receipt response exposes forbidden field %s: %s", forbidden, receiptResponse.body)
+		}
+	}
+	var receiptResult spine.ExecutionReceipt
+	decodeJSON(t, receiptResponse.body, &receiptResult)
+	if receiptResult.ID == "" || receiptResult.RunID != run.ID || receiptResult.ExecutionJobID != job.ID || receiptResult.ExecutionLeaseID != lease.ID || receiptResult.TaskID != taskID || receiptResult.CheckoutReceiptID != receipt.ID || receiptResult.RunnerID != "runner-1" {
+		t.Fatalf("execution receipt = %#v, want receipt bound to run/job/lease/task", receiptResult)
+	}
+	if receiptResult.ExecutionMode != spine.ExecutionReceiptModeNoCommand || receiptResult.ProcessStatus != spine.ExecutionReceiptStatusNotExecuted || receiptResult.ExitCode != nil || receiptResult.RawSourceUploaded {
+		t.Fatalf("execution receipt mode/status = %#v, want no-command metadata-only receipt", receiptResult)
+	}
+	if len(receiptResult.ArtifactRefs) != 0 || len(receiptResult.ChangedPathsSummary) != 0 || strings.Contains(receiptResponse.body, `"artifact_refs":null`) || strings.Contains(receiptResponse.body, `"changed_paths_summary":null`) {
+		t.Fatalf("execution receipt artifact/path claims = %#v/%#v body=%s, want empty JSON arrays", receiptResult.ArtifactRefs, receiptResult.ChangedPathsSummary, receiptResponse.body)
+	}
+	if receiptResult.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || receiptResult.NextAction.Available {
+		t.Fatalf("execution receipt next_action = %#v, want unavailable gate_review", receiptResult.NextAction)
+	}
+	if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
+		t.Fatalf("run state = %q, want receipt_submitted", got)
+	}
+	if got := server.executionJobs.jobs[job.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+		t.Fatalf("execution job state = %q, want receipt_submitted", got)
+	}
+	if len(server.executionReceipts.receipts) != 1 {
+		t.Fatalf("execution receipts = %d, want 1", len(server.executionReceipts.receipts))
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionReceiptSubmitted); got != 1 {
+		t.Fatalf("execution_receipt.submitted events = %d, want 1", got)
+	}
+	storedTaskAfterReceipt, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() after receipt = %#v/%v/%v", storedTaskAfterReceipt, ok, err)
+	}
+	if storedTaskAfterReceipt.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after execution receipt", storedTaskAfterReceipt.Status)
+	}
+	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+
+	secondReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	if secondReceiptResponse.code != http.StatusOK {
+		t.Fatalf("second execution receipt status = %d, want %d: %s", secondReceiptResponse.code, http.StatusOK, secondReceiptResponse.body)
+	}
+	var existingReceipt spine.ExecutionReceipt
+	decodeJSON(t, secondReceiptResponse.body, &existingReceipt)
+	if existingReceipt.ID != receiptResult.ID || len(server.executionReceipts.receipts) != 1 {
+		t.Fatalf("existing execution receipt id/count = %q/%d, want %q/1", existingReceipt.ID, len(server.executionReceipts.receipts), receiptResult.ID)
+	}
+}
+
+func TestExecutionRunnerRoutesCanRecoverReceiptAfterExpiredRunStartedLease(t *testing.T) {
+	server := testServer(t)
+	job, lease := createLeasedExecutionJob(t, server)
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+	expiredAt := testTime().Add(-time.Minute)
+	storedJob := server.executionJobs.jobs[job.ID]
+	storedJob.LeaseExpiresAt = &expiredAt
+	server.executionJobs.jobs[job.ID] = storedJob
+
+	recoverLeaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"runner_id":"runner-1"}`, job.RepoBindingID))
+	if recoverLeaseResponse.code != http.StatusCreated {
+		t.Fatalf("recover lease status = %d, want %d: %s", recoverLeaseResponse.code, http.StatusCreated, recoverLeaseResponse.body)
+	}
+	var recoverLease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, recoverLeaseResponse.body, &recoverLease)
+	if recoverLease.ID == lease.ID || recoverLease.ExecutionJobID != job.ID || recoverLease.ExecutionJob.State != spine.ExecutionJobStateRunStarted {
+		t.Fatalf("recovery lease = %#v, want fresh lease for existing run_started job", recoverLease)
+	}
+	recoveredRunResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, recoverLease.ID, recoverLease.LeaseToken))
+	if recoveredRunResponse.code != http.StatusOK {
+		t.Fatalf("recovered run start status = %d, want %d: %s", recoveredRunResponse.code, http.StatusOK, recoveredRunResponse.body)
+	}
+	var recoveredRun spine.Run
+	decodeJSON(t, recoveredRunResponse.body, &recoveredRun)
+	if recoveredRun.ID != run.ID || len(server.runs.runs) != 1 {
+		t.Fatalf("recovered run id/count = %q/%d, want existing %q/1", recoveredRun.ID, len(server.runs.runs), run.ID)
+	}
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, recoverLease.ID, recoverLease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("recovered execution receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	var receipt spine.ExecutionReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.ExecutionLeaseID != recoverLease.ID || receipt.RunID != run.ID || receipt.ExecutionJobID != job.ID {
+		t.Fatalf("recovered receipt = %#v, want fresh lease proof on existing run", receipt)
+	}
+	if server.executionJobs.jobs[job.ID].State != spine.ExecutionJobStateReceiptSubmitted || server.runs.runs[run.ID].State != spine.RunStateReceiptSubmitted {
+		t.Fatalf("job/run state = %q/%q, want receipt_submitted", server.executionJobs.jobs[job.ID].State, server.runs.runs[run.ID].State)
+	}
 }
 
 func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
@@ -977,8 +1077,13 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
 		run := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/execution-job-1/runs", `{"lease_id":"execution-lease-1","lease_token":"secret","runner_id":"runner-1"}`)
 		assertErrorCode(t, run, http.StatusUnauthorized, "unauthorized")
+		receipt := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-1/receipts", executionReceiptBody("execution-job-1", "execution-lease-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		assertErrorCode(t, receipt, http.StatusUnauthorized, "unauthorized")
 		if len(server.runs.runs) != 0 {
 			t.Fatalf("runs = %d, want 0 after auth failure", len(server.runs.runs))
+		}
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after auth failure", len(server.executionReceipts.receipts))
 		}
 	})
 
@@ -1041,6 +1146,74 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, response, http.StatusConflict, "lease_expired")
 		if len(server.runs.runs) != 0 {
 			t.Fatalf("runs = %d, want 0 after expired lease", len(server.runs.runs))
+		}
+	})
+
+	t.Run("receipt submit rejects unknown run", func(t *testing.T) {
+		server := testServer(t)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-missing/receipts", executionReceiptBody("execution-job-1", "execution-lease-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		assertErrorCode(t, response, http.StatusNotFound, "not_found")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after unknown run", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("receipt submit rejects non-started run", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		run := spine.Run{
+			ID:                "run-invalid-state",
+			ExecutionJobID:    job.ID,
+			ExecutionLeaseID:  lease.ID,
+			TaskID:            lease.TaskID,
+			CheckoutReceiptID: lease.CheckoutReceiptID,
+			RunnerID:          "runner-1",
+			State:             spine.RunState("failed"),
+			StartedAt:         testTime(),
+			CreatedAt:         testTime(),
+			UpdatedAt:         testTime(),
+		}
+		if err := server.runs.Create(context.Background(), run); err != nil {
+			t.Fatalf("runs.Create() error = %v", err)
+		}
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after invalid run state", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("receipt submit rejects raw source upload", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		if runResponse.code != http.StatusCreated {
+			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+		}
+		var run spine.Run
+		decodeJSON(t, runResponse.body, &run)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", true))
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after raw source upload", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("receipt submit rejects artifact and changed path claims", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		if runResponse.code != http.StatusCreated {
+			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+		}
+		var run spine.Run
+		decodeJSON(t, runResponse.body, &run)
+
+		body := fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":["artifact-1"],"changed_paths_summary":["file.go"],"raw_source_uploaded":false}`, job.ID, lease.ID, lease.LeaseToken)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after artifact/path claim", len(server.executionReceipts.receipts))
 		}
 	})
 }
@@ -1127,6 +1300,10 @@ func createLeasedExecutionJob(t *testing.T, server testServerDeps) (spine.Execut
 	var lease spine.ExecutionJobLeaseCreated
 	decodeJSON(t, response.body, &lease)
 	return job, lease
+}
+
+func executionReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, workspaceRef string, commitSHA string, rawSourceUploaded bool) string {
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":%q,"commit_sha":%q,"baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t}`, jobID, leaseID, leaseToken, runnerID, workspaceRef, commitSHA, rawSourceUploaded)
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {
@@ -1479,17 +1656,18 @@ func assertNoForbiddenWorkItemSideEffects(t *testing.T, events []spine.Event) {
 	t.Helper()
 
 	forbidden := map[string]bool{
-		"work_item.assigned":    true,
-		"work_item.claimed":     true,
-		"checkout.created":      true,
-		"run.created":           true,
-		"run.started":           true,
-		"receipt.created":       true,
-		"receipt.submitted":     true,
-		"decision.created":      true,
-		"gate_decision.created": true,
-		"gate.decision_written": true,
-		"proof.created":         true,
+		"work_item.assigned":          true,
+		"work_item.claimed":           true,
+		"checkout.created":            true,
+		"run.created":                 true,
+		"run.started":                 true,
+		"receipt.created":             true,
+		"receipt.submitted":           true,
+		"execution_receipt.submitted": true,
+		"decision.created":            true,
+		"gate_decision.created":       true,
+		"gate.decision_written":       true,
+		"proof.created":               true,
 	}
 	for _, event := range events {
 		if forbidden[event.Type] {
@@ -1502,16 +1680,17 @@ func assertNoForbiddenRuntimeSideEffects(t *testing.T, events []spine.Event) {
 	t.Helper()
 
 	forbidden := map[string]bool{
-		"work_item.assigned":    true,
-		"work_item.claimed":     true,
-		"run.created":           true,
-		"run.started":           true,
-		"receipt.created":       true,
-		"receipt.submitted":     true,
-		"decision.created":      true,
-		"gate_decision.created": true,
-		"gate.decision_written": true,
-		"proof.created":         true,
+		"work_item.assigned":          true,
+		"work_item.claimed":           true,
+		"run.created":                 true,
+		"run.started":                 true,
+		"receipt.created":             true,
+		"receipt.submitted":           true,
+		"execution_receipt.submitted": true,
+		"decision.created":            true,
+		"gate_decision.created":       true,
+		"gate.decision_written":       true,
+		"proof.created":               true,
 	}
 	for _, event := range events {
 		if forbidden[event.Type] {
@@ -1524,10 +1703,29 @@ func assertNoForbiddenPostRunSideEffects(t *testing.T, events []spine.Event) {
 	t.Helper()
 
 	forbidden := map[string]bool{
+		"work_item.assigned":          true,
+		"work_item.claimed":           true,
+		"receipt.created":             true,
+		"receipt.submitted":           true,
+		"execution_receipt.submitted": true,
+		"decision.created":            true,
+		"gate_decision.created":       true,
+		"gate.decision_written":       true,
+		"proof.created":               true,
+	}
+	for _, event := range events {
+		if forbidden[event.Type] {
+			t.Fatalf("forbidden post-run event type appended: %s", event.Type)
+		}
+	}
+}
+
+func assertNoForbiddenPostReceiptSideEffects(t *testing.T, events []spine.Event) {
+	t.Helper()
+
+	forbidden := map[string]bool{
 		"work_item.assigned":    true,
 		"work_item.claimed":     true,
-		"receipt.created":       true,
-		"receipt.submitted":     true,
 		"decision.created":      true,
 		"gate_decision.created": true,
 		"gate.decision_written": true,
@@ -1535,7 +1733,7 @@ func assertNoForbiddenPostRunSideEffects(t *testing.T, events []spine.Event) {
 	}
 	for _, event := range events {
 		if forbidden[event.Type] {
-			t.Fatalf("forbidden post-run event type appended: %s", event.Type)
+			t.Fatalf("forbidden post-receipt event type appended: %s", event.Type)
 		}
 	}
 }

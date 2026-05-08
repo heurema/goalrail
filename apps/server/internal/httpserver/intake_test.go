@@ -62,6 +62,7 @@ type testServerDeps struct {
 	checkoutReceipts  *fakeCheckoutReceiptStore
 	executionJobs     *fakeExecutionJobStore
 	runs              *fakeRunStore
+	executionReceipts *fakeExecutionReceiptStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
@@ -1745,6 +1746,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	checkoutReceiptStore := newFakeCheckoutReceiptStore()
 	executionJobStore := newFakeExecutionJobStore()
 	runStore := newFakeRunStore()
+	executionReceiptStore := newFakeExecutionReceiptStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1767,7 +1769,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
 	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
-	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, executionReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
@@ -1789,6 +1791,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		checkoutReceipts:  checkoutReceiptStore,
 		executionJobs:     executionJobStore,
 		runs:              runStore,
+		executionReceipts: executionReceiptStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -2589,7 +2592,7 @@ func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execut
 		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
 			continue
 		}
-		if job.State == spine.ExecutionJobStateQueued || (job.State == spine.ExecutionJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+		if job.State == spine.ExecutionJobStateQueued || ((job.State == spine.ExecutionJobStateLeased || job.State == spine.ExecutionJobStateRunStarted) && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
 			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
 				selected = job
 				found = true
@@ -2612,7 +2615,9 @@ func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execut
 		CreatedAt:         input.CreatedAt,
 		UpdatedAt:         input.UpdatedAt,
 	}
-	selected.State = spine.ExecutionJobStateLeased
+	if selected.State != spine.ExecutionJobStateRunStarted {
+		selected.State = spine.ExecutionJobStateLeased
+	}
 	selected.CurrentLeaseID = &lease.ID
 	selected.CurrentRunnerID = input.RunnerID
 	selected.LeaseTokenHash = input.LeaseTokenHash
@@ -2633,38 +2638,106 @@ func (s *fakeExecutionJobStore) MarkRunStarted(_ context.Context, id spine.Execu
 	return true, nil
 }
 
+func (s *fakeExecutionJobStore) MarkReceiptSubmitted(_ context.Context, id spine.ExecutionJobID, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.ExecutionJobStateRunStarted {
+		return false, nil
+	}
+	job.State = spine.ExecutionJobStateReceiptSubmitted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
 func executionJobKey(taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) string {
 	return string(taskID) + "\x00" + string(receiptID)
 }
 
 type fakeRunStore struct {
-	runs    map[spine.RunID]spine.Run
-	byLease map[spine.ExecutionLeaseID]spine.RunID
+	runs  map[spine.RunID]spine.Run
+	byJob map[spine.ExecutionJobID]spine.RunID
 }
 
 func newFakeRunStore() *fakeRunStore {
 	return &fakeRunStore{
-		runs:    map[spine.RunID]spine.Run{},
-		byLease: map[spine.ExecutionLeaseID]spine.RunID{},
+		runs:  map[spine.RunID]spine.Run{},
+		byJob: map[spine.ExecutionJobID]spine.RunID{},
 	}
 }
 
 func (s *fakeRunStore) Create(_ context.Context, run spine.Run) error {
-	if _, ok := s.byLease[run.ExecutionLeaseID]; ok {
+	if _, ok := s.byJob[run.ExecutionJobID]; ok {
 		return fmt.Errorf("run already started")
 	}
 	s.runs[run.ID] = run
-	s.byLease[run.ExecutionLeaseID] = run.ID
+	s.byJob[run.ExecutionJobID] = run.ID
 	return nil
 }
 
 func (s *fakeRunStore) GetByExecutionLease(_ context.Context, leaseID spine.ExecutionLeaseID) (spine.Run, bool, error) {
-	runID, ok := s.byLease[leaseID]
+	for _, run := range s.runs {
+		if run.ExecutionLeaseID == leaseID {
+			return run, true, nil
+		}
+	}
+	return spine.Run{}, false, nil
+}
+
+func (s *fakeRunStore) GetByExecutionJob(_ context.Context, jobID spine.ExecutionJobID) (spine.Run, bool, error) {
+	runID, ok := s.byJob[jobID]
 	if !ok {
 		return spine.Run{}, false, nil
 	}
 	run, ok := s.runs[runID]
 	return run, ok, nil
+}
+
+func (s *fakeRunStore) Get(_ context.Context, id spine.RunID) (spine.Run, bool, error) {
+	run, ok := s.runs[id]
+	return run, ok, nil
+}
+
+func (s *fakeRunStore) MarkReceiptSubmitted(_ context.Context, id spine.RunID, finishedAt time.Time, updatedAt time.Time) (bool, error) {
+	run, ok := s.runs[id]
+	if !ok || run.State != spine.RunStateStarted {
+		return false, nil
+	}
+	finished := finishedAt.UTC()
+	run.State = spine.RunStateReceiptSubmitted
+	run.FinishedAt = &finished
+	run.UpdatedAt = updatedAt
+	s.runs[id] = run
+	return true, nil
+}
+
+type fakeExecutionReceiptStore struct {
+	receipts map[spine.ExecutionReceiptID]spine.ExecutionReceipt
+	byRun    map[spine.RunID]spine.ExecutionReceiptID
+}
+
+func newFakeExecutionReceiptStore() *fakeExecutionReceiptStore {
+	return &fakeExecutionReceiptStore{
+		receipts: map[spine.ExecutionReceiptID]spine.ExecutionReceipt{},
+		byRun:    map[spine.RunID]spine.ExecutionReceiptID{},
+	}
+}
+
+func (s *fakeExecutionReceiptStore) Create(_ context.Context, receipt spine.ExecutionReceipt) error {
+	if _, ok := s.byRun[receipt.RunID]; ok {
+		return fmt.Errorf("execution receipt already submitted")
+	}
+	s.receipts[receipt.ID] = receipt
+	s.byRun[receipt.RunID] = receipt.ID
+	return nil
+}
+
+func (s *fakeExecutionReceiptStore) GetByRun(_ context.Context, runID spine.RunID) (spine.ExecutionReceipt, bool, error) {
+	receiptID, ok := s.byRun[runID]
+	if !ok {
+		return spine.ExecutionReceipt{}, false, nil
+	}
+	receipt, ok := s.receipts[receiptID]
+	return receipt, ok, nil
 }
 
 type fakeEventLog struct {
@@ -2768,6 +2841,7 @@ type sequenceIDs struct {
 	executionJob      int
 	executionLease    int
 	run               int
+	executionReceipt  int
 	event             int
 }
 
@@ -2864,6 +2938,11 @@ func (g *sequenceIDs) NewExecutionLeaseID() (spine.ExecutionLeaseID, error) {
 func (g *sequenceIDs) NewRunID() (spine.RunID, error) {
 	g.run++
 	return spine.RunID(fmt.Sprintf("run-%d", g.run)), nil
+}
+
+func (g *sequenceIDs) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
+	g.executionReceipt++
+	return spine.ExecutionReceiptID(fmt.Sprintf("execution-receipt-%d", g.executionReceipt)), nil
 }
 
 func testTime() time.Time {

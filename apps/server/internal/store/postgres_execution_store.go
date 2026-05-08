@@ -195,11 +195,24 @@ func (s *PostgresExecutionJobStore) AcquireNextLease(ctx context.Context, input 
 	row := s.query.QueryRow(ctx, `
 SELECT id, organization_id, project_id, task_id, contract_id, approved_contract_id, plan_id, proposal_id, repo_binding_id, checkout_job_id, checkout_receipt_id, state, requested_by, execution_mode, current_lease_id, current_runner_id, lease_token_hash, lease_expires_at, created_at, updated_at
 FROM execution_jobs
-WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3 AND (state = $4 OR (state = $5 AND lease_expires_at <= $6))
+WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3
+  AND (
+    state = $4
+    OR (state = $5 AND lease_expires_at <= $6)
+    OR (
+      state = $7
+      AND lease_expires_at <= $6
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_receipts
+        WHERE execution_receipts.execution_job_id = execution_jobs.id
+      )
+    )
+  )
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED
-`, orgID, projectID, repoBindingID, spine.ExecutionJobStateQueued, spine.ExecutionJobStateLeased, now)
+`, orgID, projectID, repoBindingID, spine.ExecutionJobStateQueued, spine.ExecutionJobStateLeased, now, spine.ExecutionJobStateRunStarted)
 	job, err := scanExecutionJob(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -208,7 +221,7 @@ FOR UPDATE SKIP LOCKED
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, fmt.Errorf("select next execution job lease candidate: %w", err)
 	}
 
-	if job.State == spine.ExecutionJobStateLeased && job.CurrentLeaseID != nil {
+	if (job.State == spine.ExecutionJobStateLeased || job.State == spine.ExecutionJobStateRunStarted) && job.CurrentLeaseID != nil {
 		previousID, err := uuidValue(*job.CurrentLeaseID, "current execution lease id")
 		if err != nil {
 			return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
@@ -216,8 +229,8 @@ FOR UPDATE SKIP LOCKED
 		if _, err := s.exec.Exec(ctx, `
 UPDATE execution_leases
 SET state = $1, updated_at = $2
-WHERE id = $3 AND state = $4
-`, spine.ExecutionLeaseStateExpired, now, previousID, spine.ExecutionLeaseStateActive); err != nil {
+WHERE id = $3 AND (state = $4 OR state = $5)
+`, spine.ExecutionLeaseStateExpired, now, previousID, spine.ExecutionLeaseStateActive, spine.ExecutionLeaseStateRunStarted); err != nil {
 			return spine.ExecutionLease{}, spine.ExecutionJob{}, false, fmt.Errorf("expire previous execution lease: %w", err)
 		}
 	}
@@ -244,10 +257,14 @@ WHERE id = $3 AND state = $4
 	if err := s.insertExecutionLease(ctx, lease); err != nil {
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
 	}
-	if err := s.markExecutionJobLeased(ctx, job.ID, lease); err != nil {
+	nextState := spine.ExecutionJobStateLeased
+	if job.State == spine.ExecutionJobStateRunStarted {
+		nextState = spine.ExecutionJobStateRunStarted
+	}
+	if err := s.markExecutionJobLeased(ctx, job.ID, lease, nextState); err != nil {
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
 	}
-	job.State = spine.ExecutionJobStateLeased
+	job.State = nextState
 	job.CurrentLeaseID = &lease.ID
 	job.CurrentRunnerID = lease.RunnerID
 	job.LeaseTokenHash = lease.LeaseTokenHash
@@ -302,6 +319,31 @@ func (s *PostgresExecutionJobStore) MarkRunStarted(ctx context.Context, id spine
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *PostgresExecutionJobStore) MarkReceiptSubmitted(ctx context.Context, id spine.ExecutionJobID, updatedAt time.Time) (bool, error) {
+	jobID, err := uuidValue(id, "execution job id")
+	if err != nil {
+		return false, err
+	}
+	now := updatedAt.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	stmt := s.psql.
+		Update("execution_jobs").
+		Set("state", spine.ExecutionJobStateReceiptSubmitted).
+		Set("updated_at", now).
+		Where(squirrel.Eq{"id": jobID, "state": spine.ExecutionJobStateRunStarted})
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return false, fmt.Errorf("mark execution job receipt submitted SQL: %w", err)
+	}
+	result, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return false, fmt.Errorf("mark execution job receipt submitted: %w", err)
+	}
+	return result.RowsAffected() > 0, nil
 }
 
 func (s *PostgresExecutionJobStore) getOne(ctx context.Context, op string, where squirrel.Eq) (spine.ExecutionJob, bool, error) {
@@ -448,7 +490,7 @@ func (s *PostgresExecutionJobStore) insertExecutionLease(ctx context.Context, le
 	return nil
 }
 
-func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, jobID spine.ExecutionJobID, lease spine.ExecutionLease) error {
+func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, jobID spine.ExecutionJobID, lease spine.ExecutionLease, state spine.ExecutionJobState) error {
 	parsedJobID, err := uuidValue(jobID, "execution job id")
 	if err != nil {
 		return err
@@ -459,7 +501,7 @@ func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, 
 	}
 	stmt := s.psql.
 		Update("execution_jobs").
-		Set("state", spine.ExecutionJobStateLeased).
+		Set("state", state).
 		Set("current_lease_id", parsedLeaseID).
 		Set("current_runner_id", lease.RunnerID).
 		Set("lease_token_hash", lease.LeaseTokenHash).
@@ -522,6 +564,26 @@ func (s *PostgresRunStore) Create(ctx context.Context, run spine.Run) error {
 	return nil
 }
 
+func (s *PostgresRunStore) Get(ctx context.Context, id spine.RunID) (spine.Run, bool, error) {
+	runID, err := uuidValue(id, "run id")
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	stmt := s.psql.Select(runColumns()...).From("runs").Where(squirrel.Eq{"id": runID})
+	row, err := queryRow(ctx, s.query, "get run", stmt)
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	run, err := scanRun(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Run{}, false, nil
+		}
+		return spine.Run{}, false, fmt.Errorf("get run: %w", err)
+	}
+	return run, true, nil
+}
+
 func (s *PostgresRunStore) GetByExecutionLease(ctx context.Context, leaseID spine.ExecutionLeaseID) (spine.Run, bool, error) {
 	parsedLeaseID, err := uuidValue(leaseID, "run execution lease id")
 	if err != nil {
@@ -542,6 +604,56 @@ func (s *PostgresRunStore) GetByExecutionLease(ctx context.Context, leaseID spin
 	return run, true, nil
 }
 
+func (s *PostgresRunStore) GetByExecutionJob(ctx context.Context, jobID spine.ExecutionJobID) (spine.Run, bool, error) {
+	parsedJobID, err := uuidValue(jobID, "run execution job id")
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	stmt := s.psql.Select(runColumns()...).From("runs").Where(squirrel.Eq{"execution_job_id": parsedJobID})
+	row, err := queryRow(ctx, s.query, "get run by execution job", stmt)
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	run, err := scanRun(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Run{}, false, nil
+		}
+		return spine.Run{}, false, fmt.Errorf("get run by execution job: %w", err)
+	}
+	return run, true, nil
+}
+
+func (s *PostgresRunStore) MarkReceiptSubmitted(ctx context.Context, id spine.RunID, finishedAt time.Time, updatedAt time.Time) (bool, error) {
+	runID, err := uuidValue(id, "run id")
+	if err != nil {
+		return false, err
+	}
+	finished := finishedAt.UTC()
+	if finished.IsZero() {
+		finished = time.Now().UTC()
+	}
+	now := updatedAt.UTC()
+	if now.IsZero() {
+		now = finished
+	}
+	stmt := s.psql.
+		Update("runs").
+		Set("state", spine.RunStateReceiptSubmitted).
+		Set("finished_at", finished).
+		Set("updated_at", now).
+		Where(squirrel.Eq{"id": runID, "state": spine.RunStateStarted})
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return false, fmt.Errorf("mark run receipt submitted SQL: %w", err)
+	}
+	result, err := s.exec.Exec(ctx, sqlText, args...)
+	if err != nil {
+		return false, fmt.Errorf("mark run receipt submitted: %w", err)
+	}
+	return result.RowsAffected() > 0, nil
+}
+
 func scanRun(row pgx.Row) (spine.Run, error) {
 	var run spine.Run
 	var id string
@@ -550,6 +662,7 @@ func scanRun(row pgx.Row) (spine.Run, error) {
 	var taskID string
 	var checkoutReceiptID string
 	var state string
+	var finishedAt pgtype.Timestamptz
 	if err := row.Scan(
 		&id,
 		&executionJobID,
@@ -559,6 +672,7 @@ func scanRun(row pgx.Row) (spine.Run, error) {
 		&run.RunnerID,
 		&state,
 		&run.StartedAt,
+		&finishedAt,
 		&run.CreatedAt,
 		&run.UpdatedAt,
 	); err != nil {
@@ -571,6 +685,10 @@ func scanRun(row pgx.Row) (spine.Run, error) {
 	run.CheckoutReceiptID = spine.CheckoutReceiptID(checkoutReceiptID)
 	run.State = spine.RunState(state)
 	run.StartedAt = run.StartedAt.UTC()
+	if finishedAt.Valid {
+		value := finishedAt.Time.UTC()
+		run.FinishedAt = &value
+	}
 	run.CreatedAt = run.CreatedAt.UTC()
 	run.UpdatedAt = run.UpdatedAt.UTC()
 	return run, nil
@@ -586,6 +704,244 @@ func runColumns() []string {
 		"runner_id",
 		"state",
 		"started_at",
+		"finished_at",
+		"created_at",
+		"updated_at",
+	}
+}
+
+type PostgresExecutionReceiptStore struct {
+	exec  postgresExecer
+	query postgresRowQuerier
+	psql  squirrel.StatementBuilderType
+}
+
+func NewPostgresExecutionReceiptStore(pool *pgxpool.Pool) *PostgresExecutionReceiptStore {
+	db := newPostgresDB(pool)
+	return NewPostgresExecutionReceiptStoreWithExecutorAndQuerier(db, db)
+}
+
+func NewPostgresExecutionReceiptStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresExecutionReceiptStore {
+	return &PostgresExecutionReceiptStore{
+		exec:  exec,
+		query: query,
+		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
+	}
+}
+
+func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spine.ExecutionReceipt) error {
+	id, err := uuidValue(receipt.ID, "execution receipt id")
+	if err != nil {
+		return err
+	}
+	runID, err := uuidValue(receipt.RunID, "execution receipt run id")
+	if err != nil {
+		return err
+	}
+	jobID, err := uuidValue(receipt.ExecutionJobID, "execution receipt job id")
+	if err != nil {
+		return err
+	}
+	leaseID, err := uuidValue(receipt.ExecutionLeaseID, "execution receipt lease id")
+	if err != nil {
+		return err
+	}
+	taskID, err := uuidValue(receipt.TaskID, "execution receipt task id")
+	if err != nil {
+		return err
+	}
+	checkoutReceiptID, err := uuidValue(receipt.CheckoutReceiptID, "execution receipt checkout receipt id")
+	if err != nil {
+		return err
+	}
+	repoBindingID, err := uuidValue(receipt.RepoBindingID, "execution receipt repo binding id")
+	if err != nil {
+		return err
+	}
+	artifactRefs, err := json.Marshal(nonNilStrings(receipt.ArtifactRefs))
+	if err != nil {
+		return fmt.Errorf("marshal execution receipt artifact refs: %w", err)
+	}
+	changedPaths, err := json.Marshal(nonNilStrings(receipt.ChangedPathsSummary))
+	if err != nil {
+		return fmt.Errorf("marshal execution receipt changed paths summary: %w", err)
+	}
+	var exitCode any
+	if receipt.ExitCode != nil {
+		exitCode = *receipt.ExitCode
+	}
+	stmt := s.psql.
+		Insert("execution_receipts").
+		Columns(
+			"id",
+			"run_id",
+			"execution_job_id",
+			"execution_lease_id",
+			"task_id",
+			"checkout_receipt_id",
+			"repo_binding_id",
+			"runner_id",
+			"workspace_ref",
+			"commit_sha",
+			"baseline_id",
+			"overlay_id",
+			"execution_mode",
+			"process_status",
+			"exit_code",
+			"artifact_refs",
+			"changed_paths_summary",
+			"raw_source_uploaded",
+			"started_at",
+			"finished_at",
+			"created_at",
+			"updated_at",
+		).
+		Values(
+			id,
+			runID,
+			jobID,
+			leaseID,
+			taskID,
+			checkoutReceiptID,
+			repoBindingID,
+			receipt.RunnerID,
+			receipt.WorkspaceRef,
+			receipt.CommitSHA,
+			receipt.BaselineID,
+			receipt.OverlayID,
+			receipt.ExecutionMode,
+			receipt.ProcessStatus,
+			exitCode,
+			artifactRefs,
+			changedPaths,
+			receipt.RawSourceUploaded,
+			receipt.StartedAt.UTC(),
+			receipt.FinishedAt.UTC(),
+			receipt.CreatedAt.UTC(),
+			receipt.UpdatedAt.UTC(),
+		)
+	if err := execSQL(ctx, s.exec, "create execution receipt", stmt); err != nil {
+		if uniqueViolationConstraint(err) == "execution_receipts_run_id_unique" {
+			return ErrExecutionReceiptAlreadySubmitted
+		}
+		if isUniqueViolation(err) {
+			return ErrExecutionReceiptAlreadyExists
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *PostgresExecutionReceiptStore) GetByRun(ctx context.Context, runID spine.RunID) (spine.ExecutionReceipt, bool, error) {
+	parsedRunID, err := uuidValue(runID, "execution receipt run id")
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	stmt := s.psql.Select(executionReceiptColumns()...).From("execution_receipts").Where(squirrel.Eq{"run_id": parsedRunID})
+	row, err := queryRow(ctx, s.query, "get execution receipt by run", stmt)
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	receipt, err := scanExecutionReceipt(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.ExecutionReceipt{}, false, nil
+		}
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("get execution receipt by run: %w", err)
+	}
+	return receipt, true, nil
+}
+
+func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
+	var receipt spine.ExecutionReceipt
+	var id string
+	var runID string
+	var jobID string
+	var leaseID string
+	var taskID string
+	var checkoutReceiptID string
+	var repoBindingID string
+	var artifactRefs []byte
+	var changedPaths []byte
+	var exitCode pgtype.Int4
+	if err := row.Scan(
+		&id,
+		&runID,
+		&jobID,
+		&leaseID,
+		&taskID,
+		&checkoutReceiptID,
+		&repoBindingID,
+		&receipt.RunnerID,
+		&receipt.WorkspaceRef,
+		&receipt.CommitSHA,
+		&receipt.BaselineID,
+		&receipt.OverlayID,
+		&receipt.ExecutionMode,
+		&receipt.ProcessStatus,
+		&exitCode,
+		&artifactRefs,
+		&changedPaths,
+		&receipt.RawSourceUploaded,
+		&receipt.StartedAt,
+		&receipt.FinishedAt,
+		&receipt.CreatedAt,
+		&receipt.UpdatedAt,
+	); err != nil {
+		return spine.ExecutionReceipt{}, err
+	}
+	receipt.ID = spine.ExecutionReceiptID(id)
+	receipt.RunID = spine.RunID(runID)
+	receipt.ExecutionJobID = spine.ExecutionJobID(jobID)
+	receipt.ExecutionLeaseID = spine.ExecutionLeaseID(leaseID)
+	receipt.TaskID = spine.WorkItemID(taskID)
+	receipt.CheckoutReceiptID = spine.CheckoutReceiptID(checkoutReceiptID)
+	receipt.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	if exitCode.Valid {
+		value := int(exitCode.Int32)
+		receipt.ExitCode = &value
+	}
+	if err := json.Unmarshal(artifactRefs, &receipt.ArtifactRefs); err != nil {
+		return spine.ExecutionReceipt{}, fmt.Errorf("unmarshal execution receipt artifact refs: %w", err)
+	}
+	if err := json.Unmarshal(changedPaths, &receipt.ChangedPathsSummary); err != nil {
+		return spine.ExecutionReceipt{}, fmt.Errorf("unmarshal execution receipt changed paths summary: %w", err)
+	}
+	receipt.StartedAt = receipt.StartedAt.UTC()
+	receipt.FinishedAt = receipt.FinishedAt.UTC()
+	receipt.CreatedAt = receipt.CreatedAt.UTC()
+	receipt.UpdatedAt = receipt.UpdatedAt.UTC()
+	receipt.NextAction = spine.ExecutionNextAction{
+		Kind:         spine.ExecutionReceiptNextActionGateReview,
+		Blocking:     true,
+		Available:    false,
+		PlannedSlice: spine.ExecutionReceiptNextActionPlannedSlice,
+	}
+	return receipt, nil
+}
+
+func executionReceiptColumns() []string {
+	return []string{
+		"id",
+		"run_id",
+		"execution_job_id",
+		"execution_lease_id",
+		"task_id",
+		"checkout_receipt_id",
+		"repo_binding_id",
+		"runner_id",
+		"workspace_ref",
+		"commit_sha",
+		"baseline_id",
+		"overlay_id",
+		"execution_mode",
+		"process_status",
+		"exit_code",
+		"artifact_refs",
+		"changed_paths_summary",
+		"raw_source_uploaded",
+		"started_at",
+		"finished_at",
 		"created_at",
 		"updated_at",
 	}
