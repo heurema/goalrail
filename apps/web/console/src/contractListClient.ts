@@ -1,4 +1,4 @@
-import type { ContractResponse } from './authClient';
+import type { ContractResponse } from './contractDetailClient';
 import { buildAPIURL } from './config';
 
 export type ContractStateFilter = ContractResponse['state'];

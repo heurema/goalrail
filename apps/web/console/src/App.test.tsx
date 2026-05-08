@@ -278,6 +278,7 @@ function expectNoWorkflowMutationRequests() {
   expect(calls.some((call) => call.method !== 'GET' && /\/v1\/goals\/.*\/continuation/.test(call.url))).toBe(false);
   expect(calls.some((call) => call.method !== 'GET' && /\/v1\/clarifications\/.*\/answers\/continuation/.test(call.url))).toBe(false);
   expect(calls.some((call) => call.method !== 'GET' && call.url === '/v1/contracts')).toBe(false);
+  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/contracts\/[^/]+$/.test(call.url))).toBe(false);
   expect(calls.some((call) => call.method !== 'GET' && /\/v1\/contracts\/.*\/(submissions|approvals|plans)/.test(call.url))).toBe(false);
 }
 
@@ -1101,6 +1102,28 @@ describe('App', () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts\/contract-list-approved\/(submissions|approvals|plans)/.test(url))).toBe(false);
   });
 
+  it('row selection shows contract-specific access errors without calling mutation endpoints', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-list-draft',
+        current_draft_id: undefined,
+      }),
+      contractResponse({
+        id: 'contract-list-forbidden',
+        state: 'approved',
+        current_draft_id: undefined,
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('forbidden'), 403));
+
+    const contractList = screen.getByLabelText(/contracts list/i);
+    fireEvent.click(within(contractList).getByRole('button', { name: /contract-list-forbidden/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have access to this contract.');
+    expect(screen.queryByText('Contract was not found.')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
   it.each([
     ['invalid_state', 409],
     ['not_found', 404],
@@ -1214,6 +1237,45 @@ describe('App', () => {
 
     expect(screen.getAllByText('draft-detail-stable').length).toBeGreaterThan(0);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('shows access-specific errors when scheduled selected detail refresh loses organization access', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-detail-membership',
+        goal_id: 'goal-detail-membership',
+        current_draft_id: 'draft-detail-membership',
+      }),
+    ]);
+    await restartContractsPollingWithFakeTimers([
+      contractResponse({
+        id: 'contract-detail-membership',
+        goal_id: 'goal-detail-membership',
+        current_draft_id: 'draft-detail-membership',
+      }),
+    ], contractResponse({
+      id: 'contract-detail-membership',
+      goal_id: 'goal-detail-membership',
+      current_draft_id: 'draft-detail-membership',
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-detail-membership',
+        goal_id: 'goal-detail-membership',
+        current_draft_id: 'draft-detail-membership',
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('membership_required'), 403));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('This contract requires active organization access.');
+    expect(screen.queryByText('Contract was not found.')).not.toBeInTheDocument();
     expectNoWorkflowMutationRequests();
   });
 
@@ -1794,6 +1856,49 @@ describe('App', () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/clarifications\/.*\/answers\/continuation/.test(url))).toBe(false);
   });
 
+  it('shows contract-specific access errors from Delivery Readiness linked-contract navigation', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-linked-forbidden',
+            intakeId: 'intake-linked-forbidden',
+            title: 'Linked forbidden contract goal',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            linkedContract: { id: 'contract-linked-forbidden', state: 'draft' },
+            nextAction: 'update_contract',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    const board = await screen.findByLabelText(/qualification feed lane view/i);
+    const contractLane = within(board).getByLabelText('Contract lane');
+
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const requestURL = String(url);
+      if (requestURL === '/v1/contracts/contract-linked-forbidden') {
+        return Promise.resolve(jsonResponse(errorEnvelope('forbidden'), 403));
+      }
+      if (requestURL === '/v1/contracts?limit=50') {
+        return Promise.resolve(jsonResponse(contractListResponse([])));
+      }
+
+      return Promise.resolve(jsonResponse(contractListResponse([])));
+    });
+    fireEvent.click(within(contractLane).getByRole('button', { name: /^Open contract$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have access to this contract.');
+    expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.queryByText('Contract was not found.')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
   it('shows not_found for missing contract IDs without seeding demo data', async () => {
     await loginSuccessfully();
     fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('not_found'), 404));
@@ -1806,6 +1911,65 @@ describe('App', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Contract was not found.');
     expect(screen.getAllByText('Check the ID and try again.').length).toBeGreaterThan(0);
     expect(document.body).not.toHaveTextContent(/C-0147|trialops-demo|billing-api|frontend-console/i);
+  });
+
+  it.each([
+    ['forbidden', 403, 'You do not have access to this contract.'],
+    ['membership_required', 403, 'This contract requires active organization access.'],
+    ['database_not_configured', 503, 'Goalrail server is not ready yet.'],
+    ['server_error', 502, 'Goalrail server returned a contract detail error. Code: 502.'],
+  ] as const)('manual Contract ID lookup shows a contract-specific %s error', async (code, status, message) => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope(code), status));
+
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: `contract-${code}` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(screen.queryByText('Contract was not found.')).not.toBeInTheDocument();
+    expect(screen.queryByText(`contract-${code}`)).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('manual Contract ID lookup shows clear transient detail errors without creating fake data', async () => {
+    await loginSuccessfully();
+    fetchMock.mockRejectedValueOnce(new TypeError('network failed'));
+
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: 'contract-network-error' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the Goalrail server while loading this contract.');
+    expect(screen.queryByText('contract-network-error')).not.toBeInTheDocument();
+
+    fetchMock.mockResolvedValueOnce(new Response('not json', { status: 200 }));
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: 'contract-parse-error' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Goalrail server returned an unrecognized contract detail response.');
+    });
+    expect(screen.queryByText('contract-parse-error')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('unauthorized detail errors reset auth state consistently', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('unauthorized'), 401));
+
+    fireEvent.change(screen.getByLabelText(/^Contract ID$/i), {
+      target: { value: 'contract-unauthorized' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
+
+    expect(await screen.findByLabelText(/^Email$/i)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Session is invalid. Sign in again.');
+    expect(screen.queryByRole('navigation', { name: /product surfaces/i })).not.toBeInTheDocument();
   });
 
   it('keeps the latest contract lookup when an earlier response resolves last', async () => {

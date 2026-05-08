@@ -94,6 +94,10 @@ Delivery rule:
   `GET /v1/contracts/{id}/current-draft` is available. It does not show task
   plans, execution evidence, gate decisions, proof artifacts, runner state,
   stage controls, execution/proof meters, or fake downstream body sections.
+- Selected Contract detail access errors from `GET /v1/contracts/{id}` are
+  surfaced as contract-specific messages for missing, unauthorized, forbidden,
+  membership, server-not-ready, network, parse, and status-coded server
+  failures.
 - Users data is loaded from the server API; local state is only the fetched
   view, filters, form draft, and one-time create/reset response panel
 - Users persistence uses backend-aligned roles only:
