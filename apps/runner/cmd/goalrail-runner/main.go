@@ -45,7 +45,7 @@ func main() {
 	}
 
 	flags := flag.NewFlagSet("goalrail-runner", flag.ExitOnError)
-	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, execution-start, or execution-receipt; also configurable with GOALRAIL_RUNNER_MODE")
+	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, execution-start, execution-receipt, or execution-diagnostic; also configurable with GOALRAIL_RUNNER_MODE")
 	flags.StringVar(&cfg.ServerURL, "server-url", cfg.ServerURL, "Goalrail API server URL; also configurable with GOALRAIL_RUNNER_SERVER_URL")
 	flags.StringVar(&cfg.ProjectID, "project-id", cfg.ProjectID, "Project scope for runner leases; also configurable with GOALRAIL_RUNNER_PROJECT_ID")
 	flags.StringVar(&cfg.RepoBindingID, "repo-binding-id", cfg.RepoBindingID, "RepoBinding scope for runner leases; also configurable with GOALRAIL_RUNNER_REPO_BINDING_ID")
@@ -96,6 +96,23 @@ func main() {
 			LeaseTTLSeconds: cfg.LeaseTTLSeconds,
 			Once:            cfg.Once,
 			LogWriter:       cfg.LogWriter,
+		})
+	case "execution-diagnostic":
+		err = executionrunner.Run(ctx, executionrunner.Config{
+			ServerURL:         cfg.ServerURL,
+			BearerToken:       cfg.BearerToken,
+			ProjectID:         cfg.ProjectID,
+			RepoBindingID:     cfg.RepoBindingID,
+			RunnerID:          cfg.RunnerID,
+			WorkspaceRef:      cfg.WorkspaceRef,
+			CommitSHA:         cfg.CommitSHA,
+			BaselineID:        cfg.BaselineID,
+			OverlayID:         cfg.OverlayID,
+			BuiltinDiagnostic: true,
+			PollInterval:      cfg.PollInterval,
+			LeaseTTLSeconds:   cfg.LeaseTTLSeconds,
+			Once:              cfg.Once,
+			LogWriter:         cfg.LogWriter,
 		})
 	default:
 		err = fmt.Errorf("unsupported runner mode %q", mode)

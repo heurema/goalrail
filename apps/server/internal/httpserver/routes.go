@@ -54,6 +54,7 @@ type RouteHandlers struct {
 	CheckoutJobReceipts           http.Handler
 	ExecutionJobLeases            http.Handler
 	ExecutionJobRuns              http.Handler
+	RunCommandPlans               http.Handler
 	RunReceipts                   http.Handler
 	ClarificationAnswers          http.Handler
 	ClarificationAnswerApply      http.Handler
@@ -114,6 +115,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/checkout-jobs/{id}/receipts", mustHandler("checkout job receipts", handlers.CheckoutJobReceipts))
 	mux.Handle("POST /v1/execution-jobs/leases", mustHandler("execution job leases", handlers.ExecutionJobLeases))
 	mux.Handle("POST /v1/execution-jobs/{id}/runs", mustHandler("execution job runs", handlers.ExecutionJobRuns))
+	mux.Handle("POST /v1/runs/{id}/command-plans", mustHandler("run command plans", handlers.RunCommandPlans))
 	mux.Handle("POST /v1/runs/{id}/receipts", mustHandler("run receipts", handlers.RunReceipts))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))

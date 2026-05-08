@@ -18,14 +18,16 @@ import (
 )
 
 const (
-	EventTypeExecutionJobCreated       = "execution_job.created"
-	EventTypeExecutionJobLeased        = "execution_job.leased"
-	EventTypeRunStarted                = "run.started"
-	EventTypeExecutionReceiptSubmitted = "execution_receipt.submitted"
+	EventTypeExecutionJobCreated         = "execution_job.created"
+	EventTypeExecutionJobLeased          = "execution_job.leased"
+	EventTypeRunStarted                  = "run.started"
+	EventTypeExecutionCommandPlanCreated = "execution_command_plan.created"
+	EventTypeExecutionReceiptSubmitted   = "execution_receipt.submitted"
 
-	EntityTypeExecutionJob     = "ExecutionJob"
-	EntityTypeRun              = "Run"
-	EntityTypeExecutionReceipt = "ExecutionReceipt"
+	EntityTypeExecutionJob         = "ExecutionJob"
+	EntityTypeRun                  = "Run"
+	EntityTypeExecutionCommandPlan = "ExecutionCommandPlan"
+	EntityTypeExecutionReceipt     = "ExecutionReceipt"
 
 	ExecutionModePrepareV0 = "prepare_v0"
 
@@ -35,26 +37,28 @@ const (
 )
 
 var (
-	ErrWorkItemNotFound           = errors.New("work item not found")
-	ErrRepoBindingNotFound        = errors.New("repo binding not found")
-	ErrCheckoutReceiptNotFound    = errors.New("checkout receipt not found")
-	ErrCheckoutJobNotFound        = errors.New("checkout job not found")
-	ErrExecutionJobNotFound       = errors.New("execution job not found")
-	ErrRunNotFound                = errors.New("run not found")
-	ErrInvalidWorkItemState       = errors.New("work item state does not allow execution preparation")
-	ErrInvalidCheckoutState       = errors.New("checkout job state does not allow execution preparation")
-	ErrInvalidExecutionState      = errors.New("execution job state does not allow this transition")
-	ErrInvalidRunState            = errors.New("run state does not allow this transition")
-	ErrLeaseExpired               = errors.New("execution job lease expired")
-	ErrInvalidLease               = errors.New("execution job lease is invalid")
-	ErrMembershipRequired         = errors.New("active organization membership is required")
-	ErrOrganizationForbidden      = errors.New("user is not allowed to prepare execution for this work item")
-	ErrProjectMismatch            = errors.New("execution project expectation does not match work item")
-	ErrRepoBindingMismatch        = errors.New("execution repo binding expectation does not match work item")
-	ErrCheckoutReceiptMismatch    = errors.New("checkout receipt does not match work item")
-	ErrRawSourceUploaded          = errors.New("checkout receipt must not upload raw source")
-	ErrExecutionRawSourceUploaded = errors.New("execution receipt must not upload raw source")
-	ErrRunAlreadyStarted          = errors.New("execution job already has run")
+	ErrWorkItemNotFound             = errors.New("work item not found")
+	ErrRepoBindingNotFound          = errors.New("repo binding not found")
+	ErrCheckoutReceiptNotFound      = errors.New("checkout receipt not found")
+	ErrCheckoutJobNotFound          = errors.New("checkout job not found")
+	ErrExecutionJobNotFound         = errors.New("execution job not found")
+	ErrRunNotFound                  = errors.New("run not found")
+	ErrExecutionCommandPlanNotFound = errors.New("execution command plan not found")
+	ErrInvalidWorkItemState         = errors.New("work item state does not allow execution preparation")
+	ErrInvalidCheckoutState         = errors.New("checkout job state does not allow execution preparation")
+	ErrInvalidExecutionState        = errors.New("execution job state does not allow this transition")
+	ErrInvalidRunState              = errors.New("run state does not allow this transition")
+	ErrInvalidCommandPlan           = errors.New("execution command plan is invalid")
+	ErrLeaseExpired                 = errors.New("execution job lease expired")
+	ErrInvalidLease                 = errors.New("execution job lease is invalid")
+	ErrMembershipRequired           = errors.New("active organization membership is required")
+	ErrOrganizationForbidden        = errors.New("user is not allowed to prepare execution for this work item")
+	ErrProjectMismatch              = errors.New("execution project expectation does not match work item")
+	ErrRepoBindingMismatch          = errors.New("execution repo binding expectation does not match work item")
+	ErrCheckoutReceiptMismatch      = errors.New("checkout receipt does not match work item")
+	ErrRawSourceUploaded            = errors.New("checkout receipt must not upload raw source")
+	ErrExecutionRawSourceUploaded   = errors.New("execution receipt must not upload raw source")
+	ErrRunAlreadyStarted            = errors.New("execution job already has run")
 )
 
 type ValidationError struct {
@@ -114,6 +118,12 @@ type RunStore interface {
 	MarkReceiptSubmitted(context.Context, spine.RunID, time.Time, time.Time) (bool, error)
 }
 
+type ExecutionCommandPlanStore interface {
+	Create(context.Context, spine.ExecutionCommandPlan) error
+	Get(context.Context, spine.ExecutionCommandPlanID) (spine.ExecutionCommandPlan, bool, error)
+	GetByRunAndAction(context.Context, spine.RunID, string, string) (spine.ExecutionCommandPlan, bool, error)
+}
+
 type ExecutionReceiptStore interface {
 	Create(context.Context, spine.ExecutionReceipt) error
 	GetByRun(context.Context, spine.RunID) (spine.ExecutionReceipt, bool, error)
@@ -135,6 +145,7 @@ type IDGenerator interface {
 	NewExecutionJobID() (spine.ExecutionJobID, error)
 	NewExecutionLeaseID() (spine.ExecutionLeaseID, error)
 	NewRunID() (spine.RunID, error)
+	NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error)
 	NewExecutionReceiptID() (spine.ExecutionReceiptID, error)
 	NewEventID() (spine.EventID, error)
 }
@@ -146,6 +157,7 @@ type Service struct {
 	CheckoutJobs      CheckoutJobReader
 	Jobs              JobStore
 	Runs              RunStore
+	CommandPlans      ExecutionCommandPlanStore
 	ExecutionReceipts ExecutionReceiptStore
 	Events            EventLog
 	TxRunner          TransactionRunner
@@ -153,7 +165,7 @@ type Service struct {
 	IDs               IDGenerator
 }
 
-func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, executionReceipts ExecutionReceiptStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
+func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, commandPlans ExecutionCommandPlanStore, executionReceipts ExecutionReceiptStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
 	return &Service{
 		WorkItems:         workItems,
 		RepoBindings:      repoBindings,
@@ -161,6 +173,7 @@ func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checko
 		CheckoutJobs:      checkoutJobs,
 		Jobs:              jobs,
 		Runs:              runs,
+		CommandPlans:      commandPlans,
 		ExecutionReceipts: executionReceipts,
 		Events:            events,
 		TxRunner:          txRunner,
@@ -426,6 +439,105 @@ func (s *Service) StartRun(ctx context.Context, jobID spine.ExecutionJobID, inpu
 	return run, true, nil
 }
 
+func (s *Service) CreateOrReturnBuiltinDiagnosticCommandPlan(ctx context.Context, runID spine.RunID, input spine.ExecutionCommandPlanCreateRequest, membership spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error) {
+	if err := validateCommandPlanInput(input); err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	run, ok, err := s.Runs.Get(ctx, runID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get run: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, false, ErrRunNotFound
+	}
+	job, ok, err := s.Jobs.Get(ctx, run.ExecutionJobID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get execution job: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, false, ErrExecutionJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	if input.ProjectID != job.ProjectID {
+		return spine.ExecutionCommandPlan{}, false, ErrProjectMismatch
+	}
+	if input.RepoBindingID != job.RepoBindingID {
+		return spine.ExecutionCommandPlan{}, false, ErrRepoBindingMismatch
+	}
+	if run.State != spine.RunStateStarted {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("%w: %s", ErrInvalidRunState, run.State)
+	}
+	if job.State != spine.ExecutionJobStateRunStarted {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
+	}
+	if existing, ok, err := s.CommandPlans.GetByRunAndAction(ctx, run.ID, spine.ExecutionCommandKindBuiltinDiagnostic, spine.ExecutionCommandActionWorkspaceStatus); err != nil {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get execution command plan by run and action: %w", err)
+	} else if ok {
+		return existing, false, nil
+	}
+	planID, err := s.IDs.NewExecutionCommandPlanID()
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("new execution command plan id: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	plan := spine.ExecutionCommandPlan{
+		ID:                     planID,
+		OrganizationID:         job.OrganizationID,
+		ProjectID:              job.ProjectID,
+		RepoBindingID:          job.RepoBindingID,
+		TaskID:                 job.TaskID,
+		CheckoutReceiptID:      job.CheckoutReceiptID,
+		ExecutionJobID:         job.ID,
+		RunID:                  run.ID,
+		CommandKind:            spine.ExecutionCommandKindBuiltinDiagnostic,
+		Action:                 spine.ExecutionCommandActionWorkspaceStatus,
+		ShellAllowed:           false,
+		Argv:                   []string{},
+		WorkingDirectory:       ".",
+		PathScope:              []string{"."},
+		TimeoutSeconds:         30,
+		MaxStdoutBytes:         0,
+		MaxStderrBytes:         0,
+		AllowedArtifactKinds:   []string{},
+		RawSourceUploadAllowed: false,
+		State:                  spine.ExecutionCommandPlanStatePlanned,
+		CreatedAt:              now,
+		UpdatedAt:              now,
+	}
+	event, err := s.event(EventTypeExecutionCommandPlanCreated, EntityTypeExecutionCommandPlan, string(plan.ID), plan.OrganizationID, plan.ProjectID, plan.RepoBindingID, now, map[string]any{
+		"execution_command_plan_id": plan.ID,
+		"run_id":                    plan.RunID,
+		"execution_job_id":          plan.ExecutionJobID,
+		"task_id":                   plan.TaskID,
+		"checkout_receipt_id":       plan.CheckoutReceiptID,
+		"repo_binding_id":           plan.RepoBindingID,
+		"command_kind":              plan.CommandKind,
+		"action":                    plan.Action,
+	})
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.CommandPlans.Create(txCtx, plan); err != nil {
+			return fmt.Errorf("create execution command plan: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append execution command plan created event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		if existing, ok, lookupErr := s.CommandPlans.GetByRunAndAction(ctx, run.ID, spine.ExecutionCommandKindBuiltinDiagnostic, spine.ExecutionCommandActionWorkspaceStatus); lookupErr != nil {
+			return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get execution command plan by run and action after create failure: %w", lookupErr)
+		} else if ok {
+			return existing, false, nil
+		}
+		return spine.ExecutionCommandPlan{}, false, err
+	}
+	return plan, true, nil
+}
+
 func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input spine.ExecutionReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error) {
 	if err := validateReceiptInput(input); err != nil {
 		return spine.ExecutionReceipt{}, false, err
@@ -465,10 +577,24 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 	if job.State != spine.ExecutionJobStateRunStarted {
 		return spine.ExecutionReceipt{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
 	}
+	var commandPlanID *spine.ExecutionCommandPlanID
+	commandKind := strings.TrimSpace(input.CommandKind)
+	action := strings.TrimSpace(input.Action)
+	if input.ExecutionMode == spine.ExecutionReceiptModeBuiltinDiagnostic {
+		plan, err := s.validateBuiltinDiagnosticReceipt(ctx, input, run, job)
+		if err != nil {
+			return spine.ExecutionReceipt{}, false, err
+		}
+		id := plan.ID
+		commandPlanID = &id
+		commandKind = plan.CommandKind
+		action = plan.Action
+	}
 	receiptID, err := s.IDs.NewExecutionReceiptID()
 	if err != nil {
 		return spine.ExecutionReceipt{}, false, fmt.Errorf("new execution receipt id: %w", err)
 	}
+	executionMode := strings.TrimSpace(input.ExecutionMode)
 	receipt := spine.ExecutionReceipt{
 		ID:                  receiptID,
 		RunID:               run.ID,
@@ -482,11 +608,16 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		CommitSHA:           strings.TrimSpace(input.CommitSHA),
 		BaselineID:          strings.TrimSpace(input.BaselineID),
 		OverlayID:           strings.TrimSpace(input.OverlayID),
-		ExecutionMode:       spine.ExecutionReceiptModeNoCommand,
+		ExecutionMode:       executionMode,
+		CommandPlanID:       commandPlanID,
+		CommandKind:         commandKind,
+		Action:              action,
 		ProcessStatus:       strings.TrimSpace(input.ProcessStatus),
 		ArtifactRefs:        append([]string{}, input.ArtifactRefs...),
 		ChangedPathsSummary: append([]string{}, input.ChangedPathsSummary...),
 		RawSourceUploaded:   false,
+		RunnerStartedAt:     utcTimePtr(input.RunnerStartedAt),
+		RunnerFinishedAt:    utcTimePtr(input.RunnerFinishedAt),
 		StartedAt:           run.StartedAt.UTC(),
 		FinishedAt:          now,
 		CreatedAt:           now,
@@ -507,6 +638,9 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		"repo_binding_id":      receipt.RepoBindingID,
 		"runner_id":            receipt.RunnerID,
 		"execution_mode":       receipt.ExecutionMode,
+		"command_plan_id":      receipt.CommandPlanID,
+		"command_kind":         receipt.CommandKind,
+		"action":               receipt.Action,
 		"process_status":       receipt.ProcessStatus,
 	})
 	if err != nil {
@@ -640,6 +774,22 @@ func validateRunStartInput(input spine.RunStartRequest) error {
 	return nil
 }
 
+func validateCommandPlanInput(input spine.ExecutionCommandPlanCreateRequest) error {
+	if strings.TrimSpace(string(input.ProjectID)) == "" {
+		return &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) == "" {
+		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if kind := strings.TrimSpace(input.CommandKind); kind != "" && kind != spine.ExecutionCommandKindBuiltinDiagnostic {
+		return &ValidationError{Field: "command_kind", Message: "must be builtin_diagnostic"}
+	}
+	if action := strings.TrimSpace(input.Action); action != "" && action != spine.ExecutionCommandActionWorkspaceStatus {
+		return &ValidationError{Field: "action", Message: "must be workspace_status"}
+	}
+	return nil
+}
+
 func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 	if strings.TrimSpace(string(input.ExecutionJobID)) == "" {
 		return &ValidationError{Field: "execution_job_id", Message: "is required"}
@@ -659,27 +809,97 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 	if strings.TrimSpace(input.CommitSHA) == "" {
 		return &ValidationError{Field: "commit_sha", Message: "is required"}
 	}
-	if strings.TrimSpace(input.ExecutionMode) != spine.ExecutionReceiptModeNoCommand {
-		return &ValidationError{Field: "execution_mode", Message: "must be no_command"}
-	}
-	switch strings.TrimSpace(input.ProcessStatus) {
-	case spine.ExecutionReceiptStatusNotExecuted, spine.ExecutionReceiptStatusMetadataOnly:
-	default:
-		return &ValidationError{Field: "process_status", Message: "must be not_executed or metadata_only"}
-	}
+	mode := strings.TrimSpace(input.ExecutionMode)
+	status := strings.TrimSpace(input.ProcessStatus)
 	if input.ExitCode != nil {
-		return &ValidationError{Field: "exit_code", Message: "must be omitted for no_command receipts"}
+		return &ValidationError{Field: "exit_code", Message: "must be omitted for current execution receipts"}
 	}
 	if len(input.ArtifactRefs) != 0 {
-		return &ValidationError{Field: "artifact_refs", Message: "must be empty for no_command receipts"}
+		return &ValidationError{Field: "artifact_refs", Message: "must be empty for current execution receipts"}
 	}
 	if len(input.ChangedPathsSummary) != 0 {
-		return &ValidationError{Field: "changed_paths_summary", Message: "must be empty for no_command receipts"}
+		return &ValidationError{Field: "changed_paths_summary", Message: "must be empty for current execution receipts"}
 	}
 	if input.RawSourceUploaded {
 		return ErrExecutionRawSourceUploaded
 	}
+	switch mode {
+	case spine.ExecutionReceiptModeNoCommand:
+		if strings.TrimSpace(string(input.CommandPlanID)) != "" {
+			return &ValidationError{Field: "command_plan_id", Message: "must be omitted for no_command receipts"}
+		}
+		if strings.TrimSpace(input.CommandKind) != "" {
+			return &ValidationError{Field: "command_kind", Message: "must be omitted for no_command receipts"}
+		}
+		if strings.TrimSpace(input.Action) != "" {
+			return &ValidationError{Field: "action", Message: "must be omitted for no_command receipts"}
+		}
+		if input.RunnerStartedAt != nil {
+			return &ValidationError{Field: "runner_started_at", Message: "must be omitted for no_command receipts"}
+		}
+		if input.RunnerFinishedAt != nil {
+			return &ValidationError{Field: "runner_finished_at", Message: "must be omitted for no_command receipts"}
+		}
+		switch status {
+		case spine.ExecutionReceiptStatusNotExecuted, spine.ExecutionReceiptStatusMetadataOnly:
+		default:
+			return &ValidationError{Field: "process_status", Message: "must be not_executed or metadata_only"}
+		}
+	case spine.ExecutionReceiptModeBuiltinDiagnostic:
+		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
+			return &ValidationError{Field: "command_plan_id", Message: "is required for builtin_diagnostic receipts"}
+		}
+		if strings.TrimSpace(input.CommandKind) != spine.ExecutionCommandKindBuiltinDiagnostic {
+			return &ValidationError{Field: "command_kind", Message: "must be builtin_diagnostic"}
+		}
+		if strings.TrimSpace(input.Action) != spine.ExecutionCommandActionWorkspaceStatus {
+			return &ValidationError{Field: "action", Message: "must be workspace_status"}
+		}
+		if status != spine.ExecutionReceiptStatusMetadataOnly {
+			return &ValidationError{Field: "process_status", Message: "must be metadata_only for builtin_diagnostic receipts"}
+		}
+		if input.RunnerStartedAt == nil {
+			return &ValidationError{Field: "runner_started_at", Message: "is required for builtin_diagnostic receipts"}
+		}
+		if input.RunnerFinishedAt == nil {
+			return &ValidationError{Field: "runner_finished_at", Message: "is required for builtin_diagnostic receipts"}
+		}
+	default:
+		return &ValidationError{Field: "execution_mode", Message: "must be no_command or builtin_diagnostic"}
+	}
 	return nil
+}
+
+func (s *Service) validateBuiltinDiagnosticReceipt(ctx context.Context, input spine.ExecutionReceiptSubmitRequest, run spine.Run, job spine.ExecutionJob) (spine.ExecutionCommandPlan, error) {
+	plan, ok, err := s.CommandPlans.Get(ctx, input.CommandPlanID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("get execution command plan: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, ErrExecutionCommandPlanNotFound
+	}
+	if plan.OrganizationID != job.OrganizationID || plan.ProjectID != job.ProjectID || plan.RepoBindingID != job.RepoBindingID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.RunID != run.ID || plan.ExecutionJobID != job.ID || plan.TaskID != run.TaskID || plan.CheckoutReceiptID != run.CheckoutReceiptID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.State != spine.ExecutionCommandPlanStatePlanned {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.CommandKind != spine.ExecutionCommandKindBuiltinDiagnostic || plan.Action != spine.ExecutionCommandActionWorkspaceStatus {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.ShellAllowed || len(plan.Argv) != 0 || plan.WorkingDirectory != "." || len(plan.PathScope) != 1 || plan.PathScope[0] != "." || plan.RawSourceUploadAllowed {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if len(plan.AllowedArtifactKinds) != 0 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if input.RunnerStartedAt != nil && input.RunnerFinishedAt != nil && input.RunnerFinishedAt.Before(*input.RunnerStartedAt) {
+		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "runner_finished_at", Message: "must be after runner_started_at"}
+	}
+	return plan, nil
 }
 
 func validateActor(field string, actor spine.ActorRef) error {
@@ -759,6 +979,14 @@ func leaseTokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func utcTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	utc := value.UTC()
+	return &utc
+}
+
 func (s *Service) event(eventType string, entityType string, entityID string, organizationID spine.OrganizationID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, occurredAt time.Time, payload any) (spine.Event, error) {
 	eventID, err := s.IDs.NewEventID()
 	if err != nil {
@@ -811,6 +1039,14 @@ func (UUIDGenerator) NewRunID() (spine.RunID, error) {
 		return "", err
 	}
 	return spine.RunID(id.String()), nil
+}
+
+func (UUIDGenerator) NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.ExecutionCommandPlanID(id.String()), nil
 }
 
 func (UUIDGenerator) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {

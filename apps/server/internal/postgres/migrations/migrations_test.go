@@ -558,6 +558,41 @@ func TestExecutionReceiptMigrationAddsMetadataOnlyReceiptBoundary(t *testing.T) 
 	}
 }
 
+func TestBuiltinDiagnosticCommandPlanMigrationAddsBoundedCommandBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00006_builtin_diagnostic_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE execution_command_plans",
+		"CONSTRAINT execution_command_plans_run_action_unique UNIQUE (run_id, command_kind, action)",
+		"CONSTRAINT execution_command_plans_builtin_kind_check CHECK (command_kind = 'builtin_diagnostic')",
+		"CONSTRAINT execution_command_plans_workspace_status_check CHECK (action = 'workspace_status')",
+		"CONSTRAINT execution_command_plans_no_shell_check CHECK (shell_allowed = FALSE)",
+		"CONSTRAINT execution_command_plans_no_argv_check CHECK (argv = '[]'::jsonb)",
+		"CONSTRAINT execution_command_plans_path_scope_check CHECK (path_scope = '[\".\"]'::jsonb)",
+		"CONSTRAINT execution_command_plans_no_artifacts_check CHECK (allowed_artifact_kinds = '[]'::jsonb)",
+		"ADD COLUMN command_plan_id UUID NULL REFERENCES execution_command_plans(id) ON DELETE RESTRICT",
+		"ADD CONSTRAINT execution_receipts_mode_check CHECK (execution_mode IN ('no_command', 'builtin_diagnostic'))",
+		"ADD CONSTRAINT execution_receipts_builtin_diagnostic_check CHECK",
+		"DELETE FROM execution_receipts",
+		"DROP TABLE IF EXISTS execution_command_plans;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution command plan migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("execution command plan migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("execution command plan migration must not store lease tokens")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
