@@ -46,6 +46,13 @@
   provider adapters, GateDecision, and Proof remain deferred. H2.4.1+ smoke
   coverage pins this builtin diagnostic receipt path without changing product
   behavior.
+- ADR-0031 defines the H2.5 project command execution boundary before code:
+  no shell, no arbitrary command strings, no user-provided argv, typed
+  allowlisted server-owned command plans only, explicit `working_directory` and
+  `path_scope`, disabled stdout/stderr capture for the first project probe,
+  evidence-only receipts, one command receipt per Run, and Gate / Proof still
+  deferred. The next implementation is H2.5.1
+  `project_probe/detect_declared_test_targets`, not project test execution.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -216,11 +223,15 @@
   that no-command receipt path. H2.4.1 implements only fixed
   `builtin_diagnostic/workspace_status` command-plan plus receipt plumbing.
   H2.4.1+ smoke coverage now pins that builtin diagnostic receipt path.
-  WorkItems still remain `planned`; assignment, claiming, arbitrary
-  shell/project command execution, gate, and proof are still deferred.
+  ADR-0031 now records the H2.5 project command boundary; project command
+  execution is still not implemented, and the next code slice should be only
+  typed `project_probe/detect_declared_test_targets`. WorkItems still remain
+  `planned`; assignment, claiming, arbitrary shell/project command execution,
+  gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
-  metadata listing, and command execution behavior remain deferred.
+  metadata listing, and arbitrary shell/project command execution behavior
+  remain deferred.
 - the next slices should use those overlay boundaries instead of adding ad hoc top-level storage
 - `apps/server` product/auth APIs now require structured Postgres database
   configuration for durable state; health/version stay available without DB,
@@ -952,6 +963,18 @@ Done means:
    - H2.4.1+ smoke coverage pins the builtin diagnostic path through
      `ExecutionReceipt(builtin_diagnostic)` and keeps the one-receipt-per-run
      behavior explicit for the H2.5 design review
+   - ADR-0031 completes that H2.5 design review as a docs-first boundary:
+     no arbitrary shell, no arbitrary command string, no user-provided argv,
+     typed allowlisted project commands only, server-owned plan creation,
+     runner execution only for server-approved plans, explicit
+     `working_directory` / `path_scope`, bounded or disabled stdout/stderr,
+     artifacts as evidence refs only, `ExecutionReceipt` as evidence input
+     only, one command receipt per Run, and separate future runner trust
+     hardening
+   - next implementation: H2.5.1 typed
+     `project_probe/detect_declared_test_targets`, no shell, no arbitrary
+     command string, no stdout/stderr capture, no artifacts, no changed paths,
+     and no project test execution
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
@@ -962,8 +985,9 @@ Done means:
      path scope
    - keep execution receipts as evidence inputs only; they are not
      `GateDecision` or `Proof`
-   - first implementation should avoid arbitrary shell command execution unless
-     a later runtime-adapter ADR explicitly narrows and authorizes it
+   - first project command implementation must follow ADR-0031 and stay typed,
+     allowlisted, and metadata-only; arbitrary shell command execution requires
+     a later runtime-adapter ADR that explicitly narrows and authorizes it
    - no assignment, claiming, provider adapter, LLM coding-agent integration,
      GateDecision, Proof, raw source upload, branch, commit, pull request, or
      merge request creation
