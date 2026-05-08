@@ -163,9 +163,9 @@
   H2.1+ smoke coverage now pins the path from `CheckoutReceipt` to
   `ExecutionJob(queued)` without `Run`, execution receipt, gate, or proof.
   H2.2 now implements runner execution lease acquisition plus explicit
-  `Run(started)` creation with lease proof. WorkItems still remain `planned`;
-  assignment, claiming, command execution, execution receipt, gate, and proof
-  are still deferred.
+  `Run(started)` creation with lease proof; H2.2+ smoke coverage now pins that
+  transition. WorkItems still remain `planned`; assignment, claiming, command
+  execution, execution receipt, gate, and proof are still deferred.
 - Execution receipt, gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and command execution behavior remain deferred.
@@ -885,7 +885,7 @@ Done means:
      regression baseline
    - H2.2 implemented runner execution lease acquisition and explicit
      `Run(started)` creation with lease proof, without command execution or
-     execution receipt submission
+     execution receipt submission; H2.2+ smoke coverage pins this boundary
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
