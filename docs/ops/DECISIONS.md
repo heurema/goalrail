@@ -2488,3 +2488,29 @@ Rationale:
 - Removing production mutation controls keeps the Console aligned with
   Goalrail's contract-first, server-canonical model while preserving CLI as the
   local repository/runtime bridge.
+
+## D-0092 — Admin merge exceptions require explicit evidence and follow-up
+Date: 2026-05-08
+Status: accepted
+Review after: 2026-05-22
+
+Decision:
+- Admin merge is an exception path for Goalrail PRs, not the normal merge path.
+- It may be used only when the blocking gate is known to be procedural or
+  connector-state-related, not an implementation validation failure.
+- The merge operator must capture the reason, the failed gate condition, and
+  the substantive checks that passed in the PR or follow-up ops note.
+- The operator should prefer resolving review threads and re-running checks
+  before using the exception path.
+- The feature branch may remain temporarily after such a merge for audit or
+  recovery until deploy smoke or post-merge validation is complete.
+
+Rationale:
+- PR #182 was admin rebase-merged after `pr-intake-gate` had failed with
+  `Codex Review has not completed for current head`. Substantive code/docs,
+  Go module, and Console validation checks were green, and unresolved Codex
+  threads were reported as `0`.
+- A later `pr-intake-gate` rerun for the same head passed after a clean Codex
+  review reaction was detected. Recording the exception prevents treating admin
+  merge as the default workflow while preserving a practical recovery path when
+  a procedural review-freshness gate blocks an otherwise validated PR.

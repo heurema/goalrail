@@ -38,7 +38,8 @@
 - H2.3 now implements metadata-only `ExecutionReceipt` submission for started
   Runs through `POST /v1/runs/{id}/receipts` and
   `goalrail-runner --mode execution-receipt`; receipts are no-command evidence
-  inputs, not task completion, GateDecision, or Proof
+  inputs, not task completion, GateDecision, or Proof. H2.3+ smoke coverage now
+  pins this receipt path without command execution, gate, or proof
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -190,8 +191,9 @@
   H2.2 now implements runner execution lease acquisition plus explicit
   `Run(started)` creation with lease proof; H2.2+ smoke coverage now pins that
   transition. H2.3 now implements metadata-only `ExecutionReceipt` submission
-  for started Runs without command execution. WorkItems still remain `planned`;
-  assignment, claiming, command execution, gate, and proof are still deferred.
+  for started Runs without command execution, and H2.3+ smoke coverage pins
+  that no-command receipt path. WorkItems still remain `planned`; assignment,
+  claiming, command execution, gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and command execution behavior remain deferred.
@@ -917,7 +919,8 @@ Done means:
      execution-receipt`; receipt submission carries explicit `lease_id` plus
      `lease_token`, supports re-lease recovery for expired `run_started` jobs
      without receipts, and remains no-command evidence input, not task
-     completion, `GateDecision`, or `Proof`
+     completion, `GateDecision`, or `Proof`; H2.3+ smoke coverage pins this
+     path through `Run(receipt_submitted)` / `ExecutionJob(receipt_submitted)`
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
