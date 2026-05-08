@@ -161,6 +161,9 @@ func TestStepSubmitsNoCommandExecutionReceipt(t *testing.T) {
 	if receiptRequest.ExecutionMode != "no_command" || receiptRequest.ProcessStatus != "not_executed" || receiptRequest.RawSourceUploaded {
 		t.Fatalf("receipt mode/status = %#v, want no-command metadata receipt", receiptRequest)
 	}
+	if len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 {
+		t.Fatalf("receipt artifact/path claims = %#v/%#v, want empty no-command evidence arrays", receiptRequest.ArtifactRefs, receiptRequest.ChangedPathsSummary)
+	}
 	if receiptRequest.WorkspaceRef != "mounted:/workspace/goalrail" || receiptRequest.CommitSHA != "abc123" {
 		t.Fatalf("receipt workspace metadata = %#v, want configured metadata", receiptRequest)
 	}
@@ -249,6 +252,9 @@ func TestStepCanResumeReceiptAfterTransientSubmitFailure(t *testing.T) {
 	}
 	if receiptRequest.LeaseID != "lease-2" || receiptRequest.LeaseToken != secondSecretToken {
 		t.Fatalf("recovered receipt proof = %#v, want fresh lease proof", receiptRequest)
+	}
+	if len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.ExecutionMode != "no_command" || receiptRequest.ProcessStatus != "not_executed" {
+		t.Fatalf("recovered receipt = %#v, want no-command metadata-only receipt", receiptRequest)
 	}
 	if strings.Contains(logs.String(), firstSecretToken) || strings.Contains(logs.String(), secondSecretToken) {
 		t.Fatalf("logs leaked execution lease token: %q", logs.String())

@@ -384,6 +384,9 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 	if executionReceipt.ExecutionMode != spine.ExecutionReceiptModeNoCommand || executionReceipt.ProcessStatus != spine.ExecutionReceiptStatusNotExecuted || executionReceipt.ExitCode != nil || executionReceipt.RawSourceUploaded {
 		t.Fatalf("execution receipt mode/status = %#v, want no-command metadata-only receipt", executionReceipt)
 	}
+	if len(executionReceipt.ArtifactRefs) != 0 || len(executionReceipt.ChangedPathsSummary) != 0 || strings.Contains(executionReceiptResponse.body, `"artifact_refs":null`) || strings.Contains(executionReceiptResponse.body, `"changed_paths_summary":null`) {
+		t.Fatalf("execution receipt artifact/path claims = %#v/%#v body=%s, want empty JSON arrays", executionReceipt.ArtifactRefs, executionReceipt.ChangedPathsSummary, executionReceiptResponse.body)
+	}
 	if executionReceipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || executionReceipt.NextAction.Available || executionReceipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
 		t.Fatalf("execution receipt next_action = %#v, want unavailable gate_review", executionReceipt.NextAction)
 	}
@@ -405,6 +408,16 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 	}
 	if got := countEventType(server.events.Events(), execution.EventTypeExecutionReceiptSubmitted); got != 1 {
 		t.Fatalf("execution_receipt.submitted events = %d, want 1", got)
+	}
+
+	secondExecutionReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(executionJob.ID, executionLease.ID, executionLease.LeaseToken, "runner-smoke", "mounted:/workspace/goalrail#run="+string(run.ID), "abc123", false))
+	if secondExecutionReceiptResponse.code != http.StatusOK {
+		t.Fatalf("second execution receipt status = %d, want %d: %s", secondExecutionReceiptResponse.code, http.StatusOK, secondExecutionReceiptResponse.body)
+	}
+	var existingExecutionReceipt spine.ExecutionReceipt
+	decodeJSON(t, secondExecutionReceiptResponse.body, &existingExecutionReceipt)
+	if existingExecutionReceipt.ID != executionReceipt.ID || len(server.executionReceipts.receipts) != 1 {
+		t.Fatalf("existing execution receipt id/count = %q/%d, want %q/1", existingExecutionReceipt.ID, len(server.executionReceipts.receipts), executionReceipt.ID)
 	}
 	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 }
