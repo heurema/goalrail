@@ -234,6 +234,18 @@ function errorEnvelope(code: string, message = 'error') {
   };
 }
 
+function expectNoWorkflowMutationRequests() {
+  const calls = fetchMock.mock.calls.map(([url, options]) => ({
+    url: String(url),
+    method: String((options as RequestInit | undefined)?.method ?? 'GET'),
+  }));
+
+  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/goals\/.*\/continuation/.test(call.url))).toBe(false);
+  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/clarifications\/.*\/answers\/continuation/.test(call.url))).toBe(false);
+  expect(calls.some((call) => call.method !== 'GET' && call.url === '/v1/contracts')).toBe(false);
+  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/contracts\/.*\/(submissions|approvals|plans)/.test(call.url))).toBe(false);
+}
+
 async function setLocale(locale: 'en' | 'ru') {
   await i18n.changeLanguage(locale);
   document.documentElement.lang = locale;
@@ -256,6 +268,25 @@ async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'o
   await waitFor(() => {
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?limit=50');
   });
+}
+
+async function flushAsyncWork() {
+  await act(async () => {
+    for (let index = 0; index < 5; index += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function restartContractsPollingWithFakeTimers(contracts: unknown[] = [], detail?: unknown) {
+  fireEvent.click(screen.getByRole('button', { name: /settings/i }));
+  vi.useFakeTimers();
+  fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse(contracts)));
+  if (detail) {
+    fetchMock.mockResolvedValueOnce(jsonResponse(detail));
+  }
+  fireEvent.click(screen.getByRole('button', { name: /^Contracts$/i }));
+  await flushAsyncWork();
 }
 
 async function startPasswordChangeLogin(locale: 'en' | 'ru' = 'en') {
@@ -774,6 +805,102 @@ describe('App', () => {
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
   });
 
+  it('periodically refreshes the active Contracts list through the read-only discovery endpoint', async () => {
+    await loginSuccessfully();
+    await restartContractsPollingWithFakeTimers();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-refreshed',
+        goal_id: 'goal-refreshed',
+        repo_binding_id: 'repo-refreshed',
+        current_draft_id: 'draft-refreshed',
+      }),
+    ])));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getAllByText('contract-refreshed').length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/contracts?limit=50')).toHaveLength(3);
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('includes the active state filter in scheduled Contracts refreshes', async () => {
+    await loginSuccessfully();
+    await restartContractsPollingWithFakeTimers();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'ready_for_approval' },
+    });
+
+    await flushAsyncWork();
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?state=ready_for_approval&limit=50');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-filter-refresh',
+        state: 'ready_for_approval',
+        current_draft_id: 'draft-filter-refresh',
+      }),
+    ])));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getAllByText('contract-filter-refresh').length).toBeGreaterThan(0);
+    expect(
+      fetchMock.mock.calls
+        .map(([url]) => String(url))
+        .filter((url) => url === '/v1/contracts?state=ready_for_approval&limit=50')
+    ).toHaveLength(2);
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('skips scheduled Contracts refresh while hidden and refreshes once when visible again', async () => {
+    await loginSuccessfully();
+    await restartContractsPollingWithFakeTimers();
+
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: true,
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/contracts?limit=50')).toHaveLength(2);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-visible-again',
+        goal_id: 'goal-visible-again',
+        current_draft_id: 'draft-visible-again',
+      }),
+    ])));
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getAllByText('contract-visible-again').length).toBeGreaterThan(0);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/contracts?limit=50')).toHaveLength(3);
+    expectNoWorkflowMutationRequests();
+  });
+
   it('renders selected contract detail as an aggregate-only read-only panel', async () => {
     await loginSuccessfully('en', 'owner', [
       contractResponse({
@@ -845,6 +972,128 @@ describe('App', () => {
       })
     );
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts\/contract-list-approved\/(submissions|approvals|plans)/.test(url))).toBe(false);
+  });
+
+  it('periodically refreshes selected Contract detail through the read-only detail endpoint', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-selected-refresh',
+        goal_id: 'goal-selected-refresh',
+        current_draft_id: 'draft-before-refresh',
+      }),
+    ]);
+    await restartContractsPollingWithFakeTimers([
+      contractResponse({
+        id: 'contract-selected-refresh',
+        goal_id: 'goal-selected-refresh',
+        current_draft_id: 'draft-before-refresh',
+      }),
+    ], contractResponse({
+      id: 'contract-selected-refresh',
+      goal_id: 'goal-selected-refresh',
+      current_draft_id: 'draft-before-refresh',
+    }));
+    expect(screen.getByText('draft-before-refresh')).toBeInTheDocument();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-selected-refresh',
+        goal_id: 'goal-selected-refresh',
+        current_draft_id: 'draft-list-refresh',
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
+      id: 'contract-selected-refresh',
+      goal_id: 'goal-selected-refresh',
+      current_draft_id: 'draft-after-refresh',
+    })));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByText('draft-after-refresh')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/contract-selected-refresh');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps selected aggregate detail on transient scheduled detail errors', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-detail-stable',
+        goal_id: 'goal-detail-stable',
+        current_draft_id: 'draft-detail-stable',
+      }),
+    ]);
+    await restartContractsPollingWithFakeTimers([
+      contractResponse({
+        id: 'contract-detail-stable',
+        goal_id: 'goal-detail-stable',
+        current_draft_id: 'draft-detail-stable',
+      }),
+    ], contractResponse({
+      id: 'contract-detail-stable',
+      goal_id: 'goal-detail-stable',
+      current_draft_id: 'draft-detail-stable',
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-detail-stable',
+        goal_id: 'goal-detail-stable',
+        current_draft_id: 'draft-detail-stable',
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('server_error'), 503));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByText('draft-detail-stable')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps not_found behavior when a scheduled selected detail refresh returns not_found', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-detail-missing',
+        goal_id: 'goal-detail-missing',
+        current_draft_id: 'draft-detail-missing',
+      }),
+    ]);
+    await restartContractsPollingWithFakeTimers([
+      contractResponse({
+        id: 'contract-detail-missing',
+        goal_id: 'goal-detail-missing',
+        current_draft_id: 'draft-detail-missing',
+      }),
+    ], contractResponse({
+      id: 'contract-detail-missing',
+      goal_id: 'goal-detail-missing',
+      current_draft_id: 'draft-detail-missing',
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-detail-missing',
+        goal_id: 'goal-detail-missing',
+        current_draft_id: 'draft-detail-missing',
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('not_found'), 404));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Contract was not found.');
+    expect(screen.getAllByText('Check the ID and try again.').length).toBeGreaterThan(0);
+    expectNoWorkflowMutationRequests();
   });
 
   it('filters the contract list by state without calling mutation endpoints', async () => {
@@ -1278,12 +1527,20 @@ describe('App', () => {
       goal_id: 'goal-linked',
       current_draft_id: 'draft-linked',
     })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-linked',
+        goal_id: 'goal-linked',
+        current_draft_id: 'draft-linked',
+      }),
+    ])));
     fireEvent.click(within(contractLane).getByRole('button', { name: /^Open contract$/i }));
 
     expect(await screen.findByText('draft-linked')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
-    expect(fetchMock.mock.calls[4][0]).toBe('/v1/contracts/contract-linked');
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    const linkedContractDetailCall = fetchMock.mock.calls.find(([url]) => String(url) === '/v1/contracts/contract-linked');
+    expect(linkedContractDetailCall).toBeDefined();
+    expect(linkedContractDetailCall?.[1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
