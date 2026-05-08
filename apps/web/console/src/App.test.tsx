@@ -310,12 +310,14 @@ async function loginSuccessfully(
   locale: 'en' | 'ru' = 'en',
   membershipRole = 'owner',
   contracts: unknown[] = [],
-  initialDraftOverrides: Partial<Record<string, unknown>> | null = {}
+  initialDraftOverrides: Partial<Record<string, unknown>> | null = {},
+  repositoryContexts: unknown[] = [repositoryContextRecord()]
 ) {
   await setLocale(locale);
   fetchMock.mockResolvedValueOnce(jsonResponse(loginResponse()));
   fetchMock.mockResolvedValueOnce(jsonResponse(meResponse({ role: membershipRole })));
   fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse(contracts)));
+  fetchMock.mockResolvedValueOnce(jsonResponse(repositoryContextResponse(repositoryContexts)));
   const firstContract = contracts[0] as Record<string, unknown> | undefined;
   if (firstContract?.current_draft_id && initialDraftOverrides !== null) {
     fetchMock.mockResolvedValueOnce(jsonResponse(draftResponseForContract(firstContract, initialDraftOverrides)));
@@ -331,6 +333,7 @@ async function loginSuccessfully(
   await screen.findByRole('navigation', { name: locale === 'ru' ? /разделы продукта/i : /product surfaces/i });
   await waitFor(() => {
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?limit=50');
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
   });
 }
 
@@ -612,7 +615,7 @@ describe('App', () => {
   it('successful login calls auth login, then /v1/me, then renders the console', async () => {
     await loginSuccessfully();
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[0][0]).toBe('/v1/auth/login');
     expect(fetchMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({
@@ -632,6 +635,14 @@ describe('App', () => {
     );
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
     expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -702,6 +713,7 @@ describe('App', () => {
     );
     fetchMock.mockResolvedValueOnce(jsonResponse(meResponse()));
     fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse()));
+    fetchMock.mockResolvedValueOnce(jsonResponse(repositoryContextResponse()));
 
     fireEvent.change(screen.getByLabelText(/^Текущий пароль$/i), { target: { value: 'temporary-password' } });
     fireEvent.change(screen.getByLabelText(/^Новый пароль$/i), { target: { value: 'new-password' } });
@@ -710,9 +722,10 @@ describe('App', () => {
     await screen.findByRole('navigation', { name: /разделы продукта/i });
     await waitFor(() => {
       expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?limit=50');
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(fetchMock.mock.calls[1][0]).toBe('/v1/auth/change-password');
     expect(fetchMock.mock.calls[1][1]).toEqual(
       expect.objectContaining({
@@ -730,6 +743,7 @@ describe('App', () => {
     );
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/me');
     expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts?limit=50');
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
   });
 
   it('invalid current password stays on the password-change form', async () => {
@@ -752,9 +766,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
 
     await screen.findByLabelText(/^Email$/i);
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/auth/logout');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/auth/logout');
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -771,8 +785,14 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
 
     await screen.findByLabelText(/^Email$/i);
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/v1/auth/login', '/v1/me', '/v1/contracts?limit=50', '/v1/auth/logout']);
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/v1/auth/login',
+      '/v1/me',
+      '/v1/contracts?limit=50',
+      '/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context',
+      '/v1/auth/logout',
+    ]);
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -823,8 +843,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
 
     await screen.findByText('Render selected contract current draft');
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/018f0000-0000-7000-8000-000000000101');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    const contractLookupCall = findFetchRequest('/v1/contracts/018f0000-0000-7000-8000-000000000101');
+    expect(contractLookupCall?.options).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -879,6 +899,127 @@ describe('App', () => {
     expect(contractList).not.toHaveTextContent(/2026-05-08T10:00:00Z|2026-05-07T09:10:00Z/);
     expect(screen.getAllByText('draft-list-draft').length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
+  });
+
+  it('loads and renders repository context metadata on authenticated Contracts entry', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        projectDisplayName: 'Goalrail Console',
+        projectSlug: 'goalrail-console',
+        projectState: 'active',
+        repoBindingId: 'repo-context-primary',
+        repositoryFullName: 'heurema/goalrail',
+        provider: 'github',
+        defaultBranch: 'main',
+        workflowBaseBranch: 'release-base',
+        pathScope: 'apps/web/console',
+        accessMode: 'metadata_only',
+        repoBindingState: 'active',
+      }),
+    ]);
+
+    const panel = screen.getByLabelText(/repository context metadata/i);
+    const repositoryContextCall = findFetchRequest('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
+
+    expect(repositoryContextCall?.options).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(panel).toHaveTextContent('Goalrail Dev');
+    expect(panel).toHaveTextContent('goalrail-dev');
+    expect(panel).toHaveTextContent('Goalrail Console');
+    expect(panel).toHaveTextContent('goalrail-console');
+    expect(panel).toHaveTextContent('active');
+    expect(panel).toHaveTextContent('repo-context-primary');
+    expect(panel).toHaveTextContent('heurema/goalrail');
+    expect(panel).toHaveTextContent('github');
+    expect(panel).toHaveTextContent('main');
+    expect(panel).toHaveTextContent('release-base');
+    expect(panel).toHaveTextContent('apps/web/console');
+    expect(panel).toHaveTextContent('metadata_only');
+    expect(panel).toHaveTextContent('No Contract is selected; showing the first repository context for this Organization.');
+    expect(panel).not.toHaveTextContent('2026-05-07T10:15:00Z');
+    expect(panel).toHaveTextContent('Metadata only. This does not prove provider authorization, checkout permission, readiness/proof status, execution status, or runner state.');
+    expect(panel).not.toHaveTextContent(/provider connected|checkout ready|readiness score|proof ready|execution running|runner online|gate decision|task plan/i);
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('shows the repository context matching the selected Contract repo_binding_id', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-context-match',
+        goal_id: 'goal-context-match',
+        repo_binding_id: 'repo-binding-match',
+        current_draft_id: undefined,
+      }),
+    ], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-binding-other',
+        projectDisplayName: 'Other Project',
+        repositoryFullName: 'heurema/other',
+      }),
+      repositoryContextRecord({
+        repoBindingId: 'repo-binding-match',
+        projectDisplayName: 'Matched Project',
+        repositoryFullName: 'heurema/goalrail-console',
+        workflowBaseBranch: 'contracts-base',
+        pathScope: 'apps/web/console',
+      }),
+    ]);
+
+    const panel = screen.getByLabelText(/repository context metadata/i);
+
+    expect(panel).toHaveTextContent('Matched to the selected Contract repo_binding_id.');
+    expect(panel).toHaveTextContent('Matched Project');
+    expect(panel).toHaveTextContent('repo-binding-match');
+    expect(panel).toHaveTextContent('heurema/goalrail-console');
+    expect(panel).toHaveTextContent('contracts-base');
+    expect(panel).not.toHaveTextContent('Other Project');
+    expect(panel).not.toHaveTextContent('heurema/other');
+    expect(screen.getByLabelText(/selected contract detail/i)).toHaveTextContent('contract-context-match');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps the selected Contract visible when its repo binding has no repository context metadata', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-context-missing',
+        goal_id: 'goal-context-missing',
+        repo_binding_id: 'repo-binding-missing',
+        current_draft_id: undefined,
+      }),
+    ], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-binding-present',
+        projectDisplayName: 'Present Project',
+        repositoryFullName: 'heurema/present',
+      }),
+    ]);
+
+    const panel = screen.getByLabelText(/repository context metadata/i);
+    const detail = screen.getByLabelText(/selected contract detail/i);
+
+    expect(detail).toHaveTextContent('contract-context-missing');
+    expect(detail).toHaveTextContent('repo-binding-missing');
+    expect(panel).toHaveTextContent('No repository context metadata for this repo binding');
+    expect(panel).toHaveTextContent('repo_binding_id repo-binding-missing is not present');
+    expect(panel).not.toHaveTextContent('Present Project');
+    expect(panel).not.toHaveTextContent('heurema/present');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('shows an honest Contracts repository context empty state when no contexts are returned', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, []);
+
+    const panel = screen.getByLabelText(/repository context metadata/i);
+
+    expect(panel).toHaveTextContent('No repository context metadata yet');
+    expect(panel).toHaveTextContent('This Organization has no active Project / RepoBinding metadata from the repository context endpoint.');
+    expect(panel).toHaveTextContent('Metadata only.');
+    expectNoWorkflowMutationRequests();
   });
 
   it('periodically refreshes the active Contracts list through the read-only discovery endpoint', async () => {
@@ -1057,7 +1198,7 @@ describe('App', () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/contract-ready-detail/current-draft');
     expect(workspace).toHaveTextContent('Task, execution, gate, and proof data are not available in this Console view yet.');
     expect(workspace).not.toHaveTextContent(
-      /Execution evidence|Work items|Stage controls|Record activity|Active stage|Queued proof|Active execution|Runner state|Task plan|Gate decision|Contract state meters/i
+      /Execution evidence|Work items|Stage controls|Record activity|Active stage|Queued proof|Active execution|Runner online|Runner active|Task plan|Gate decision|Contract state meters/i
     );
   });
 
@@ -1531,8 +1672,8 @@ describe('App', () => {
     const contractLane = within(board).getByLabelText('Contract lane');
     const blockedLane = within(board).getByLabelText('Blocked lane');
 
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/qualification-feed?limit=50');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    const qualificationFeedCall = findFetchRequest('/v1/qualification-feed?limit=50');
+    expect(qualificationFeedCall?.options).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -2197,8 +2338,8 @@ describe('App', () => {
       expect(screen.getByText('draft-B')).toBeInTheDocument();
       expect(screen.queryByText('draft-A')).not.toBeInTheDocument();
     });
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-A');
-    expect(fetchMock.mock.calls[4][0]).toBe('/v1/contracts/contract-B');
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/contracts/contract-A');
+    expect(fetchMock.mock.calls[5][0]).toBe('/v1/contracts/contract-B');
   });
 
   it('theme storage remains exactly goalrail.console.theme', async () => {
@@ -2261,7 +2402,7 @@ describe('App', () => {
     expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('Owner');
     expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('role · Администратор');
     expect(screen.getByRole('button', { name: /^Контракты$/i })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
     expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
   });
@@ -2276,8 +2417,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
 
     expect(await screen.findByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -2301,8 +2442,8 @@ describe('App', () => {
     expect(screen.getAllByText('heurema/goalrail').length).toBeGreaterThan(0);
     expect(screen.getByText('metadata_only')).toBeInTheDocument();
     expect(screen.getByText(/does not prove checkout permission or provider authorization/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -2536,8 +2677,8 @@ describe('App', () => {
 
     expect(await screen.findByText('shown-once-secret')).toBeInTheDocument();
     expect(screen.getByText(/shown once/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls[4][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    expect(fetchMock.mock.calls[5][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[5][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -2604,10 +2745,10 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     await screen.findByText('Dev Lead');
-    expect(fetchMock.mock.calls[4][0]).toBe(
+    expect(fetchMock.mock.calls[5][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010'
     );
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    expect(fetchMock.mock.calls[5][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         credentials: 'omit',
@@ -2655,10 +2796,10 @@ describe('App', () => {
     fireEvent.click(within(confirmDialog).getByRole('button', { name: /^Reset temporary password$/i }));
 
     expect(await screen.findByText('rotated-once-secret')).toBeInTheDocument();
-    expect(fetchMock.mock.calls[4][0]).toBe(
+    expect(fetchMock.mock.calls[5][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010/temporary-password-resets'
     );
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    expect(fetchMock.mock.calls[5][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -2667,7 +2808,7 @@ describe('App', () => {
         },
       })
     );
-    expect(fetchMock.mock.calls[4][1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls[5][1]?.body).toBeUndefined();
     expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Must change password');
     expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
     expect(window.localStorage.length).toBe(0);
@@ -2699,7 +2840,7 @@ describe('App', () => {
     fireEvent.click(resetButton);
 
     expect(screen.queryByRole('dialog', { name: /confirm temporary password reset/i })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it('blocks self owner downgrade before calling PATCH', async () => {
@@ -2721,7 +2862,7 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('You cannot remove your own owner access');
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it('blocks self membership deactivation before calling PATCH', async () => {
@@ -2743,7 +2884,7 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('You cannot deactivate your own organization membership');
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it('allows self display name edit while preserving owner role and active state', async () => {
@@ -2767,10 +2908,10 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     await screen.findByText('Owner Updated');
-    expect(fetchMock.mock.calls[4][0]).toBe(
+    expect(fetchMock.mock.calls[5][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000001'
     );
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    expect(fetchMock.mock.calls[5][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({
@@ -2804,10 +2945,10 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Admin');
     });
-    expect(fetchMock.mock.calls[4][0]).toBe(
+    expect(fetchMock.mock.calls[5][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000011'
     );
-    expect(fetchMock.mock.calls[4][1]).toEqual(
+    expect(fetchMock.mock.calls[5][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({
@@ -2823,7 +2964,7 @@ describe('App', () => {
     await loginSuccessfully();
 
     expect(document.body).not.toHaveTextContent(
-      /registration|register|sign up|sso|invite|reset password|password reset|analytics|chat|file upload|model selector|organization creation|repo integration|runner|gate queue/i
+      /registration|register|sign up|sso|invite|reset password|password reset|analytics|chat|file upload|model selector|organization creation|repo integration|runner online|runner active|gate queue/i
     );
   });
 });

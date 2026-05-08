@@ -519,6 +519,17 @@ function ConsoleApp() {
   }, [activeSurface, authStatus, contractListStateFilter, screen, tokens?.accessToken]);
 
   useEffect(() => {
+    if (screen !== 'console' || activeSurface !== 'contracts' || authStatus !== 'authenticated') {
+      return;
+    }
+    if (repositoryContextLoadStatus !== 'idle') {
+      return;
+    }
+
+    void loadRepositoryContext();
+  }, [activeSurface, authStatus, profile?.organization_membership.organization_id, repositoryContextLoadStatus, screen, tokens?.accessToken]);
+
+  useEffect(() => {
     if (screen !== 'settings-users' || authStatus !== 'authenticated') {
       return;
     }
@@ -1715,6 +1726,9 @@ function ConsoleApp() {
             contractDraftError={contractDraftError}
             contractDraftLoadStatus={contractDraftLoadStatus}
             loadStatus={contractLoadStatus}
+            repositoryContext={repositoryContext}
+            repositoryContextError={repositoryContextError}
+            repositoryContextLoadStatus={repositoryContextLoadStatus}
             t={translate}
           />
         ) : activeSurface === 'delivery-readiness' ? (
@@ -2209,6 +2223,9 @@ function ContractSurfacePanel({
   contractDraftError,
   contractDraftLoadStatus,
   loadStatus,
+  repositoryContext,
+  repositoryContextError,
+  repositoryContextLoadStatus,
   t,
 }: {
   activeLocale: ConsoleLocale;
@@ -2217,6 +2234,9 @@ function ContractSurfacePanel({
   contractDraftError: string;
   contractDraftLoadStatus: ContractDraftLoadStatus;
   loadStatus: ContractLoadStatus;
+  repositoryContext: OrganizationRepositoryContextResponse | null;
+  repositoryContextError: string;
+  repositoryContextLoadStatus: RepositoryContextLoadStatus;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const stateLabel = contract ? t(`contractStates.${contract.state}`) : t('surfaces.contracts.notSelected');
@@ -2305,6 +2325,15 @@ function ContractSurfacePanel({
         </div>
 
         <aside className="opsContractSide">
+          <ContractRepositoryContextPanel
+            activeLocale={activeLocale}
+            contract={contract}
+            loadStatus={repositoryContextLoadStatus}
+            repositoryContext={repositoryContext}
+            repositoryContextError={repositoryContextError}
+            t={t}
+          />
+
           <section className="opsSideCard">
             <div className="opsPanelHead compact">
               <div>
@@ -2320,6 +2349,177 @@ function ContractSurfacePanel({
       </div>
     </section>
   );
+}
+
+function ContractRepositoryContextPanel({
+  activeLocale,
+  contract,
+  loadStatus,
+  repositoryContext,
+  repositoryContextError,
+  t,
+}: {
+  activeLocale: ConsoleLocale;
+  contract: ContractResponse | null;
+  loadStatus: RepositoryContextLoadStatus;
+  repositoryContext: OrganizationRepositoryContextResponse | null;
+  repositoryContextError: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const emptyValue = t('repository.emptyValue');
+  const contexts = repositoryContext?.contexts ?? [];
+  const selectedContext = selectRepositoryContext(repositoryContext, contract);
+  const selectedBindingIsMissing = Boolean(contract && repositoryContext && contexts.length > 0 && !selectedContext);
+  const organizationRows: Array<{ label: string; value: string }> = repositoryContext ? [
+    {
+      label: t('repository.fields.organizationDisplayName'),
+      value: displayMetadataValue(repositoryContext.organization.display_name, emptyValue),
+    },
+    {
+      label: t('repository.fields.organizationSlug'),
+      value: displayMetadataValue(repositoryContext.organization.slug, emptyValue),
+    },
+  ] : [];
+  const contextRows: Array<{ label: string; value: string }> = selectedContext ? [
+    {
+      label: t('repository.fields.projectDisplayName'),
+      value: displayMetadataValue(selectedContext.project.display_name, emptyValue),
+    },
+    {
+      label: t('repository.fields.projectSlug'),
+      value: displayMetadataValue(selectedContext.project.slug, emptyValue),
+    },
+    {
+      label: t('repository.fields.projectState'),
+      value: displayMetadataValue(selectedContext.project.state, emptyValue),
+    },
+    {
+      label: t('repository.fields.repoBindingId'),
+      value: displayMetadataValue(selectedContext.repo_binding.id, emptyValue),
+    },
+    {
+      label: t('repository.fields.repositoryFullName'),
+      value: displayMetadataValue(selectedContext.repo_binding.repository_full_name, emptyValue),
+    },
+    {
+      label: t('repository.fields.provider'),
+      value: displayMetadataValue(selectedContext.repo_binding.provider, emptyValue),
+    },
+    {
+      label: t('repository.fields.defaultBranch'),
+      value: displayMetadataValue(selectedContext.repo_binding.default_branch, emptyValue),
+    },
+    {
+      label: t('repository.fields.workflowBaseBranch'),
+      value: displayMetadataValue(selectedContext.repo_binding.workflow_base_branch, emptyValue),
+    },
+    {
+      label: t('repository.fields.pathScope'),
+      value: displayMetadataValue(selectedContext.repo_binding.path_scope, emptyValue),
+    },
+    {
+      label: t('repository.fields.accessMode'),
+      value: displayMetadataValue(selectedContext.repo_binding.access_mode, emptyValue),
+    },
+    {
+      label: t('repository.fields.repoBindingState'),
+      value: displayMetadataValue(selectedContext.repo_binding.state, emptyValue),
+    },
+    {
+      label: t('repository.fields.updatedAt'),
+      value: formatCalmTimestamp(selectedContext.repo_binding.updated_at, { locale: activeLocale }),
+    },
+  ] : [];
+  const selectionCopy = selectedContext
+    ? contract
+      ? t('surfaces.contracts.repositoryContext.matchedSelection')
+      : t('surfaces.contracts.repositoryContext.firstSelection')
+    : '';
+
+  return (
+    <section className="opsSideCard opsRepositoryContext" aria-label={t('surfaces.contracts.repositoryContext.ariaLabel')}>
+      <div className="opsPanelHead compact">
+        <div>
+          <div className="opsPanelKicker">{t('surfaces.contracts.repositoryContext.kicker')}</div>
+          <div className="opsPanelId">{t('surfaces.contracts.repositoryContext.title')}</div>
+        </div>
+        <span className="opsPill muted">{t('surfaces.contracts.repositoryContext.metadataBadge')}</span>
+      </div>
+
+      <p className="opsContextDisclaimer">{t('surfaces.contracts.repositoryContext.metadataOnly')}</p>
+
+      {loadStatus === 'loading' && !repositoryContext ? (
+        <div className="opsContextEmpty" role="status">
+          <span>{t('surfaces.contracts.repositoryContext.loadingTitle')}</span>
+          <p>{t('repository.loading')}</p>
+        </div>
+      ) : null}
+
+      {loadStatus === 'error' && !repositoryContext ? (
+        <div className="opsContextEmpty" role="alert">
+          <span>{t('surfaces.contracts.repositoryContext.errorTitle')}</span>
+          <p>{repositoryContextError || t('repository.errors.generic')}</p>
+        </div>
+      ) : null}
+
+      {repositoryContext ? (
+        <div className="opsContextBlock">
+          <span>{t('repository.organization')}</span>
+          <dl className="opsKeyGrid">
+            {organizationRows.map((row) => (
+              <FieldRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </dl>
+        </div>
+      ) : null}
+
+      {loadStatus === 'loaded' && contexts.length === 0 ? (
+        <div className="opsContextEmpty">
+          <span>{t('surfaces.contracts.repositoryContext.emptyTitle')}</span>
+          <p>{t('surfaces.contracts.repositoryContext.emptyCopy')}</p>
+        </div>
+      ) : null}
+
+      {selectedBindingIsMissing ? (
+        <div className="opsContextEmpty">
+          <span>{t('surfaces.contracts.repositoryContext.missingBindingTitle')}</span>
+          <p>{t('surfaces.contracts.repositoryContext.missingBindingCopy', { repoBindingId: contract?.repo_binding_id })}</p>
+        </div>
+      ) : null}
+
+      {selectedContext ? (
+        <div className="opsContextBlock">
+          <span>{t('surfaces.contracts.repositoryContext.currentContext')}</span>
+          <p className="opsContextSelection">{selectionCopy}</p>
+          <dl className="opsKeyGrid">
+            {contextRows.map((row) => (
+              <FieldRow key={row.label} label={row.label} value={row.value} />
+            ))}
+          </dl>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function selectRepositoryContext(
+  repositoryContext: OrganizationRepositoryContextResponse | null,
+  contract: ContractResponse | null
+) {
+  const contexts = repositoryContext?.contexts ?? [];
+  if (contexts.length === 0) {
+    return null;
+  }
+  if (!contract) {
+    return contexts[0];
+  }
+
+  return contexts.find((context) => context.repo_binding.id === contract.repo_binding_id) ?? null;
+}
+
+function displayMetadataValue(value: string | undefined, emptyValue: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : emptyValue;
 }
 
 function ContractDraftDetail({

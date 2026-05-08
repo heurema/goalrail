@@ -23,7 +23,9 @@ Current scope:
   surfaces; Contracts consumes authenticated, organization-scoped, read-only
   Contract endpoints: `GET /v1/contracts`, `GET /v1/contracts/{id}`, and
   `GET /v1/contracts/{id}/current-draft`; it renders a contract rail/list plus
-  selected aggregate detail and current draft body when available;
+  selected aggregate detail, current draft body when available, and read-only
+  Organization / Project / Repository context metadata from
+  `GET /v1/organizations/{organization_id}/repository-context`;
   Delivery Readiness consumes read-only `GET /v1/qualification-feed`
   while authenticated and renders Qualification / Clarification / Contract /
   Blocked lanes
@@ -83,6 +85,13 @@ Delivery rule:
   manual refresh, keeps manual ID lookup as a secondary fallback, and shows
   selected detail through authenticated, organization-scoped, read-only
   `GET /v1/contracts/{id}` as the compact public Contract aggregate only
+- The Contracts surface also uses `/v1/me` to determine `organization_id` and
+  reads `GET /v1/organizations/{organization_id}/repository-context` for a
+  compact metadata-only context panel. If the selected Contract
+  `repo_binding_id` matches a returned context, that context is shown; if no
+  Contract is selected, the first Organization repository context is shown; if
+  the selected binding is absent from the response, the Contract stays visible
+  and the panel says no repository context metadata exists for that binding.
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout

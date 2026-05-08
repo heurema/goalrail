@@ -187,7 +187,13 @@
   read-only `GET /v1/contracts/{id}` and presents the public Contract aggregate
   with one lifecycle status, linked ids, calm timestamps, and the current draft
   body through read-only `GET /v1/contracts/{id}/current-draft` when
-  `current_draft_id` is present; task, execution, gate, runner, and proof data
+  `current_draft_id` is present. The same Contracts surface also reads
+  `/v1/me` organization context and
+  `GET /v1/organizations/{organization_id}/repository-context` to show a
+  metadata-only Organization / Project / Repository context panel, preferring
+  the selected Contract `repo_binding_id` match, falling back to the first
+  Organization context when no Contract is selected, and showing honest empty
+  or missing-binding states. Task, execution, gate, runner, and proof data
   remain unavailable in that view.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
