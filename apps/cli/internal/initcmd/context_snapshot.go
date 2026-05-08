@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/heurema/goalrail/apps/cli/internal/reposhape"
 	"github.com/heurema/goalrail/apps/cli/internal/spine"
 )
 
@@ -48,7 +49,7 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 	packageManagers := map[string]struct{}{}
 	workspaces := map[string]struct{}{}
 
-	for _, candidate := range knownRepositoryPaths() {
+	for _, candidate := range reposhape.RootInventoryPaths() {
 		if exists, isDir, err := relativePathExists(gitRoot, candidate); err != nil {
 			return repositoryInventory{}, err
 		} else if exists {
@@ -74,7 +75,7 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 		}
 	}
 
-	workflowFiles, err := immediateChildFiles(gitRoot, filepath.Join(".github", "workflows"), 25)
+	workflowFiles, err := immediateChildFiles(gitRoot, ".github/workflows", 25)
 	if err != nil {
 		return repositoryInventory{}, err
 	}
@@ -92,36 +93,8 @@ func collectRepositoryInventory(gitRoot string) (repositoryInventory, error) {
 	}, nil
 }
 
-func knownRepositoryPaths() []string {
-	return []string{
-		"README.md",
-		"README",
-		"go.mod",
-		"go.work",
-		"package.json",
-		"pnpm-lock.yaml",
-		"package-lock.json",
-		"yarn.lock",
-		"bun.lock",
-		"bun.lockb",
-		"Cargo.toml",
-		"pyproject.toml",
-		"requirements.txt",
-		"poetry.lock",
-		"uv.lock",
-		"Gemfile",
-		"composer.json",
-		"Dockerfile",
-		"docker-compose.yml",
-		"compose.yml",
-		"Makefile",
-		"Taskfile.yml",
-		filepath.Join(".github", "workflows"),
-	}
-}
-
 func collectWorkspaceManifestPaths(root string, workspace string, pathSet map[string]struct{}) error {
-	for _, manifest := range workspaceManifestPaths() {
+	for _, manifest := range reposhape.WorkspaceInventoryPaths() {
 		path := filepath.ToSlash(filepath.Join(workspace, manifest))
 		exists, isDir, err := relativePathExists(root, path)
 		if err != nil {
@@ -134,60 +107,14 @@ func collectWorkspaceManifestPaths(root string, workspace string, pathSet map[st
 	return nil
 }
 
-func workspaceManifestPaths() []string {
-	return []string{
-		"go.mod",
-		"go.work",
-		"package.json",
-		"pnpm-lock.yaml",
-		"package-lock.json",
-		"yarn.lock",
-		"bun.lock",
-		"bun.lockb",
-		"Cargo.toml",
-		"pyproject.toml",
-		"requirements.txt",
-		"poetry.lock",
-		"uv.lock",
-		"Gemfile",
-		"composer.json",
-		"Dockerfile",
-		"docker-compose.yml",
-		"compose.yml",
-		"Makefile",
-		"Taskfile.yml",
-	}
-}
-
 func addInventorySignals(pathSet map[string]struct{}, toolchains map[string]struct{}, packageManagers map[string]struct{}) {
 	for path := range pathSet {
-		name := filepath.Base(strings.TrimSuffix(path, "/"))
-		switch name {
-		case "go.mod", "go.work":
-			toolchains["go"] = struct{}{}
-		case "package.json":
-			toolchains["node"] = struct{}{}
-		case "Cargo.toml":
-			toolchains["rust"] = struct{}{}
-		case "pyproject.toml", "requirements.txt":
-			toolchains["python"] = struct{}{}
-		case "Dockerfile", "docker-compose.yml", "compose.yml":
-			toolchains["docker"] = struct{}{}
+		cleanPath := strings.TrimSuffix(path, "/")
+		for _, toolchain := range reposhape.ToolchainsForPath(cleanPath) {
+			toolchains[toolchain] = struct{}{}
 		}
-
-		switch name {
-		case "pnpm-lock.yaml":
-			packageManagers["pnpm"] = struct{}{}
-		case "package-lock.json":
-			packageManagers["npm"] = struct{}{}
-		case "yarn.lock":
-			packageManagers["yarn"] = struct{}{}
-		case "bun.lock", "bun.lockb":
-			packageManagers["bun"] = struct{}{}
-		case "poetry.lock":
-			packageManagers["poetry"] = struct{}{}
-		case "uv.lock":
-			packageManagers["uv"] = struct{}{}
+		for _, packageManager := range reposhape.PackageManagersForPath(cleanPath) {
+			packageManagers[packageManager] = struct{}{}
 		}
 	}
 }
