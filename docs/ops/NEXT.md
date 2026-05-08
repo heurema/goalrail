@@ -43,7 +43,9 @@
 - ADR-0030 defines the H2.4 bounded command execution boundary; H2.4.1 now
   implements only the fixed `builtin_diagnostic/workspace_status` command-plan
   plus command-metadata receipt path. Arbitrary shell, project commands,
-  provider adapters, GateDecision, and Proof remain deferred.
+  provider adapters, GateDecision, and Proof remain deferred. H2.4.1+ smoke
+  coverage pins this builtin diagnostic receipt path without changing product
+  behavior.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -209,6 +211,7 @@
   for started Runs without command execution, and H2.3+ smoke coverage pins
   that no-command receipt path. H2.4.1 implements only fixed
   `builtin_diagnostic/workspace_status` command-plan plus receipt plumbing.
+  H2.4.1+ smoke coverage now pins that builtin diagnostic receipt path.
   WorkItems still remain `planned`; assignment, claiming, arbitrary
   shell/project command execution, gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
@@ -942,6 +945,9 @@ Done means:
      `builtin_diagnostic/workspace_status` action as command-plan plus
      command-metadata receipt plumbing, without arbitrary shell, project
      commands, provider adapters, or LLM coding-agent integration
+   - H2.4.1+ smoke coverage pins the builtin diagnostic path through
+     `ExecutionReceipt(builtin_diagnostic)` and keeps the one-receipt-per-run
+     behavior explicit for the H2.5 design review
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
