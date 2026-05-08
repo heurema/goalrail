@@ -20,6 +20,7 @@ related_docs:
   - docs/ops/STATUS.md
   - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
+  - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -120,37 +121,38 @@ related_docs:
 71. `docs/ops/COMPONENTS.yaml`
 72. `docs/ops/INIT_LIFECYCLE.md`
 73. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-74. `docs/ops/BRANCH_PROTECTION.md`
-75. `docs/ops/REPO_STRUCTURE.md`
-76. `docs/ops/GO_CODE_GUIDE.md`
-77. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-78. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-79. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-80. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-81. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-82. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-83. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-84. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-85. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-86. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-87. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-88. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-89. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-90. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+74. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+75. `docs/ops/BRANCH_PROTECTION.md`
+76. `docs/ops/REPO_STRUCTURE.md`
+77. `docs/ops/GO_CODE_GUIDE.md`
+78. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+79. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+80. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+81. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+82. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+83. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+84. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+85. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+86. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+87. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+88. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+89. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+90. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+91. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-91. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-92. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-93. `docs/reference/design/reference_screens/`
-94. `docs/reference/start-assistant/`
-95. `.goalrail/work/`
-96. `.goalrail/knowledge/`
-97. `.goalrail/public-kb/manifest.yaml`
-98. `.punk/publishing.toml`
-99. `.goalrail/flows/`
-100. `.goalrail/evals/`
-101. `docs/ops/PUBLISHING_MIGRATION.md`
-102. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+92. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+93. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+94. `docs/reference/design/reference_screens/`
+95. `docs/reference/start-assistant/`
+96. `.goalrail/work/`
+97. `.goalrail/knowledge/`
+98. `.goalrail/public-kb/manifest.yaml`
+99. `.punk/publishing.toml`
+100. `.goalrail/flows/`
+101. `.goalrail/evals/`
+102. `docs/ops/PUBLISHING_MIGRATION.md`
+103. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -264,6 +266,9 @@ related_docs:
   and MVP partial-failure recovery direction
 - `SNAPSHOT_SCAN_SHARED_SHAPE.md` — operational direction for reducing drift
   between repository context snapshot inventory and local Project Scan baseline
+- `INIT_STABILIZATION_CHECKPOINT.md` — operational checkpoint for completed
+  `goalrail init` stabilization slices, remaining risks, non-goals, and the
+  next safe init follow-up options
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
