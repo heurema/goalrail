@@ -269,17 +269,36 @@ function errorEnvelope(code: string, message = 'error') {
   };
 }
 
-function expectNoWorkflowMutationRequests() {
-  const calls = fetchMock.mock.calls.map(([url, options]) => ({
+function fetchRequestCalls() {
+  return fetchMock.mock.calls.map(([url, options]) => ({
     url: String(url),
     method: String((options as RequestInit | undefined)?.method ?? 'GET'),
+    options: options as RequestInit | undefined,
   }));
+}
 
-  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/goals\/.*\/continuation/.test(call.url))).toBe(false);
-  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/clarifications\/.*\/answers\/continuation/.test(call.url))).toBe(false);
-  expect(calls.some((call) => call.method !== 'GET' && call.url === '/v1/contracts')).toBe(false);
-  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/contracts\/[^/]+$/.test(call.url))).toBe(false);
-  expect(calls.some((call) => call.method !== 'GET' && /\/v1\/contracts\/.*\/(submissions|approvals|plans)/.test(call.url))).toBe(false);
+function findFetchRequest(url: string, method = 'GET') {
+  return fetchRequestCalls().find((call) => call.url === url && call.method === method);
+}
+
+function expectNoWorkflowMutationRequests() {
+  const workflowMutationPatterns = [
+    /\/v1\/goals\/[^/]+\/continuation$/,
+    /\/v1\/clarifications\/[^/]+\/answers\/continuation$/,
+    /^\/v1\/contracts$/,
+    /^\/v1\/contracts\/[^/]+$/,
+    /^\/v1\/contracts\/[^/]+\/(submissions|approvals|plans)$/,
+    /^\/v1\/plans(?:\/|$)/,
+    /^\/v1\/proposals(?:\/|$)/,
+    /^\/v1\/tasks(?:\/|$)/,
+    /^\/v1\/runs(?:\/|$)/,
+    /^\/v1\/proofs?(?:\/|$)/,
+  ];
+  const calls = fetchRequestCalls();
+
+  expect(calls.some((call) => (
+    call.method !== 'GET' && workflowMutationPatterns.some((pattern) => pattern.test(call.url))
+  ))).toBe(false);
 }
 
 async function setLocale(locale: 'en' | 'ru') {
@@ -1561,16 +1580,21 @@ describe('App', () => {
     expect(requestURLs.some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
   });
 
-  it('polls qualification feed while the delivery-readiness surface is open', async () => {
+  it('polls qualification feed into linked-contract backend state without UI mutation', async () => {
     await loginSuccessfully();
     vi.useFakeTimers();
     fetchMock.mockResolvedValueOnce(
       jsonResponse(
         qualificationFeedResponse([
           qualificationFeedItem({
-            goalId: 'goal-polling',
-            intakeId: 'intake-polling',
-            title: 'Polling goal',
+            goalId: 'goal-cli-created',
+            intakeId: 'intake-cli-created',
+            title: 'CLI-created goal awaiting contract',
+            lane: 'qualification',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            nextAction: 'draft_contract',
           }),
         ])
       )
@@ -1580,15 +1604,25 @@ describe('App', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByText('Polling goal')).toBeInTheDocument();
+    expect(screen.getByText('CLI-created goal awaiting contract')).toBeInTheDocument();
+    expect(screen.getByText('Ready for contract')).toBeInTheDocument();
+    expect(screen.getByText('No linked contract')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Draft contract$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Open contract$/i })).not.toBeInTheDocument();
 
     fetchMock.mockResolvedValueOnce(
       jsonResponse(
         qualificationFeedResponse([
           qualificationFeedItem({
-            goalId: 'goal-updated',
-            intakeId: 'intake-updated',
-            title: 'Updated polling goal',
+            goalId: 'goal-cli-created',
+            intakeId: 'intake-cli-created',
+            title: 'CLI-created goal linked by backend state',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            linkedContract: { id: 'contract-cli-created', state: 'draft' },
+            nextAction: 'update_contract',
           }),
         ])
       )
@@ -1599,9 +1633,15 @@ describe('App', () => {
       await Promise.resolve();
     });
 
-    expect(screen.getByText('Updated polling goal')).toBeInTheDocument();
+    const board = screen.getByLabelText(/qualification feed lane view/i);
+    const contractLane = within(board).getByLabelText('Contract lane');
+    expect(contractLane).toHaveTextContent('CLI-created goal linked by backend state');
+    expect(contractLane).toHaveTextContent('Contract linked');
+    expect(contractLane).toHaveTextContent('Draft · contract-cli-created');
+    expect(within(contractLane).getByRole('button', { name: /^Open contract$/i })).toBeInTheDocument();
+    expect(screen.queryByText('CLI-created goal awaiting contract')).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/qualification-feed?limit=50')).toHaveLength(2);
-    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /continuation|\/v1\/contracts$/.test(url))).toBe(false);
+    expectNoWorkflowMutationRequests();
   });
 
   it('skips scheduled qualification feed polling while the document is hidden', async () => {
@@ -1854,6 +1894,156 @@ describe('App', () => {
     expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/contracts')).toHaveLength(0);
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/clarifications\/.*\/answers\/continuation/.test(url))).toBe(false);
+  });
+
+  it('smokes the read-only Delivery Readiness to current draft Contract handoff', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-handoff',
+            intakeId: 'intake-handoff',
+            repoBindingId: 'repo-handoff',
+            repositoryFullName: 'heurema/goalrail',
+            title: 'Console goal contract handoff',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            linkedContract: { id: 'contract-handoff', state: 'draft' },
+            nextAction: 'update_contract',
+            createdAt: '2026-05-08T09:50:00Z',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    const board = await screen.findByLabelText(/qualification feed lane view/i);
+    const contractLane = within(board).getByLabelText('Contract lane');
+    const openContractButton = within(contractLane).getByRole('button', { name: /^Open contract$/i });
+    const handoffCard = openContractButton.closest('article');
+
+    expect(handoffCard).not.toBeNull();
+    expect(handoffCard).toHaveTextContent('Console goal contract handoff');
+    expect(handoffCard).toHaveTextContent('goal-handoff');
+    expect(handoffCard).toHaveTextContent('heurema/goalrail');
+    expect(handoffCard).toHaveTextContent('repo-handoff');
+    expect(handoffCard).toHaveTextContent('Ready for contract seed');
+    expect(handoffCard).toHaveTextContent('Contract linked');
+    expect(handoffCard).toHaveTextContent('Draft · contract-handoff');
+    expect(within(handoffCard as HTMLElement).getAllByRole('button')).toHaveLength(1);
+    expect(within(handoffCard as HTMLElement).queryByRole('button', { name: /^Draft contract$/i })).not.toBeInTheDocument();
+    expect(within(handoffCard as HTMLElement).queryByRole('button', { name: /^Answer questions$/i })).not.toBeInTheDocument();
+    expect(within(handoffCard as HTMLElement).queryByRole('button', { name: /^Continue \/ Recheck$/i })).not.toBeInTheDocument();
+
+    fetchMock.mockImplementation((url: string | URL | Request) => {
+      const requestURL = String(url);
+      if (requestURL === '/v1/contracts?limit=50') {
+        return Promise.resolve(jsonResponse(contractListResponse([
+          contractResponse({
+            id: 'contract-handoff',
+            goal_id: 'goal-handoff',
+            repo_binding_id: 'repo-handoff',
+            current_seed_id: 'seed-handoff',
+            current_draft_id: 'draft-handoff',
+            state: 'draft',
+          }),
+        ])));
+      }
+      if (requestURL === '/v1/contracts/contract-handoff') {
+        return Promise.resolve(jsonResponse(contractResponse({
+          id: 'contract-handoff',
+          goal_id: 'goal-handoff',
+          repo_binding_id: 'repo-handoff',
+          current_seed_id: 'seed-handoff',
+          current_draft_id: 'draft-handoff',
+          state: 'draft',
+        })));
+      }
+      if (requestURL === '/v1/contracts/contract-handoff/current-draft') {
+        return Promise.resolve(jsonResponse(contractDraftResponse({
+          id: 'draft-handoff',
+          contract_id: 'contract-handoff',
+          contract_seed_id: 'seed-handoff',
+          goal_id: 'goal-handoff',
+          repo_binding_id: 'repo-handoff',
+          title: 'Console handoff current draft',
+          intent_summary: 'Pin the read-only goal to contract handoff.',
+          proposed_scope: ['Open the linked Contract from Delivery Readiness'],
+          proposed_non_goals: ['Do not add browser lifecycle controls'],
+          proposed_constraints: ['Use read-only selected Contract endpoints'],
+          proposed_acceptance_criteria: ['Current draft body renders after Open contract'],
+          proposed_expected_checks: ['npm --prefix apps/web/console run test'],
+          proposed_proof_expectations: ['Regression smoke verifies no workflow mutations'],
+          risk_hints: ['Keep CLI-owned lifecycle outside the Console'],
+          source_refs: [{ kind: 'contract_seed', id: 'seed-handoff' }],
+        })));
+      }
+      if (requestURL === '/v1/qualification-feed?limit=50') {
+        return Promise.resolve(jsonResponse(qualificationFeedResponse([])));
+      }
+
+      return Promise.resolve(jsonResponse(contractListResponse([])));
+    });
+
+    fireEvent.click(openContractButton);
+
+    expect(await screen.findByText('Console handoff current draft')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
+
+    const contractList = screen.getByLabelText(/contracts list/i);
+    expect(contractList).toHaveTextContent('contract-handoff');
+    expect(contractList).toHaveTextContent('goal-handoff');
+    expect(contractList).toHaveTextContent('repo-handoff');
+
+    const selectedDetail = screen.getByLabelText(/selected contract detail/i);
+    expect(selectedDetail).toHaveTextContent('contract-handoff');
+    expect(selectedDetail).toHaveTextContent('goal-handoff');
+    expect(selectedDetail).toHaveTextContent('repo-handoff');
+    expect(selectedDetail).toHaveTextContent('seed-handoff');
+    expect(selectedDetail).toHaveTextContent('draft-handoff');
+    expect(selectedDetail).toHaveTextContent('Draft');
+
+    const currentDraft = screen.getByLabelText(/current draft detail/i);
+    expect(currentDraft).toHaveTextContent('Console handoff current draft');
+    expect(currentDraft).toHaveTextContent('Pin the read-only goal to contract handoff.');
+    expect(currentDraft).toHaveTextContent('Open the linked Contract from Delivery Readiness');
+    expect(currentDraft).toHaveTextContent('Current draft body renders after Open contract');
+    expect(currentDraft).toHaveTextContent('Do not add browser lifecycle controls');
+    expect(currentDraft).toHaveTextContent('Use read-only selected Contract endpoints');
+    expect(currentDraft).toHaveTextContent('Regression smoke verifies no workflow mutations');
+    expect(screen.getByText('Task, execution, gate, and proof data are not available in this Console view yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Submit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Approve$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Plan work$/i })).not.toBeInTheDocument();
+
+    const qualificationFeedCall = findFetchRequest('/v1/qualification-feed?limit=50');
+    const contractListCall = findFetchRequest('/v1/contracts?limit=50');
+    const contractDetailCall = findFetchRequest('/v1/contracts/contract-handoff');
+    const currentDraftCall = findFetchRequest('/v1/contracts/contract-handoff/current-draft');
+    expect(qualificationFeedCall?.options).toEqual(expect.objectContaining({
+      method: 'GET',
+      credentials: 'omit',
+      headers: { Authorization: 'Bearer access-token' },
+    }));
+    expect(contractListCall?.options).toEqual(expect.objectContaining({
+      method: 'GET',
+      credentials: 'omit',
+      headers: { Authorization: 'Bearer access-token' },
+    }));
+    expect(contractDetailCall?.options).toEqual(expect.objectContaining({
+      method: 'GET',
+      credentials: 'omit',
+      headers: { Authorization: 'Bearer access-token' },
+    }));
+    expect(currentDraftCall?.options).toEqual(expect.objectContaining({
+      method: 'GET',
+      credentials: 'omit',
+      headers: { Authorization: 'Bearer access-token' },
+    }));
+    expectNoWorkflowMutationRequests();
   });
 
   it('shows contract-specific access errors from Delivery Readiness linked-contract navigation', async () => {
