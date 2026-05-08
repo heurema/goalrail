@@ -165,3 +165,19 @@ type WorkCheckoutPrepareOutput struct {
 	Display          DisplaySummary      `json:"display"`
 	NextAction       NextAction          `json:"next_action"`
 }
+
+type WorkExecutionPrepareOutput struct {
+	SchemaVersion     string         `json:"schema_version"`
+	Mode              string         `json:"mode"`
+	ServerURL         string         `json:"server_url"`
+	OrganizationID    string         `json:"organization_id"`
+	ProjectID         string         `json:"project_id"`
+	RepoBindingID     RepoBindingID  `json:"repo_binding_id"`
+	TaskID            string         `json:"task_id"`
+	CheckoutReceiptID string         `json:"checkout_receipt_id"`
+	ExecutionJobID    string         `json:"execution_job_id"`
+	ExecutionJobState string         `json:"execution_job_state"`
+	LocalConfigPath   string         `json:"local_config_path"`
+	Display           DisplaySummary `json:"display"`
+	NextAction        NextAction     `json:"next_action"`
+}

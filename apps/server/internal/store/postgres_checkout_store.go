@@ -343,18 +343,25 @@ func checkoutJobColumns() []string {
 }
 
 type PostgresCheckoutReceiptStore struct {
-	exec postgresExecer
-	psql squirrel.StatementBuilderType
+	exec  postgresExecer
+	query postgresRowQuerier
+	psql  squirrel.StatementBuilderType
 }
 
 func NewPostgresCheckoutReceiptStore(pool *pgxpool.Pool) *PostgresCheckoutReceiptStore {
-	return NewPostgresCheckoutReceiptStoreWithExecutor(newPostgresDB(pool))
+	db := newPostgresDB(pool)
+	return NewPostgresCheckoutReceiptStoreWithExecutorAndQuerier(db, db)
 }
 
 func NewPostgresCheckoutReceiptStoreWithExecutor(exec postgresExecer) *PostgresCheckoutReceiptStore {
+	return NewPostgresCheckoutReceiptStoreWithExecutorAndQuerier(exec, nil)
+}
+
+func NewPostgresCheckoutReceiptStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresCheckoutReceiptStore {
 	return &PostgresCheckoutReceiptStore{
-		exec: exec,
-		psql: squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
+		exec:  exec,
+		query: query,
+		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 	}
 }
 
@@ -427,4 +434,82 @@ func (s *PostgresCheckoutReceiptStore) Create(ctx context.Context, receipt spine
 		return err
 	}
 	return nil
+}
+
+func (s *PostgresCheckoutReceiptStore) Get(ctx context.Context, id spine.CheckoutReceiptID) (spine.CheckoutReceipt, bool, error) {
+	receiptID, err := uuidValue(id, "checkout receipt id")
+	if err != nil {
+		return spine.CheckoutReceipt{}, false, err
+	}
+	stmt := s.psql.
+		Select(checkoutReceiptColumns()...).
+		From("checkout_receipts").
+		Where(squirrel.Eq{"id": receiptID})
+	row, err := queryRow(ctx, s.query, "get checkout receipt", stmt)
+	if err != nil {
+		return spine.CheckoutReceipt{}, false, err
+	}
+	receipt, err := scanCheckoutReceipt(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.CheckoutReceipt{}, false, nil
+		}
+		return spine.CheckoutReceipt{}, false, fmt.Errorf("get checkout receipt: %w", err)
+	}
+	return receipt, true, nil
+}
+
+func scanCheckoutReceipt(row pgx.Row) (spine.CheckoutReceipt, error) {
+	var receipt spine.CheckoutReceipt
+	var id string
+	var jobID string
+	var taskID string
+	var repoBindingID string
+	var partialReasons []byte
+	if err := row.Scan(
+		&id,
+		&jobID,
+		&taskID,
+		&repoBindingID,
+		&receipt.RunnerID,
+		&receipt.WorkspaceRef,
+		&receipt.CommitSHA,
+		&receipt.BaselineID,
+		&receipt.OverlayID,
+		&receipt.Dirty,
+		&receipt.Partial,
+		&partialReasons,
+		&receipt.RawSourceUploaded,
+		&receipt.CreatedAt,
+	); err != nil {
+		return spine.CheckoutReceipt{}, err
+	}
+	receipt.ID = spine.CheckoutReceiptID(id)
+	receipt.JobID = spine.CheckoutJobID(jobID)
+	receipt.TaskID = spine.WorkItemID(taskID)
+	receipt.RepoBindingID = spine.RepoBindingID(repoBindingID)
+	if err := json.Unmarshal(partialReasons, &receipt.PartialReasons); err != nil {
+		return spine.CheckoutReceipt{}, fmt.Errorf("unmarshal checkout receipt partial_reasons: %w", err)
+	}
+	receipt.CreatedAt = receipt.CreatedAt.UTC()
+	return receipt, nil
+}
+
+func checkoutReceiptColumns() []string {
+	return []string{
+		"id",
+		"job_id",
+		"task_id",
+		"repo_binding_id",
+		"runner_id",
+		"workspace_ref",
+		"commit_sha",
+		"baseline_id",
+		"overlay_id",
+		"dirty",
+		"partial",
+		"partial_reasons",
+		"raw_source_uploaded",
+		"created_at",
+	}
 }

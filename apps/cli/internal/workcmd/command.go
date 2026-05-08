@@ -78,13 +78,15 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runProposal(ctx, out, workDir, args[1:], options)
 	case "checkout":
 		return runCheckout(ctx, out, workDir, args[1:], options)
+	case "execution":
+		return runExecution(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown work command %q", args[0]))
 	}
 }
 
 func Usage() string {
-	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n  checkout   prepare runner checkout instructions for planned WorkItems\n\nRun goalrail work <command> --help for command usage.\n"
+	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n  checkout   prepare runner checkout instructions for planned WorkItems\n  execution  prepare execution jobs from checkout receipts\n\nRun goalrail work <command> --help for command usage.\n"
 }
 
 func StartUsage() string {
@@ -121,6 +123,14 @@ func CheckoutUsage() string {
 
 func CheckoutPrepareUsage() string {
 	return "Usage: goalrail work checkout prepare --task-id <task_id> [--format text|json]\n\nCreates or returns a server-owned checkout job and checkout instruction for a planned WorkItem using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not assign, claim, execute commands, create Run, gate, proof, or verify work.\n"
+}
+
+func ExecutionUsage() string {
+	return "Usage: goalrail work execution <command> [options]\n\nCommands:\n  prepare   create or return an ExecutionJob from a checkout receipt\n\nRun goalrail work execution <command> --help for command usage.\n"
+}
+
+func ExecutionPrepareUsage() string {
+	return "Usage: goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> [--format text|json]\n\nCreates or returns a server-owned ExecutionJob for a planned WorkItem and checkout receipt using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not create Run, lease execution, execute commands, create execution receipt, gate, proof, or verify work.\n"
 }
 
 func runStart(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
@@ -692,6 +702,85 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 	return err
 }
 
+func runExecution(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if len(args) == 0 {
+		_, err := fmt.Fprint(out.Stdout, ExecutionUsage())
+		return err
+	}
+	switch args[0] {
+	case "--help", "-h":
+		_, err := fmt.Fprint(out.Stdout, ExecutionUsage())
+		return err
+	case "prepare":
+		return runExecutionPrepare(ctx, out, workDir, args[1:], options)
+	default:
+		return exitcode.UsageError(fmt.Errorf("unknown work execution command %q", args[0]))
+	}
+}
+
+func runExecutionPrepare(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work execution prepare", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	taskID := flags.String("task-id", "", "WorkItem ID")
+	checkoutReceiptID := flags.String("checkout-receipt-id", "", "CheckoutReceipt ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, ExecutionPrepareUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedTaskID := strings.TrimSpace(*taskID)
+	if normalizedTaskID == "" {
+		return exitcode.UsageError(errors.New("--task-id is required"))
+	}
+	if err := validateUUIDLike("task_id", normalizedTaskID); err != nil {
+		return err
+	}
+	normalizedTaskID = strings.ToLower(normalizedTaskID)
+	normalizedCheckoutReceiptID := strings.TrimSpace(*checkoutReceiptID)
+	if normalizedCheckoutReceiptID == "" {
+		return exitcode.UsageError(errors.New("--checkout-receipt-id is required"))
+	}
+	if err := validateUUIDLike("checkout_receipt_id", normalizedCheckoutReceiptID); err != nil {
+		return err
+	}
+	normalizedCheckoutReceiptID = strings.ToLower(normalizedCheckoutReceiptID)
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	work, err := loadWorkContext(ctx, workDir, options, "work execution prepare")
+	if err != nil {
+		return err
+	}
+
+	job, err := postExecutionJob(ctx, work.Client, work.Session, normalizedTaskID, normalizedCheckoutReceiptID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateExecutionJobContext(work.Config, normalizedTaskID, normalizedCheckoutReceiptID, job); err != nil {
+		return err
+	}
+
+	output := buildExecutionPrepareOutput(work.Config, work.ServerURL, job)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderExecutionPrepareText(output))
+	return err
+}
+
 func renderStartText(output spine.WorkStartOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work intake started\n\n")
@@ -961,6 +1050,29 @@ func renderCheckoutPrepareText(output spine.WorkCheckoutPrepareOutput) string {
 	return b.String()
 }
 
+func renderExecutionPrepareText(output spine.WorkExecutionPrepareOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Execution job prepared\n\n")
+	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
+	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "Task: %s\n", output.TaskID)
+	fmt.Fprintf(&b, "Checkout receipt: %s\n", output.CheckoutReceiptID)
+	fmt.Fprintf(&b, "Execution job: %s\n", output.ExecutionJobID)
+	fmt.Fprintf(&b, "State: %s\n", output.ExecutionJobState)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Kind != "" {
+		fmt.Fprintf(&b, "\nNext action: %s\n", output.NextAction.Kind)
+		if output.NextAction.PlannedSlice != "" {
+			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		}
+	}
+	return b.String()
+}
+
 func renderContinueText(output spine.WorkContinueOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Work continuation\n\n")
@@ -1096,6 +1208,31 @@ func buildCheckoutPrepareOutput(config projectconfig.Config, serverURL string, j
 	}
 }
 
+func buildExecutionPrepareOutput(config projectconfig.Config, serverURL string, job executionJobResponse) spine.WorkExecutionPrepareOutput {
+	return spine.WorkExecutionPrepareOutput{
+		SchemaVersion:     cliSchemaVersion,
+		Mode:              serverMode,
+		ServerURL:         serverURL,
+		OrganizationID:    config.OrganizationID,
+		ProjectID:         config.ProjectID,
+		RepoBindingID:     spine.RepoBindingID(config.RepoBindingID),
+		TaskID:            job.TaskID,
+		CheckoutReceiptID: job.CheckoutReceiptID,
+		ExecutionJobID:    job.ID,
+		ExecutionJobState: job.State,
+		LocalConfigPath:   projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Execution preparation queued. No Run was created and no command was executed.",
+		},
+		NextAction: spine.NextAction{
+			Kind:         "runner_execution_required",
+			Blocking:     true,
+			Available:    false,
+			PlannedSlice: "H2.2",
+		},
+	}
+}
+
 func firstCheckoutCommand(taskIDs []string) string {
 	if len(taskIDs) == 0 {
 		return ""
@@ -1164,6 +1301,8 @@ func renderPlanNextActionText(kind string) string {
 		return "planned WorkItems exist server-side; execution is a future step and is not available yet."
 	case "prepare_checkout":
 		return "prepare a checkout job for the first planned WorkItem; execution is not part of checkout preparation."
+	case "runner_execution_required":
+		return "runner execution start is a future step; no Run exists yet."
 	case "blocked":
 		return "blocked; inspect the WorkItemPlan state before continuing."
 	default:
@@ -1475,6 +1614,19 @@ func validateCheckoutJobContext(config projectconfig.Config, taskID string, job 
 	return nil
 }
 
+func validateExecutionJobContext(config projectconfig.Config, taskID string, checkoutReceiptID string, job executionJobResponse) error {
+	if !sameUUIDText(job.TaskID, taskID) {
+		return exitcode.ValidationError(errors.New("execution job response task_id does not match requested WorkItem"))
+	}
+	if !sameUUIDText(job.CheckoutReceiptID, checkoutReceiptID) {
+		return exitcode.ValidationError(errors.New("execution job response checkout_receipt_id does not match requested CheckoutReceipt"))
+	}
+	if job.RepoBindingID != "" && string(job.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("execution job response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the WorkItem"))
+	}
+	return nil
+}
+
 func sameUUIDText(left string, right string) bool {
 	return strings.EqualFold(strings.TrimSpace(left), strings.TrimSpace(right))
 }
@@ -1772,6 +1924,53 @@ func postCheckoutJob(ctx context.Context, client HTTPClient, session authstore.S
 	return decoded, nil
 }
 
+func postExecutionJob(ctx context.Context, client HTTPClient, session authstore.Session, taskID string, checkoutReceiptID string, config projectconfig.Config) (executionJobResponse, error) {
+	payload := executionJobCreateRequest{
+		ProjectID:         config.ProjectID,
+		RepoBindingID:     config.RepoBindingID,
+		CheckoutReceiptID: checkoutReceiptID,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return executionJobResponse{}, exitcode.RuntimeError(fmt.Errorf("encode execution job request: %w", err))
+	}
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	endpoint := serverURL + "/v1/tasks/" + url.PathEscape(taskID) + "/execution-jobs"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return executionJobResponse{}, exitcode.RuntimeError(fmt.Errorf("build execution job request: %w", err))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return executionJobResponse{}, exitcode.RuntimeError(fmt.Errorf("prepare execution job on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+		return executionJobResponse{}, mapHTTPError("execution job request", response, serverURL)
+	}
+	var decoded executionJobResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return executionJobResponse{}, exitcode.RuntimeError(fmt.Errorf("decode execution job response: %w", err))
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return executionJobResponse{}, exitcode.RuntimeError(errors.New("execution job response did not include id"))
+	}
+	if strings.TrimSpace(decoded.TaskID) == "" {
+		return executionJobResponse{}, exitcode.RuntimeError(errors.New("execution job response did not include task_id"))
+	}
+	if strings.TrimSpace(decoded.CheckoutReceiptID) == "" {
+		return executionJobResponse{}, exitcode.RuntimeError(errors.New("execution job response did not include checkout_receipt_id"))
+	}
+	if strings.TrimSpace(decoded.State) == "" {
+		return executionJobResponse{}, exitcode.RuntimeError(errors.New("execution job response did not include state"))
+	}
+	return decoded, nil
+}
+
 func mapHTTPError(operation string, response *http.Response, serverURL string) error {
 	message := decodeServerErrorMessage(response.Body, response.StatusCode)
 	switch response.StatusCode {
@@ -1915,6 +2114,12 @@ type workPlanCreateRequest struct {
 	RepoBindingID string `json:"repo_binding_id"`
 }
 
+type executionJobCreateRequest struct {
+	ProjectID         string `json:"project_id"`
+	RepoBindingID     string `json:"repo_binding_id"`
+	CheckoutReceiptID string `json:"checkout_receipt_id"`
+}
+
 type workPlanResponse struct {
 	ID                 string              `json:"id"`
 	ContractID         spine.ContractID    `json:"contract_id"`
@@ -1963,4 +2168,18 @@ type checkoutJobResponse struct {
 	RepoBindingID      spine.RepoBindingID       `json:"repo_binding_id"`
 	State              string                    `json:"state"`
 	Instruction        spine.CheckoutInstruction `json:"instruction"`
+}
+
+type executionJobResponse struct {
+	ID                 string              `json:"id"`
+	TaskID             string              `json:"task_id"`
+	ContractID         spine.ContractID    `json:"contract_id"`
+	ApprovedContractID string              `json:"approved_contract_id"`
+	PlanID             string              `json:"plan_id"`
+	ProposalID         string              `json:"proposal_id"`
+	RepoBindingID      spine.RepoBindingID `json:"repo_binding_id"`
+	CheckoutJobID      string              `json:"checkout_job_id"`
+	CheckoutReceiptID  string              `json:"checkout_receipt_id"`
+	State              string              `json:"state"`
+	ExecutionMode      string              `json:"execution_mode"`
 }

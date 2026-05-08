@@ -458,6 +458,37 @@ func TestCheckoutMigrationCreatesCheckoutTables(t *testing.T) {
 	}
 }
 
+func TestExecutionMigrationCreatesExecutionJobTable(t *testing.T) {
+	contents, err := FS.ReadFile("00003_execution_jobs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE execution_jobs",
+		"task_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE",
+		"checkout_job_id UUID NOT NULL REFERENCES checkout_jobs(id) ON DELETE CASCADE",
+		"checkout_receipt_id UUID NOT NULL REFERENCES checkout_receipts(id) ON DELETE CASCADE",
+		"CONSTRAINT execution_jobs_task_receipt_unique UNIQUE (task_id, checkout_receipt_id)",
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued'))",
+		"CONSTRAINT execution_jobs_execution_mode_check CHECK (execution_mode <> '')",
+		"CREATE INDEX execution_jobs_organization_created_at_idx",
+		"CREATE INDEX execution_jobs_project_created_at_idx",
+		"CREATE INDEX execution_jobs_task_id_idx",
+		"CREATE INDEX execution_jobs_checkout_receipt_id_idx",
+		"CREATE INDEX execution_jobs_repo_binding_id_idx",
+		"CREATE INDEX execution_jobs_state_created_at_idx",
+		"DROP TABLE IF EXISTS execution_jobs;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE runs") || strings.Contains(sql, "CREATE TABLE execution_receipts") {
+		t.Fatalf("execution job migration must not create Run or execution receipt tables")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
