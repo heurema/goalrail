@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 
-import StartPageRu from './StartPageRu';
 import './App.css';
+
+const StartPageRu = lazy(() => import('./StartPageRu'));
 
 type LeadSubmitState = 'idle' | 'submitting' | 'success' | 'error';
 
@@ -623,7 +624,11 @@ function PilotLanding() {
 
 function App() {
   if (isStartRoute()) {
-    return <StartPageRu />;
+    return (
+      <Suspense fallback={<div className="pilot-app-shell" />}>
+        <StartPageRu />
+      </Suspense>
+    );
   }
 
   return <PilotLanding />;

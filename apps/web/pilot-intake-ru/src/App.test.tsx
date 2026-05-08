@@ -73,7 +73,7 @@ describe('Pilot intake RU business-first landing', () => {
     expect(screen.getAllByRole('button', { name: 'Обсудить пилот' }).length).toBeGreaterThan(0);
   });
 
-  it('keeps the pilot landing on / and renders the RU start page only on /start', () => {
+  it('keeps the pilot landing on / and renders the RU start page only on /start', async () => {
     const { unmount } = render(<App />);
 
     expect(screen.getByRole('heading', { name: 'ИИ-кодинг без хаоса' })).toBeInTheDocument();
@@ -82,7 +82,9 @@ describe('Pilot intake RU business-first landing', () => {
     window.history.pushState({}, '', '/start');
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Спросите GoalRail про AI-assisted delivery.' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Спросите GoalRail про AI-assisted delivery.' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('От бизнес-цели до проверенного изменения в коде.')).toBeInTheDocument();
   });
 
@@ -94,7 +96,7 @@ describe('Pilot intake RU business-first landing', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole('button', { name: 'Что такое contract-first execution?' }));
+    await user.click(await screen.findByRole('button', { name: 'Что такое contract-first execution?' }));
 
     expect(screen.getByRole('textbox', { name: 'Спросить GoalRail' })).toHaveValue(
       'Что такое contract-first execution?',
@@ -133,7 +135,7 @@ describe('Pilot intake RU business-first landing', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.type(screen.getByRole('textbox', { name: 'Спросить GoalRail' }), 'Что такое GoalRail?');
+    await user.type(await screen.findByRole('textbox', { name: 'Спросить GoalRail' }), 'Что такое GoalRail?');
     await user.click(screen.getByRole('button', { name: 'Спросить' }));
 
     await screen.findByRole('heading', { name: 'Ответ source-grounded ассистента' });
