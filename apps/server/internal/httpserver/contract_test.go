@@ -462,6 +462,209 @@ func TestGetContractUnknownReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestGetContractCurrentDraftReturnsAuthenticatedDraft(t *testing.T) {
+	server := testServer(t)
+	contract := createContract(t, server)
+	if contract.CurrentDraftID == nil {
+		t.Fatal("current_draft_id is nil")
+	}
+	beforeContracts := len(server.contracts.contracts)
+	beforeSeeds := len(server.contractSeeds.seeds)
+	beforeDrafts := len(server.contractDrafts.drafts)
+	beforeApproved := len(server.approvedContracts.approved)
+	beforeWorkItems := len(server.workItems.items)
+	beforePlans := len(server.workItemPlans.plans)
+	beforePlanLeases := len(server.workItemLeases.leases)
+	beforeProposals := len(server.workItemProposals.proposals)
+	beforeCheckoutJobs := len(server.checkoutJobs.jobs)
+	beforeCheckoutReceipts := len(server.checkoutReceipts.receipts)
+	beforeExecutionJobs := len(server.executionJobs.jobs)
+	beforeRuns := len(server.runs.runs)
+	beforeCommandPlans := len(server.commandPlans.plans)
+	beforeExecutionReceipts := len(server.executionReceipts.receipts)
+	beforeEvents := len(server.events.Events())
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "Bearer access-token")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
+		if strings.Contains(response.body, hiddenField) {
+			t.Fatalf("response includes hidden field %s", hiddenField)
+		}
+	}
+	for _, field := range []string{
+		"id",
+		"contract_id",
+		"contract_seed_id",
+		"goal_id",
+		"repo_binding_id",
+		"title",
+		"intent_summary",
+		"proposed_scope",
+		"proposed_non_goals",
+		"proposed_constraints",
+		"proposed_acceptance_criteria",
+		"proposed_expected_checks",
+		"proposed_proof_expectations",
+		"risk_hints",
+		"source_refs",
+		"state",
+		"created_at",
+	} {
+		if !strings.Contains(response.body, `"`+field+`"`) {
+			t.Fatalf("response missing draft field %q: %s", field, response.body)
+		}
+	}
+
+	var draft spine.ContractDraft
+	decodeJSON(t, response.body, &draft)
+	if draft.ID != *contract.CurrentDraftID {
+		t.Fatalf("draft id = %q, want %q", draft.ID, *contract.CurrentDraftID)
+	}
+	if draft.ContractID != contract.ID || draft.RepoBindingID != contract.RepoBindingID || draft.GoalID != contract.GoalID {
+		t.Fatalf("draft linkage = %#v, want contract/repo/goal from %#v", draft, contract)
+	}
+	if draft.Title == "" || draft.IntentSummary == "" {
+		t.Fatalf("draft title/intent summary missing: %#v", draft)
+	}
+	if len(draft.ProposedScope) == 0 || len(draft.ProposedAcceptanceCriteria) == 0 || len(draft.ProposedProofExpectations) == 0 {
+		t.Fatalf("draft body slices incomplete: %#v", draft)
+	}
+	if len(server.contracts.contracts) != beforeContracts ||
+		len(server.contractSeeds.seeds) != beforeSeeds ||
+		len(server.contractDrafts.drafts) != beforeDrafts ||
+		len(server.approvedContracts.approved) != beforeApproved ||
+		len(server.workItems.items) != beforeWorkItems ||
+		len(server.workItemPlans.plans) != beforePlans ||
+		len(server.workItemLeases.leases) != beforePlanLeases ||
+		len(server.workItemProposals.proposals) != beforeProposals ||
+		len(server.checkoutJobs.jobs) != beforeCheckoutJobs ||
+		len(server.checkoutReceipts.receipts) != beforeCheckoutReceipts ||
+		len(server.executionJobs.jobs) != beforeExecutionJobs ||
+		len(server.runs.runs) != beforeRuns ||
+		len(server.commandPlans.plans) != beforeCommandPlans ||
+		len(server.executionReceipts.receipts) != beforeExecutionReceipts ||
+		len(server.events.Events()) != beforeEvents {
+		t.Fatal("GET /v1/contracts/{id}/current-draft mutated contract lifecycle, planning, run, execution, or event state")
+	}
+}
+
+func TestGetContractCurrentDraftRequiresBearerAuth(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	contract := contractWithCurrentDraft("018f0000-0000-7000-8000-000000000c31", "018f0000-0000-7000-8000-000000000d31", "018f0000-0000-7000-8000-000000000002")
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+}
+
+func TestGetContractCurrentDraftRejectsInactiveMembership(t *testing.T) {
+	profile := continuationAuthProfile("018f0000-0000-7000-8000-000000000002")
+	profile.OrganizationMembership.State = spine.EntityStateInactive
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{profile: profile})
+	contract := storeContractWithCurrentDraft(t, server, "018f0000-0000-7000-8000-000000000c32", "018f0000-0000-7000-8000-000000000d32", "018f0000-0000-7000-8000-000000000002")
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "Bearer access-token")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "membership_required" {
+		t.Fatalf("error code = %q, want membership_required", body.Error.Code)
+	}
+}
+
+func TestGetContractCurrentDraftRejectsOtherOrganizationContract(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	contract := storeContractWithCurrentDraft(t, server, "018f0000-0000-7000-8000-000000000c33", "018f0000-0000-7000-8000-000000000d33", "018f0000-0000-7000-8000-000000000002")
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "Bearer access-token")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "forbidden" {
+		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
+	}
+}
+
+func TestGetContractCurrentDraftRejectsMissingCurrentDraft(t *testing.T) {
+	server := testServer(t)
+	contract := contractForList("018f0000-0000-7000-8000-000000000c34", "018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000000004", "018f0000-0000-7000-8000-000000000234", spine.ContractStateDraft)
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "Bearer access-token")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+}
+
+func TestGetContractCurrentDraftRejectsMismatchedDraft(t *testing.T) {
+	server := testServer(t)
+	draftID := spine.ContractDraftID("018f0000-0000-7000-8000-000000000d35")
+	contract := contractWithCurrentDraft("018f0000-0000-7000-8000-000000000c35", draftID, "018f0000-0000-7000-8000-000000000002")
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+	if err := server.contractDrafts.Create(context.Background(), spine.ContractDraft{
+		ID:             draftID,
+		OrganizationID: "018f0000-0000-7000-8000-000000009999",
+		ProjectID:      contract.ProjectID,
+		RepoBindingID:  contract.RepoBindingID,
+		ContractID:     "018f0000-0000-7000-8000-000000000c99",
+		ContractSeedID: "018f0000-0000-7000-8000-000000000535",
+		GoalID:         contract.GoalID,
+		Title:          "Mismatched draft",
+		IntentSummary:  "This draft is linked to a different contract.",
+		State:          spine.ContractDraftStateDraft,
+		CreatedAt:      testTime(),
+	}); err != nil {
+		t.Fatalf("contractDrafts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID)+"/current-draft", "", "Bearer access-token")
+	if response.code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusConflict, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "invalid_state" {
+		t.Fatalf("error code = %q, want invalid_state", body.Error.Code)
+	}
+}
+
 func TestPatchContractUpdatesCurrentDraft(t *testing.T) {
 	server := testServer(t)
 	contract := createContract(t, server)
@@ -965,6 +1168,54 @@ func contractForList(id spine.ContractID, organizationID spine.OrganizationID, p
 		CreatedAt:      testTime(),
 		UpdatedAt:      testTime(),
 	}
+}
+
+func contractWithCurrentDraft(id spine.ContractID, draftID spine.ContractDraftID, organizationID spine.OrganizationID) spine.Contract {
+	contract := contractForList(
+		id,
+		organizationID,
+		"018f0000-0000-7000-8000-000000000003",
+		"018f0000-0000-7000-8000-000000000004",
+		"018f0000-0000-7000-8000-000000000236",
+		spine.ContractStateDraft,
+	)
+	contract.CurrentDraftID = &draftID
+	seedID := spine.ContractSeedID("018f0000-0000-7000-8000-000000000536")
+	contract.CurrentSeedID = &seedID
+	return contract
+}
+
+func storeContractWithCurrentDraft(t *testing.T, server testServerDeps, id spine.ContractID, draftID spine.ContractDraftID, organizationID spine.OrganizationID) spine.Contract {
+	t.Helper()
+
+	contract := contractWithCurrentDraft(id, draftID, organizationID)
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+	if err := server.contractDrafts.Create(context.Background(), spine.ContractDraft{
+		ID:                         draftID,
+		OrganizationID:             organizationID,
+		ProjectID:                  contract.ProjectID,
+		RepoBindingID:              contract.RepoBindingID,
+		ContractID:                 contract.ID,
+		ContractSeedID:             *contract.CurrentSeedID,
+		GoalID:                     contract.GoalID,
+		Title:                      "Stored current draft",
+		IntentSummary:              "Stored current draft body.",
+		ProposedScope:              []string{"Keep current draft display read-only."},
+		ProposedNonGoals:           []string{"No lifecycle mutation."},
+		ProposedConstraints:        []string{"Backend API only."},
+		ProposedAcceptanceCriteria: []string{"Current draft body is returned."},
+		ProposedExpectedChecks:     []string{"go test ./..."},
+		ProposedProofExpectations:  []string{"Validation output is reported."},
+		RiskHints:                  []string{"Read-only auth path."},
+		SourceRefs:                 []spine.SourceRef{{Kind: "contract_seed", ID: string(*contract.CurrentSeedID)}},
+		State:                      spine.ContractDraftStateDraft,
+		CreatedAt:                  testTime(),
+	}); err != nil {
+		t.Fatalf("contractDrafts.Create() error = %v", err)
+	}
+	return contract
 }
 
 func submitContractForApproval(t *testing.T, server testServerDeps, contractID spine.ContractID) spine.Contract {

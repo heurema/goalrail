@@ -20,6 +20,7 @@ type ContractService interface {
 	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
 	Get(context.Context, spine.ContractID) (spine.Contract, error)
 	List(context.Context, contract.ListInput) (spine.ContractList, error)
+	CurrentDraft(context.Context, spine.ContractID, spine.OrganizationMembership) (spine.ContractDraft, error)
 	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error)
 	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest, spine.OrganizationMembership) (spine.Contract, error)
 	Approve(context.Context, spine.ContractID, spine.ApproveContractDraftRequest, spine.OrganizationMembership) (spine.Contract, error)
@@ -89,6 +90,22 @@ func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusOK, contract)
+}
+
+func (h *ContractHandler) CurrentDraft(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
+	draft, err := h.service.CurrentDraft(r.Context(), spine.ContractID(r.PathValue("id")), profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+
+	RespondJSON(w, http.StatusOK, draft)
 }
 
 func (h *ContractHandler) UpdateDraft(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +258,8 @@ func (h *ContractHandler) respondServiceError(w http.ResponseWriter, err error) 
 		RespondError(w, http.StatusConflict, "invalid_state", "contract state does not allow this transition")
 	case errors.Is(err, contract.ErrContractCurrentDraftMissing):
 		RespondError(w, http.StatusConflict, "invalid_state", "contract current draft is missing")
+	case errors.Is(err, contract.ErrContractCurrentDraftMismatch):
+		RespondError(w, http.StatusConflict, "invalid_state", "contract current draft does not belong to contract")
 	case errors.Is(err, contractdraft.ErrInvalidSeedState):
 		RespondError(w, http.StatusConflict, "invalid_state", "contract seed is not ready for contract draft")
 	case errors.Is(err, contractdraft.ErrInvalidDraftState):
