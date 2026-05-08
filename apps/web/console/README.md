@@ -19,7 +19,10 @@ Current scope:
   `must_change_password = true`
 - authenticated shell entry only after `/v1/me` succeeds
 - access and refresh tokens are held in React memory only
-- left navigation with three structured empty product surfaces: Contracts, Delivery Readiness, Proof
+- left navigation with Contracts, Delivery Readiness, and Proof product
+  surfaces; Delivery Readiness now polls read-only `GET /v1/qualification-feed`
+  while authenticated and renders Qualification / Clarification / Contract /
+  Blocked lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
   Organization Users add/edit/temporary-password reset UI plus read-only
   Repository context metadata
@@ -60,6 +63,19 @@ Delivery rule:
 - Settings / Repository uses `/v1/me` to determine the current
   `organization_id` and then consumes
   `GET /v1/organizations/{organization_id}/repository-context`
+- Delivery Readiness polls `GET /v1/qualification-feed?limit=50` only while the
+  authenticated surface is open; it renders stored feed snapshots and does not
+  call Goal continuation, readiness recomputation, clarification creation, or
+  contract creation automatically
+- Delivery Readiness has explicit user-triggered actions for
+  `continue_goal`, `answer_clarification`, and `draft_contract`; they call
+  `POST /v1/goals/{id}/continuation`,
+  `POST /v1/clarifications/{id}/answers/continuation`, and
+  `POST /v1/contracts`, then refresh the feed once after the action returns
+- clarification answers are submitted only for text-safe mappings
+  (`goal.summary`, `goal.scope_hint`, `goal.acceptance_hint`); actor-mapped
+  questions such as `goal.intent_owner` are shown as unsupported instead of
+  being posted as invalid plain text
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout

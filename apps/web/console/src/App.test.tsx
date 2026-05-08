@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 import App from './App';
@@ -150,6 +150,88 @@ function repositoryContextRecord(overrides: Partial<Record<string, unknown>> = {
   };
 }
 
+function qualificationFeedItem(overrides: Partial<Record<string, unknown>> = {}) {
+  const goalId = String(overrides.goalId ?? '018f0000-0000-7000-8000-000000000202');
+  const lane = String(overrides.lane ?? 'qualification');
+  const goalState = String(overrides.goalState ?? 'created');
+  const ready = Boolean(overrides.ready ?? goalState === 'ready_for_contract_seed');
+  const linkedContract = overrides.linkedContract;
+  const openClarificationRequest = overrides.openClarificationRequest;
+
+  return {
+    intake_id: String(overrides.intakeId ?? '018f0000-0000-7000-8000-000000000201'),
+    goal_id: goalId,
+    organization_id: '018f0000-0000-7000-8000-000000000002',
+    project_id: String(overrides.projectId ?? '018f0000-0000-7000-8000-000000000003'),
+    repo_binding_id: String(overrides.repoBindingId ?? '018f0000-0000-7000-8000-000000000004'),
+    repository_full_name: String(overrides.repositoryFullName ?? 'heurema/goalrail'),
+    title: String(overrides.title ?? 'Improve billing error handling'),
+    lane,
+    intake_state: 'received',
+    goal_state: goalState,
+    readiness: {
+      ready,
+      reason_codes: (overrides.reasonCodes as string[] | undefined) ?? (ready ? [] : ['missing_scope_hint']),
+      source: 'goal_snapshot',
+    },
+    ...(openClarificationRequest === undefined ? {} : { open_clarification_request: openClarificationRequest }),
+    ...(linkedContract === undefined ? {} : { linked_contract: linkedContract }),
+    next_action: {
+      kind: String(overrides.nextAction ?? 'continue_goal'),
+      available: Boolean(overrides.nextActionAvailable ?? true),
+      blocking: Boolean(overrides.nextActionBlocking ?? false),
+    },
+    created_at: String(overrides.createdAt ?? '2026-05-08T10:00:00Z'),
+  };
+}
+
+function qualificationFeedResponse(items: unknown[] = [qualificationFeedItem()]) {
+  return { items };
+}
+
+function openClarificationRequest(questionText = 'What is the intended scope at a high level?') {
+  return {
+    id: '018f0000-0000-7000-8000-000000000220',
+    state: 'open',
+    questions: [
+      {
+        id: '018f0000-0000-7000-8000-000000000221',
+        text: questionText,
+        why_needed: 'A scope hint is required before contract seed readiness.',
+        answer_type: 'text',
+        maps_to: 'goal.scope_hint',
+      },
+    ],
+  };
+}
+
+function openIntentOwnerClarificationRequest() {
+  return {
+    id: '018f0000-0000-7000-8000-000000000230',
+    state: 'open',
+    questions: [
+      {
+        id: '018f0000-0000-7000-8000-000000000231',
+        text: 'Who owns this intent?',
+        why_needed: 'An intent owner is required before contract seed readiness.',
+        answer_type: 'text',
+        maps_to: 'goal.intent_owner',
+      },
+    ],
+  };
+}
+
+function goalContinuationResponse(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    goal_id: String(overrides.goalId ?? 'goal-created'),
+    state: String(overrides.state ?? 'needs_clarification'),
+    readiness: {
+      ready: Boolean(overrides.ready ?? false),
+      reason_codes: (overrides.reasonCodes as string[] | undefined) ?? ['missing_scope_hint'],
+    },
+  };
+}
+
 function errorEnvelope(code: string, message = 'error') {
   return {
     error: { code, message },
@@ -205,6 +287,10 @@ describe('App', () => {
     asMock(window.sessionStorage.getItem).mockClear();
     asMock(window.sessionStorage.setItem).mockClear();
     await setLocale('en');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('redirects the public root route to /start without backend calls or browser storage writes', async () => {
@@ -625,20 +711,462 @@ describe('App', () => {
       })
     );
 
+    fetchMock.mockResolvedValueOnce(jsonResponse(qualificationFeedResponse([])));
     fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
-    expect(screen.getByText(/enough context to become a delivery contract/i)).toBeInTheDocument();
-    expect(screen.getByText('NOT CHECKED')).toBeInTheDocument();
+    expect(await screen.findByText('No active qualification items yet.')).toBeInTheDocument();
+    expect(screen.getByLabelText(/qualification feed lane view/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /settings/i }));
     fireEvent.click(screen.getByRole('button', { name: /^Русский$/i }));
 
     expect(await screen.findByRole('navigation', { name: /разделы продукта/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Оценка готовности$/i }));
-    expect(screen.getByText(/хватает ли контекста/i)).toBeInTheDocument();
-    expect(screen.getByText('НЕ ПРОВЕРЯЛОСЬ')).toBeInTheDocument();
+    expect(screen.getByText('No active qualification items yet.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(
       /trialops-demo|C-0147|readiness score|\/100|\bscan\b|proof queue|fake queue|fake pass|fake fail|pass\/fail/i
     );
+  });
+
+  it('loads the qualification feed into qualification, clarification, contract, and blocked lanes without action calls', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-created',
+            intakeId: 'intake-created',
+            title: 'Created qualification goal',
+            lane: 'qualification',
+            goalState: 'created',
+            reasonCodes: ['missing_scope_hint'],
+            nextAction: 'continue_goal',
+          }),
+          qualificationFeedItem({
+            goalId: 'goal-clarification',
+            intakeId: 'intake-clarification',
+            title: 'Clarification goal',
+            lane: 'clarification',
+            goalState: 'needs_clarification',
+            reasonCodes: ['missing_acceptance_hint'],
+            openClarificationRequest: openClarificationRequest(),
+            nextAction: 'answer_clarification',
+            nextActionBlocking: true,
+          }),
+          qualificationFeedItem({
+            goalId: 'goal-ready',
+            intakeId: 'intake-ready',
+            title: 'Ready for contract seed goal',
+            lane: 'qualification',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            nextAction: 'draft_contract',
+          }),
+          qualificationFeedItem({
+            goalId: 'goal-draft',
+            intakeId: 'intake-draft',
+            title: 'Draft contract goal',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            linkedContract: { id: 'contract-draft', state: 'draft' },
+            nextAction: 'update_contract',
+          }),
+          qualificationFeedItem({
+            goalId: 'goal-approved',
+            intakeId: 'intake-approved',
+            title: 'Approved contract goal',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            linkedContract: { id: 'contract-approved', state: 'approved' },
+            nextAction: 'plan_work',
+          }),
+          qualificationFeedItem({
+            goalId: 'goal-rejected',
+            intakeId: 'intake-rejected',
+            title: 'Rejected qualification goal',
+            lane: 'blocked',
+            goalState: 'rejected',
+            reasonCodes: ['missing_scope_hint'],
+            nextAction: 'blocked',
+            nextActionAvailable: false,
+            nextActionBlocking: true,
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+
+    const board = await screen.findByLabelText(/qualification feed lane view/i);
+    const qualificationLane = within(board).getByLabelText('Qualification lane');
+    const clarificationLane = within(board).getByLabelText('Clarification lane');
+    const contractLane = within(board).getByLabelText('Contract lane');
+    const blockedLane = within(board).getByLabelText('Blocked lane');
+
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/qualification-feed?limit=50');
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(qualificationLane).toHaveTextContent('Created qualification goal');
+    expect(qualificationLane).toHaveTextContent('Ready for contract seed goal');
+    expect(qualificationLane).toHaveTextContent('Draft contract');
+    expect(clarificationLane).toHaveTextContent('Clarification goal');
+    expect(clarificationLane).toHaveTextContent('1 open questions');
+    expect(clarificationLane).toHaveTextContent('What is the intended scope at a high level?');
+    expect(clarificationLane).toHaveTextContent('Answer questions');
+    expect(contractLane).toHaveTextContent('Draft contract goal');
+    expect(contractLane).toHaveTextContent('Draft');
+    expect(contractLane).toHaveTextContent('Approved contract goal');
+    expect(contractLane).toHaveTextContent('Approved');
+    expect(blockedLane).toHaveTextContent('Rejected qualification goal');
+    expect(blockedLane).toHaveTextContent('Rejected');
+    const requestURLs = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(requestURLs.some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);
+    expect(requestURLs.some((url) => /\/v1\/clarifications\/.*\/answers\/continuation/.test(url))).toBe(false);
+    expect(requestURLs.some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
+  });
+
+  it('polls qualification feed while the delivery-readiness surface is open', async () => {
+    await loginSuccessfully();
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-polling',
+            intakeId: 'intake-polling',
+            title: 'Polling goal',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Polling goal')).toBeInTheDocument();
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-updated',
+            intakeId: 'intake-updated',
+            title: 'Updated polling goal',
+          }),
+        ])
+      )
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Updated polling goal')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/qualification-feed?limit=50')).toHaveLength(2);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /continuation|\/v1\/contracts$/.test(url))).toBe(false);
+  });
+
+  it('runs continue_goal only from the explicit card action and refreshes the feed', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-created',
+            intakeId: 'intake-created',
+            title: 'Created qualification goal',
+            lane: 'qualification',
+            goalState: 'created',
+            reasonCodes: ['missing_scope_hint'],
+            nextAction: 'continue_goal',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    expect(await screen.findByText('Created qualification goal')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/goals\/goal-created\/continuation/.test(url))).toBe(false);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(goalContinuationResponse({ goalId: 'goal-created' })));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-created',
+            intakeId: 'intake-created',
+            title: 'Clarification now required',
+            lane: 'clarification',
+            goalState: 'needs_clarification',
+            reasonCodes: ['missing_acceptance_hint'],
+            openClarificationRequest: openClarificationRequest(),
+            nextAction: 'answer_clarification',
+            nextActionBlocking: true,
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue \/ Recheck$/i }));
+
+    expect(await screen.findByText('Clarification now required')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/goals/goal-created/continuation');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(fetchMock.mock.calls[3][1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/qualification-feed?limit=50');
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
+  });
+
+  it('disables continue_goal while pending to prevent duplicate mutation calls', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-double-click',
+            intakeId: 'intake-double-click',
+            title: 'Double click guard goal',
+            lane: 'qualification',
+            goalState: 'created',
+            nextAction: 'continue_goal',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    expect(await screen.findByText('Double click guard goal')).toBeInTheDocument();
+
+    const continuationRequest = deferredResponse();
+    fetchMock.mockImplementationOnce(() => continuationRequest.promise);
+    const button = screen.getByRole('button', { name: /^Continue \/ Recheck$/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(screen.getByRole('button', { name: /^Working\.\.\.$/i })).toBeDisabled();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/goals/goal-double-click/continuation')).toHaveLength(1);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(qualificationFeedResponse([])));
+    await act(async () => {
+      continuationRequest.resolve(jsonResponse(goalContinuationResponse({ goalId: 'goal-double-click' })));
+    });
+
+    expect(await screen.findByText('No active qualification items yet.')).toBeInTheDocument();
+  });
+
+  it('answers clarification questions only from the explicit card action and refreshes the feed', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-clarification',
+            intakeId: 'intake-clarification',
+            title: 'Clarification goal',
+            lane: 'clarification',
+            goalState: 'needs_clarification',
+            reasonCodes: ['missing_scope_hint'],
+            openClarificationRequest: openClarificationRequest(),
+            nextAction: 'answer_clarification',
+            nextActionBlocking: true,
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    expect(await screen.findByText('Clarification goal')).toBeInTheDocument();
+    expect(screen.getByLabelText('What is the intended scope at a high level?')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/answers\/continuation/.test(url))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Answer questions$/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Answer all questions before submitting.');
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/answers\/continuation/.test(url))).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('What is the intended scope at a high level?'), {
+      target: { value: 'Scope is billing API retry behavior.' },
+    });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(goalContinuationResponse({
+        goalId: 'goal-clarification',
+        state: 'ready_for_contract_seed',
+        ready: true,
+        reasonCodes: [],
+      }))
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-clarification',
+            intakeId: 'intake-clarification',
+            title: 'Ready for contract seed goal',
+            lane: 'qualification',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            nextAction: 'draft_contract',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Answer questions$/i }));
+
+    expect(await screen.findByText('Ready for contract seed goal')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/clarifications/018f0000-0000-7000-8000-000000000220/answers/continuation');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: {
+          Authorization: 'Bearer access-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          answers: [
+            {
+              question_id: '018f0000-0000-7000-8000-000000000221',
+              value: 'Scope is billing API retry behavior.',
+            },
+          ],
+        }),
+      })
+    );
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/qualification-feed?limit=50');
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
+  });
+
+  it('does not submit unsupported actor-mapped clarification answers', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-intent-owner',
+            intakeId: 'intake-intent-owner',
+            title: 'Intent owner clarification',
+            lane: 'clarification',
+            goalState: 'needs_clarification',
+            reasonCodes: ['missing_intent_owner'],
+            openClarificationRequest: openIntentOwnerClarificationRequest(),
+            nextAction: 'answer_clarification',
+            nextActionBlocking: true,
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    expect(await screen.findByText('Intent owner clarification')).toBeInTheDocument();
+
+    const actorField = screen.getByLabelText('Who owns this intent?');
+    expect(actorField).toBeDisabled();
+    expect(actorField).toHaveValue('Requires actor selection; not implemented yet.');
+    expect(screen.getByText('This clarification question is not supported in Console yet.')).toBeInTheDocument();
+
+    const action = screen.getByRole('button', { name: /^Answer questions$/i });
+    expect(action).toBeDisabled();
+    fireEvent.click(action);
+
+    const requestURLs = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(requestURLs.some((url) => /\/v1\/clarifications\/.*\/answers\/continuation/.test(url))).toBe(false);
+    expect(requestURLs.some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);
+    expect(requestURLs.some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
+  });
+
+  it('drafts a contract only from the explicit card action and refreshes the feed', async () => {
+    await loginSuccessfully();
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-ready',
+            intakeId: 'intake-ready',
+            title: 'Ready for contract seed goal',
+            lane: 'qualification',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            nextAction: 'draft_contract',
+          }),
+        ])
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    expect(await screen.findByText('Ready for contract seed goal')).toBeInTheDocument();
+
+    const draftRequest = deferredResponse();
+    fetchMock.mockImplementationOnce(() => draftRequest.promise);
+    const action = screen.getByRole('button', { name: /^Draft contract$/i });
+    fireEvent.click(action);
+    fireEvent.click(action);
+
+    expect(screen.getByRole('button', { name: /^Working\.\.\.$/i })).toBeDisabled();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => url === '/v1/contracts')).toHaveLength(1);
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        qualificationFeedResponse([
+          qualificationFeedItem({
+            goalId: 'goal-ready',
+            intakeId: 'intake-ready',
+            title: 'Draft contract goal',
+            lane: 'contract',
+            goalState: 'ready_for_contract_seed',
+            ready: true,
+            reasonCodes: [],
+            linkedContract: { id: 'contract-draft', state: 'draft' },
+            nextAction: 'update_contract',
+          }),
+        ])
+      )
+    );
+    await act(async () => {
+      draftRequest.resolve(jsonResponse(contractResponse({
+        id: 'contract-draft',
+        goal_id: 'goal-ready',
+      })));
+    });
+
+    const board = await screen.findByLabelText(/qualification feed lane view/i);
+    const contractLane = within(board).getByLabelText('Contract lane');
+    expect(contractLane).toHaveTextContent('Draft contract goal');
+    expect(contractLane).toHaveTextContent('Draft');
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'omit',
+        headers: {
+          Authorization: 'Bearer access-token',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          goal_id: 'goal-ready',
+        }),
+      })
+    );
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/qualification-feed?limit=50');
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/clarifications\/.*\/answers\/continuation/.test(url))).toBe(false);
   });
 
   it('shows not_found for missing contract IDs without seeding demo data', async () => {

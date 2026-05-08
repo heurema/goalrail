@@ -23,6 +23,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/postgres"
+	"github.com/heurema/goalrail/apps/server/internal/qualificationfeed"
 	"github.com/heurema/goalrail/apps/server/internal/repobinding"
 	"github.com/heurema/goalrail/apps/server/internal/repositorycontext"
 	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
@@ -40,6 +41,7 @@ type postgresStores struct {
 	goals                 *store.PostgresGoalStore
 	clarificationRequests *store.PostgresClarificationRequestStore
 	clarificationAnswers  *store.PostgresClarificationAnswerStore
+	qualificationFeed     *store.PostgresQualificationFeedStore
 	contracts             *store.PostgresContractStore
 	contractSeeds         *store.PostgresContractSeedStore
 	contractDrafts        *store.PostgresContractDraftStore
@@ -63,6 +65,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		goals:                 store.NewPostgresGoalStore(pool),
 		clarificationRequests: store.NewPostgresClarificationRequestStore(pool),
 		clarificationAnswers:  store.NewPostgresClarificationAnswerStore(pool),
+		qualificationFeed:     store.NewPostgresQualificationFeedStore(pool),
 		contracts:             store.NewPostgresContractStore(pool),
 		contractSeeds:         store.NewPostgresContractSeedStore(pool),
 		contractDrafts:        store.NewPostgresContractDraftStore(pool),
@@ -85,6 +88,7 @@ type appServices struct {
 	goal              *goal.Service
 	clarification     *clarification.Service
 	continuation      *continuation.Service
+	qualificationFeed *qualificationfeed.Service
 	contract          *contract.Service
 	workItem          *workitem.Service
 	workItemPlan      *workitemplan.Service
@@ -113,6 +117,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		goal:              goalService,
 		clarification:     clarificationService,
 		continuation:      continuation.NewService(stores.goals, goalService, clarificationService),
+		qualificationFeed: qualificationfeed.NewService(stores.qualificationFeed),
 		contract:          contract.NewService(stores.goals, stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
@@ -131,6 +136,7 @@ type appHandlers struct {
 	goal              *httpserver.GoalHandler
 	clarification     *httpserver.ClarificationHandler
 	continuation      *httpserver.ContinuationHandler
+	qualificationFeed *httpserver.QualificationFeedHandler
 	contract          *httpserver.ContractHandler
 	workItem          *httpserver.WorkItemHandler
 	workItemPlan      *httpserver.WorkItemPlanHandler
@@ -149,6 +155,7 @@ func newAppHandlers(services appServices) appHandlers {
 		goal:              httpserver.NewGoalHandler(services.goal),
 		clarification:     httpserver.NewClarificationHandler(services.clarification),
 		continuation:      httpserver.NewContinuationHandler(services.auth, services.continuation),
+		qualificationFeed: httpserver.NewQualificationFeedHandler(services.auth, services.qualificationFeed),
 		contract:          httpserver.NewContractHandler(services.auth, services.contract),
 		workItem:          httpserver.NewWorkItemHandler(services.workItem),
 		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.auth, services.workItemPlan),
@@ -217,6 +224,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		GoalReadiness:                 http.HandlerFunc(h.goal.CheckReadiness),
 		GoalContinuation:              http.HandlerFunc(h.continuation.ReconcileGoal),
 		ClarificationContinuation:     http.HandlerFunc(h.continuation.AnswerClarification),
+		QualificationFeed:             http.HandlerFunc(h.qualificationFeed.List),
 		GoalClarificationRequests:     http.HandlerFunc(h.clarification.CreateRequest),
 		ContractCreate:                http.HandlerFunc(h.contract.Create),
 		ContractGet:                   http.HandlerFunc(h.contract.Get),
@@ -295,6 +303,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		GoalReadiness:                 unavailable,
 		GoalContinuation:              unavailable,
 		ClarificationContinuation:     unavailable,
+		QualificationFeed:             unavailable,
 		GoalClarificationRequests:     unavailable,
 		ContractCreate:                unavailable,
 		ContractGet:                   unavailable,

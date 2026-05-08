@@ -140,7 +140,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   color: inherit;
   font: inherit;
 }
@@ -1949,6 +1950,352 @@ select:focus-visible {
   }
 }
 
+.qualificationSurface {
+  min-width: 0;
+  min-height: 100vh;
+  padding: 28px 32px 36px;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.qualificationHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.qualificationHeader h2,
+.qualificationHeader p,
+.qualificationHeader h3,
+.qualificationEmpty h3,
+.qualificationEmpty p {
+  margin: 0;
+}
+
+.qualificationHeader h2 {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.qualificationHeader p {
+  max-width: 760px;
+  margin-top: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.qualificationStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(82px, 1fr));
+  gap: 8px;
+  min-width: 392px;
+}
+
+.qualificationStats span {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.qualificationStats b {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.qualificationEmpty {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 78%, transparent);
+}
+
+.qualificationEmpty h3 {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.qualificationEmpty p {
+  color: var(--mute);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.qualificationLaneBoard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.qualificationLane {
+  display: flex;
+  min-width: 0;
+  min-height: 420px;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 82%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, white 3%, transparent);
+}
+
+.qualificationLane > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.qualificationLane h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.qualificationLane > header span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.qualificationCards {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.qualificationCard {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--panel-3) 56%, transparent), transparent 34%),
+    var(--panel);
+}
+
+.qualificationCard.mauve {
+  border-color: color-mix(in oklab, var(--accent-soft) 68%, var(--line));
+}
+
+.qualificationCard.amber {
+  border-color: color-mix(in oklab, var(--warn-soft) 70%, var(--line));
+}
+
+.qualificationCard.pass {
+  border-color: color-mix(in oklab, var(--pass-soft) 70%, var(--line));
+}
+
+.qualificationCard > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.qualificationCard h4 {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.qualificationCardFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+  margin: 0;
+}
+
+.qualificationCardFields > div {
+  min-width: 0;
+}
+
+.qualificationCardFields dt {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.qualificationCardFields dd {
+  min-width: 0;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.qualificationReadiness,
+.qualificationReasonList,
+.qualificationCardFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.qualificationReasonList span {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 22px;
+  align-items: center;
+  padding: 2px 7px;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qualificationCardFooter {
+  justify-content: space-between;
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.qualificationAnswerForm {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--bg) 34%, transparent);
+}
+
+.qualificationAnswerField {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.qualificationAnswerField span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.qualificationAnswerField small {
+  color: var(--mute);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.qualificationAnswerField textarea {
+  width: 100%;
+  min-height: 78px;
+  resize: vertical;
+  padding: 8px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--panel) 82%, transparent);
+  color: var(--ink);
+  outline: none;
+}
+
+.qualificationAnswerField textarea:focus {
+  border-color: color-mix(in oklab, var(--accent) 42%, var(--line));
+  background: color-mix(in oklab, var(--panel-2) 78%, transparent);
+}
+
+.qualificationAnswerField textarea:disabled {
+  border-color: color-mix(in oklab, var(--warn-soft) 50%, var(--line-soft));
+  background: color-mix(in oklab, var(--warn-soft) 10%, transparent);
+  color: var(--mute);
+  cursor: not-allowed;
+}
+
+.qualificationAnswerError {
+  margin: 0;
+}
+
+.qualificationAnswerUnsupported {
+  margin: 0;
+  color: var(--warn);
+}
+
+.qualificationActionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 48%, var(--line));
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--accent) 12%, var(--panel-2));
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 140ms, background 140ms;
+}
+
+.qualificationActionButton:hover {
+  background: color-mix(in oklab, var(--accent) 20%, var(--panel-2));
+}
+
+.qualificationActionButton:disabled {
+  border-color: var(--line-soft);
+  background: transparent;
+  color: var(--mute);
+  cursor: not-allowed;
+}
+
+.qualificationLaneEmpty {
+  padding: 14px 12px;
+  border: 1px dashed var(--line-soft);
+  border-radius: 4px;
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
 .settingsSurface {
   min-width: 0;
   min-height: 100vh;
@@ -2819,6 +3166,7 @@ select:focus-visible {
 
   .surfaceHeader,
   .appearanceHeader,
+  .qualificationHeader,
   .repositoryHeader,
   .repositoryOrgPanel,
   .repositoryCard header,
@@ -2834,6 +3182,26 @@ select:focus-visible {
 
   .themeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .qualificationSurface {
+    min-height: auto;
+    padding: 20px 16px 28px;
+  }
+
+  .qualificationStats,
+  .qualificationLaneBoard,
+  .qualificationCardFields {
+    grid-template-columns: 1fr;
+  }
+
+  .qualificationStats {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .qualificationLane {
+    min-height: 0;
   }
 
   .usersToolbar {

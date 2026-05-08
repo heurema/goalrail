@@ -23,8 +23,24 @@ import {
   getOrganizationRepositoryContext,
   isRepositoryContextClientError,
 } from './repositoryContextClient';
+import {
+  isQualificationFeedClientError,
+  listQualificationFeed,
+} from './qualificationFeedClient';
+import {
+  answerClarification,
+  continueGoal,
+  draftContract,
+  isGoalActionsClientError,
+} from './goalActionsClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
+import type {
+  QualificationFeedItem,
+  QualificationFeedQuestion,
+  QualificationFeedResponse,
+  QualificationLane,
+} from './qualificationFeedClient';
 import StartPage from './StartPage';
 
 import './App.css';
@@ -38,6 +54,9 @@ type StatusFilter = OrganizationUserState | 'all';
 type UsersLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type RepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
+type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type QualificationAnswerDrafts = Record<string, Record<string, string>>;
+type QualificationAnswerErrors = Record<string, string>;
 type AuthStatus =
   | 'unauthenticated'
   | 'logging_in'
@@ -74,6 +93,10 @@ interface ThemePreset {
 }
 
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
+const QUALIFICATION_FEED_LIMIT = 50;
+const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
+const QUALIFICATION_FEED_LANES = ['qualification', 'clarification', 'contract', 'blocked'] as const;
+const TEXT_CLARIFICATION_MAPPINGS = new Set(['goal.summary', 'goal.scope_hint', 'goal.acceptance_hint']);
 const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
 const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
 const USER_STATUSES: OrganizationUserState[] = ['active', 'inactive'];
@@ -232,6 +255,32 @@ function repositoryContextErrorMessage(error: unknown, t: (key: string, options?
   return t('repository.errors.generic');
 }
 
+function qualificationFeedErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isQualificationFeedClientError(error)) {
+    const translated = t(`qualificationFeed.errors.${error.code}`);
+    if (translated !== `qualificationFeed.errors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status ? t('qualificationFeed.errors.genericWithStatus', { status: error.status }) : t('qualificationFeed.errors.generic');
+  }
+
+  return t('qualificationFeed.errors.generic');
+}
+
+function goalActionErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isGoalActionsClientError(error)) {
+    const translated = t(`qualificationFeed.errors.${error.code}`);
+    if (translated !== `qualificationFeed.errors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status ? t('qualificationFeed.errors.genericWithStatus', { status: error.status }) : t('qualificationFeed.errors.generic');
+  }
+
+  return t('qualificationFeed.errors.generic');
+}
+
 function normalizedPathname() {
   if (typeof window === 'undefined') {
     return '';
@@ -285,6 +334,13 @@ function ConsoleApp() {
   const [repositoryContext, setRepositoryContext] = useState<OrganizationRepositoryContextResponse | null>(null);
   const [repositoryContextLoadStatus, setRepositoryContextLoadStatus] = useState<RepositoryContextLoadStatus>('idle');
   const [repositoryContextError, setRepositoryContextError] = useState('');
+  const [qualificationFeed, setQualificationFeed] = useState<QualificationFeedResponse>({ items: [] });
+  const [qualificationFeedLoadStatus, setQualificationFeedLoadStatus] = useState<QualificationFeedLoadStatus>('idle');
+  const [qualificationFeedError, setQualificationFeedError] = useState('');
+  const [qualificationActionGoalId, setQualificationActionGoalId] = useState<string | null>(null);
+  const [qualificationActionError, setQualificationActionError] = useState('');
+  const [qualificationAnswerDrafts, setQualificationAnswerDrafts] = useState<QualificationAnswerDrafts>({});
+  const [qualificationAnswerErrors, setQualificationAnswerErrors] = useState<QualificationAnswerErrors>({});
   const [formError, setFormError] = useState('');
   const [temporaryPassword, setTemporaryPassword] = useState<OneTimeTemporaryPassword | null>(null);
   const [contractIdInput, setContractIdInput] = useState('');
@@ -303,6 +359,7 @@ function ConsoleApp() {
   const contractLookupSequence = useRef(0);
   const usersLoadSequence = useRef(0);
   const repositoryContextLoadSequence = useRef(0);
+  const qualificationFeedLoadSequence = useRef(0);
   const authSessionSequence = useRef(0);
 
   useEffect(() => {
@@ -324,6 +381,74 @@ function ConsoleApp() {
 
     void loadRepositoryContext();
   }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (screen !== 'console' || activeSurface !== 'delivery-readiness' || authStatus !== 'authenticated') {
+      return;
+    }
+
+    const accessToken = tokens?.accessToken ?? '';
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof window.setTimeout> | undefined;
+
+    async function poll(showLoading: boolean) {
+      if (cancelled) {
+        return;
+      }
+      const loadSequence = qualificationFeedLoadSequence.current + 1;
+      qualificationFeedLoadSequence.current = loadSequence;
+      if (showLoading) {
+        setQualificationFeedLoadStatus('loading');
+      }
+      setQualificationFeedError('');
+
+      try {
+        const result = await listQualificationFeed({
+          accessToken,
+          limit: QUALIFICATION_FEED_LIMIT,
+        });
+        if (cancelled || qualificationFeedLoadSequence.current !== loadSequence) {
+          return;
+        }
+        setQualificationFeed(result);
+        setQualificationFeedLoadStatus('loaded');
+      } catch (error) {
+        if (cancelled || qualificationFeedLoadSequence.current !== loadSequence) {
+          return;
+        }
+        if (isQualificationFeedClientError(error) && error.code === 'unauthorized') {
+          cancelled = true;
+          resetAuthState();
+          setAuthError(translate('auth.invalidSession'));
+          return;
+        }
+        setQualificationFeedLoadStatus('error');
+        setQualificationFeedError(qualificationFeedErrorMessage(error, translate));
+      } finally {
+        if (!cancelled) {
+          timeoutId = window.setTimeout(() => {
+            void poll(false);
+          }, QUALIFICATION_FEED_POLL_INTERVAL_MS);
+        }
+      }
+    }
+
+    void poll(qualificationFeedLoadStatus === 'idle');
+
+    return () => {
+      cancelled = true;
+      qualificationFeedLoadSequence.current += 1;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [activeSurface, authStatus, screen, tokens?.accessToken]);
 
   useEffect(() => {
     if (screen !== 'settings-users') {
@@ -463,6 +588,7 @@ function ConsoleApp() {
     contractLookupSequence.current += 1;
     usersLoadSequence.current += 1;
     repositoryContextLoadSequence.current += 1;
+    qualificationFeedLoadSequence.current += 1;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -476,6 +602,13 @@ function ConsoleApp() {
     setRepositoryContext(null);
     setRepositoryContextLoadStatus('idle');
     setRepositoryContextError('');
+    setQualificationFeed({ items: [] });
+    setQualificationFeedLoadStatus('idle');
+    setQualificationFeedError('');
+    setQualificationActionGoalId(null);
+    setQualificationActionError('');
+    setQualificationAnswerDrafts({});
+    setQualificationAnswerErrors({});
     setFormError('');
     setTemporaryPassword(null);
     setResetTarget(null);
@@ -611,6 +744,156 @@ function ConsoleApp() {
       setRepositoryContext(null);
       setRepositoryContextLoadStatus('error');
       setRepositoryContextError(repositoryContextErrorMessage(error, translate));
+    }
+  }
+
+  async function loadQualificationFeedOnce() {
+    const accessToken = tokens?.accessToken;
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    const loadSequence = qualificationFeedLoadSequence.current + 1;
+    qualificationFeedLoadSequence.current = loadSequence;
+    setQualificationFeedLoadStatus('loading');
+    setQualificationFeedError('');
+
+    try {
+      const result = await listQualificationFeed({
+        accessToken,
+        limit: QUALIFICATION_FEED_LIMIT,
+      });
+      if (qualificationFeedLoadSequence.current !== loadSequence) {
+        return;
+      }
+      setQualificationFeed(result);
+      setQualificationFeedLoadStatus('loaded');
+    } catch (error) {
+      if (qualificationFeedLoadSequence.current !== loadSequence) {
+        return;
+      }
+      if (isQualificationFeedClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setQualificationFeedLoadStatus('error');
+      setQualificationFeedError(qualificationFeedErrorMessage(error, translate));
+    }
+  }
+
+  function updateQualificationAnswer(goalId: string, questionId: string, value: string) {
+    setQualificationAnswerDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [goalId]: {
+        ...(currentDrafts[goalId] ?? {}),
+        [questionId]: value,
+      },
+    }));
+    setQualificationAnswerErrors((currentErrors) => {
+      if (!currentErrors[goalId]) {
+        return currentErrors;
+      }
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[goalId];
+      return nextErrors;
+    });
+  }
+
+  async function handleQualificationAction(item: QualificationFeedItem) {
+    if (!item.next_action.available || !isSupportedQualificationAction(item)) {
+      return;
+    }
+
+    const accessToken = tokens?.accessToken;
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    const mutationSessionSequence = authSessionSequence.current;
+    setQualificationActionGoalId(item.goal_id);
+    setQualificationActionError('');
+    setQualificationAnswerErrors((currentErrors) => {
+      if (!currentErrors[item.goal_id]) {
+        return currentErrors;
+      }
+      const nextErrors = { ...currentErrors };
+      delete nextErrors[item.goal_id];
+      return nextErrors;
+    });
+
+    try {
+      if (item.next_action.kind === 'continue_goal') {
+        await continueGoal({
+          accessToken,
+          goalId: item.goal_id,
+        });
+      } else if (item.next_action.kind === 'answer_clarification') {
+        const clarificationRequest = item.open_clarification_request;
+        const questions = clarificationRequest?.questions ?? [];
+        const answersByQuestionID = qualificationAnswerDrafts[item.goal_id] ?? {};
+        const unsupportedAnswer = questions.find((question) => !isSupportedClarificationQuestion(question));
+        if (unsupportedAnswer) {
+          setQualificationAnswerErrors((currentErrors) => ({
+            ...currentErrors,
+            [item.goal_id]: translate('qualificationFeed.unsupportedAnswer'),
+          }));
+          return;
+        }
+        const missingAnswer = questions.find((question) => !answersByQuestionID[question.id]?.trim());
+        if (!clarificationRequest || questions.length === 0 || missingAnswer) {
+          setQualificationAnswerErrors((currentErrors) => ({
+            ...currentErrors,
+            [item.goal_id]: translate('qualificationFeed.answerRequired'),
+          }));
+          return;
+        }
+
+        await answerClarification({
+          accessToken,
+          clarificationRequestId: clarificationRequest.id,
+          answers: questions.map((question) => ({
+            question_id: question.id,
+            value: (answersByQuestionID[question.id] ?? '').trim(),
+          })),
+        });
+      } else if (item.next_action.kind === 'draft_contract') {
+        await draftContract({
+          accessToken,
+          goalId: item.goal_id,
+        });
+      }
+      if (authSessionSequence.current !== mutationSessionSequence) {
+        return;
+      }
+      setQualificationAnswerDrafts((currentDrafts) => {
+        if (!currentDrafts[item.goal_id]) {
+          return currentDrafts;
+        }
+        const nextDrafts = { ...currentDrafts };
+        delete nextDrafts[item.goal_id];
+        return nextDrafts;
+      });
+      await loadQualificationFeedOnce();
+    } catch (error) {
+      if (authSessionSequence.current !== mutationSessionSequence) {
+        return;
+      }
+      if (isGoalActionsClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+      setQualificationActionError(goalActionErrorMessage(error, translate));
+    } finally {
+      if (authSessionSequence.current === mutationSessionSequence) {
+        setQualificationActionGoalId(null);
+      }
     }
   }
 
@@ -1029,6 +1312,20 @@ function ConsoleApp() {
           <ContractSurfacePanel
             contract={contract}
             loadStatus={contractLoadStatus}
+            t={translate}
+          />
+        ) : activeSurface === 'delivery-readiness' ? (
+          <QualificationFeedSurfacePanel
+            actionError={qualificationActionError}
+            actionGoalId={qualificationActionGoalId}
+            answerDrafts={qualificationAnswerDrafts}
+            answerErrors={qualificationAnswerErrors}
+            feed={qualificationFeed}
+            loadStatus={qualificationFeedLoadStatus}
+            onAction={handleQualificationAction}
+            onAnswerChange={updateQualificationAnswer}
+            onRetry={loadQualificationFeedOnce}
+            qualificationFeedError={qualificationFeedError}
             t={translate}
           />
         ) : (
@@ -1742,6 +2039,269 @@ function formatDateTime(value: string) {
     return value;
   }
   return date.toISOString();
+}
+
+function QualificationFeedSurfacePanel({
+  actionError,
+  actionGoalId,
+  answerDrafts,
+  answerErrors,
+  feed,
+  loadStatus,
+  onAction,
+  onAnswerChange,
+  onRetry,
+  qualificationFeedError,
+  t,
+}: {
+  actionError: string;
+  actionGoalId: string | null;
+  answerDrafts: QualificationAnswerDrafts;
+  answerErrors: QualificationAnswerErrors;
+  feed: QualificationFeedResponse;
+  loadStatus: QualificationFeedLoadStatus;
+  onAction: (item: QualificationFeedItem) => void;
+  onAnswerChange: (goalId: string, questionId: string, value: string) => void;
+  onRetry: () => void;
+  qualificationFeedError: string;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const items = feed.items;
+  const itemsByLane = QUALIFICATION_FEED_LANES.map((lane) => ({
+    lane,
+    items: items.filter((item) => qualificationBoardLane(item) === lane),
+  }));
+
+  return (
+    <section className="qualificationSurface" aria-label={t('qualificationFeed.ariaLabel')}>
+      <header className="qualificationHeader">
+        <div>
+          <p className="kicker">{t('qualificationFeed.kicker')}</p>
+          <h2>{t('qualificationFeed.title')}</h2>
+          <p>{t('qualificationFeed.copy')}</p>
+        </div>
+        <div className="qualificationStats" aria-label={t('qualificationFeed.stats')}>
+          {itemsByLane.map(({ lane, items: laneItems }) => (
+            <span key={lane}>
+              <b>{laneItems.length}</b>
+              {t(`qualificationFeed.lanes.${lane}`)}
+            </span>
+          ))}
+        </div>
+      </header>
+
+      {loadStatus === 'loading' ? <p className="usersNotice" role="status">{t('qualificationFeed.loading')}</p> : null}
+
+      {loadStatus === 'error' ? (
+        <div className="usersNotice usersNoticeError" role="alert">
+          <p>{qualificationFeedError}</p>
+          <button className="ghostButton" onClick={onRetry} type="button">
+            {t('qualificationFeed.retry')}
+          </button>
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div className="usersNotice usersNoticeError" role="alert">
+          <p>{actionError}</p>
+        </div>
+      ) : null}
+
+      {loadStatus === 'loaded' && items.length === 0 ? (
+        <section className="qualificationEmpty" aria-label={t('qualificationFeed.emptyTitle')}>
+          <h3>{t('qualificationFeed.emptyTitle')}</h3>
+          <p>{t('qualificationFeed.emptyCopy')}</p>
+        </section>
+      ) : null}
+
+      <div className="qualificationLaneBoard" aria-label={t('qualificationFeed.boardLabel')}>
+        {itemsByLane.map(({ lane, items: laneItems }) => (
+          <section className="qualificationLane" aria-label={t(`qualificationFeed.laneLabels.${lane}`)} key={lane}>
+            <header>
+              <h3>{t(`qualificationFeed.lanes.${lane}`)}</h3>
+              <span>{laneItems.length}</span>
+            </header>
+            <div className="qualificationCards">
+              {laneItems.map((item) => (
+                <QualificationFeedCard
+                  answerDraft={answerDrafts[item.goal_id] ?? {}}
+                  answerError={answerErrors[item.goal_id] ?? ''}
+                  isActionPending={actionGoalId === item.goal_id}
+                  item={item}
+                  key={`${item.intake_id}-${item.goal_id}`}
+                  onAction={onAction}
+                  onAnswerChange={onAnswerChange}
+                  t={t}
+                />
+              ))}
+              {loadStatus === 'loaded' && laneItems.length === 0 ? (
+                <div className="qualificationLaneEmpty">{t('qualificationFeed.emptyLane')}</div>
+              ) : null}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QualificationFeedCard({
+  answerDraft,
+  answerError,
+  isActionPending,
+  item,
+  onAction,
+  onAnswerChange,
+  t,
+}: {
+  answerDraft: Record<string, string>;
+  answerError: string;
+  isActionPending: boolean;
+  item: QualificationFeedItem;
+  onAction: (item: QualificationFeedItem) => void;
+  onAnswerChange: (goalId: string, questionId: string, value: string) => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
+}) {
+  const questionCount = item.open_clarification_request?.questions.length ?? 0;
+  const readinessReasonCodes = item.readiness.reason_codes ?? [];
+  const contractState = item.linked_contract ? t(`contractStates.${item.linked_contract.state}`) : t('qualificationFeed.noContract');
+  const actionSupported = isSupportedQualificationAction(item);
+  const actionDisabled = isActionPending || !item.next_action.available || !actionSupported;
+  const unsupportedQuestion = item.next_action.kind === 'answer_clarification'
+    ? item.open_clarification_request?.questions.find((question) => !isSupportedClarificationQuestion(question))
+    : undefined;
+
+  return (
+    <article className={`qualificationCard ${qualificationTone(item.lane)}`}>
+      <header>
+        <div>
+          <span className="opsMono">{item.goal_id}</span>
+          <h4>{item.title}</h4>
+        </div>
+        <span className={`opsPill ${qualificationTone(item.lane)}`}>{t(`qualificationFeed.itemLanes.${item.lane}`)}</span>
+      </header>
+
+      <dl className="qualificationCardFields">
+        <FieldRow label={t('qualificationFeed.fields.repository')} value={item.repository_full_name || t('qualificationFeed.emptyValue')} />
+        <FieldRow label={t('qualificationFeed.fields.repoBinding')} value={item.repo_binding_id} />
+        <FieldRow label={t('qualificationFeed.fields.goalState')} value={t(`qualificationFeed.goalStates.${item.goal_state}`)} />
+        <FieldRow label={t('qualificationFeed.fields.contract')} value={contractState} />
+      </dl>
+
+      <div className="qualificationReadiness">
+        <span className={item.readiness.ready ? 'opsPill pass' : 'opsPill amber'}>
+          {item.readiness.ready ? t('qualificationFeed.ready') : t('qualificationFeed.notReady')}
+        </span>
+        <span className={item.next_action.blocking ? 'opsPill amber' : 'opsPill muted'}>
+          {t(`qualificationFeed.actions.${item.next_action.kind}`)}
+        </span>
+      </div>
+
+      <div className="qualificationReasonList" aria-label={t('qualificationFeed.reasonCodes')}>
+        {readinessReasonCodes.length > 0 ? (
+          readinessReasonCodes.map((reasonCode) => <span key={reasonCode}>{reasonCode}</span>)
+        ) : (
+          <span>{t('qualificationFeed.noReasonCodes')}</span>
+        )}
+      </div>
+
+      <footer className="qualificationCardFooter">
+        <span>{t('qualificationFeed.questionsCount', { count: questionCount })}</span>
+        <span>{formatDateTime(item.created_at)}</span>
+      </footer>
+
+      {item.next_action.kind === 'answer_clarification' && item.open_clarification_request ? (
+        <div className="qualificationAnswerForm">
+          {item.open_clarification_request.questions.map((question) => {
+            const questionSupported = isSupportedClarificationQuestion(question);
+            return (
+              <label className="qualificationAnswerField" key={question.id}>
+                <span>{question.text}</span>
+                <small>{question.why_needed || question.maps_to}</small>
+                {questionSupported ? (
+                  <textarea
+                    aria-label={question.text}
+                    disabled={isActionPending}
+                    onChange={(event) => onAnswerChange(item.goal_id, question.id, event.target.value)}
+                    rows={3}
+                    value={answerDraft[question.id] ?? ''}
+                  />
+                ) : (
+                  <textarea
+                    aria-label={question.text}
+                    disabled
+                    readOnly
+                    rows={2}
+                    value={unsupportedClarificationQuestionMessage(question, t)}
+                  />
+                )}
+              </label>
+            );
+          })}
+          {unsupportedQuestion ? (
+            <p className="fieldMessage qualificationAnswerUnsupported">{t('qualificationFeed.unsupportedAnswer')}</p>
+          ) : null}
+          {answerError ? <p className="fieldMessage qualificationAnswerError" role="alert">{answerError}</p> : null}
+        </div>
+      ) : null}
+
+      {item.next_action.kind !== 'none' ? (
+        <button
+          className="qualificationActionButton"
+          disabled={actionDisabled}
+          onClick={() => onAction(item)}
+          type="button"
+        >
+          {isActionPending ? t('qualificationFeed.actionRunning') : t(`qualificationFeed.actions.${item.next_action.kind}`)}
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+function isSupportedQualificationAction(item: QualificationFeedItem) {
+  if (item.next_action.kind === 'continue_goal') {
+    return true;
+  }
+  if (item.next_action.kind === 'draft_contract') {
+    return true;
+  }
+  if (item.next_action.kind === 'answer_clarification') {
+    const questions = item.open_clarification_request?.questions ?? [];
+    return questions.length > 0 && questions.every((question) => isSupportedClarificationQuestion(question));
+  }
+  return false;
+}
+
+function isSupportedClarificationQuestion(question: QualificationFeedQuestion) {
+  return question.answer_type === 'text' && TEXT_CLARIFICATION_MAPPINGS.has(question.maps_to);
+}
+
+function unsupportedClarificationQuestionMessage(
+  question: QualificationFeedQuestion,
+  t: (key: string, options?: Record<string, unknown>) => string
+) {
+  if (question.maps_to === 'goal.intent_owner') {
+    return t('qualificationFeed.actorSelectionRequired');
+  }
+  return t('qualificationFeed.unsupportedQuestion');
+}
+
+function qualificationBoardLane(item: QualificationFeedItem): (typeof QUALIFICATION_FEED_LANES)[number] {
+  return item.lane;
+}
+
+function qualificationTone(lane: QualificationLane) {
+  if (lane === 'clarification') {
+    return 'amber';
+  }
+  if (lane === 'contract') {
+    return 'pass';
+  }
+  if (lane === 'blocked') {
+    return 'muted';
+  }
+  return 'mauve';
 }
 
 function SurfaceEmptyStatePanel({

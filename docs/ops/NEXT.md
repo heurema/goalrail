@@ -16,7 +16,7 @@
   push-to-live pipeline
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, checkout job / checkout receipt preparation storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, authenticated read-only `GET /v1/qualification-feed` for intent / qualification discovery, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, checkout job / checkout receipt preparation storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0028 now defines and H1 implements the runner checkout instruction and
   workspace receipt boundary: the code can create or return a checkout job from
@@ -137,6 +137,26 @@
 - Repository access MVP is reset to RepoBinding context plus runner-owned
   local credentials. RepoBinding remains canonical repository context and not
   permission to clone; the API server stores no repository secrets in the MVP.
+- The backend now has a read-only qualification feed for Console polling:
+  `GET /v1/qualification-feed` returns stored intake / goal / open
+  clarification / linked contract state under the caller's active
+  OrganizationMembership, without hidden readiness recomputation or automatic
+  clarification creation. The Console Delivery Readiness surface now polls
+  this feed while authenticated and renders Qualification / Clarification /
+  Contract / Blocked lanes without calling continuation or draft actions
+  automatically.
+  Explicit user-triggered actions now cover `continue_goal` through
+  `POST /v1/goals/{id}/continuation`, `answer_clarification` through
+  `POST /v1/clarifications/{id}/answers/continuation`, and
+  `draft_contract` through `POST /v1/contracts`; all refresh the feed once
+  after success. Console clarification answers are limited to text-safe
+  Goal mappings and block unsupported actor-mapped questions such as
+  `goal.intent_owner` instead of posting invalid plain text.
+- Known qualification-feed gap: the read model starts at promoted Goals. A
+  received-only IntakeRecord from a partial `intake -> promote` failure will
+  not appear in Console yet; current CLI `work start` treats that as a
+  command/server failure, and a later received-intake lane or recovery feed can
+  be added if this becomes operationally relevant.
 - H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
   coverage now pins `work checkout prepare` through runner checkout lease and
   persisted `CheckoutReceipt`. H2.1 execution preparation is implemented, and
