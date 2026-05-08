@@ -106,7 +106,7 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 	steps := []spine.InitStepResult{
 		initStepOK(initStepRepoBinding, responsePayload.Message),
 	}
-	retryCommand := repoBindingInitRetryCommand(projectID)
+	retryCommand := repoBindingInitRetryCommand(projectID, draft)
 	configStatus, err := writeProjectConfig(draft.GitRoot, projectConfig{
 		ServerURL:      output.ServerURL,
 		OrganizationID: output.OrganizationID,
@@ -229,7 +229,7 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 	steps := []spine.InitStepResult{
 		initStepOK(initStepRepositoryContext, responsePayload.Message),
 	}
-	retryCommand := repositoryContextInitRetryCommand()
+	retryCommand := repositoryContextInitRetryCommand(draft)
 	configStatus, err := writeProjectConfig(draft.GitRoot, projectConfig{
 		ServerURL:      output.ServerURL,
 		OrganizationID: output.OrganizationID,
@@ -410,12 +410,12 @@ func applyRepositoryContextSnapshot(ctx context.Context, client HTTPClient, sess
 	snapshotRequest, err := buildRepositoryContextSnapshot(draft.GitRoot, *output, draft)
 	if err != nil {
 		output.ContextSnapshotStatus = string(spine.InitStepStatusWarning)
-		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: collect repository context snapshot: "+err.Error(), repositoryContextInitRetryCommand())
+		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: collect repository context snapshot: "+err.Error(), repositoryContextInitRetryCommand(draft))
 	}
 	snapshotResponse, err := postRepositoryContextSnapshot(ctx, client, session, output.RepoBindingID, snapshotRequest)
 	if err != nil {
 		output.ContextSnapshotStatus = string(spine.InitStepStatusWarning)
-		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: "+err.Error(), repositoryContextInitRetryCommand())
+		return initStepWarning(initStepContextSnapshot, "Repository context snapshot was not recorded: "+err.Error(), repositoryContextInitRetryCommand(draft))
 	}
 	if snapshotResponse.Created {
 		output.ContextSnapshotStatus = "recorded"
@@ -430,12 +430,48 @@ func applyRepositoryContextSnapshot(ctx context.Context, client HTTPClient, sess
 	return initStepOK(initStepContextSnapshot, "Repository context snapshot "+output.ContextSnapshotStatus+".")
 }
 
-func repoBindingInitRetryCommand(projectID string) string {
-	return "goalrail init --project " + projectID
+func repoBindingInitRetryCommand(projectID string, draft spine.RepoBindingDraft) string {
+	parts := []string{"goalrail", "init", "--project", shellQuoteInitArg(projectID)}
+	return appendInitContextRetryArgs(parts, draft)
 }
 
-func repositoryContextInitRetryCommand() string {
-	return "goalrail init"
+func repositoryContextInitRetryCommand(draft spine.RepoBindingDraft) string {
+	return appendInitContextRetryArgs([]string{"goalrail", "init"}, draft)
+}
+
+func appendInitContextRetryArgs(parts []string, draft spine.RepoBindingDraft) string {
+	if strings.TrimSpace(draft.RepoURL) != "" {
+		parts = append(parts, "--repo", shellQuoteInitArg(strings.TrimSpace(draft.RepoURL)))
+	}
+	if strings.TrimSpace(draft.WorkflowBaseBranch) != "" {
+		parts = append(parts, "--base", shellQuoteInitArg(strings.TrimSpace(draft.WorkflowBaseBranch)))
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellQuoteInitArg(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if isPlainInitShellArg(value) {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+func isPlainInitShellArg(value string) bool {
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		switch r {
+		case '_', '-', '.', '/', ':', '@', '=', '+', ',', '%':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func writeRepoBindingOutputWithError(out *term.Output, format term.Format, output spine.RepoBindingInitOutput, commandErr error) error {
