@@ -132,6 +132,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ProposalAcceptance:            probeRoute("proposal_acceptance"),
 		TaskGet:                       probeRoute("task_get"),
 		TaskCheckoutJobs:              probeRoute("task_checkout_jobs"),
+		TaskExecutionJobs:             probeRoute("task_execution_jobs"),
 		CheckoutJobLeases:             probeRoute("checkout_job_leases"),
 		CheckoutJobReceipts:           probeRoute("checkout_job_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
@@ -185,6 +186,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "proposal_acceptance", method: http.MethodPost, path: "/v1/proposals/proposal-1/acceptance", wantRoute: "proposal_acceptance"},
 		{name: "task_get", method: http.MethodGet, path: "/v1/tasks/task-1", wantRoute: "task_get"},
 		{name: "task_checkout_jobs", method: http.MethodPost, path: "/v1/tasks/task-1/checkout-jobs", wantRoute: "task_checkout_jobs"},
+		{name: "task_execution_jobs", method: http.MethodPost, path: "/v1/tasks/task-1/execution-jobs", wantRoute: "task_execution_jobs"},
 		{name: "checkout_job_leases", method: http.MethodPost, path: "/v1/checkout-jobs/leases", wantRoute: "checkout_job_leases"},
 		{name: "checkout_job_receipts", method: http.MethodPost, path: "/v1/checkout-jobs/job-1/receipts", wantRoute: "checkout_job_receipts"},
 	}
@@ -251,6 +253,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ProposalAcceptance:            probeRoute("proposal_acceptance"),
 		TaskGet:                       probeRoute("task_get"),
 		TaskCheckoutJobs:              probeRoute("task_checkout_jobs"),
+		TaskExecutionJobs:             probeRoute("task_execution_jobs"),
 		CheckoutJobLeases:             probeRoute("checkout_job_leases"),
 		CheckoutJobReceipts:           probeRoute("checkout_job_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
@@ -387,6 +390,7 @@ func newRouter(
 	workItemHandler *httpserver.WorkItemHandler,
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 	checkoutHandler *httpserver.CheckoutHandler,
+	executionHandler *httpserver.ExecutionHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                         livez,
@@ -431,6 +435,7 @@ func newRouter(
 		ProposalAcceptance:            http.HandlerFunc(workItemPlanHandler.AcceptProposal),
 		TaskGet:                       http.HandlerFunc(workItemHandler.GetTask),
 		TaskCheckoutJobs:              http.HandlerFunc(checkoutHandler.CreateJob),
+		TaskExecutionJobs:             http.HandlerFunc(executionHandler.CreateJob),
 		CheckoutJobLeases:             http.HandlerFunc(checkoutHandler.AcquireLease),
 		CheckoutJobReceipts:           http.HandlerFunc(checkoutHandler.SubmitReceipt),
 		ClarificationAnswers:          http.HandlerFunc(clarificationHandler.RecordAnswer),
@@ -447,6 +452,7 @@ func baseHandlers(
 	workItemHandler *httpserver.WorkItemHandler,
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
 	checkoutHandler *httpserver.CheckoutHandler,
+	executionHandler *httpserver.ExecutionHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
 	authHandler := httpserver.NewAuthHandler(stubAuthService{})
@@ -463,6 +469,7 @@ func baseHandlers(
 		workItemHandler,
 		workItemPlanHandler,
 		checkoutHandler,
+		executionHandler,
 	)
 }
 

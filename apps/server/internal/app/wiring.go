@@ -17,6 +17,7 @@ import (
 	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
@@ -49,6 +50,7 @@ type postgresStores struct {
 	workItemProposals     *store.PostgresWorkItemPlanProposalStore
 	checkoutJobs          *store.PostgresCheckoutJobStore
 	checkoutReceipts      *store.PostgresCheckoutReceiptStore
+	executionJobs         *store.PostgresExecutionJobStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
 	userManagement        *store.PostgresUserManagementStore
@@ -71,6 +73,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		workItemProposals:     store.NewPostgresWorkItemPlanProposalStore(pool),
 		checkoutJobs:          store.NewPostgresCheckoutJobStore(pool),
 		checkoutReceipts:      store.NewPostgresCheckoutReceiptStore(pool),
+		executionJobs:         store.NewPostgresExecutionJobStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
 		userManagement:        store.NewPostgresUserManagementStore(pool),
@@ -86,6 +89,7 @@ type appServices struct {
 	workItem          *workitem.Service
 	workItemPlan      *workitemplan.Service
 	checkout          *checkout.Service
+	execution         *execution.Service
 	repoBinding       *repobinding.Service
 	repositoryInit    *repositoryinit.Service
 	repositoryContext *repositorycontext.Service
@@ -113,6 +117,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
 		checkout:          checkout.NewService(stores.workItems, stores.projectContext, stores.checkoutJobs, stores.checkoutReceipts, stores.events, txRunner, checkout.SystemClock{}, checkout.UUIDGenerator{}),
+		execution:         execution.NewService(stores.workItems, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{}),
 		repoBinding:       repoBindingService,
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
@@ -130,6 +135,7 @@ type appHandlers struct {
 	workItem          *httpserver.WorkItemHandler
 	workItemPlan      *httpserver.WorkItemPlanHandler
 	checkout          *httpserver.CheckoutHandler
+	execution         *httpserver.ExecutionHandler
 	repoBinding       *httpserver.RepoBindingHandler
 	repositoryInit    *httpserver.RepositoryInitHandler
 	repositoryContext *httpserver.RepositoryContextSnapshotHandler
@@ -147,6 +153,7 @@ func newAppHandlers(services appServices) appHandlers {
 		workItem:          httpserver.NewWorkItemHandler(services.workItem),
 		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.auth, services.workItemPlan),
 		checkout:          httpserver.NewCheckoutHandler(services.auth, services.checkout),
+		execution:         httpserver.NewExecutionHandler(services.auth, services.execution),
 		repoBinding:       httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
 		repositoryInit:    httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
 		repositoryContext: httpserver.NewRepositoryContextSnapshotHandler(services.auth, services.repositoryContext),
@@ -227,6 +234,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		ProposalAcceptance:            http.HandlerFunc(h.workItemPlan.AcceptProposal),
 		TaskGet:                       http.HandlerFunc(h.workItem.GetTask),
 		TaskCheckoutJobs:              http.HandlerFunc(h.checkout.CreateJob),
+		TaskExecutionJobs:             http.HandlerFunc(h.execution.CreateJob),
 		CheckoutJobLeases:             http.HandlerFunc(h.checkout.AcquireLease),
 		CheckoutJobReceipts:           http.HandlerFunc(h.checkout.SubmitReceipt),
 		ClarificationAnswers:          http.HandlerFunc(h.clarification.RecordAnswer),
@@ -304,6 +312,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		ProposalAcceptance:            unavailable,
 		TaskGet:                       unavailable,
 		TaskCheckoutJobs:              unavailable,
+		TaskExecutionJobs:             unavailable,
 		CheckoutJobLeases:             unavailable,
 		CheckoutJobReceipts:           unavailable,
 		ClarificationAnswers:          unavailable,

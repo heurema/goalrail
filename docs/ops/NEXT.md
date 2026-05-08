@@ -27,6 +27,11 @@
   `ExecutionJob` is the leaseable execution-preparation object, `Run` is
   created only when a runner starts execution with lease proof, and execution
   receipts remain evidence inputs rather than Gate / Proof verdicts
+- H2.1 now implements the first code slice after ADR-0029:
+  `goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id>`
+  creates or returns `ExecutionJob(queued)` from `WorkItem(planned)` plus
+  `CheckoutReceipt` without creating `Run`, leasing execution, running
+  commands, creating execution receipt, gate, or proof
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured
@@ -130,9 +135,10 @@
 - H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
   coverage now pins `work checkout prepare` through runner checkout lease and
   persisted `CheckoutReceipt`. The next bounded delivery-runtime slice must
-  start after a fresh runner/execution boundary review and should not assume
-  checkout receipt means code execution. WorkItems still remain `planned`;
-  assignment, claiming, execution, `Run`, gate, and proof are still deferred.
+  be H2.2 runner execution lease plus explicit `Run` start with lease proof,
+  not command execution. WorkItems still remain `planned`; assignment,
+  claiming, command execution, execution receipt, gate, and proof are still
+  deferred.
 - Execution, gate, proof, assignment/claiming, queue, outbox, runtime registry,
   provider OAuth, VcsConnection, token storage, provider clients, live metadata
   listing, `Run`, and execution receipt behavior remain deferred.

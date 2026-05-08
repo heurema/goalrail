@@ -65,23 +65,46 @@ explicit runtime adapter slice.
 
 ## H2 implementation target
 
-Recommended first implementation slice:
+First implementation slice:
 
 ```text
-H2A - execution job + Run start boundary
+H2.1 - ExecutionJob preparation from CheckoutReceipt
 ```
 
-H2A may add:
+H2.1 adds:
 
 - agent-facing preparation command for creating or returning one execution job
   from a planned WorkItem and CheckoutReceipt
 - server-owned `ExecutionJob` records
+
+H2.1 must not add:
+
+- runner-facing execution job lease route
+- runner-facing run-start route
+- `Run`
+- execution receipt
+- command execution
+- arbitrary shell command execution
+- generic runtime adapter platform
+- LLM coding-agent integration
+- assignment or claiming
+- branch creation, commit creation, pull request creation, or merge request
+  creation
+- GateDecision
+- Proof
+- provider OAuth or provider clients
+- server-side repository clone
+- server-side repository credentials
+- raw source upload by default
+
+Later H2 slices may add:
+
 - runner-facing execution job lease route
 - runner-facing run-start route that creates `Run` only with valid lease proof
 - runner-facing execution receipt submission route for bounded metadata
 - state-aware next actions that keep Gate / Proof unavailable
 
-H2A must not add:
+Later H2 slices must still not add:
 
 - arbitrary shell command execution
 - generic runtime adapter platform
@@ -96,7 +119,7 @@ H2A must not add:
 - server-side repository credentials
 - raw source upload by default
 
-If H2A cannot record a meaningful execution receipt without running commands,
+If a later H2 slice cannot record a meaningful execution receipt without running commands,
 it may stop at execution job leasing and run-start state, but it must not
 pretend execution occurred.
 
@@ -293,10 +316,10 @@ Purpose:
 - server creates or returns one execution job
 - server does not start a Run
 
-Possible CLI:
+Implemented H2.1 CLI:
 
 ```bash
-goalrail work run prepare \
+goalrail work execution prepare \
   --task-id <task_id> \
   --checkout-receipt-id <checkout_receipt_id> \
   --format json
@@ -344,7 +367,7 @@ The runner must not:
 - write Postgres directly
 - mutate WorkItems directly
 - assign or claim tasks
-- run arbitrary shell commands in H2A
+- run arbitrary shell commands in H2
 - create GateDecision
 - create Proof
 - decide final acceptance
@@ -436,14 +459,14 @@ After H1, checkout preparation output can honestly stop at:
 }
 ```
 
-After H2A implementation, a receipt-submitted checkout job may expose:
+After H2.1 implementation, an agent can prepare execution explicitly:
 
 ```json
 {
-  "kind": "prepare_run",
+  "kind": "prepare_execution",
   "available": true,
   "blocking": true,
-  "command": "goalrail work run prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> --format json"
+  "command": "goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> --format json"
 }
 ```
 
@@ -453,11 +476,11 @@ After run preparation:
 {
   "kind": "execution_runner_required",
   "available": false,
-  "planned_slice": "H2B"
+  "planned_slice": "H2.2"
 }
 ```
 
-If H2A includes runner run-start and receipt submission, the next action after
+If a later H2 slice includes runner run-start and receipt submission, the next action after
 execution receipt should be:
 
 ```json
@@ -470,9 +493,9 @@ execution receipt should be:
 
 No text output should claim verification, acceptance, proof, or gate decision.
 
-## H2A tests required
+## H2 tests required
 
-H2A should test:
+H2.1 should test:
 
 - execution job creation fails without auth before mutation
 - execution job creation rejects Organization / Project / RepoBinding mismatch
@@ -480,6 +503,9 @@ H2A should test:
 - execution job creation rejects missing or mismatched CheckoutReceipt
 - repeated execution job creation returns the existing job
 - execution job creation does not create Run
+
+Later H2 slices should test:
+
 - execution lease acquisition is scoped by Organization / Project / RepoBinding
 - raw execution lease token is returned only once and stored only as hash
 - Run start requires valid lease proof
@@ -531,7 +557,7 @@ This ADR does not implement or authorize:
 ### Tradeoffs
 
 - Adds one more object before `Run`.
-- H2A may still not execute real commands.
+- Later H2 slices may still not execute real commands.
 - A dedicated runner registration / token protocol remains deferred.
 - Actual runtime adapter behavior remains deferred to a later ADR or slice.
 

@@ -18,6 +18,7 @@ import (
 	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
@@ -59,6 +60,7 @@ type testServerDeps struct {
 	repoBindings      *fakeRepoBindingStore
 	checkoutJobs      *fakeCheckoutJobStore
 	checkoutReceipts  *fakeCheckoutReceiptStore
+	executionJobs     *fakeExecutionJobStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
@@ -1740,6 +1742,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	repoBindingStore := newFakeRepoBindingStore()
 	checkoutJobStore := newFakeCheckoutJobStore()
 	checkoutReceiptStore := newFakeCheckoutReceiptStore()
+	executionJobStore := newFakeExecutionJobStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1762,9 +1765,11 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
 	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
+	executionService := execution.NewService(workItemStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler, executionHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,
@@ -1780,6 +1785,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		repoBindings:      repoBindingStore,
 		checkoutJobs:      checkoutJobStore,
 		checkoutReceipts:  checkoutReceiptStore,
+		executionJobs:     executionJobStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -2526,6 +2532,46 @@ func (s *fakeCheckoutReceiptStore) Create(_ context.Context, receipt spine.Check
 	return nil
 }
 
+func (s *fakeCheckoutReceiptStore) Get(_ context.Context, id spine.CheckoutReceiptID) (spine.CheckoutReceipt, bool, error) {
+	receipt, ok := s.receipts[id]
+	return receipt, ok, nil
+}
+
+type fakeExecutionJobStore struct {
+	jobs  map[spine.ExecutionJobID]spine.ExecutionJob
+	byKey map[string]spine.ExecutionJobID
+}
+
+func newFakeExecutionJobStore() *fakeExecutionJobStore {
+	return &fakeExecutionJobStore{
+		jobs:  map[spine.ExecutionJobID]spine.ExecutionJob{},
+		byKey: map[string]spine.ExecutionJobID{},
+	}
+}
+
+func (s *fakeExecutionJobStore) Create(_ context.Context, job spine.ExecutionJob) error {
+	key := executionJobKey(job.TaskID, job.CheckoutReceiptID)
+	if _, ok := s.byKey[key]; ok {
+		return fmt.Errorf("execution job already prepared")
+	}
+	s.jobs[job.ID] = job
+	s.byKey[key] = job.ID
+	return nil
+}
+
+func (s *fakeExecutionJobStore) GetByTaskAndCheckoutReceipt(_ context.Context, taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) (spine.ExecutionJob, bool, error) {
+	jobID, ok := s.byKey[executionJobKey(taskID, receiptID)]
+	if !ok {
+		return spine.ExecutionJob{}, false, nil
+	}
+	job, ok := s.jobs[jobID]
+	return job, ok, nil
+}
+
+func executionJobKey(taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) string {
+	return string(taskID) + "\x00" + string(receiptID)
+}
+
 type fakeEventLog struct {
 	events []spine.Event
 }
@@ -2624,6 +2670,7 @@ type sequenceIDs struct {
 	workItemProposal  int
 	checkoutJob       int
 	checkoutReceipt   int
+	executionJob      int
 	event             int
 }
 
@@ -2705,6 +2752,11 @@ func (g *sequenceIDs) NewCheckoutJobID() (spine.CheckoutJobID, error) {
 func (g *sequenceIDs) NewCheckoutReceiptID() (spine.CheckoutReceiptID, error) {
 	g.checkoutReceipt++
 	return spine.CheckoutReceiptID(fmt.Sprintf("checkout-receipt-%d", g.checkoutReceipt)), nil
+}
+
+func (g *sequenceIDs) NewExecutionJobID() (spine.ExecutionJobID, error) {
+	g.executionJob++
+	return spine.ExecutionJobID(fmt.Sprintf("execution-job-%d", g.executionJob)), nil
 }
 
 func testTime() time.Time {

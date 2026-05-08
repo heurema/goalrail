@@ -11,6 +11,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 	"github.com/heurema/goalrail/apps/server/internal/workitem"
 	"github.com/heurema/goalrail/apps/server/internal/workitemplan"
@@ -709,6 +710,185 @@ func TestCheckoutJobLeaseAndReceiptRecordWorkspaceOnly(t *testing.T) {
 	}
 }
 
+func TestPostTaskExecutionJobsCreatesQueuedJobWithoutRuntimeSideEffects(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	taskID := accepted.CreatedTaskIDs[0]
+	_, receipt := createCheckoutReceipt(t, server, taskID)
+
+	body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","checkout_receipt_id":%q,"requested_by":{"kind":"user","id":"spoofed-requester"}}`, receipt.ID)
+	response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", body)
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	assertNoHiddenContext(t, response.body)
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbidden) {
+			t.Fatalf("execution job response exposes forbidden field %s: %s", forbidden, response.body)
+		}
+	}
+	var job spine.ExecutionJob
+	decodeJSON(t, response.body, &job)
+	if job.TaskID != taskID || job.CheckoutReceiptID != receipt.ID || job.State != spine.ExecutionJobStateQueued {
+		t.Fatalf("execution job = %#v, want queued job for task/receipt", job)
+	}
+	if job.RequestedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("requested_by = %#v, want authenticated user actor", job.RequestedBy)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() = %#v/%v/%v", storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after execution job preparation", storedTask.Status)
+	}
+	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionJobCreated); got != 1 {
+		t.Fatalf("execution_job.created events = %d, want 1", got)
+	}
+
+	second := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", body)
+	if second.code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusOK, second.body)
+	}
+	var existing spine.ExecutionJob
+	decodeJSON(t, second.body, &existing)
+	if existing.ID != job.ID || len(server.executionJobs.jobs) != 1 {
+		t.Fatalf("existing execution job id/count = %q/%d, want %q/1", existing.ID, len(server.executionJobs.jobs), job.ID)
+	}
+	if got := countEventType(server.events.Events(), execution.EventTypeExecutionJobCreated); got != 1 {
+		t.Fatalf("execution_job.created events = %d, want no duplicate event", got)
+	}
+}
+
+func TestPostTaskExecutionJobsRejectsBoundaryFailures(t *testing.T) {
+	t.Run("unauthenticated rejects before mutation", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/work-item-1/execution-jobs", `{"checkout_receipt_id":"checkout-receipt-1"}`)
+		assertErrorCode(t, response, http.StatusUnauthorized, "unauthorized")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after auth failure", len(server.executionJobs.jobs))
+		}
+	})
+
+	t.Run("project expectation mismatch rejects before mutation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+		taskID := accepted.CreatedTaskIDs[0]
+		_, receipt := createCheckoutReceipt(t, server, taskID)
+
+		body := fmt.Sprintf(`{"project_id":"project-mismatch","checkout_receipt_id":%q}`, receipt.ID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", body)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after project mismatch", len(server.executionJobs.jobs))
+		}
+	})
+
+	t.Run("missing checkout receipt rejects before mutation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+		taskID := accepted.CreatedTaskIDs[0]
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", `{"checkout_receipt_id":"checkout-receipt-missing"}`)
+		assertErrorCode(t, response, http.StatusNotFound, "not_found")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after missing receipt", len(server.executionJobs.jobs))
+		}
+	})
+
+	t.Run("receipt for different task rejects before mutation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+		taskID := accepted.CreatedTaskIDs[0]
+		_, receipt := createCheckoutReceipt(t, server, taskID)
+		otherTask := server.workItems.items[taskID]
+		otherTask.ID = "work-item-other"
+		server.workItems.items[otherTask.ID] = otherTask
+
+		body := fmt.Sprintf(`{"checkout_receipt_id":%q}`, receipt.ID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(otherTask.ID)+"/execution-jobs", body)
+		assertErrorCode(t, response, http.StatusConflict, "checkout_receipt_mismatch")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after task mismatch", len(server.executionJobs.jobs))
+		}
+	})
+
+	t.Run("raw source receipt rejects before mutation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+		taskID := accepted.CreatedTaskIDs[0]
+		_, receipt := createCheckoutReceipt(t, server, taskID)
+		receipt.RawSourceUploaded = true
+		server.checkoutReceipts.receipts[receipt.ID] = receipt
+
+		body := fmt.Sprintf(`{"checkout_receipt_id":%q}`, receipt.ID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", body)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after raw source receipt", len(server.executionJobs.jobs))
+		}
+	})
+
+	t.Run("checkout job not receipted rejects before mutation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+		taskID := accepted.CreatedTaskIDs[0]
+		job := spine.CheckoutJob{
+			ID:                 "checkout-job-unreceipted",
+			OrganizationID:     approved.OrganizationID,
+			ProjectID:          approved.ProjectID,
+			TaskID:             taskID,
+			ContractID:         approved.ContractID,
+			ApprovedContractID: approved.ID,
+			PlanID:             plan.ID,
+			ProposalID:         proposal.ID,
+			RepoBindingID:      approved.RepoBindingID,
+			State:              spine.CheckoutJobStateQueued,
+			CreatedAt:          testTime(),
+			UpdatedAt:          testTime(),
+		}
+		server.checkoutJobs.jobs[job.ID] = job
+		receipt := spine.CheckoutReceipt{
+			ID:                "checkout-receipt-unreceipted",
+			JobID:             job.ID,
+			TaskID:            taskID,
+			RepoBindingID:     approved.RepoBindingID,
+			RunnerID:          "runner-1",
+			WorkspaceRef:      "mounted:/workspace/goalrail",
+			CommitSHA:         "abc123",
+			RawSourceUploaded: false,
+			CreatedAt:         testTime(),
+		}
+		server.checkoutReceipts.receipts[receipt.ID] = receipt
+
+		body := fmt.Sprintf(`{"checkout_receipt_id":%q}`, receipt.ID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/execution-jobs", body)
+		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
+		if len(server.executionJobs.jobs) != 0 {
+			t.Fatalf("execution jobs = %d, want 0 after invalid checkout job state", len(server.executionJobs.jobs))
+		}
+	})
+}
+
 func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 	t.Run("unauthenticated rejects before job creation", func(t *testing.T) {
 		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
@@ -732,6 +912,34 @@ func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 			t.Fatalf("checkout jobs = %d, want 0 after project mismatch", len(server.checkoutJobs.jobs))
 		}
 	})
+}
+
+func createCheckoutReceipt(t *testing.T, server testServerDeps, taskID spine.WorkItemID) (spine.CheckoutJob, spine.CheckoutReceipt) {
+	t.Helper()
+
+	jobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", `{}`)
+	if jobResponse.code != http.StatusCreated && jobResponse.code != http.StatusOK {
+		t.Fatalf("create checkout job status = %d, want success: %s", jobResponse.code, jobResponse.body)
+	}
+	var job spine.CheckoutJob
+	decodeJSON(t, jobResponse.body, &job)
+
+	leaseBody := fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-1"}`, "018f0000-0000-7000-8000-000000000003", job.RepoBindingID)
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", leaseBody)
+	if leaseResponse.code != http.StatusCreated {
+		t.Fatalf("lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
+	}
+	var lease spine.CheckoutJobLeaseCreated
+	decodeJSON(t, leaseResponse.body, &lease)
+
+	receiptBody := fmt.Sprintf(`{"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","dirty":false,"partial":false,"raw_source_uploaded":false}`, lease.LeaseToken)
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(job.ID)+"/receipts", receiptBody)
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	var receipt spine.CheckoutReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	return job, receipt
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {

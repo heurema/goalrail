@@ -48,6 +48,7 @@ type RouteHandlers struct {
 	ProposalAcceptance            http.Handler
 	TaskGet                       http.Handler
 	TaskCheckoutJobs              http.Handler
+	TaskExecutionJobs             http.Handler
 	CheckoutJobLeases             http.Handler
 	CheckoutJobReceipts           http.Handler
 	ClarificationAnswers          http.Handler
@@ -103,6 +104,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/proposals/{id}/acceptance", mustHandler("proposal acceptance", handlers.ProposalAcceptance))
 	mux.Handle("GET /v1/tasks/{id}", mustHandler("task get", handlers.TaskGet))
 	mux.Handle("POST /v1/tasks/{id}/checkout-jobs", mustHandler("task checkout jobs", handlers.TaskCheckoutJobs))
+	mux.Handle("POST /v1/tasks/{id}/execution-jobs", mustHandler("task execution jobs", handlers.TaskExecutionJobs))
 	mux.Handle("POST /v1/checkout-jobs/leases", mustHandler("checkout job leases", handlers.CheckoutJobLeases))
 	mux.Handle("POST /v1/checkout-jobs/{id}/receipts", mustHandler("checkout job receipts", handlers.CheckoutJobReceipts))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))

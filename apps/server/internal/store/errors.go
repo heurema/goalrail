@@ -45,6 +45,10 @@ var (
 	ErrCheckoutJobNotFound           = errors.New("checkout job not found")
 	ErrCheckoutReceiptAlreadyExists  = errors.New("checkout receipt already exists")
 	ErrCheckoutReceiptAlreadyCreated = errors.New("checkout job already has receipt")
+
+	ErrExecutionJobAlreadyExists   = errors.New("execution job already exists")
+	ErrExecutionJobAlreadyPrepared = errors.New("work item checkout receipt already has execution job")
+	ErrExecutionJobNotFound        = errors.New("execution job not found")
 )
 
 type uniqueConstraintError struct {

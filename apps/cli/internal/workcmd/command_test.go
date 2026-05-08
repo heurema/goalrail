@@ -1424,6 +1424,68 @@ func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	}
 }
 
+func TestRunExecutionPrepareCreatesExecutionJob(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var request executionJobCreateRequest
+	var meCount, executionCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401/execution-jobs":
+			executionCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("POST /v1/tasks/{id}/execution-jobs method = %s", r.Method)
+			}
+			decoder := json.NewDecoder(r.Body)
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&request); err != nil {
+				t.Errorf("decode execution job request: %v", err)
+				http.Error(w, "bad json", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000601","task_id":"018f0000-0000-7000-8000-000000000401","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","checkout_job_id":"018f0000-0000-7000-8000-000000000501","checkout_receipt_id":"018f0000-0000-7000-8000-000000000502","state":"queued","execution_mode":"prepare_v0"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runExecutionPrepareJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--task-id", "018F0000-0000-7000-8000-000000000401", "--checkout-receipt-id", "018F0000-0000-7000-8000-000000000502", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work execution prepare) error = %v", err)
+	}
+	if output.SchemaVersion != "goalrail.cli.v1" || output.TaskID != "018f0000-0000-7000-8000-000000000401" || output.CheckoutReceiptID != "018f0000-0000-7000-8000-000000000502" || output.ExecutionJobID != "018f0000-0000-7000-8000-000000000601" {
+		t.Fatalf("output = %#v, want execution job envelope", output)
+	}
+	if output.ExecutionJobState != "queued" {
+		t.Fatalf("execution_job_state = %q, want queued", output.ExecutionJobState)
+	}
+	if output.NextAction.Kind != "runner_execution_required" || !output.NextAction.Blocking || output.NextAction.Available || output.NextAction.PlannedSlice != "H2.2" {
+		t.Fatalf("next_action = %#v, want unavailable runner execution requirement", output.NextAction)
+	}
+	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" || request.CheckoutReceiptID != "018f0000-0000-7000-8000-000000000502" {
+		t.Fatalf("execution request = %#v, want marker context and checkout receipt", request)
+	}
+	if meCount.Load() != 1 || executionCount.Load() != 1 {
+		t.Fatalf("request counts me/execution = %d/%d, want 1/1", meCount.Load(), executionCount.Load())
+	}
+}
+
 func TestRunStartHelpUsage(t *testing.T) {
 	t.Parallel()
 
@@ -1734,6 +1796,27 @@ func runCheckoutPrepareJSON(t *testing.T, workDir string, store fakeSessionStore
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work checkout prepare JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runExecutionPrepareJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkExecutionPrepareOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"execution", "prepare"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkExecutionPrepareOutput{}, err
+	}
+
+	var output spine.WorkExecutionPrepareOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work execution prepare JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }
