@@ -66,16 +66,12 @@ Delivery rule:
 - Delivery Readiness polls `GET /v1/qualification-feed?limit=50` only while the
   authenticated surface is open; it renders stored feed snapshots and does not
   call Goal continuation, readiness recomputation, clarification creation, or
-  contract creation automatically
-- Delivery Readiness has explicit user-triggered actions for
-  `continue_goal`, `answer_clarification`, and `draft_contract`; they call
-  `POST /v1/goals/{id}/continuation`,
-  `POST /v1/clarifications/{id}/answers/continuation`, and
-  `POST /v1/contracts`, then refresh the feed once after the action returns
-- clarification answers are submitted only for text-safe mappings
-  (`goal.summary`, `goal.scope_hint`, `goal.acceptance_hint`); actor-mapped
-  questions such as `goal.intent_owner` are shown as unsupported instead of
-  being posted as invalid plain text
+  contract creation automatically; open clarification questions are shown as
+  read-only backend state
+- Delivery Readiness exposes no `continue_goal`, `answer_clarification`, or
+  `draft_contract` controls; linked contract cards expose `Open contract`
+  navigation only, which loads the selected contract through
+  `GET /v1/contracts/{id}`
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
@@ -104,11 +100,10 @@ surface. Workflow mutations happen through the local agent by calling Goalrail
 CLI. The server owns canonical state. The Console visualizes server-owned
 state; it must not become a second workflow driver.
 
-The current prototype still contains explicit card actions for
-`continue_goal`, `answer_clarification`, and `draft_contract`. Those controls
-are implementation debt under this production direction and should be removed
-in a later bounded implementation slice. This README records the target
-boundary only; it does not claim that removal is implemented.
+The current Delivery Readiness implementation follows this boundary: it renders
+server-owned feed state, read-only clarification questions, readiness / blocked
+/ linked-contract state, and linked-contract navigation without Goal or
+Contract workflow mutation controls.
 
 Production dashboard must not expose controls for:
 - `POST /v1/goals/{id}/continuation`
@@ -128,14 +123,14 @@ Do not add `Managed via CLI` labels or `Copy CLI command` buttons. The Console
 should make the boundary clear through behavior, not by adding command-helper
 chrome.
 
-## Planned status refresh
+## Status refresh
 
-Future implementation should use the simplest frontend refresh path:
+The current implementation uses the simplest frontend refresh path:
 - initial refresh when the user is authenticated
 - frontend periodic calls to read-only backend endpoints
 - repeat about every 5-10 seconds while the tab is active
-- pause or reduce refresh when `document.hidden` is true
-- keep manual Refresh as fallback
+- skip scheduled refresh when `document.hidden` is true
+- keep manual Retry / Refresh as fallback
 - keep existing visible state on transient read errors
 
 Minimum read-only endpoint:
@@ -159,7 +154,7 @@ GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
 This is simple periodic polling. It is not true long polling, server
 wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
 
-## Planned dashboard behavior
+## Dashboard behavior
 
 - A Goal created through CLI appears in Delivery Readiness after Console
   refresh/polling.
@@ -169,9 +164,12 @@ wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
   main user flow.
 - Delivery Readiness shows qualification state and handoff to Contracts, not
   lifecycle controls.
-- The Contracts surface is read-only and can show selected/listed contracts.
-- Cards show one primary status, not duplicate status chips.
-- Timestamps use calm human-readable labels and do not show seconds, raw
+- The Contracts surface is read-only and can show a selected contract by ID.
+
+Pending display refinements from D-0091:
+- Cards should converge on one primary status rather than duplicate status
+  chips.
+- Timestamps should use calm human-readable labels and avoid seconds, raw
   ISO/RFC3339 strings, or timezone-heavy values on normal cards.
 
 Readiness primary statuses, in display priority:

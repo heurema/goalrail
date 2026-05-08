@@ -155,32 +155,29 @@
   this feed while authenticated and renders Qualification / Clarification /
   Contract / Blocked lanes without calling continuation or draft actions
   automatically.
-  Explicit user-triggered actions now cover `continue_goal` through
-  `POST /v1/goals/{id}/continuation`, `answer_clarification` through
-  `POST /v1/clarifications/{id}/answers/continuation`, and
-  `draft_contract` through `POST /v1/contracts`; all refresh the feed once
-  after success. Console clarification answers are limited to text-safe
-  Goal mappings and block unsupported actor-mapped questions such as
-  `goal.intent_owner` instead of posting invalid plain text.
+  Production Delivery Readiness no longer exposes `continue_goal`,
+  `answer_clarification`, or `draft_contract` mutation controls; open
+  clarification questions are rendered as read-only backend state, and linked
+  Contract cards expose `Open contract` navigation through existing
+  `GET /v1/contracts/{id}` only.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
   command/server failure, and a later received-intake lane or recovery feed can
   be added if this becomes operationally relevant.
-- Planned Console Goal / Contract dashboard alignment: D-0091 now records the
+- Console Goal / Contract dashboard alignment: D-0091 records the
   production direction as
   `Agent -> Goalrail CLI -> Goalrail Server canonical state -> Console read-only dashboard`.
-  The current Console prototype still has explicit user-triggered mutation
-  actions; the later bounded implementation slice should remove those
-  production controls and keep Delivery Readiness / Contracts as read-only
-  Intent & Oversight surfaces. Planned behavior is simple frontend periodic
-  polling of read-only endpoints, not true long polling, SSE, WebSocket,
-  daemon, or event stream: initial authenticated refresh, repeat about every
-  5-10 seconds in an active tab, pause/reduce while hidden, keep manual Refresh
-  as fallback, and keep existing visible state on transient errors. The minimum
-  feed remains `GET /v1/qualification-feed?limit=50`; selected Contract detail
-  uses `GET /v1/contracts/{id}`; optional future contract discovery should
-  prefer authenticated, organization-scoped, read-only filtered
+  The first bounded frontend slice removes production Delivery Readiness
+  mutation controls and keeps Delivery Readiness / Contracts as read-only
+  Intent & Oversight surfaces. Behavior is simple frontend periodic polling of
+  read-only endpoints, not true long polling, SSE, WebSocket, daemon, or event
+  stream: initial authenticated refresh, repeat about every 5-10 seconds in an
+  active tab, skip scheduled polling while hidden, keep manual Refresh / Retry
+  as fallback, and keep existing visible state on transient errors. The
+  minimum feed remains `GET /v1/qualification-feed?limit=50`; selected
+  Contract detail uses `GET /v1/contracts/{id}`; optional future contract
+  discovery should prefer authenticated, organization-scoped, read-only filtered
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
   activity timeline, UI clarification answer forms, or fake Proof/readiness

@@ -2199,7 +2199,7 @@ select:focus-visible {
   letter-spacing: 0.04em;
 }
 
-.qualificationAnswerForm {
+.qualificationQuestionList {
   display: grid;
   gap: 10px;
   padding: 10px;
@@ -2208,59 +2208,34 @@ select:focus-visible {
   background: color-mix(in oklab, var(--bg) 34%, transparent);
 }
 
-.qualificationAnswerField {
+.qualificationQuestionList > span {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.qualificationQuestion {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
-.qualificationAnswerField span {
+.qualificationQuestion b {
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-.qualificationAnswerField small {
+.qualificationQuestion small {
   color: var(--mute);
   font-size: 11px;
   line-height: 1.4;
 }
 
-.qualificationAnswerField textarea {
-  width: 100%;
-  min-height: 78px;
-  resize: vertical;
-  padding: 8px 9px;
-  border: 1px solid var(--line-soft);
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--panel) 82%, transparent);
-  color: var(--ink);
-  outline: none;
-}
-
-.qualificationAnswerField textarea:focus {
-  border-color: color-mix(in oklab, var(--accent) 42%, var(--line));
-  background: color-mix(in oklab, var(--panel-2) 78%, transparent);
-}
-
-.qualificationAnswerField textarea:disabled {
-  border-color: color-mix(in oklab, var(--warn-soft) 50%, var(--line-soft));
-  background: color-mix(in oklab, var(--warn-soft) 10%, transparent);
-  color: var(--mute);
-  cursor: not-allowed;
-}
-
-.qualificationAnswerError {
-  margin: 0;
-}
-
-.qualificationAnswerUnsupported {
-  margin: 0;
-  color: var(--warn);
-}
-
-.qualificationActionButton {
+.qualificationNavigationButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2275,15 +2250,8 @@ select:focus-visible {
   transition: border-color 140ms, background 140ms;
 }
 
-.qualificationActionButton:hover {
+.qualificationNavigationButton:hover {
   background: color-mix(in oklab, var(--accent) 20%, var(--panel-2));
-}
-
-.qualificationActionButton:disabled {
-  border-color: var(--line-soft);
-  background: transparent;
-  color: var(--mute);
-  cursor: not-allowed;
 }
 
 .qualificationLaneEmpty {
