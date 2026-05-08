@@ -20,7 +20,7 @@ Current scope:
 - authenticated shell entry only after `/v1/me` succeeds
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
-  surfaces; Delivery Readiness now polls read-only `GET /v1/qualification-feed`
+  surfaces; Delivery Readiness consumes read-only `GET /v1/qualification-feed`
   while authenticated and renders Qualification / Clarification / Contract /
   Blocked lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
@@ -90,3 +90,134 @@ Delivery rule:
 - user management remains Console/admin API-backed; there are no CLI
   user-management commands
 - product surfaces, auth state, locale, users, and settings screen are not persisted
+
+## Goal / Contract workflow boundary
+
+Agreed production direction:
+
+```text
+Agent -> Goalrail CLI -> Goalrail Server canonical state -> Console read-only dashboard
+```
+
+For Goal and Contract workflow, the Console is a read-only Intent & Oversight
+surface. Workflow mutations happen through the local agent by calling Goalrail
+CLI. The server owns canonical state. The Console visualizes server-owned
+state; it must not become a second workflow driver.
+
+The current prototype still contains explicit card actions for
+`continue_goal`, `answer_clarification`, and `draft_contract`. Those controls
+are implementation debt under this production direction and should be removed
+in a later bounded implementation slice. This README records the target
+boundary only; it does not claim that removal is implemented.
+
+Production dashboard must not expose controls for:
+- `POST /v1/goals/{id}/continuation`
+- `POST /v1/clarifications/{id}/answers/continuation`
+- `POST /v1/contracts`
+- contract submit / approve / plan mutation actions, if present
+
+Allowed read-only or navigation actions:
+- Open contract
+- View details
+- Refresh
+- Select contract
+- Filter
+- Search
+
+Do not add `Managed via CLI` labels or `Copy CLI command` buttons. The Console
+should make the boundary clear through behavior, not by adding command-helper
+chrome.
+
+## Planned status refresh
+
+Future implementation should use the simplest frontend refresh path:
+- initial refresh when the user is authenticated
+- frontend periodic calls to read-only backend endpoints
+- repeat about every 5-10 seconds while the tab is active
+- pause or reduce refresh when `document.hidden` is true
+- keep manual Refresh as fallback
+- keep existing visible state on transient read errors
+
+Minimum read-only endpoint:
+
+```http
+GET /v1/qualification-feed?limit=50
+```
+
+When a selected contract is open:
+
+```http
+GET /v1/contracts/{id}
+```
+
+If contract discovery is needed later:
+
+```http
+GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
+```
+
+This is simple periodic polling. It is not true long polling, server
+wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
+
+## Planned dashboard behavior
+
+- A Goal created through CLI appears in Delivery Readiness after Console
+  refresh/polling.
+- A Contract created or updated through CLI appears or updates in the Console
+  after refresh/polling.
+- Linked contract state is visible without manual contract ID loading as the
+  main user flow.
+- Delivery Readiness shows qualification state and handoff to Contracts, not
+  lifecycle controls.
+- The Contracts surface is read-only and can show selected/listed contracts.
+- Cards show one primary status, not duplicate status chips.
+- Timestamps use calm human-readable labels and do not show seconds, raw
+  ISO/RFC3339 strings, or timezone-heavy values on normal cards.
+
+Readiness primary statuses, in display priority:
+1. Needs answer
+2. Ready for contract
+3. Needs qualification
+4. Contract linked
+5. Blocked
+
+Contract primary statuses:
+- Draft
+- Ready for approval
+- Approved
+- Blocked
+- Superseded
+
+Normal timestamp examples:
+- just now
+- 5 min ago
+- 2 h ago
+- Today 14:20
+- Yesterday 09:10
+- 8 May
+
+Linked contract handoff:
+- when a feed item has a linked contract summary or id, show `Contract linked`
+- show compact contract id / title / state if available
+- offer `Open contract` navigation only
+- do not show `Draft contract` or other mutation actions
+- selected contract detail loads through read-only `GET /v1/contracts/{id}`
+
+Optional future backend discovery, if the frontend needs a list/rail:
+
+```http
+GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
+```
+
+That endpoint must be authenticated, organization-scoped by active membership,
+read-only, and compact. It must not recompute readiness, create contracts, or
+perform lifecycle transitions. Prefer filtered `GET /v1/contracts?goal_id=`
+before adding `GET /v1/goals/{goal_id}/contract`.
+
+Deferred ideas:
+- A future daemon/status heartbeat may publish lightweight agent/runtime status,
+  enabling an honest `Agent working` UI state. This is not part of the current
+  slice because there is no daemon or heartbeat source of truth yet.
+- Activity timeline / agent-run history is deferred.
+- UI clarification answer forms are deferred.
+- Proof/readiness data must not be faked.
