@@ -281,6 +281,10 @@ function findFetchRequest(url: string, method = 'GET') {
   return fetchRequestCalls().find((call) => call.url === url && call.method === method);
 }
 
+function countFetchRequests(url: string, method = 'GET') {
+  return fetchRequestCalls().filter((call) => call.url === url && call.method === method).length;
+}
+
 function expectNoWorkflowMutationRequests() {
   const workflowMutationPatterns = [
     /\/v1\/goals\/[^/]+\/continuation$/,
@@ -1015,10 +1019,260 @@ describe('App', () => {
     await loginSuccessfully('en', 'owner', [], {}, []);
 
     const panel = screen.getByLabelText(/repository context metadata/i);
+    const repositoryFilter = screen.getByLabelText(/^Repository$/i) as HTMLSelectElement;
 
     expect(panel).toHaveTextContent('No repository context metadata yet');
     expect(panel).toHaveTextContent('This Organization has no active Project / RepoBinding metadata from the repository context endpoint.');
     expect(panel).toHaveTextContent('Metadata only.');
+    expect(repositoryFilter).toBeDisabled();
+    expect(repositoryFilter).toHaveValue('all');
+    expect(within(repositoryFilter).getByRole('option', { name: /^All repositories$/i })).toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('renders repo binding filter options from repository context metadata', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-primary',
+        repositoryFullName: 'heurema/goalrail',
+        projectDisplayName: 'Goalrail Console',
+      }),
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-secondary',
+        repositoryFullName: 'heurema/console-demo',
+        projectDisplayName: 'Console Demo',
+      }),
+    ]);
+
+    const repositoryFilter = screen.getByLabelText(/^Repository$/i) as HTMLSelectElement;
+
+    expect(repositoryFilter).not.toBeDisabled();
+    expect(within(repositoryFilter).getByRole('option', { name: /^All repositories$/i })).toBeInTheDocument();
+    expect(within(repositoryFilter).getByRole('option', {
+      name: 'heurema/goalrail · repo-filter-primary · Goalrail Console',
+    })).toBeInTheDocument();
+    expect(within(repositoryFilter).getByRole('option', {
+      name: 'heurema/console-demo · repo-filter-secondary · Console Demo',
+    })).toBeInTheDocument();
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('filters the contract list by repo binding without calling mutation endpoints', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-one',
+        repositoryFullName: 'heurema/goalrail',
+      }),
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-two',
+        repositoryFullName: 'heurema/console-demo',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-repo-filtered',
+        goal_id: 'goal-repo-filtered',
+        repo_binding_id: 'repo-filter-one',
+        current_draft_id: undefined,
+      }),
+    ])));
+
+    fireEvent.change(screen.getByLabelText(/^Repository$/i), {
+      target: { value: 'repo-filter-one' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?repo_binding_id=repo-filter-one&limit=50');
+    });
+    const contractList = screen.getByLabelText(/contracts list/i);
+    expect(contractList).toHaveTextContent('contract-repo-filtered');
+    expect(contractList).toHaveTextContent('repo-filter-one');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('AND-combines repo binding and state filters for contract discovery', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-combined',
+        repositoryFullName: 'heurema/goalrail',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+
+    fireEvent.change(screen.getByLabelText(/^Repository$/i), {
+      target: { value: 'repo-filter-combined' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?repo_binding_id=repo-filter-combined&limit=50');
+    });
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-combined-filter',
+        repo_binding_id: 'repo-filter-combined',
+        state: 'ready_for_approval',
+        current_draft_id: undefined,
+      }),
+    ])));
+
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'ready_for_approval' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain(
+        '/v1/contracts?repo_binding_id=repo-filter-combined&state=ready_for_approval&limit=50'
+      );
+    });
+    expect(screen.getByLabelText(/contracts list/i)).toHaveTextContent('contract-combined-filter');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('manual Refresh preserves active repo binding and state filters', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-refresh',
+        repositoryFullName: 'heurema/goalrail',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+
+    fireEvent.change(screen.getByLabelText(/^Repository$/i), {
+      target: { value: 'repo-filter-refresh' },
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?repo_binding_id=repo-filter-refresh&limit=50');
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'approved' },
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain(
+        '/v1/contracts?repo_binding_id=repo-filter-refresh&state=approved&limit=50'
+      );
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-filter-refresh-manual',
+        repo_binding_id: 'repo-filter-refresh',
+        state: 'approved',
+        current_draft_id: undefined,
+      }),
+    ])));
+    fireEvent.click(screen.getByRole('button', { name: /^Refresh$/i }));
+
+    await waitFor(() => {
+      expect(countFetchRequests('/v1/contracts?repo_binding_id=repo-filter-refresh&state=approved&limit=50')).toBeGreaterThanOrEqual(2);
+    });
+    expect(screen.getByLabelText(/contracts list/i)).toHaveTextContent('contract-filter-refresh-manual');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps contract discovery usable when repository context loading fails', async () => {
+    await setLocale('en');
+    fetchMock.mockResolvedValueOnce(jsonResponse(loginResponse()));
+    fetchMock.mockResolvedValueOnce(jsonResponse(meResponse({ role: 'owner' })));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-context-error-still-listed',
+        goal_id: 'goal-context-error',
+        repo_binding_id: 'repo-context-error',
+        current_draft_id: undefined,
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('server_error'), 503));
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText(/^Password$/i), { target: { value: 'password' } });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/contracts list/i)).toHaveTextContent('contract-context-error-still-listed');
+    });
+    const repositoryFilter = screen.getByLabelText(/^Repository$/i) as HTMLSelectElement;
+    expect(repositoryFilter).toBeDisabled();
+    expect(repositoryFilter).toHaveValue('all');
+    expect(screen.getByLabelText(/repository context metadata/i)).toHaveTextContent('Repository context unavailable');
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-state-still-works',
+        state: 'approved',
+        repo_binding_id: 'repo-context-error',
+        current_draft_id: undefined,
+      }),
+    ])));
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'approved' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?state=approved&limit=50');
+    });
+    expect(screen.getByLabelText(/contracts list/i)).toHaveTextContent('contract-state-still-works');
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('keeps selected Contract detail visible when the active repo filter excludes it', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-selected-repo-a',
+        goal_id: 'goal-selected-repo-a',
+        repo_binding_id: 'repo-filter-a',
+        current_draft_id: undefined,
+      }),
+    ], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-a',
+        repositoryFullName: 'heurema/repo-a',
+        projectDisplayName: 'Project A',
+      }),
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-b',
+        repositoryFullName: 'heurema/repo-b',
+        projectDisplayName: 'Project B',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-visible-repo-b',
+        goal_id: 'goal-visible-repo-b',
+        repo_binding_id: 'repo-filter-b',
+        current_draft_id: undefined,
+      }),
+    ])));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
+      id: 'contract-selected-repo-a',
+      goal_id: 'goal-selected-repo-a',
+      repo_binding_id: 'repo-filter-a',
+      current_draft_id: undefined,
+    })));
+
+    fireEvent.change(screen.getByLabelText(/^Repository$/i), {
+      target: { value: 'repo-filter-b' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?repo_binding_id=repo-filter-b&limit=50');
+    });
+    const contractList = screen.getByLabelText(/contracts list/i);
+    expect(contractList).toHaveTextContent('contract-visible-repo-b');
+    expect(contractList).not.toHaveTextContent('contract-selected-repo-a');
+    expect(within(contractList).getByRole('button', { name: /contract-visible-repo-b/i })).not.toHaveAttribute('aria-current');
+
+    const selectedDetail = screen.getByLabelText(/selected contract detail/i);
+    const repositoryPanel = screen.getByLabelText(/repository context metadata/i);
+    expect(selectedDetail).toHaveTextContent('contract-selected-repo-a');
+    expect(selectedDetail).toHaveTextContent('repo-filter-a');
+    expect(repositoryPanel).toHaveTextContent('Matched to the selected Contract repo_binding_id.');
+    expect(repositoryPanel).toHaveTextContent('Project A');
+    expect(repositoryPanel).toHaveTextContent('repo-filter-a');
+    expect(repositoryPanel).not.toHaveTextContent('Project B');
+    expect(repositoryPanel).not.toHaveTextContent('repo-filter-b');
     expectNoWorkflowMutationRequests();
   });
 
@@ -1086,6 +1340,52 @@ describe('App', () => {
         .map(([url]) => String(url))
         .filter((url) => url === '/v1/contracts?state=ready_for_approval&limit=50')
     ).toHaveLength(2);
+    expectNoWorkflowMutationRequests();
+  });
+
+  it('includes active repo binding and state filters in scheduled Contracts refreshes', async () => {
+    await loginSuccessfully('en', 'owner', [], {}, [
+      repositoryContextRecord({
+        repoBindingId: 'repo-filter-poll',
+        repositoryFullName: 'heurema/goalrail',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+    fireEvent.change(screen.getByLabelText(/^Repository$/i), {
+      target: { value: 'repo-filter-poll' },
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?repo_binding_id=repo-filter-poll&limit=50');
+    });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([])));
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'ready_for_approval' },
+    });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain(
+        '/v1/contracts?repo_binding_id=repo-filter-poll&state=ready_for_approval&limit=50'
+      );
+    });
+
+    await restartContractsPollingWithFakeTimers();
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-poll-filtered',
+        repo_binding_id: 'repo-filter-poll',
+        state: 'ready_for_approval',
+        current_draft_id: undefined,
+      }),
+    ])));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+    });
+    await flushAsyncWork();
+
+    expect(screen.getByLabelText(/contracts list/i)).toHaveTextContent('contract-poll-filtered');
+    expect(countFetchRequests('/v1/contracts?repo_binding_id=repo-filter-poll&state=ready_for_approval&limit=50')).toBeGreaterThanOrEqual(3);
     expectNoWorkflowMutationRequests();
   });
 
@@ -1537,9 +1837,7 @@ describe('App', () => {
   });
 
   it('filters the contract list by state without calling mutation endpoints', async () => {
-    await loginSuccessfully('en', 'owner', [
-      contractResponse({ id: 'contract-list-draft', state: 'draft' }),
-    ]);
+    await loginSuccessfully('en', 'owner', []);
     fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
       contractResponse({
         id: 'contract-ready',

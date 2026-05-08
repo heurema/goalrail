@@ -180,10 +180,11 @@
   organization-scoped, read-only Contract discovery:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
   It loads `GET /v1/contracts?limit=50` by default, renders a compact
-  contract rail/list with selected aggregate detail, supports state filtering
-  plus manual refresh, keeps manual ID lookup as a secondary fallback, and does
-  not create contracts, recompute readiness, create plans, or drive lifecycle
-  transitions. Selected Contract detail uses authenticated, organization-scoped,
+  contract rail/list with selected aggregate detail, supports state and
+  repo-binding filtering plus manual refresh, keeps manual ID lookup as a
+  secondary fallback, and does not create contracts, recompute readiness,
+  create plans, or drive lifecycle transitions. Selected Contract detail uses
+  authenticated, organization-scoped,
   read-only `GET /v1/contracts/{id}` and presents the public Contract aggregate
   with one lifecycle status, linked ids, calm timestamps, and the current draft
   body through read-only `GET /v1/contracts/{id}/current-draft` when
@@ -211,8 +212,9 @@
   active tab, skip scheduled polling while hidden, keep manual Refresh / Retry
   as fallback, and keep existing visible state on transient errors. The
   minimum feed remains `GET /v1/qualification-feed?limit=50`; the Contracts
-  rail/list uses `GET /v1/contracts?limit=50` plus the state filter, and
-  selected Contract detail uses `GET /v1/contracts/{id}` plus
+  rail/list uses `GET /v1/contracts?limit=50` plus state and repo-binding
+  filters when selected, and selected Contract detail uses
+  `GET /v1/contracts/{id}` plus
   `GET /v1/contracts/{id}/current-draft` when `current_draft_id` is linked.
   Delivery Readiness display now follows one primary status per card, D-0091
   status priority, and calm browser-local time labels.

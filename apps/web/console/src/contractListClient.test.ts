@@ -76,6 +76,39 @@ describe('contractListClient API base URL', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.goalrail.dev/v1/contracts?limit=50');
   });
 
+  it('serializes repo_binding_id when repoBindingId is provided', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_GOALRAIL_API_BASE_URL', '');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(contractListResponse()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { listContracts } = await import('./contractListClient');
+    await listContracts({
+      accessToken: 'access-token',
+      repoBindingId: 'repo-filter-1',
+      limit: 50,
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/v1/contracts?repo_binding_id=repo-filter-1&limit=50');
+  });
+
+  it('AND-combines repo_binding_id, state, and limit filters', async () => {
+    vi.resetModules();
+    vi.stubEnv('VITE_GOALRAIL_API_BASE_URL', '');
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(contractListResponse()));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { listContracts } = await import('./contractListClient');
+    await listContracts({
+      accessToken: 'access-token',
+      repoBindingId: 'repo-filter-1',
+      state: 'ready_for_approval',
+      limit: 50,
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/v1/contracts?repo_binding_id=repo-filter-1&state=ready_for_approval&limit=50');
+  });
+
   it('maps backend errors into typed request errors', async () => {
     vi.resetModules();
     vi.stubEnv('VITE_GOALRAIL_API_BASE_URL', '');
