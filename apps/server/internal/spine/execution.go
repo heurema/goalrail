@@ -129,19 +129,20 @@ type Run struct {
 }
 
 type ExecutionReceiptSubmitRequest struct {
-	ExecutionJobID      ExecutionJobID `json:"execution_job_id"`
-	LeaseToken          string         `json:"lease_token"`
-	RunnerID            string         `json:"runner_id"`
-	WorkspaceRef        string         `json:"workspace_ref"`
-	CommitSHA           string         `json:"commit_sha"`
-	BaselineID          string         `json:"baseline_id,omitempty"`
-	OverlayID           string         `json:"overlay_id,omitempty"`
-	ExecutionMode       string         `json:"execution_mode"`
-	ProcessStatus       string         `json:"process_status"`
-	ExitCode            *int           `json:"exit_code,omitempty"`
-	ArtifactRefs        []string       `json:"artifact_refs,omitempty"`
-	ChangedPathsSummary []string       `json:"changed_paths_summary,omitempty"`
-	RawSourceUploaded   bool           `json:"raw_source_uploaded"`
+	ExecutionJobID      ExecutionJobID   `json:"execution_job_id"`
+	LeaseID             ExecutionLeaseID `json:"lease_id"`
+	LeaseToken          string           `json:"lease_token"`
+	RunnerID            string           `json:"runner_id"`
+	WorkspaceRef        string           `json:"workspace_ref"`
+	CommitSHA           string           `json:"commit_sha"`
+	BaselineID          string           `json:"baseline_id,omitempty"`
+	OverlayID           string           `json:"overlay_id,omitempty"`
+	ExecutionMode       string           `json:"execution_mode"`
+	ProcessStatus       string           `json:"process_status"`
+	ExitCode            *int             `json:"exit_code,omitempty"`
+	ArtifactRefs        []string         `json:"artifact_refs,omitempty"`
+	ChangedPathsSummary []string         `json:"changed_paths_summary,omitempty"`
+	RawSourceUploaded   bool             `json:"raw_source_uploaded"`
 }
 
 type ExecutionReceipt struct {

@@ -367,7 +367,7 @@ func TestAgentPullLoopServerSmokeThroughWorkItemPlanned(t *testing.T) {
 	}
 	assertNoForbiddenPostRunSideEffects(t, server.events.Events())
 
-	executionReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(executionJob.ID, executionLease.LeaseToken, "runner-smoke", "mounted:/workspace/goalrail#run="+string(run.ID), "abc123", false))
+	executionReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(executionJob.ID, executionLease.ID, executionLease.LeaseToken, "runner-smoke", "mounted:/workspace/goalrail#run="+string(run.ID), "abc123", false))
 	if executionReceiptResponse.code != http.StatusCreated {
 		t.Fatalf("execution receipt status = %d, want %d: %s", executionReceiptResponse.code, http.StatusCreated, executionReceiptResponse.body)
 	}

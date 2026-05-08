@@ -195,11 +195,24 @@ func (s *PostgresExecutionJobStore) AcquireNextLease(ctx context.Context, input 
 	row := s.query.QueryRow(ctx, `
 SELECT id, organization_id, project_id, task_id, contract_id, approved_contract_id, plan_id, proposal_id, repo_binding_id, checkout_job_id, checkout_receipt_id, state, requested_by, execution_mode, current_lease_id, current_runner_id, lease_token_hash, lease_expires_at, created_at, updated_at
 FROM execution_jobs
-WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3 AND (state = $4 OR (state = $5 AND lease_expires_at <= $6))
+WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3
+  AND (
+    state = $4
+    OR (state = $5 AND lease_expires_at <= $6)
+    OR (
+      state = $7
+      AND lease_expires_at <= $6
+      AND NOT EXISTS (
+        SELECT 1
+        FROM execution_receipts
+        WHERE execution_receipts.execution_job_id = execution_jobs.id
+      )
+    )
+  )
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED
-`, orgID, projectID, repoBindingID, spine.ExecutionJobStateQueued, spine.ExecutionJobStateLeased, now)
+`, orgID, projectID, repoBindingID, spine.ExecutionJobStateQueued, spine.ExecutionJobStateLeased, now, spine.ExecutionJobStateRunStarted)
 	job, err := scanExecutionJob(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -208,7 +221,7 @@ FOR UPDATE SKIP LOCKED
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, fmt.Errorf("select next execution job lease candidate: %w", err)
 	}
 
-	if job.State == spine.ExecutionJobStateLeased && job.CurrentLeaseID != nil {
+	if (job.State == spine.ExecutionJobStateLeased || job.State == spine.ExecutionJobStateRunStarted) && job.CurrentLeaseID != nil {
 		previousID, err := uuidValue(*job.CurrentLeaseID, "current execution lease id")
 		if err != nil {
 			return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
@@ -216,8 +229,8 @@ FOR UPDATE SKIP LOCKED
 		if _, err := s.exec.Exec(ctx, `
 UPDATE execution_leases
 SET state = $1, updated_at = $2
-WHERE id = $3 AND state = $4
-`, spine.ExecutionLeaseStateExpired, now, previousID, spine.ExecutionLeaseStateActive); err != nil {
+WHERE id = $3 AND (state = $4 OR state = $5)
+`, spine.ExecutionLeaseStateExpired, now, previousID, spine.ExecutionLeaseStateActive, spine.ExecutionLeaseStateRunStarted); err != nil {
 			return spine.ExecutionLease{}, spine.ExecutionJob{}, false, fmt.Errorf("expire previous execution lease: %w", err)
 		}
 	}
@@ -244,10 +257,14 @@ WHERE id = $3 AND state = $4
 	if err := s.insertExecutionLease(ctx, lease); err != nil {
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
 	}
-	if err := s.markExecutionJobLeased(ctx, job.ID, lease); err != nil {
+	nextState := spine.ExecutionJobStateLeased
+	if job.State == spine.ExecutionJobStateRunStarted {
+		nextState = spine.ExecutionJobStateRunStarted
+	}
+	if err := s.markExecutionJobLeased(ctx, job.ID, lease, nextState); err != nil {
 		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, err
 	}
-	job.State = spine.ExecutionJobStateLeased
+	job.State = nextState
 	job.CurrentLeaseID = &lease.ID
 	job.CurrentRunnerID = lease.RunnerID
 	job.LeaseTokenHash = lease.LeaseTokenHash
@@ -473,7 +490,7 @@ func (s *PostgresExecutionJobStore) insertExecutionLease(ctx context.Context, le
 	return nil
 }
 
-func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, jobID spine.ExecutionJobID, lease spine.ExecutionLease) error {
+func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, jobID spine.ExecutionJobID, lease spine.ExecutionLease, state spine.ExecutionJobState) error {
 	parsedJobID, err := uuidValue(jobID, "execution job id")
 	if err != nil {
 		return err
@@ -484,7 +501,7 @@ func (s *PostgresExecutionJobStore) markExecutionJobLeased(ctx context.Context, 
 	}
 	stmt := s.psql.
 		Update("execution_jobs").
-		Set("state", spine.ExecutionJobStateLeased).
+		Set("state", state).
 		Set("current_lease_id", parsedLeaseID).
 		Set("current_runner_id", lease.RunnerID).
 		Set("lease_token_hash", lease.LeaseTokenHash).
@@ -583,6 +600,26 @@ func (s *PostgresRunStore) GetByExecutionLease(ctx context.Context, leaseID spin
 			return spine.Run{}, false, nil
 		}
 		return spine.Run{}, false, fmt.Errorf("get run by execution lease: %w", err)
+	}
+	return run, true, nil
+}
+
+func (s *PostgresRunStore) GetByExecutionJob(ctx context.Context, jobID spine.ExecutionJobID) (spine.Run, bool, error) {
+	parsedJobID, err := uuidValue(jobID, "run execution job id")
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	stmt := s.psql.Select(runColumns()...).From("runs").Where(squirrel.Eq{"execution_job_id": parsedJobID})
+	row, err := queryRow(ctx, s.query, "get run by execution job", stmt)
+	if err != nil {
+		return spine.Run{}, false, err
+	}
+	run, err := scanRun(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Run{}, false, nil
+		}
+		return spine.Run{}, false, fmt.Errorf("get run by execution job: %w", err)
 	}
 	return run, true, nil
 }

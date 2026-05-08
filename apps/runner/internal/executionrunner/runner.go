@@ -140,6 +140,7 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	if r.config.SubmitReceipt {
 		receipt, err := r.client.submitReceipt(ctx, run.ID, executionReceiptRequest{
 			ExecutionJobID:      run.ExecutionJobID,
+			LeaseID:             lease.ID,
 			LeaseToken:          lease.LeaseToken,
 			RunnerID:            r.config.RunnerID,
 			WorkspaceRef:        r.config.WorkspaceRef,

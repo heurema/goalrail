@@ -969,7 +969,7 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 		t.Fatalf("runs = %d, want no duplicate run after wrong repeated proof", len(server.runs.runs))
 	}
 
-	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 	if receiptResponse.code != http.StatusCreated {
 		t.Fatalf("execution receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
 	}
@@ -1013,7 +1013,7 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 	}
 	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 
-	secondReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	secondReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 	if secondReceiptResponse.code != http.StatusOK {
 		t.Fatalf("second execution receipt status = %d, want %d: %s", secondReceiptResponse.code, http.StatusOK, secondReceiptResponse.body)
 	}
@@ -1024,6 +1024,52 @@ func TestExecutionRunnerRoutesLeaseAndStartRun(t *testing.T) {
 	}
 }
 
+func TestExecutionRunnerRoutesCanRecoverReceiptAfterExpiredRunStartedLease(t *testing.T) {
+	server := testServer(t)
+	job, lease := createLeasedExecutionJob(t, server)
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+	expiredAt := testTime().Add(-time.Minute)
+	storedJob := server.executionJobs.jobs[job.ID]
+	storedJob.LeaseExpiresAt = &expiredAt
+	server.executionJobs.jobs[job.ID] = storedJob
+
+	recoverLeaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/leases", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"runner_id":"runner-1"}`, job.RepoBindingID))
+	if recoverLeaseResponse.code != http.StatusCreated {
+		t.Fatalf("recover lease status = %d, want %d: %s", recoverLeaseResponse.code, http.StatusCreated, recoverLeaseResponse.body)
+	}
+	var recoverLease spine.ExecutionJobLeaseCreated
+	decodeJSON(t, recoverLeaseResponse.body, &recoverLease)
+	if recoverLease.ID == lease.ID || recoverLease.ExecutionJobID != job.ID || recoverLease.ExecutionJob.State != spine.ExecutionJobStateRunStarted {
+		t.Fatalf("recovery lease = %#v, want fresh lease for existing run_started job", recoverLease)
+	}
+	recoveredRunResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, recoverLease.ID, recoverLease.LeaseToken))
+	if recoveredRunResponse.code != http.StatusOK {
+		t.Fatalf("recovered run start status = %d, want %d: %s", recoveredRunResponse.code, http.StatusOK, recoveredRunResponse.body)
+	}
+	var recoveredRun spine.Run
+	decodeJSON(t, recoveredRunResponse.body, &recoveredRun)
+	if recoveredRun.ID != run.ID || len(server.runs.runs) != 1 {
+		t.Fatalf("recovered run id/count = %q/%d, want existing %q/1", recoveredRun.ID, len(server.runs.runs), run.ID)
+	}
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, recoverLease.ID, recoverLease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("recovered execution receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	var receipt spine.ExecutionReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.ExecutionLeaseID != recoverLease.ID || receipt.RunID != run.ID || receipt.ExecutionJobID != job.ID {
+		t.Fatalf("recovered receipt = %#v, want fresh lease proof on existing run", receipt)
+	}
+	if server.executionJobs.jobs[job.ID].State != spine.ExecutionJobStateReceiptSubmitted || server.runs.runs[run.ID].State != spine.RunStateReceiptSubmitted {
+		t.Fatalf("job/run state = %q/%q, want receipt_submitted", server.executionJobs.jobs[job.ID].State, server.runs.runs[run.ID].State)
+	}
+}
+
 func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 	t.Run("unauthenticated rejects before mutation", func(t *testing.T) {
 		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
@@ -1031,7 +1077,7 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
 		run := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/execution-job-1/runs", `{"lease_id":"execution-lease-1","lease_token":"secret","runner_id":"runner-1"}`)
 		assertErrorCode(t, run, http.StatusUnauthorized, "unauthorized")
-		receipt := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-1/receipts", executionReceiptBody("execution-job-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		receipt := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-1/receipts", executionReceiptBody("execution-job-1", "execution-lease-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 		assertErrorCode(t, receipt, http.StatusUnauthorized, "unauthorized")
 		if len(server.runs.runs) != 0 {
 			t.Fatalf("runs = %d, want 0 after auth failure", len(server.runs.runs))
@@ -1105,7 +1151,7 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 
 	t.Run("receipt submit rejects unknown run", func(t *testing.T) {
 		server := testServer(t)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-missing/receipts", executionReceiptBody("execution-job-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/run-missing/receipts", executionReceiptBody("execution-job-1", "execution-lease-1", "secret", "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 		assertErrorCode(t, response, http.StatusNotFound, "not_found")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after unknown run", len(server.executionReceipts.receipts))
@@ -1130,7 +1176,7 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		if err := server.runs.Create(context.Background(), run); err != nil {
 			t.Fatalf("runs.Create() error = %v", err)
 		}
-		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false))
 		assertErrorCode(t, response, http.StatusConflict, "invalid_state")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after invalid run state", len(server.executionReceipts.receipts))
@@ -1146,7 +1192,7 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		}
 		var run spine.Run
 		decodeJSON(t, runResponse.body, &run)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", true))
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", true))
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after raw source upload", len(server.executionReceipts.receipts))
@@ -1163,7 +1209,7 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		var run spine.Run
 		decodeJSON(t, runResponse.body, &run)
 
-		body := fmt.Sprintf(`{"execution_job_id":%q,"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":["artifact-1"],"changed_paths_summary":["file.go"],"raw_source_uploaded":false}`, job.ID, lease.LeaseToken)
+		body := fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":["artifact-1"],"changed_paths_summary":["file.go"],"raw_source_uploaded":false}`, job.ID, lease.ID, lease.LeaseToken)
 		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 		if len(server.executionReceipts.receipts) != 0 {
@@ -1256,8 +1302,8 @@ func createLeasedExecutionJob(t *testing.T, server testServerDeps) (spine.Execut
 	return job, lease
 }
 
-func executionReceiptBody(jobID spine.ExecutionJobID, leaseToken string, runnerID string, workspaceRef string, commitSHA string, rawSourceUploaded bool) string {
-	return fmt.Sprintf(`{"execution_job_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":%q,"commit_sha":%q,"baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t}`, jobID, leaseToken, runnerID, workspaceRef, commitSHA, rawSourceUploaded)
+func executionReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, workspaceRef string, commitSHA string, rawSourceUploaded bool) string {
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":%q,"commit_sha":%q,"baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"no_command","process_status":"not_executed","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t}`, jobID, leaseID, leaseToken, runnerID, workspaceRef, commitSHA, rawSourceUploaded)
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {

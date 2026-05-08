@@ -48,6 +48,7 @@ type runStarted struct {
 
 type executionReceiptRequest struct {
 	ExecutionJobID      string   `json:"execution_job_id"`
+	LeaseID             string   `json:"lease_id"`
 	LeaseToken          string   `json:"lease_token"`
 	RunnerID            string   `json:"runner_id"`
 	WorkspaceRef        string   `json:"workspace_ref"`

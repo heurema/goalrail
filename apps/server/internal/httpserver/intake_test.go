@@ -2592,7 +2592,7 @@ func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execut
 		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
 			continue
 		}
-		if job.State == spine.ExecutionJobStateQueued || (job.State == spine.ExecutionJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+		if job.State == spine.ExecutionJobStateQueued || ((job.State == spine.ExecutionJobStateLeased || job.State == spine.ExecutionJobStateRunStarted) && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
 			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
 				selected = job
 				found = true
@@ -2615,7 +2615,9 @@ func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execut
 		CreatedAt:         input.CreatedAt,
 		UpdatedAt:         input.UpdatedAt,
 	}
-	selected.State = spine.ExecutionJobStateLeased
+	if selected.State != spine.ExecutionJobStateRunStarted {
+		selected.State = spine.ExecutionJobStateLeased
+	}
 	selected.CurrentLeaseID = &lease.ID
 	selected.CurrentRunnerID = input.RunnerID
 	selected.LeaseTokenHash = input.LeaseTokenHash
@@ -2652,28 +2654,37 @@ func executionJobKey(taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID)
 }
 
 type fakeRunStore struct {
-	runs    map[spine.RunID]spine.Run
-	byLease map[spine.ExecutionLeaseID]spine.RunID
+	runs  map[spine.RunID]spine.Run
+	byJob map[spine.ExecutionJobID]spine.RunID
 }
 
 func newFakeRunStore() *fakeRunStore {
 	return &fakeRunStore{
-		runs:    map[spine.RunID]spine.Run{},
-		byLease: map[spine.ExecutionLeaseID]spine.RunID{},
+		runs:  map[spine.RunID]spine.Run{},
+		byJob: map[spine.ExecutionJobID]spine.RunID{},
 	}
 }
 
 func (s *fakeRunStore) Create(_ context.Context, run spine.Run) error {
-	if _, ok := s.byLease[run.ExecutionLeaseID]; ok {
+	if _, ok := s.byJob[run.ExecutionJobID]; ok {
 		return fmt.Errorf("run already started")
 	}
 	s.runs[run.ID] = run
-	s.byLease[run.ExecutionLeaseID] = run.ID
+	s.byJob[run.ExecutionJobID] = run.ID
 	return nil
 }
 
 func (s *fakeRunStore) GetByExecutionLease(_ context.Context, leaseID spine.ExecutionLeaseID) (spine.Run, bool, error) {
-	runID, ok := s.byLease[leaseID]
+	for _, run := range s.runs {
+		if run.ExecutionLeaseID == leaseID {
+			return run, true, nil
+		}
+	}
+	return spine.Run{}, false, nil
+}
+
+func (s *fakeRunStore) GetByExecutionJob(_ context.Context, jobID spine.ExecutionJobID) (spine.Run, bool, error) {
+	runID, ok := s.byJob[jobID]
 	if !ok {
 		return spine.Run{}, false, nil
 	}

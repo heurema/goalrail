@@ -110,6 +110,7 @@ type RunStore interface {
 	Create(context.Context, spine.Run) error
 	Get(context.Context, spine.RunID) (spine.Run, bool, error)
 	GetByExecutionLease(context.Context, spine.ExecutionLeaseID) (spine.Run, bool, error)
+	GetByExecutionJob(context.Context, spine.ExecutionJobID) (spine.Run, bool, error)
 	MarkReceiptSubmitted(context.Context, spine.RunID, time.Time, time.Time) (bool, error)
 }
 
@@ -355,7 +356,17 @@ func (s *Service) StartRun(ctx context.Context, jobID spine.ExecutionJobID, inpu
 	}
 	if job.State != spine.ExecutionJobStateLeased {
 		if job.State == spine.ExecutionJobStateRunStarted {
-			return spine.Run{}, false, ErrRunAlreadyStarted
+			if err := validateCurrentLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+				return spine.Run{}, false, err
+			}
+			existing, ok, err := s.Runs.GetByExecutionJob(ctx, job.ID)
+			if err != nil {
+				return spine.Run{}, false, fmt.Errorf("get run by execution job: %w", err)
+			}
+			if !ok {
+				return spine.Run{}, false, ErrRunNotFound
+			}
+			return existing, false, nil
 		}
 		return spine.Run{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
 	}
@@ -440,7 +451,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		return spine.ExecutionReceipt{}, false, err
 	}
 	now := s.Clock.Now().UTC()
-	if err := validateCurrentLeaseProof(job, run.ExecutionLeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
+	if err := validateCurrentLeaseProof(job, input.LeaseID, input.RunnerID, leaseTokenHash(input.LeaseToken), now); err != nil {
 		return spine.ExecutionReceipt{}, false, err
 	}
 	if existing, ok, err := s.ExecutionReceipts.GetByRun(ctx, run.ID); err != nil {
@@ -462,7 +473,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		ID:                  receiptID,
 		RunID:               run.ID,
 		ExecutionJobID:      run.ExecutionJobID,
-		ExecutionLeaseID:    run.ExecutionLeaseID,
+		ExecutionLeaseID:    input.LeaseID,
 		TaskID:              run.TaskID,
 		CheckoutReceiptID:   run.CheckoutReceiptID,
 		RepoBindingID:       job.RepoBindingID,
@@ -632,6 +643,9 @@ func validateRunStartInput(input spine.RunStartRequest) error {
 func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 	if strings.TrimSpace(string(input.ExecutionJobID)) == "" {
 		return &ValidationError{Field: "execution_job_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.LeaseID)) == "" {
+		return &ValidationError{Field: "lease_id", Message: "is required"}
 	}
 	if strings.TrimSpace(input.LeaseToken) == "" {
 		return &ValidationError{Field: "lease_token", Message: "is required"}

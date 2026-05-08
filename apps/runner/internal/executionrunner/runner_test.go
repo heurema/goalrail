@@ -155,7 +155,7 @@ func TestStepSubmitsNoCommandExecutionReceipt(t *testing.T) {
 	if receiptRequests.Load() != 1 {
 		t.Fatalf("receipt requests = %d, want 1", receiptRequests.Load())
 	}
-	if receiptRequest.ExecutionJobID != "execution-job-1" || receiptRequest.LeaseToken != secretToken || receiptRequest.RunnerID != "runner-1" {
+	if receiptRequest.ExecutionJobID != "execution-job-1" || receiptRequest.LeaseID != "lease-1" || receiptRequest.LeaseToken != secretToken || receiptRequest.RunnerID != "runner-1" {
 		t.Fatalf("receipt proof = %#v, want lease-backed run proof", receiptRequest)
 	}
 	if receiptRequest.ExecutionMode != "no_command" || receiptRequest.ProcessStatus != "not_executed" || receiptRequest.RawSourceUploaded {
@@ -174,6 +174,84 @@ func TestStepSubmitsNoCommandExecutionReceipt(t *testing.T) {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("logs = %q, want no %q claim", logs.String(), forbidden)
 		}
+	}
+}
+
+func TestStepCanResumeReceiptAfterTransientSubmitFailure(t *testing.T) {
+	const firstSecretToken = "first-secret-execution-token"
+	const secondSecretToken = "second-secret-execution-token"
+	var leaseRequests atomic.Int32
+	var runRequests atomic.Int32
+	var receiptRequests atomic.Int32
+	var receiptRequest executionReceiptRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+			count := leaseRequests.Add(1)
+			if count == 1 {
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + firstSecretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+				return
+			}
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"lease-2","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secondSecretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"run_started"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+			runRequests.Add(1)
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+			count := receiptRequests.Add(1)
+			if count == 1 {
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = w.Write([]byte(`{"error":{"code":"temporary_unavailable","message":"temporary receipt failure"}}`))
+				return
+			}
+			decodeStrict(t, r, &receiptRequest)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"execution-receipt-1","run_id":"run-1","execution_job_id":"execution-job-1","runner_id":"runner-1","execution_mode":"no_command","process_status":"not_executed"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	runner, err := NewRunner(Config{
+		ServerURL:       server.URL,
+		BearerToken:     "runner-token",
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		SubmitReceipt:   true,
+		PollInterval:    time.Millisecond,
+		LeaseTTLSeconds: 900,
+		Once:            true,
+		LogWriter:       &logs,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	if _, err := runner.Step(context.Background()); err == nil {
+		t.Fatal("first Step() error = nil, want transient receipt submission error")
+	}
+	result, err := runner.Step(context.Background())
+	if err != nil {
+		t.Fatalf("second Step() error = %v", err)
+	}
+	if result != StepReceiptSubmitted {
+		t.Fatalf("second Step() = %q, want %q", result, StepReceiptSubmitted)
+	}
+	if leaseRequests.Load() != 2 || runRequests.Load() != 2 || receiptRequests.Load() != 2 {
+		t.Fatalf("requests lease/run/receipt = %d/%d/%d, want 2/2/2", leaseRequests.Load(), runRequests.Load(), receiptRequests.Load())
+	}
+	if receiptRequest.LeaseID != "lease-2" || receiptRequest.LeaseToken != secondSecretToken {
+		t.Fatalf("recovered receipt proof = %#v, want fresh lease proof", receiptRequest)
+	}
+	if strings.Contains(logs.String(), firstSecretToken) || strings.Contains(logs.String(), secondSecretToken) {
+		t.Fatalf("logs leaked execution lease token: %q", logs.String())
 	}
 }
 

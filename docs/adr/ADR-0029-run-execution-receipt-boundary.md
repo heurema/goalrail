@@ -139,6 +139,9 @@ H2.3 adds:
   `POST /v1/runs/{id}/receipts`
 - a runner `execution-receipt` mode that leases an execution job, starts a Run,
   and submits one metadata-only / no-command `ExecutionReceipt`
+- receipt submission carries explicit `lease_id` plus `lease_token` so a runner
+  can recover an expired `run_started` job with a fresh lease and submit the
+  receipt without creating a duplicate `Run`
 - state-aware next actions that keep Gate / Proof unavailable
 
 H2.3 must not add:
@@ -381,7 +384,8 @@ Purpose:
   RepoBinding
 - runner validates the instruction against local scope and workspace context
 - runner starts one `Run` with lease proof
-- runner submits one execution receipt with lease / run proof
+- runner submits one execution receipt with explicit `lease_id`, `lease_token`,
+  and run proof
 
 The route names may be adjusted during implementation, but the boundary must
 preserve separate job creation, lease acquisition, Run start, and receipt

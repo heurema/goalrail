@@ -898,7 +898,9 @@ Done means:
      execution receipt submission; H2.2+ smoke coverage pins this boundary
    - H2.3 implements metadata-only `ExecutionReceipt` submission for started
      Runs through a runner-facing receipt route and `goalrail-runner --mode
-     execution-receipt`; receipts are no-command evidence inputs, not task
+     execution-receipt`; receipt submission carries explicit `lease_id` plus
+     `lease_token`, supports re-lease recovery for expired `run_started` jobs
+     without receipts, and remains no-command evidence input, not task
      completion, `GateDecision`, or `Proof`
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
