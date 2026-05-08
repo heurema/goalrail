@@ -41,6 +41,10 @@ now adds a server-owned checkout job / instruction, a minimal API-only
 `goalrail-runner` checkout receipt loop under `apps/runner`, and bounded
 runner-submitted workspace receipts without assignment, claiming, actual
 clone/fetch, execution, `Run`, gate, or proof;
+ADR-0029 now defines the next docs-first H2 boundary: `ExecutionJob` is the
+leaseable execution-preparation object, `Run` is created only when a runner
+explicitly starts execution with lease proof, and execution receipts are
+evidence inputs rather than gate verdicts or proof;
 runner-facing checkout lease and receipt routes are bearer-authenticated through
 the current active OrganizationMembership boundary, and lease acquisition is
 scoped by requested project / repo binding before any job is leased;
@@ -157,7 +161,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- twenty-eight kernel/CLI/server/domain boundary ADRs
+- twenty-nine kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -212,6 +216,10 @@ The project currently has:
   lead to a server-owned checkout job / instruction and a runner-submitted
   checkout receipt, while WorkItem state remains `planned` and assignment,
   claiming, execution, `Run`, gate, and proof remain deferred
+- ADR-0029 documents the Run and execution receipt boundary for the next
+  runtime slice: a server-owned `ExecutionJob` is the leaseable unit,
+  `Run` is created only on runner start with lease proof, and execution
+  receipts stay evidence inputs rather than `GateDecision` or `Proof`
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -375,7 +383,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and twenty-eight boundary ADRs exist
+- kernel schema note and twenty-nine boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -468,6 +476,10 @@ The project currently has:
   ADR-0028 defines the concrete checkout instruction / workspace receipt
   boundary now implemented by H1 as a checkout-job plus workspace-receipt
   prototype; actual clone/fetch, execution, gate, and proof remain deferred
+- ADR-0029 defines the next Run / execution receipt boundary as docs-only:
+  execution should start from a server-owned `ExecutionJob`, create `Run` only
+  after a runner starts execution with lease proof, and keep execution receipts
+  separate from Gate / Proof verdicts; no execution implementation has landed
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
