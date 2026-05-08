@@ -72,6 +72,11 @@ Delivery rule:
   `draft_contract` controls; linked contract cards expose `Open contract`
   navigation only, which loads the selected contract through
   `GET /v1/contracts/{id}`
+- The backend now exposes authenticated, organization-scoped read-only Contract
+  discovery at
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=` for
+  future Contracts rail/list support; this README does not claim a frontend
+  rail/list UI exists yet
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
@@ -145,7 +150,7 @@ When a selected contract is open:
 GET /v1/contracts/{id}
 ```
 
-If contract discovery is needed later:
+Backend read-only contract discovery for a future Contracts rail/list:
 
 ```http
 GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
@@ -201,16 +206,17 @@ Linked contract handoff:
 - do not show `Draft contract` or other mutation actions
 - selected contract detail loads through read-only `GET /v1/contracts/{id}`
 
-Optional future backend discovery, if the frontend needs a list/rail:
+Backend discovery available for a future frontend list/rail:
 
 ```http
 GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
 ```
 
-That endpoint must be authenticated, organization-scoped by active membership,
-read-only, and compact. It must not recompute readiness, create contracts, or
-perform lifecycle transitions. Prefer filtered `GET /v1/contracts?goal_id=`
-before adding `GET /v1/goals/{goal_id}/contract`.
+That endpoint is authenticated, organization-scoped by active membership,
+read-only, compact, and limit-only. It does not recompute readiness, create
+contracts, or perform lifecycle transitions. The frontend Contracts rail/list
+is not implemented yet. Prefer filtered `GET /v1/contracts?goal_id=` before
+adding `GET /v1/goals/{goal_id}/contract`.
 
 Deferred ideas:
 - A future daemon/status heartbeat may publish lightweight agent/runtime status,

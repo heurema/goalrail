@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -2025,6 +2026,57 @@ func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spi
 	}
 	contract, ok := s.contracts[contractID]
 	return contract, ok, nil
+}
+
+func (s *fakeContractStore) List(_ context.Context, filter spine.ContractListFilter) ([]spine.Contract, error) {
+	contracts := make([]spine.Contract, 0, len(s.contracts))
+	for _, contract := range s.contracts {
+		if filter.OrganizationID != "" && contract.OrganizationID != filter.OrganizationID {
+			continue
+		}
+		if filter.ProjectID != "" && contract.ProjectID != filter.ProjectID {
+			continue
+		}
+		if filter.RepoBindingID != "" && contract.RepoBindingID != filter.RepoBindingID {
+			continue
+		}
+		if filter.GoalID != "" && contract.GoalID != filter.GoalID {
+			continue
+		}
+		if filter.State != "" && contract.State != filter.State {
+			continue
+		}
+		contracts = append(contracts, cloneContract(contract))
+	}
+	sort.Slice(contracts, func(i, j int) bool {
+		if !contracts[i].UpdatedAt.Equal(contracts[j].UpdatedAt) {
+			return contracts[i].UpdatedAt.After(contracts[j].UpdatedAt)
+		}
+		if !contracts[i].CreatedAt.Equal(contracts[j].CreatedAt) {
+			return contracts[i].CreatedAt.After(contracts[j].CreatedAt)
+		}
+		return contracts[i].ID > contracts[j].ID
+	})
+	if filter.Limit > 0 && len(contracts) > filter.Limit {
+		contracts = contracts[:filter.Limit]
+	}
+	return contracts, nil
+}
+
+func cloneContract(contract spine.Contract) spine.Contract {
+	if contract.CurrentSeedID != nil {
+		value := *contract.CurrentSeedID
+		contract.CurrentSeedID = &value
+	}
+	if contract.CurrentDraftID != nil {
+		value := *contract.CurrentDraftID
+		contract.CurrentDraftID = &value
+	}
+	if contract.ApprovedSnapshotID != nil {
+		value := *contract.ApprovedSnapshotID
+		contract.ApprovedSnapshotID = &value
+	}
+	return contract
 }
 
 func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error {

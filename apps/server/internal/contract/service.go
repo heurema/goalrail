@@ -25,6 +25,11 @@ var (
 	ErrRepoBindingMismatch         = errors.New("contract create repo binding expectation does not match goal")
 )
 
+const (
+	defaultListLimit = 50
+	maxListLimit     = 100
+)
+
 type ValidationError struct {
 	Field   string
 	Message string
@@ -40,6 +45,7 @@ func (e *ValidationError) Error() string {
 type Store interface {
 	Get(context.Context, spine.ContractID) (spine.Contract, bool, error)
 	GetByGoalID(context.Context, spine.GoalID) (spine.Contract, bool, error)
+	List(context.Context, spine.ContractListFilter) ([]spine.Contract, error)
 }
 
 type GoalReader interface {
@@ -73,6 +79,15 @@ type Service struct {
 	TxRunner  TransactionRunner
 }
 
+type ListInput struct {
+	Membership    spine.OrganizationMembership
+	ProjectID     spine.ProjectID
+	RepoBindingID spine.RepoBindingID
+	GoalID        spine.GoalID
+	State         spine.ContractState
+	Limit         int
+}
+
 func NewService(goals GoalReader, contracts Store, seeds SeedCreator, drafts DraftService, approvals ApprovalService, txRunner TransactionRunner) *Service {
 	return &Service{
 		Goals:     goals,
@@ -82,6 +97,48 @@ func NewService(goals GoalReader, contracts Store, seeds SeedCreator, drafts Dra
 		Approvals: approvals,
 		TxRunner:  txRunner,
 	}
+}
+
+func (s *Service) List(ctx context.Context, input ListInput) (spine.ContractList, error) {
+	if err := authorizeContractRead(input.Membership); err != nil {
+		return spine.ContractList{}, err
+	}
+	limit, err := normalizeListLimit(input.Limit)
+	if err != nil {
+		return spine.ContractList{}, err
+	}
+	projectID := spine.ProjectID(strings.TrimSpace(string(input.ProjectID)))
+	repoBindingID := spine.RepoBindingID(strings.TrimSpace(string(input.RepoBindingID)))
+	goalID := spine.GoalID(strings.TrimSpace(string(input.GoalID)))
+	state := spine.ContractState(strings.TrimSpace(string(input.State)))
+	if err := validateOptionalUUIDv7Filter("project_id", projectID); err != nil {
+		return spine.ContractList{}, err
+	}
+	if err := validateOptionalUUIDv7Filter("repo_binding_id", repoBindingID); err != nil {
+		return spine.ContractList{}, err
+	}
+	if err := validateOptionalUUIDv7Filter("goal_id", goalID); err != nil {
+		return spine.ContractList{}, err
+	}
+	if err := validateContractState(state); err != nil {
+		return spine.ContractList{}, err
+	}
+
+	contracts, err := s.Contracts.List(ctx, spine.ContractListFilter{
+		OrganizationID: input.Membership.OrganizationID,
+		ProjectID:      projectID,
+		RepoBindingID:  repoBindingID,
+		GoalID:         goalID,
+		State:          state,
+		Limit:          limit,
+	})
+	if err != nil {
+		return spine.ContractList{}, fmt.Errorf("list contracts: %w", err)
+	}
+	if contracts == nil {
+		contracts = []spine.Contract{}
+	}
+	return spine.ContractList{Contracts: contracts, Limit: limit}, nil
 }
 
 func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest, membership spine.OrganizationMembership) (spine.Contract, bool, error) {
@@ -271,6 +328,13 @@ func authorizeContractMutation(membership spine.OrganizationMembership, contract
 	return nil
 }
 
+func authorizeContractRead(membership spine.OrganizationMembership) error {
+	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
+		return ErrMembershipRequired
+	}
+	return nil
+}
+
 func validateGoalID(goalID spine.GoalID) error {
 	text := strings.TrimSpace(string(goalID))
 	if text == "" {
@@ -284,6 +348,43 @@ func validateGoalID(goalID spine.GoalID) error {
 		return &ValidationError{Field: "goal_id", Message: "must be a UUIDv7"}
 	}
 	return nil
+}
+
+func validateOptionalUUIDv7Filter(field string, value any) error {
+	text := strings.TrimSpace(fmt.Sprint(value))
+	if text == "" {
+		return nil
+	}
+	id, err := uuid.Parse(text)
+	if err != nil {
+		return &ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: field, Message: "must be a UUIDv7"}
+	}
+	return nil
+}
+
+func normalizeListLimit(limit int) (int, error) {
+	if limit == 0 {
+		return defaultListLimit, nil
+	}
+	if limit < 0 {
+		return 0, &ValidationError{Field: "limit", Message: "must be positive"}
+	}
+	if limit > maxListLimit {
+		return 0, &ValidationError{Field: "limit", Message: "must be <= 100"}
+	}
+	return limit, nil
+}
+
+func validateContractState(state spine.ContractState) error {
+	switch state {
+	case "", spine.ContractStateSeeded, spine.ContractStateDraft, spine.ContractStateReadyForApproval, spine.ContractStateApproved:
+		return nil
+	default:
+		return &ValidationError{Field: "state", Message: "must be a known contract state"}
+	}
 }
 
 func validateExpectedGoalContext(input spine.ContractCreateRequest, goal spine.Goal) error {

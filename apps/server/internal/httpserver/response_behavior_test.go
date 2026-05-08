@@ -11,6 +11,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
+	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/spine"
 )
@@ -146,6 +147,10 @@ func (s *capturingContractService) Create(context.Context, spine.ContractCreateR
 
 func (s *capturingContractService) Get(context.Context, spine.ContractID) (spine.Contract, error) {
 	return spine.Contract{}, nil
+}
+
+func (s *capturingContractService) List(context.Context, contract.ListInput) (spine.ContractList, error) {
+	return spine.ContractList{}, nil
 }
 
 func (s *capturingContractService) UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error) {
