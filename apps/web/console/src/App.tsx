@@ -27,12 +27,17 @@ import {
   isQualificationFeedClientError,
   listQualificationFeed,
 } from './qualificationFeedClient';
+import {
+  isContractListClientError,
+  listContracts,
+} from './contractListClient';
 import type { OrganizationUserRecord, OrganizationUserRole, OrganizationUserState } from './usersClient';
 import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
 import type {
   QualificationFeedItem,
   QualificationFeedResponse,
 } from './qualificationFeedClient';
+import type { ContractListResponse, ContractStateFilter } from './contractListClient';
 import { READINESS_DISPLAY_LANES, projectReadinessDisplay, sortReadinessItems } from './readinessDisplay';
 import { formatCalmTimestamp } from './uiTime';
 import StartPage from './StartPage';
@@ -48,6 +53,9 @@ type StatusFilter = OrganizationUserState | 'all';
 type UsersLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type RepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type ContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
+type ContractListLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type ContractListStateFilter = ContractStateFilter | 'all';
+type ContractSelectionSource = 'auto' | 'list' | 'manual' | 'linked' | null;
 type QualificationFeedLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 type AuthStatus =
   | 'unauthenticated'
@@ -85,6 +93,8 @@ interface ThemePreset {
 }
 
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
+const CONTRACT_LIST_LIMIT = 50;
+const CONTRACT_STATE_FILTERS: ContractListStateFilter[] = ['all', 'draft', 'ready_for_approval', 'approved', 'seeded'];
 const QUALIFICATION_FEED_LIMIT = 50;
 const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
 const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
@@ -258,6 +268,21 @@ function qualificationFeedErrorMessage(error: unknown, t: (key: string, options?
   return t('qualificationFeed.errors.generic');
 }
 
+function contractListErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isContractListClientError(error)) {
+    const translated = t(`surfaces.contracts.listErrors.${error.code}`);
+    if (translated !== `surfaces.contracts.listErrors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status
+      ? t('surfaces.contracts.listErrors.genericWithStatus', { status: error.status })
+      : t('surfaces.contracts.listErrors.generic');
+  }
+
+  return t('surfaces.contracts.listErrors.generic');
+}
+
 function normalizedPathname() {
   if (typeof window === 'undefined') {
     return '';
@@ -320,6 +345,10 @@ function ConsoleApp() {
   const [contractLoadStatus, setContractLoadStatus] = useState<ContractLoadStatus>('idle');
   const [contractError, setContractError] = useState('');
   const [contract, setContract] = useState<ContractResponse | null>(null);
+  const [contractList, setContractList] = useState<ContractListResponse>({ contracts: [], limit: CONTRACT_LIST_LIMIT });
+  const [contractListLoadStatus, setContractListLoadStatus] = useState<ContractListLoadStatus>('idle');
+  const [contractListError, setContractListError] = useState('');
+  const [contractListStateFilter, setContractListStateFilter] = useState<ContractListStateFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -330,6 +359,10 @@ function ConsoleApp() {
   const [resetError, setResetError] = useState('');
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const contractLookupSequence = useRef(0);
+  const contractListLoadSequence = useRef(0);
+  const lastContractListStateFilter = useRef<ContractListStateFilter | null>(null);
+  const selectedContractId = useRef<string | null>(null);
+  const contractSelectionSource = useRef<ContractSelectionSource>(null);
   const usersLoadSequence = useRef(0);
   const repositoryContextLoadSequence = useRef(0);
   const qualificationFeedLoadSequence = useRef(0);
@@ -338,6 +371,10 @@ function ConsoleApp() {
   useEffect(() => {
     document.documentElement.lang = activeLocale;
   }, [activeLocale]);
+
+  useEffect(() => {
+    selectedContractId.current = contract?.id ?? null;
+  }, [contract?.id]);
 
   useEffect(() => {
     if (screen !== 'settings-users' || authStatus !== 'authenticated') {
@@ -354,6 +391,18 @@ function ConsoleApp() {
 
     void loadRepositoryContext();
   }, [authStatus, profile?.organization_membership.organization_id, screen, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (screen !== 'console' || activeSurface !== 'contracts' || authStatus !== 'authenticated') {
+      return;
+    }
+
+    if (contractListLoadStatus !== 'idle' && lastContractListStateFilter.current === contractListStateFilter) {
+      return;
+    }
+
+    void loadContractList(contractListLoadStatus === 'idle');
+  }, [activeSurface, authStatus, contractListLoadStatus, contractListStateFilter, screen, tokens?.accessToken]);
 
   useEffect(() => {
     if (screen !== 'console' || activeSurface !== 'delivery-readiness' || authStatus !== 'authenticated') {
@@ -580,9 +629,13 @@ function ConsoleApp() {
   function resetAuthState() {
     authSessionSequence.current += 1;
     contractLookupSequence.current += 1;
+    contractListLoadSequence.current += 1;
+    lastContractListStateFilter.current = null;
     usersLoadSequence.current += 1;
     repositoryContextLoadSequence.current += 1;
     qualificationFeedLoadSequence.current += 1;
+    selectedContractId.current = null;
+    contractSelectionSource.current = null;
     setTokens(null);
     setProfile(null);
     setAuthStatus('unauthenticated');
@@ -608,19 +661,24 @@ function ConsoleApp() {
     setContractLoadStatus('idle');
     setContractError('');
     setContract(null);
+    setContractList({ contracts: [], limit: CONTRACT_LIST_LIMIT });
+    setContractListLoadStatus('idle');
+    setContractListError('');
+    setContractListStateFilter('all');
   }
 
   async function handleContractLookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await loadContractById(contractIdInput);
+    await loadContractById(contractIdInput, 'manual');
   }
 
-  async function loadContractById(contractIdValue: string) {
+  async function loadContractById(contractIdValue: string, selectionSource: Exclude<ContractSelectionSource, 'auto'> = 'manual') {
     const contractId = contractIdValue.trim();
     const accessToken = tokens?.accessToken;
 
     if (!contractId) {
       contractLookupSequence.current += 1;
+      contractSelectionSource.current = null;
       setContractError(translate('surfaces.contracts.lookupMissing'));
       setContractLoadStatus('error');
       setContract(null);
@@ -635,6 +693,7 @@ function ConsoleApp() {
 
     const lookupSequence = contractLookupSequence.current + 1;
     contractLookupSequence.current = lookupSequence;
+    contractSelectionSource.current = selectionSource;
     setContractLoadStatus('loading');
     setContractError('');
     setContract(null);
@@ -645,6 +704,7 @@ function ConsoleApp() {
         return;
       }
       setContract(found);
+      setContractIdInput(found.id);
       setContractLoadStatus('loaded');
     } catch (error) {
       if (contractLookupSequence.current !== lookupSequence) {
@@ -666,6 +726,85 @@ function ConsoleApp() {
     }
   }
 
+  async function loadContractList(showLoading = true) {
+    const accessToken = tokens?.accessToken;
+    if (!accessToken) {
+      resetAuthState();
+      setAuthError(translate('auth.invalidSession'));
+      return;
+    }
+
+    const loadSequence = contractListLoadSequence.current + 1;
+    contractListLoadSequence.current = loadSequence;
+    lastContractListStateFilter.current = contractListStateFilter;
+    if (showLoading) {
+      setContractListLoadStatus('loading');
+    }
+    setContractListError('');
+
+    try {
+      const result = await listContracts({
+        accessToken,
+        state: contractListStateFilter === 'all' ? undefined : contractListStateFilter,
+        limit: CONTRACT_LIST_LIMIT,
+      });
+      if (contractListLoadSequence.current !== loadSequence) {
+        return;
+      }
+      setContractList(result);
+      setContractListLoadStatus('loaded');
+      reconcileContractListSelection(result.contracts);
+    } catch (error) {
+      if (contractListLoadSequence.current !== loadSequence) {
+        return;
+      }
+      if (isContractListClientError(error) && error.code === 'unauthorized') {
+        resetAuthState();
+        setAuthError(translate('auth.invalidSession'));
+        return;
+      }
+
+      setContractListLoadStatus('error');
+      setContractListError(contractListErrorMessage(error, translate));
+    }
+  }
+
+  function reconcileContractListSelection(contracts: ContractResponse[]) {
+    const selectedId = selectedContractId.current;
+    const selectionSource = contractSelectionSource.current;
+
+    if (selectedId) {
+      const selectedSummary = contracts.find((record) => record.id === selectedId);
+      if (selectedSummary) {
+        setContract((current) => (current?.id === selectedSummary.id ? { ...current, ...selectedSummary } : current));
+        return;
+      }
+
+      if (selectionSource === 'auto' && contracts.length > 0) {
+        selectContractSummary(contracts[0], 'auto');
+      }
+      return;
+    }
+
+    if (!selectionSource && contracts.length > 0) {
+      selectContractSummary(contracts[0], 'auto');
+    }
+  }
+
+  function selectContractSummary(nextContract: ContractResponse, selectionSource: ContractSelectionSource) {
+    contractSelectionSource.current = selectionSource;
+    selectedContractId.current = nextContract.id;
+    setContractIdInput(nextContract.id);
+    setContract(nextContract);
+    setContractLoadStatus('loaded');
+    setContractError('');
+  }
+
+  function handleContractListSelection(nextContract: ContractResponse) {
+    setContractIdInput(nextContract.id);
+    void loadContractById(nextContract.id, 'list');
+  }
+
   async function openLinkedContract(contractId: string) {
     const nextContractId = contractId.trim();
     if (!nextContractId) {
@@ -674,7 +813,7 @@ function ConsoleApp() {
     setScreen('console');
     setActiveSurface('contracts');
     setContractIdInput(nextContractId);
-    await loadContractById(nextContractId);
+    await loadContractById(nextContractId, 'linked');
   }
 
   async function loadUsers() {
@@ -1164,12 +1303,20 @@ function ConsoleApp() {
 
         {screen === 'console' && activeSurface === 'contracts' ? (
           <ContractRailPanel
+            activeLocale={activeLocale}
             contract={contract}
             contractError={contractError}
             contractIdInput={contractIdInput}
+            contractList={contractList}
+            contractListError={contractListError}
+            contractListLoadStatus={contractListLoadStatus}
+            contractListStateFilter={contractListStateFilter}
             loadStatus={contractLoadStatus}
             onContractIdChange={setContractIdInput}
+            onContractListStateFilterChange={setContractListStateFilter}
+            onContractSelect={handleContractListSelection}
             onLookup={handleContractLookup}
+            onRefresh={() => void loadContractList(true)}
             t={translate}
           />
         ) : null}
@@ -1533,34 +1680,118 @@ function ConsoleApp() {
 }
 
 function ContractRailPanel({
+  activeLocale,
   contract,
   contractError,
   contractIdInput,
+  contractList,
+  contractListError,
+  contractListLoadStatus,
+  contractListStateFilter,
   loadStatus,
   onContractIdChange,
+  onContractListStateFilterChange,
+  onContractSelect,
   onLookup,
+  onRefresh,
   t,
 }: {
+  activeLocale: ConsoleLocale;
   contract: ContractResponse | null;
   contractError: string;
   contractIdInput: string;
+  contractList: ContractListResponse;
+  contractListError: string;
+  contractListLoadStatus: ContractListLoadStatus;
+  contractListStateFilter: ContractListStateFilter;
   loadStatus: ContractLoadStatus;
   onContractIdChange: (value: string) => void;
+  onContractListStateFilterChange: (value: ContractListStateFilter) => void;
+  onContractSelect: (contract: ContractResponse) => void;
   onLookup: (event: FormEvent<HTMLFormElement>) => void;
+  onRefresh: () => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
-  const isLoading = loadStatus === 'loading';
-  const stateLabel = contract ? t(`contractStates.${contract.state}`) : t('surfaces.contracts.notSelected');
-  const statusTone = contract?.state === 'approved' ? 'pass' : contract?.state === 'ready_for_approval' ? 'amber' : contract ? 'mauve' : 'muted';
+  const isLookupLoading = loadStatus === 'loading';
+  const isListLoading = contractListLoadStatus === 'loading';
+  const contracts = contractList.contracts;
 
   return (
     <section className="contractRailPanel" aria-label={t('surfaces.contracts.ops.surfaceContext')}>
       <div className="opsGroupLabel">{t('surfaces.contracts.ops.surfaceContext')}</div>
       <div className="opsRailSection">
         <h3>{t('surfaces.contracts.nav')}</h3>
-        <p>{contract ? t('surfaces.contracts.ops.repoScoped') : t('surfaces.contracts.ops.selectById')}</p>
+        <p>{t('surfaces.contracts.ops.discoveryCopy', { limit: contractList.limit })}</p>
       </div>
 
+      <div className="opsContractToolbar">
+        <label>
+          <span>{t('surfaces.contracts.stateFilterLabel')}</span>
+          <select
+            aria-label={t('surfaces.contracts.stateFilterLabel')}
+            onChange={(event) => onContractListStateFilterChange(event.target.value as ContractListStateFilter)}
+            value={contractListStateFilter}
+          >
+            {CONTRACT_STATE_FILTERS.map((state) => (
+              <option key={state} value={state}>
+                {state === 'all' ? t('surfaces.contracts.allStates') : t(`contractStates.${state}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="ghostButton" disabled={isListLoading} onClick={onRefresh} type="button">
+          {isListLoading ? t('surfaces.contracts.refreshing') : t('surfaces.contracts.refresh')}
+        </button>
+      </div>
+
+      {contractListError ? (
+        <p className="fieldMessage contractMessage contractListMessage" role="alert">
+          {contractListError}
+        </p>
+      ) : null}
+
+      <div className="opsGroupLabel">{t('surfaces.contracts.ops.activeContracts')}</div>
+      <div className="opsContractList" aria-label={t('surfaces.contracts.contractListLabel')}>
+        {contracts.map((listedContract) => {
+          const stateLabel = t(`contractStates.${listedContract.state}`);
+          const statusTone = contractStateTone(listedContract.state);
+          const isSelected = contract?.id === listedContract.id;
+          return (
+            <button
+              aria-current={isSelected ? 'true' : undefined}
+              className={isSelected ? 'opsContractRow active' : 'opsContractRow'}
+              key={listedContract.id}
+              onClick={() => onContractSelect(listedContract)}
+              type="button"
+            >
+              <div>
+                <span className="opsMono">{listedContract.id}</span>
+                <b>{stateLabel}</b>
+              </div>
+              <span className={`opsPill ${statusTone}`}>{stateLabel}</span>
+              <dl className="opsContractRowFields">
+                <FieldRow label={t('surfaces.contracts.fields.goalId')} value={listedContract.goal_id} />
+                <FieldRow label={t('surfaces.contracts.fields.repoBindingId')} value={listedContract.repo_binding_id} />
+              </dl>
+              <div className="opsRowMeta">
+                <span>{t('surfaces.contracts.fields.updatedAt')}</span>
+                <span>{formatCalmTimestamp(listedContract.updated_at, { locale: activeLocale })}</span>
+              </div>
+            </button>
+          );
+        })}
+        {isListLoading && contracts.length === 0 ? (
+          <div className="opsRailEmpty" role="status">{t('surfaces.contracts.listLoading')}</div>
+        ) : null}
+        {contractListLoadStatus === 'loaded' && contracts.length === 0 ? (
+          <div className="opsRailEmpty">{t('surfaces.contracts.listEmpty')}</div>
+        ) : null}
+        {contractListLoadStatus === 'error' && contracts.length === 0 ? (
+          <div className="opsRailEmpty">{t('surfaces.contracts.listUnavailable')}</div>
+        ) : null}
+      </div>
+
+      <div className="opsGroupLabel">{t('surfaces.contracts.manualLookup')}</div>
       <form className="opsContractSearch" onSubmit={onLookup}>
         <label>
           <span>{t('surfaces.contracts.lookupLabel')}</span>
@@ -1572,39 +1803,18 @@ function ContractRailPanel({
             value={contractIdInput}
           />
         </label>
-        <button disabled={isLoading} type="submit">
-          {isLoading ? t('surfaces.contracts.loading') : t('surfaces.contracts.lookupAction')}
+        <button disabled={isLookupLoading} type="submit">
+          {isLookupLoading ? t('surfaces.contracts.loading') : t('surfaces.contracts.lookupAction')}
           <span aria-hidden="true">→</span>
         </button>
       </form>
       {contractError ? <p className="fieldMessage contractMessage" role="alert">{contractError}</p> : null}
-
-      <div className="opsGroupLabel">{t('surfaces.contracts.ops.activeContracts')}</div>
-      <div className="opsFilterChips">
-        <span>{t('surfaces.contracts.ops.active')}</span>
-        <span>{t('surfaces.contracts.ops.executing')}</span>
-        <span>{t('surfaces.contracts.ops.approval')}</span>
-      </div>
-      <div className="opsContractList" aria-label={t('surfaces.contracts.ops.activeContracts')}>
-        {contract ? (
-          <div className="opsContractRow active">
-            <div>
-              <span className="opsMono">{contract.id}</span>
-              <b>{t('surfaces.contracts.currentRecord')}</b>
-            </div>
-            <span className={`opsPill ${statusTone}`}>{stateLabel}</span>
-            <p>{t('surfaces.contracts.ops.loadedSummary')}</p>
-            <div className="opsRowMeta">
-              <span>{contract.repo_binding_id}</span>
-              <span>{formatDateTime(contract.updated_at)}</span>
-            </div>
-          </div>
-        ) : (
-          <div className="opsRailEmpty">{t('surfaces.contracts.ops.noActiveContract')}</div>
-        )}
-      </div>
     </section>
   );
+}
+
+function contractStateTone(state: ContractResponse['state']) {
+  return state === 'approved' ? 'pass' : state === 'ready_for_approval' ? 'amber' : 'mauve';
 }
 
 function ContractSurfacePanel({

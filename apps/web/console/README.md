@@ -20,9 +20,10 @@ Current scope:
 - authenticated shell entry only after `/v1/me` succeeds
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
-  surfaces; Delivery Readiness consumes read-only `GET /v1/qualification-feed`
-  while authenticated and renders Qualification / Clarification / Contract /
-  Blocked lanes
+  surfaces; Contracts consumes read-only `GET /v1/contracts` discovery and
+  renders a contract rail/list plus selected detail, while Delivery Readiness
+  consumes read-only `GET /v1/qualification-feed` while authenticated and
+  renders Qualification / Clarification / Contract / Blocked lanes
 - bottom-left Settings utility with Appearance theme presets and API-backed
   Organization Users add/edit/temporary-password reset UI plus read-only
   Repository context metadata
@@ -72,11 +73,12 @@ Delivery rule:
   `draft_contract` controls; linked contract cards expose `Open contract`
   navigation only, which loads the selected contract through
   `GET /v1/contracts/{id}`
-- The backend now exposes authenticated, organization-scoped read-only Contract
-  discovery at
-  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=` for
-  future Contracts rail/list support; this README does not claim a frontend
-  rail/list UI exists yet
+- The Contracts surface consumes authenticated, organization-scoped read-only
+  Contract discovery at
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
+  loads `GET /v1/contracts?limit=50` by default, supports a state filter and
+  manual refresh, keeps manual ID lookup as a secondary fallback, and shows
+  selected detail through read-only `GET /v1/contracts/{id}`
 - Repository context data is server-owned metadata only: Organization summary,
   active Project metadata, and active RepoBinding metadata
 - Repository context does not imply provider authorization, checkout
@@ -142,6 +144,7 @@ Minimum read-only endpoint:
 
 ```http
 GET /v1/qualification-feed?limit=50
+GET /v1/contracts?limit=50
 ```
 
 When a selected contract is open:
@@ -150,7 +153,7 @@ When a selected contract is open:
 GET /v1/contracts/{id}
 ```
 
-Backend read-only contract discovery for a future Contracts rail/list:
+Backend read-only contract discovery for the Contracts rail/list:
 
 ```http
 GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
@@ -169,7 +172,9 @@ wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
   main user flow.
 - Delivery Readiness shows qualification state and handoff to Contracts, not
   lifecycle controls.
-- The Contracts surface is read-only and can show a selected contract by ID.
+- The Contracts surface is read-only, lists contracts from discovery, supports
+  state filtering plus manual refresh, and can show selected detail or a manual
+  ID lookup result.
 
 D-0091 display behavior:
 - Delivery Readiness cards show one frontend-projected primary status instead
@@ -206,7 +211,7 @@ Linked contract handoff:
 - do not show `Draft contract` or other mutation actions
 - selected contract detail loads through read-only `GET /v1/contracts/{id}`
 
-Backend discovery available for a future frontend list/rail:
+Backend discovery used by the frontend list/rail:
 
 ```http
 GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
@@ -214,9 +219,8 @@ GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=
 
 That endpoint is authenticated, organization-scoped by active membership,
 read-only, compact, and limit-only. It does not recompute readiness, create
-contracts, or perform lifecycle transitions. The frontend Contracts rail/list
-is not implemented yet. Prefer filtered `GET /v1/contracts?goal_id=` before
-adding `GET /v1/goals/{goal_id}/contract`.
+contracts, or perform lifecycle transitions. Prefer filtered
+`GET /v1/contracts?goal_id=` before adding `GET /v1/goals/{goal_id}/contract`.
 
 Deferred ideas:
 - A future daemon/status heartbeat may publish lightweight agent/runtime status,

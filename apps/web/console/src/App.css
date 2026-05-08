@@ -1173,12 +1173,22 @@ select:focus-visible {
   padding: 2px 12px 12px;
 }
 
+.opsContractToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 2px 12px 10px;
+}
+
+.opsContractToolbar label,
 .opsContractSearch label {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+.opsContractToolbar label > span,
 .opsContractSearch label > span {
   color: var(--mute);
   font-family: var(--font-mono);
@@ -1187,6 +1197,7 @@ select:focus-visible {
   text-transform: uppercase;
 }
 
+.opsContractToolbar select,
 .opsContractSearch input {
   width: 100%;
   min-height: 32px;
@@ -1198,6 +1209,7 @@ select:focus-visible {
   outline: none;
 }
 
+.opsContractToolbar select:focus,
 .opsContractSearch input:focus {
   border-color: color-mix(in oklab, var(--ops-mauve) 38%, var(--line));
   background: color-mix(in oklab, var(--panel-2) 78%, transparent);
@@ -1225,6 +1237,12 @@ select:focus-visible {
 .opsContractSearch button:hover {
   background: color-mix(in oklab, var(--ops-mauve) 24%, var(--panel-2));
   transform: translateY(-1px);
+}
+
+.opsContractToolbar .ghostButton {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11.5px;
 }
 
 .opsFilterChips {
@@ -1285,6 +1303,11 @@ select:focus-visible {
   transition: border-color 160ms, background-color 160ms, transform 160ms;
 }
 
+.opsContractRow:hover {
+  border-color: color-mix(in oklab, var(--ops-mauve) 38%, var(--line));
+  background: color-mix(in oklab, var(--panel) 78%, transparent);
+}
+
 .opsContractRow.active {
   border-color: color-mix(in oklab, var(--ops-mauve) 50%, var(--line));
   background: linear-gradient(180deg, color-mix(in oklab, var(--ops-mauve) 8%, transparent), transparent);
@@ -1325,6 +1348,41 @@ select:focus-visible {
   line-height: 1.4;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+}
+
+.opsContractRowFields {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.opsContractRowFields > div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.opsContractRowFields dt {
+  overflow: hidden;
+  color: var(--mute-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.opsContractRowFields dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .opsPill,

@@ -112,6 +112,13 @@ function contractResponse(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function contractListResponse(contracts: unknown[] = []) {
+  return {
+    contracts,
+    limit: 50,
+  };
+}
+
 function repositoryContextResponse(contexts: unknown[] = [repositoryContextRecord()]) {
   return {
     organization: {
@@ -232,10 +239,11 @@ async function setLocale(locale: 'en' | 'ru') {
   document.documentElement.lang = locale;
 }
 
-async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'owner') {
+async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'owner', contracts: unknown[] = []) {
   await setLocale(locale);
   fetchMock.mockResolvedValueOnce(jsonResponse(loginResponse()));
   fetchMock.mockResolvedValueOnce(jsonResponse(meResponse({ role: membershipRole })));
+  fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse(contracts)));
   render(<App />);
 
   fireEvent.change(screen.getByLabelText(/^Email$/i), { target: { value: 'owner@example.com' } });
@@ -245,6 +253,9 @@ async function loginSuccessfully(locale: 'en' | 'ru' = 'en', membershipRole = 'o
   fireEvent.click(screen.getByRole('button', { name: locale === 'ru' ? /войти/i : /sign in/i }));
 
   await screen.findByRole('navigation', { name: locale === 'ru' ? /разделы продукта/i : /product surfaces/i });
+  await waitFor(() => {
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?limit=50');
+  });
 }
 
 async function startPasswordChangeLogin(locale: 'en' | 'ru' = 'en') {
@@ -498,7 +509,7 @@ describe('App', () => {
   it('successful login calls auth login, then /v1/me, then renders the console', async () => {
     await loginSuccessfully();
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0][0]).toBe('/v1/auth/login');
     expect(fetchMock.mock.calls[0][1]).toEqual(
       expect.objectContaining({
@@ -510,6 +521,14 @@ describe('App', () => {
     );
     expect(fetchMock.mock.calls[1][0]).toBe('/v1/me');
     expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
+    expect(fetchMock.mock.calls[2][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -579,6 +598,7 @@ describe('App', () => {
       })
     );
     fetchMock.mockResolvedValueOnce(jsonResponse(meResponse()));
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse()));
 
     fireEvent.change(screen.getByLabelText(/^Текущий пароль$/i), { target: { value: 'temporary-password' } });
     fireEvent.change(screen.getByLabelText(/^Новый пароль$/i), { target: { value: 'new-password' } });
@@ -586,7 +606,7 @@ describe('App', () => {
 
     await screen.findByRole('navigation', { name: /разделы продукта/i });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[1][0]).toBe('/v1/auth/change-password');
     expect(fetchMock.mock.calls[1][1]).toEqual(
       expect.objectContaining({
@@ -603,6 +623,7 @@ describe('App', () => {
       })
     );
     expect(fetchMock.mock.calls[2][0]).toBe('/v1/me');
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts?limit=50');
   });
 
   it('invalid current password stays on the password-change form', async () => {
@@ -625,9 +646,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
 
     await screen.findByLabelText(/^Email$/i);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/auth/logout');
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/auth/logout');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -644,8 +665,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /log out/i }));
 
     await screen.findByLabelText(/^Email$/i);
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/v1/auth/login', '/v1/me', '/v1/auth/logout']);
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/v1/auth/login', '/v1/me', '/v1/contracts?limit=50', '/v1/auth/logout']);
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -695,8 +716,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /load contract/i }));
 
     await screen.findByText('018f0000-0000-7000-8000-000000000104');
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts/018f0000-0000-7000-8000-000000000101');
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/018f0000-0000-7000-8000-000000000101');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -718,6 +739,122 @@ describe('App', () => {
     expect(document.body).not.toHaveTextContent(
       /trialops-demo|C-0147|readiness score|\/100|\bscan\b|proof queue|fake queue|fake pass|fake fail|pass\/fail/i
     );
+  });
+
+  it('loads the contract list on authenticated Contracts entry and renders calm list rows', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-list-draft',
+        goal_id: 'goal-list-draft',
+        repo_binding_id: 'repo-list-draft',
+        state: 'draft',
+        current_draft_id: 'draft-list-draft',
+        updated_at: '2026-05-08T10:00:00Z',
+      }),
+      contractResponse({
+        id: 'contract-list-approved',
+        goal_id: 'goal-list-approved',
+        repo_binding_id: 'repo-list-approved',
+        state: 'approved',
+        current_draft_id: 'draft-list-approved',
+        updated_at: '2026-05-07T09:10:00Z',
+      }),
+    ]);
+
+    const contractList = screen.getByLabelText(/contracts list/i);
+    expect(contractList).toHaveTextContent('contract-list-draft');
+    expect(contractList).toHaveTextContent('goal-list-draft');
+    expect(contractList).toHaveTextContent('repo-list-draft');
+    expect(contractList).toHaveTextContent('Draft');
+    expect(contractList).toHaveTextContent('contract-list-approved');
+    expect(contractList).toHaveTextContent('Approved');
+    expect(contractList).toHaveTextContent(/May|Today|Yesterday|ago|just now/);
+    expect(contractList).not.toHaveTextContent(/2026-05-08T10:00:00Z|2026-05-07T09:10:00Z/);
+    expect(screen.getByText('draft-list-draft')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts?limit=50');
+  });
+
+  it('selecting a contract row loads selected detail through the read-only contract endpoint', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-list-draft',
+        goal_id: 'goal-list-draft',
+        current_draft_id: 'draft-list-draft',
+      }),
+      contractResponse({
+        id: 'contract-list-approved',
+        goal_id: 'goal-list-approved',
+        state: 'approved',
+        current_draft_id: 'draft-list-approved-summary',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractResponse({
+      id: 'contract-list-approved',
+      goal_id: 'goal-list-approved',
+      state: 'approved',
+      current_draft_id: 'draft-list-approved-detail',
+    })));
+
+    const contractList = screen.getByLabelText(/contracts list/i);
+    fireEvent.click(within(contractList).getByRole('button', { name: /contract-list-approved/i }));
+
+    expect(await screen.findByText('draft-list-approved-detail')).toBeInTheDocument();
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-list-approved');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'omit',
+        headers: { Authorization: 'Bearer access-token' },
+      })
+    );
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/v1\/contracts\/contract-list-approved\/(submissions|approvals|plans)/.test(url))).toBe(false);
+  });
+
+  it('filters the contract list by state without calling mutation endpoints', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({ id: 'contract-list-draft', state: 'draft' }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(contractListResponse([
+      contractResponse({
+        id: 'contract-ready',
+        goal_id: 'goal-ready',
+        state: 'ready_for_approval',
+        current_draft_id: 'draft-ready',
+      }),
+    ])));
+
+    fireEvent.change(screen.getByLabelText(/^State$/i), {
+      target: { value: 'ready_for_approval' },
+    });
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?state=ready_for_approval&limit=50');
+    });
+    expect(within(screen.getByLabelText(/contracts list/i)).getByText('contract-ready')).toBeInTheDocument();
+    expect(screen.getByText('draft-ready')).toBeInTheDocument();
+    const requestURLs = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(requestURLs.some((url) => /\/v1\/contracts$/.test(url))).toBe(false);
+    expect(requestURLs.some((url) => /\/v1\/contracts\/.*\/(submissions|approvals|plans)/.test(url))).toBe(false);
+  });
+
+  it('keeps visible contract rows on transient list refresh errors', async () => {
+    await loginSuccessfully('en', 'owner', [
+      contractResponse({
+        id: 'contract-stable',
+        goal_id: 'goal-stable',
+        repo_binding_id: 'repo-stable',
+        current_draft_id: 'draft-stable',
+      }),
+    ]);
+    fetchMock.mockResolvedValueOnce(jsonResponse(errorEnvelope('server_error'), 503));
+
+    fireEvent.click(screen.getByRole('button', { name: /^Refresh$/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Goalrail server returned an error. Code: 503.');
+    const contractList = screen.getByLabelText(/contracts list/i);
+    expect(contractList).toHaveTextContent('contract-stable');
+    expect(contractList).toHaveTextContent('goal-stable');
+    expect(screen.getByText('draft-stable')).toBeInTheDocument();
   });
 
   it('loads the qualification feed with one primary status, calm timestamps, and no action calls', async () => {
@@ -803,8 +940,8 @@ describe('App', () => {
     const contractLane = within(board).getByLabelText('Contract lane');
     const blockedLane = within(board).getByLabelText('Blocked lane');
 
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/qualification-feed?limit=50');
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/qualification-feed?limit=50');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -1108,8 +1245,8 @@ describe('App', () => {
 
     expect(await screen.findByText('draft-linked')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Contracts$/i })).toHaveAttribute('aria-current', 'page');
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-linked');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/contracts/contract-linked');
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -1170,8 +1307,8 @@ describe('App', () => {
       expect(screen.getByText('draft-B')).toBeInTheDocument();
       expect(screen.queryByText('draft-A')).not.toBeInTheDocument();
     });
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/contracts/contract-A');
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-B');
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/contracts/contract-A');
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/contracts/contract-B');
   });
 
   it('theme storage remains exactly goalrail.console.theme', async () => {
@@ -1234,7 +1371,7 @@ describe('App', () => {
     expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('Owner');
     expect(screen.getByLabelText(/текущий пользователь/i)).toHaveTextContent('role · Администратор');
     expect(screen.getByRole('button', { name: /^Контракты$/i })).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
     expect(asMock(window.sessionStorage.setItem)).not.toHaveBeenCalled();
   });
@@ -1249,8 +1386,8 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Users$/i }));
 
     expect(await screen.findByRole('table', { name: /workspace users/i })).toHaveTextContent('Owner');
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -1274,8 +1411,8 @@ describe('App', () => {
     expect(screen.getAllByText('heurema/goalrail').length).toBeGreaterThan(0);
     expect(screen.getByText('metadata_only')).toBeInTheDocument();
     expect(screen.getByText(/does not prove checkout permission or provider authorization/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls[2][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
-    expect(fetchMock.mock.calls[2][1]).toEqual(
+    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/repository-context');
+    expect(fetchMock.mock.calls[3][1]).toEqual(
       expect.objectContaining({
         method: 'GET',
         credentials: 'omit',
@@ -1509,8 +1646,8 @@ describe('App', () => {
 
     expect(await screen.findByText('shown-once-secret')).toBeInTheDocument();
     expect(screen.getByText(/shown once/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls[3][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][0]).toBe('/v1/organizations/018f0000-0000-7000-8000-000000000002/users');
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -1577,10 +1714,10 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     await screen.findByText('Dev Lead');
-    expect(fetchMock.mock.calls[3][0]).toBe(
+    expect(fetchMock.mock.calls[4][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010'
     );
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         credentials: 'omit',
@@ -1628,10 +1765,10 @@ describe('App', () => {
     fireEvent.click(within(confirmDialog).getByRole('button', { name: /^Reset temporary password$/i }));
 
     expect(await screen.findByText('rotated-once-secret')).toBeInTheDocument();
-    expect(fetchMock.mock.calls[3][0]).toBe(
+    expect(fetchMock.mock.calls[4][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000010/temporary-password-resets'
     );
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'POST',
         credentials: 'omit',
@@ -1640,7 +1777,7 @@ describe('App', () => {
         },
       })
     );
-    expect(fetchMock.mock.calls[3][1]?.body).toBeUndefined();
+    expect(fetchMock.mock.calls[4][1]?.body).toBeUndefined();
     expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Must change password');
     expect(asMock(window.localStorage.setItem)).not.toHaveBeenCalled();
     expect(window.localStorage.length).toBe(0);
@@ -1672,7 +1809,7 @@ describe('App', () => {
     fireEvent.click(resetButton);
 
     expect(screen.queryByRole('dialog', { name: /confirm temporary password reset/i })).not.toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('blocks self owner downgrade before calling PATCH', async () => {
@@ -1694,7 +1831,7 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('You cannot remove your own owner access');
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('blocks self membership deactivation before calling PATCH', async () => {
@@ -1716,7 +1853,7 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('You cannot deactivate your own organization membership');
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it('allows self display name edit while preserving owner role and active state', async () => {
@@ -1740,10 +1877,10 @@ describe('App', () => {
     fireEvent.click(within(drawer).getByRole('button', { name: /^Save$/i }));
 
     await screen.findByText('Owner Updated');
-    expect(fetchMock.mock.calls[3][0]).toBe(
+    expect(fetchMock.mock.calls[4][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000001'
     );
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({
@@ -1777,10 +1914,10 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByRole('table', { name: /workspace users/i })).toHaveTextContent('Admin');
     });
-    expect(fetchMock.mock.calls[3][0]).toBe(
+    expect(fetchMock.mock.calls[4][0]).toBe(
       '/v1/organizations/018f0000-0000-7000-8000-000000000002/users/018f0000-0000-7000-8000-000000000011'
     );
-    expect(fetchMock.mock.calls[3][1]).toEqual(
+    expect(fetchMock.mock.calls[4][1]).toEqual(
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({

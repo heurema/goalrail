@@ -167,13 +167,13 @@
   Delivery Readiness cards now use one frontend-projected primary status,
   D-0091 display priority, and calm browser-local timestamps while preserving
   read-only clarification question text and context.
-- The backend now has authenticated, organization-scoped, read-only Contract
-  discovery for future Console Contracts rail/list support:
+- The Console Contracts surface now consumes authenticated,
+  organization-scoped, read-only Contract discovery:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
-  It returns compact public Contract records in a `{ "contracts": [...],
-  "limit": n }` envelope with a default limit of 50 and max of 100, and it does
-  not create contracts, recompute readiness, create plans, or drive lifecycle
-  transitions. No frontend contract rail/list UI exists yet.
+  It loads `GET /v1/contracts?limit=50` by default, renders a compact
+  contract rail/list with selected detail, supports state filtering plus manual
+  refresh, keeps manual ID lookup as a secondary fallback, and does not create
+  contracts, recompute readiness, create plans, or drive lifecycle transitions.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
@@ -189,13 +189,11 @@
   stream: initial authenticated refresh, repeat about every 5-10 seconds in an
   active tab, skip scheduled polling while hidden, keep manual Refresh / Retry
   as fallback, and keep existing visible state on transient errors. The
-  minimum feed remains `GET /v1/qualification-feed?limit=50`; selected
-  Contract detail uses `GET /v1/contracts/{id}`. Delivery Readiness display now
-  follows one primary status per card, D-0091 status priority, and calm
-  browser-local time labels; backend Contract discovery is now implemented as
-  authenticated, organization-scoped, read-only filtered
-  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`
-  for future list/rail UI.
+  minimum feed remains `GET /v1/qualification-feed?limit=50`; the Contracts
+  rail/list uses `GET /v1/contracts?limit=50` plus the state filter, and
+  selected Contract detail uses `GET /v1/contracts/{id}`. Delivery Readiness
+  display now follows one primary status per card, D-0091 status priority, and
+  calm browser-local time labels.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
   activity timeline, UI clarification answer forms, or fake Proof/readiness
   data in that slice. Future `Agent working` requires a real daemon/status
