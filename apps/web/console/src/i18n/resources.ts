@@ -351,18 +351,16 @@ export const resources = {
         emptyLane: 'No items in this lane.',
         emptyValue: 'not present',
         noContract: 'No linked contract',
-        ready: 'Ready',
-        notReady: 'Not ready',
         questions: 'Questions',
         openContract: 'Open contract',
         reasonCodes: 'Readiness reason codes',
         noReasonCodes: 'no reason codes',
         questionsCount: '{{count}} open questions',
-        readOnlyStates: {
-          needsAnswer: 'Needs answer',
-          readyForContract: 'Ready for contract',
-          needsQualification: 'Needs qualification',
-          contractLinked: 'Contract linked',
+        primaryStatuses: {
+          needs_answer: 'Needs answer',
+          ready_for_contract: 'Ready for contract',
+          needs_qualification: 'Needs qualification',
+          contract_linked: 'Contract linked',
           blocked: 'Blocked',
         },
         lanes: {
@@ -387,6 +385,7 @@ export const resources = {
           repository: 'Repository',
           repoBinding: 'RepoBinding',
           goalState: 'Goal state',
+          feedLane: 'Feed lane',
           contract: 'Contract',
         },
         goalStates: {
@@ -781,18 +780,16 @@ export const resources = {
         emptyLane: 'В этой lane нет items.',
         emptyValue: 'нет',
         noContract: 'Нет связанного contract',
-        ready: 'Ready',
-        notReady: 'Not ready',
         questions: 'Вопросы',
         openContract: 'Открыть контракт',
         reasonCodes: 'Readiness reason codes',
         noReasonCodes: 'нет reason codes',
         questionsCount: '{{count}} open questions',
-        readOnlyStates: {
-          needsAnswer: 'Нужен ответ',
-          readyForContract: 'Готово к контракту',
-          needsQualification: 'Нужна оценка',
-          contractLinked: 'Контракт связан',
+        primaryStatuses: {
+          needs_answer: 'Нужен ответ',
+          ready_for_contract: 'Готово к контракту',
+          needs_qualification: 'Нужна квалификация',
+          contract_linked: 'Контракт связан',
           blocked: 'Заблокировано',
         },
         lanes: {
@@ -817,6 +814,7 @@ export const resources = {
           repository: 'Repository',
           repoBinding: 'RepoBinding',
           goalState: 'Goal state',
+          feedLane: 'Лента',
           contract: 'Contract',
         },
         goalStates: {

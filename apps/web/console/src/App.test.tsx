@@ -720,8 +720,10 @@ describe('App', () => {
     );
   });
 
-  it('loads the qualification feed into qualification, clarification, contract, and blocked lanes without action calls', async () => {
+  it('loads the qualification feed with one primary status, calm timestamps, and no action calls', async () => {
     await loginSuccessfully();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-08T10:00:30Z'));
     fetchMock.mockResolvedValueOnce(
       jsonResponse(
         qualificationFeedResponse([
@@ -791,8 +793,11 @@ describe('App', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /^Delivery Readiness$/i }));
+    await act(async () => {
+      await Promise.resolve();
+    });
 
-    const board = await screen.findByLabelText(/qualification feed lane view/i);
+    const board = screen.getByLabelText(/qualification feed lane view/i);
     const qualificationLane = within(board).getByLabelText('Qualification lane');
     const clarificationLane = within(board).getByLabelText('Clarification lane');
     const contractLane = within(board).getByLabelText('Contract lane');
@@ -810,11 +815,16 @@ describe('App', () => {
     expect(qualificationLane).toHaveTextContent('Ready for contract seed goal');
     expect(qualificationLane).toHaveTextContent('Needs qualification');
     expect(qualificationLane).toHaveTextContent('Ready for contract');
+    const qualificationCards = Array.from(qualificationLane.querySelectorAll('.qualificationCard')).map((card) => card.textContent ?? '');
+    expect(qualificationCards[0]).toContain('Ready for contract seed goal');
+    expect(qualificationCards[1]).toContain('Created qualification goal');
     expect(clarificationLane).toHaveTextContent('Clarification goal');
     expect(clarificationLane).toHaveTextContent('1 open questions');
     expect(clarificationLane).toHaveTextContent('What is the intended scope at a high level?');
+    expect(clarificationLane).toHaveTextContent('A scope hint is required before contract seed readiness.');
     expect(clarificationLane).toHaveTextContent('Needs answer');
     expect(within(clarificationLane).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(clarificationLane).queryByRole('button', { name: /^Answer questions$/i })).not.toBeInTheDocument();
     expect(contractLane).toHaveTextContent('Contract draft goal');
     expect(contractLane).toHaveTextContent('Draft');
     expect(contractLane).toHaveTextContent('Contract linked');
@@ -823,6 +833,18 @@ describe('App', () => {
     expect(contractLane).toHaveTextContent('Approved');
     expect(blockedLane).toHaveTextContent('Rejected qualification goal');
     expect(blockedLane).toHaveTextContent('Rejected');
+    const cards = Array.from(board.querySelectorAll('.qualificationCard'));
+    expect(cards).toHaveLength(6);
+    cards.forEach((card) => {
+      const statusPills = Array.from(card.querySelectorAll('.opsPill'));
+      expect(statusPills).toHaveLength(1);
+      expect(statusPills[0]).toHaveTextContent(/^(Needs answer|Ready for contract|Needs qualification|Contract linked|Blocked)$/);
+      expect(within(card as HTMLElement).queryByText(/^Ready$/)).not.toBeInTheDocument();
+      expect(within(card as HTMLElement).queryByText(/^Not ready$/)).not.toBeInTheDocument();
+    });
+    expect(within(board).getAllByText('just now')).toHaveLength(6);
+    expect(board).not.toHaveTextContent(/2026-05-08T10:00:00Z/);
+    expect(board).not.toHaveTextContent(/continue_goal|answer_clarification|draft_contract/i);
     expect(board).not.toHaveTextContent(/Continue \/ Recheck|Answer questions|Draft contract|^Approve$|Plan work|Working\.\.\./i);
     const requestURLs = fetchMock.mock.calls.map(([url]) => String(url));
     expect(requestURLs.some((url) => /\/v1\/goals\/.*\/continuation/.test(url))).toBe(false);

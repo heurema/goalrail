@@ -2119,6 +2119,10 @@ select:focus-visible {
   border-color: color-mix(in oklab, var(--pass-soft) 70%, var(--line));
 }
 
+.qualificationCard.muted {
+  border-color: var(--line);
+}
+
 .qualificationCard > header {
   display: flex;
   align-items: flex-start;
@@ -2165,7 +2169,6 @@ select:focus-visible {
   line-height: 1.45;
 }
 
-.qualificationReadiness,
 .qualificationReasonList,
 .qualificationCardFooter {
   display: flex;

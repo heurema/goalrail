@@ -32,8 +32,9 @@ import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } f
 import type {
   QualificationFeedItem,
   QualificationFeedResponse,
-  QualificationLane,
 } from './qualificationFeedClient';
+import { READINESS_DISPLAY_LANES, projectReadinessDisplay, sortReadinessItems } from './readinessDisplay';
+import { formatCalmTimestamp } from './uiTime';
 import StartPage from './StartPage';
 
 import './App.css';
@@ -86,7 +87,6 @@ interface ThemePreset {
 const SURFACES: SurfaceId[] = ['contracts', 'delivery-readiness', 'proof'];
 const QUALIFICATION_FEED_LIMIT = 50;
 const QUALIFICATION_FEED_POLL_INTERVAL_MS = 5000;
-const QUALIFICATION_FEED_LANES = ['qualification', 'clarification', 'contract', 'blocked'] as const;
 const CONSOLE_ROLES: OrganizationUserRole[] = ['owner', 'admin', 'member', 'viewer'];
 const MEMBERSHIP_ROLES: MembershipRole[] = ['owner', 'admin', 'member', 'viewer'];
 const USER_STATUSES: OrganizationUserState[] = ['active', 'inactive'];
@@ -1211,6 +1211,7 @@ function ConsoleApp() {
           <QualificationFeedSurfacePanel
             feed={qualificationFeed}
             loadStatus={qualificationFeedLoadStatus}
+            locale={activeLocale}
             onOpenContract={openLinkedContract}
             onRetry={loadQualificationFeedOnce}
             qualificationFeedError={qualificationFeedError}
@@ -1932,6 +1933,7 @@ function formatDateTime(value: string) {
 function QualificationFeedSurfacePanel({
   feed,
   loadStatus,
+  locale,
   onOpenContract,
   onRetry,
   qualificationFeedError,
@@ -1939,15 +1941,16 @@ function QualificationFeedSurfacePanel({
 }: {
   feed: QualificationFeedResponse;
   loadStatus: QualificationFeedLoadStatus;
+  locale: ConsoleLocale;
   onOpenContract: (contractId: string) => void;
   onRetry: () => void;
   qualificationFeedError: string;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
   const items = feed.items;
-  const itemsByLane = QUALIFICATION_FEED_LANES.map((lane) => ({
+  const itemsByLane = READINESS_DISPLAY_LANES.map((lane) => ({
     lane,
-    items: items.filter((item) => qualificationBoardLane(item) === lane),
+    items: sortReadinessItems(items.filter((item) => qualificationBoardLane(item) === lane)),
   }));
 
   return (
@@ -2001,6 +2004,7 @@ function QualificationFeedSurfacePanel({
                 <QualificationFeedCard
                   item={item}
                   key={`${item.intake_id}-${item.goal_id}`}
+                  locale={locale}
                   onOpenContract={onOpenContract}
                   t={t}
                 />
@@ -2018,43 +2022,41 @@ function QualificationFeedSurfacePanel({
 
 function QualificationFeedCard({
   item,
+  locale,
   onOpenContract,
   t,
 }: {
   item: QualificationFeedItem;
+  locale: ConsoleLocale;
   onOpenContract: (contractId: string) => void;
   t: (key: string, options?: Record<string, unknown>) => string;
 }) {
+  const display = projectReadinessDisplay(item);
   const questionCount = item.open_clarification_request?.questions.length ?? 0;
   const readinessReasonCodes = item.readiness.reason_codes ?? [];
   const contractState = item.linked_contract ? t(`contractStates.${item.linked_contract.state}`) : t('qualificationFeed.noContract');
-  const primaryStatus = qualificationPrimaryStatus(item);
+  const contractValue = item.linked_contract
+    ? `${contractState} · ${item.linked_contract.id}`
+    : contractState;
+  const createdAtLabel = formatCalmTimestamp(item.created_at, { locale });
 
   return (
-    <article className={`qualificationCard ${qualificationTone(item.lane)}`}>
+    <article className={`qualificationCard ${display.tone}`}>
       <header>
         <div>
           <span className="opsMono">{item.goal_id}</span>
           <h4>{item.title}</h4>
         </div>
-        <span className={`opsPill ${qualificationTone(item.lane)}`}>{t(`qualificationFeed.itemLanes.${item.lane}`)}</span>
+        <span className={`opsPill ${display.tone}`}>{t(`qualificationFeed.primaryStatuses.${display.primaryStatusKey}`)}</span>
       </header>
 
       <dl className="qualificationCardFields">
         <FieldRow label={t('qualificationFeed.fields.repository')} value={item.repository_full_name || t('qualificationFeed.emptyValue')} />
         <FieldRow label={t('qualificationFeed.fields.repoBinding')} value={item.repo_binding_id} />
         <FieldRow label={t('qualificationFeed.fields.goalState')} value={t(`qualificationFeed.goalStates.${item.goal_state}`)} />
-        <FieldRow label={t('qualificationFeed.fields.contract')} value={contractState} />
+        <FieldRow label={t('qualificationFeed.fields.feedLane')} value={t(`qualificationFeed.itemLanes.${item.lane}`)} />
+        <FieldRow label={t('qualificationFeed.fields.contract')} value={contractValue} />
       </dl>
-
-      <div className="qualificationReadiness">
-        <span className={item.readiness.ready ? 'opsPill pass' : 'opsPill amber'}>
-          {item.readiness.ready ? t('qualificationFeed.ready') : t('qualificationFeed.notReady')}
-        </span>
-        <span className={`opsPill ${primaryStatus === 'contractLinked' ? 'pass' : primaryStatus === 'blocked' || primaryStatus === 'needsAnswer' ? 'amber' : 'muted'}`}>
-          {t(`qualificationFeed.readOnlyStates.${primaryStatus}`)}
-        </span>
-      </div>
 
       <div className="qualificationReasonList" aria-label={t('qualificationFeed.reasonCodes')}>
         {readinessReasonCodes.length > 0 ? (
@@ -2066,7 +2068,7 @@ function QualificationFeedCard({
 
       <footer className="qualificationCardFooter">
         <span>{t('qualificationFeed.questionsCount', { count: questionCount })}</span>
-        <span>{formatDateTime(item.created_at)}</span>
+        <span title={item.created_at}>{createdAtLabel}</span>
       </footer>
 
       {item.open_clarification_request ? (
@@ -2094,37 +2096,8 @@ function QualificationFeedCard({
   );
 }
 
-function qualificationPrimaryStatus(item: QualificationFeedItem) {
-  if (item.linked_contract) {
-    return 'contractLinked';
-  }
-  if (item.lane === 'blocked' || item.goal_state === 'rejected' || item.next_action.kind === 'blocked') {
-    return 'blocked';
-  }
-  if (item.open_clarification_request || item.next_action.kind === 'answer_clarification') {
-    return 'needsAnswer';
-  }
-  if (item.readiness.ready || item.goal_state === 'ready_for_contract_seed') {
-    return 'readyForContract';
-  }
-  return 'needsQualification';
-}
-
-function qualificationBoardLane(item: QualificationFeedItem): (typeof QUALIFICATION_FEED_LANES)[number] {
+function qualificationBoardLane(item: QualificationFeedItem): (typeof READINESS_DISPLAY_LANES)[number] {
   return item.lane;
-}
-
-function qualificationTone(lane: QualificationLane) {
-  if (lane === 'clarification') {
-    return 'amber';
-  }
-  if (lane === 'contract') {
-    return 'pass';
-  }
-  if (lane === 'blocked') {
-    return 'muted';
-  }
-  return 'mauve';
 }
 
 function SurfaceEmptyStatePanel({
