@@ -34,6 +34,7 @@ type RouteHandlers struct {
 	QualificationFeed             http.Handler
 	GoalClarificationRequests     http.Handler
 	ContractCreate                http.Handler
+	ContractList                  http.Handler
 	ContractGet                   http.Handler
 	ContractUpdate                http.Handler
 	ContractSubmit                http.Handler
@@ -92,6 +93,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("GET /v1/qualification-feed", mustHandler("qualification feed", handlers.QualificationFeed))
 	mux.Handle("POST /v1/goals/{id}/clarifications", mustHandler("goal clarification requests", handlers.GoalClarificationRequests))
 	mux.Handle("POST /v1/contracts", mustHandler("contract create", handlers.ContractCreate))
+	mux.Handle("GET /v1/contracts", mustHandler("contract list", handlers.ContractList))
 	mux.Handle("GET /v1/contracts/{id}", mustHandler("contract get", handlers.ContractGet))
 	mux.Handle("PATCH /v1/contracts/{id}", mustHandler("contract update", handlers.ContractUpdate))
 	mux.Handle("POST /v1/contracts/{id}/submissions", mustHandler("contract submit", handlers.ContractSubmit))

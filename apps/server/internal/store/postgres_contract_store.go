@@ -16,18 +16,25 @@ import (
 type PostgresContractStore struct {
 	exec  postgresExecer
 	query postgresRowQuerier
+	rows  postgresRowsQuerier
 	psql  squirrel.StatementBuilderType
 }
 
 func NewPostgresContractStore(pool *pgxpool.Pool) *PostgresContractStore {
 	db := newPostgresDB(pool)
-	return NewPostgresContractStoreWithExecutorAndQuerier(db, db)
+	return NewPostgresContractStoreWithExecutorQuerierAndRows(db, db, db)
 }
 
 func NewPostgresContractStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *PostgresContractStore {
+	rows, _ := query.(postgresRowsQuerier)
+	return NewPostgresContractStoreWithExecutorQuerierAndRows(exec, query, rows)
+}
+
+func NewPostgresContractStoreWithExecutorQuerierAndRows(exec postgresExecer, query postgresRowQuerier, rows postgresRowsQuerier) *PostgresContractStore {
 	return &PostgresContractStore{
 		exec:  exec,
 		query: query,
+		rows:  rows,
 		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 	}
 }
@@ -129,6 +136,73 @@ func (s *PostgresContractStore) GetByGoalID(ctx context.Context, id spine.GoalID
 		return spine.Contract{}, false, err
 	}
 	return s.getOne(ctx, "get contract by goal id", squirrel.Eq{"goal_id": goalID})
+}
+
+func (s *PostgresContractStore) List(ctx context.Context, filter spine.ContractListFilter) ([]spine.Contract, error) {
+	if s.rows == nil {
+		return nil, fmt.Errorf("contract rows executor is nil")
+	}
+	orgID, err := uuidValue(filter.OrganizationID, "contract organization id")
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := s.psql.
+		Select(contractColumns()...).
+		From("contracts").
+		Where(squirrel.Eq{"organization_id": orgID}).
+		OrderBy("updated_at DESC", "created_at DESC", "id DESC")
+
+	if filter.ProjectID != "" {
+		projectID, err := uuidValue(filter.ProjectID, "contract project id")
+		if err != nil {
+			return nil, err
+		}
+		stmt = stmt.Where(squirrel.Eq{"project_id": projectID})
+	}
+	if filter.RepoBindingID != "" {
+		repoBindingID, err := uuidValue(filter.RepoBindingID, "contract repo binding id")
+		if err != nil {
+			return nil, err
+		}
+		stmt = stmt.Where(squirrel.Eq{"repo_binding_id": repoBindingID})
+	}
+	if filter.GoalID != "" {
+		goalID, err := uuidValue(filter.GoalID, "contract goal id")
+		if err != nil {
+			return nil, err
+		}
+		stmt = stmt.Where(squirrel.Eq{"goal_id": goalID})
+	}
+	if filter.State != "" {
+		stmt = stmt.Where(squirrel.Eq{"state": filter.State})
+	}
+	if filter.Limit > 0 {
+		stmt = stmt.Limit(uint64(filter.Limit))
+	}
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("list contracts SQL: %w", err)
+	}
+	rows, err := s.rows.Query(ctx, sqlText, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list contracts: %w", err)
+	}
+	defer rows.Close()
+
+	var contracts []spine.Contract
+	for rows.Next() {
+		contract, err := scanContract(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan contract: %w", err)
+		}
+		contracts = append(contracts, contract)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate contracts: %w", err)
+	}
+	return contracts, nil
 }
 
 func (s *PostgresContractStore) MarkDraftCreated(ctx context.Context, contractID spine.ContractID, draftID spine.ContractDraftID, updatedAt time.Time) error {

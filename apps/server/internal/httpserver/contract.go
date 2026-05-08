@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/heurema/goalrail/apps/server/internal/actor"
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
@@ -17,6 +19,7 @@ import (
 type ContractService interface {
 	Create(context.Context, spine.ContractCreateRequest, spine.OrganizationMembership) (spine.Contract, bool, error)
 	Get(context.Context, spine.ContractID) (spine.Contract, error)
+	List(context.Context, contract.ListInput) (spine.ContractList, error)
 	UpdateDraft(context.Context, spine.ContractID, spine.ContractDraftUpdateRequest, spine.OrganizationMembership) (spine.Contract, error)
 	SubmitForApproval(context.Context, spine.ContractID, spine.ContractDraftReadyForApprovalRequest, spine.OrganizationMembership) (spine.Contract, error)
 	Approve(context.Context, spine.ContractID, spine.ApproveContractDraftRequest, spine.OrganizationMembership) (spine.Contract, error)
@@ -55,6 +58,27 @@ func (h *ContractHandler) Create(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	RespondJSON(w, status, created)
+}
+
+func (h *ContractHandler) List(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
+	input, ok := parseContractListQuery(w, r)
+	if !ok {
+		return
+	}
+	input.Membership = profile.OrganizationMembership
+
+	result, err := h.service.List(r.Context(), input)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, result)
 }
 
 func (h *ContractHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +166,25 @@ func (h *ContractHandler) Approve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RespondJSON(w, http.StatusCreated, approved)
+}
+
+func parseContractListQuery(w http.ResponseWriter, r *http.Request) (contract.ListInput, bool) {
+	query := r.URL.Query()
+	input := contract.ListInput{
+		ProjectID:     spine.ProjectID(strings.TrimSpace(query.Get("project_id"))),
+		RepoBindingID: spine.RepoBindingID(strings.TrimSpace(query.Get("repo_binding_id"))),
+		GoalID:        spine.GoalID(strings.TrimSpace(query.Get("goal_id"))),
+		State:         spine.ContractState(strings.TrimSpace(query.Get("state"))),
+	}
+	if rawLimit := strings.TrimSpace(query.Get("limit")); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			RespondError(w, http.StatusBadRequest, "validation_failed", "limit: must be an integer")
+			return contract.ListInput{}, false
+		}
+		input.Limit = limit
+	}
+	return input, true
 }
 
 func actorRefForAuthProfile(profile auth.Profile) spine.ActorRef {

@@ -167,6 +167,13 @@
   Delivery Readiness cards now use one frontend-projected primary status,
   D-0091 display priority, and calm browser-local timestamps while preserving
   read-only clarification question text and context.
+- The backend now has authenticated, organization-scoped, read-only Contract
+  discovery for future Console Contracts rail/list support:
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
+  It returns compact public Contract records in a `{ "contracts": [...],
+  "limit": n }` envelope with a default limit of 50 and max of 100, and it does
+  not create contracts, recompute readiness, create plans, or drive lifecycle
+  transitions. No frontend contract rail/list UI exists yet.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a
@@ -185,9 +192,10 @@
   minimum feed remains `GET /v1/qualification-feed?limit=50`; selected
   Contract detail uses `GET /v1/contracts/{id}`. Delivery Readiness display now
   follows one primary status per card, D-0091 status priority, and calm
-  browser-local time labels; optional future contract
-  discovery should prefer authenticated, organization-scoped, read-only filtered
-  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
+  browser-local time labels; backend Contract discovery is now implemented as
+  authenticated, organization-scoped, read-only filtered
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`
+  for future list/rail UI.
   Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
   activity timeline, UI clarification answer forms, or fake Proof/readiness
   data in that slice. Future `Agent working` requires a real daemon/status

@@ -136,6 +136,153 @@ func TestPostContractsCreateOrReturnsExistingDraft(t *testing.T) {
 	}
 }
 
+func TestGetContractsListsAuthenticatedOrganizationContracts(t *testing.T) {
+	server := testServer(t)
+	goal := createReadyForContractSeedGoal(t, server)
+	response := doAuthRequest(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(goal.ID), "Bearer access-token")
+	if response.code != http.StatusCreated {
+		t.Fatalf("contract create status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	var created spine.Contract
+	decodeJSON(t, response.body, &created)
+	otherOrg := created
+	otherOrg.ID = "018f0000-0000-7000-8000-000000000c99"
+	otherOrg.OrganizationID = "018f0000-0000-7000-8000-000000009999"
+	otherOrg.GoalID = "018f0000-0000-7000-8000-000000000299"
+	if err := server.contracts.Create(context.Background(), otherOrg); err != nil {
+		t.Fatalf("other org contract create error = %v", err)
+	}
+
+	listResponse := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts", "", "Bearer access-token")
+	if listResponse.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", listResponse.code, http.StatusOK, listResponse.body)
+	}
+	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
+		if strings.Contains(listResponse.body, hiddenField) {
+			t.Fatalf("response includes hidden field %s", hiddenField)
+		}
+	}
+	var body spine.ContractList
+	decodeJSON(t, listResponse.body, &body)
+	if body.Limit != 50 {
+		t.Fatalf("limit = %d, want 50", body.Limit)
+	}
+	if len(body.Contracts) != 1 {
+		t.Fatalf("contracts len = %d, want 1: %#v", len(body.Contracts), body.Contracts)
+	}
+	if body.Contracts[0].ID != created.ID {
+		t.Fatalf("contract id = %q, want %q", body.Contracts[0].ID, created.ID)
+	}
+}
+
+func TestGetContractsAppliesSupportedFilters(t *testing.T) {
+	server := testServer(t)
+	matchingGoal := createReadyForContractSeedGoal(t, server)
+	createResponse := doAuthRequest(t, server.router, http.MethodPost, "/v1/contracts", createContractJSON(matchingGoal.ID), "Bearer access-token")
+	if createResponse.code != http.StatusCreated {
+		t.Fatalf("contract create status = %d, want %d: %s", createResponse.code, http.StatusCreated, createResponse.body)
+	}
+	var matching spine.Contract
+	decodeJSON(t, createResponse.body, &matching)
+	contracts := []spine.Contract{
+		contractForList("018f0000-0000-7000-8000-000000000c21", "018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000009903", matching.RepoBindingID, "018f0000-0000-7000-8000-000000009901", spine.ContractStateDraft),
+		contractForList("018f0000-0000-7000-8000-000000000c22", "018f0000-0000-7000-8000-000000000002", matchingGoal.ProjectID, "018f0000-0000-7000-8000-000000009904", "018f0000-0000-7000-8000-000000009902", spine.ContractStateDraft),
+		contractForList("018f0000-0000-7000-8000-000000000c23", "018f0000-0000-7000-8000-000000000002", matchingGoal.ProjectID, matching.RepoBindingID, "018f0000-0000-7000-8000-000000009905", spine.ContractStateDraft),
+		contractForList("018f0000-0000-7000-8000-000000000c24", "018f0000-0000-7000-8000-000000000002", matchingGoal.ProjectID, matching.RepoBindingID, "018f0000-0000-7000-8000-000000009906", spine.ContractStateApproved),
+	}
+	for _, contract := range contracts {
+		if err := server.contracts.Create(context.Background(), contract); err != nil {
+			t.Fatalf("contract store create error = %v", err)
+		}
+	}
+
+	tests := []struct {
+		name         string
+		query        string
+		forbiddenIDs []spine.ContractID
+		wantOnlyID   spine.ContractID
+	}{
+		{name: "project", query: "project_id=" + string(matchingGoal.ProjectID), forbiddenIDs: []spine.ContractID{"018f0000-0000-7000-8000-000000000c21"}},
+		{name: "repo binding", query: "repo_binding_id=" + string(matching.RepoBindingID), forbiddenIDs: []spine.ContractID{"018f0000-0000-7000-8000-000000000c22"}},
+		{name: "goal", query: "goal_id=" + string(matching.GoalID), forbiddenIDs: []spine.ContractID{"018f0000-0000-7000-8000-000000000c21", "018f0000-0000-7000-8000-000000000c22", "018f0000-0000-7000-8000-000000000c23", "018f0000-0000-7000-8000-000000000c24"}},
+		{name: "state", query: "state=draft"},
+		{name: "combined", query: "project_id=" + string(matchingGoal.ProjectID) + "&repo_binding_id=" + string(matching.RepoBindingID) + "&goal_id=" + string(matching.GoalID) + "&state=draft", wantOnlyID: matching.ID},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts?"+tt.query, "", "Bearer access-token")
+			if response.code != http.StatusOK {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+			}
+			var body spine.ContractList
+			decodeJSON(t, response.body, &body)
+			if len(body.Contracts) == 0 {
+				t.Fatal("contracts len = 0, want matches")
+			}
+			if tt.wantOnlyID != "" && (len(body.Contracts) != 1 || body.Contracts[0].ID != tt.wantOnlyID) {
+				t.Fatalf("contracts = %#v, want only %q", body.Contracts, tt.wantOnlyID)
+			}
+			for _, listed := range body.Contracts {
+				for _, forbiddenID := range tt.forbiddenIDs {
+					if listed.ID == forbiddenID {
+						t.Fatalf("%s filter returned nonmatching contract: %#v", tt.name, listed)
+					}
+				}
+				if tt.name == "state" && listed.State != spine.ContractStateDraft {
+					t.Fatalf("state filter returned %q, want draft", listed.State)
+				}
+			}
+		})
+	}
+}
+
+func TestGetContractsLimitValidationAndReadOnlyBehavior(t *testing.T) {
+	server := testServer(t)
+	created := createContract(t, server)
+	beforeContracts := len(server.contracts.contracts)
+	beforeSeeds := len(server.contractSeeds.seeds)
+	beforeDrafts := len(server.contractDrafts.drafts)
+	beforeApproved := len(server.approvedContracts.approved)
+	beforeWorkItems := len(server.workItems.items)
+	beforePlans := len(server.workItemPlans.plans)
+	beforeRuns := len(server.runs.runs)
+	beforeEvents := len(server.events.Events())
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts?limit=100", "", "Bearer access-token")
+	if response.code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var body spine.ContractList
+	decodeJSON(t, response.body, &body)
+	if body.Limit != 100 {
+		t.Fatalf("limit = %d, want 100", body.Limit)
+	}
+	if len(body.Contracts) != 1 || body.Contracts[0].ID != created.ID {
+		t.Fatalf("contracts = %#v, want created contract", body.Contracts)
+	}
+	if len(server.contracts.contracts) != beforeContracts || len(server.contractSeeds.seeds) != beforeSeeds || len(server.contractDrafts.drafts) != beforeDrafts || len(server.approvedContracts.approved) != beforeApproved || len(server.workItems.items) != beforeWorkItems || len(server.workItemPlans.plans) != beforePlans || len(server.runs.runs) != beforeRuns || len(server.events.Events()) != beforeEvents {
+		t.Fatal("GET /v1/contracts mutated contract lifecycle, planning, run, or event state")
+	}
+
+	for _, path := range []string{"/v1/contracts?limit=nope", "/v1/contracts?limit=101", "/v1/contracts?state=blocked", "/v1/contracts?goal_id=not-a-uuid"} {
+		t.Run(path, func(t *testing.T) {
+			response := doAuthRequest(t, server.router, http.MethodGet, path, "", "Bearer access-token")
+			if response.code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", response.code, http.StatusBadRequest, response.body)
+			}
+		})
+	}
+}
+
+func TestGetContractsRequiresBearerAuth(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts", "", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+}
+
 func TestPostContractsRequiresAuthBeforeMutation(t *testing.T) {
 	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
 	goal := createReadyForContractSeedGoal(t, server)
@@ -805,6 +952,19 @@ func createContract(t *testing.T, server testServerDeps) spine.Contract {
 	var contract spine.Contract
 	decodeJSON(t, response.body, &contract)
 	return contract
+}
+
+func contractForList(id spine.ContractID, organizationID spine.OrganizationID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, goalID spine.GoalID, state spine.ContractState) spine.Contract {
+	return spine.Contract{
+		ID:             id,
+		OrganizationID: organizationID,
+		ProjectID:      projectID,
+		RepoBindingID:  repoBindingID,
+		GoalID:         goalID,
+		State:          state,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
+	}
 }
 
 func submitContractForApproval(t *testing.T, server testServerDeps, contractID spine.ContractID) spine.Contract {

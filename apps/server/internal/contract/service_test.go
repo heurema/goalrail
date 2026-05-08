@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -182,6 +183,120 @@ func TestCreateReturnsExistingContractForGoal(t *testing.T) {
 	}
 	if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftCreated); got != 1 {
 		t.Fatalf("contract_draft.created events = %d, want 1", got)
+	}
+}
+
+func TestListScopesContractsToActiveMembershipOrganization(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	if err := contractStore.Create(ctx, storedContract("018f0000-0000-7000-8000-000000000c01", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateDraft)); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := contractStore.Create(ctx, storedContract("018f0000-0000-7000-8000-000000000c02", "018f0000-0000-7000-8000-000000009999", "018f0000-0000-7000-8000-000000000202", spine.ContractStateApproved)); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	result, err := service.List(ctx, contract.ListInput{Membership: activeMembership(orgID)})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result.Contracts) != 1 {
+		t.Fatalf("contracts len = %d, want 1: %#v", len(result.Contracts), result.Contracts)
+	}
+	if result.Contracts[0].OrganizationID != orgID {
+		t.Fatalf("contract organization = %q, want %q", result.Contracts[0].OrganizationID, orgID)
+	}
+	if result.Limit != 50 {
+		t.Fatalf("limit = %d, want default 50", result.Limit)
+	}
+}
+
+func TestListAppliesFiltersAndMaxLimit(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	matching := storedContract("018f0000-0000-7000-8000-000000000c01", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateReadyForApproval)
+	if err := contractStore.Create(ctx, matching); err != nil {
+		t.Fatalf("Create() matching error = %v", err)
+	}
+	for _, other := range []spine.Contract{
+		storedContract("018f0000-0000-7000-8000-000000000c02", orgID, "018f0000-0000-7000-8000-000000000202", spine.ContractStateReadyForApproval),
+		storedContract("018f0000-0000-7000-8000-000000000c03", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateDraft),
+	} {
+		if err := contractStore.Create(ctx, other); err != nil {
+			t.Fatalf("Create() other error = %v", err)
+		}
+	}
+
+	result, err := service.List(ctx, contract.ListInput{
+		Membership:    activeMembership(orgID),
+		ProjectID:     matching.ProjectID,
+		RepoBindingID: matching.RepoBindingID,
+		GoalID:        matching.GoalID,
+		State:         spine.ContractStateReadyForApproval,
+		Limit:         100,
+	})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result.Contracts) != 1 || result.Contracts[0].ID != matching.ID {
+		t.Fatalf("contracts = %#v, want matching contract only", result.Contracts)
+	}
+	if result.Limit != 100 || contractStore.lastListFilter.Limit != 100 {
+		t.Fatalf("limit result/filter = %d/%d, want 100/100", result.Limit, contractStore.lastListFilter.Limit)
+	}
+}
+
+func TestListAllowsActiveReaderRoles(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	for _, role := range []spine.OrganizationMembershipRole{
+		spine.OrganizationMembershipRoleViewer,
+		spine.OrganizationMembershipRoleMember,
+		spine.OrganizationMembershipRoleAdmin,
+		spine.OrganizationMembershipRoleOwner,
+	} {
+		t.Run(string(role), func(t *testing.T) {
+			membership := activeMembership("018f0000-0000-7000-8000-000000000002")
+			membership.Role = role
+			if _, err := service.List(ctx, contract.ListInput{Membership: membership}); err != nil {
+				t.Fatalf("List() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestListRejectsInactiveMembershipAndInvalidFilters(t *testing.T) {
+	ctx := context.Background()
+	service := newContractServiceWithStore(newFakeContractStore())
+	tests := []struct {
+		name  string
+		input contract.ListInput
+	}{
+		{
+			name: "inactive membership",
+			input: contract.ListInput{Membership: spine.OrganizationMembership{
+				OrganizationID: "018f0000-0000-7000-8000-000000000002",
+				State:          spine.EntityStateInactive,
+			}},
+		},
+		{name: "bad project id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), ProjectID: "not-a-uuid"}},
+		{name: "bad repo binding id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), RepoBindingID: "not-a-uuid"}},
+		{name: "bad goal id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), GoalID: "not-a-uuid"}},
+		{name: "invalid state", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), State: "blocked"}},
+		{name: "negative limit", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), Limit: -1}},
+		{name: "too large limit", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), Limit: 101}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := service.List(ctx, tt.input); err == nil {
+				t.Fatal("List() error = nil, want validation or membership error")
+			}
+		})
 	}
 }
 
@@ -757,6 +872,49 @@ func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
 }
 
+func newContractServiceWithStore(contractStore *fakeContractStore) *contract.Service {
+	goalStore := newFakeGoalStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	return contract.NewService(goalStore, contractStore, seedService, draftService, approvalService, txRunner)
+}
+
+func storedContract(id spine.ContractID, organizationID spine.OrganizationID, goalID spine.GoalID, state spine.ContractState) spine.Contract {
+	return spine.Contract{
+		ID:             id,
+		OrganizationID: organizationID,
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		GoalID:         goalID,
+		State:          state,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime().Add(time.Duration(len(id)) * time.Minute),
+	}
+}
+
+func cloneContract(contract spine.Contract) spine.Contract {
+	if contract.CurrentSeedID != nil {
+		value := *contract.CurrentSeedID
+		contract.CurrentSeedID = &value
+	}
+	if contract.CurrentDraftID != nil {
+		value := *contract.CurrentDraftID
+		contract.CurrentDraftID = &value
+	}
+	if contract.ApprovedSnapshotID != nil {
+		value := *contract.ApprovedSnapshotID
+		contract.ApprovedSnapshotID = &value
+	}
+	return contract
+}
+
 type fakeGoalStore struct {
 	goals map[spine.GoalID]spine.Goal
 }
@@ -778,6 +936,7 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 type fakeContractStore struct {
 	contracts                          map[spine.ContractID]spine.Contract
 	byGoal                             map[spine.GoalID]spine.ContractID
+	lastListFilter                     spine.ContractListFilter
 	createSawTransaction               bool
 	markDraftCreatedSawTransaction     bool
 	markReadyForApprovalSawTransaction bool
@@ -810,6 +969,42 @@ func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spi
 	}
 	contract, ok := s.contracts[contractID]
 	return contract, ok, nil
+}
+
+func (s *fakeContractStore) List(_ context.Context, filter spine.ContractListFilter) ([]spine.Contract, error) {
+	s.lastListFilter = filter
+	contracts := make([]spine.Contract, 0, len(s.contracts))
+	for _, contract := range s.contracts {
+		if filter.OrganizationID != "" && contract.OrganizationID != filter.OrganizationID {
+			continue
+		}
+		if filter.ProjectID != "" && contract.ProjectID != filter.ProjectID {
+			continue
+		}
+		if filter.RepoBindingID != "" && contract.RepoBindingID != filter.RepoBindingID {
+			continue
+		}
+		if filter.GoalID != "" && contract.GoalID != filter.GoalID {
+			continue
+		}
+		if filter.State != "" && contract.State != filter.State {
+			continue
+		}
+		contracts = append(contracts, cloneContract(contract))
+	}
+	sort.Slice(contracts, func(i, j int) bool {
+		if !contracts[i].UpdatedAt.Equal(contracts[j].UpdatedAt) {
+			return contracts[i].UpdatedAt.After(contracts[j].UpdatedAt)
+		}
+		if !contracts[i].CreatedAt.Equal(contracts[j].CreatedAt) {
+			return contracts[i].CreatedAt.After(contracts[j].CreatedAt)
+		}
+		return contracts[i].ID > contracts[j].ID
+	})
+	if filter.Limit > 0 && len(contracts) > filter.Limit {
+		contracts = contracts[:filter.Limit]
+	}
+	return contracts, nil
 }
 
 func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error {
