@@ -207,8 +207,18 @@ func (s *Service) Create(ctx context.Context, input spine.ContractCreateRequest,
 	return created, true, err
 }
 
-func (s *Service) Get(ctx context.Context, id spine.ContractID) (spine.Contract, error) {
-	return s.getContract(ctx, id)
+func (s *Service) Get(ctx context.Context, id spine.ContractID, membership spine.OrganizationMembership) (spine.Contract, error) {
+	if err := authorizeContractRead(membership); err != nil {
+		return spine.Contract{}, err
+	}
+	contract, err := s.getContract(ctx, id)
+	if err != nil {
+		return spine.Contract{}, err
+	}
+	if err := authorizeContractOrganization(membership, contract); err != nil {
+		return spine.Contract{}, err
+	}
+	return contract, nil
 }
 
 func (s *Service) CurrentDraft(ctx context.Context, id spine.ContractID, membership spine.OrganizationMembership) (spine.ContractDraft, error) {
@@ -355,15 +365,19 @@ func authorizeContractMutation(membership spine.OrganizationMembership, contract
 	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
 		return ErrMembershipRequired
 	}
-	if membership.OrganizationID != contract.OrganizationID {
-		return ErrOrganizationForbidden
-	}
-	return nil
+	return authorizeContractOrganization(membership, contract)
 }
 
 func authorizeContractRead(membership spine.OrganizationMembership) error {
 	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
 		return ErrMembershipRequired
+	}
+	return nil
+}
+
+func authorizeContractOrganization(membership spine.OrganizationMembership, contract spine.Contract) error {
+	if membership.OrganizationID != contract.OrganizationID {
+		return ErrOrganizationForbidden
 	}
 	return nil
 }

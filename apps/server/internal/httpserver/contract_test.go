@@ -431,10 +431,50 @@ func TestPostContractsRejectsProjectMismatchBeforeMutation(t *testing.T) {
 func TestGetContractReturnsContractView(t *testing.T) {
 	server := testServer(t)
 	contract := createContract(t, server)
+	beforeContracts := len(server.contracts.contracts)
+	beforeSeeds := len(server.contractSeeds.seeds)
+	beforeDrafts := len(server.contractDrafts.drafts)
+	beforeApproved := len(server.approvedContracts.approved)
+	beforeWorkItems := len(server.workItems.items)
+	beforePlans := len(server.workItemPlans.plans)
+	beforePlanLeases := len(server.workItemLeases.leases)
+	beforeProposals := len(server.workItemProposals.proposals)
+	beforeCheckoutJobs := len(server.checkoutJobs.jobs)
+	beforeCheckoutReceipts := len(server.checkoutReceipts.receipts)
+	beforeExecutionJobs := len(server.executionJobs.jobs)
+	beforeRuns := len(server.runs.runs)
+	beforeCommandPlans := len(server.commandPlans.plans)
+	beforeExecutionReceipts := len(server.executionReceipts.receipts)
+	beforeEvents := len(server.events.Events())
+	goalBefore := server.goals.goals[contract.GoalID]
 
-	response := doJSON(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID), "")
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID), "", "Bearer access-token")
 	if response.code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	for _, hiddenField := range []string{"\"organization_id\"", "\"project_id\""} {
+		if strings.Contains(response.body, hiddenField) {
+			t.Fatalf("response includes hidden field %s", hiddenField)
+		}
+	}
+	for _, forbiddenField := range []string{"\"work_item_id\"", "\"run_id\"", "\"receipt_id\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\"", "\"readiness\""} {
+		if strings.Contains(response.body, forbiddenField) {
+			t.Fatalf("response includes forbidden field %s", forbiddenField)
+		}
+	}
+	for _, field := range []string{
+		"id",
+		"repo_binding_id",
+		"goal_id",
+		"state",
+		"current_seed_id",
+		"current_draft_id",
+		"created_at",
+		"updated_at",
+	} {
+		if !strings.Contains(response.body, `"`+field+`"`) {
+			t.Fatalf("response missing contract field %q: %s", field, response.body)
+		}
 	}
 
 	var got spine.Contract
@@ -442,12 +482,97 @@ func TestGetContractReturnsContractView(t *testing.T) {
 	if got.ID != contract.ID || got.State != spine.ContractStateDraft {
 		t.Fatalf("contract = %#v, want id %q state draft", got, contract.ID)
 	}
+	if got.RepoBindingID != contract.RepoBindingID || got.GoalID != contract.GoalID {
+		t.Fatalf("contract linkage = repo %q goal %q, want repo %q goal %q", got.RepoBindingID, got.GoalID, contract.RepoBindingID, contract.GoalID)
+	}
+	if got.CurrentSeedID == nil || got.CurrentDraftID == nil {
+		t.Fatalf("contract missing current seed or draft: %#v", got)
+	}
+	if len(server.contracts.contracts) != beforeContracts ||
+		len(server.contractSeeds.seeds) != beforeSeeds ||
+		len(server.contractDrafts.drafts) != beforeDrafts ||
+		len(server.approvedContracts.approved) != beforeApproved ||
+		len(server.workItems.items) != beforeWorkItems ||
+		len(server.workItemPlans.plans) != beforePlans ||
+		len(server.workItemLeases.leases) != beforePlanLeases ||
+		len(server.workItemProposals.proposals) != beforeProposals ||
+		len(server.checkoutJobs.jobs) != beforeCheckoutJobs ||
+		len(server.checkoutReceipts.receipts) != beforeCheckoutReceipts ||
+		len(server.executionJobs.jobs) != beforeExecutionJobs ||
+		len(server.runs.runs) != beforeRuns ||
+		len(server.commandPlans.plans) != beforeCommandPlans ||
+		len(server.executionReceipts.receipts) != beforeExecutionReceipts ||
+		len(server.events.Events()) != beforeEvents ||
+		!reflect.DeepEqual(server.goals.goals[contract.GoalID], goalBefore) {
+		t.Fatal("GET /v1/contracts/{id} mutated contract lifecycle, planning, run, execution, event, or readiness state")
+	}
+}
+
+func TestGetContractRequiresBearerAuth(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	contract := contractForList("018f0000-0000-7000-8000-000000000c30", "018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000000004", "018f0000-0000-7000-8000-000000000230", spine.ContractStateDraft)
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID), "", "")
+	if response.code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusUnauthorized, response.body)
+	}
+}
+
+func TestGetContractRejectsInactiveMembership(t *testing.T) {
+	profile := continuationAuthProfile("018f0000-0000-7000-8000-000000000002")
+	profile.OrganizationMembership.State = spine.EntityStateInactive
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{profile: profile})
+	contract := contractForList("018f0000-0000-7000-8000-000000000c36", "018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000000004", "018f0000-0000-7000-8000-000000000236", spine.ContractStateDraft)
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID), "", "Bearer access-token")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "membership_required" {
+		t.Fatalf("error code = %q, want membership_required", body.Error.Code)
+	}
+}
+
+func TestGetContractRejectsOtherOrganizationContract(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000009999"),
+	})
+	contract := contractForList("018f0000-0000-7000-8000-000000000c37", "018f0000-0000-7000-8000-000000000002", "018f0000-0000-7000-8000-000000000003", "018f0000-0000-7000-8000-000000000004", "018f0000-0000-7000-8000-000000000237", spine.ContractStateDraft)
+	if err := server.contracts.Create(context.Background(), contract); err != nil {
+		t.Fatalf("contracts.Create() error = %v", err)
+	}
+
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/"+string(contract.ID), "", "Bearer access-token")
+	if response.code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusForbidden, response.body)
+	}
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decodeJSON(t, response.body, &body)
+	if body.Error.Code != "forbidden" {
+		t.Fatalf("error code = %q, want forbidden", body.Error.Code)
+	}
 }
 
 func TestGetContractUnknownReturnsNotFound(t *testing.T) {
 	server := testServer(t)
 
-	response := doJSON(t, server.router, http.MethodGet, "/v1/contracts/missing", "")
+	response := doAuthRequest(t, server.router, http.MethodGet, "/v1/contracts/missing", "", "Bearer access-token")
 	if response.code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusNotFound, response.body)
 	}

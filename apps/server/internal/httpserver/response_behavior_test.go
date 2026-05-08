@@ -103,6 +103,23 @@ func TestContractUpdateRequiresAuthBeforeService(t *testing.T) {
 	}
 }
 
+func TestContractGetRequiresAuthBeforeService(t *testing.T) {
+	service := &capturingContractService{}
+	handler := httpserver.NewContractHandler(fakeHTTPAuthService{meErr: auth.ErrInvalidToken}, service)
+	request := httptest.NewRequest(http.MethodGet, "/v1/contracts/contract-1", nil)
+	request.SetPathValue("id", "contract-1")
+	recorder := httptest.NewRecorder()
+
+	handler.Get(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusUnauthorized, recorder.Body.String())
+	}
+	if service.getCalled {
+		t.Fatal("contract get service was called despite auth failure")
+	}
+}
+
 func newContractApproveRequest(t *testing.T, ctx context.Context, body string) *http.Request {
 	t.Helper()
 
@@ -138,6 +155,7 @@ type capturingContractService struct {
 	approveActorOK bool
 	approveCalled  bool
 	approveInput   spine.ApproveContractDraftRequest
+	getCalled      bool
 	updateCalled   bool
 }
 
@@ -145,7 +163,8 @@ func (s *capturingContractService) Create(context.Context, spine.ContractCreateR
 	return spine.Contract{}, false, nil
 }
 
-func (s *capturingContractService) Get(context.Context, spine.ContractID) (spine.Contract, error) {
+func (s *capturingContractService) Get(context.Context, spine.ContractID, spine.OrganizationMembership) (spine.Contract, error) {
+	s.getCalled = true
 	return spine.Contract{}, nil
 }
 

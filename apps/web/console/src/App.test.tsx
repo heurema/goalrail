@@ -688,6 +688,9 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /сменить пароль/i }));
 
     await screen.findByRole('navigation', { name: /разделы продукта/i });
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts?limit=50');
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[1][0]).toBe('/v1/auth/change-password');
