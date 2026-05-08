@@ -1475,7 +1475,7 @@ func TestRunExecutionPrepareCreatesExecutionJob(t *testing.T) {
 	if output.ExecutionJobState != "queued" {
 		t.Fatalf("execution_job_state = %q, want queued", output.ExecutionJobState)
 	}
-	if output.NextAction.Kind != "runner_execution_required" || !output.NextAction.Blocking || output.NextAction.Available || output.NextAction.PlannedSlice != "H2.2" {
+	if output.NextAction.Kind != "runner_execution_required" || !output.NextAction.Blocking || output.NextAction.Available || output.NextAction.PlannedSlice != "H2.3" {
 		t.Fatalf("next_action = %#v, want unavailable runner execution requirement", output.NextAction)
 	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" || request.CheckoutReceiptID != "018f0000-0000-7000-8000-000000000502" {

@@ -11,6 +11,8 @@ import (
 
 type ExecutionService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.ExecutionJobCreateRequest, spine.OrganizationMembership) (spine.ExecutionJob, bool, error)
+	AcquireNextLease(context.Context, spine.ExecutionJobLeaseCreateRequest, spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error)
+	StartRun(context.Context, spine.ExecutionJobID, spine.RunStartRequest, spine.OrganizationMembership) (spine.Run, bool, error)
 }
 
 type ExecutionHandler struct {
@@ -46,6 +48,52 @@ func (h *ExecutionHandler) CreateJob(w http.ResponseWriter, r *http.Request) {
 	RespondJSON(w, status, job)
 }
 
+func (h *ExecutionHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	var input spine.ExecutionJobLeaseCreateRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	lease, ok, err := h.service.AcquireNextLease(r.Context(), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	RespondJSON(w, http.StatusCreated, lease)
+}
+
+func (h *ExecutionHandler) StartRun(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	var input spine.RunStartRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	run, created, err := h.service.StartRun(r.Context(), spine.ExecutionJobID(r.PathValue("id")), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	RespondJSON(w, status, run)
+}
+
 func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error) {
 	var validationErr *execution.ValidationError
 	var malformedID spine.MalformedIDError
@@ -56,14 +104,26 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusBadRequest, "validation_failed", malformedID.Error())
 	case errors.Is(err, execution.ErrWorkItemNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "work item not found")
+	case errors.Is(err, execution.ErrRepoBindingNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "repo binding not found")
 	case errors.Is(err, execution.ErrCheckoutReceiptNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "checkout receipt not found")
 	case errors.Is(err, execution.ErrCheckoutJobNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "checkout job not found")
+	case errors.Is(err, execution.ErrExecutionJobNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "execution job not found")
 	case errors.Is(err, execution.ErrInvalidWorkItemState):
 		RespondError(w, http.StatusConflict, "invalid_state", "work item is not planned")
 	case errors.Is(err, execution.ErrInvalidCheckoutState):
 		RespondError(w, http.StatusConflict, "invalid_state", "checkout job receipt has not been submitted")
+	case errors.Is(err, execution.ErrInvalidExecutionState):
+		RespondError(w, http.StatusConflict, "invalid_state", "execution job state does not allow this transition")
+	case errors.Is(err, execution.ErrLeaseExpired):
+		RespondError(w, http.StatusConflict, "lease_expired", "execution job lease expired")
+	case errors.Is(err, execution.ErrInvalidLease):
+		RespondError(w, http.StatusConflict, "invalid_lease", "execution job lease is invalid")
+	case errors.Is(err, execution.ErrRunAlreadyStarted):
+		RespondError(w, http.StatusConflict, "already_started", "execution job already has a run")
 	case errors.Is(err, execution.ErrRawSourceUploaded):
 		RespondError(w, http.StatusBadRequest, "validation_failed", "checkout receipt must not upload raw source")
 	case errors.Is(err, execution.ErrMembershipRequired):

@@ -61,6 +61,7 @@ type testServerDeps struct {
 	checkoutJobs      *fakeCheckoutJobStore
 	checkoutReceipts  *fakeCheckoutReceiptStore
 	executionJobs     *fakeExecutionJobStore
+	runs              *fakeRunStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
@@ -1743,6 +1744,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	checkoutJobStore := newFakeCheckoutJobStore()
 	checkoutReceiptStore := newFakeCheckoutReceiptStore()
 	executionJobStore := newFakeExecutionJobStore()
+	runStore := newFakeRunStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1765,7 +1767,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
 	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
-	executionService := execution.NewService(workItemStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
@@ -1786,6 +1788,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		checkoutJobs:      checkoutJobStore,
 		checkoutReceipts:  checkoutReceiptStore,
 		executionJobs:     executionJobStore,
+		runs:              runStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -2559,6 +2562,11 @@ func (s *fakeExecutionJobStore) Create(_ context.Context, job spine.ExecutionJob
 	return nil
 }
 
+func (s *fakeExecutionJobStore) Get(_ context.Context, id spine.ExecutionJobID) (spine.ExecutionJob, bool, error) {
+	job, ok := s.jobs[id]
+	return job, ok, nil
+}
+
 func (s *fakeExecutionJobStore) GetByTaskAndCheckoutReceipt(_ context.Context, taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) (spine.ExecutionJob, bool, error) {
 	jobID, ok := s.byKey[executionJobKey(taskID, receiptID)]
 	if !ok {
@@ -2568,8 +2576,95 @@ func (s *fakeExecutionJobStore) GetByTaskAndCheckoutReceipt(_ context.Context, t
 	return job, ok, nil
 }
 
+func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execution.JobLeaseInput) (spine.ExecutionLease, spine.ExecutionJob, bool, error) {
+	var selected spine.ExecutionJob
+	found := false
+	for _, job := range s.jobs {
+		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
+			continue
+		}
+		if input.ProjectID != "" && job.ProjectID != input.ProjectID {
+			continue
+		}
+		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
+			continue
+		}
+		if job.State == spine.ExecutionJobStateQueued || (job.State == spine.ExecutionJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
+				selected = job
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, nil
+	}
+	lease := spine.ExecutionLease{
+		ID:                input.ID,
+		ExecutionJobID:    selected.ID,
+		TaskID:            selected.TaskID,
+		CheckoutReceiptID: selected.CheckoutReceiptID,
+		RepoBindingID:     selected.RepoBindingID,
+		RunnerID:          input.RunnerID,
+		State:             spine.ExecutionLeaseStateActive,
+		LeaseTokenHash:    input.LeaseTokenHash,
+		ExpiresAt:         input.ExpiresAt,
+		CreatedAt:         input.CreatedAt,
+		UpdatedAt:         input.UpdatedAt,
+	}
+	selected.State = spine.ExecutionJobStateLeased
+	selected.CurrentLeaseID = &lease.ID
+	selected.CurrentRunnerID = input.RunnerID
+	selected.LeaseTokenHash = input.LeaseTokenHash
+	selected.LeaseExpiresAt = &input.ExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.jobs[selected.ID] = selected
+	return lease, selected, true, nil
+}
+
+func (s *fakeExecutionJobStore) MarkRunStarted(_ context.Context, id spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, runnerID string, tokenHash string, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.ExecutionJobStateLeased || job.CurrentLeaseID == nil || *job.CurrentLeaseID != leaseID || job.CurrentRunnerID != runnerID || job.LeaseTokenHash != tokenHash || job.LeaseExpiresAt == nil || !job.LeaseExpiresAt.After(updatedAt) {
+		return false, nil
+	}
+	job.State = spine.ExecutionJobStateRunStarted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
 func executionJobKey(taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) string {
 	return string(taskID) + "\x00" + string(receiptID)
+}
+
+type fakeRunStore struct {
+	runs    map[spine.RunID]spine.Run
+	byLease map[spine.ExecutionLeaseID]spine.RunID
+}
+
+func newFakeRunStore() *fakeRunStore {
+	return &fakeRunStore{
+		runs:    map[spine.RunID]spine.Run{},
+		byLease: map[spine.ExecutionLeaseID]spine.RunID{},
+	}
+}
+
+func (s *fakeRunStore) Create(_ context.Context, run spine.Run) error {
+	if _, ok := s.byLease[run.ExecutionLeaseID]; ok {
+		return fmt.Errorf("run already started")
+	}
+	s.runs[run.ID] = run
+	s.byLease[run.ExecutionLeaseID] = run.ID
+	return nil
+}
+
+func (s *fakeRunStore) GetByExecutionLease(_ context.Context, leaseID spine.ExecutionLeaseID) (spine.Run, bool, error) {
+	runID, ok := s.byLease[leaseID]
+	if !ok {
+		return spine.Run{}, false, nil
+	}
+	run, ok := s.runs[runID]
+	return run, ok, nil
 }
 
 type fakeEventLog struct {
@@ -2671,6 +2766,8 @@ type sequenceIDs struct {
 	checkoutJob       int
 	checkoutReceipt   int
 	executionJob      int
+	executionLease    int
+	run               int
 	event             int
 }
 
@@ -2757,6 +2854,16 @@ func (g *sequenceIDs) NewCheckoutReceiptID() (spine.CheckoutReceiptID, error) {
 func (g *sequenceIDs) NewExecutionJobID() (spine.ExecutionJobID, error) {
 	g.executionJob++
 	return spine.ExecutionJobID(fmt.Sprintf("execution-job-%d", g.executionJob)), nil
+}
+
+func (g *sequenceIDs) NewExecutionLeaseID() (spine.ExecutionLeaseID, error) {
+	g.executionLease++
+	return spine.ExecutionLeaseID(fmt.Sprintf("execution-lease-%d", g.executionLease)), nil
+}
+
+func (g *sequenceIDs) NewRunID() (spine.RunID, error) {
+	g.run++
+	return spine.RunID(fmt.Sprintf("run-%d", g.run)), nil
 }
 
 func testTime() time.Time {
