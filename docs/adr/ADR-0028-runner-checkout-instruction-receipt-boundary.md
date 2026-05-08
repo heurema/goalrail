@@ -40,8 +40,10 @@ WorkItem(planned)
   -> CheckoutReceipt
 ```
 
-This ADR is documentation-only. It does not implement runner code, server routes,
-stores, migrations, CLI commands, checkout, execution, `Run`, gate, or proof.
+This ADR was accepted as a boundary decision before H1 implementation. H1 now
+implements the checkout job / instruction and workspace receipt protocol slice,
+but still does not implement actual repository clone/fetch, arbitrary command
+execution, `Run`, gate, or proof.
 
 ## Decision
 
@@ -64,7 +66,7 @@ preparation records. They are not `Run`, not proof, and not gate verdicts.
 
 ## H1 implementation target
 
-Recommended first implementation slice:
+Implemented first slice:
 
 ```text
 H1 — runner checkout instruction + workspace receipt
@@ -143,20 +145,29 @@ apps/runner/cmd/goalrail-runner
 apps/runner/internal/...
 ```
 
-The runner startup config should include Goalrail API connection and local
-credential file paths only, for example:
+The runner startup config should include Goalrail API connection, an
+operator-declared checkout lease scope, and local credential file paths, for
+example:
 
 - `--server-url` / `GOALRAIL_RUNNER_SERVER_URL`
+- `--project-id` / `GOALRAIL_RUNNER_PROJECT_ID`
+- `--repo-binding-id` / `GOALRAIL_RUNNER_REPO_BINDING_ID`
 - `--runner-id` / `GOALRAIL_RUNNER_ID`
-- runner API token file or equivalent narrow runner auth input
+- `GOALRAIL_RUNNER_BEARER_TOKEN` for the current narrow API auth input
 - Git HTTPS token file
 - SSH key file
 - known_hosts file
 - mounted workspace root, when using mounted workspace mode
 
-Runner startup config must not hard-code a repository URL, RepoBinding ID,
-checkout mode, task ID, branch, or path scope as canonical truth. Those arrive
-from API-issued checkout instructions.
+Until a dedicated runner registration / capability model exists, `project_id`
+and `repo_binding_id` are a fail-closed lease filter. They limit which checkout
+jobs the runner may receive; they are not the canonical checkout instruction.
+The runner must still validate each API-issued instruction against the requested
+scope before submitting a workspace receipt.
+
+Runner startup config must not hard-code a repository URL, checkout mode, task
+ID, branch, or path scope as canonical truth. Those arrive from API-issued
+checkout instructions.
 
 ## CheckoutInstruction v0 fields
 
@@ -292,7 +303,11 @@ The runner must:
 - run as a separate process from the API server
 - talk to Goalrail only through API routes
 - own local repository credentials
+- request checkout leases only for its operator-declared project / repo binding
+  scope
 - use API-issued checkout metadata for the bounded job
+- validate the leased instruction against the requested scope before submitting
+  a receipt
 - prepare a read-only ephemeral checkout or verify a mounted workspace
 - resolve the actual `commit_sha`
 - refresh or produce local baseline / overlay evidence where needed
@@ -309,6 +324,11 @@ The runner must not:
 - execute arbitrary customer commands in H1
 - create `Run`, receipt-for-execution, `Decision`, `GateDecision`, or `Proof`
 - create branches, commits, pull requests, or merge requests
+
+For H1's mounted-workspace prototype, the submitted `workspace_ref` is still an
+opaque runner-local reference, but it must be qualified per lease with checkout
+job / task / repo-binding identity. The static runner workspace root alone is
+not sufficient receipt identity for repeated jobs.
 
 If H1 uses local Git commands for checkout, they must be routed through a narrow
 allowlisted checkout helper. That helper may run Git checkout/fetch/status
@@ -385,8 +405,9 @@ This ADR does not define or implement:
 
 - H1 still will not execute tasks.
 - H1 still will not produce proof.
-- A runner auth handshake must be explicit before public runner-facing routes
-  become usable.
+- H1 uses existing bearer-authenticated OrganizationMembership boundaries for
+  runner-facing lease and receipt routes; a dedicated runner registration /
+  runner-token protocol remains a later hardening slice.
 - Checkout receipt evidence is not enough for final acceptance; it is only
   workspace preparation evidence.
 

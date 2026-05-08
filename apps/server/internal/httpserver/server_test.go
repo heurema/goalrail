@@ -131,6 +131,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ProposalGet:                   probeRoute("proposal_get"),
 		ProposalAcceptance:            probeRoute("proposal_acceptance"),
 		TaskGet:                       probeRoute("task_get"),
+		TaskCheckoutJobs:              probeRoute("task_checkout_jobs"),
+		CheckoutJobLeases:             probeRoute("checkout_job_leases"),
+		CheckoutJobReceipts:           probeRoute("checkout_job_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
 	})
@@ -181,6 +184,9 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "proposal_get", method: http.MethodGet, path: "/v1/proposals/proposal-1", wantRoute: "proposal_get"},
 		{name: "proposal_acceptance", method: http.MethodPost, path: "/v1/proposals/proposal-1/acceptance", wantRoute: "proposal_acceptance"},
 		{name: "task_get", method: http.MethodGet, path: "/v1/tasks/task-1", wantRoute: "task_get"},
+		{name: "task_checkout_jobs", method: http.MethodPost, path: "/v1/tasks/task-1/checkout-jobs", wantRoute: "task_checkout_jobs"},
+		{name: "checkout_job_leases", method: http.MethodPost, path: "/v1/checkout-jobs/leases", wantRoute: "checkout_job_leases"},
+		{name: "checkout_job_receipts", method: http.MethodPost, path: "/v1/checkout-jobs/job-1/receipts", wantRoute: "checkout_job_receipts"},
 	}
 
 	for _, tt := range tests {
@@ -244,6 +250,9 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ProposalGet:                   probeRoute("proposal_get"),
 		ProposalAcceptance:            probeRoute("proposal_acceptance"),
 		TaskGet:                       probeRoute("task_get"),
+		TaskCheckoutJobs:              probeRoute("task_checkout_jobs"),
+		CheckoutJobLeases:             probeRoute("checkout_job_leases"),
+		CheckoutJobReceipts:           probeRoute("checkout_job_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
 	})
@@ -377,6 +386,7 @@ func newRouter(
 	contractHandler *httpserver.ContractHandler,
 	workItemHandler *httpserver.WorkItemHandler,
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
+	checkoutHandler *httpserver.CheckoutHandler,
 ) http.Handler {
 	return httpserver.NewRouter(httpserver.RouteHandlers{
 		Livez:                         livez,
@@ -420,6 +430,9 @@ func newRouter(
 		ProposalGet:                   http.HandlerFunc(workItemPlanHandler.GetProposal),
 		ProposalAcceptance:            http.HandlerFunc(workItemPlanHandler.AcceptProposal),
 		TaskGet:                       http.HandlerFunc(workItemHandler.GetTask),
+		TaskCheckoutJobs:              http.HandlerFunc(checkoutHandler.CreateJob),
+		CheckoutJobLeases:             http.HandlerFunc(checkoutHandler.AcquireLease),
+		CheckoutJobReceipts:           http.HandlerFunc(checkoutHandler.SubmitReceipt),
 		ClarificationAnswers:          http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:      http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
@@ -433,6 +446,7 @@ func baseHandlers(
 	contractHandler *httpserver.ContractHandler,
 	workItemHandler *httpserver.WorkItemHandler,
 	workItemPlanHandler *httpserver.WorkItemPlanHandler,
+	checkoutHandler *httpserver.CheckoutHandler,
 ) http.Handler {
 	healthHandler := health.NewHandler()
 	authHandler := httpserver.NewAuthHandler(stubAuthService{})
@@ -448,6 +462,7 @@ func baseHandlers(
 		contractHandler,
 		workItemHandler,
 		workItemPlanHandler,
+		checkoutHandler,
 	)
 }
 

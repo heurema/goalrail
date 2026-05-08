@@ -601,6 +601,256 @@ func TestPostProposalAcceptanceRejectsDuplicateAndInvalidContext(t *testing.T) {
 	})
 }
 
+func TestPostTaskCheckoutJobsCreatesInstructionWithoutRuntimeSideEffects(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	taskID := accepted.CreatedTaskIDs[0]
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","requested_by":{"kind":"user","id":"spoofed-requester"}}`)
+	if response.code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+	}
+	assertNoHiddenContext(t, response.body)
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbidden) {
+			t.Fatalf("checkout job response exposes forbidden field %s: %s", forbidden, response.body)
+		}
+	}
+	var job spine.CheckoutJob
+	decodeJSON(t, response.body, &job)
+	if job.TaskID != taskID || job.State != spine.CheckoutJobStateQueued {
+		t.Fatalf("job = %#v, want queued job for task %s", job, taskID)
+	}
+	if job.RequestedBy.ID != "018f0000-0000-7000-8000-000000000001" {
+		t.Fatalf("requested_by = %#v, want authenticated user actor", job.RequestedBy)
+	}
+	if job.Instruction.TaskID != taskID || job.Instruction.RepositoryFullName == "" || job.Instruction.RawSourceUploaded {
+		t.Fatalf("instruction = %#v, want task-bound no-raw-source instruction", job.Instruction)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), taskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() = %#v/%v/%v", storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after checkout job creation", storedTask.Status)
+	}
+	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
+
+	second := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", `{}`)
+	if second.code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d: %s", second.code, http.StatusOK, second.body)
+	}
+	var existing spine.CheckoutJob
+	decodeJSON(t, second.body, &existing)
+	if existing.ID != job.ID || len(server.checkoutJobs.jobs) != 1 {
+		t.Fatalf("existing job id/count = %q/%d, want %q/1", existing.ID, len(server.checkoutJobs.jobs), job.ID)
+	}
+}
+
+func TestCheckoutJobLeaseAndReceiptRecordWorkspaceOnly(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	taskID := accepted.CreatedTaskIDs[0]
+	jobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(taskID)+"/checkout-jobs", `{}`)
+	if jobResponse.code != http.StatusCreated {
+		t.Fatalf("create checkout job status = %d, want %d: %s", jobResponse.code, http.StatusCreated, jobResponse.body)
+	}
+	var job spine.CheckoutJob
+	decodeJSON(t, jobResponse.body, &job)
+
+	leaseBody := fmt.Sprintf(`{"project_id":%q,"repo_binding_id":%q,"runner_id":"runner-1"}`, "018f0000-0000-7000-8000-000000000003", job.RepoBindingID)
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", leaseBody)
+	if leaseResponse.code != http.StatusCreated {
+		t.Fatalf("lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
+	}
+	if strings.Contains(leaseResponse.body, "lease_token_hash") {
+		t.Fatalf("lease response exposes token hash: %s", leaseResponse.body)
+	}
+	var lease spine.CheckoutJobLeaseCreated
+	decodeJSON(t, leaseResponse.body, &lease)
+	if lease.JobID != job.ID || lease.TaskID != taskID || lease.LeaseToken == "" {
+		t.Fatalf("lease = %#v, want lease for checkout job %s with one-time token", lease, job.ID)
+	}
+
+	receiptBody := fmt.Sprintf(`{"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","dirty":false,"partial":false,"raw_source_uploaded":false}`, lease.LeaseToken)
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(job.ID)+"/receipts", receiptBody)
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	assertNoHiddenContext(t, receiptResponse.body)
+	var receipt spine.CheckoutReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.JobID != job.ID || receipt.TaskID != taskID || receipt.RawSourceUploaded {
+		t.Fatalf("receipt = %#v, want job/task receipt without raw source", receipt)
+	}
+	if len(server.checkoutReceipts.receipts) != 1 {
+		t.Fatalf("checkout receipts = %d, want 1", len(server.checkoutReceipts.receipts))
+	}
+	storedJob := server.checkoutJobs.jobs[job.ID]
+	if storedJob.State != spine.CheckoutJobStateReceiptSubmitted {
+		t.Fatalf("checkout job state = %q, want receipt_submitted", storedJob.State)
+	}
+	storedTask, _, _ := server.workItems.Get(context.Background(), taskID)
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after checkout receipt", storedTask.Status)
+	}
+	assertNoForbiddenRuntimeSideEffects(t, server.events.Events())
+
+	duplicate := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(job.ID)+"/receipts", receiptBody)
+	assertErrorCode(t, duplicate, http.StatusConflict, "already_receipted")
+	if len(server.checkoutReceipts.receipts) != 1 {
+		t.Fatalf("checkout receipts = %d, want no duplicate receipt", len(server.checkoutReceipts.receipts))
+	}
+}
+
+func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
+	t.Run("unauthenticated rejects before job creation", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/work-item-1/checkout-jobs", `{}`)
+		assertErrorCode(t, response, http.StatusUnauthorized, "unauthorized")
+		if len(server.checkoutJobs.jobs) != 0 {
+			t.Fatalf("checkout jobs = %d, want 0 after auth failure", len(server.checkoutJobs.jobs))
+		}
+	})
+
+	t.Run("project expectation mismatch rejects before job creation", func(t *testing.T) {
+		server := testServer(t)
+		approved := createApprovedContract(t, server)
+		plan := createPlan(t, server, approved.ContractID)
+		proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+		accepted := acceptProposal(t, server, proposal.ID)
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(accepted.CreatedTaskIDs[0])+"/checkout-jobs", `{"project_id":"project-mismatch"}`)
+		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
+		if len(server.checkoutJobs.jobs) != 0 {
+			t.Fatalf("checkout jobs = %d, want 0 after project mismatch", len(server.checkoutJobs.jobs))
+		}
+	})
+}
+
+func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {
+	server := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+
+	lease := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"runner_id":"runner-1"}`)
+	assertErrorCode(t, lease, http.StatusUnauthorized, "unauthorized")
+
+	receipt := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/job-1/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+	assertErrorCode(t, receipt, http.StatusUnauthorized, "unauthorized")
+	if len(server.checkoutReceipts.receipts) != 0 {
+		t.Fatalf("checkout receipts = %d, want 0 after auth failure", len(server.checkoutReceipts.receipts))
+	}
+}
+
+func TestCheckoutRunnerRoutesRespectOrganizationBoundary(t *testing.T) {
+	t.Run("lease only sees jobs from authenticated organization", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+		})
+		job := spine.CheckoutJob{
+			ID:             "checkout-job-foreign",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-foreign",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime(),
+			UpdatedAt:      testTime(),
+		}
+		server.checkoutJobs.jobs[job.ID] = job
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
+		if got := server.checkoutJobs.jobs[job.ID].State; got != spine.CheckoutJobStateQueued {
+			t.Fatalf("foreign checkout job state = %q, want queued", got)
+		}
+	})
+
+	t.Run("lease only sees requested project and repo binding scope", func(t *testing.T) {
+		server := testServer(t)
+		otherBinding := server.repoBindings.bindings["018f0000-0000-7000-8000-000000000004"]
+		otherBinding.ID = "018f0000-0000-7000-8000-000000000044"
+		otherBinding.RepositoryFullName = "heurema/other"
+		otherBinding.RepositoryURL = "https://github.com/heurema/other"
+		server.repoBindings.bindings[otherBinding.ID] = otherBinding
+
+		wantedJob := spine.CheckoutJob{
+			ID:             "checkout-job-wanted",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-wanted",
+			RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime().Add(time.Minute),
+			UpdatedAt:      testTime(),
+		}
+		otherJob := spine.CheckoutJob{
+			ID:             "checkout-job-other",
+			OrganizationID: "018f0000-0000-7000-8000-000000000002",
+			ProjectID:      "018f0000-0000-7000-8000-000000000003",
+			TaskID:         "work-item-other",
+			RepoBindingID:  otherBinding.ID,
+			State:          spine.CheckoutJobStateQueued,
+			CreatedAt:      testTime(),
+			UpdatedAt:      testTime(),
+		}
+		server.checkoutJobs.jobs[wantedJob.ID] = wantedJob
+		server.checkoutJobs.jobs[otherJob.ID] = otherJob
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", `{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":"018f0000-0000-7000-8000-000000000004","runner_id":"runner-1"}`)
+		if response.code != http.StatusCreated {
+			t.Fatalf("lease status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		}
+		var lease spine.CheckoutJobLeaseCreated
+		decodeJSON(t, response.body, &lease)
+		if lease.JobID != wantedJob.ID {
+			t.Fatalf("lease job = %q, want scoped job %q", lease.JobID, wantedJob.ID)
+		}
+		if got := server.checkoutJobs.jobs[otherJob.ID].State; got != spine.CheckoutJobStateQueued {
+			t.Fatalf("other repo checkout job state = %q, want queued", got)
+		}
+	})
+
+	t.Run("receipt rejects job from another organization", func(t *testing.T) {
+		server := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+			profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+		})
+		expiresAt := testTime().Add(time.Hour)
+		job := spine.CheckoutJob{
+			ID:              "checkout-job-foreign",
+			OrganizationID:  "018f0000-0000-7000-8000-000000000002",
+			ProjectID:       "018f0000-0000-7000-8000-000000000003",
+			TaskID:          "work-item-foreign",
+			RepoBindingID:   "018f0000-0000-7000-8000-000000000004",
+			State:           spine.CheckoutJobStateLeased,
+			CurrentRunnerID: "runner-1",
+			LeaseTokenHash:  "unused",
+			LeaseExpiresAt:  &expiresAt,
+			CreatedAt:       testTime(),
+			UpdatedAt:       testTime(),
+		}
+		server.checkoutJobs.jobs[job.ID] = job
+
+		response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/"+string(job.ID)+"/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+		assertErrorCode(t, response, http.StatusForbidden, "forbidden")
+		if len(server.checkoutReceipts.receipts) != 0 {
+			t.Fatalf("checkout receipts = %d, want 0 after org mismatch", len(server.checkoutReceipts.receipts))
+		}
+	})
+}
+
+func TestCheckoutRunnerRoutesReturnClientErrorForMalformedIDs(t *testing.T) {
+	server := testServer(t)
+
+	response := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/malformed-id/receipts", `{"lease_token":"secret","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`)
+	assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+}
+
 func TestRemovedDirectTaskRouteAndListRoutesReturnNotFound(t *testing.T) {
 	server := testServer(t)
 	for _, tt := range []struct {
@@ -849,6 +1099,28 @@ func assertNoForbiddenWorkItemSideEffects(t *testing.T, events []spine.Event) {
 	for _, event := range events {
 		if forbidden[event.Type] {
 			t.Fatalf("forbidden event type appended: %s", event.Type)
+		}
+	}
+}
+
+func assertNoForbiddenRuntimeSideEffects(t *testing.T, events []spine.Event) {
+	t.Helper()
+
+	forbidden := map[string]bool{
+		"work_item.assigned":    true,
+		"work_item.claimed":     true,
+		"run.created":           true,
+		"run.started":           true,
+		"receipt.created":       true,
+		"receipt.submitted":     true,
+		"decision.created":      true,
+		"gate_decision.created": true,
+		"gate.decision_written": true,
+		"proof.created":         true,
+	}
+	for _, event := range events {
+		if forbidden[event.Type] {
+			t.Fatalf("forbidden runtime event type appended: %s", event.Type)
 		}
 	}
 }

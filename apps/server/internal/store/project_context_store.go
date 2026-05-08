@@ -845,10 +845,10 @@ func (s *ProjectContextStore) execSQL(ctx context.Context, op string, sqlizer sq
 func uuidValue(value any, field string) (uuid.UUID, error) {
 	id, err := uuid.Parse(fmt.Sprint(value))
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s must be uuid: %w", field, err)
+		return uuid.Nil, spine.MalformedIDError{Field: field, Reason: "must be uuid", Err: err}
 	}
 	if id.Version() != 7 {
-		return uuid.Nil, fmt.Errorf("%s must be uuidv7", field)
+		return uuid.Nil, spine.MalformedIDError{Field: field, Reason: "must be uuidv7"}
 	}
 	return id, nil
 }

@@ -39,6 +39,12 @@ var (
 	ErrWorkItemPlanProposalExists     = errors.New("work item plan proposal already exists")
 	ErrWorkItemPlanAlreadyHasProposal = errors.New("work item plan already has proposal")
 	ErrWorkItemPlanProposalNotFound   = errors.New("work item plan proposal not found")
+
+	ErrCheckoutJobAlreadyExists      = errors.New("checkout job already exists")
+	ErrCheckoutJobAlreadyPrepared    = errors.New("work item already has checkout job")
+	ErrCheckoutJobNotFound           = errors.New("checkout job not found")
+	ErrCheckoutReceiptAlreadyExists  = errors.New("checkout receipt already exists")
+	ErrCheckoutReceiptAlreadyCreated = errors.New("checkout job already has receipt")
 )
 
 type uniqueConstraintError struct {
