@@ -208,13 +208,17 @@ describe('App', () => {
   });
 
   it('redirects the public root route to /start without backend calls or browser storage writes', async () => {
-    window.history.replaceState(null, '', '/');
+    window.history.replaceState(null, '', '/?utm_source=linkedin#ask');
 
     render(<App />);
 
     expect(screen.getByRole('heading', { name: /ask goalrail about ai-assisted delivery/i })).toBeInTheDocument();
     expect(screen.getByText('From business goal to verified code change.')).toBeInTheDocument();
-    await waitFor(() => expect(window.location.pathname).toBe('/start'));
+    await waitFor(() =>
+      expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+        '/start?utm_source=linkedin#ask'
+      )
+    );
     expect(fetchMock).not.toHaveBeenCalled();
     expect(window.localStorage.getItem).not.toHaveBeenCalled();
     expect(window.localStorage.setItem).not.toHaveBeenCalled();

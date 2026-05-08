@@ -251,7 +251,8 @@ function isRootRoute() {
 function RootStartRedirect() {
   useEffect(() => {
     if (normalizedPathname() === '/') {
-      window.history.replaceState(window.history.state, '', '/start');
+      const target = `/start${window.location.search}${window.location.hash}`;
+      window.history.replaceState(window.history.state, '', target);
     }
   }, []);
 
