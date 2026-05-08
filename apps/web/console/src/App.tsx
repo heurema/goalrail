@@ -3,13 +3,12 @@ import { useTranslation } from 'react-i18next';
 
 import {
   changePassword,
-  getContract,
   isAuthClientError,
   login as loginWithPassword,
   logout as logoutSession,
   me as fetchCurrentProfile,
 } from './authClient';
-import type { AuthClientError, ContractResponse, LoginResponse, MeResponse } from './authClient';
+import type { AuthClientError, LoginResponse, MeResponse } from './authClient';
 import { isSupportedLocale, updateLocaleQueryParam } from './i18n/locale';
 import type { ConsoleLocale } from './i18n/resources';
 import {
@@ -32,6 +31,10 @@ import {
   listContracts,
 } from './contractListClient';
 import {
+  getContractDetail,
+  isContractDetailClientError,
+} from './contractDetailClient';
+import {
   getCurrentContractDraft,
   isContractDraftClientError,
 } from './contractDraftClient';
@@ -42,6 +45,7 @@ import type {
   QualificationFeedResponse,
 } from './qualificationFeedClient';
 import type { ContractListResponse, ContractStateFilter } from './contractListClient';
+import type { ContractResponse } from './contractDetailClient';
 import type { ContractDraftResponse, ContractDraftSourceRef } from './contractDraftClient';
 import { READINESS_DISPLAY_LANES, projectReadinessDisplay, sortReadinessItems } from './readinessDisplay';
 import { formatCalmTimestamp } from './uiTime';
@@ -289,6 +293,30 @@ function contractListErrorMessage(error: unknown, t: (key: string, options?: Rec
   }
 
   return t('surfaces.contracts.listErrors.generic');
+}
+
+function contractDetailErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
+  if (isContractDetailClientError(error)) {
+    const translated = t(`surfaces.contracts.detailErrors.${error.code}`);
+    if (translated !== `surfaces.contracts.detailErrors.${error.code}`) {
+      return translated;
+    }
+
+    return error.status
+      ? t('surfaces.contracts.detailErrors.genericWithStatus', { status: error.status })
+      : t('surfaces.contracts.detailErrors.generic');
+  }
+
+  return t('surfaces.contracts.detailErrors.generic');
+}
+
+function isSilentPreservableContractDetailError(error: unknown) {
+  return isContractDetailClientError(error)
+    && (
+      error.code === 'network_error'
+      || error.code === 'response_parse_error'
+      || error.code === 'server_error'
+    );
 }
 
 function contractDraftErrorMessage(error: unknown, t: (key: string, options?: Record<string, unknown>) => string) {
@@ -919,7 +947,7 @@ function ConsoleApp() {
     clearContractDraftState();
 
     try {
-      const found = await getContract(accessToken, contractId);
+      const found = await getContractDetail({ accessToken, contractId });
       if (contractLookupSequence.current !== lookupSequence) {
         return;
       }
@@ -937,18 +965,18 @@ function ConsoleApp() {
       selectedContractSnapshot.current = null;
       setContract(null);
       clearContractDraftState();
-      if (isAuthClientError(error) && error.code === 'unauthorized') {
+      if (isContractDetailClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
-        setAuthError(authErrorMessage(error, translate));
+        setAuthError(translate('auth.invalidSession'));
         return;
       }
-      if (isAuthClientError(error) && error.code === 'not_found') {
+      if (isContractDetailClientError(error) && error.code === 'not_found') {
         setContractLoadStatus('not_found');
         setContractError(translate('surfaces.contracts.notFound'));
         return;
       }
       setContractLoadStatus('error');
-      setContractError(authErrorMessage(error, translate));
+      setContractError(contractDetailErrorMessage(error, translate));
     }
   }
 
@@ -1041,7 +1069,7 @@ function ConsoleApp() {
     contractDetailRefreshInFlight.current = true;
     const lookupSequence = contractLookupSequence.current;
     try {
-      const found = await getContract(accessToken, contractId);
+      const found = await getContractDetail({ accessToken, contractId });
       if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
         return 'stale';
       }
@@ -1059,12 +1087,12 @@ function ConsoleApp() {
       if (contractLookupSequence.current !== lookupSequence || selectedContractId.current !== contractId) {
         return 'stale';
       }
-      if (isAuthClientError(error) && error.code === 'unauthorized') {
+      if (isContractDetailClientError(error) && error.code === 'unauthorized') {
         resetAuthState();
-        setAuthError(authErrorMessage(error, translate));
+        setAuthError(translate('auth.invalidSession'));
         return 'unauthorized';
       }
-      if (isAuthClientError(error) && error.code === 'not_found') {
+      if (isContractDetailClientError(error) && error.code === 'not_found') {
         selectedContractId.current = null;
         selectedContractSnapshot.current = null;
         setContract(null);
@@ -1074,12 +1102,20 @@ function ConsoleApp() {
         return 'not_found';
       }
 
-      if (options.silentTransientErrors && selectedContractSnapshot.current?.id === contractId) {
+      if (
+        options.silentTransientErrors
+        && selectedContractSnapshot.current?.id === contractId
+        && isSilentPreservableContractDetailError(error)
+      ) {
         setContractLoadStatus('loaded');
         return 'error';
       }
+      selectedContractId.current = null;
+      selectedContractSnapshot.current = null;
+      setContract(null);
+      clearContractDraftState();
       setContractLoadStatus('error');
-      setContractError(authErrorMessage(error, translate));
+      setContractError(contractDetailErrorMessage(error, translate));
       return 'error';
     } finally {
       contractDetailRefreshInFlight.current = false;
