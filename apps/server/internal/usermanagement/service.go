@@ -218,26 +218,7 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			return fmt.Errorf("get user by email: %w", err)
 		}
 		if ok {
-			if user.State != spine.EntityStateActive {
-				return ErrUserExists
-			}
-			membership, created, err := s.createMembershipForExistingUser(txCtx, user, normalized, now)
-			if err != nil {
-				return err
-			}
-			if !created {
-				return ErrUserExists
-			}
-			credential, credentialOK, err := s.Store.GetPasswordCredential(txCtx, user.ID)
-			if err != nil {
-				return fmt.Errorf("get password credential summary: %w", err)
-			}
-			result = CreateUserResult{
-				User:                   user,
-				OrganizationMembership: membership,
-				Credential:             credentialSummary(credential, credentialOK),
-			}
-			return nil
+			return ErrUserExists
 		}
 
 		id, err := s.IDs.NewUserID()
@@ -264,23 +245,7 @@ func (s *Service) CreateUser(ctx context.Context, input CreateUserInput) (Create
 			if !ok || existingUser.State != spine.EntityStateActive {
 				return ErrUserExists
 			}
-			membership, attached, err := s.createMembershipForExistingUser(txCtx, existingUser, normalized, now)
-			if err != nil {
-				return err
-			}
-			if !attached {
-				return ErrUserExists
-			}
-			credential, credentialOK, err := s.Store.GetPasswordCredential(txCtx, existingUser.ID)
-			if err != nil {
-				return fmt.Errorf("get password credential summary: %w", err)
-			}
-			result = CreateUserResult{
-				User:                   existingUser,
-				OrganizationMembership: membership,
-				Credential:             credentialSummary(credential, credentialOK),
-			}
-			return nil
+			return ErrUserExists
 		}
 		membershipID, err := s.IDs.NewOrganizationMembershipID()
 		if err != nil {
@@ -347,6 +312,9 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 			return fmt.Errorf("get organization membership: %w", err)
 		}
 		if !ok {
+			return ErrNotFound
+		}
+		if membership.State != spine.EntityStateActive {
 			return ErrNotFound
 		}
 
@@ -418,6 +386,9 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 			return fmt.Errorf("get organization membership: %w", err)
 		}
 		if !ok {
+			return ErrNotFound
+		}
+		if membership.State != spine.EntityStateActive {
 			return ErrNotFound
 		}
 

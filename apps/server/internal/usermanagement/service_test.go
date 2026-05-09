@@ -172,7 +172,7 @@ func TestCreateUserWithExistingEmailReturnsConflictWithoutMutatingExistingRecord
 	}
 }
 
-func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *testing.T) {
+func TestCreateUserWithExistingUserOutsideOrganizationReturnsConflict(t *testing.T) {
 	store := newFakeStore()
 	originalUser := user(otherExistingUserID, "Existing Other", "other-existing@example.com", spine.EntityStateActive)
 	originalCredential := spine.UserPasswordCredential{
@@ -195,11 +195,11 @@ func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *
 		DisplayName:         "Ignored Name",
 		Role:                "admin",
 	})
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
 	}
 	if result.TemporaryPassword != "" {
-		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user", result.TemporaryPassword)
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
 	}
 	if got := store.users[otherExistingUserID]; got != originalUser {
 		t.Fatalf("existing user mutated:\n got: %#v\nwant: %#v", got, originalUser)
@@ -207,16 +207,15 @@ func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *
 	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
 		t.Fatalf("existing credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	membership := store.memberships[key(orgID, otherExistingUserID)]
-	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleAdmin || membership.State != spine.EntityStateActive {
-		t.Fatalf("attached membership = %#v, want active admin membership", membership)
+	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
+		t.Fatalf("unexpected membership created for existing user")
 	}
 	if encoded := mustJSON(t, result); strings.Contains(encoded, "temporary_password") || strings.Contains(encoded, "existing-other-password") || strings.Contains(encoded, "password_hash") {
 		t.Fatalf("attach response leaked temporary password or credential material: %s", encoded)
 	}
 }
 
-func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
+func TestCreateUserDuplicateEmailInsertRaceReturnsConflict(t *testing.T) {
 	store := newFakeStore()
 	originalUser := user(otherExistingUserID, "Race", "race@example.com", spine.EntityStateActive)
 	originalCredential := spine.UserPasswordCredential{
@@ -238,11 +237,11 @@ func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
 		DisplayName:         "Race",
 		Role:                "member",
 	})
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
 	}
 	if result.TemporaryPassword != "" {
-		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user after race", result.TemporaryPassword)
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
 	}
 	if got := store.users[otherExistingUserID]; got != originalUser {
 		t.Fatalf("existing user mutated after race:\n got: %#v\nwant: %#v", got, originalUser)
@@ -250,9 +249,8 @@ func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
 	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
 		t.Fatalf("existing credential mutated after race:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	membership := store.memberships[key(orgID, otherExistingUserID)]
-	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleMember || membership.State != spine.EntityStateActive {
-		t.Fatalf("attached membership = %#v, want active member membership", membership)
+	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
+		t.Fatalf("unexpected membership created for existing user")
 	}
 }
 
