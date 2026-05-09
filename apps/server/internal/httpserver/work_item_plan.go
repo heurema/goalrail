@@ -10,36 +10,50 @@ import (
 )
 
 type WorkItemPlanService interface {
-	CreatePlan(context.Context, spine.ContractID, spine.WorkItemPlanCreateRequest) (spine.WorkItemPlan, error)
+	CreatePlan(context.Context, spine.ContractID, spine.WorkItemPlanCreateRequest, spine.OrganizationMembership) (spine.WorkItemPlan, bool, error)
 	GetPlan(context.Context, spine.WorkItemPlanID) (spine.WorkItemPlan, error)
+	GetPlanStatus(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanStatusRequest, spine.OrganizationMembership) (spine.WorkItemPlanStatus, error)
 	AcquireNextLease(context.Context, spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error)
 	GetLease(context.Context, spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, error)
 	RenewLease(context.Context, spine.WorkItemPlanLeaseID, spine.WorkItemPlanLeaseRenewRequest) (spine.WorkItemPlanLease, error)
 	SubmitProposal(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanProposalSubmitRequest) (spine.WorkItemPlanProposal, error)
 	GetProposal(context.Context, spine.WorkItemPlanProposalID) (spine.WorkItemPlanProposal, error)
-	AcceptProposal(context.Context, spine.WorkItemPlanProposalID, spine.WorkItemPlanAcceptanceRequest) (spine.WorkItemPlanAcceptanceResult, error)
+	AcceptProposal(context.Context, spine.WorkItemPlanProposalID, spine.WorkItemPlanAcceptanceRequest, spine.OrganizationMembership) (spine.WorkItemPlanAcceptanceResult, error)
 }
 
 type WorkItemPlanHandler struct {
-	service WorkItemPlanService
+	authService AuthService
+	service     WorkItemPlanService
 }
 
-func NewWorkItemPlanHandler(service WorkItemPlanService) *WorkItemPlanHandler {
-	return &WorkItemPlanHandler{service: service}
+func NewWorkItemPlanHandler(authService AuthService, service WorkItemPlanService) *WorkItemPlanHandler {
+	return &WorkItemPlanHandler{authService: authService, service: service}
 }
 
 func (h *WorkItemPlanHandler) CreatePlan(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.WorkItemPlanCreateRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
-	created, err := h.service.CreatePlan(r.Context(), spine.ContractID(r.PathValue("id")), input)
+	input.RequestedBy = actorRefForAuthProfile(profile)
+
+	created, newlyCreated, err := h.service.CreatePlan(r.Context(), spine.ContractID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
 	}
-	RespondJSON(w, http.StatusCreated, created)
+	status := http.StatusOK
+	if newlyCreated {
+		status = http.StatusCreated
+	}
+	RespondJSON(w, status, created)
 }
 
 func (h *WorkItemPlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +63,26 @@ func (h *WorkItemPlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusOK, plan)
+}
+
+func (h *WorkItemPlanHandler) GetPlanStatus(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
+	var input spine.WorkItemPlanStatusRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	status, err := h.service.GetPlanStatus(r.Context(), spine.WorkItemPlanID(r.PathValue("id")), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, status)
 }
 
 func (h *WorkItemPlanHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
@@ -116,12 +150,20 @@ func (h *WorkItemPlanHandler) GetProposal(w http.ResponseWriter, r *http.Request
 }
 
 func (h *WorkItemPlanHandler) AcceptProposal(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+
 	var input spine.WorkItemPlanAcceptanceRequest
 	if err := decodeStrictJSON(r.Body, &input); err != nil {
 		respondInvalidJSON(w)
 		return
 	}
-	accepted, err := h.service.AcceptProposal(r.Context(), spine.WorkItemPlanProposalID(r.PathValue("id")), input)
+	input.AcceptedBy = actorRefForAuthProfile(profile)
+
+	accepted, err := h.service.AcceptProposal(r.Context(), spine.WorkItemPlanProposalID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return
@@ -156,6 +198,14 @@ func (h *WorkItemPlanHandler) respondServiceError(w http.ResponseWriter, err err
 		RespondError(w, http.StatusConflict, "invalid_state", "proposal state does not allow this transition")
 	case errors.Is(err, workitemplan.ErrAlreadyPlanned):
 		RespondError(w, http.StatusConflict, "already_planned", "contract already has a plan")
+	case errors.Is(err, workitemplan.ErrMembershipRequired):
+		RespondError(w, http.StatusForbidden, "membership_required", "active organization membership is required")
+	case errors.Is(err, workitemplan.ErrOrganizationForbidden):
+		RespondError(w, http.StatusForbidden, "forbidden", "user is not allowed to create work item plan for this contract")
+	case errors.Is(err, workitemplan.ErrProjectMismatch):
+		RespondError(w, http.StatusConflict, "project_context_mismatch", "request project does not match contract project")
+	case errors.Is(err, workitemplan.ErrRepoBindingMismatch):
+		RespondError(w, http.StatusConflict, "project_context_mismatch", "request repo binding does not match contract repo binding")
 	case errors.Is(err, workitemplan.ErrAlreadyProposed):
 		RespondError(w, http.StatusConflict, "already_proposed", "plan already has a proposal")
 	case errors.Is(err, workitemplan.ErrAlreadyAccepted):

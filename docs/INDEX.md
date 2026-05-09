@@ -18,6 +18,10 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/INIT_LIFECYCLE.md
+  - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
+  - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
+  - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -61,77 +65,100 @@ related_docs:
 
 ### 5. Product shape and external posture
 22. `docs/product/GOALRAIL_DESIGN_DECISIONS.md`
-23. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
-24. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
-25. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
-26. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
-27. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+23. `docs/product/GOALRAIL_GLOBAL_START_ASSISTANT.md`
+24. `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`
+25. `docs/product/GOALRAIL_LANDING_COPY.md` — historical / superseded technical draft; not current public landing canon
+26. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
+27. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
+28. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
 
 ### 6. Architecture canon
-28. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-29. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
-30. `docs/PROJECT_SPINE_SCHEMA.md`
-31. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-32. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-33. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-34. `docs/adr/ADR-0003-go-cli-layout.md`
-35. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
-36. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
-37. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
-38. `docs/adr/ADR-0007-clarification-request-boundary.md`
-39. `docs/adr/ADR-0008-runner-checkout-boundary.md`
-40. `docs/adr/ADR-0009-clarification-answer-boundary.md`
-41. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
-42. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
-43. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
-44. `docs/adr/ADR-0013-contract-seed-boundary.md`
-45. `docs/adr/ADR-0014-contract-draft-boundary.md`
-46. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
-47. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
-48. `docs/adr/ADR-0017-contract-approval-boundary.md`
-49. `docs/adr/ADR-0018-workitem-planning-boundary.md`
-50. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
-51. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
-52. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
-53. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
-54. `docs/adr/ADR-0022-installation-boundary.md`
-55. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
-56. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
-57. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
-58. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+29. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+30. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
+31. `docs/PROJECT_SPINE_SCHEMA.md`
+32. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+33. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+34. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+35. `docs/adr/ADR-0003-go-cli-layout.md`
+36. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
+37. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+38. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
+39. `docs/adr/ADR-0007-clarification-request-boundary.md`
+40. `docs/adr/ADR-0008-runner-checkout-boundary.md`
+41. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+42. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
+43. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
+44. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
+45. `docs/adr/ADR-0013-contract-seed-boundary.md`
+46. `docs/adr/ADR-0014-contract-draft-boundary.md`
+47. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
+48. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
+49. `docs/adr/ADR-0017-contract-approval-boundary.md`
+50. `docs/adr/ADR-0018-workitem-planning-boundary.md`
+51. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
+52. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
+53. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
+54. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
+55. `docs/adr/ADR-0022-installation-boundary.md`
+56. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
+57. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
+58. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
+59. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+60. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
+61. `docs/adr/ADR-0029-run-execution-receipt-boundary.md`
+62. `docs/adr/ADR-0030-bounded-command-execution-boundary.md`
+63. `docs/adr/ADR-0031-project-command-execution-boundary.md`
+64. `docs/adr/ADR-0032-typed-project-test-command-boundary.md`
+65. `docs/adr/ADR-0033-runner-sandbox-enforcement-boundary.md`
 
 ### 7. Governance and change control
-59. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-60. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-61. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-62. `docs/product/GOALRAIL_RULE_STACK.md`
+66. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+67. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+68. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+69. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-63. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-64. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-65. `docs/ops/STATUS.md`
-66. `docs/ops/NEXT.md`
-67. `docs/ops/DECISIONS.md`
-68. `docs/ops/COMPONENTS.yaml`
-69. `docs/ops/BRANCH_PROTECTION.md`
-70. `docs/ops/REPO_STRUCTURE.md`
-71. `docs/ops/GO_CODE_GUIDE.md`
-72. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-73. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-74. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-75. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+70. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+71. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+72. `docs/ops/STATUS.md`
+73. `docs/ops/NEXT.md`
+74. `docs/ops/DECISIONS.md`
+75. `docs/ops/COMPONENTS.yaml`
+76. `docs/ops/INIT_LIFECYCLE.md`
+77. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+78. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+79. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+80. `docs/ops/BRANCH_PROTECTION.md`
+81. `docs/ops/REPO_STRUCTURE.md`
+82. `docs/ops/GO_CODE_GUIDE.md`
+83. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+84. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+85. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+86. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+87. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+88. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+89. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+90. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+91. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+92. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+93. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+94. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+95. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+96. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-76. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-77. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-78. `docs/reference/design/reference_screens/`
-79. `.goalrail/work/`
-80. `.goalrail/knowledge/`
-81. `.punk/publishing.toml`
-82. `.goalrail/flows/`
-83. `.goalrail/evals/`
-84. `docs/ops/PUBLISHING_MIGRATION.md`
-85. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+97. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+98. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+99. `docs/reference/design/reference_screens/`
+100. `docs/reference/start-assistant/`
+101. `.goalrail/work/`
+102. `.goalrail/knowledge/`
+103. `.goalrail/public-kb/manifest.yaml`
+104. `.punk/publishing.toml`
+105. `.goalrail/flows/`
+106. `.goalrail/evals/`
+107. `docs/ops/PUBLISHING_MIGRATION.md`
+108. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -167,6 +194,7 @@ related_docs:
 
 ### Product shape and external posture
 - `GOALRAIL_DESIGN_DECISIONS.md` — public entry flow и главные UX-решения
+- `GOALRAIL_GLOBAL_START_ASSISTANT.md` — draft global `/start` assistant surface: English-first guided entry page, public knowledge boundary, static-first then source-grounded assistant sequence, and no repo scan / code execution posture
 - `GOALRAIL_LANDING_COPY_PILOT_FIRST.md` — current public RU pilot landing canon and copy/governance reference for the business-first landing (`ИИ-кодинг без хаоса`); implementation lives at `apps/web/pilot-intake-ru`; D-0055 makes this the primary public RU landing and demotes the previous technical interactive walkthrough to internal/checkpoint status; D-0047 boundaries remain except for the narrow D-0056 lead-capture endpoint, D-0058 server-local daily digest, and D-0059 Resend HTTPS mail transport (no analytics, no LLM, no repo connection, no execution, no persistence beyond local JSONL lead log)
 - `GOALRAIL_LANDING_COPY.md` — historical / superseded technical prompt-handoff landing draft; not current public landing canon and not the source of truth for `apps/web/pilot-intake-ru`
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
@@ -199,8 +227,8 @@ related_docs:
 - `ADR-0019` — WorkItem planning controller / runner boundary
 - `ADR-0020` — Public Contract identity boundary
 - `ADR-0021` — WorkItemPlan pull lease boundary; typed planning queue and future lease protocol direction
-- `ADR-0024` — Minimal planning worker loop boundary; future thin
-  `goalrail-worker` polling loop over typed plan leases, without runner,
+- `ADR-0024` — Minimal planning worker loop boundary; first thin
+  `goalrail-worker` prototype polls typed plan leases, without runner,
   checkout, execution, direct DB writes, or WorkItem creation by the worker
 - `ADR-0022` — Installation boundary; running control-plane instance above
   Organization, with `self_hosted` and `saas` as the only deployment modes
@@ -217,6 +245,31 @@ related_docs:
   Console-backed server API, owner-only v0 authorization, canonical `User` plus
   `OrganizationMembership`, one-time temporary password handling, and no CLI
   user creation
+- `ADR-0028` — runner checkout instruction and workspace receipt boundary;
+  concrete H1 target for `WorkItem(planned)` to checkout preparation without
+  assignment, execution, `Run`, gate, proof, server-side clone, or server-side
+  repository secrets
+- `ADR-0029` — Run and execution receipt boundary; H2 direction for
+  `ExecutionJob` as the leaseable unit, `Run` creation only on runner start
+  with lease proof, and execution receipts as evidence inputs rather than gate
+  verdicts or proof
+- `ADR-0030` — bounded command execution boundary; H2.4 direction for
+  server-issued command plans, runner-only built-in diagnostic execution first,
+  no arbitrary shell, and command metadata receipts as evidence inputs rather
+  than gate verdicts or proof
+- `ADR-0031` — project command execution boundary; H2.5 direction for typed,
+  allowlisted project probes only, no shell, no arbitrary command strings, no
+  user-provided argv, one command receipt per Run, and project command
+  receipts as evidence inputs rather than gate verdicts or proof
+- `ADR-0032` — typed project test command boundary; H2.6 direction for a
+  server-owned `project_test/run_declared_test_target` shape derived from
+  project-probe metadata, with no shell, no user-provided argv, disabled
+  stdout/stderr capture for the first slice, one command receipt per Run, and
+  test receipts as evidence inputs rather than gate verdicts or proof
+- `ADR-0033` — runner sandbox enforcement boundary; H2.7 direction for
+  network/workspace-write enforcement semantics before any project-test
+  `exited` or `timed_out` receipt, keeping unavailable controls fail-closed as
+  `policy_rejected`
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
@@ -231,11 +284,32 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
+  modes, local marker / snapshot / Project Scan distinctions, trust boundary,
+  and MVP partial-failure recovery direction
+- `SNAPSHOT_SCAN_SHARED_SHAPE.md` — operational direction for reducing drift
+  between repository context snapshot inventory and local Project Scan baseline
+- `INIT_STABILIZATION_CHECKPOINT.md` — operational checkpoint for completed
+  `goalrail init` stabilization slices, remaining risks, non-goals, and the
+  next safe init follow-up options
+- `CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md` — operational checkpoint for
+  the completed read-only Console Goal / Contract tranche, implemented flow,
+  endpoints, boundaries, completed slices, and do-not-reintroduce non-goals
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
 - `CONSOLE_MAIN_DEPLOYMENT_WIRING.md` — operational record for the main `goalrail.dev` console and `api.goalrail.dev` API Flux GitOps deployment and smoke status
 - `CONSOLE_RU_DEPLOYMENT_WIRING.md` — operational record for the static `console.goalrail.ru` deployment wiring and smoke status
+- `START_ASSISTANT_IMPLEMENTATION_PLAN.md` — staged implementation plan for `/start`, from static page to source-grounded assistant
+- `START_ASSISTANT_WORKER_ARCHITECTURE.md` — Stage 3A architecture for the separate public-edge assistant Worker and `/api/start-chat` ownership boundary
+- `START_ASSISTANT_PUBLIC_KB_PIPELINE.md` — public KB source whitelist, build process, vector store lifecycle, manifest storage, freshness, and rollback rules
+- `START_ASSISTANT_STAGE_3B_PLAN.md` — smallest live Worker implementation plan, tests, smoke checks, security validation, and non-goals
+- `START_ASSISTANT_LIVE_RUNBOOK.md` — live `/start` route ownership, Worker deploy/smoke commands, rollback path, and remaining limits
+- `START_ASSISTANT_KNOWLEDGE_SYNC.md` — initial public knowledge sync policy for compiling whitelisted docs into retrieval artifacts
+- `START_ASSISTANT_SECURITY_AND_PRIVACY.md` — public assistant safety boundary, input policy, logging posture, abuse controls, and safe refusals
+- `START_ASSISTANT_API_CONTRACT.md` — `POST /api/start-chat` request/response contract and system-instruction draft
+- `DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md` — proposed decision snippet for the separate public-edge Worker boundary
+- `DECISION_LOG_START_ASSISTANT_SNIPPET.md` — proposed decision snippet for the global `/start` assistant surface
 - `GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md` — draft operational template для post-qualification pilot proposal; client-facing working copy, не product canon
 - `GOALRAIL_QUALIFICATION_CHECKLIST.md` — draft founder-facing fit-check checklist для короткого qualification call; operational screen, не stabilised sales process
 
@@ -243,8 +317,10 @@ related_docs:
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
+- `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
 - `.goalrail/knowledge/` — Goalrail advisory research and idea backlog; не источник канона без promotion
+- `.goalrail/public-kb/manifest.yaml` — explicit public KB whitelist input for the future source-grounded `/start` assistant
 - `.punk/publishing.toml` — committed publishing binding manifest; runtime workspace is external and resolved via CLI
 - legacy `.punk/publishing/` was removed; see `docs/ops/PUBLISHING_MIGRATION.md`
 - `.goalrail/flows/` — planned flow/spec boundary for future runtime semantics

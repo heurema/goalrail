@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -39,9 +40,9 @@ func TestCreateUsesTransactionRunnerRollbackWhenDraftCreationFails(t *testing.T)
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	failingDraftService := &failingDraftService{err: errors.New("draft create failed")}
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, failingDraftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, failingDraftService, draftStore, approvalService, txRunner)
 
-	if _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}); err == nil {
+	if _, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID)); err == nil {
 		t.Fatal("Create() error = nil, want draft failure")
 	}
 	if _, ok, err := contractStore.GetByGoalID(ctx, goal.ID); err != nil {
@@ -56,10 +57,13 @@ func TestCreateUsesTransactionRunnerRollbackWhenDraftCreationFails(t *testing.T)
 	}
 
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service = contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	service = contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, &fakeTransactionRunner{})
+	created, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("retry Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("retry Create() createdNew = false, want true")
 	}
 	if created.State != spine.ContractStateDraft {
 		t.Fatalf("retry contract state = %q, want %q", created.State, spine.ContractStateDraft)
@@ -96,11 +100,14 @@ func TestCreateUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
 
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	created, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("Create() createdNew = false, want true")
 	}
 	if txRunner.calls != 3 {
 		t.Fatalf("TxRunner calls = %d, want 3", txRunner.calls)
@@ -131,6 +138,550 @@ func TestCreateUsesRequiredTransactionRunner(t *testing.T) {
 	}
 }
 
+func TestCreateReturnsExistingContractForGoal(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+	first, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("first Create() error = %v", err)
+	}
+	if !createdNew {
+		t.Fatal("first Create() createdNew = false, want true")
+	}
+	second, createdNew, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("second Create() error = %v", err)
+	}
+	if createdNew {
+		t.Fatal("second Create() createdNew = true, want false")
+	}
+	if second.ID != first.ID || second.CurrentDraftID == nil || *second.CurrentDraftID != *first.CurrentDraftID {
+		t.Fatalf("second contract = %#v, want same draft handle as %#v", second, first)
+	}
+	if len(contractStore.contracts) != 1 || len(seedStore.seeds) != 1 || len(draftStore.drafts) != 1 {
+		t.Fatalf("stored counts contracts/seeds/drafts = %d/%d/%d, want 1/1/1", len(contractStore.contracts), len(seedStore.seeds), len(draftStore.drafts))
+	}
+	if got := countEventType(events.Events(), contractseed.EventTypeContractSeedCreated); got != 1 {
+		t.Fatalf("contract_seed.created events = %d, want 1", got)
+	}
+	if got := countEventType(events.Events(), contractdraft.EventTypeContractDraftCreated); got != 1 {
+		t.Fatalf("contract_draft.created events = %d, want 1", got)
+	}
+}
+
+func TestListScopesContractsToActiveMembershipOrganization(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	if err := contractStore.Create(ctx, storedContract("018f0000-0000-7000-8000-000000000c01", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateDraft)); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := contractStore.Create(ctx, storedContract("018f0000-0000-7000-8000-000000000c02", "018f0000-0000-7000-8000-000000009999", "018f0000-0000-7000-8000-000000000202", spine.ContractStateApproved)); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	result, err := service.List(ctx, contract.ListInput{Membership: activeMembership(orgID)})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result.Contracts) != 1 {
+		t.Fatalf("contracts len = %d, want 1: %#v", len(result.Contracts), result.Contracts)
+	}
+	if result.Contracts[0].OrganizationID != orgID {
+		t.Fatalf("contract organization = %q, want %q", result.Contracts[0].OrganizationID, orgID)
+	}
+	if result.Limit != 50 {
+		t.Fatalf("limit = %d, want default 50", result.Limit)
+	}
+}
+
+func TestListAppliesFiltersAndMaxLimit(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	matching := storedContract("018f0000-0000-7000-8000-000000000c01", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateReadyForApproval)
+	if err := contractStore.Create(ctx, matching); err != nil {
+		t.Fatalf("Create() matching error = %v", err)
+	}
+	for _, other := range []spine.Contract{
+		storedContract("018f0000-0000-7000-8000-000000000c02", orgID, "018f0000-0000-7000-8000-000000000202", spine.ContractStateReadyForApproval),
+		storedContract("018f0000-0000-7000-8000-000000000c03", orgID, "018f0000-0000-7000-8000-000000000201", spine.ContractStateDraft),
+	} {
+		if err := contractStore.Create(ctx, other); err != nil {
+			t.Fatalf("Create() other error = %v", err)
+		}
+	}
+
+	result, err := service.List(ctx, contract.ListInput{
+		Membership:    activeMembership(orgID),
+		ProjectID:     matching.ProjectID,
+		RepoBindingID: matching.RepoBindingID,
+		GoalID:        matching.GoalID,
+		State:         spine.ContractStateReadyForApproval,
+		Limit:         100,
+	})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result.Contracts) != 1 || result.Contracts[0].ID != matching.ID {
+		t.Fatalf("contracts = %#v, want matching contract only", result.Contracts)
+	}
+	if result.Limit != 100 || contractStore.lastListFilter.Limit != 100 {
+		t.Fatalf("limit result/filter = %d/%d, want 100/100", result.Limit, contractStore.lastListFilter.Limit)
+	}
+}
+
+func TestListAllowsActiveReaderRoles(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	for _, role := range []spine.OrganizationMembershipRole{
+		spine.OrganizationMembershipRoleViewer,
+		spine.OrganizationMembershipRoleMember,
+		spine.OrganizationMembershipRoleAdmin,
+		spine.OrganizationMembershipRoleOwner,
+	} {
+		t.Run(string(role), func(t *testing.T) {
+			membership := activeMembership("018f0000-0000-7000-8000-000000000002")
+			membership.Role = role
+			if _, err := service.List(ctx, contract.ListInput{Membership: membership}); err != nil {
+				t.Fatalf("List() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestListRejectsInactiveMembershipAndInvalidFilters(t *testing.T) {
+	ctx := context.Background()
+	service := newContractServiceWithStore(newFakeContractStore())
+	tests := []struct {
+		name  string
+		input contract.ListInput
+	}{
+		{
+			name: "inactive membership",
+			input: contract.ListInput{Membership: spine.OrganizationMembership{
+				OrganizationID: "018f0000-0000-7000-8000-000000000002",
+				State:          spine.EntityStateInactive,
+			}},
+		},
+		{name: "bad project id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), ProjectID: "not-a-uuid"}},
+		{name: "bad repo binding id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), RepoBindingID: "not-a-uuid"}},
+		{name: "bad goal id", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), GoalID: "not-a-uuid"}},
+		{name: "invalid state", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), State: "blocked"}},
+		{name: "negative limit", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), Limit: -1}},
+		{name: "too large limit", input: contract.ListInput{Membership: activeMembership("018f0000-0000-7000-8000-000000000002"), Limit: 101}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := service.List(ctx, tt.input); err == nil {
+				t.Fatal("List() error = nil, want validation or membership error")
+			}
+		})
+	}
+}
+
+func TestGetScopesContractToActiveMembershipOrganization(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	service := newContractServiceWithStore(contractStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+	created := storedContract("018f0000-0000-7000-8000-000000000c10", orgID, "018f0000-0000-7000-8000-000000000210", spine.ContractStateDraft)
+	if err := contractStore.Create(ctx, created); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	got, err := service.Get(ctx, created.ID, activeMembership(orgID))
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.ID != created.ID || got.OrganizationID != orgID {
+		t.Fatalf("Get() = %#v, want contract %q in org %q", got, created.ID, orgID)
+	}
+
+	inactive := activeMembership(orgID)
+	inactive.State = spine.EntityStateInactive
+	if _, err := service.Get(ctx, created.ID, inactive); !errors.Is(err, contract.ErrMembershipRequired) {
+		t.Fatalf("Get() inactive membership error = %v, want ErrMembershipRequired", err)
+	}
+	if _, err := service.Get(ctx, created.ID, activeMembership("018f0000-0000-7000-8000-000000009999")); !errors.Is(err, contract.ErrOrganizationForbidden) {
+		t.Fatalf("Get() other organization error = %v, want ErrOrganizationForbidden", err)
+	}
+	if _, err := service.Get(ctx, "018f0000-0000-7000-8000-000000000c99", activeMembership(orgID)); !errors.Is(err, contract.ErrContractNotFound) {
+		t.Fatalf("Get() missing contract error = %v, want ErrContractNotFound", err)
+	}
+}
+
+func TestCurrentDraftReturnsDraftForActiveMembershipOrganization(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+	created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.CurrentDraftID == nil {
+		t.Fatal("current_draft_id is nil")
+	}
+	txCallsBefore := txRunner.calls
+	eventsBefore := len(events.Events())
+
+	draft, err := service.CurrentDraft(ctx, created.ID, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("CurrentDraft() error = %v", err)
+	}
+	if draft.ID != *created.CurrentDraftID {
+		t.Fatalf("draft id = %q, want %q", draft.ID, *created.CurrentDraftID)
+	}
+	if draft.ContractID != created.ID || draft.OrganizationID != created.OrganizationID {
+		t.Fatalf("draft linkage = contract %q org %q, want contract %q org %q", draft.ContractID, draft.OrganizationID, created.ID, created.OrganizationID)
+	}
+	if draft.Title == "" || draft.IntentSummary == "" || len(draft.ProposedScope) == 0 || len(draft.ProposedAcceptanceCriteria) == 0 {
+		t.Fatalf("draft body fields incomplete: %#v", draft)
+	}
+	if txRunner.calls != txCallsBefore {
+		t.Fatalf("TxRunner calls = %d, want unchanged %d for read-only CurrentDraft", txRunner.calls, txCallsBefore)
+	}
+	if len(events.Events()) != eventsBefore {
+		t.Fatalf("events = %d, want unchanged %d for read-only CurrentDraft", len(events.Events()), eventsBefore)
+	}
+}
+
+func TestCurrentDraftRejectsInactiveMembershipAndOrganizationMismatch(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+	created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	eventsBefore := len(events.Events())
+
+	tests := []struct {
+		name       string
+		membership spine.OrganizationMembership
+		want       error
+	}{
+		{
+			name: "inactive membership",
+			membership: spine.OrganizationMembership{
+				OrganizationID: goal.OrganizationID,
+				State:          spine.EntityStateInactive,
+			},
+			want: contract.ErrMembershipRequired,
+		},
+		{
+			name:       "other organization",
+			membership: activeMembership("018f0000-0000-7000-8000-000000009999"),
+			want:       contract.ErrOrganizationForbidden,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.CurrentDraft(ctx, created.ID, tt.membership)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("CurrentDraft() error = %v, want %v", err, tt.want)
+			}
+			if len(events.Events()) != eventsBefore {
+				t.Fatalf("events = %d, want unchanged %d", len(events.Events()), eventsBefore)
+			}
+		})
+	}
+}
+
+func TestCurrentDraftRejectsMissingOrMismatchedDraft(t *testing.T) {
+	ctx := context.Background()
+	contractStore := newFakeContractStore()
+	draftStore := newFakeContractDraftStore()
+	service := newContractServiceWithStores(contractStore, draftStore)
+	orgID := spine.OrganizationID("018f0000-0000-7000-8000-000000000002")
+
+	missingCurrentDraft := storedContract("018f0000-0000-7000-8000-000000000c11", orgID, "018f0000-0000-7000-8000-000000000211", spine.ContractStateDraft)
+	if err := contractStore.Create(ctx, missingCurrentDraft); err != nil {
+		t.Fatalf("Create() missing draft contract error = %v", err)
+	}
+	if _, err := service.CurrentDraft(ctx, missingCurrentDraft.ID, activeMembership(orgID)); !errors.Is(err, contract.ErrContractCurrentDraftMissing) {
+		t.Fatalf("CurrentDraft() missing current draft error = %v, want ErrContractCurrentDraftMissing", err)
+	}
+
+	mismatchDraftID := spine.ContractDraftID("contract-draft-mismatch")
+	mismatchedContract := storedContract("018f0000-0000-7000-8000-000000000c12", orgID, "018f0000-0000-7000-8000-000000000212", spine.ContractStateDraft)
+	mismatchedContract.CurrentDraftID = &mismatchDraftID
+	if err := contractStore.Create(ctx, mismatchedContract); err != nil {
+		t.Fatalf("Create() mismatched contract error = %v", err)
+	}
+	if err := draftStore.Create(ctx, spine.ContractDraft{
+		ID:             mismatchDraftID,
+		OrganizationID: "018f0000-0000-7000-8000-000000009999",
+		ContractID:     "018f0000-0000-7000-8000-000000000c99",
+		State:          spine.ContractDraftStateDraft,
+		CreatedAt:      testTime(),
+	}); err != nil {
+		t.Fatalf("drafts.Create() error = %v", err)
+	}
+	if _, err := service.CurrentDraft(ctx, mismatchedContract.ID, activeMembership(orgID)); !errors.Is(err, contract.ErrContractCurrentDraftMismatch) {
+		t.Fatalf("CurrentDraft() mismatched draft error = %v, want ErrContractCurrentDraftMismatch", err)
+	}
+
+	missingDraftID := spine.ContractDraftID("contract-draft-missing")
+	missingDraftContract := storedContract("018f0000-0000-7000-8000-000000000c13", orgID, "018f0000-0000-7000-8000-000000000213", spine.ContractStateDraft)
+	missingDraftContract.CurrentDraftID = &missingDraftID
+	if err := contractStore.Create(ctx, missingDraftContract); err != nil {
+		t.Fatalf("Create() missing stored draft contract error = %v", err)
+	}
+	if _, err := service.CurrentDraft(ctx, missingDraftContract.ID, activeMembership(orgID)); !errors.Is(err, contractdraft.ErrContractDraftNotFound) {
+		t.Fatalf("CurrentDraft() missing stored draft error = %v, want ErrContractDraftNotFound", err)
+	}
+}
+
+func TestCreateRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+	_, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership("018f0000-0000-7000-8000-000000009999"))
+	if !errors.Is(err, contract.ErrOrganizationForbidden) {
+		t.Fatalf("Create() error = %v, want ErrOrganizationForbidden", err)
+	}
+	if len(contractStore.contracts) != 0 || len(seedStore.seeds) != 0 || len(draftStore.drafts) != 0 || len(events.Events()) != 0 {
+		t.Fatalf("mutation happened despite org mismatch")
+	}
+}
+
+func TestCreateRejectsExpectedProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input func(spine.Goal) spine.ContractCreateRequest
+		want  error
+	}{
+		{
+			name: "project",
+			input: func(goal spine.Goal) spine.ContractCreateRequest {
+				return spine.ContractCreateRequest{
+					GoalID:        goal.ID,
+					ProjectID:     "018f0000-0000-7000-8000-000000009998",
+					RepoBindingID: goal.RepoBindingID,
+				}
+			},
+			want: contract.ErrProjectMismatch,
+		},
+		{
+			name: "repo binding",
+			input: func(goal spine.Goal) spine.ContractCreateRequest {
+				return spine.ContractCreateRequest{
+					GoalID:        goal.ID,
+					ProjectID:     goal.ProjectID,
+					RepoBindingID: "018f0000-0000-7000-8000-000000009999",
+				}
+			},
+			want: contract.ErrRepoBindingMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			goalStore := newFakeGoalStore()
+			contractStore := newFakeContractStore()
+			seedStore := newFakeContractSeedStore()
+			draftStore := newFakeContractDraftStore()
+			approvedStore := newFakeApprovedContractStore()
+			events := newFakeEventLog()
+			ids := &sequenceIDs{}
+			txRunner := &fakeTransactionRunner{}
+
+			goal := readyGoal()
+			if err := goalStore.Create(ctx, goal); err != nil {
+				t.Fatalf("goals.Create() error = %v", err)
+			}
+			seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+			_, _, err := service.Create(ctx, tt.input(goal), activeMembership(goal.OrganizationID))
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("Create() error = %v, want %v", err, tt.want)
+			}
+			if len(contractStore.contracts) != 0 || len(seedStore.seeds) != 0 || len(draftStore.drafts) != 0 || len(events.Events()) != 0 {
+				t.Fatalf("mutation happened despite expected context mismatch")
+			}
+		})
+	}
+}
+
+func TestUpdateDraftRejectsOrganizationMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+	goalStore := newFakeGoalStore()
+	contractStore := newFakeContractStore()
+	seedStore := newFakeContractSeedStore()
+	draftStore := newFakeContractDraftStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+
+	goal := readyGoal()
+	if err := goalStore.Create(ctx, goal); err != nil {
+		t.Fatalf("goals.Create() error = %v", err)
+	}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+	created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	eventCountBefore := len(events.Events())
+	_, err = service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`), activeMembership("018f0000-0000-7000-8000-000000009999"))
+	if !errors.Is(err, contract.ErrOrganizationForbidden) {
+		t.Fatalf("UpdateDraft() error = %v, want ErrOrganizationForbidden", err)
+	}
+	if got := len(events.Events()); got != eventCountBefore {
+		t.Fatalf("events = %d, want %d without update mutation", got, eventCountBefore)
+	}
+	if draftStore.updateSawTransaction {
+		t.Fatal("draft update ran despite organization mismatch")
+	}
+}
+
+func TestUpdateDraftRejectsExpectedProjectOrRepoBindingMismatchBeforeMutation(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input func(spine.Goal) spine.ContractDraftUpdateRequest
+		want  error
+	}{
+		{
+			name: "project",
+			input: func(goal spine.Goal) spine.ContractDraftUpdateRequest {
+				request := draftUpdateRequest(t, `{"title": "Reviewed draft title"}`)
+				request.ProjectID = "018f0000-0000-7000-8000-000000009998"
+				request.RepoBindingID = goal.RepoBindingID
+				return request
+			},
+			want: contract.ErrProjectMismatch,
+		},
+		{
+			name: "repo binding",
+			input: func(goal spine.Goal) spine.ContractDraftUpdateRequest {
+				request := draftUpdateRequest(t, `{"title": "Reviewed draft title"}`)
+				request.ProjectID = goal.ProjectID
+				request.RepoBindingID = "018f0000-0000-7000-8000-000000009999"
+				return request
+			},
+			want: contract.ErrRepoBindingMismatch,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			goalStore := newFakeGoalStore()
+			contractStore := newFakeContractStore()
+			seedStore := newFakeContractSeedStore()
+			draftStore := newFakeContractDraftStore()
+			approvedStore := newFakeApprovedContractStore()
+			events := newFakeEventLog()
+			ids := &sequenceIDs{}
+			txRunner := &fakeTransactionRunner{}
+
+			goal := readyGoal()
+			if err := goalStore.Create(ctx, goal); err != nil {
+				t.Fatalf("goals.Create() error = %v", err)
+			}
+			seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+			service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+
+			created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
+			if err != nil {
+				t.Fatalf("Create() error = %v", err)
+			}
+			eventCountBefore := len(events.Events())
+			_, err = service.UpdateDraft(ctx, created.ID, tt.input(goal), activeMembership(goal.OrganizationID))
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("UpdateDraft() error = %v, want %v", err, tt.want)
+			}
+			if got := len(events.Events()); got != eventCountBefore {
+				t.Fatalf("events = %d, want %d without update mutation", got, eventCountBefore)
+			}
+			if draftStore.updateSawTransaction {
+				t.Fatal("draft update ran despite expected context mismatch")
+			}
+		})
+	}
+}
+
 func TestUpdateDraftUsesRequiredTransactionRunner(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newFakeGoalStore()
@@ -150,16 +701,16 @@ func TestUpdateDraftUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	transactionalAppendsBeforeUpdate := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
-	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`))
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("UpdateDraft() error = %v", err)
 	}
@@ -212,16 +763,16 @@ func TestSubmitForApprovalUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	transactionalAppendsBeforeSubmit := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
-	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+	updated, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
@@ -277,20 +828,20 @@ func TestApproveUsesRequiredTransactionRunner(t *testing.T) {
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	createService := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
-	created, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	createService := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, &fakeTransactionRunner{})
+	created, _, err := createService.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	submitted, err := createService.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	submitted, err := createService.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
 	transactionalAppendsBeforeApprove := events.transactionalAppends
 
 	txRunner := &fakeTransactionRunner{}
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, txRunner)
-	approved, err := service.Approve(ctx, submitted.ID, approveRequest())
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+	approved, err := service.Approve(ctx, submitted.ID, approveRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
@@ -346,27 +897,27 @@ func TestContractLifecycleTransitionsUseRequiredTransactionRunner(t *testing.T) 
 	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
 	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, subServiceTxRunner, fixedClock{now: testTime()}, ids)
-	service := contract.NewService(contractStore, seedService, draftService, approvalService, &fakeTransactionRunner{})
+	service := contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, &fakeTransactionRunner{})
 
-	created, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID})
+	created, _, err := service.Create(ctx, spine.ContractCreateRequest{GoalID: goal.ID}, activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`))
+	updated, err := service.UpdateDraft(ctx, created.ID, draftUpdateRequest(t, `{"title": "Reviewed draft title"}`), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("UpdateDraft() error = %v", err)
 	}
 	if updated.State != spine.ContractStateDraft {
 		t.Fatalf("updated contract state = %q, want %q", updated.State, spine.ContractStateDraft)
 	}
-	submitted, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest())
+	submitted, err := service.SubmitForApproval(ctx, created.ID, draftReadyForApprovalRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("SubmitForApproval() error = %v", err)
 	}
 	if submitted.State != spine.ContractStateReadyForApproval {
 		t.Fatalf("submitted contract state = %q, want %q", submitted.State, spine.ContractStateReadyForApproval)
 	}
-	approved, err := service.Approve(ctx, created.ID, approveRequest())
+	approved, err := service.Approve(ctx, created.ID, approveRequest(), activeMembership(goal.OrganizationID))
 	if err != nil {
 		t.Fatalf("Approve() error = %v", err)
 	}
@@ -473,7 +1024,7 @@ func (g *sequenceIDs) NewEventID() (spine.EventID, error) {
 
 func readyGoal() spine.Goal {
 	return spine.Goal{
-		ID:             "goal-1",
+		ID:             "018f0000-0000-7000-8000-000000000101",
 		IntakeID:       "intake-1",
 		OrganizationID: "018f0000-0000-7000-8000-000000000002",
 		ProjectID:      "018f0000-0000-7000-8000-000000000003",
@@ -489,8 +1040,66 @@ func readyGoal() spine.Goal {
 	}
 }
 
+func activeMembership(organizationID spine.OrganizationID) spine.OrganizationMembership {
+	return spine.OrganizationMembership{
+		ID:             "018f0000-0000-7000-8000-000000000011",
+		OrganizationID: organizationID,
+		UserID:         "018f0000-0000-7000-8000-000000000001",
+		Role:           spine.OrganizationMembershipRoleMember,
+		State:          spine.EntityStateActive,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime(),
+	}
+}
+
 func testTime() time.Time {
 	return time.Date(2026, 4, 25, 12, 0, 0, 0, time.UTC)
+}
+
+func newContractServiceWithStore(contractStore *fakeContractStore) *contract.Service {
+	return newContractServiceWithStores(contractStore, newFakeContractDraftStore())
+}
+
+func newContractServiceWithStores(contractStore *fakeContractStore, draftStore *fakeContractDraftStore) *contract.Service {
+	goalStore := newFakeGoalStore()
+	seedStore := newFakeContractSeedStore()
+	approvedStore := newFakeApprovedContractStore()
+	events := newFakeEventLog()
+	ids := &sequenceIDs{}
+	txRunner := &fakeTransactionRunner{}
+	seedService := contractseed.NewService(goalStore, contractStore, seedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	draftService := contractdraft.NewService(seedStore, contractStore, draftStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	approvalService := approvedcontract.NewService(draftStore, contractStore, approvedStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	return contract.NewService(goalStore, contractStore, seedService, draftService, draftStore, approvalService, txRunner)
+}
+
+func storedContract(id spine.ContractID, organizationID spine.OrganizationID, goalID spine.GoalID, state spine.ContractState) spine.Contract {
+	return spine.Contract{
+		ID:             id,
+		OrganizationID: organizationID,
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		GoalID:         goalID,
+		State:          state,
+		CreatedAt:      testTime(),
+		UpdatedAt:      testTime().Add(time.Duration(len(id)) * time.Minute),
+	}
+}
+
+func cloneContract(contract spine.Contract) spine.Contract {
+	if contract.CurrentSeedID != nil {
+		value := *contract.CurrentSeedID
+		contract.CurrentSeedID = &value
+	}
+	if contract.CurrentDraftID != nil {
+		value := *contract.CurrentDraftID
+		contract.CurrentDraftID = &value
+	}
+	if contract.ApprovedSnapshotID != nil {
+		value := *contract.ApprovedSnapshotID
+		contract.ApprovedSnapshotID = &value
+	}
+	return contract
 }
 
 type fakeGoalStore struct {
@@ -514,6 +1123,7 @@ func (s *fakeGoalStore) Get(_ context.Context, id spine.GoalID) (spine.Goal, boo
 type fakeContractStore struct {
 	contracts                          map[spine.ContractID]spine.Contract
 	byGoal                             map[spine.GoalID]spine.ContractID
+	lastListFilter                     spine.ContractListFilter
 	createSawTransaction               bool
 	markDraftCreatedSawTransaction     bool
 	markReadyForApprovalSawTransaction bool
@@ -546,6 +1156,42 @@ func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spi
 	}
 	contract, ok := s.contracts[contractID]
 	return contract, ok, nil
+}
+
+func (s *fakeContractStore) List(_ context.Context, filter spine.ContractListFilter) ([]spine.Contract, error) {
+	s.lastListFilter = filter
+	contracts := make([]spine.Contract, 0, len(s.contracts))
+	for _, contract := range s.contracts {
+		if filter.OrganizationID != "" && contract.OrganizationID != filter.OrganizationID {
+			continue
+		}
+		if filter.ProjectID != "" && contract.ProjectID != filter.ProjectID {
+			continue
+		}
+		if filter.RepoBindingID != "" && contract.RepoBindingID != filter.RepoBindingID {
+			continue
+		}
+		if filter.GoalID != "" && contract.GoalID != filter.GoalID {
+			continue
+		}
+		if filter.State != "" && contract.State != filter.State {
+			continue
+		}
+		contracts = append(contracts, cloneContract(contract))
+	}
+	sort.Slice(contracts, func(i, j int) bool {
+		if !contracts[i].UpdatedAt.Equal(contracts[j].UpdatedAt) {
+			return contracts[i].UpdatedAt.After(contracts[j].UpdatedAt)
+		}
+		if !contracts[i].CreatedAt.Equal(contracts[j].CreatedAt) {
+			return contracts[i].CreatedAt.After(contracts[j].CreatedAt)
+		}
+		return contracts[i].ID > contracts[j].ID
+	})
+	if filter.Limit > 0 && len(contracts) > filter.Limit {
+		contracts = contracts[:filter.Limit]
+	}
+	return contracts, nil
 }
 
 func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error {

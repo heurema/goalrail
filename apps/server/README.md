@@ -1,9 +1,10 @@
 # Goalrail Server
 
 This server is still an early prototype. Existing intake, Goal readiness,
-public Contract lifecycle, ContractSeed creation, ContractDraft
-creation/update, ContractDraft ready_for_approval, ApprovedContract approval,
-WorkItem planning, auth credential/session, and event log flows require
+read-only qualification feed, public Contract lifecycle, ContractSeed creation,
+ContractDraft creation/update, ContractDraft ready_for_approval,
+ApprovedContract approval, WorkItem planning, auth credential/session, and
+event log flows require
 Postgres-backed state. The production server wiring no longer falls back to
 in-memory product state when database configuration is absent.
 Map-backed in-memory product/auth stores have been removed from
@@ -268,6 +269,23 @@ curl -sS -X POST http://localhost:8080/v1/auth/logout \
 Logout validates the bearer access token, loads the referenced session, and
 marks that session revoked with `revoked_at`.
 
+## Repository context read API
+
+After login, active Organization members can read the server-owned Project /
+RepoBinding metadata for their Organization:
+
+- `GET /v1/organizations/{organization_id}/repository-context`
+
+The endpoint loads the caller profile and OrganizationMembership server-side,
+rejects cross-Organization reads, and returns Organization metadata plus an
+array of active Project + active RepoBinding contexts. An Organization with no
+active context returns `200` with `contexts: []`.
+
+This response is metadata-only. It does not return Installation mode,
+`public_base_url`, provider tokens, clone credentials, repository secret
+material, source bodies, checkout status, readiness score, proof status, runner
+state, or provider authorization state.
+
 ## Organization user-management API
 
 After login, owner-only Organization user management is available through the
@@ -283,6 +301,13 @@ password exactly once. The server stores only password hashes, sets
 `must_change_password = true`, and the reset route revokes active sessions for
 that user. List responses never return password hashes, temporary passwords,
 refresh tokens, session tokens, or CLI auth codes.
+
+Temporary-password reset remains allowed for active or inactive non-self
+Organization users and memberships. The admin reset route rejects resetting the
+authenticated user's own password; use the authenticated password-change flow
+for your own password instead. The patch route rejects self-demotion away from
+`owner` and self-deactivation of the caller's own Organization membership while
+still allowing self display-name edits and no-op owner / active patches.
 
 The API remains a Console/admin surface. There are no CLI user-management
 commands, invite/reset email delivery, public registration, self-service
@@ -353,6 +378,19 @@ Then promote and check readiness:
 curl -sS -X POST http://localhost:8080/v1/intakes/{intake_id}/goals
 curl -sS -X POST http://localhost:8080/v1/goals/{goal_id}/readiness
 ```
+
+Read the current intent / qualification feed without mutating Goal readiness or
+creating clarification requests:
+
+```bash
+curl -sS "http://localhost:8080/v1/qualification-feed?repo_binding_id=018f0000-0000-7000-8000-000000000004&limit=50" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}"
+```
+
+The feed is scoped to the authenticated caller's active OrganizationMembership.
+It joins existing IntakeRecord, Goal, open ClarificationRequest, RepoBinding,
+and linked Contract state into a derived read model. Optional filters are
+`project_id`, `repo_binding_id`, `state` / `goal_state`, and `limit`.
 
 With Postgres configured, `IntakeRecord`, `Goal`, `ClarificationRequest`,
 `ClarificationAnswer`, the public `Contract` aggregate, `ContractSeed`,

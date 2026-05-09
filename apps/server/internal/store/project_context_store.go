@@ -15,26 +15,36 @@ import (
 type ProjectContextStore struct {
 	exec  postgresExecer
 	query postgresRowQuerier
+	rows  postgresRowsQuerier
 	psql  squirrel.StatementBuilderType
 }
 
 func NewProjectContextStore(pool *pgxpool.Pool) *ProjectContextStore {
 	db := newPostgresDB(pool)
-	return newProjectContextStore(db, db)
+	return newProjectContextStore(db, db, db)
 }
 
 func NewProjectContextStoreWithExecutor(exec postgresExecer) *ProjectContextStore {
-	return newProjectContextStore(exec, nil)
+	return newProjectContextStore(exec, nil, nil)
 }
 
 func NewProjectContextStoreWithExecutorAndQuerier(exec postgresExecer, query postgresRowQuerier) *ProjectContextStore {
-	return newProjectContextStore(exec, query)
+	var rows postgresRowsQuerier
+	if candidate, ok := query.(postgresRowsQuerier); ok {
+		rows = candidate
+	}
+	return newProjectContextStore(exec, query, rows)
 }
 
-func newProjectContextStore(exec postgresExecer, query postgresRowQuerier) *ProjectContextStore {
+func NewProjectContextStoreWithExecutorQuerierAndRows(exec postgresExecer, query postgresRowQuerier, rows postgresRowsQuerier) *ProjectContextStore {
+	return newProjectContextStore(exec, query, rows)
+}
+
+func newProjectContextStore(exec postgresExecer, query postgresRowQuerier, rows postgresRowsQuerier) *ProjectContextStore {
 	return &ProjectContextStore{
 		exec:  exec,
 		query: query,
+		rows:  rows,
 		psql:  squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar),
 	}
 }
@@ -83,6 +93,34 @@ func (s *ProjectContextStore) UpsertOrganization(ctx context.Context, org spine.
 		Suffix("ON CONFLICT (id) DO UPDATE SET installation_id = EXCLUDED.installation_id, slug = EXCLUDED.slug, display_name = EXCLUDED.display_name, state = EXCLUDED.state, updated_at = EXCLUDED.updated_at")
 
 	return s.execSQL(ctx, "upsert organization", stmt)
+}
+
+func (s *ProjectContextStore) GetOrganization(ctx context.Context, organizationID spine.OrganizationID) (spine.Organization, bool, error) {
+	if s.query == nil {
+		return spine.Organization{}, false, fmt.Errorf("project context query executor is nil")
+	}
+	id, err := uuidValue(organizationID, "organization id")
+	if err != nil {
+		return spine.Organization{}, false, err
+	}
+	stmt := s.psql.
+		Select(organizationColumns()...).
+		From("organizations").
+		Where(squirrel.Eq{"id": id})
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return spine.Organization{}, false, fmt.Errorf("get organization SQL: %w", err)
+	}
+
+	organization, err := scanOrganization(s.query.QueryRow(ctx, sqlText, args...))
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.Organization{}, false, nil
+		}
+		return spine.Organization{}, false, fmt.Errorf("get organization: %w", err)
+	}
+	return organization, true, nil
 }
 
 func (s *ProjectContextStore) UpsertOrganizationMembership(ctx context.Context, membership spine.OrganizationMembership) error {
@@ -291,6 +329,56 @@ func (s *ProjectContextStore) GetActiveRepoBindingByOrganizationAndRepository(ct
 		return spine.RepoBinding{}, false, fmt.Errorf("get active repo binding by organization repository: %w", err)
 	}
 	return binding, true, nil
+}
+
+func (s *ProjectContextStore) ListActiveProjectRepoBindingContexts(ctx context.Context, organizationID spine.OrganizationID) ([]spine.ProjectRepoBindingContext, error) {
+	if s.rows == nil {
+		return nil, fmt.Errorf("project context rows executor is nil")
+	}
+	orgID, err := uuidValue(organizationID, "organization id")
+	if err != nil {
+		return nil, err
+	}
+
+	projectColumns := prefixedColumns("p", projectColumns())
+	repoBindingColumns := prefixedColumns("rb", repoBindingColumns())
+	stmt := s.psql.
+		Select(append(projectColumns, repoBindingColumns...)...).
+		From("projects p").
+		Join("repo_bindings rb ON rb.project_id = p.id").
+		Where(squirrel.Eq{
+			"p.organization_id":  orgID,
+			"p.state":            spine.EntityStateActive,
+			"rb.organization_id": orgID,
+			"rb.state":           spine.EntityStateActive,
+		}).
+		OrderBy("p.created_at ASC", "p.id ASC", "rb.created_at ASC", "rb.id ASC")
+
+	sqlText, args, err := stmt.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("list active project repo binding contexts SQL: %w", err)
+	}
+	rows, err := s.rows.Query(ctx, sqlText, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list active project repo binding contexts: %w", err)
+	}
+	defer rows.Close()
+
+	var contexts []spine.ProjectRepoBindingContext
+	for rows.Next() {
+		project, binding, err := scanProjectRepoBindingContext(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan project repo binding context: %w", err)
+		}
+		contexts = append(contexts, spine.ProjectRepoBindingContext{
+			Project:     project,
+			RepoBinding: binding,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate project repo binding contexts: %w", err)
+	}
+	return contexts, nil
 }
 
 func (s *ProjectContextStore) GetRepoBinding(ctx context.Context, repoBindingID spine.RepoBindingID) (spine.RepoBinding, bool, error) {
@@ -528,6 +616,26 @@ func projectColumns() []string {
 	}
 }
 
+func organizationColumns() []string {
+	return []string{
+		"id",
+		"installation_id",
+		"slug",
+		"display_name",
+		"state",
+		"created_at",
+		"updated_at",
+	}
+}
+
+func prefixedColumns(prefix string, columns []string) []string {
+	out := make([]string, 0, len(columns))
+	for _, column := range columns {
+		out = append(out, prefix+"."+column)
+	}
+	return out
+}
+
 func repositoryContextSnapshotColumns() []string {
 	return []string{
 		"id",
@@ -569,6 +677,30 @@ func scanProject(row pgx.Row) (spine.Project, error) {
 	return project, nil
 }
 
+func scanOrganization(row pgx.Row) (spine.Organization, error) {
+	var id string
+	var installationID string
+	var state string
+	var organization spine.Organization
+	if err := row.Scan(
+		&id,
+		&installationID,
+		&organization.Slug,
+		&organization.DisplayName,
+		&state,
+		&organization.CreatedAt,
+		&organization.UpdatedAt,
+	); err != nil {
+		return spine.Organization{}, err
+	}
+	organization.ID = spine.OrganizationID(id)
+	organization.InstallationID = spine.InstallationID(installationID)
+	organization.State = spine.EntityState(state)
+	organization.CreatedAt = organization.CreatedAt.UTC()
+	organization.UpdatedAt = organization.UpdatedAt.UTC()
+	return organization, nil
+}
+
 func scanRepoBinding(row pgx.Row) (spine.RepoBinding, error) {
 	var binding spine.RepoBinding
 	var id string
@@ -606,6 +738,67 @@ func scanRepoBinding(row pgx.Row) (spine.RepoBinding, error) {
 	binding.CreatedAt = binding.CreatedAt.UTC()
 	binding.UpdatedAt = binding.UpdatedAt.UTC()
 	return binding, nil
+}
+
+func scanProjectRepoBindingContext(row pgx.Row) (spine.Project, spine.RepoBinding, error) {
+	var projectID string
+	var projectOrganizationID string
+	var projectCreatedByUserID string
+	var projectState string
+	var project spine.Project
+	var bindingID string
+	var bindingOrganizationID string
+	var bindingProjectID string
+	var bindingCreatedByUserID string
+	var bindingAccessMode string
+	var bindingState string
+	var binding spine.RepoBinding
+
+	if err := row.Scan(
+		&projectID,
+		&projectOrganizationID,
+		&projectCreatedByUserID,
+		&project.Slug,
+		&project.DisplayName,
+		&projectState,
+		&project.CreatedAt,
+		&project.UpdatedAt,
+		&bindingID,
+		&bindingOrganizationID,
+		&bindingProjectID,
+		&bindingCreatedByUserID,
+		&binding.VcsConnectionID,
+		&binding.Provider,
+		&binding.RepositoryExternalID,
+		&binding.RepositoryFullName,
+		&binding.RepositoryURL,
+		&binding.DefaultBranch,
+		&binding.WorkflowBaseBranch,
+		&binding.PathScope,
+		&bindingAccessMode,
+		&bindingState,
+		&binding.CreatedAt,
+		&binding.UpdatedAt,
+	); err != nil {
+		return spine.Project{}, spine.RepoBinding{}, err
+	}
+
+	project.ID = spine.ProjectID(projectID)
+	project.OrganizationID = spine.OrganizationID(projectOrganizationID)
+	project.CreatedByUserID = spine.UserID(projectCreatedByUserID)
+	project.State = spine.EntityState(projectState)
+	project.CreatedAt = project.CreatedAt.UTC()
+	project.UpdatedAt = project.UpdatedAt.UTC()
+
+	binding.ID = spine.RepoBindingID(bindingID)
+	binding.OrganizationID = spine.OrganizationID(bindingOrganizationID)
+	binding.ProjectID = spine.ProjectID(bindingProjectID)
+	binding.CreatedByUserID = spine.UserID(bindingCreatedByUserID)
+	binding.AccessMode = spine.RepoBindingAccessMode(bindingAccessMode)
+	binding.State = spine.EntityState(bindingState)
+	binding.CreatedAt = binding.CreatedAt.UTC()
+	binding.UpdatedAt = binding.UpdatedAt.UTC()
+	return project, binding, nil
 }
 
 func scanRepositoryContextSnapshot(row pgx.Row) (spine.RepositoryContextSnapshotRecord, error) {
@@ -652,10 +845,10 @@ func (s *ProjectContextStore) execSQL(ctx context.Context, op string, sqlizer sq
 func uuidValue(value any, field string) (uuid.UUID, error) {
 	id, err := uuid.Parse(fmt.Sprint(value))
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("%s must be uuid: %w", field, err)
+		return uuid.Nil, spine.MalformedIDError{Field: field, Reason: "must be uuid", Err: err}
 	}
 	if id.Version() != 7 {
-		return uuid.Nil, fmt.Errorf("%s must be uuidv7", field)
+		return uuid.Nil, spine.MalformedIDError{Field: field, Reason: "must be uuidv7"}
 	}
 	return id, nil
 }

@@ -28,5 +28,21 @@ type Contract struct {
 }
 
 type ContractCreateRequest struct {
-	GoalID GoalID `json:"goal_id"`
+	GoalID        GoalID        `json:"goal_id"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+}
+
+type ContractListFilter struct {
+	OrganizationID OrganizationID
+	ProjectID      ProjectID
+	RepoBindingID  RepoBindingID
+	GoalID         GoalID
+	State          ContractState
+	Limit          int
+}
+
+type ContractList struct {
+	Contracts []Contract `json:"contracts"`
+	Limit     int        `json:"limit"`
 }

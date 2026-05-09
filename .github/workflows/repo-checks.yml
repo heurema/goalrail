@@ -19,6 +19,10 @@ jobs:
             build_target: ./cmd/goalrail-server
           - module: apps/cli
             build_target: ./cmd/goalrail
+          - module: apps/worker
+            build_target: ./cmd/goalrail-worker
+          - module: apps/runner
+            build_target: ./cmd/goalrail-runner
           - module: apps/web/pilot-intake-ru/server
             build_target: ./cmd/goalrail-pilot-intake-ru
 

@@ -412,6 +412,317 @@ func TestInitMigrationCreatesWorkItemsTable(t *testing.T) {
 	if strings.Contains(sql, "CONSTRAINT work_items_approved_contract_id_unique UNIQUE (approved_contract_id)") {
 		t.Fatalf("work_items must not keep one-task-per-approved-contract unique constraint")
 	}
+	if strings.Contains(sql, "CREATE TABLE checkout_jobs") || strings.Contains(sql, "CREATE TABLE checkout_receipts") {
+		t.Fatalf("checkout tables must live in a follow-up migration, not 00001_init.sql")
+	}
+}
+
+func TestCheckoutMigrationCreatesCheckoutTables(t *testing.T) {
+	contents, err := FS.ReadFile("00002_checkout_jobs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE checkout_jobs",
+		"task_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE",
+		"current_runner_id TEXT NOT NULL DEFAULT ''",
+		"lease_token_hash TEXT NOT NULL DEFAULT ''",
+		"CONSTRAINT checkout_jobs_task_id_unique UNIQUE (task_id)",
+		"CONSTRAINT checkout_jobs_state_check CHECK (state IN ('queued', 'leased', 'receipt_submitted'))",
+		"CREATE INDEX checkout_jobs_organization_created_at_idx",
+		"CREATE INDEX checkout_jobs_project_created_at_idx",
+		"CREATE INDEX checkout_jobs_task_id_idx",
+		"CREATE INDEX checkout_jobs_state_created_at_idx",
+		"CREATE INDEX checkout_jobs_repo_binding_id_idx",
+		"CREATE INDEX checkout_jobs_lease_expires_at_idx",
+		"CREATE TABLE checkout_receipts",
+		"job_id UUID NOT NULL REFERENCES checkout_jobs(id) ON DELETE CASCADE",
+		"raw_source_uploaded BOOLEAN NOT NULL DEFAULT FALSE",
+		"CONSTRAINT checkout_receipts_job_id_unique UNIQUE (job_id)",
+		"CONSTRAINT checkout_receipts_no_raw_source_check CHECK (raw_source_uploaded = FALSE)",
+		"CREATE INDEX checkout_receipts_task_id_idx",
+		"CREATE INDEX checkout_receipts_repo_binding_id_idx",
+		"DROP TABLE IF EXISTS checkout_receipts;",
+		"DROP TABLE IF EXISTS checkout_jobs;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("checkout migration missing %q", want)
+		}
+	}
+	if strings.Index(sql, "CREATE TABLE checkout_jobs") > strings.Index(sql, "CREATE TABLE checkout_receipts") {
+		t.Fatalf("checkout_jobs must be created before checkout_receipts")
+	}
+	if strings.Index(sql, "DROP TABLE IF EXISTS checkout_receipts;") > strings.Index(sql, "DROP TABLE IF EXISTS checkout_jobs;") {
+		t.Fatalf("checkout_receipts must be dropped before checkout_jobs")
+	}
+}
+
+func TestExecutionMigrationCreatesExecutionJobTable(t *testing.T) {
+	contents, err := FS.ReadFile("00003_execution_jobs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE execution_jobs",
+		"task_id UUID NOT NULL REFERENCES work_items(id) ON DELETE CASCADE",
+		"checkout_job_id UUID NOT NULL REFERENCES checkout_jobs(id) ON DELETE CASCADE",
+		"checkout_receipt_id UUID NOT NULL REFERENCES checkout_receipts(id) ON DELETE CASCADE",
+		"CONSTRAINT execution_jobs_task_receipt_unique UNIQUE (task_id, checkout_receipt_id)",
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued'))",
+		"CONSTRAINT execution_jobs_execution_mode_check CHECK (execution_mode <> '')",
+		"CREATE INDEX execution_jobs_organization_created_at_idx",
+		"CREATE INDEX execution_jobs_project_created_at_idx",
+		"CREATE INDEX execution_jobs_task_id_idx",
+		"CREATE INDEX execution_jobs_checkout_receipt_id_idx",
+		"CREATE INDEX execution_jobs_repo_binding_id_idx",
+		"CREATE INDEX execution_jobs_state_created_at_idx",
+		"DROP TABLE IF EXISTS execution_jobs;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE runs") || strings.Contains(sql, "CREATE TABLE execution_receipts") {
+		t.Fatalf("execution job migration must not create Run or execution receipt tables")
+	}
+}
+
+func TestExecutionLeaseRunMigrationAddsRunStartBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00004_execution_leases_runs.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN current_lease_id UUID NULL",
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued', 'leased', 'run_started'))",
+		"CREATE TABLE execution_leases",
+		"lease_token_hash TEXT NOT NULL",
+		"CONSTRAINT execution_leases_state_check CHECK (state IN ('active', 'expired', 'run_started'))",
+		"CREATE TABLE runs",
+		"execution_job_id UUID NOT NULL REFERENCES execution_jobs(id) ON DELETE CASCADE",
+		"execution_lease_id UUID NOT NULL REFERENCES execution_leases(id) ON DELETE CASCADE",
+		"CONSTRAINT runs_execution_job_id_unique UNIQUE (execution_job_id)",
+		"CONSTRAINT runs_execution_lease_id_unique UNIQUE (execution_lease_id)",
+		"CONSTRAINT runs_state_check CHECK (state IN ('started'))",
+		"DROP TABLE IF EXISTS runs;",
+		"DROP TABLE IF EXISTS execution_leases;",
+		"WHERE state IN ('leased', 'run_started')",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution lease/run migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE execution_receipts") || strings.Contains(sql, "CREATE TABLE gate_decisions") || strings.Contains(sql, "CREATE TABLE proofs") {
+		t.Fatalf("execution lease/run migration must not create receipt, gate, or proof tables")
+	}
+	if strings.Contains(sql, "lease_token TEXT") {
+		t.Fatalf("execution lease migration must not store raw lease token")
+	}
+}
+
+func TestExecutionReceiptMigrationAddsMetadataOnlyReceiptBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00005_execution_receipts.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CONSTRAINT execution_jobs_state_check CHECK (state IN ('queued', 'leased', 'run_started', 'receipt_submitted'))",
+		"ADD COLUMN finished_at TIMESTAMPTZ NULL",
+		"CONSTRAINT runs_state_check CHECK (state IN ('started', 'receipt_submitted'))",
+		"CREATE TABLE execution_receipts",
+		"run_id UUID NOT NULL REFERENCES runs(id) ON DELETE CASCADE",
+		"execution_job_id UUID NOT NULL REFERENCES execution_jobs(id) ON DELETE CASCADE",
+		"execution_lease_id UUID NOT NULL REFERENCES execution_leases(id) ON DELETE CASCADE",
+		"CONSTRAINT execution_receipts_run_id_unique UNIQUE (run_id)",
+		"CONSTRAINT execution_receipts_mode_check CHECK (execution_mode = 'no_command')",
+		"CONSTRAINT execution_receipts_no_exit_code_check CHECK (exit_code IS NULL)",
+		"CONSTRAINT execution_receipts_no_artifacts_check CHECK (artifact_refs = '[]'::jsonb)",
+		"CONSTRAINT execution_receipts_no_changed_paths_check CHECK (changed_paths_summary = '[]'::jsonb)",
+		"CONSTRAINT execution_receipts_no_raw_source_check CHECK (raw_source_uploaded = FALSE)",
+		"DROP TABLE IF EXISTS execution_receipts;",
+		"WHERE state = 'receipt_submitted'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution receipt migration missing %q", want)
+		}
+	}
+	if strings.Contains(sql, "CREATE TABLE gate_decisions") || strings.Contains(sql, "CREATE TABLE proofs") {
+		t.Fatalf("execution receipt migration must not create gate or proof tables")
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("execution receipt migration must not store lease tokens")
+	}
+}
+
+func TestBuiltinDiagnosticCommandPlanMigrationAddsBoundedCommandBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00006_builtin_diagnostic_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE execution_command_plans",
+		"CONSTRAINT execution_command_plans_run_action_unique UNIQUE (run_id, command_kind, action)",
+		"CONSTRAINT execution_command_plans_builtin_kind_check CHECK (command_kind = 'builtin_diagnostic')",
+		"CONSTRAINT execution_command_plans_workspace_status_check CHECK (action = 'workspace_status')",
+		"CONSTRAINT execution_command_plans_no_shell_check CHECK (shell_allowed = FALSE)",
+		"CONSTRAINT execution_command_plans_no_argv_check CHECK (argv = '[]'::jsonb)",
+		"CONSTRAINT execution_command_plans_path_scope_check CHECK (path_scope = '[\".\"]'::jsonb)",
+		"CONSTRAINT execution_command_plans_no_artifacts_check CHECK (allowed_artifact_kinds = '[]'::jsonb)",
+		"ADD COLUMN command_plan_id UUID NULL REFERENCES execution_command_plans(id) ON DELETE RESTRICT",
+		"ADD CONSTRAINT execution_receipts_mode_check CHECK (execution_mode IN ('no_command', 'builtin_diagnostic'))",
+		"ADD CONSTRAINT execution_receipts_builtin_diagnostic_check CHECK",
+		"DELETE FROM execution_receipts",
+		"DROP TABLE IF EXISTS execution_command_plans;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("execution command plan migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("execution command plan migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("execution command plan migration must not store lease tokens")
+	}
+}
+
+func TestProjectProbeCommandPlanMigrationAddsTypedProbeBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00007_project_probe_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD CONSTRAINT execution_command_plans_kind_action_check CHECK",
+		"command_kind = 'project_probe' AND action = 'detect_declared_test_targets'",
+		"ADD COLUMN project_probe_metadata JSONB NOT NULL DEFAULT",
+		"ADD CONSTRAINT execution_receipts_mode_check CHECK (execution_mode IN ('no_command', 'builtin_diagnostic', 'project_probe'))",
+		"ADD CONSTRAINT execution_receipts_project_probe_check CHECK",
+		"project_probe_metadata ? 'detected_manifests'",
+		"project_probe_metadata ? 'package_manager_candidates'",
+		"project_probe_metadata ? 'declared_test_target_candidates'",
+		"project_probe_metadata ? 'unsupported_or_unknowns'",
+		"project_probe_metadata ? 'partiality_reasons'",
+		"jsonb_typeof(project_probe_metadata -> 'detected_manifests') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'package_manager_candidates') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'declared_test_target_candidates') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'unsupported_or_unknowns') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'partiality_reasons') = 'array'",
+		"DELETE FROM execution_receipts",
+		"WHERE execution_mode = 'project_probe'",
+		"DELETE FROM execution_command_plans",
+		"WHERE command_kind = 'project_probe'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project probe migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc", "sh -c"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project probe migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project probe migration must not store lease tokens")
+	}
+}
+
+func TestProjectTestCommandPlanMigrationAddsPlanningOnlyBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00008_project_test_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN source_project_probe_receipt_id UUID NULL REFERENCES execution_receipts(id) ON DELETE RESTRICT",
+		"ADD COLUMN selected_target_id TEXT NOT NULL DEFAULT ''",
+		"ADD COLUMN declared_test_target JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"ADD COLUMN network_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN workspace_write_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN scratch_write_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN changed_paths_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"command_kind = 'project_test' AND action = 'run_declared_test_target'",
+		"source_project_probe_receipt_id IS NOT NULL",
+		"declared_test_target ->> 'source_kind' = 'package_json_script'",
+		"shell_allowed = FALSE",
+		"argv = '[]'::jsonb",
+		"timeout_seconds = 120",
+		"network_allowed = FALSE",
+		"workspace_write_allowed = FALSE",
+		"max_stdout_bytes = 0",
+		"max_stderr_bytes = 0",
+		"allowed_artifact_kinds = '[]'::jsonb",
+		"changed_paths_allowed = FALSE",
+		"raw_source_upload_allowed = FALSE",
+		"WHERE command_kind = 'project_test'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project test migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc", "sh -c"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project test migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project test migration must not store lease tokens")
+	}
+}
+
+func TestProjectTestReceiptEnforcementReportMigrationAddsFailClosedBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00009_project_test_receipt_enforcement_report.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN enforcement_report JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"execution_mode IN ('no_command', 'builtin_diagnostic', 'project_probe', 'project_test')",
+		"process_status IN ('not_executed', 'metadata_only', 'policy_rejected')",
+		"ADD CONSTRAINT execution_receipts_project_test_check CHECK",
+		"command_kind = 'project_test'",
+		"action = 'run_declared_test_target'",
+		"process_status IN ('not_executed', 'metadata_only')",
+		"process_status = 'policy_rejected'",
+		"AND process_status IN ('not_executed', 'metadata_only')",
+		"exit_code IS NULL",
+		"artifact_refs = '[]'::jsonb",
+		"changed_paths_summary = '[]'::jsonb",
+		"raw_source_uploaded = FALSE",
+		"project_probe_metadata = '{",
+		"UPDATE execution_receipts",
+		"WHERE execution_mode = 'project_test'",
+		`"reason": "enforcement_unavailable"`,
+		`"scratch_write_policy": "allowed_runner_local"`,
+		`"network_policy": "disabled_required"`,
+		`"network_enforcement": "unavailable"`,
+		`"workspace_write_policy": "disabled_required"`,
+		`"workspace_write_enforcement": "unavailable"`,
+		`"process_tree_enforcement": "unavailable"`,
+		`"decision": "policy_rejected"`,
+		"enforcement_report = '{",
+		"WHERE execution_mode = 'project_test'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project test receipt enforcement migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "bash -lc", "sh -c", "stdout", "stderr"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project test receipt enforcement migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project test receipt enforcement migration must not store lease tokens")
+	}
 }
 
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {

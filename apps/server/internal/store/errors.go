@@ -39,6 +39,26 @@ var (
 	ErrWorkItemPlanProposalExists     = errors.New("work item plan proposal already exists")
 	ErrWorkItemPlanAlreadyHasProposal = errors.New("work item plan already has proposal")
 	ErrWorkItemPlanProposalNotFound   = errors.New("work item plan proposal not found")
+
+	ErrCheckoutJobAlreadyExists      = errors.New("checkout job already exists")
+	ErrCheckoutJobAlreadyPrepared    = errors.New("work item already has checkout job")
+	ErrCheckoutJobNotFound           = errors.New("checkout job not found")
+	ErrCheckoutReceiptAlreadyExists  = errors.New("checkout receipt already exists")
+	ErrCheckoutReceiptAlreadyCreated = errors.New("checkout job already has receipt")
+
+	ErrExecutionJobAlreadyExists          = errors.New("execution job already exists")
+	ErrExecutionJobAlreadyPrepared        = errors.New("work item checkout receipt already has execution job")
+	ErrExecutionJobNotFound               = errors.New("execution job not found")
+	ErrExecutionLeaseAlreadyExists        = errors.New("execution lease already exists")
+	ErrExecutionLeaseNotFound             = errors.New("execution lease not found")
+	ErrRunAlreadyExists                   = errors.New("run already exists")
+	ErrRunNotFound                        = errors.New("run not found")
+	ErrExecutionCommandPlanAlreadyExists  = errors.New("execution command plan already exists")
+	ErrExecutionCommandPlanAlreadyPlanned = errors.New("run already has execution command plan")
+	ErrExecutionCommandPlanNotFound       = errors.New("execution command plan not found")
+	ErrExecutionReceiptAlreadyExists      = errors.New("execution receipt already exists")
+	ErrExecutionReceiptAlreadySubmitted   = errors.New("run already has execution receipt")
+	ErrExecutionReceiptNotFound           = errors.New("execution receipt not found")
 )
 
 type uniqueConstraintError struct {

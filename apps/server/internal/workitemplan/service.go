@@ -43,6 +43,10 @@ var (
 	ErrLeaseExpired                    = errors.New("work item plan lease expired")
 	ErrLeaseCompleted                  = errors.New("work item plan lease completed")
 	ErrInvalidLease                    = errors.New("work item plan lease is invalid")
+	ErrMembershipRequired              = errors.New("active organization membership is required")
+	ErrOrganizationForbidden           = errors.New("user is not allowed to create work item plan for this contract")
+	ErrProjectMismatch                 = errors.New("work item plan project expectation does not match contract")
+	ErrRepoBindingMismatch             = errors.New("work item plan repo binding expectation does not match contract")
 )
 
 type ValidationError struct {
@@ -149,24 +153,30 @@ func NewService(contracts ContractReader, approvedContracts ApprovedContractRead
 	}
 }
 
-func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, input spine.WorkItemPlanCreateRequest) (spine.WorkItemPlan, error) {
+func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, input spine.WorkItemPlanCreateRequest, membership spine.OrganizationMembership) (spine.WorkItemPlan, bool, error) {
 	if err := validateActor("requested_by", input.RequestedBy); err != nil {
-		return spine.WorkItemPlan{}, err
+		return spine.WorkItemPlan{}, false, err
 	}
 
 	contract, approved, err := s.loadApprovedContract(ctx, contractID)
 	if err != nil {
-		return spine.WorkItemPlan{}, err
+		return spine.WorkItemPlan{}, false, err
 	}
-	if _, ok, err := s.Plans.GetByContractID(ctx, contract.ID); err != nil {
-		return spine.WorkItemPlan{}, fmt.Errorf("get work item plan by contract id: %w", err)
+	if err := authorizePlanCreation(membership, contract); err != nil {
+		return spine.WorkItemPlan{}, false, err
+	}
+	if err := validateExpectedContractContext(input.ProjectID, input.RepoBindingID, contract); err != nil {
+		return spine.WorkItemPlan{}, false, err
+	}
+	if existing, ok, err := s.Plans.GetByContractID(ctx, contract.ID); err != nil {
+		return spine.WorkItemPlan{}, false, fmt.Errorf("get work item plan by contract id: %w", err)
 	} else if ok {
-		return spine.WorkItemPlan{}, ErrAlreadyPlanned
+		return existing, false, nil
 	}
 
 	planID, err := s.IDs.NewWorkItemPlanID()
 	if err != nil {
-		return spine.WorkItemPlan{}, fmt.Errorf("new work item plan id: %w", err)
+		return spine.WorkItemPlan{}, false, fmt.Errorf("new work item plan id: %w", err)
 	}
 	now := s.Clock.Now().UTC()
 	plan := spine.WorkItemPlan{
@@ -182,14 +192,14 @@ func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, i
 		UpdatedAt:          now,
 	}
 	if err := s.Plans.Create(ctx, plan); err != nil {
-		if _, ok, lookupErr := s.Plans.GetByContractID(ctx, contract.ID); lookupErr != nil {
-			return spine.WorkItemPlan{}, fmt.Errorf("get work item plan by contract id after create failure: %w", lookupErr)
+		if existing, ok, lookupErr := s.Plans.GetByContractID(ctx, contract.ID); lookupErr != nil {
+			return spine.WorkItemPlan{}, false, fmt.Errorf("get work item plan by contract id after create failure: %w", lookupErr)
 		} else if ok {
-			return spine.WorkItemPlan{}, ErrAlreadyPlanned
+			return existing, false, nil
 		}
-		return spine.WorkItemPlan{}, fmt.Errorf("create work item plan: %w", err)
+		return spine.WorkItemPlan{}, false, fmt.Errorf("create work item plan: %w", err)
 	}
-	return plan, nil
+	return plan, true, nil
 }
 
 func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
@@ -201,6 +211,27 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 		return spine.WorkItemPlan{}, ErrPlanNotFound
 	}
 	return plan, nil
+}
+
+func (s *Service) GetPlanStatus(ctx context.Context, id spine.WorkItemPlanID, input spine.WorkItemPlanStatusRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanStatus, error) {
+	plan, err := s.GetPlan(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+	if err := authorizePlanAccess(membership, plan.OrganizationID); err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+	if err := validateExpectedPlanContext(input.ProjectID, input.RepoBindingID, plan); err != nil {
+		return spine.WorkItemPlanStatus{}, err
+	}
+
+	status := spine.WorkItemPlanStatus{Plan: plan}
+	if proposal, ok, err := s.Proposals.GetByPlanID(ctx, plan.ID); err != nil {
+		return spine.WorkItemPlanStatus{}, fmt.Errorf("get work item plan proposal by plan id: %w", err)
+	} else if ok {
+		status.Proposal = &proposal
+	}
+	return status, nil
 }
 
 func (s *Service) AcquireNextLease(ctx context.Context, input spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error) {
@@ -406,12 +437,18 @@ func (s *Service) GetProposal(ctx context.Context, id spine.WorkItemPlanProposal
 	return proposal, nil
 }
 
-func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemPlanProposalID, input spine.WorkItemPlanAcceptanceRequest) (spine.WorkItemPlanAcceptanceResult, error) {
+func (s *Service) AcceptProposal(ctx context.Context, proposalID spine.WorkItemPlanProposalID, input spine.WorkItemPlanAcceptanceRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanAcceptanceResult, error) {
 	if err := validateActor("accepted_by", input.AcceptedBy); err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
 	proposal, err := s.GetProposal(ctx, proposalID)
 	if err != nil {
+		return spine.WorkItemPlanAcceptanceResult{}, err
+	}
+	if err := authorizePlanAccess(membership, proposal.OrganizationID); err != nil {
+		return spine.WorkItemPlanAcceptanceResult{}, err
+	}
+	if err := validateExpectedProposalContext(input.ProjectID, input.RepoBindingID, proposal); err != nil {
 		return spine.WorkItemPlanAcceptanceResult{}, err
 	}
 	if proposal.State == spine.WorkItemProposalStateAccepted {
@@ -495,6 +532,50 @@ func (s *Service) loadApprovedContract(ctx context.Context, contractID spine.Con
 		return spine.Contract{}, spine.ApprovedContract{}, fmt.Errorf("%w: %s", ErrInvalidApprovedContractState, approved.State)
 	}
 	return contract, approved, nil
+}
+
+func authorizePlanCreation(membership spine.OrganizationMembership, contract spine.Contract) error {
+	return authorizePlanAccess(membership, contract.OrganizationID)
+}
+
+func authorizePlanAccess(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
+	if membership.State != spine.EntityStateActive || strings.TrimSpace(string(membership.OrganizationID)) == "" {
+		return ErrMembershipRequired
+	}
+	if membership.OrganizationID != organizationID {
+		return ErrOrganizationForbidden
+	}
+	return nil
+}
+
+func validateExpectedContractContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, contract spine.Contract) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != contract.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != contract.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
+}
+
+func validateExpectedPlanContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, plan spine.WorkItemPlan) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != plan.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != plan.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
+}
+
+func validateExpectedProposalContext(projectID spine.ProjectID, repoBindingID spine.RepoBindingID, proposal spine.WorkItemPlanProposal) error {
+	if strings.TrimSpace(string(projectID)) != "" && projectID != proposal.ProjectID {
+		return ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(repoBindingID)) != "" && repoBindingID != proposal.RepoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	return nil
 }
 
 func (s *Service) materializedWorkItems(proposal spine.WorkItemPlanProposal, acceptedBy spine.ActorRef, acceptedAt time.Time) ([]spine.WorkItem, []spine.Event, error) {

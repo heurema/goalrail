@@ -36,18 +36,6 @@ export interface LogoutResponse {
   revoked: boolean;
 }
 
-export interface ContractResponse {
-  id: string;
-  repo_binding_id: string;
-  goal_id: string;
-  state: 'seeded' | 'draft' | 'ready_for_approval' | 'approved';
-  current_seed_id?: string;
-  current_draft_id?: string;
-  approved_snapshot_id?: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface AuthClientError {
   code: string;
   message: string;
@@ -115,13 +103,6 @@ export async function me(accessToken: string): Promise<MeResponse> {
 export async function logout(accessToken: string): Promise<LogoutResponse> {
   return request<LogoutResponse>('/v1/auth/logout', {
     method: 'POST',
-    accessToken,
-  });
-}
-
-export async function getContract(accessToken: string, contractId: string): Promise<ContractResponse> {
-  return request<ContractResponse>(`/v1/contracts/${encodeURIComponent(contractId)}`, {
-    method: 'GET',
     accessToken,
   });
 }

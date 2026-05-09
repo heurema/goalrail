@@ -1,8 +1,9 @@
 package projectscan
 
 import (
-	"path"
 	"strings"
+
+	"github.com/heurema/goalrail/apps/cli/internal/reposhape"
 )
 
 func ScanCriticalChangedPaths(paths []string) []string {
@@ -22,13 +23,13 @@ func IsScanCriticalPath(relativePath string) bool {
 		return false
 	}
 
-	base := path.Base(relativePath)
-	if isWorkspaceManifest(base) {
+	if reposhape.IsWorkspaceManifest(relativePath) {
 		return true
 	}
-	switch base {
-	case "pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb", "Cargo.lock", "poetry.lock", "uv.lock", "Gemfile.lock", "composer.lock":
+	if len(reposhape.PackageManagersForPath(relativePath)) > 0 {
 		return true
+	}
+	switch lastPathSegment(relativePath) {
 	case "pnpm-workspace.yaml", "turbo.json", "nx.json", "lerna.json", "rush.json", "workspace.json":
 		return true
 	case "AGENTS.md", "CLAUDE.md", "CODEOWNERS":
@@ -36,7 +37,7 @@ func IsScanCriticalPath(relativePath string) bool {
 	}
 
 	switch {
-	case strings.HasPrefix(relativePath, ".github/workflows/"):
+	case reposhape.IsCIWorkflowPath(relativePath):
 		return true
 	case relativePath == ".github/copilot-instructions.md":
 		return true
@@ -57,4 +58,11 @@ func IsScanCriticalPath(relativePath string) bool {
 	default:
 		return false
 	}
+}
+
+func lastPathSegment(relativePath string) string {
+	if idx := strings.LastIndex(relativePath, "/"); idx >= 0 {
+		return relativePath[idx+1:]
+	}
+	return relativePath
 }

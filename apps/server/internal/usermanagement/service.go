@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	ErrForbidden       = errors.New("user is not allowed to manage organization users")
-	ErrNotFound        = errors.New("organization user not found")
-	ErrUserExists      = errors.New("organization user already exists")
-	ErrLastActiveOwner = errors.New("last active owner cannot be disabled or demoted")
+	ErrForbidden           = errors.New("user is not allowed to manage organization users")
+	ErrNotFound            = errors.New("organization user not found")
+	ErrUserExists          = errors.New("organization user already exists")
+	ErrLastActiveOwner     = errors.New("last active owner cannot be disabled or demoted")
+	ErrSelfActionForbidden = errors.New("self action forbidden")
 )
 
 type ValidationError struct {
@@ -338,6 +339,9 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 		if err := s.guardLastActiveOwner(txCtx, normalized.OrganizationID, user, membership, nextUser, nextMembership); err != nil {
 			return err
 		}
+		if err := guardSelfPatch(normalized.AuthenticatedUserID, user, membership, nextMembership); err != nil {
+			return err
+		}
 		if nextUser != user {
 			if err := s.Store.UpsertUser(txCtx, nextUser); err != nil {
 				return fmt.Errorf("upsert user: %w", err)
@@ -373,6 +377,9 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 	err = s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
 		if err := s.requireOwner(txCtx, normalized.OrganizationID, normalized.AuthenticatedUserID); err != nil {
 			return err
+		}
+		if normalized.AuthenticatedUserID == normalized.UserID {
+			return ErrSelfActionForbidden
 		}
 		user, ok, err := s.Store.GetUser(txCtx, normalized.UserID)
 		if err != nil {
@@ -458,6 +465,19 @@ func (s *Service) requireOwner(ctx context.Context, organizationID spine.Organiz
 	}
 	if !ok || membership.OrganizationID != organizationID || membership.State != spine.EntityStateActive || membership.Role != spine.OrganizationMembershipRoleOwner {
 		return ErrForbidden
+	}
+	return nil
+}
+
+func guardSelfPatch(authenticatedUserID spine.UserID, currentUser spine.User, currentMembership spine.OrganizationMembership, nextMembership spine.OrganizationMembership) error {
+	if authenticatedUserID != currentUser.ID {
+		return nil
+	}
+	if currentMembership.Role == spine.OrganizationMembershipRoleOwner && nextMembership.Role != spine.OrganizationMembershipRoleOwner {
+		return ErrSelfActionForbidden
+	}
+	if currentMembership.Role == spine.OrganizationMembershipRoleOwner && nextMembership.State == spine.EntityStateInactive {
+		return ErrSelfActionForbidden
 	}
 	return nil
 }

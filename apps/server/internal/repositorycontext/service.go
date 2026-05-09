@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -25,10 +26,11 @@ const (
 )
 
 var (
-	ErrForbidden           = errors.New("user is not allowed to record repository context snapshot")
-	ErrRepoBindingNotFound = errors.New("repo binding not found")
-	ErrRepoBindingInactive = errors.New("repo binding is not active")
-	ErrSnapshotMismatch    = errors.New("repository context snapshot does not match repo binding")
+	ErrForbidden            = errors.New("user is not allowed to record repository context snapshot")
+	ErrOrganizationNotFound = errors.New("organization not found")
+	ErrRepoBindingNotFound  = errors.New("repo binding not found")
+	ErrRepoBindingInactive  = errors.New("repo binding is not active")
+	ErrSnapshotMismatch     = errors.New("repository context snapshot does not match repo binding")
 )
 
 type ValidationError struct {
@@ -44,7 +46,9 @@ func (e *ValidationError) Error() string {
 }
 
 type Store interface {
+	GetOrganization(context.Context, spine.OrganizationID) (spine.Organization, bool, error)
 	GetRepoBinding(context.Context, spine.RepoBindingID) (spine.RepoBinding, bool, error)
+	ListActiveProjectRepoBindingContexts(context.Context, spine.OrganizationID) ([]spine.ProjectRepoBindingContext, error)
 	GetRepositoryContextSnapshotByFingerprint(context.Context, spine.RepoBindingID, string) (spine.RepositoryContextSnapshotRecord, bool, error)
 	CreateRepositoryContextSnapshot(context.Context, spine.RepositoryContextSnapshotRecord) error
 }
@@ -71,6 +75,12 @@ type RecordInput struct {
 	Membership          spine.OrganizationMembership
 	RepoBindingID       spine.RepoBindingID
 	Snapshot            spine.RepositoryContextSnapshotRequest
+}
+
+type ReadOrganizationContextInput struct {
+	AuthenticatedUserID spine.UserID
+	Membership          spine.OrganizationMembership
+	OrganizationID      spine.OrganizationID
 }
 
 type Service struct {
@@ -176,6 +186,126 @@ func (s *Service) RecordSnapshot(ctx context.Context, input RecordInput) (spine.
 	return snapshotResult(record, true, recordedMessage), nil
 }
 
+func (s *Service) GetOrganizationRepositoryContext(ctx context.Context, input ReadOrganizationContextInput) (spine.OrganizationRepositoryContextResult, error) {
+	normalized, err := normalizeReadInput(input)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, err
+	}
+	if err := authorizeRead(normalized.Membership, normalized.OrganizationID); err != nil {
+		return spine.OrganizationRepositoryContextResult{}, err
+	}
+
+	organization, ok, err := s.Store.GetOrganization(ctx, normalized.OrganizationID)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, fmt.Errorf("get organization: %w", err)
+	}
+	if !ok || organization.State != spine.EntityStateActive {
+		return spine.OrganizationRepositoryContextResult{}, ErrOrganizationNotFound
+	}
+
+	contexts, err := s.Store.ListActiveProjectRepoBindingContexts(ctx, normalized.OrganizationID)
+	if err != nil {
+		return spine.OrganizationRepositoryContextResult{}, fmt.Errorf("list active project repo binding contexts: %w", err)
+	}
+	if contexts == nil {
+		contexts = []spine.ProjectRepoBindingContext{}
+	}
+	return spine.OrganizationRepositoryContextResult{
+		Organization: publicOrganization(organization),
+		Contexts:     publicContexts(contexts),
+	}, nil
+}
+
+func publicOrganization(organization spine.Organization) spine.OrganizationRepositoryContextOrganization {
+	return spine.OrganizationRepositoryContextOrganization{
+		ID:          organization.ID,
+		Slug:        organization.Slug,
+		DisplayName: organization.DisplayName,
+		State:       organization.State,
+	}
+}
+
+func publicContexts(contexts []spine.ProjectRepoBindingContext) []spine.OrganizationRepositoryContext {
+	public := make([]spine.OrganizationRepositoryContext, 0, len(contexts))
+	for _, context := range contexts {
+		public = append(public, spine.OrganizationRepositoryContext{
+			Project: spine.OrganizationRepositoryContextProject{
+				ID:          context.Project.ID,
+				Slug:        context.Project.Slug,
+				DisplayName: context.Project.DisplayName,
+				State:       context.Project.State,
+				CreatedAt:   context.Project.CreatedAt,
+				UpdatedAt:   context.Project.UpdatedAt,
+			},
+			RepoBinding: spine.OrganizationRepositoryContextRepoBinding{
+				ID:                 context.RepoBinding.ID,
+				Provider:           context.RepoBinding.Provider,
+				RepositoryFullName: context.RepoBinding.RepositoryFullName,
+				RepositoryURL:      sanitizeRepositoryURL(context.RepoBinding.RepositoryURL),
+				DefaultBranch:      context.RepoBinding.DefaultBranch,
+				WorkflowBaseBranch: context.RepoBinding.WorkflowBaseBranch,
+				PathScope:          context.RepoBinding.PathScope,
+				AccessMode:         context.RepoBinding.AccessMode,
+				State:              context.RepoBinding.State,
+				CreatedAt:          context.RepoBinding.CreatedAt,
+				UpdatedAt:          context.RepoBinding.UpdatedAt,
+			},
+		})
+	}
+	return public
+}
+
+func sanitizeRepositoryURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return sanitizeSCPLikeRepositoryURL(raw)
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.ForceQuery = false
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	return parsed.String()
+}
+
+func sanitizeSCPLikeRepositoryURL(raw string) string {
+	candidate := raw
+	if index := strings.IndexAny(candidate, "?#"); index >= 0 {
+		candidate = candidate[:index]
+	}
+	if strings.ContainsAny(candidate, "\r\n\t ") {
+		return ""
+	}
+	at := strings.Index(candidate, "@")
+	if at <= 0 || !isSafeSCPUsername(candidate[:at]) || !strings.Contains(candidate[at+1:], ":") {
+		return ""
+	}
+	return candidate
+}
+
+func isSafeSCPUsername(username string) bool {
+	for _, r := range username {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return username != ""
+}
+
+func normalizeReadInput(input ReadOrganizationContextInput) (ReadOrganizationContextInput, error) {
+	if strings.TrimSpace(string(input.AuthenticatedUserID)) == "" {
+		return ReadOrganizationContextInput{}, &ValidationError{Field: "user_id", Message: "authenticated user is required"}
+	}
+	if strings.TrimSpace(string(input.OrganizationID)) == "" {
+		return ReadOrganizationContextInput{}, &ValidationError{Field: "organization_id", Message: "is required"}
+	}
+	if err := validateUUIDv7("organization_id", string(input.OrganizationID)); err != nil {
+		return ReadOrganizationContextInput{}, err
+	}
+	return input, nil
+}
+
 func normalizeInput(input RecordInput) (RecordInput, error) {
 	if strings.TrimSpace(string(input.AuthenticatedUserID)) == "" {
 		return RecordInput{}, &ValidationError{Field: "user_id", Message: "authenticated user is required"}
@@ -231,6 +361,24 @@ func authorize(membership spine.OrganizationMembership) error {
 	default:
 		return ErrForbidden
 	}
+}
+
+func authorizeRead(membership spine.OrganizationMembership, organizationID spine.OrganizationID) error {
+	if membership.State != spine.EntityStateActive || !sameUUID(membership.OrganizationID, organizationID) {
+		return ErrForbidden
+	}
+	switch membership.Role {
+	case spine.OrganizationMembershipRoleOwner, spine.OrganizationMembershipRoleAdmin, spine.OrganizationMembershipRoleMember, spine.OrganizationMembershipRoleViewer:
+		return nil
+	default:
+		return ErrForbidden
+	}
+}
+
+func sameUUID(left spine.OrganizationID, right spine.OrganizationID) bool {
+	leftID, leftErr := uuid.Parse(string(left))
+	rightID, rightErr := uuid.Parse(string(right))
+	return leftErr == nil && rightErr == nil && leftID == rightID
 }
 
 func snapshotMatchesBinding(snapshot spine.RepositoryContextSnapshotRequest, binding spine.RepoBinding) bool {

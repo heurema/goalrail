@@ -6,17 +6,20 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
+	"github.com/heurema/goalrail/apps/server/internal/checkout"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/continuation"
 	contractsvc "github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
@@ -55,6 +58,13 @@ type testServerDeps struct {
 	workItemPlans     *fakeWorkItemPlanStore
 	workItemLeases    *fakeWorkItemPlanLeaseStore
 	workItemProposals *fakeWorkItemPlanProposalStore
+	repoBindings      *fakeRepoBindingStore
+	checkoutJobs      *fakeCheckoutJobStore
+	checkoutReceipts  *fakeCheckoutReceiptStore
+	executionJobs     *fakeExecutionJobStore
+	runs              *fakeRunStore
+	commandPlans      *fakeExecutionCommandPlanStore
+	executionReceipts *fakeExecutionReceiptStore
 	events            *fakeEventLog
 	idFactory         *sequenceIDs
 }
@@ -1733,6 +1743,13 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	workItemPlanStore := newFakeWorkItemPlanStore()
 	workItemLeaseStore := newFakeWorkItemPlanLeaseStore(workItemPlanStore)
 	workItemPlanProposalStore := newFakeWorkItemPlanProposalStore()
+	repoBindingStore := newFakeRepoBindingStore()
+	checkoutJobStore := newFakeCheckoutJobStore()
+	checkoutReceiptStore := newFakeCheckoutReceiptStore()
+	executionJobStore := newFakeExecutionJobStore()
+	runStore := newFakeRunStore()
+	commandPlanStore := newFakeExecutionCommandPlanStore()
+	executionReceiptStore := newFakeExecutionReceiptStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1747,15 +1764,19 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	contractSeedService := contractseed.NewService(goalStore, contractStore, contractSeedStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	contractDraftService := contractdraft.NewService(contractSeedStore, contractStore, contractDraftStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	approvedContractService := approvedcontract.NewService(contractDraftStore, contractStore, approvedContractStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	contractService := contractsvc.NewService(contractStore, contractSeedService, contractDraftService, approvedContractService, txRunner)
-	contractHandler := httpserver.NewContractHandler(contractService)
+	contractService := contractsvc.NewService(goalStore, contractStore, contractSeedService, contractDraftService, contractDraftStore, approvedContractService, txRunner)
+	contractHandler := httpserver.NewContractHandler(authService, contractService)
 	workItemService := workitem.NewService(workItemStore)
 	workItemHandler := httpserver.NewWorkItemHandler(workItemService)
 	workItemPlanService := workitemplan.NewService(contractStore, approvedContractStore, workItemPlanStore, workItemLeaseStore, workItemPlanProposalStore, workItemStore, events, txRunner, fixedClock{now: testTime()}, ids)
-	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(workItemPlanService)
+	workItemPlanHandler := httpserver.NewWorkItemPlanHandler(authService, workItemPlanService)
+	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
+	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, commandPlanStore, executionReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler),
+		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler, executionHandler),
 		intakes:           intakeStore,
 		goals:             goalStore,
 		clarifications:    clarificationStore,
@@ -1768,6 +1789,13 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 		workItemPlans:     workItemPlanStore,
 		workItemLeases:    workItemLeaseStore,
 		workItemProposals: workItemPlanProposalStore,
+		repoBindings:      repoBindingStore,
+		checkoutJobs:      checkoutJobStore,
+		checkoutReceipts:  checkoutReceiptStore,
+		executionJobs:     executionJobStore,
+		runs:              runStore,
+		commandPlans:      commandPlanStore,
+		executionReceipts: executionReceiptStore,
 		events:            events,
 		idFactory:         ids,
 	}
@@ -1998,6 +2026,57 @@ func (s *fakeContractStore) GetByGoalID(_ context.Context, id spine.GoalID) (spi
 	}
 	contract, ok := s.contracts[contractID]
 	return contract, ok, nil
+}
+
+func (s *fakeContractStore) List(_ context.Context, filter spine.ContractListFilter) ([]spine.Contract, error) {
+	contracts := make([]spine.Contract, 0, len(s.contracts))
+	for _, contract := range s.contracts {
+		if filter.OrganizationID != "" && contract.OrganizationID != filter.OrganizationID {
+			continue
+		}
+		if filter.ProjectID != "" && contract.ProjectID != filter.ProjectID {
+			continue
+		}
+		if filter.RepoBindingID != "" && contract.RepoBindingID != filter.RepoBindingID {
+			continue
+		}
+		if filter.GoalID != "" && contract.GoalID != filter.GoalID {
+			continue
+		}
+		if filter.State != "" && contract.State != filter.State {
+			continue
+		}
+		contracts = append(contracts, cloneContract(contract))
+	}
+	sort.Slice(contracts, func(i, j int) bool {
+		if !contracts[i].UpdatedAt.Equal(contracts[j].UpdatedAt) {
+			return contracts[i].UpdatedAt.After(contracts[j].UpdatedAt)
+		}
+		if !contracts[i].CreatedAt.Equal(contracts[j].CreatedAt) {
+			return contracts[i].CreatedAt.After(contracts[j].CreatedAt)
+		}
+		return contracts[i].ID > contracts[j].ID
+	})
+	if filter.Limit > 0 && len(contracts) > filter.Limit {
+		contracts = contracts[:filter.Limit]
+	}
+	return contracts, nil
+}
+
+func cloneContract(contract spine.Contract) spine.Contract {
+	if contract.CurrentSeedID != nil {
+		value := *contract.CurrentSeedID
+		contract.CurrentSeedID = &value
+	}
+	if contract.CurrentDraftID != nil {
+		value := *contract.CurrentDraftID
+		contract.CurrentDraftID = &value
+	}
+	if contract.ApprovedSnapshotID != nil {
+		value := *contract.ApprovedSnapshotID
+		contract.ApprovedSnapshotID = &value
+	}
+	return contract
 }
 
 func (s *fakeContractStore) Delete(_ context.Context, id spine.ContractID) error {
@@ -2389,6 +2468,378 @@ func (s *fakeWorkItemPlanProposalStore) MarkAccepted(_ context.Context, id spine
 	return nil
 }
 
+type fakeRepoBindingStore struct {
+	bindings map[spine.RepoBindingID]spine.RepoBinding
+}
+
+func newFakeRepoBindingStore() *fakeRepoBindingStore {
+	binding := spine.RepoBinding{
+		ID:                 "018f0000-0000-7000-8000-000000000004",
+		OrganizationID:     "018f0000-0000-7000-8000-000000000002",
+		ProjectID:          "018f0000-0000-7000-8000-000000000003",
+		CreatedByUserID:    "018f0000-0000-7000-8000-000000000001",
+		Provider:           "github",
+		RepositoryFullName: "heurema/goalrail",
+		RepositoryURL:      "https://github.com/heurema/goalrail",
+		DefaultBranch:      "main",
+		WorkflowBaseBranch: "main",
+		PathScope:          ".",
+		AccessMode:         spine.RepoBindingAccessModeCustomerMountedWorkspace,
+		State:              spine.EntityStateActive,
+		CreatedAt:          testTime(),
+		UpdatedAt:          testTime(),
+	}
+	return &fakeRepoBindingStore{bindings: map[spine.RepoBindingID]spine.RepoBinding{binding.ID: binding}}
+}
+
+func (s *fakeRepoBindingStore) GetRepoBinding(_ context.Context, id spine.RepoBindingID) (spine.RepoBinding, bool, error) {
+	binding, ok := s.bindings[id]
+	return binding, ok, nil
+}
+
+type fakeCheckoutJobStore struct {
+	jobs   map[spine.CheckoutJobID]spine.CheckoutJob
+	byTask map[spine.WorkItemID]spine.CheckoutJobID
+}
+
+func newFakeCheckoutJobStore() *fakeCheckoutJobStore {
+	return &fakeCheckoutJobStore{
+		jobs:   map[spine.CheckoutJobID]spine.CheckoutJob{},
+		byTask: map[spine.WorkItemID]spine.CheckoutJobID{},
+	}
+}
+
+func (s *fakeCheckoutJobStore) Create(_ context.Context, job spine.CheckoutJob) error {
+	s.jobs[job.ID] = job
+	s.byTask[job.TaskID] = job.ID
+	return nil
+}
+
+func (s *fakeCheckoutJobStore) Get(_ context.Context, id spine.CheckoutJobID) (spine.CheckoutJob, bool, error) {
+	if id == "malformed-id" {
+		return spine.CheckoutJob{}, false, spine.MalformedIDError{Field: "checkout job id", Reason: "must be uuid"}
+	}
+	job, ok := s.jobs[id]
+	return job, ok, nil
+}
+
+func (s *fakeCheckoutJobStore) GetByTaskID(_ context.Context, id spine.WorkItemID) (spine.CheckoutJob, bool, error) {
+	jobID, ok := s.byTask[id]
+	if !ok {
+		return spine.CheckoutJob{}, false, nil
+	}
+	job, ok := s.jobs[jobID]
+	return job, ok, nil
+}
+
+func (s *fakeCheckoutJobStore) AcquireNextLease(_ context.Context, input checkout.JobLeaseInput) (spine.CheckoutJob, bool, error) {
+	var selected spine.CheckoutJob
+	found := false
+	for _, job := range s.jobs {
+		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
+			continue
+		}
+		if input.ProjectID != "" && job.ProjectID != input.ProjectID {
+			continue
+		}
+		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
+			continue
+		}
+		if job.State == spine.CheckoutJobStateQueued || (job.State == spine.CheckoutJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
+				selected = job
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.CheckoutJob{}, false, nil
+	}
+	selected.State = spine.CheckoutJobStateLeased
+	selected.CurrentRunnerID = input.RunnerID
+	selected.LeaseTokenHash = input.LeaseTokenHash
+	selected.LeaseExpiresAt = &input.LeaseExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.jobs[selected.ID] = selected
+	return selected, true, nil
+}
+
+func (s *fakeCheckoutJobStore) MarkReceiptSubmitted(_ context.Context, id spine.CheckoutJobID, runnerID string, tokenHash string, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.CheckoutJobStateLeased || job.CurrentRunnerID != runnerID || job.LeaseTokenHash != tokenHash || job.LeaseExpiresAt == nil || !job.LeaseExpiresAt.After(updatedAt) {
+		return false, nil
+	}
+	job.State = spine.CheckoutJobStateReceiptSubmitted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
+type fakeCheckoutReceiptStore struct {
+	receipts map[spine.CheckoutReceiptID]spine.CheckoutReceipt
+	byJob    map[spine.CheckoutJobID]spine.CheckoutReceiptID
+}
+
+func newFakeCheckoutReceiptStore() *fakeCheckoutReceiptStore {
+	return &fakeCheckoutReceiptStore{
+		receipts: map[spine.CheckoutReceiptID]spine.CheckoutReceipt{},
+		byJob:    map[spine.CheckoutJobID]spine.CheckoutReceiptID{},
+	}
+}
+
+func (s *fakeCheckoutReceiptStore) Create(_ context.Context, receipt spine.CheckoutReceipt) error {
+	s.receipts[receipt.ID] = receipt
+	s.byJob[receipt.JobID] = receipt.ID
+	return nil
+}
+
+func (s *fakeCheckoutReceiptStore) Get(_ context.Context, id spine.CheckoutReceiptID) (spine.CheckoutReceipt, bool, error) {
+	receipt, ok := s.receipts[id]
+	return receipt, ok, nil
+}
+
+type fakeExecutionJobStore struct {
+	jobs  map[spine.ExecutionJobID]spine.ExecutionJob
+	byKey map[string]spine.ExecutionJobID
+}
+
+func newFakeExecutionJobStore() *fakeExecutionJobStore {
+	return &fakeExecutionJobStore{
+		jobs:  map[spine.ExecutionJobID]spine.ExecutionJob{},
+		byKey: map[string]spine.ExecutionJobID{},
+	}
+}
+
+func (s *fakeExecutionJobStore) Create(_ context.Context, job spine.ExecutionJob) error {
+	key := executionJobKey(job.TaskID, job.CheckoutReceiptID)
+	if _, ok := s.byKey[key]; ok {
+		return fmt.Errorf("execution job already prepared")
+	}
+	s.jobs[job.ID] = job
+	s.byKey[key] = job.ID
+	return nil
+}
+
+func (s *fakeExecutionJobStore) Get(_ context.Context, id spine.ExecutionJobID) (spine.ExecutionJob, bool, error) {
+	job, ok := s.jobs[id]
+	return job, ok, nil
+}
+
+func (s *fakeExecutionJobStore) GetByTaskAndCheckoutReceipt(_ context.Context, taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) (spine.ExecutionJob, bool, error) {
+	jobID, ok := s.byKey[executionJobKey(taskID, receiptID)]
+	if !ok {
+		return spine.ExecutionJob{}, false, nil
+	}
+	job, ok := s.jobs[jobID]
+	return job, ok, nil
+}
+
+func (s *fakeExecutionJobStore) AcquireNextLease(_ context.Context, input execution.JobLeaseInput) (spine.ExecutionLease, spine.ExecutionJob, bool, error) {
+	var selected spine.ExecutionJob
+	found := false
+	for _, job := range s.jobs {
+		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
+			continue
+		}
+		if input.ProjectID != "" && job.ProjectID != input.ProjectID {
+			continue
+		}
+		if input.RepoBindingID != "" && job.RepoBindingID != input.RepoBindingID {
+			continue
+		}
+		if job.State == spine.ExecutionJobStateQueued || ((job.State == spine.ExecutionJobStateLeased || job.State == spine.ExecutionJobStateRunStarted) && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(input.UpdatedAt)) {
+			if !found || job.CreatedAt.Before(selected.CreatedAt) || (job.CreatedAt.Equal(selected.CreatedAt) && job.ID < selected.ID) {
+				selected = job
+				found = true
+			}
+		}
+	}
+	if !found {
+		return spine.ExecutionLease{}, spine.ExecutionJob{}, false, nil
+	}
+	lease := spine.ExecutionLease{
+		ID:                input.ID,
+		ExecutionJobID:    selected.ID,
+		TaskID:            selected.TaskID,
+		CheckoutReceiptID: selected.CheckoutReceiptID,
+		RepoBindingID:     selected.RepoBindingID,
+		RunnerID:          input.RunnerID,
+		State:             spine.ExecutionLeaseStateActive,
+		LeaseTokenHash:    input.LeaseTokenHash,
+		ExpiresAt:         input.ExpiresAt,
+		CreatedAt:         input.CreatedAt,
+		UpdatedAt:         input.UpdatedAt,
+	}
+	if selected.State != spine.ExecutionJobStateRunStarted {
+		selected.State = spine.ExecutionJobStateLeased
+	}
+	selected.CurrentLeaseID = &lease.ID
+	selected.CurrentRunnerID = input.RunnerID
+	selected.LeaseTokenHash = input.LeaseTokenHash
+	selected.LeaseExpiresAt = &input.ExpiresAt
+	selected.UpdatedAt = input.UpdatedAt
+	s.jobs[selected.ID] = selected
+	return lease, selected, true, nil
+}
+
+func (s *fakeExecutionJobStore) MarkRunStarted(_ context.Context, id spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, runnerID string, tokenHash string, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.ExecutionJobStateLeased || job.CurrentLeaseID == nil || *job.CurrentLeaseID != leaseID || job.CurrentRunnerID != runnerID || job.LeaseTokenHash != tokenHash || job.LeaseExpiresAt == nil || !job.LeaseExpiresAt.After(updatedAt) {
+		return false, nil
+	}
+	job.State = spine.ExecutionJobStateRunStarted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
+func (s *fakeExecutionJobStore) MarkReceiptSubmitted(_ context.Context, id spine.ExecutionJobID, updatedAt time.Time) (bool, error) {
+	job, ok := s.jobs[id]
+	if !ok || job.State != spine.ExecutionJobStateRunStarted {
+		return false, nil
+	}
+	job.State = spine.ExecutionJobStateReceiptSubmitted
+	job.UpdatedAt = updatedAt
+	s.jobs[id] = job
+	return true, nil
+}
+
+func executionJobKey(taskID spine.WorkItemID, receiptID spine.CheckoutReceiptID) string {
+	return string(taskID) + "\x00" + string(receiptID)
+}
+
+type fakeRunStore struct {
+	runs  map[spine.RunID]spine.Run
+	byJob map[spine.ExecutionJobID]spine.RunID
+}
+
+func newFakeRunStore() *fakeRunStore {
+	return &fakeRunStore{
+		runs:  map[spine.RunID]spine.Run{},
+		byJob: map[spine.ExecutionJobID]spine.RunID{},
+	}
+}
+
+func (s *fakeRunStore) Create(_ context.Context, run spine.Run) error {
+	if _, ok := s.byJob[run.ExecutionJobID]; ok {
+		return fmt.Errorf("run already started")
+	}
+	s.runs[run.ID] = run
+	s.byJob[run.ExecutionJobID] = run.ID
+	return nil
+}
+
+func (s *fakeRunStore) GetByExecutionLease(_ context.Context, leaseID spine.ExecutionLeaseID) (spine.Run, bool, error) {
+	for _, run := range s.runs {
+		if run.ExecutionLeaseID == leaseID {
+			return run, true, nil
+		}
+	}
+	return spine.Run{}, false, nil
+}
+
+func (s *fakeRunStore) GetByExecutionJob(_ context.Context, jobID spine.ExecutionJobID) (spine.Run, bool, error) {
+	runID, ok := s.byJob[jobID]
+	if !ok {
+		return spine.Run{}, false, nil
+	}
+	run, ok := s.runs[runID]
+	return run, ok, nil
+}
+
+func (s *fakeRunStore) Get(_ context.Context, id spine.RunID) (spine.Run, bool, error) {
+	run, ok := s.runs[id]
+	return run, ok, nil
+}
+
+func (s *fakeRunStore) MarkReceiptSubmitted(_ context.Context, id spine.RunID, finishedAt time.Time, updatedAt time.Time) (bool, error) {
+	run, ok := s.runs[id]
+	if !ok || run.State != spine.RunStateStarted {
+		return false, nil
+	}
+	finished := finishedAt.UTC()
+	run.State = spine.RunStateReceiptSubmitted
+	run.FinishedAt = &finished
+	run.UpdatedAt = updatedAt
+	s.runs[id] = run
+	return true, nil
+}
+
+type fakeExecutionCommandPlanStore struct {
+	plans map[spine.ExecutionCommandPlanID]spine.ExecutionCommandPlan
+	byKey map[string]spine.ExecutionCommandPlanID
+}
+
+func newFakeExecutionCommandPlanStore() *fakeExecutionCommandPlanStore {
+	return &fakeExecutionCommandPlanStore{
+		plans: map[spine.ExecutionCommandPlanID]spine.ExecutionCommandPlan{},
+		byKey: map[string]spine.ExecutionCommandPlanID{},
+	}
+}
+
+func (s *fakeExecutionCommandPlanStore) Create(_ context.Context, plan spine.ExecutionCommandPlan) error {
+	key := executionCommandPlanKey(plan.RunID, plan.CommandKind, plan.Action)
+	if _, ok := s.byKey[key]; ok {
+		return fmt.Errorf("execution command plan already planned")
+	}
+	s.plans[plan.ID] = plan
+	s.byKey[key] = plan.ID
+	return nil
+}
+
+func (s *fakeExecutionCommandPlanStore) Get(_ context.Context, id spine.ExecutionCommandPlanID) (spine.ExecutionCommandPlan, bool, error) {
+	plan, ok := s.plans[id]
+	return plan, ok, nil
+}
+
+func (s *fakeExecutionCommandPlanStore) GetByRunAndAction(_ context.Context, runID spine.RunID, kind string, action string) (spine.ExecutionCommandPlan, bool, error) {
+	planID, ok := s.byKey[executionCommandPlanKey(runID, kind, action)]
+	if !ok {
+		return spine.ExecutionCommandPlan{}, false, nil
+	}
+	plan, ok := s.plans[planID]
+	return plan, ok, nil
+}
+
+func executionCommandPlanKey(runID spine.RunID, kind string, action string) string {
+	return string(runID) + "\x00" + kind + "\x00" + action
+}
+
+type fakeExecutionReceiptStore struct {
+	receipts map[spine.ExecutionReceiptID]spine.ExecutionReceipt
+	byRun    map[spine.RunID]spine.ExecutionReceiptID
+}
+
+func newFakeExecutionReceiptStore() *fakeExecutionReceiptStore {
+	return &fakeExecutionReceiptStore{
+		receipts: map[spine.ExecutionReceiptID]spine.ExecutionReceipt{},
+		byRun:    map[spine.RunID]spine.ExecutionReceiptID{},
+	}
+}
+
+func (s *fakeExecutionReceiptStore) Create(_ context.Context, receipt spine.ExecutionReceipt) error {
+	if _, ok := s.byRun[receipt.RunID]; ok {
+		return fmt.Errorf("execution receipt already submitted")
+	}
+	s.receipts[receipt.ID] = receipt
+	s.byRun[receipt.RunID] = receipt.ID
+	return nil
+}
+
+func (s *fakeExecutionReceiptStore) Get(_ context.Context, id spine.ExecutionReceiptID) (spine.ExecutionReceipt, bool, error) {
+	receipt, ok := s.receipts[id]
+	return receipt, ok, nil
+}
+
+func (s *fakeExecutionReceiptStore) GetByRun(_ context.Context, runID spine.RunID) (spine.ExecutionReceipt, bool, error) {
+	receiptID, ok := s.byRun[runID]
+	if !ok {
+		return spine.ExecutionReceipt{}, false, nil
+	}
+	receipt, ok := s.receipts[receiptID]
+	return receipt, ok, nil
+}
+
 type fakeEventLog struct {
 	events []spine.Event
 }
@@ -2485,6 +2936,13 @@ type sequenceIDs struct {
 	workItemPlan      int
 	workItemPlanLease int
 	workItemProposal  int
+	checkoutJob       int
+	checkoutReceipt   int
+	executionJob      int
+	executionLease    int
+	run               int
+	commandPlan       int
+	executionReceipt  int
 	event             int
 }
 
@@ -2556,6 +3014,41 @@ func (g *sequenceIDs) NewWorkItemPlanLeaseID() (spine.WorkItemPlanLeaseID, error
 func (g *sequenceIDs) NewWorkItemPlanProposalID() (spine.WorkItemPlanProposalID, error) {
 	g.workItemProposal++
 	return spine.WorkItemPlanProposalID(fmt.Sprintf("proposal-%d", g.workItemProposal)), nil
+}
+
+func (g *sequenceIDs) NewCheckoutJobID() (spine.CheckoutJobID, error) {
+	g.checkoutJob++
+	return spine.CheckoutJobID(fmt.Sprintf("checkout-job-%d", g.checkoutJob)), nil
+}
+
+func (g *sequenceIDs) NewCheckoutReceiptID() (spine.CheckoutReceiptID, error) {
+	g.checkoutReceipt++
+	return spine.CheckoutReceiptID(fmt.Sprintf("checkout-receipt-%d", g.checkoutReceipt)), nil
+}
+
+func (g *sequenceIDs) NewExecutionJobID() (spine.ExecutionJobID, error) {
+	g.executionJob++
+	return spine.ExecutionJobID(fmt.Sprintf("execution-job-%d", g.executionJob)), nil
+}
+
+func (g *sequenceIDs) NewExecutionLeaseID() (spine.ExecutionLeaseID, error) {
+	g.executionLease++
+	return spine.ExecutionLeaseID(fmt.Sprintf("execution-lease-%d", g.executionLease)), nil
+}
+
+func (g *sequenceIDs) NewRunID() (spine.RunID, error) {
+	g.run++
+	return spine.RunID(fmt.Sprintf("run-%d", g.run)), nil
+}
+
+func (g *sequenceIDs) NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error) {
+	g.commandPlan++
+	return spine.ExecutionCommandPlanID(fmt.Sprintf("execution-command-plan-%d", g.commandPlan)), nil
+}
+
+func (g *sequenceIDs) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
+	g.executionReceipt++
+	return spine.ExecutionReceiptID(fmt.Sprintf("018f0000-0000-7000-8004-%012d", g.executionReceipt)), nil
 }
 
 func testTime() time.Time {

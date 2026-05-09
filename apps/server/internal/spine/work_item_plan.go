@@ -108,7 +108,19 @@ type ProposedWorkItem struct {
 }
 
 type WorkItemPlanCreateRequest struct {
-	RequestedBy ActorRef `json:"requested_by"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	RequestedBy   ActorRef      `json:"requested_by,omitempty"`
+}
+
+type WorkItemPlanStatusRequest struct {
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+}
+
+type WorkItemPlanStatus struct {
+	Plan     WorkItemPlan          `json:"plan"`
+	Proposal *WorkItemPlanProposal `json:"proposal,omitempty"`
 }
 
 type WorkItemPlanLeaseCreateRequest struct {
@@ -132,7 +144,9 @@ type WorkItemPlanProposalSubmitRequest struct {
 }
 
 type WorkItemPlanAcceptanceRequest struct {
-	AcceptedBy ActorRef `json:"accepted_by"`
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	AcceptedBy    ActorRef      `json:"accepted_by,omitempty"`
 }
 
 type WorkItemPlanAcceptanceResult struct {

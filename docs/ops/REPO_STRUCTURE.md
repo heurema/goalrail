@@ -53,6 +53,8 @@ Use it together with:
 | Canonical server binary entrypoint | `apps/server/cmd/goalrail-server/` |
 | Server-only internal packages | `apps/server/internal/` |
 | Server DTOs and domain value types | `apps/server/internal/spine/` |
+| Public-edge Worker packages | `apps/workers/<worker>/` |
+| Start assistant Worker | `apps/workers/start-assistant/` |
 | Server intake service logic | `apps/server/internal/intake/` |
 | Server Goal promotion and readiness service logic | `apps/server/internal/goal/` |
 | Server clarification request and answer service logic | `apps/server/internal/clarification/` |
@@ -60,8 +62,15 @@ Use it together with:
 | Server ContractDraft creation/update/ready_for_approval service logic | `apps/server/internal/contractdraft/` |
 | Server ApprovedContract approval service logic | `apps/server/internal/approvedcontract/` |
 | Server WorkItem planning service logic | `apps/server/internal/workitem/` |
+| Server checkout preparation service logic | `apps/server/internal/checkout/` |
 | Server Postgres stores and store error sentinels | `apps/server/internal/store/` |
 | Server test-local fakes | The relevant `*_test.go` package file |
+| Go planning worker module | `apps/worker/` |
+| Canonical planning worker binary entrypoint | `apps/worker/cmd/goalrail-worker/` |
+| Worker-only internal packages and API DTOs | `apps/worker/internal/` |
+| Go runner module | `apps/runner/` |
+| Canonical runner binary entrypoint | `apps/runner/cmd/goalrail-runner/` |
+| Runner-only internal packages and API DTOs | `apps/runner/internal/` |
 | Web workspace package files | `apps/web/` |
 | Real console web shell | `apps/web/console/` |
 | Demo change-packet web apps | `apps/web/demo-change-packet/` and `apps/web/demo-change-packet-ru/` |
@@ -74,6 +83,7 @@ Use it together with:
 | Research that is not canon yet | `docs/research/` or `.goalrail/knowledge/`, depending on durability |
 | Docs-check fixtures and schemas | `tools/docs-check/fixtures/` and `tools/docs-check/schemas/` |
 | Repository hygiene commands | `scripts/` |
+| Start assistant public KB helper scripts | `scripts/start-assistant/` |
 | Goalrail working slice reports | `.goalrail/work/` |
 | Future Goalrail flow/spec artifacts | `.goalrail/flows/` |
 | Future eval/spec artifacts | `.goalrail/evals/` |

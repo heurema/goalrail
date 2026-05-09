@@ -32,7 +32,7 @@ var rootCommands = []commandSummary{
 	{name: "project", summary: "scan and report local project freshness"},
 	{name: "work", summary: "start and continue server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
-	{name: "contract", summary: "validate contract JSON files"},
+	{name: "contract", summary: "draft, update, submit, approve, and validate contract state"},
 	{name: "proof", summary: "render proof JSON files"},
 }
 
@@ -269,18 +269,10 @@ func newReadinessCommand(env clienv.Env) *cobra.Command {
 func newContractCommand(env clienv.Env) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "contract",
-		Short:              "validate contract JSON files",
+		Short:              "draft, update, and validate contract state",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-				_, err := fmt.Fprint(cmd.OutOrStdout(), contractcmd.Usage())
-				return err
-			}
-			if len(args) > 0 {
-				return exitcode.UsageError(fmt.Errorf("unknown contract command %q", args[0]))
-			}
-			_, err := fmt.Fprint(cmd.OutOrStdout(), contractcmd.Usage())
-			return err
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, args, contractcmd.Options{})
 		},
 	}
 	cmd.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
@@ -291,11 +283,43 @@ func newContractCommand(env clienv.Env) *cobra.Command {
 		return err
 	})
 	cmd.AddCommand(&cobra.Command{
+		Use:                "draft",
+		Short:              "create or return a server Contract draft handle for a ready Goal",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"draft"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "update",
+		Short:              "update proposed fields on a server ContractDraft",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"update"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "submit",
+		Short:              "submit a server ContractDraft for approval",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"submit"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "approve",
+		Short:              "approve a submitted Contract after user confirmation",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"approve"}, args...), contractcmd.Options{})
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
 		Use:                "validate",
 		Short:              "validate a contract JSON file",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return contractcmd.Run(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"validate"}, args...))
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"validate"}, args...), contractcmd.Options{})
 		},
 	})
 	return cmd
@@ -378,6 +402,14 @@ func helpFor(cmd *cobra.Command) string {
 		return projectcmd.StatusUsage()
 	case "goalrail contract":
 		return contractcmd.Usage()
+	case "goalrail contract draft":
+		return contractcmd.DraftUsage()
+	case "goalrail contract update":
+		return contractcmd.UpdateUsage()
+	case "goalrail contract submit":
+		return contractcmd.SubmitUsage()
+	case "goalrail contract approve":
+		return contractcmd.ApproveUsage()
 	case "goalrail contract validate":
 		return contractcmd.ValidateUsage()
 	case "goalrail proof":

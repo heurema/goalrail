@@ -10,17 +10,20 @@ import (
 
 	"github.com/heurema/goalrail/apps/server/internal/approvedcontract"
 	"github.com/heurema/goalrail/apps/server/internal/auth"
+	"github.com/heurema/goalrail/apps/server/internal/checkout"
 	"github.com/heurema/goalrail/apps/server/internal/clarification"
 	"github.com/heurema/goalrail/apps/server/internal/config"
 	"github.com/heurema/goalrail/apps/server/internal/continuation"
 	"github.com/heurema/goalrail/apps/server/internal/contract"
 	"github.com/heurema/goalrail/apps/server/internal/contractdraft"
 	"github.com/heurema/goalrail/apps/server/internal/contractseed"
+	"github.com/heurema/goalrail/apps/server/internal/execution"
 	"github.com/heurema/goalrail/apps/server/internal/goal"
 	"github.com/heurema/goalrail/apps/server/internal/health"
 	"github.com/heurema/goalrail/apps/server/internal/httpserver"
 	"github.com/heurema/goalrail/apps/server/internal/intake"
 	"github.com/heurema/goalrail/apps/server/internal/postgres"
+	"github.com/heurema/goalrail/apps/server/internal/qualificationfeed"
 	"github.com/heurema/goalrail/apps/server/internal/repobinding"
 	"github.com/heurema/goalrail/apps/server/internal/repositorycontext"
 	"github.com/heurema/goalrail/apps/server/internal/repositoryinit"
@@ -38,6 +41,7 @@ type postgresStores struct {
 	goals                 *store.PostgresGoalStore
 	clarificationRequests *store.PostgresClarificationRequestStore
 	clarificationAnswers  *store.PostgresClarificationAnswerStore
+	qualificationFeed     *store.PostgresQualificationFeedStore
 	contracts             *store.PostgresContractStore
 	contractSeeds         *store.PostgresContractSeedStore
 	contractDrafts        *store.PostgresContractDraftStore
@@ -46,6 +50,12 @@ type postgresStores struct {
 	workItemPlans         *store.PostgresWorkItemPlanStore
 	workItemPlanLeases    *store.PostgresWorkItemPlanLeaseStore
 	workItemProposals     *store.PostgresWorkItemPlanProposalStore
+	checkoutJobs          *store.PostgresCheckoutJobStore
+	checkoutReceipts      *store.PostgresCheckoutReceiptStore
+	executionJobs         *store.PostgresExecutionJobStore
+	runs                  *store.PostgresRunStore
+	executionCommandPlans *store.PostgresExecutionCommandPlanStore
+	executionReceipts     *store.PostgresExecutionReceiptStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
 	userManagement        *store.PostgresUserManagementStore
@@ -58,6 +68,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		goals:                 store.NewPostgresGoalStore(pool),
 		clarificationRequests: store.NewPostgresClarificationRequestStore(pool),
 		clarificationAnswers:  store.NewPostgresClarificationAnswerStore(pool),
+		qualificationFeed:     store.NewPostgresQualificationFeedStore(pool),
 		contracts:             store.NewPostgresContractStore(pool),
 		contractSeeds:         store.NewPostgresContractSeedStore(pool),
 		contractDrafts:        store.NewPostgresContractDraftStore(pool),
@@ -66,6 +77,12 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		workItemPlans:         store.NewPostgresWorkItemPlanStore(pool),
 		workItemPlanLeases:    store.NewPostgresWorkItemPlanLeaseStore(pool),
 		workItemProposals:     store.NewPostgresWorkItemPlanProposalStore(pool),
+		checkoutJobs:          store.NewPostgresCheckoutJobStore(pool),
+		checkoutReceipts:      store.NewPostgresCheckoutReceiptStore(pool),
+		executionJobs:         store.NewPostgresExecutionJobStore(pool),
+		runs:                  store.NewPostgresRunStore(pool),
+		executionCommandPlans: store.NewPostgresExecutionCommandPlanStore(pool),
+		executionReceipts:     store.NewPostgresExecutionReceiptStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
 		userManagement:        store.NewPostgresUserManagementStore(pool),
@@ -77,9 +94,12 @@ type appServices struct {
 	goal              *goal.Service
 	clarification     *clarification.Service
 	continuation      *continuation.Service
+	qualificationFeed *qualificationfeed.Service
 	contract          *contract.Service
 	workItem          *workitem.Service
 	workItemPlan      *workitemplan.Service
+	checkout          *checkout.Service
+	execution         *execution.Service
 	repoBinding       *repobinding.Service
 	repositoryInit    *repositoryinit.Service
 	repositoryContext *repositorycontext.Service
@@ -103,9 +123,12 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		goal:              goalService,
 		clarification:     clarificationService,
 		continuation:      continuation.NewService(stores.goals, goalService, clarificationService),
-		contract:          contract.NewService(stores.contracts, contractSeedService, contractDraftService, approvedContractService, txRunner),
+		qualificationFeed: qualificationfeed.NewService(stores.qualificationFeed),
+		contract:          contract.NewService(stores.goals, stores.contracts, contractSeedService, contractDraftService, stores.contractDrafts, approvedContractService, txRunner),
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
+		checkout:          checkout.NewService(stores.workItems, stores.projectContext, stores.checkoutJobs, stores.checkoutReceipts, stores.events, txRunner, checkout.SystemClock{}, checkout.UUIDGenerator{}),
+		execution:         execution.NewService(stores.workItems, stores.projectContext, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.runs, stores.executionCommandPlans, stores.executionReceipts, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{}),
 		repoBinding:       repoBindingService,
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
@@ -119,9 +142,12 @@ type appHandlers struct {
 	goal              *httpserver.GoalHandler
 	clarification     *httpserver.ClarificationHandler
 	continuation      *httpserver.ContinuationHandler
+	qualificationFeed *httpserver.QualificationFeedHandler
 	contract          *httpserver.ContractHandler
 	workItem          *httpserver.WorkItemHandler
 	workItemPlan      *httpserver.WorkItemPlanHandler
+	checkout          *httpserver.CheckoutHandler
+	execution         *httpserver.ExecutionHandler
 	repoBinding       *httpserver.RepoBindingHandler
 	repositoryInit    *httpserver.RepositoryInitHandler
 	repositoryContext *httpserver.RepositoryContextSnapshotHandler
@@ -135,9 +161,12 @@ func newAppHandlers(services appServices) appHandlers {
 		goal:              httpserver.NewGoalHandler(services.goal),
 		clarification:     httpserver.NewClarificationHandler(services.clarification),
 		continuation:      httpserver.NewContinuationHandler(services.auth, services.continuation),
-		contract:          httpserver.NewContractHandler(services.contract),
+		qualificationFeed: httpserver.NewQualificationFeedHandler(services.auth, services.qualificationFeed),
+		contract:          httpserver.NewContractHandler(services.auth, services.contract),
 		workItem:          httpserver.NewWorkItemHandler(services.workItem),
-		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.workItemPlan),
+		workItemPlan:      httpserver.NewWorkItemPlanHandler(services.auth, services.workItemPlan),
+		checkout:          httpserver.NewCheckoutHandler(services.auth, services.checkout),
+		execution:         httpserver.NewExecutionHandler(services.auth, services.execution),
 		repoBinding:       httpserver.NewRepoBindingHandler(services.auth, services.repoBinding),
 		repositoryInit:    httpserver.NewRepositoryInitHandler(services.auth, services.repositoryInit),
 		repositoryContext: httpserver.NewRepositoryContextSnapshotHandler(services.auth, services.repositoryContext),
@@ -176,47 +205,61 @@ func (s clarificationRequestStoreAdapter) UpdateState(ctx context.Context, id sp
 
 func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler http.Handler) httpserver.RouteHandlers {
 	return httpserver.RouteHandlers{
-		Livez:                     http.HandlerFunc(healthHandler.Livez),
-		Readyz:                    http.HandlerFunc(healthHandler.Readyz),
-		Version:                   versionHandler,
-		AuthLogin:                 http.HandlerFunc(h.auth.Login),
-		CLILoginPage:              http.HandlerFunc(h.auth.CLILoginPage),
-		CLILoginSubmit:            http.HandlerFunc(h.auth.CLILoginSubmit),
-		AuthCLIExchange:           http.HandlerFunc(h.auth.CLIExchange),
-		AuthRefresh:               http.HandlerFunc(h.auth.Refresh),
-		AuthChangePassword:        http.HandlerFunc(h.auth.ChangePassword),
-		AuthLogout:                http.HandlerFunc(h.auth.Logout),
-		Me:                        http.HandlerFunc(h.auth.Me),
-		OrganizationUsersList:     http.HandlerFunc(h.userManagement.List),
-		OrganizationUsersCreate:   http.HandlerFunc(h.userManagement.Create),
-		OrganizationUsersPatch:    http.HandlerFunc(h.userManagement.Patch),
-		OrganizationUsersReset:    http.HandlerFunc(h.userManagement.ResetTemporaryPassword),
-		RepositoryContextInit:     http.HandlerFunc(h.repositoryInit.Init),
-		RepositoryContextSnapshot: http.HandlerFunc(h.repositoryContext.Record),
-		ProjectRepoBindingInit:    http.HandlerFunc(h.repoBinding.Init),
-		IntakeSubmit:              http.HandlerFunc(h.intake.Submit),
-		IntakeGet:                 http.HandlerFunc(h.intake.Get),
-		IntakePromote:             http.HandlerFunc(h.goal.PromoteFromIntake),
-		GoalReadiness:             http.HandlerFunc(h.goal.CheckReadiness),
-		GoalContinuation:          http.HandlerFunc(h.continuation.ReconcileGoal),
-		ClarificationContinuation: http.HandlerFunc(h.continuation.AnswerClarification),
-		GoalClarificationRequests: http.HandlerFunc(h.clarification.CreateRequest),
-		ContractCreate:            http.HandlerFunc(h.contract.Create),
-		ContractGet:               http.HandlerFunc(h.contract.Get),
-		ContractUpdate:            http.HandlerFunc(h.contract.UpdateDraft),
-		ContractSubmit:            http.HandlerFunc(h.contract.SubmitForApproval),
-		ContractApprove:           http.HandlerFunc(h.contract.Approve),
-		ContractPlans:             http.HandlerFunc(h.workItemPlan.CreatePlan),
-		PlanLeases:                http.HandlerFunc(h.workItemPlan.AcquireLease),
-		PlanLeaseGet:              http.HandlerFunc(h.workItemPlan.GetLease),
-		PlanLeaseRenew:            http.HandlerFunc(h.workItemPlan.RenewLease),
-		PlanGet:                   http.HandlerFunc(h.workItemPlan.GetPlan),
-		PlanProposals:             http.HandlerFunc(h.workItemPlan.SubmitProposal),
-		ProposalGet:               http.HandlerFunc(h.workItemPlan.GetProposal),
-		ProposalAcceptance:        http.HandlerFunc(h.workItemPlan.AcceptProposal),
-		TaskGet:                   http.HandlerFunc(h.workItem.GetTask),
-		ClarificationAnswers:      http.HandlerFunc(h.clarification.RecordAnswer),
-		ClarificationAnswerApply:  http.HandlerFunc(h.clarification.ApplyAnswer),
+		Livez:                         http.HandlerFunc(healthHandler.Livez),
+		Readyz:                        http.HandlerFunc(healthHandler.Readyz),
+		Version:                       versionHandler,
+		AuthLogin:                     http.HandlerFunc(h.auth.Login),
+		CLILoginPage:                  http.HandlerFunc(h.auth.CLILoginPage),
+		CLILoginSubmit:                http.HandlerFunc(h.auth.CLILoginSubmit),
+		AuthCLIExchange:               http.HandlerFunc(h.auth.CLIExchange),
+		AuthRefresh:                   http.HandlerFunc(h.auth.Refresh),
+		AuthChangePassword:            http.HandlerFunc(h.auth.ChangePassword),
+		AuthLogout:                    http.HandlerFunc(h.auth.Logout),
+		Me:                            http.HandlerFunc(h.auth.Me),
+		OrganizationUsersList:         http.HandlerFunc(h.userManagement.List),
+		OrganizationUsersCreate:       http.HandlerFunc(h.userManagement.Create),
+		OrganizationUsersPatch:        http.HandlerFunc(h.userManagement.Patch),
+		OrganizationUsersReset:        http.HandlerFunc(h.userManagement.ResetTemporaryPassword),
+		OrganizationRepositoryContext: http.HandlerFunc(h.repositoryContext.GetOrganizationRepositoryContext),
+		RepositoryContextInit:         http.HandlerFunc(h.repositoryInit.Init),
+		RepositoryContextSnapshot:     http.HandlerFunc(h.repositoryContext.Record),
+		ProjectRepoBindingInit:        http.HandlerFunc(h.repoBinding.Init),
+		IntakeSubmit:                  http.HandlerFunc(h.intake.Submit),
+		IntakeGet:                     http.HandlerFunc(h.intake.Get),
+		IntakePromote:                 http.HandlerFunc(h.goal.PromoteFromIntake),
+		GoalReadiness:                 http.HandlerFunc(h.goal.CheckReadiness),
+		GoalContinuation:              http.HandlerFunc(h.continuation.ReconcileGoal),
+		ClarificationContinuation:     http.HandlerFunc(h.continuation.AnswerClarification),
+		QualificationFeed:             http.HandlerFunc(h.qualificationFeed.List),
+		GoalClarificationRequests:     http.HandlerFunc(h.clarification.CreateRequest),
+		ContractCreate:                http.HandlerFunc(h.contract.Create),
+		ContractList:                  http.HandlerFunc(h.contract.List),
+		ContractGet:                   http.HandlerFunc(h.contract.Get),
+		ContractCurrentDraft:          http.HandlerFunc(h.contract.CurrentDraft),
+		ContractUpdate:                http.HandlerFunc(h.contract.UpdateDraft),
+		ContractSubmit:                http.HandlerFunc(h.contract.SubmitForApproval),
+		ContractApprove:               http.HandlerFunc(h.contract.Approve),
+		ContractPlans:                 http.HandlerFunc(h.workItemPlan.CreatePlan),
+		PlanLeases:                    http.HandlerFunc(h.workItemPlan.AcquireLease),
+		PlanLeaseGet:                  http.HandlerFunc(h.workItemPlan.GetLease),
+		PlanLeaseRenew:                http.HandlerFunc(h.workItemPlan.RenewLease),
+		PlanGet:                       http.HandlerFunc(h.workItemPlan.GetPlan),
+		PlanStatus:                    http.HandlerFunc(h.workItemPlan.GetPlanStatus),
+		PlanProposals:                 http.HandlerFunc(h.workItemPlan.SubmitProposal),
+		ProposalGet:                   http.HandlerFunc(h.workItemPlan.GetProposal),
+		ProposalAcceptance:            http.HandlerFunc(h.workItemPlan.AcceptProposal),
+		TaskGet:                       http.HandlerFunc(h.workItem.GetTask),
+		TaskCheckoutJobs:              http.HandlerFunc(h.checkout.CreateJob),
+		TaskExecutionJobs:             http.HandlerFunc(h.execution.CreateJob),
+		CheckoutJobLeases:             http.HandlerFunc(h.checkout.AcquireLease),
+		CheckoutJobReceipts:           http.HandlerFunc(h.checkout.SubmitReceipt),
+		ExecutionJobLeases:            http.HandlerFunc(h.execution.AcquireLease),
+		ExecutionJobRuns:              http.HandlerFunc(h.execution.StartRun),
+		RunCommandPlans:               http.HandlerFunc(h.execution.CreateCommandPlan),
+		RunCommandPlan:                http.HandlerFunc(h.execution.GetCommandPlan),
+		RunReceipts:                   http.HandlerFunc(h.execution.SubmitReceipt),
+		ClarificationAnswers:          http.HandlerFunc(h.clarification.RecordAnswer),
+		ClarificationAnswerApply:      http.HandlerFunc(h.clarification.ApplyAnswer),
 	}
 }
 
@@ -248,46 +291,60 @@ func newHTTPServer(ctx context.Context, cfg config.Config) (*http.Server, func()
 func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHandler http.Handler) httpserver.RouteHandlers {
 	unavailable := httpserver.DatabaseNotConfiguredHandler()
 	return httpserver.RouteHandlers{
-		Livez:                     http.HandlerFunc(healthHandler.Livez),
-		Readyz:                    http.HandlerFunc(healthHandler.Readyz),
-		Version:                   versionHandler,
-		AuthLogin:                 unavailable,
-		CLILoginPage:              unavailable,
-		CLILoginSubmit:            unavailable,
-		AuthCLIExchange:           unavailable,
-		AuthRefresh:               unavailable,
-		AuthChangePassword:        unavailable,
-		AuthLogout:                unavailable,
-		Me:                        unavailable,
-		OrganizationUsersList:     unavailable,
-		OrganizationUsersCreate:   unavailable,
-		OrganizationUsersPatch:    unavailable,
-		OrganizationUsersReset:    unavailable,
-		RepositoryContextInit:     unavailable,
-		RepositoryContextSnapshot: unavailable,
-		ProjectRepoBindingInit:    unavailable,
-		IntakeSubmit:              unavailable,
-		IntakeGet:                 unavailable,
-		IntakePromote:             unavailable,
-		GoalReadiness:             unavailable,
-		GoalContinuation:          unavailable,
-		ClarificationContinuation: unavailable,
-		GoalClarificationRequests: unavailable,
-		ContractCreate:            unavailable,
-		ContractGet:               unavailable,
-		ContractUpdate:            unavailable,
-		ContractSubmit:            unavailable,
-		ContractApprove:           unavailable,
-		ContractPlans:             unavailable,
-		PlanLeases:                unavailable,
-		PlanLeaseGet:              unavailable,
-		PlanLeaseRenew:            unavailable,
-		PlanGet:                   unavailable,
-		PlanProposals:             unavailable,
-		ProposalGet:               unavailable,
-		ProposalAcceptance:        unavailable,
-		TaskGet:                   unavailable,
-		ClarificationAnswers:      unavailable,
-		ClarificationAnswerApply:  unavailable,
+		Livez:                         http.HandlerFunc(healthHandler.Livez),
+		Readyz:                        http.HandlerFunc(healthHandler.Readyz),
+		Version:                       versionHandler,
+		AuthLogin:                     unavailable,
+		CLILoginPage:                  unavailable,
+		CLILoginSubmit:                unavailable,
+		AuthCLIExchange:               unavailable,
+		AuthRefresh:                   unavailable,
+		AuthChangePassword:            unavailable,
+		AuthLogout:                    unavailable,
+		Me:                            unavailable,
+		OrganizationUsersList:         unavailable,
+		OrganizationUsersCreate:       unavailable,
+		OrganizationUsersPatch:        unavailable,
+		OrganizationUsersReset:        unavailable,
+		OrganizationRepositoryContext: unavailable,
+		RepositoryContextInit:         unavailable,
+		RepositoryContextSnapshot:     unavailable,
+		ProjectRepoBindingInit:        unavailable,
+		IntakeSubmit:                  unavailable,
+		IntakeGet:                     unavailable,
+		IntakePromote:                 unavailable,
+		GoalReadiness:                 unavailable,
+		GoalContinuation:              unavailable,
+		ClarificationContinuation:     unavailable,
+		QualificationFeed:             unavailable,
+		GoalClarificationRequests:     unavailable,
+		ContractCreate:                unavailable,
+		ContractList:                  unavailable,
+		ContractGet:                   unavailable,
+		ContractCurrentDraft:          unavailable,
+		ContractUpdate:                unavailable,
+		ContractSubmit:                unavailable,
+		ContractApprove:               unavailable,
+		ContractPlans:                 unavailable,
+		PlanLeases:                    unavailable,
+		PlanLeaseGet:                  unavailable,
+		PlanLeaseRenew:                unavailable,
+		PlanGet:                       unavailable,
+		PlanStatus:                    unavailable,
+		PlanProposals:                 unavailable,
+		ProposalGet:                   unavailable,
+		ProposalAcceptance:            unavailable,
+		TaskGet:                       unavailable,
+		TaskCheckoutJobs:              unavailable,
+		TaskExecutionJobs:             unavailable,
+		CheckoutJobLeases:             unavailable,
+		CheckoutJobReceipts:           unavailable,
+		ExecutionJobLeases:            unavailable,
+		ExecutionJobRuns:              unavailable,
+		RunCommandPlans:               unavailable,
+		RunCommandPlan:                unavailable,
+		RunReceipts:                   unavailable,
+		ClarificationAnswers:          unavailable,
+		ClarificationAnswerApply:      unavailable,
 	}
 }

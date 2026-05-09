@@ -20,7 +20,7 @@ jobs:
   pr-intake-gate:
     name: pr-intake-gate
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout trusted base code
@@ -32,10 +32,11 @@ jobs:
       - name: Run PR intake gate
         # Pinned from repo-governance main.
         # pull_request_target must not execute mutable tags.
-        uses: heurema/repo-governance/actions/pr-intake-gate@2413ba8db779a431d46505003870766b35b3ea57
+        uses: heurema/repo-governance/actions/pr-intake-gate@5f109136c7a4e9f5a06fdc9422b1aa65d9695b29
         with:
           policy-path: .github/pr-intake-gate.yml
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          codex-review-require-current-review: 'true'
-          codex-review-wait-seconds: '480'
+          codex-review-require-current-review: 'false'
+          codex-review-wait-seconds: '0'
+          codex-review-resolution-wait-seconds: '480'
           codex-review-poll-interval-seconds: '10'

@@ -20,16 +20,21 @@ It sits between planning and execution:
 ## Current state
 
 Goalrail's product canon, MVP shape, and operating model are documented,
-and an early Go server prototype now exists under `apps/server` with a
-bounded persistence slice.
+and early implementation prototypes exist under `apps/server`, `apps/cli`,
+`apps/worker`, `apps/runner`, and `apps/web`.
 
-The implemented slice covers a server-owned lifecycle from intake through
-work-item planning:
+For current implementation truth, use `docs/ops/STATUS.md` and
+`docs/ops/COMPONENTS.yaml`. This README is only a high-level entry point.
+
+The implemented server slice covers a server-owned lifecycle from intake
+through work-item planning and the first bounded runner receipt baseline:
 IntakeRecord → Goal → ContractSeed → ContractDraft (`draft`) →
 ContractDraft (`ready_for_approval`) → ApprovedContract (`approved`) →
-WorkItem (`planned` prototype). HTTP routes, Postgres-backed persistence
-for the core canonical objects, migrations, and event append for the key
-transitions are in place.
+WorkItem (`planned`) → CheckoutReceipt → ExecutionJob → Run (`started`) →
+ExecutionCommandPlan (`builtin_diagnostic/workspace_status`) →
+ExecutionReceipt (`builtin_diagnostic`). HTTP routes, Postgres-backed
+persistence for the core canonical objects, migrations, auth, and event append
+for the key transitions are in place.
 
 This is **not** a full Goalrail runtime and **not** an agent platform.
 Goalrail remains a contract-first, bounded control plane that supplements
@@ -45,11 +50,16 @@ existing developer and business tools rather than replacing them.
 
 ## What is not implemented
 
-- runner, workers, queue / jobs, or repo checkout
+- arbitrary shell or project command execution
+- project test execution such as `npm test`, `go test ./...`, or `pytest`
 - gate, proof generation, or runnable eval harness
-- durable `WorkItem` storage or durable clarification persistence
-- authn / authz, tracker sync, analytics, CRM, or product web loop
-- broad backend platform, LLM/API calls, repo integration, or runtime execution
+- WorkItem assignment / claiming or completion semantics
+- runner registration / token hardening or runner attestation
+- actual repository clone/fetch, repository writes, provider OAuth, or stored
+  repository credentials
+- tracker sync, analytics, CRM, or full product web loop
+- broad backend platform, LLM coding-agent integration, or provider runtime
+  adapters
 
 ## Read first
 

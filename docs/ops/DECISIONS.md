@@ -2354,3 +2354,163 @@ Rationale:
   backend-created users while preserving ADR-0027's Console/admin boundary.
 - Revoking active sessions makes the `must_change_password` rotation effective
   for users who already had product sessions.
+
+## D-0090 — Start assistant live path uses a separate public-edge Worker
+Date: 2026-05-07
+Status: accepted
+
+Decision:
+- The live `/start` assistant uses a separate public-edge assistant Worker for
+  `POST /api/start-chat`.
+- The first live assistant slice does not run inside the core Goalrail API app.
+- Browser code does not call OpenAI directly.
+- The Worker answers only from an approved public KB retrieval index built from
+  an explicit GitHub whitelist.
+- GitHub remains the source of truth; the retrieval index is a compiled
+  artifact.
+- The first KB sync path starts manual, with GitHub Action sync added only after
+  chunk quality, source boundaries, and rollback are proven.
+- The first retrieval path is OpenAI Responses API with file_search.
+- Cloudflare AI Gateway may be introduced later only with payload logging
+  posture explicitly decided.
+- The assistant must not scan repositories, execute code, accept file uploads,
+  ingest private code, store chat history, add analytics/tracking, or imply broad
+  product maturity.
+
+Rationale:
+- Anonymous public assistant traffic has different abuse, privacy, and cost
+  boundaries than the authenticated product API.
+- A separate Worker keeps provider secrets server-side while isolating public
+  Q&A from canonical Goalrail state.
+- Manual KB sync first gives the team a reviewable path for public-source
+  quality before automating provider uploads.
+
+## D-0091 — Console Goal and Contract workflow is read-only
+Date: 2026-05-08
+Status: accepted
+
+Decision:
+- The production Console Goal / Contract dashboard is a read-only Intent &
+  Oversight surface.
+- The workflow path is:
+
+```text
+Agent -> Goalrail CLI -> Goalrail Server canonical state -> Console read-only dashboard
+```
+
+- All Goal and Contract workflow mutations are performed by the local agent
+  through Goalrail CLI.
+- The Goalrail server owns canonical Goal, clarification, Contract, planning,
+  and event state.
+- The Console visualizes backend state only; it must not become a second driver
+  for Goal continuation, clarification answers, contract creation, contract
+  review transitions, approvals, or planning transitions.
+- The future Console implementation should use simple frontend periodic polling
+  of read-only endpoints: refresh once after authenticated entry, repeat about
+  every 5-10 seconds while the tab is active, pause or reduce refresh when
+  `document.hidden` is true, keep manual Refresh as fallback, and keep existing
+  visible state on transient read errors.
+- The minimum read-only feed is `GET /v1/qualification-feed?limit=50`.
+- When a selected Contract is open, detail may load through
+  `GET /v1/contracts/{id}`.
+- If Contract discovery is needed, prefer an authenticated, organization-scoped,
+  read-only compact list endpoint:
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
+  It must not perform hidden readiness recomputation, contract creation, or
+  lifecycle transitions. Prefer `GET /v1/contracts?goal_id=` before adding
+  `GET /v1/goals/{goal_id}/contract`.
+- This is periodic polling only. It is not true long polling, server-side
+  wait/cursor semantics, SSE, WebSocket, daemon, or event stream behavior.
+- A Goal created through CLI should appear in Delivery Readiness after Console
+  refresh/polling. A Contract created or updated through CLI should appear or
+  update after refresh/polling.
+- Linked Contract state should be visible without manual Contract ID loading as
+  the main user flow. When a feed item has linked Contract summary or id, show
+  one primary status, `Contract linked`, compact Contract id/title/state when
+  available, and `Open contract` navigation only.
+- Delivery Readiness shows qualification state and handoff to Contracts, not
+  lifecycle controls.
+- The Contracts surface is read-only and may show selected/listed contracts.
+- Cards use one primary status, not duplicate status chips.
+- Production dashboard mutation controls should be removed in the later
+  implementation slice, including UI controls that call
+  `POST /v1/goals/{id}/continuation`,
+  `POST /v1/clarifications/{id}/answers/continuation`, `POST /v1/contracts`,
+  and contract submit / approve / plan mutation actions if present.
+- Allowed Console actions are read-only or navigational: Open contract, View
+  details, Refresh, Select contract, Filter, and Search.
+- Do not add `Managed via CLI` labels.
+- Do not add `Copy CLI command` buttons.
+- Do not implement `Agent working` in the current slice. A future daemon/status
+  heartbeat may publish lightweight agent/runtime status and enable an honest
+  `Agent working` UI state, but no daemon or heartbeat source of truth exists
+  yet.
+- Do not add activity timeline / agent-run history now.
+- Do not add a UI clarification answer form now.
+- Do not fake Proof, readiness, verification, or execution data.
+
+Primary status model:
+- Readiness primary statuses, in priority order: Needs answer, Ready for
+  contract, Needs qualification, Contract linked, Blocked.
+- Contract primary statuses: Draft, Ready for approval, Approved, Blocked,
+  Superseded.
+- Normal cards should use calm human-readable timestamps such as `just now`,
+  `5 min ago`, `2 h ago`, `Today 14:20`, `Yesterday 09:10`, or `8 May`, and
+  should not show seconds, raw ISO/RFC3339 strings, or timezone-heavy values.
+
+Current implementation note:
+- The first bounded frontend implementation slice has removed production
+  Delivery Readiness mutation controls from the Console while preserving
+  read-only feed polling and linked-contract navigation.
+
+Explicit non-goals:
+- no daemon in this slice
+- no `Agent working` state in this slice
+- no activity timeline
+- no UI clarification answer form
+- no copy CLI command button
+- no true long polling
+- no SSE, WebSocket, or event stream
+- no fake Proof or fake verification data
+- no provider-specific agent adapters
+- no server-side repository clone
+- no generic workflow engine behavior
+- no broad analytics or admin dashboard
+
+Rationale:
+- ADR-0026 defines the local agent plus Goalrail CLI as the pull-loop UX bridge
+  and the server as canonical workflow authority.
+- A read-only Console keeps Intent & Oversight visibility without duplicating
+  CLI-driven state transitions in the browser.
+- Simple frontend polling is enough for the current oversight loop and avoids
+  adding daemon, push-channel, event-stream, or runtime-status infrastructure
+  before a source of truth exists.
+- Removing production mutation controls keeps the Console aligned with
+  Goalrail's contract-first, server-canonical model while preserving CLI as the
+  local repository/runtime bridge.
+
+## D-0092 — Admin merge exceptions require explicit evidence and follow-up
+Date: 2026-05-08
+Status: accepted
+Review after: 2026-05-22
+
+Decision:
+- Admin merge is an exception path for Goalrail PRs, not the normal merge path.
+- It may be used only when the blocking gate is known to be procedural or
+  connector-state-related, not an implementation validation failure.
+- The merge operator must capture the reason, the failed gate condition, and
+  the substantive checks that passed in the PR or follow-up ops note.
+- The operator should prefer resolving review threads and re-running checks
+  before using the exception path.
+- The feature branch may remain temporarily after such a merge for audit or
+  recovery until deploy smoke or post-merge validation is complete.
+
+Rationale:
+- PR #182 was admin rebase-merged after `pr-intake-gate` had failed with
+  `Codex Review has not completed for current head`. Substantive code/docs,
+  Go module, and Console validation checks were green, and unresolved Codex
+  threads were reported as `0`.
+- A later `pr-intake-gate` rerun for the same head passed after a clean Codex
+  review reaction was detected. Recording the exception prevents treating admin
+  merge as the default workflow while preserving a practical recovery path when
+  a procedural review-freshness gate blocks an otherwise validated PR.

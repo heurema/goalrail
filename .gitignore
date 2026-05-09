@@ -11,10 +11,14 @@ test-results/
 .playwright-cli/
 output/
 **/__pycache__/
+apps/worker/goalrail-worker
+apps/runner/goalrail-runner
 .goalrail/work/demo/trialops/design-handoff/
 .idea/
 .vscode/
 .playwright-mcp/
+.goalrail/public-kb/dist/
+.signum/
 
 # Punk publishing runtime artifacts
 .punk/publishing/

@@ -58,6 +58,37 @@ loop:
 
 The first worker is a narrow planning worker, not a broad worker platform.
 
+## Implementation note — 2026-05-07
+
+The first minimal worker slice is implemented under `apps/worker` with the
+canonical binary entrypoint `apps/worker/cmd/goalrail-worker`.
+
+The worker is a separate Go module from `apps/server`. It uses local API DTOs
+and talks to the API server over HTTP only. It does not import server internal
+packages, server stores, Postgres drivers, or command execution packages.
+
+The implemented worker supports:
+
+- `--server-url` / `GOALRAIL_WORKER_SERVER_URL`
+- `--worker-id` / `GOALRAIL_WORKER_ID`
+- `--poll-interval`
+- `--lease-ttl-seconds`
+- `--once`
+
+The v0 planner is deterministic and minimal. It fetches the leased
+`WorkItemPlan` through the API and submits one bounded development-mode
+proposal with `lease_id` plus `lease_token`. It does not inspect repositories,
+checkout code, run commands, accept proposals, create WorkItems directly, start
+Runs, write receipts, decide gates, or create Proof.
+
+Lease renewal remains deferred because the v0 proposal computation is local and
+bounded. If later planning can exceed the requested lease TTL, renewal must be
+added before that longer computation is enabled.
+
+The current worker API path does not add broad worker auth. It consumes the
+existing WorkItemPlan lease/proposal API exactly as implemented and keeps raw
+lease tokens out of logs and disk persistence.
+
 ## Terminology
 
 - `worker` means the process that polls the API server and coordinates planning
@@ -116,15 +147,14 @@ A future planning worker must not:
 
 ## Planner behavior v0
 
-The first planner behavior may initially be deterministic or manual proposal
-mode. This is a target boundary, not an implemented behavior in this ADR.
+The first planner behavior is deterministic minimal proposal mode.
 
 The planner may use approved Contract and Plan metadata fetched from the API.
 It should not require repository checkout in the first worker slice. Repo-aware
 planning remains a later planner / runner context boundary.
 
-If a dummy or development planner is introduced later, it must be clearly
-marked as development-only and not production planning behavior.
+Development-mode planner output must be clearly marked as minimal and must not
+be described as production-quality planning behavior.
 
 ## Lease behavior
 
@@ -187,10 +217,8 @@ planning loop.
 
 ## Non-goals
 
-This ADR does not implement or authorize:
+This ADR and its first implementation slice do not authorize:
 
-- worker code
-- worker binary packaging
 - route implementation
 - migrations
 - new stores

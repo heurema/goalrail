@@ -51,6 +51,27 @@ const (
 	RepoBindingAccessModeMetadataOnly             RepoBindingAccessMode = "metadata_only"
 )
 
+type MalformedIDError struct {
+	Field  string
+	Reason string
+	Err    error
+}
+
+func (e MalformedIDError) Error() string {
+	reason := e.Reason
+	if reason == "" {
+		reason = "must be valid"
+	}
+	if e.Field == "" {
+		return reason
+	}
+	return e.Field + " " + reason
+}
+
+func (e MalformedIDError) Unwrap() error {
+	return e.Err
+}
+
 type User struct {
 	ID          UserID      `json:"id"`
 	DisplayName string      `json:"display_name"`
@@ -214,6 +235,51 @@ type RepositoryContextSnapshotResult struct {
 	Fingerprint       string                      `json:"fingerprint"`
 	Created           bool                        `json:"created"`
 	Message           string                      `json:"message"`
+}
+
+type OrganizationRepositoryContextResult struct {
+	Organization OrganizationRepositoryContextOrganization `json:"organization"`
+	Contexts     []OrganizationRepositoryContext           `json:"contexts"`
+}
+
+type OrganizationRepositoryContextOrganization struct {
+	ID          OrganizationID `json:"id"`
+	Slug        string         `json:"slug"`
+	DisplayName string         `json:"display_name"`
+	State       EntityState    `json:"state"`
+}
+
+type OrganizationRepositoryContext struct {
+	Project     OrganizationRepositoryContextProject     `json:"project"`
+	RepoBinding OrganizationRepositoryContextRepoBinding `json:"repo_binding"`
+}
+
+type OrganizationRepositoryContextProject struct {
+	ID          ProjectID   `json:"id"`
+	Slug        string      `json:"slug"`
+	DisplayName string      `json:"display_name"`
+	State       EntityState `json:"state"`
+	CreatedAt   time.Time   `json:"created_at"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type OrganizationRepositoryContextRepoBinding struct {
+	ID                 RepoBindingID         `json:"id"`
+	Provider           string                `json:"provider"`
+	RepositoryFullName string                `json:"repository_full_name"`
+	RepositoryURL      string                `json:"repository_url"`
+	DefaultBranch      string                `json:"default_branch"`
+	WorkflowBaseBranch string                `json:"workflow_base_branch"`
+	PathScope          string                `json:"path_scope"`
+	AccessMode         RepoBindingAccessMode `json:"access_mode"`
+	State              EntityState           `json:"state"`
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+}
+
+type ProjectRepoBindingContext struct {
+	Project     Project     `json:"project"`
+	RepoBinding RepoBinding `json:"repo_binding"`
 }
 
 type ResolvedRepoBindingContext struct {
