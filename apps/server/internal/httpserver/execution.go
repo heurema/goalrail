@@ -164,6 +164,8 @@ func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error)
 		RespondError(w, http.StatusNotFound, "not_found", "run not found")
 	case errors.Is(err, execution.ErrExecutionCommandPlanNotFound):
 		RespondError(w, http.StatusNotFound, "not_found", "execution command plan not found")
+	case errors.Is(err, execution.ErrExecutionReceiptNotFound):
+		RespondError(w, http.StatusNotFound, "not_found", "execution receipt not found")
 	case errors.Is(err, execution.ErrInvalidWorkItemState):
 		RespondError(w, http.StatusConflict, "invalid_state", "work item is not planned")
 	case errors.Is(err, execution.ErrInvalidCheckoutState):

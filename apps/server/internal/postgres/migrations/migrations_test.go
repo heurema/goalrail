@@ -634,6 +634,49 @@ func TestProjectProbeCommandPlanMigrationAddsTypedProbeBoundary(t *testing.T) {
 	}
 }
 
+func TestProjectTestCommandPlanMigrationAddsPlanningOnlyBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00008_project_test_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN source_project_probe_receipt_id UUID NULL REFERENCES execution_receipts(id) ON DELETE RESTRICT",
+		"ADD COLUMN selected_target_id TEXT NOT NULL DEFAULT ''",
+		"ADD COLUMN declared_test_target JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"ADD COLUMN network_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN workspace_write_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN scratch_write_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"ADD COLUMN changed_paths_allowed BOOLEAN NOT NULL DEFAULT FALSE",
+		"command_kind = 'project_test' AND action = 'run_declared_test_target'",
+		"source_project_probe_receipt_id IS NOT NULL",
+		"declared_test_target ->> 'source_kind' = 'package_json_script'",
+		"shell_allowed = FALSE",
+		"argv = '[]'::jsonb",
+		"timeout_seconds = 120",
+		"network_allowed = FALSE",
+		"workspace_write_allowed = FALSE",
+		"max_stdout_bytes = 0",
+		"max_stderr_bytes = 0",
+		"allowed_artifact_kinds = '[]'::jsonb",
+		"changed_paths_allowed = FALSE",
+		"raw_source_upload_allowed = FALSE",
+		"WHERE command_kind = 'project_test'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project test migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc", "sh -c"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project test migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project test migration must not store lease tokens")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {
