@@ -76,7 +76,10 @@
   rejection, and the runner no-process / no-token-leak boundary without adding
   product behavior. ADR-0034 now defines the H2.7.2 runner capability model
   boundary: self-declared capabilities are untrusted metadata only and do not
-  unlock project-test execution.
+  unlock project-test execution. H2.7.3 now implements self-declared untrusted
+  `RunnerCapabilityReport` storage and `goalrail-runner --mode
+  capability-report` without sandboxing, trusted capabilities, or any
+  project-test execution unlock.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -264,7 +267,9 @@
   only, not actual test execution.
 - ADR-0034 records the H2.7.2 runner capability model boundary. Capability
   reports are self-declared and untrusted until a later runner registration /
-  trust boundary; they must not unlock `project_test` process outcomes.
+  trust boundary. H2.7.3 now records self-declared untrusted
+  `RunnerCapabilityReport` metadata, but those reports must not unlock
+  `project_test` process outcomes.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1026,8 +1031,8 @@ Done means:
      `timed_out`, unavailable controls remain `policy_rejected` and H2.7.1
      records that through explicit enforcement-report metadata
    - ADR-0034 defines runner capability reports as self-declared untrusted
-     metadata only; trusted capability and execution unlock remain later
-     boundaries
+     metadata only; H2.7.3 records that metadata, while trusted capability and
+     execution unlock remain later boundaries
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

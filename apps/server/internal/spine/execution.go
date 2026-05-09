@@ -15,6 +15,8 @@ type ExecutionCommandPlanID string
 
 type ExecutionReceiptID string
 
+type RunnerCapabilityReportID string
+
 type ExecutionJobState string
 
 const (
@@ -61,6 +63,8 @@ const (
 	ExecutionEnforcementDecisionPolicyRejected    = "policy_rejected"
 	ExecutionEnforcementReasonUnavailable         = "enforcement_unavailable"
 )
+
+const RunnerCapabilityTrustSelfDeclaredUntrusted = "self_declared_untrusted"
 
 const (
 	ExecutionCommandPlanNextActionRunnerProjectTestRequired = "runner_project_test_required"
@@ -328,4 +332,42 @@ type ExecutionNextAction struct {
 	Blocking     bool   `json:"blocking"`
 	Available    bool   `json:"available"`
 	PlannedSlice string `json:"planned_slice,omitempty"`
+}
+
+type RunnerCapabilityReportCreateRequest struct {
+	RunnerID                        string          `json:"runner_id"`
+	OrganizationID                  OrganizationID  `json:"organization_id,omitempty"`
+	ProjectID                       ProjectID       `json:"project_id"`
+	RepoBindingID                   RepoBindingID   `json:"repo_binding_id"`
+	NetworkIsolationDeclared        bool            `json:"network_isolation_declared"`
+	WorkspaceWriteIsolationDeclared bool            `json:"workspace_write_isolation_declared"`
+	ProcessTreeControlDeclared      bool            `json:"process_tree_control_declared"`
+	StdoutStderrPolicyDeclared      bool            `json:"stdout_stderr_policy_declared"`
+	ArtifactPolicyDeclared          bool            `json:"artifact_policy_declared"`
+	TrustState                      string          `json:"trust_state"`
+	NetworkEnforcement              json.RawMessage `json:"network_enforcement,omitempty"`
+	WorkspaceWriteEnforcement       json.RawMessage `json:"workspace_write_enforcement,omitempty"`
+	ProcessTreeEnforcement          json.RawMessage `json:"process_tree_enforcement,omitempty"`
+	NetworkIsolationEnforced        json.RawMessage `json:"network_isolation_enforced,omitempty"`
+	WorkspaceWriteIsolationEnforced json.RawMessage `json:"workspace_write_isolation_enforced,omitempty"`
+	ProcessTreeControlEnforced      json.RawMessage `json:"process_tree_control_enforced,omitempty"`
+	Attestation                     json.RawMessage `json:"attestation,omitempty"`
+	TrustEvidence                   json.RawMessage `json:"trust_evidence,omitempty"`
+}
+
+type RunnerCapabilityReport struct {
+	ID                              RunnerCapabilityReportID `json:"id"`
+	RunnerID                        string                   `json:"runner_id"`
+	OrganizationID                  OrganizationID           `json:"organization_id"`
+	ProjectID                       ProjectID                `json:"project_id"`
+	RepoBindingID                   RepoBindingID            `json:"repo_binding_id"`
+	NetworkIsolationDeclared        bool                     `json:"network_isolation_declared"`
+	WorkspaceWriteIsolationDeclared bool                     `json:"workspace_write_isolation_declared"`
+	ProcessTreeControlDeclared      bool                     `json:"process_tree_control_declared"`
+	StdoutStderrPolicyDeclared      bool                     `json:"stdout_stderr_policy_declared"`
+	ArtifactPolicyDeclared          bool                     `json:"artifact_policy_declared"`
+	TrustState                      string                   `json:"trust_state"`
+	ReportedAt                      time.Time                `json:"reported_at"`
+	CreatedAt                       time.Time                `json:"created_at"`
+	UpdatedAt                       time.Time                `json:"updated_at"`
 }

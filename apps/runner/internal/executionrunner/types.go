@@ -119,6 +119,26 @@ type executionReceipt struct {
 	ExitCode       *int   `json:"exit_code,omitempty"`
 }
 
+type runnerCapabilityReportRequest struct {
+	RunnerID                        string `json:"runner_id"`
+	ProjectID                       string `json:"project_id"`
+	RepoBindingID                   string `json:"repo_binding_id"`
+	NetworkIsolationDeclared        bool   `json:"network_isolation_declared"`
+	WorkspaceWriteIsolationDeclared bool   `json:"workspace_write_isolation_declared"`
+	ProcessTreeControlDeclared      bool   `json:"process_tree_control_declared"`
+	StdoutStderrPolicyDeclared      bool   `json:"stdout_stderr_policy_declared"`
+	ArtifactPolicyDeclared          bool   `json:"artifact_policy_declared"`
+	TrustState                      string `json:"trust_state"`
+}
+
+type runnerCapabilityReport struct {
+	ID            string `json:"id"`
+	RunnerID      string `json:"runner_id"`
+	ProjectID     string `json:"project_id"`
+	RepoBindingID string `json:"repo_binding_id"`
+	TrustState    string `json:"trust_state"`
+}
+
 type enforcementReport struct {
 	NetworkPolicy             string `json:"network_policy"`
 	NetworkEnforcement        string `json:"network_enforcement"`

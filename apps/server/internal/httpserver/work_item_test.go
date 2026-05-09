@@ -1574,6 +1574,42 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 	})
 
+	t.Run("runner capability report does not unlock project test execution outcomes", func(t *testing.T) {
+		server := testServer(t)
+		job, lease, run, plan := createProjectTestPlanFromSeededProbe(t, server)
+
+		capabilityBody := fmt.Sprintf(`{"runner_id":"runner-1","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"network_isolation_declared":true,"workspace_write_isolation_declared":true,"process_tree_control_declared":true,"stdout_stderr_policy_declared":true,"artifact_policy_declared":true,"trust_state":"self_declared_untrusted"}`, job.RepoBindingID)
+		firstCapabilityResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", capabilityBody)
+		if firstCapabilityResponse.code != http.StatusCreated {
+			t.Fatalf("first capability report status = %d, want %d: %s", firstCapabilityResponse.code, http.StatusCreated, firstCapabilityResponse.body)
+		}
+		secondCapabilityResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", capabilityBody)
+		if secondCapabilityResponse.code != http.StatusCreated {
+			t.Fatalf("second capability report status = %d, want %d: %s", secondCapabilityResponse.code, http.StatusCreated, secondCapabilityResponse.body)
+		}
+		if len(server.runnerCapabilities.reports) != 2 {
+			t.Fatalf("runner capability reports = %d, want append-only reports", len(server.runnerCapabilities.reports))
+		}
+		for _, report := range server.runnerCapabilities.reports {
+			if report.TrustState != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+				t.Fatalf("runner capability report trust_state = %q, want self_declared_untrusted", report.TrustState)
+			}
+		}
+
+		exitedReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(0), false))
+		assertErrorCode(t, exitedReceiptResponse, http.StatusBadRequest, "validation_failed")
+		if _, ok := server.executionReceipts.byRun[run.ID]; ok {
+			t.Fatalf("project_test receipt for run %q was stored after exited attempt", run.ID)
+		}
+		storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+		if err != nil || !ok {
+			t.Fatalf("workItems.Get() after rejected exited receipt = %#v/%v/%v", storedTask, ok, err)
+		}
+		if storedTask.Status != spine.WorkItemStatusPlanned {
+			t.Fatalf("task status = %q, want planned after rejected exited receipt", storedTask.Status)
+		}
+	})
+
 	t.Run("rejects unsafe project test receipt claims", func(t *testing.T) {
 		for _, tt := range []struct {
 			name string

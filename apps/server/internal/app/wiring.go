@@ -56,6 +56,7 @@ type postgresStores struct {
 	runs                  *store.PostgresRunStore
 	executionCommandPlans *store.PostgresExecutionCommandPlanStore
 	executionReceipts     *store.PostgresExecutionReceiptStore
+	runnerCapabilities    *store.PostgresRunnerCapabilityReportStore
 	events                *store.PostgresEventLog
 	auth                  *store.PostgresAuthStore
 	userManagement        *store.PostgresUserManagementStore
@@ -83,6 +84,7 @@ func newPostgresStores(pool *pgxpool.Pool) postgresStores {
 		runs:                  store.NewPostgresRunStore(pool),
 		executionCommandPlans: store.NewPostgresExecutionCommandPlanStore(pool),
 		executionReceipts:     store.NewPostgresExecutionReceiptStore(pool),
+		runnerCapabilities:    store.NewPostgresRunnerCapabilityReportStore(pool),
 		events:                store.NewPostgresEventLog(pool),
 		auth:                  store.NewPostgresAuthStore(pool),
 		userManagement:        store.NewPostgresUserManagementStore(pool),
@@ -117,6 +119,8 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 	goalService := goal.NewService(stores.intakes, stores.goals, stores.events, txRunner, goal.SystemClock{}, goal.UUIDGenerator{})
 	clarificationRequests := clarificationRequestStoreAdapter{store: stores.clarificationRequests}
 	clarificationService := clarification.NewService(stores.goals, clarificationRequests, stores.clarificationAnswers, stores.events, txRunner, clarification.SystemClock{}, clarification.UUIDGenerator{})
+	executionService := execution.NewService(stores.workItems, stores.projectContext, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.runs, stores.executionCommandPlans, stores.executionReceipts, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{})
+	executionService.RunnerCapabilities = stores.runnerCapabilities
 
 	return appServices{
 		intake:            intake.NewService(stores.intakes, stores.projectContext, stores.events, txRunner, intake.SystemClock{}, intake.UUIDGenerator{}),
@@ -128,7 +132,7 @@ func newAppServices(stores postgresStores, txRunner *store.PostgresTransactionRu
 		workItem:          workitem.NewService(stores.workItems),
 		workItemPlan:      workitemplan.NewService(stores.contracts, stores.approvedContracts, stores.workItemPlans, stores.workItemPlanLeases, stores.workItemProposals, stores.workItems, stores.events, txRunner, workitemplan.SystemClock{}, workitemplan.UUIDGenerator{}),
 		checkout:          checkout.NewService(stores.workItems, stores.projectContext, stores.checkoutJobs, stores.checkoutReceipts, stores.events, txRunner, checkout.SystemClock{}, checkout.UUIDGenerator{}),
-		execution:         execution.NewService(stores.workItems, stores.projectContext, stores.checkoutReceipts, stores.checkoutJobs, stores.executionJobs, stores.runs, stores.executionCommandPlans, stores.executionReceipts, stores.events, txRunner, execution.SystemClock{}, execution.UUIDGenerator{}),
+		execution:         executionService,
 		repoBinding:       repoBindingService,
 		repositoryInit:    repositoryinit.NewService(stores.projectContext, repoBindingService, stores.events, txRunner, repositoryinit.SystemClock{}, repositoryinit.UUIDGenerator{}),
 		repositoryContext: repositorycontext.NewService(stores.projectContext, stores.events, txRunner, repositorycontext.SystemClock{}, repositorycontext.UUIDGenerator{}),
@@ -258,6 +262,7 @@ func (h appHandlers) routeHandlers(healthHandler *health.Handler, versionHandler
 		RunCommandPlans:               http.HandlerFunc(h.execution.CreateCommandPlan),
 		RunCommandPlan:                http.HandlerFunc(h.execution.GetCommandPlan),
 		RunReceipts:                   http.HandlerFunc(h.execution.SubmitReceipt),
+		RunnerCapabilityReports:       http.HandlerFunc(h.execution.CreateRunnerCapabilityReport),
 		ClarificationAnswers:          http.HandlerFunc(h.clarification.RecordAnswer),
 		ClarificationAnswerApply:      http.HandlerFunc(h.clarification.ApplyAnswer),
 	}
@@ -344,6 +349,7 @@ func databaseUnavailableRouteHandlers(healthHandler *health.Handler, versionHand
 		RunCommandPlans:               unavailable,
 		RunCommandPlan:                unavailable,
 		RunReceipts:                   unavailable,
+		RunnerCapabilityReports:       unavailable,
 		ClarificationAnswers:          unavailable,
 		ClarificationAnswerApply:      unavailable,
 	}

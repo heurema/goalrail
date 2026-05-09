@@ -208,6 +208,37 @@ func (c *apiClient) submitReceipt(ctx context.Context, runID string, input execu
 	return decoded, nil
 }
 
+func (c *apiClient) submitRunnerCapabilityReport(ctx context.Context, input runnerCapabilityReportRequest) (runnerCapabilityReport, error) {
+	body, err := json.Marshal(input)
+	if err != nil {
+		return runnerCapabilityReport{}, fmt.Errorf("encode runner capability report request: %w", err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/v1/runner-capability-reports", bytes.NewReader(body))
+	if err != nil {
+		return runnerCapabilityReport{}, fmt.Errorf("build runner capability report request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	c.authorize(request)
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return runnerCapabilityReport{}, fmt.Errorf("submit runner capability report: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusCreated {
+		return runnerCapabilityReport{}, decodeAPIError(response)
+	}
+	var decoded runnerCapabilityReport
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return runnerCapabilityReport{}, fmt.Errorf("decode runner capability report: %w", err)
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return runnerCapabilityReport{}, errors.New("runner capability report response is missing id")
+	}
+	return decoded, nil
+}
+
 func (c *apiClient) authorize(request *http.Request) {
 	if c.bearerToken != "" {
 		request.Header.Set("Authorization", "Bearer "+c.bearerToken)

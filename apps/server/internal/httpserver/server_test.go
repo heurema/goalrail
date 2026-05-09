@@ -143,6 +143,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		RunCommandPlans:               probeRoute("run_command_plans"),
 		RunCommandPlan:                probeRoute("run_command_plan"),
 		RunReceipts:                   probeRoute("run_receipts"),
+		RunnerCapabilityReports:       probeRoute("runner_capability_reports"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
 	})
@@ -205,6 +206,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "run_command_plans", method: http.MethodPost, path: "/v1/runs/run-1/command-plans", wantRoute: "run_command_plans"},
 		{name: "run_command_plan", method: http.MethodGet, path: "/v1/runs/run-1/command-plans/project_test/run_declared_test_target", wantRoute: "run_command_plan"},
 		{name: "run_receipts", method: http.MethodPost, path: "/v1/runs/run-1/receipts", wantRoute: "run_receipts"},
+		{name: "runner_capability_reports", method: http.MethodPost, path: "/v1/runner-capability-reports", wantRoute: "runner_capability_reports"},
 	}
 
 	for _, tt := range tests {
@@ -280,6 +282,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		RunCommandPlans:               probeRoute("run_command_plans"),
 		RunCommandPlan:                probeRoute("run_command_plan"),
 		RunReceipts:                   probeRoute("run_receipts"),
+		RunnerCapabilityReports:       probeRoute("runner_capability_reports"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
 	})
@@ -471,6 +474,7 @@ func newRouter(
 		RunCommandPlans:               http.HandlerFunc(executionHandler.CreateCommandPlan),
 		RunCommandPlan:                http.HandlerFunc(executionHandler.GetCommandPlan),
 		RunReceipts:                   http.HandlerFunc(executionHandler.SubmitReceipt),
+		RunnerCapabilityReports:       http.HandlerFunc(executionHandler.CreateRunnerCapabilityReport),
 		ClarificationAnswers:          http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:      http.HandlerFunc(clarificationHandler.ApplyAnswer),
 	})
