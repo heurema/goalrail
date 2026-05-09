@@ -60,7 +60,9 @@
   record. It does not execute tests, create `ExecutionReceipt(project_test)`,
   accept shell, user argv, arbitrary command strings, or "run all tests", and
   still keeps stdout/stderr capture, artifacts, GateDecision, and Proof
-  deferred.
+  deferred. H2.6.1+ smoke coverage pins the command-plan boundary as
+  regression-only; the next implementation step remains runner execution in a
+  later slice, not hidden test execution here.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -252,6 +254,8 @@
   implements server-side `project_test/run_declared_test_target` command-plan
   preparation only; it must not be treated as test execution, arbitrary shell,
   package-manager command execution, "run all tests", GateDecision, or Proof.
+  H2.6.1+ smoke coverage now pins fail-closed plan creation and no receipt /
+  gate / proof side effects.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1003,7 +1007,8 @@ Done means:
    - ADR-0032 defines H2.6 typed project test command execution. H2.6.1
      implements only server-side `project_test/run_declared_test_target`
      command-plan preparation derived from project-probe metadata, with shell,
-     user argv, runner test execution, Gate, and Proof deferred
+     user argv, runner test execution, Gate, and Proof deferred; H2.6.1+ adds
+     regression smoke for that planning-only boundary
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

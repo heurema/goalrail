@@ -70,7 +70,9 @@ returned from a matching `ExecutionReceipt(project_probe)` selected target,
 with no runner test execution, no `ExecutionReceipt(project_test)`, no shell,
 no arbitrary command string, no user-provided argv, no stdout/stderr capture, no
 artifacts, no changed paths, no raw source upload, no GateDecision, no Proof,
-and no WorkItem status transition;
+and no WorkItem status transition; H2.6.1+ smoke coverage now pins that
+planning-only boundary, including fail-closed unsafe field rejection and no
+project-test receipt / gate / proof side effects;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -287,6 +289,10 @@ The project currently has:
   arbitrary command strings, user-provided argv, "run all tests",
   stdout/stderr capture, artifacts, changed paths, raw source upload,
   GateDecision, Proof, WorkItem status transitions, or multi-command Runs.
+  H2.6.1+ smoke coverage pins this as a regression-only planning boundary:
+  malformed probe receipt IDs fail validation, unsafe execution/output/artifact
+  fields are rejected, selected target metadata is persisted, and no
+  project-test receipt, gate, proof, or WorkItem transition is created.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -642,7 +648,9 @@ The project currently has:
   implements only server-side `project_test/run_declared_test_target` command
   plan preparation from project-probe metadata. Runner test execution,
   `ExecutionReceipt(project_test)`, stdout/stderr capture, artifacts, Gate, and
-  Proof remain deferred
+  Proof remain deferred. H2.6.1+ smoke coverage pins that plan preparation as
+  metadata-derived, fail-closed, and side-effect-free beyond command-plan
+  creation
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
