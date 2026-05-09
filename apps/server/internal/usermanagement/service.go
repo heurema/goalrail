@@ -314,7 +314,7 @@ func (s *Service) PatchUser(ctx context.Context, input PatchUserInput) (PatchUse
 		if !ok {
 			return ErrNotFound
 		}
-		if membership.State != spine.EntityStateActive {
+		if membership.State != spine.EntityStateActive && !patchReactivatesMembership(normalized) {
 			return ErrNotFound
 		}
 
@@ -416,6 +416,10 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 		return ResetTemporaryPasswordResult{}, err
 	}
 	return result, nil
+}
+
+func patchReactivatesMembership(input PatchUserInput) bool {
+	return input.State != nil && *input.State == string(spine.EntityStateActive)
 }
 
 func (s *Service) createMembershipForExistingUser(ctx context.Context, user spine.User, input CreateUserInput, now time.Time) (spine.OrganizationMembership, bool, error) {
