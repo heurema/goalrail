@@ -1932,7 +1932,30 @@ function ConsoleApp() {
 
       {screen === 'console' && activeSurface === 'contracts' ? (
         <div className="demoContractsOverlay">
-          <DemoContractsPage />
+          <DemoContractsPage
+            liveContracts={{
+              contracts: contractList.contracts,
+              selectedContract: contract,
+              selectedDraft: contractDraft,
+              contractListLoadStatus,
+              contractListError,
+              contractLoadStatus,
+              contractError,
+              contractDraftLoadStatus,
+              contractDraftError,
+              repositoryContext,
+              repositoryContextLoadStatus,
+              repositoryContextError,
+              repoBindingFilter: contractListRepoBindingFilter,
+              stateFilter: contractListStateFilter,
+              onContractSelect: handleContractListSelection,
+              onRefresh: () => {
+                void refreshContractsSurface(true);
+              },
+              onRepoBindingFilterChange: setContractListRepoBindingFilter,
+              onStateFilterChange: setContractListStateFilter,
+            }}
+          />
         </div>
       ) : null}
 

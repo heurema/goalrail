@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
+import type { ContractDraftResponse } from './contractDraftClient';
+import type { ContractResponse } from './contractDetailClient';
+import type { OrganizationRepositoryContextResponse, RepositoryContextRecord } from './repositoryContextClient';
 import demoContractsCss from './DemoContractsPage.css?raw';
 
 const demoContractsShadowCss = demoContractsCss
@@ -12,8 +15,8 @@ const demoContractsShadowCss = demoContractsCss
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 type ActiveSurface = 'contracts' | 'readiness' | 'proof';
 type RepoId = 'trialops-demo' | 'billing-api' | 'frontend-console';
-type ContractRepoId = 'trialops-demo' | 'billing-api';
-type RepoFilter = ContractRepoId | 'all';
+type ContractRepoId = string;
+type RepoFilter = string;
 type ApprovalState = 'pending' | 'accepted' | 'rework' | 'blocked';
 type Tone = 'mauve' | 'amber' | 'pass' | 'block';
 
@@ -23,7 +26,7 @@ interface Stage {
 }
 
 interface RepoContext {
-  repo: RepoId;
+  repo: string;
   bound: 'да' | 'нет';
   init: string;
   docsIndexed: number;
@@ -71,6 +74,11 @@ interface ContractRecord {
   id: string;
   title: string;
   repo: ContractRepoId;
+  repoFilterValue?: string;
+  backendState?: ContractResponse['state'];
+  currentDraftId?: string;
+  updatedAt?: string;
+  backendContract?: ContractResponse;
   owner: string;
   scopeSurface: string;
   summary: string;
@@ -91,6 +99,32 @@ interface ContractRecord {
   trust: string[];
   howToVerify: string[];
   activity: Record<number, Array<{ kind: string; note: string; tone: Tone }>>;
+}
+
+type LiveContractListLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+type LiveContractLoadStatus = 'idle' | 'loading' | 'loaded' | 'not_found' | 'error';
+type LiveContractDraftLoadStatus = 'idle' | 'loading' | 'loaded' | 'no_draft' | 'unavailable' | 'error';
+type LiveRepositoryContextLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+export interface DemoContractsLiveData {
+  contracts: ContractResponse[];
+  selectedContract: ContractResponse | null;
+  selectedDraft: ContractDraftResponse | null;
+  contractListLoadStatus: LiveContractListLoadStatus;
+  contractListError: string;
+  contractLoadStatus: LiveContractLoadStatus;
+  contractError: string;
+  contractDraftLoadStatus: LiveContractDraftLoadStatus;
+  contractDraftError: string;
+  repositoryContext: OrganizationRepositoryContextResponse | null;
+  repositoryContextLoadStatus: LiveRepositoryContextLoadStatus;
+  repositoryContextError: string;
+  repoBindingFilter: string;
+  stateFilter: ContractResponse['state'] | 'all';
+  onContractSelect: (contract: ContractResponse) => void;
+  onRefresh: () => void;
+  onRepoBindingFilterChange: (repoBindingId: string) => void;
+  onStateFilterChange: (state: ContractResponse['state'] | 'all') => void;
 }
 
 interface ProofFeedItem {
@@ -225,6 +259,283 @@ const REPO_CONTEXTS: Record<RepoId, RepoContext> = {
     runtimes: ['ручная настройка', 'нужна инициализация'],
   },
 };
+
+const LIVE_ALL_REPOSITORIES_FILTER = 'all';
+const LIVE_CONTRACT_STATE_OPTIONS: Array<{ value: ContractResponse['state'] | 'all'; label: string }> = [
+  { value: 'all', label: 'Все состояния' },
+  { value: 'seeded', label: 'Seeded' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'ready_for_approval', label: 'Ready for approval' },
+  { value: 'approved', label: 'Approved' },
+];
+
+const EMPTY_LIVE_CONTRACT: ContractRecord = {
+  id: 'Нет контрактов',
+  title: 'Backend не вернул контракты',
+  repo: 'backend',
+  repoFilterValue: LIVE_ALL_REPOSITORIES_FILTER,
+  owner: 'read-only backend',
+  scopeSurface: 'GET /v1/contracts',
+  summary: 'Контракты появятся здесь после создания через существующий CLI/API flow.',
+  defaultStep: 0,
+  goal: 'Показать честное пустое состояние backend-backed Contracts страницы.',
+  intakeNotes: ['GET /v1/contracts вернул пустой список.', 'Локальные demo-контракты скрыты, чтобы не выдавать мок-данные за backend state.'],
+  inScope: ['Read-only discovery', 'Repository context metadata', 'Current draft detail when linked'],
+  outOfScope: ['Workflow mutation controls', 'Execution', 'Gate', 'Proof generation'],
+  acceptance: ['Пустое состояние видно без подмены backend данных моками.'],
+  proofExpectations: ['Проверить backend response и отсутствие mutation calls.'],
+  policyNote: 'Console остается read-only для Contract workflow.',
+  clarifications: [
+    {
+      ref: 'backend-state',
+      question: 'Почему нет строк?',
+      answer: 'Backend не вернул Contract aggregate для текущей Organization/filter.',
+      note: 'Создание контрактов остается за CLI/API workflow, не за этой страницей.',
+    },
+  ],
+  workItems: [],
+  evidence: [{ label: 'Источник', value: 'GET /v1/contracts?limit=50', tone: 'mauve' }],
+  verification: [{ criterion: 'Не показывать мок как real data', support: 'Пустое состояние backend list', outcome: 'Покрыто' }],
+  changed: ['Текущая Contracts страница подключена к read-only backend discovery.'],
+  unchanged: ['Workflow mutation controls не добавлены.', 'Runner/gate/proof по-прежнему вне этой страницы.'],
+  trust: ['Данные берутся из authenticated backend endpoints.', 'Пустой backend список остается пустым на UI.'],
+  howToVerify: ['Проверить network calls `/v1/contracts` и `/repository-context`.'],
+  activity: {
+    0: [{ kind: 'contract.discovery.empty', note: 'Backend discovery завершился без Contract rows', tone: 'amber' }],
+  },
+};
+
+function makeLiveRepoOptions(repositoryContext: OrganizationRepositoryContextResponse | null) {
+  const contexts = repositoryContext?.contexts ?? [];
+  return [
+    { value: LIVE_ALL_REPOSITORIES_FILTER, label: 'Все репозитории' },
+    ...contexts.map((context) => ({
+      value: context.repo_binding.id,
+      label: context.repo_binding.repository_full_name || context.repo_binding.id,
+    })),
+  ];
+}
+
+function makeLiveRepoContexts(repositoryContext: OrganizationRepositoryContextResponse | null) {
+  const contexts = repositoryContext?.contexts ?? [];
+  return contexts.reduce<Record<string, RepoContext>>((acc, context) => {
+    acc[context.repo_binding.id] = mapRepositoryContext(context);
+    return acc;
+  }, {});
+}
+
+function mapRepositoryContext(context: RepositoryContextRecord): RepoContext {
+  return {
+    repo: context.repo_binding.repository_full_name || context.repo_binding.id,
+    bound: context.repo_binding.state === 'active' ? 'да' : 'нет',
+    init: context.repo_binding.state,
+    docsIndexed: 0,
+    readiness: context.repo_binding.state === 'active' ? 64 : 32,
+    scanStatus: `provider: ${context.repo_binding.provider || 'unknown'}`,
+    testsStatus: 'metadata-only',
+    ciStatus: 'metadata-only',
+    ownersRulesStatus: 'metadata-only',
+    proofSurfaceStatus: 'недоступно в Console view',
+    recommendedMode: context.repo_binding.access_mode || 'metadata_only',
+    checklist: [
+      { label: 'Project', value: context.project.display_name || context.project.slug || context.project.id, tone: 'mauve' },
+      { label: 'RepoBinding', value: context.repo_binding.state || 'unknown', tone: context.repo_binding.state === 'active' ? 'pass' : 'amber' },
+      { label: 'Access mode', value: context.repo_binding.access_mode || 'metadata_only', tone: 'amber' },
+    ],
+    runtimePolicy: 'metadata-only · без provider authorization, checkout, execution, gate или proof',
+    runtimes: [
+      context.repo_binding.default_branch ? `default: ${context.repo_binding.default_branch}` : 'default branch unknown',
+      context.repo_binding.workflow_base_branch ? `workflow base: ${context.repo_binding.workflow_base_branch}` : 'workflow base unknown',
+      context.repo_binding.path_scope ? `path: ${context.repo_binding.path_scope}` : 'path scope unknown',
+    ],
+  };
+}
+
+function liveContractRepoLabel(contract: ContractResponse, repositoryContext: OrganizationRepositoryContextResponse | null) {
+  const match = repositoryContext?.contexts.find((context) => context.repo_binding.id === contract.repo_binding_id);
+  return match?.repo_binding.repository_full_name || contract.repo_binding_id;
+}
+
+function mapLiveContract(
+  contract: ContractResponse,
+  repositoryContext: OrganizationRepositoryContextResponse | null,
+  selectedDraft: ContractDraftResponse | null
+): ContractRecord {
+  const draft = selectedDraft?.contract_id === contract.id ? selectedDraft : null;
+  const stateLabel = contractStateLabel(contract.state);
+  const defaultStep = stepForContractState(contract.state);
+  const repo = liveContractRepoLabel(contract, repositoryContext);
+  const title = draft?.title || `Контракт ${shortContractId(contract.id)}`;
+  const intent = draft?.intent_summary || `Backend Contract aggregate для Goal ${contract.goal_id}.`;
+  const proposedScope = normalizeLiveList(draft?.proposed_scope, [`RepoBinding ${contract.repo_binding_id}`, `Goal ${contract.goal_id}`]);
+  const proposedNonGoals = normalizeLiveList(draft?.proposed_non_goals, ['Execution, gate и proof не отображаются этим read-only view.']);
+  const proposedAcceptance = normalizeLiveList(draft?.proposed_acceptance_criteria, ['Публичный Contract aggregate загружен из backend.']);
+  const proposedProof = normalizeLiveList(draft?.proposed_proof_expectations, ['Проверить read-only API response и UI state.']);
+  const expectedChecks = normalizeLiveList(draft?.proposed_expected_checks, ['Console typecheck/test/build']);
+
+  return {
+    id: contract.id,
+    title,
+    repo,
+    repoFilterValue: contract.repo_binding_id,
+    backendState: contract.state,
+    currentDraftId: contract.current_draft_id,
+    updatedAt: contract.updated_at,
+    backendContract: contract,
+    owner: `backend · ${stateLabel}`,
+    scopeSurface: draft ? 'current draft · read-only' : 'contract aggregate · read-only',
+    summary: intent,
+    defaultStep,
+    goal: intent,
+    intakeNotes: [
+      `Contract state: ${stateLabel}`,
+      `Goal: ${contract.goal_id}`,
+      `RepoBinding: ${contract.repo_binding_id}`,
+    ],
+    inScope: proposedScope,
+    outOfScope: proposedNonGoals,
+    acceptance: proposedAcceptance,
+    proofExpectations: proposedProof,
+    policyNote: 'Данные загружены через authenticated read-only Console endpoints. Workflow mutation controls не включены.',
+    clarifications: [
+      {
+        ref: 'contract-state',
+        question: 'Какой backend state у выбранного Contract?',
+        answer: stateLabel,
+        note: `updated_at: ${formatLiveDate(contract.updated_at)}`,
+      },
+      {
+        ref: 'repo-binding',
+        question: 'К какому repository context привязан Contract?',
+        answer: repo,
+        note: contract.repo_binding_id,
+      },
+      {
+        ref: 'current-draft',
+        question: 'Есть ли current draft?',
+        answer: contract.current_draft_id ? contract.current_draft_id : 'Нет linked current_draft_id',
+        note: draft ? 'Draft body загружен из /current-draft.' : 'Draft detail не загружен или отсутствует.',
+      },
+    ],
+    workItems: [
+      {
+        id: 'READ-01',
+        title: 'Read-only Contract aggregate',
+        lane: 'проверка/подтверждение',
+        scope: `GET /v1/contracts/${contract.id}`,
+        status: 'Загружено',
+        proofObligation: 'Не выполнять workflow mutation из Console.',
+      },
+      {
+        id: 'READ-02',
+        title: 'Current draft detail',
+        lane: 'проверка/подтверждение',
+        scope: contract.current_draft_id ? `GET /v1/contracts/${contract.id}/current-draft` : 'current_draft_id absent',
+        status: draft ? 'Загружено' : 'Недоступно',
+        proofObligation: 'Показывать только read-only draft fields.',
+      },
+    ],
+    evidence: [
+      { label: 'Contract ID', value: contract.id, tone: 'mauve' },
+      { label: 'State', value: stateLabel, tone: contractStateTone(contract.state) },
+      { label: 'Updated', value: formatLiveDate(contract.updated_at), tone: 'pass' },
+      { label: 'Current draft', value: contract.current_draft_id || 'нет', tone: contract.current_draft_id ? 'pass' : 'amber' },
+    ],
+    verification: expectedChecks.map((check) => ({
+      criterion: check,
+      support: draft ? 'proposed_expected_checks из current draft' : 'fallback Console verification',
+      outcome: 'Read-only',
+    })),
+    changed: proposedScope,
+    unchanged: proposedNonGoals,
+    trust: [
+      'Bearer token хранится только в React memory.',
+      'Страница читает backend Contract state и не пишет lifecycle state.',
+      'Repository context metadata не означает provider authorization или checkout readiness.',
+    ],
+    howToVerify: [
+      'Проверить `/v1/contracts?limit=50` после login.',
+      'Выбрать Contract row и проверить `/v1/contracts/{id}`.',
+      'Если есть current_draft_id, проверить `/v1/contracts/{id}/current-draft`.',
+    ],
+    activity: makeLiveActivity(contract, draft),
+  };
+}
+
+function normalizeLiveList(values: string[] | undefined, fallback: string[]) {
+  return Array.isArray(values) && values.length > 0 ? values : fallback;
+}
+
+function contractStateLabel(state: ContractResponse['state']) {
+  return state === 'ready_for_approval'
+    ? 'Ready for approval'
+    : state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+function contractStateTone(state: ContractResponse['state']): Tone {
+  return state === 'approved' ? 'pass' : state === 'ready_for_approval' ? 'amber' : 'mauve';
+}
+
+function stepForContractState(state: ContractResponse['state']): StepIndex {
+  return state === 'seeded' ? 1 : state === 'draft' ? 2 : state === 'ready_for_approval' ? 6 : 7;
+}
+
+function shortContractId(id: string) {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
+function formatLiveDate(value: string | undefined) {
+  if (!value) {
+    return 'unknown';
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return parsed.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function makeLiveActivity(contract: ContractResponse, draft: ContractDraftResponse | null) {
+  const stateLabel = contractStateLabel(contract.state);
+  return {
+    0: [{ kind: 'contract.loaded', note: `Contract ${contract.id} загружен из backend`, tone: 'mauve' as Tone }],
+    1: [{ kind: 'contract.state', note: `Lifecycle state: ${stateLabel}`, tone: contractStateTone(contract.state) }],
+    2: [{ kind: 'contract.detail', note: `Goal ${contract.goal_id} · RepoBinding ${contract.repo_binding_id}`, tone: 'mauve' as Tone }],
+    3: [{ kind: 'contract.readonly', note: 'Workflow mutation controls в Console не включены', tone: 'amber' as Tone }],
+    4: [{ kind: 'contract.updated', note: `Updated ${formatLiveDate(contract.updated_at)}`, tone: 'pass' as Tone }],
+    5: [{ kind: 'contract.checks', note: draft ? 'Expected checks получены из current draft' : 'Current draft недоступен', tone: draft ? 'pass' as Tone : 'amber' as Tone }],
+    6: [{ kind: 'contract.proof', note: draft ? 'Proof expectations получены из current draft' : 'Proof/gate остаются недоступны', tone: draft ? 'pass' as Tone : 'amber' as Tone }],
+    7: [{ kind: 'contract.decision', note: contract.state === 'approved' ? 'Contract approved в backend' : 'Human approval через Console не выполняется', tone: contract.state === 'approved' ? 'pass' as Tone : 'amber' as Tone }],
+  };
+}
+
+function mapMobileContractQueueItem(contract: ContractRecord): MobileContractQueueItem {
+  const stateLabel = contract.backendState ? contractStateLabel(contract.backendState) : getStatus(contract.defaultStep, 'pending');
+  const stage = STAGES[contract.defaultStep]?.name ?? 'Контракт';
+
+  return {
+    id: contract.id,
+    title: contract.title,
+    status: stateLabel,
+    tone: contract.backendState ? contractStateTone(contract.backendState) : getStatusTone(stateLabel),
+    stage,
+    stageProgress: contract.currentDraftId ? 'current draft linked' : `${contract.defaultStep + 1}/${STAGES.length}`,
+    policy: contract.policyNote,
+    humanDecision: contract.backendState === 'approved' ? 'Approved in backend' : 'Read-only in Console',
+    repo: contract.repo,
+    detail: {
+      changePacket: contract.summary,
+      evidence: contract.evidence.map((item) => `${item.label}: ${item.value}`).join(' · ') || 'Backend evidence unavailable',
+      projectContext: contract.goal,
+      decisionTrail: contract.trust.join(' · '),
+    },
+  };
+}
 
 const CONTRACTS: ContractRecord[] = [
   {
@@ -960,9 +1271,17 @@ function MobileDetailSection({ title, children }: { title: string; children: Rea
 
 function MobileContractsSurface({
   selectedContract,
+  contracts = MOBILE_CONTRACT_QUEUE,
+  contractsLabel = '3 активных контракта',
+  repositoryLabel = 'trialops-demo',
+  modeLabel = 'демо',
   onSelectContract,
 }: {
   selectedContract: MobileContractQueueItem;
+  contracts?: MobileContractQueueItem[];
+  contractsLabel?: string;
+  repositoryLabel?: string;
+  modeLabel?: string;
   onSelectContract: (contractId: string) => void;
 }) {
   return (
@@ -970,8 +1289,8 @@ function MobileContractsSurface({
       <section className="mobile-card">
         <div className="mobile-card-kicker">Контекст</div>
         <div className="mobile-stat-grid">
-          <MobileStat label="репозиторий" value="trialops-demo" />
-          <MobileStat label="контракты" value="3 активных контракта" tone="pass" />
+          <MobileStat label="репозиторий" value={repositoryLabel} />
+          <MobileStat label="контракты" value={contractsLabel} tone={contracts.length > 0 ? 'pass' : 'amber'} />
           <MobileStat label="выбранный контракт" value={selectedContract.id} />
           <MobileStat label="статус" value={selectedContract.status} tone={selectedContract.tone} />
         </div>
@@ -983,10 +1302,10 @@ function MobileContractsSurface({
             <div className="mobile-card-kicker">Очередь контрактов</div>
             <h2>Выберите для проверки</h2>
           </div>
-          <span className="status-pill mauve">демо</span>
+          <span className="status-pill mauve">{modeLabel}</span>
         </div>
         <div className="mobile-queue">
-          {MOBILE_CONTRACT_QUEUE.map((contract) => (
+          {contracts.map((contract) => (
             <button
               key={contract.id}
               className={cx('mobile-queue-row', selectedContract.id === contract.id && 'active')}
@@ -1217,14 +1536,47 @@ function MobileProofSurface({
   );
 }
 
-function MobileCompanionPreview() {
-  const [mobileSurface, setMobileSurface] = useState<ActiveSurface>('proof');
-  const [selectedMobileContractId, setSelectedMobileContractId] = useState('C-0147');
+function MobileCompanionPreview({ liveContracts }: { liveContracts?: DemoContractsLiveData }) {
+  const hasLiveContracts = Boolean(liveContracts);
+  const [mobileSurface, setMobileSurface] = useState<ActiveSurface>(() => (liveContracts ? 'contracts' : 'proof'));
+  const [selectedMobileContractId, setSelectedMobileContractId] = useState(() => liveContracts?.selectedContract?.id ?? 'C-0147');
   const [selectedMobileRepo, setSelectedMobileRepo] = useState<RepoId>('trialops-demo');
   const [selectedMobileProofId, setSelectedMobileProofId] = useState('PF-0147');
 
-  const selectedMobileContract = MOBILE_CONTRACT_QUEUE.find((contract) => contract.id === selectedMobileContractId) ?? MOBILE_CONTRACT_QUEUE[0];
+  const liveRepoLabel = liveContracts?.repositoryContext?.contexts[0]?.repo_binding.repository_full_name ?? 'backend';
+  const liveContractRecords = useMemo(() => {
+    if (!liveContracts) {
+      return [];
+    }
+
+    return liveContracts.contracts.map((contract) => (
+      mapLiveContract(contract, liveContracts.repositoryContext, liveContracts.selectedDraft)
+    ));
+  }, [liveContracts]);
+  const mobileContracts = hasLiveContracts
+    ? (liveContractRecords.length > 0 ? liveContractRecords.map(mapMobileContractQueueItem) : [mapMobileContractQueueItem(EMPTY_LIVE_CONTRACT)])
+    : MOBILE_CONTRACT_QUEUE;
+  const selectedMobileContract = mobileContracts.find((contract) => contract.id === selectedMobileContractId) ?? mobileContracts[0];
   const selectedMobileProof = PROOF_FEED.find((proof) => proof.id === selectedMobileProofId) ?? PROOF_FEED[0];
+
+  useEffect(() => {
+    if (!hasLiveContracts) {
+      return;
+    }
+
+    const nextContractId = liveContracts?.selectedContract?.id ?? mobileContracts[0]?.id;
+    if (nextContractId && !mobileContracts.some((contract) => contract.id === selectedMobileContractId)) {
+      setSelectedMobileContractId(nextContractId);
+    }
+  }, [hasLiveContracts, liveContracts?.selectedContract?.id, mobileContracts, selectedMobileContractId]);
+
+  const handleMobileContractSelect = (contractId: string) => {
+    setSelectedMobileContractId(contractId);
+    const selectedBackendContract = liveContractRecords.find((contract) => contract.id === contractId)?.backendContract;
+    if (selectedBackendContract) {
+      liveContracts?.onContractSelect(selectedBackendContract);
+    }
+  };
 
   return (
     <main className="mobile-companion">
@@ -1248,7 +1600,14 @@ function MobileCompanionPreview() {
       </nav>
 
       {mobileSurface === 'contracts' ? (
-        <MobileContractsSurface selectedContract={selectedMobileContract} onSelectContract={setSelectedMobileContractId} />
+        <MobileContractsSurface
+          contracts={mobileContracts}
+          contractsLabel={hasLiveContracts ? `${liveContracts?.contracts.length ?? 0} контрактов` : '3 активных контракта'}
+          modeLabel={hasLiveContracts ? 'Read-only API' : 'демо'}
+          repositoryLabel={hasLiveContracts ? liveRepoLabel : 'trialops-demo'}
+          selectedContract={selectedMobileContract}
+          onSelectContract={handleMobileContractSelect}
+        />
       ) : mobileSurface === 'readiness' ? (
         <MobileReadinessSurface selectedRepo={selectedMobileRepo} onSelectRepo={setSelectedMobileRepo} />
       ) : (
@@ -1883,9 +2242,10 @@ function ProofFeedBottomPanel({ selectedProof }: { selectedProof: ProofFeedItem 
   );
 }
 
-function DesktopConsole() {
+function DesktopConsole({ liveContracts }: { liveContracts?: DemoContractsLiveData }) {
+  const hasLiveContracts = Boolean(liveContracts);
   const [activeSurface, setActiveSurface] = useState<ActiveSurface>('contracts');
-  const [repoFilter, setRepoFilter] = useState<RepoFilter>('trialops-demo');
+  const [repoFilter, setRepoFilter] = useState<RepoFilter>(() => (liveContracts ? LIVE_ALL_REPOSITORIES_FILTER : 'trialops-demo'));
   const [repoSelectorOpen, setRepoSelectorOpen] = useState(false);
   const [contractSearch, setContractSearch] = useState('');
   const [repoSearch, setRepoSearch] = useState('');
@@ -1899,9 +2259,29 @@ function DesktopConsole() {
   const [visibleEvidence, setVisibleEvidence] = useState(0);
   const [visibleVerification, setVisibleVerification] = useState(0);
 
+  const liveRepoOptions = useMemo(() => makeLiveRepoOptions(liveContracts?.repositoryContext ?? null), [liveContracts?.repositoryContext]);
+  const liveRepoContexts = useMemo(() => makeLiveRepoContexts(liveContracts?.repositoryContext ?? null), [liveContracts?.repositoryContext]);
+  const liveContractRecords = useMemo(() => {
+    if (!liveContracts) {
+      return [];
+    }
+
+    return liveContracts.contracts.map((contract) => (
+      mapLiveContract(contract, liveContracts.repositoryContext, liveContracts.selectedDraft)
+    ));
+  }, [liveContracts]);
+  const contractSource = hasLiveContracts ? liveContractRecords : CONTRACTS;
+  const repoOptions = hasLiveContracts ? liveRepoOptions : REPO_OPTIONS;
+  const selectedLiveContractId = liveContracts?.selectedContract?.id;
+  const selectedLiveContract = selectedLiveContractId
+    ? liveContractRecords.find((contract) => contract.id === selectedLiveContractId)
+    : null;
+
   const repoScopedContracts = useMemo(() => {
-    return repoFilter === 'all' ? CONTRACTS : CONTRACTS.filter((contract) => contract.repo === repoFilter);
-  }, [repoFilter]);
+    return repoFilter === LIVE_ALL_REPOSITORIES_FILTER
+      ? contractSource
+      : contractSource.filter((contract) => (contract.repoFilterValue ?? contract.repo) === repoFilter);
+  }, [contractSource, repoFilter]);
 
   const visibleContracts = useMemo(() => {
     return repoScopedContracts.filter((contract) =>
@@ -1923,19 +2303,54 @@ function DesktopConsole() {
   }, [proofSearch]);
 
   useEffect(() => {
-    if (!repoScopedContracts.some((contract) => contract.id === selectedContractId)) {
-      setSelectedContractId(repoScopedContracts[0]?.id ?? CONTRACTS[0].id);
+    if (hasLiveContracts) {
+      if (selectedLiveContractId) {
+        setSelectedContractId(selectedLiveContractId);
+        return;
+      }
+      setSelectedContractId(repoScopedContracts[0]?.id ?? EMPTY_LIVE_CONTRACT.id);
+      return;
     }
-  }, [repoScopedContracts, selectedContractId]);
+
+    if (!repoScopedContracts.some((contract) => contract.id === selectedContractId)) {
+      const nextContract = repoScopedContracts[0];
+      if (nextContract) {
+        setSelectedContractId(nextContract.id);
+        return;
+      }
+
+      setSelectedContractId(CONTRACTS[0].id);
+    }
+  }, [hasLiveContracts, repoScopedContracts, selectedContractId, selectedLiveContractId]);
+
+  useEffect(() => {
+    if (selectedLiveContractId) {
+      setSelectedContractId(selectedLiveContractId);
+    }
+  }, [selectedLiveContractId]);
+
+  useEffect(() => {
+    if (hasLiveContracts) {
+      setRepoFilter(liveContracts?.repoBindingFilter ?? LIVE_ALL_REPOSITORIES_FILTER);
+    }
+  }, [hasLiveContracts, liveContracts?.repoBindingFilter]);
 
   const selectedContract = useMemo(() => {
-    return CONTRACTS.find((contract) => contract.id === selectedContractId) ?? CONTRACTS[0];
-  }, [selectedContractId]);
+    if (selectedLiveContract) {
+      return selectedLiveContract;
+    }
+    return contractSource.find((contract) => contract.id === selectedContractId)
+      ?? (hasLiveContracts ? EMPTY_LIVE_CONTRACT : CONTRACTS[0]);
+  }, [contractSource, hasLiveContracts, selectedContractId, selectedLiveContract]);
 
   const step = contractSteps[selectedContract.id] ?? selectedContract.defaultStep;
   const approval = approvalStates[selectedContract.id] ?? 'pending';
   const selectedStatus = getStatus(step, approval);
-  const projectContext = REPO_CONTEXTS[selectedContract.repo];
+  const projectContext =
+    (selectedContract.repoFilterValue ? liveRepoContexts[selectedContract.repoFilterValue] : undefined)
+    ?? REPO_CONTEXTS[selectedContract.repo as RepoId]
+    ?? Object.values(liveRepoContexts)[0]
+    ?? REPO_CONTEXTS['trialops-demo'];
   const meters = getMeters(step, approval);
   const activity = useMemo(() => getActivity(selectedContract, step, approval), [selectedContract, step, approval]);
   const selectedProof = useMemo(() => PROOF_FEED.find((item) => item.id === selectedProofId) ?? PROOF_FEED[0], [selectedProofId]);
@@ -2044,10 +2459,13 @@ function DesktopConsole() {
     setStepForSelected(7);
   };
 
-  const selectedRepoOption = REPO_OPTIONS.find((option) => option.value === repoFilter) ?? REPO_OPTIONS[0];
+  const selectedRepoOption = repoOptions.find((option) => option.value === repoFilter) ?? repoOptions[0];
 
   const handleRepoFilterSelect = (nextRepoFilter: RepoFilter) => {
     setRepoFilter(nextRepoFilter);
+    if (hasLiveContracts) {
+      liveContracts?.onRepoBindingFilterChange(nextRepoFilter);
+    }
     setRepoSelectorOpen(false);
   };
 
@@ -2176,7 +2594,7 @@ function DesktopConsole() {
                       </button>
                       {repoSelectorOpen ? (
                         <div className="repo-select-menu" role="listbox" aria-label="Переключатель репозитория">
-                          {REPO_OPTIONS.map((option) => (
+                          {repoOptions.map((option) => (
                             <button
                               key={option.value}
                               className={cx('repo-select-option', option.value === repoFilter && 'active')}
@@ -2186,18 +2604,57 @@ function DesktopConsole() {
                               onClick={() => handleRepoFilterSelect(option.value)}
                             >
                               <span>{option.label}</span>
-                              <b>{option.value === 'all' ? 'все' : CONTRACTS.filter((contract) => contract.repo === option.value).length}</b>
+                              <b>
+                                {option.value === LIVE_ALL_REPOSITORIES_FILTER
+                                  ? 'все'
+                                  : contractSource.filter((contract) => (contract.repoFilterValue ?? contract.repo) === option.value).length}
+                              </b>
                             </button>
                           ))}
                         </div>
                       ) : null}
                     </div>
                   </div>
+                  {hasLiveContracts ? (
+                    <div className="select-wrap">
+                      <span className="select-label">Статус</span>
+                      <select
+                        aria-label="Статус контрактов"
+                        className="native-select"
+                        value={liveContracts?.stateFilter ?? 'all'}
+                        onChange={(event) => liveContracts?.onStateFilterChange(event.target.value as ContractResponse['state'] | 'all')}
+                      >
+                        {LIVE_CONTRACT_STATE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                  {hasLiveContracts ? (
+                    <button className="live-refresh-button" type="button" onClick={liveContracts?.onRefresh}>
+                      {liveContracts?.contractListLoadStatus === 'loading' ? 'Обновляем' : 'Обновить'}
+                    </button>
+                  ) : null}
                   <div className="repo-hint-list">
-                    <span>trialops-demo · 3 контракта</span>
-                    <span>billing-api · 2 контракта</span>
-                    <span>Все репозитории доступны</span>
+                    {hasLiveContracts ? (
+                      <>
+                        <span>Backend discovery · {liveContracts?.contracts.length ?? 0} контрактов</span>
+                        <span>{liveContracts?.repositoryContext?.contexts.length ?? 0} repository context</span>
+                        <span>Read-only endpoints · без mutation controls</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>trialops-demo · 3 контракта</span>
+                        <span>billing-api · 2 контракта</span>
+                        <span>Все репозитории доступны</span>
+                      </>
+                    )}
                   </div>
+                  {hasLiveContracts && liveContracts?.contractListError ? (
+                    <div className="live-error" role="alert">{liveContracts.contractListError}</div>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -2225,7 +2682,12 @@ function DesktopConsole() {
                         key={contract.id}
                         className={cx('contract-row', isSelected && 'active', !isSelected && 'compact')}
                         type="button"
-                        onClick={() => setSelectedContractId(contract.id)}
+                        onClick={() => {
+                          setSelectedContractId(contract.id);
+                          if (hasLiveContracts && contract.backendContract) {
+                            liveContracts?.onContractSelect(contract.backendContract);
+                          }
+                        }}
                       >
                         <div className="contract-row-top">
                           <span className="contract-id">{contract.id}</span>
@@ -2248,7 +2710,17 @@ function DesktopConsole() {
                       </button>
                     );
                   })}
-                  {visibleContracts.length === 0 ? <div className="rail-empty">Контракты не найдены</div> : null}
+                  {visibleContracts.length === 0 ? (
+                    <div className="rail-empty">
+                      {hasLiveContracts && liveContracts?.contractListLoadStatus === 'loading'
+                        ? 'Загружаем контракты из backend'
+                        : hasLiveContracts && liveContracts?.contractListLoadStatus === 'error'
+                          ? 'Backend contract discovery недоступен'
+                          : hasLiveContracts
+                            ? 'Backend не вернул контракты по текущему фильтру'
+                            : 'Контракты не найдены'}
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : activeSurface === 'readiness' ? (
@@ -2308,8 +2780,12 @@ function DesktopConsole() {
 
           <div className="case">
             <div className="k">Режим</div>
-            <div className="v">Демо-разделы рабочей области</div>
-            <div className="sub">Только локальное демо-состояние · без бэкенда · без роутинга</div>
+            <div className="v">{hasLiveContracts ? 'Backend-backed Contracts' : 'Демо-разделы рабочей области'}</div>
+            <div className="sub">
+              {hasLiveContracts
+                ? 'Read-only API · без workflow mutation controls'
+                : 'Только локальное демо-состояние · без бэкенда · без роутинга'}
+            </div>
           </div>
         </aside>
 
@@ -2497,26 +2973,38 @@ function DesktopConsole() {
 
           <section className="panel-card control-card">
             <div className="panel-head">
-              <div className="t">Управление стадией</div>
-              <div className="id">Только демо-проход</div>
+              <div className="t">{hasLiveContracts ? 'Backend endpoints' : 'Управление стадией'}</div>
+              <div className="id">{hasLiveContracts ? 'Read-only surface' : 'Только демо-проход'}</div>
             </div>
-            <div className="control-copy">{getStepSummary(step)}</div>
+            <div className="control-copy">
+              {hasLiveContracts
+                ? 'Страница читает list/detail/current-draft/repository-context endpoints и не выполняет lifecycle mutations.'
+                : getStepSummary(step)}
+            </div>
             <div className="control-meta">
               <span>Репозиторий: {repoFilter === 'all' ? 'Все репозитории' : repoFilter}</span>
               <span>Репозиторий карточки: {selectedContract.repo}</span>
             </div>
             <div className="control-actions">
-              <button className="ghost-button" type="button" onClick={goBack} disabled={step === 0}>
-                Назад
-              </button>
-              {primaryActionLabel ? (
-                <button className="primary-button" type="button" onClick={step === 7 ? resetSelected : goNext}>
-                  {primaryActionLabel}
+              {hasLiveContracts ? (
+                <button className="primary-button" type="button" onClick={liveContracts?.onRefresh}>
+                  Обновить из backend
                 </button>
-              ) : null}
-              <button className="ghost-button" type="button" onClick={resetSelected}>
-                Сбросить
-              </button>
+              ) : (
+                <>
+                  <button className="ghost-button" type="button" onClick={goBack} disabled={step === 0}>
+                    Назад
+                  </button>
+                  {primaryActionLabel ? (
+                    <button className="primary-button" type="button" onClick={step === 7 ? resetSelected : goNext}>
+                      {primaryActionLabel}
+                    </button>
+                  ) : null}
+                  <button className="ghost-button" type="button" onClick={resetSelected}>
+                    Сбросить
+                  </button>
+                </>
+              )}
             </div>
           </section>
         </section>
@@ -2539,13 +3027,13 @@ function DesktopConsole() {
   );
 }
 
-function DemoContractsApp() {
+function DemoContractsApp({ liveContracts }: { liveContracts?: DemoContractsLiveData }) {
   const isMobileCompanion = useMobileCompanionBreakpoint();
 
-  return isMobileCompanion ? <MobileCompanionPreview /> : <DesktopConsole />;
+  return isMobileCompanion ? <MobileCompanionPreview liveContracts={liveContracts} /> : <DesktopConsole liveContracts={liveContracts} />;
 }
 
-export default function DemoContractsPage() {
+export default function DemoContractsPage({ liveContracts }: { liveContracts?: DemoContractsLiveData }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [shadowRoot, setShadowRoot] = useState<ShadowRoot | null>(null);
 
@@ -2566,7 +3054,7 @@ export default function DemoContractsPage() {
             <>
               <style>{demoContractsShadowCss}</style>
               <div id="root">
-                <DemoContractsApp />
+                <DemoContractsApp liveContracts={liveContracts} />
               </div>
             </>,
             shadowRoot

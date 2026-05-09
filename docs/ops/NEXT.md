@@ -193,17 +193,17 @@
   Delivery Readiness cards now use one frontend-projected primary status,
   D-0091 display priority, and calm browser-local timestamps while preserving
   read-only clarification question text and context.
-- The Console Contracts entry now renders the imported local RU demo contracts
-  page from `apps/web/demo-change-packet-ru` after authentication. This is a
-  visual demo port with local demo contracts/prefilled records only, isolated
-  from the rest of the Console CSS, and it must not be treated as backend
-  contract workflow behavior. The backend-bound read-only Contracts surface
-  code remains in source for follow-up work and consumes authenticated,
-  organization-scoped Contract discovery / detail endpoints:
+- The Console Contracts entry now renders the imported RU demo contracts page
+  shell from `apps/web/demo-change-packet-ru` after authentication, isolated
+  from the rest of the Console CSS, and backs its contract rows/detail/current
+  draft state with authenticated, organization-scoped read-only Contract
+  discovery / detail endpoints:
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
   `GET /v1/contracts/{id}`, and
   `GET /v1/contracts/{id}/current-draft`, plus metadata-only repository context
-  from `GET /v1/organizations/{organization_id}/repository-context`.
+  from `GET /v1/organizations/{organization_id}/repository-context`. It remains
+  a read-only Console surface and does not expose Contract lifecycle mutation
+  controls.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a

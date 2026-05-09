@@ -305,6 +305,15 @@ function expectNoWorkflowMutationRequests() {
   ))).toBe(false);
 }
 
+async function findDemoContractsShadowRoot() {
+  await waitFor(() => {
+    const host = document.querySelector('.demoContractsHost') as HTMLDivElement | null;
+    expect(host?.shadowRoot).toBeTruthy();
+  });
+
+  return (document.querySelector('.demoContractsHost') as HTMLDivElement).shadowRoot as ShadowRoot;
+}
+
 async function setLocale(locale: 'en' | 'ru') {
   await i18n.changeLanguage(locale);
   document.documentElement.lang = locale;
@@ -1500,6 +1509,54 @@ describe('App', () => {
     expect(workspace).not.toHaveTextContent(
       /Execution evidence|Work items|Stage controls|Record activity|Active stage|Queued proof|Active execution|Runner online|Runner active|Task plan|Gate decision|Contract state meters/i
     );
+  });
+
+  it('renders backend contract data inside the imported contracts page shell', async () => {
+    await loginSuccessfully('ru', 'owner', [
+      contractResponse({
+        id: 'backend-live-contract',
+        goal_id: 'backend-live-goal',
+        repo_binding_id: 'backend-live-repo-binding',
+        state: 'ready_for_approval',
+        current_seed_id: 'backend-live-seed',
+        current_draft_id: 'backend-live-draft',
+        updated_at: '2026-05-09T10:15:00Z',
+      }),
+    ], {
+      id: 'backend-live-draft',
+      contract_id: 'backend-live-contract',
+      contract_seed_id: 'backend-live-seed',
+      goal_id: 'backend-live-goal',
+      repo_binding_id: 'backend-live-repo-binding',
+      title: 'Backend live draft title',
+      intent_summary: 'Backend live draft intent summary.',
+      proposed_scope: ['Backend live scope item'],
+      proposed_non_goals: ['No browser lifecycle mutation'],
+      proposed_acceptance_criteria: ['Backend page shows current draft'],
+      proposed_expected_checks: ['Backend read-only smoke'],
+      proposed_proof_expectations: ['Backend proof expectation text'],
+      state: 'ready_for_approval',
+    }, [
+      repositoryContextRecord({
+        repoBindingId: 'backend-live-repo-binding',
+        repositoryFullName: 'heurema/backend-live',
+        projectDisplayName: 'Backend Live Project',
+      }),
+    ]);
+
+    const shadowRoot = await findDemoContractsShadowRoot();
+
+    await waitFor(() => {
+      expect(shadowRoot.textContent).toContain('backend-live-contract');
+      expect(shadowRoot.textContent).toContain('Backend live draft title');
+    });
+    expect(shadowRoot.textContent).toContain('heurema/backend-live');
+    expect(shadowRoot.textContent).toContain('Backend live draft intent summary.');
+    expect(shadowRoot.textContent).toContain('Backend live scope item');
+    expect(shadowRoot.textContent).toContain('No browser lifecycle mutation');
+    expect(shadowRoot.textContent).toContain('Read-only API');
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toContain('/v1/contracts/backend-live-contract/current-draft');
+    expectNoWorkflowMutationRequests();
   });
 
   it('does not call current draft detail when the selected Contract has no current_draft_id', async () => {

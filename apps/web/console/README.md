@@ -21,10 +21,9 @@ Current scope:
 - access and refresh tokens are held in React memory only
 - left navigation with Contracts, Delivery Readiness, and Proof product
   surfaces; the current authenticated Contracts entry renders the imported
-  `apps/web/demo-change-packet-ru` demo contracts page with local demo state
-  only, isolated from the rest of the Console CSS. This is a visual demo port,
-  not a backend-backed contract workflow claim. The existing read-only Contract
-  clients remain in source for the backend-bound surface:
+  `apps/web/demo-change-packet-ru` demo contracts page shell, isolated from
+  the rest of the Console CSS, and backs its Contract rows/detail/current draft
+  data with the existing authenticated read-only Contract endpoints:
   `GET /v1/contracts`, `GET /v1/contracts/{id}`, and
   `GET /v1/contracts/{id}/current-draft`, plus read-only Organization /
   Project / Repository context metadata from
@@ -81,16 +80,15 @@ Delivery rule:
   `draft_contract` controls; linked contract cards expose `Open contract`
   navigation only, which loads the selected contract through
   `GET /v1/contracts/{id}`
-- The current Contracts entry is the imported local RU demo contracts UI. The
-  backend-bound Contracts surface code remains available in source and consumes
+- The current Contracts entry is the imported RU demo contracts UI backed by
   authenticated, organization-scoped read-only Contract discovery at
   `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
   loads `GET /v1/contracts?limit=50` by default, supports state and
-  repo-binding filters plus manual refresh, keeps manual ID lookup as a
-  secondary fallback, and shows selected detail through authenticated,
+  repo-binding filters plus manual refresh, and shows selected detail through
+  authenticated,
   organization-scoped, read-only `GET /v1/contracts/{id}` as the compact public
   Contract aggregate only
-- The backend-bound Contracts surface code also uses `/v1/me` to determine
+- The Contracts surface also uses `/v1/me` to determine
   `organization_id` and reads
   `GET /v1/organizations/{organization_id}/repository-context` for a compact
   metadata-only context panel. If the selected Contract
@@ -209,11 +207,10 @@ wait/cursor semantics, SSE, WebSocket, a daemon, or an event stream.
   main user flow.
 - Delivery Readiness shows qualification state and handoff to Contracts, not
   lifecycle controls.
-- The backend-bound Contracts surface code is read-only, lists contracts from
-  discovery, supports state and repo-binding filtering plus manual refresh,
-  and can show selected detail or a manual ID lookup result. The current
-  authenticated Contracts entry renders the imported local RU demo page
-  instead.
+- The current imported RU demo Contracts shell is read-only, lists contracts
+  from backend discovery, supports state and repo-binding filtering plus manual
+  refresh, and shows selected detail/current draft from the backend-backed
+  selected Contract state.
 
 D-0091 display behavior:
 - Delivery Readiness cards show one frontend-projected primary status instead
