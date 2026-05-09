@@ -107,54 +107,55 @@ related_docs:
 61. `docs/adr/ADR-0029-run-execution-receipt-boundary.md`
 62. `docs/adr/ADR-0030-bounded-command-execution-boundary.md`
 63. `docs/adr/ADR-0031-project-command-execution-boundary.md`
+64. `docs/adr/ADR-0032-typed-project-test-command-boundary.md`
 
 ### 7. Governance and change control
-64. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-65. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-66. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-67. `docs/product/GOALRAIL_RULE_STACK.md`
+65. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+66. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+67. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+68. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-68. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-69. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-70. `docs/ops/STATUS.md`
-71. `docs/ops/NEXT.md`
-72. `docs/ops/DECISIONS.md`
-73. `docs/ops/COMPONENTS.yaml`
-74. `docs/ops/INIT_LIFECYCLE.md`
-75. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-76. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-77. `docs/ops/BRANCH_PROTECTION.md`
-78. `docs/ops/REPO_STRUCTURE.md`
-79. `docs/ops/GO_CODE_GUIDE.md`
-80. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-81. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-82. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-83. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-84. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-85. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-86. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-87. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-88. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-89. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-90. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-91. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-92. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-93. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+69. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+70. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+71. `docs/ops/STATUS.md`
+72. `docs/ops/NEXT.md`
+73. `docs/ops/DECISIONS.md`
+74. `docs/ops/COMPONENTS.yaml`
+75. `docs/ops/INIT_LIFECYCLE.md`
+76. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+77. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+78. `docs/ops/BRANCH_PROTECTION.md`
+79. `docs/ops/REPO_STRUCTURE.md`
+80. `docs/ops/GO_CODE_GUIDE.md`
+81. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+82. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+83. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+84. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+85. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+86. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+87. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+88. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+89. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+90. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+91. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+92. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+93. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+94. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-94. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-95. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-96. `docs/reference/design/reference_screens/`
-97. `docs/reference/start-assistant/`
-98. `.goalrail/work/`
-99. `.goalrail/knowledge/`
-100. `.goalrail/public-kb/manifest.yaml`
-101. `.punk/publishing.toml`
-102. `.goalrail/flows/`
-103. `.goalrail/evals/`
-104. `docs/ops/PUBLISHING_MIGRATION.md`
-105. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+95. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+96. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+97. `docs/reference/design/reference_screens/`
+98. `docs/reference/start-assistant/`
+99. `.goalrail/work/`
+100. `.goalrail/knowledge/`
+101. `.goalrail/public-kb/manifest.yaml`
+102. `.punk/publishing.toml`
+103. `.goalrail/flows/`
+104. `.goalrail/evals/`
+105. `docs/ops/PUBLISHING_MIGRATION.md`
+106. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -257,6 +258,11 @@ related_docs:
   allowlisted project probes only, no shell, no arbitrary command strings, no
   user-provided argv, one command receipt per Run, and project command
   receipts as evidence inputs rather than gate verdicts or proof
+- `ADR-0032` — typed project test command boundary; H2.6 direction for a
+  server-owned `project_test/run_declared_test_target` shape derived from
+  project-probe metadata, with no shell, no user-provided argv, disabled
+  stdout/stderr capture for the first slice, one command receipt per Run, and
+  test receipts as evidence inputs rather than gate verdicts or proof
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
