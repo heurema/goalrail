@@ -2826,6 +2826,11 @@ func (s *fakeExecutionReceiptStore) Create(_ context.Context, receipt spine.Exec
 	return nil
 }
 
+func (s *fakeExecutionReceiptStore) Get(_ context.Context, id spine.ExecutionReceiptID) (spine.ExecutionReceipt, bool, error) {
+	receipt, ok := s.receipts[id]
+	return receipt, ok, nil
+}
+
 func (s *fakeExecutionReceiptStore) GetByRun(_ context.Context, runID spine.RunID) (spine.ExecutionReceipt, bool, error) {
 	receiptID, ok := s.byRun[runID]
 	if !ok {
@@ -3043,7 +3048,7 @@ func (g *sequenceIDs) NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID,
 
 func (g *sequenceIDs) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
 	g.executionReceipt++
-	return spine.ExecutionReceiptID(fmt.Sprintf("execution-receipt-%d", g.executionReceipt)), nil
+	return spine.ExecutionReceiptID(fmt.Sprintf("018f0000-0000-7000-8004-%012d", g.executionReceipt)), nil
 }
 
 func testTime() time.Time {

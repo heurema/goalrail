@@ -49,6 +49,11 @@ const (
 	ExecutionReceiptNextActionPlannedSlice = "I"
 )
 
+const (
+	ExecutionCommandPlanNextActionRunnerProjectTestRequired = "runner_project_test_required"
+	ExecutionCommandPlanNextActionProjectTestPlannedSlice   = "H2.6.2"
+)
+
 type ExecutionCommandPlanState string
 
 const (
@@ -60,6 +65,8 @@ const (
 	ExecutionCommandActionWorkspaceStatus   = "workspace_status"
 	ExecutionCommandKindProjectProbe        = "project_probe"
 	ExecutionCommandActionDetectTestTargets = "detect_declared_test_targets"
+	ExecutionCommandKindProjectTest         = "project_test"
+	ExecutionCommandActionRunTestTarget     = "run_declared_test_target"
 )
 
 type ExecutionJob struct {
@@ -149,41 +156,66 @@ type Run struct {
 }
 
 type ExecutionCommandPlanCreateRequest struct {
-	ProjectID     ProjectID       `json:"project_id,omitempty"`
-	RepoBindingID RepoBindingID   `json:"repo_binding_id,omitempty"`
-	CommandKind   string          `json:"command_kind,omitempty"`
-	Action        string          `json:"action,omitempty"`
-	Shell         json.RawMessage `json:"shell,omitempty"`
-	ShellAllowed  json.RawMessage `json:"shell_allowed,omitempty"`
-	Argv          json.RawMessage `json:"argv,omitempty"`
-	Command       string          `json:"command,omitempty"`
-	CommandString string          `json:"command_string,omitempty"`
-	UserCommand   string          `json:"user_command,omitempty"`
+	ProjectID             ProjectID          `json:"project_id,omitempty"`
+	RepoBindingID         RepoBindingID      `json:"repo_binding_id,omitempty"`
+	CommandKind           string             `json:"command_kind,omitempty"`
+	Action                string             `json:"action,omitempty"`
+	ProjectProbeReceiptID ExecutionReceiptID `json:"project_probe_receipt_id,omitempty"`
+	SelectedTargetID      string             `json:"selected_target_id,omitempty"`
+	Shell                 json.RawMessage    `json:"shell,omitempty"`
+	ShellAllowed          json.RawMessage    `json:"shell_allowed,omitempty"`
+	Argv                  json.RawMessage    `json:"argv,omitempty"`
+	Command               string             `json:"command,omitempty"`
+	CommandString         string             `json:"command_string,omitempty"`
+	UserCommand           string             `json:"user_command,omitempty"`
+	RunAllTests           json.RawMessage    `json:"run_all_tests,omitempty"`
+	StdoutCapture         json.RawMessage    `json:"stdout_capture,omitempty"`
+	StderrCapture         json.RawMessage    `json:"stderr_capture,omitempty"`
+	ArtifactsAllowed      json.RawMessage    `json:"artifacts_allowed,omitempty"`
+	ArtifactRefs          json.RawMessage    `json:"artifact_refs,omitempty"`
+	AllowedArtifactKinds  json.RawMessage    `json:"allowed_artifact_kinds,omitempty"`
+	ChangedPathsAllowed   json.RawMessage    `json:"changed_paths_allowed,omitempty"`
+	ChangedPathsSummary   json.RawMessage    `json:"changed_paths_summary,omitempty"`
+	RawSourceUpload       json.RawMessage    `json:"raw_source_upload,omitempty"`
+	RawSourceUploaded     json.RawMessage    `json:"raw_source_uploaded,omitempty"`
+	RawSourceAllowed      json.RawMessage    `json:"raw_source_upload_allowed,omitempty"`
+	NetworkAllowed        json.RawMessage    `json:"network_allowed,omitempty"`
+	WriteAllowed          json.RawMessage    `json:"write_allowed,omitempty"`
+	WorkspaceWriteAllowed json.RawMessage    `json:"workspace_write_allowed,omitempty"`
+	ScratchWriteAllowed   json.RawMessage    `json:"scratch_write_allowed,omitempty"`
 }
 
 type ExecutionCommandPlan struct {
-	ID                     ExecutionCommandPlanID    `json:"id"`
-	OrganizationID         OrganizationID            `json:"-"`
-	ProjectID              ProjectID                 `json:"project_id"`
-	RepoBindingID          RepoBindingID             `json:"repo_binding_id"`
-	TaskID                 WorkItemID                `json:"task_id"`
-	CheckoutReceiptID      CheckoutReceiptID         `json:"checkout_receipt_id"`
-	ExecutionJobID         ExecutionJobID            `json:"execution_job_id"`
-	RunID                  RunID                     `json:"run_id"`
-	CommandKind            string                    `json:"command_kind"`
-	Action                 string                    `json:"action"`
-	ShellAllowed           bool                      `json:"shell_allowed"`
-	Argv                   []string                  `json:"argv"`
-	WorkingDirectory       string                    `json:"working_directory"`
-	PathScope              []string                  `json:"path_scope"`
-	TimeoutSeconds         int                       `json:"timeout_seconds"`
-	MaxStdoutBytes         int                       `json:"max_stdout_bytes"`
-	MaxStderrBytes         int                       `json:"max_stderr_bytes"`
-	AllowedArtifactKinds   []string                  `json:"allowed_artifact_kinds"`
-	RawSourceUploadAllowed bool                      `json:"raw_source_upload_allowed"`
-	State                  ExecutionCommandPlanState `json:"state"`
-	CreatedAt              time.Time                 `json:"created_at"`
-	UpdatedAt              time.Time                 `json:"updated_at"`
+	ID                          ExecutionCommandPlanID           `json:"id"`
+	OrganizationID              OrganizationID                   `json:"-"`
+	ProjectID                   ProjectID                        `json:"project_id"`
+	RepoBindingID               RepoBindingID                    `json:"repo_binding_id"`
+	TaskID                      WorkItemID                       `json:"task_id"`
+	CheckoutReceiptID           CheckoutReceiptID                `json:"checkout_receipt_id"`
+	ExecutionJobID              ExecutionJobID                   `json:"execution_job_id"`
+	RunID                       RunID                            `json:"run_id"`
+	CommandKind                 string                           `json:"command_kind"`
+	Action                      string                           `json:"action"`
+	SourceProjectProbeReceiptID *ExecutionReceiptID              `json:"source_project_probe_receipt_id,omitempty"`
+	SelectedTargetID            string                           `json:"selected_target_id,omitempty"`
+	DeclaredTestTarget          *ProjectProbeTestTargetCandidate `json:"declared_test_target,omitempty"`
+	ShellAllowed                bool                             `json:"shell_allowed"`
+	Argv                        []string                         `json:"argv"`
+	WorkingDirectory            string                           `json:"working_directory"`
+	PathScope                   []string                         `json:"path_scope"`
+	TimeoutSeconds              int                              `json:"timeout_seconds"`
+	NetworkAllowed              bool                             `json:"network_allowed"`
+	WorkspaceWriteAllowed       bool                             `json:"workspace_write_allowed"`
+	ScratchWriteAllowed         bool                             `json:"scratch_write_allowed"`
+	MaxStdoutBytes              int                              `json:"max_stdout_bytes"`
+	MaxStderrBytes              int                              `json:"max_stderr_bytes"`
+	AllowedArtifactKinds        []string                         `json:"allowed_artifact_kinds"`
+	ChangedPathsAllowed         bool                             `json:"changed_paths_allowed"`
+	RawSourceUploadAllowed      bool                             `json:"raw_source_upload_allowed"`
+	State                       ExecutionCommandPlanState        `json:"state"`
+	CreatedAt                   time.Time                        `json:"created_at"`
+	UpdatedAt                   time.Time                        `json:"updated_at"`
+	NextAction                  *ExecutionNextAction             `json:"next_action,omitempty"`
 }
 
 type ExecutionReceiptSubmitRequest struct {

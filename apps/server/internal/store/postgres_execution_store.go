@@ -774,6 +774,17 @@ func (s *PostgresExecutionCommandPlanStore) Create(ctx context.Context, plan spi
 	if err != nil {
 		return fmt.Errorf("marshal execution command plan allowed artifacts: %w", err)
 	}
+	declaredTestTarget, err := json.Marshal(declaredTestTargetPayload(plan.DeclaredTestTarget))
+	if err != nil {
+		return fmt.Errorf("marshal execution command plan declared test target: %w", err)
+	}
+	var sourceProjectProbeReceiptID any
+	if plan.SourceProjectProbeReceiptID != nil {
+		sourceProjectProbeReceiptID, err = uuidValue(*plan.SourceProjectProbeReceiptID, "execution command plan source project probe receipt id")
+		if err != nil {
+			return err
+		}
+	}
 	stmt := s.psql.
 		Insert("execution_command_plans").
 		Columns(
@@ -787,14 +798,21 @@ func (s *PostgresExecutionCommandPlanStore) Create(ctx context.Context, plan spi
 			"run_id",
 			"command_kind",
 			"action",
+			"source_project_probe_receipt_id",
+			"selected_target_id",
+			"declared_test_target",
 			"shell_allowed",
 			"argv",
 			"working_directory",
 			"path_scope",
 			"timeout_seconds",
+			"network_allowed",
+			"workspace_write_allowed",
+			"scratch_write_allowed",
 			"max_stdout_bytes",
 			"max_stderr_bytes",
 			"allowed_artifact_kinds",
+			"changed_paths_allowed",
 			"raw_source_upload_allowed",
 			"state",
 			"created_at",
@@ -811,14 +829,21 @@ func (s *PostgresExecutionCommandPlanStore) Create(ctx context.Context, plan spi
 			runID,
 			plan.CommandKind,
 			plan.Action,
+			sourceProjectProbeReceiptID,
+			plan.SelectedTargetID,
+			declaredTestTarget,
 			plan.ShellAllowed,
 			argv,
 			plan.WorkingDirectory,
 			pathScope,
 			plan.TimeoutSeconds,
+			plan.NetworkAllowed,
+			plan.WorkspaceWriteAllowed,
+			plan.ScratchWriteAllowed,
 			plan.MaxStdoutBytes,
 			plan.MaxStderrBytes,
 			allowedArtifacts,
+			plan.ChangedPathsAllowed,
 			plan.RawSourceUploadAllowed,
 			plan.State,
 			plan.CreatedAt.UTC(),
@@ -883,6 +908,8 @@ func scanExecutionCommandPlan(row pgx.Row) (spine.ExecutionCommandPlan, error) {
 	var jobID string
 	var runID string
 	var state string
+	var sourceProjectProbeReceiptID pgtype.UUID
+	var declaredTestTarget []byte
 	var argv []byte
 	var pathScope []byte
 	var allowedArtifacts []byte
@@ -897,14 +924,21 @@ func scanExecutionCommandPlan(row pgx.Row) (spine.ExecutionCommandPlan, error) {
 		&runID,
 		&plan.CommandKind,
 		&plan.Action,
+		&sourceProjectProbeReceiptID,
+		&plan.SelectedTargetID,
+		&declaredTestTarget,
 		&plan.ShellAllowed,
 		&argv,
 		&plan.WorkingDirectory,
 		&pathScope,
 		&plan.TimeoutSeconds,
+		&plan.NetworkAllowed,
+		&plan.WorkspaceWriteAllowed,
+		&plan.ScratchWriteAllowed,
 		&plan.MaxStdoutBytes,
 		&plan.MaxStderrBytes,
 		&allowedArtifacts,
+		&plan.ChangedPathsAllowed,
 		&plan.RawSourceUploadAllowed,
 		&state,
 		&plan.CreatedAt,
@@ -921,6 +955,15 @@ func scanExecutionCommandPlan(row pgx.Row) (spine.ExecutionCommandPlan, error) {
 	plan.ExecutionJobID = spine.ExecutionJobID(jobID)
 	plan.RunID = spine.RunID(runID)
 	plan.State = spine.ExecutionCommandPlanState(state)
+	if value := uuidString(sourceProjectProbeReceiptID); value != "" {
+		receiptID := spine.ExecutionReceiptID(value)
+		plan.SourceProjectProbeReceiptID = &receiptID
+	}
+	target, err := decodeDeclaredTestTarget(declaredTestTarget)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, err
+	}
+	plan.DeclaredTestTarget = target
 	if err := json.Unmarshal(argv, &plan.Argv); err != nil {
 		return spine.ExecutionCommandPlan{}, fmt.Errorf("unmarshal execution command plan argv: %w", err)
 	}
@@ -947,19 +990,47 @@ func executionCommandPlanColumns() []string {
 		"run_id",
 		"command_kind",
 		"action",
+		"source_project_probe_receipt_id",
+		"selected_target_id",
+		"declared_test_target",
 		"shell_allowed",
 		"argv",
 		"working_directory",
 		"path_scope",
 		"timeout_seconds",
+		"network_allowed",
+		"workspace_write_allowed",
+		"scratch_write_allowed",
 		"max_stdout_bytes",
 		"max_stderr_bytes",
 		"allowed_artifact_kinds",
+		"changed_paths_allowed",
 		"raw_source_upload_allowed",
 		"state",
 		"created_at",
 		"updated_at",
 	}
+}
+
+func declaredTestTargetPayload(target *spine.ProjectProbeTestTargetCandidate) any {
+	if target == nil {
+		return map[string]string{}
+	}
+	return *target
+}
+
+func decodeDeclaredTestTarget(payload []byte) (*spine.ProjectProbeTestTargetCandidate, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	var target spine.ProjectProbeTestTargetCandidate
+	if err := json.Unmarshal(payload, &target); err != nil {
+		return nil, fmt.Errorf("unmarshal execution command plan declared test target: %w", err)
+	}
+	if target.Name == "" && target.SourcePath == "" && target.SourceKind == "" {
+		return nil, nil
+	}
+	return &target, nil
 }
 
 type PostgresExecutionReceiptStore struct {
@@ -1113,6 +1184,26 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 		return err
 	}
 	return nil
+}
+
+func (s *PostgresExecutionReceiptStore) Get(ctx context.Context, id spine.ExecutionReceiptID) (spine.ExecutionReceipt, bool, error) {
+	parsedID, err := uuidValue(id, "execution receipt id")
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	stmt := s.psql.Select(executionReceiptColumns()...).From("execution_receipts").Where(squirrel.Eq{"id": parsedID})
+	row, err := queryRow(ctx, s.query, "get execution receipt", stmt)
+	if err != nil {
+		return spine.ExecutionReceipt{}, false, err
+	}
+	receipt, err := scanExecutionReceipt(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.ExecutionReceipt{}, false, nil
+		}
+		return spine.ExecutionReceipt{}, false, fmt.Errorf("get execution receipt: %w", err)
+	}
+	return receipt, true, nil
 }
 
 func (s *PostgresExecutionReceiptStore) GetByRun(ctx context.Context, runID spine.RunID) (spine.ExecutionReceipt, bool, error) {

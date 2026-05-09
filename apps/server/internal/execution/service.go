@@ -44,6 +44,7 @@ var (
 	ErrExecutionJobNotFound         = errors.New("execution job not found")
 	ErrRunNotFound                  = errors.New("run not found")
 	ErrExecutionCommandPlanNotFound = errors.New("execution command plan not found")
+	ErrExecutionReceiptNotFound     = errors.New("execution receipt not found")
 	ErrInvalidWorkItemState         = errors.New("work item state does not allow execution preparation")
 	ErrInvalidCheckoutState         = errors.New("checkout job state does not allow execution preparation")
 	ErrInvalidExecutionState        = errors.New("execution job state does not allow this transition")
@@ -126,6 +127,7 @@ type ExecutionCommandPlanStore interface {
 
 type ExecutionReceiptStore interface {
 	Create(context.Context, spine.ExecutionReceipt) error
+	Get(context.Context, spine.ExecutionReceiptID) (spine.ExecutionReceipt, bool, error)
 	GetByRun(context.Context, spine.RunID) (spine.ExecutionReceipt, bool, error)
 }
 
@@ -473,10 +475,17 @@ func (s *Service) CreateOrReturnCommandPlan(ctx context.Context, runID spine.Run
 	if job.State != spine.ExecutionJobStateRunStarted {
 		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
 	}
+	policy, err = s.prepareCommandPlanPolicy(ctx, input, run, job, policy)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, false, err
+	}
 	if existing, ok, err := s.CommandPlans.GetByRunAndAction(ctx, run.ID, policy.CommandKind, policy.Action); err != nil {
 		return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get execution command plan by run and action: %w", err)
 	} else if ok {
-		return existing, false, nil
+		if !commandPlanMatchesPolicy(existing, policy) {
+			return spine.ExecutionCommandPlan{}, false, ErrInvalidCommandPlan
+		}
+		return decorateCommandPlanForResponse(existing), false, nil
 	}
 	planID, err := s.IDs.NewExecutionCommandPlanID()
 	if err != nil {
@@ -501,13 +510,26 @@ func (s *Service) CreateOrReturnCommandPlan(ctx context.Context, runID spine.Run
 		TimeoutSeconds:         policy.TimeoutSeconds,
 		MaxStdoutBytes:         policy.MaxStdoutBytes,
 		MaxStderrBytes:         policy.MaxStderrBytes,
+		NetworkAllowed:         policy.NetworkAllowed,
+		WorkspaceWriteAllowed:  policy.WorkspaceWriteAllowed,
+		ScratchWriteAllowed:    policy.ScratchWriteAllowed,
+		ChangedPathsAllowed:    policy.ChangedPathsAllowed,
 		AllowedArtifactKinds:   []string{},
 		RawSourceUploadAllowed: false,
 		State:                  spine.ExecutionCommandPlanStatePlanned,
 		CreatedAt:              now,
 		UpdatedAt:              now,
 	}
-	event, err := s.event(EventTypeExecutionCommandPlanCreated, EntityTypeExecutionCommandPlan, string(plan.ID), plan.OrganizationID, plan.ProjectID, plan.RepoBindingID, now, map[string]any{
+	if policy.SourceProjectProbeReceiptID != nil {
+		sourceReceiptID := *policy.SourceProjectProbeReceiptID
+		plan.SourceProjectProbeReceiptID = &sourceReceiptID
+	}
+	if policy.DeclaredTestTarget != nil {
+		target := *policy.DeclaredTestTarget
+		plan.SelectedTargetID = policy.SelectedTargetID
+		plan.DeclaredTestTarget = &target
+	}
+	eventPayload := map[string]any{
 		"execution_command_plan_id": plan.ID,
 		"run_id":                    plan.RunID,
 		"execution_job_id":          plan.ExecutionJobID,
@@ -516,7 +538,12 @@ func (s *Service) CreateOrReturnCommandPlan(ctx context.Context, runID spine.Run
 		"repo_binding_id":           plan.RepoBindingID,
 		"command_kind":              plan.CommandKind,
 		"action":                    plan.Action,
-	})
+	}
+	if plan.SourceProjectProbeReceiptID != nil {
+		eventPayload["source_project_probe_receipt_id"] = *plan.SourceProjectProbeReceiptID
+		eventPayload["selected_target_id"] = plan.SelectedTargetID
+	}
+	event, err := s.event(EventTypeExecutionCommandPlanCreated, EntityTypeExecutionCommandPlan, string(plan.ID), plan.OrganizationID, plan.ProjectID, plan.RepoBindingID, now, eventPayload)
 	if err != nil {
 		return spine.ExecutionCommandPlan{}, false, err
 	}
@@ -532,11 +559,14 @@ func (s *Service) CreateOrReturnCommandPlan(ctx context.Context, runID spine.Run
 		if existing, ok, lookupErr := s.CommandPlans.GetByRunAndAction(ctx, run.ID, policy.CommandKind, policy.Action); lookupErr != nil {
 			return spine.ExecutionCommandPlan{}, false, fmt.Errorf("get execution command plan by run and action after create failure: %w", lookupErr)
 		} else if ok {
-			return existing, false, nil
+			if !commandPlanMatchesPolicy(existing, policy) {
+				return spine.ExecutionCommandPlan{}, false, ErrInvalidCommandPlan
+			}
+			return decorateCommandPlanForResponse(existing), false, nil
 		}
 		return spine.ExecutionCommandPlan{}, false, err
 	}
-	return plan, true, nil
+	return decorateCommandPlanForResponse(plan), true, nil
 }
 
 func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input spine.ExecutionReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error) {
@@ -790,13 +820,20 @@ func validateRunStartInput(input spine.RunStartRequest) error {
 }
 
 type commandPlanPolicy struct {
-	CommandKind      string
-	Action           string
-	WorkingDirectory string
-	PathScope        []string
-	TimeoutSeconds   int
-	MaxStdoutBytes   int
-	MaxStderrBytes   int
+	CommandKind                 string
+	Action                      string
+	WorkingDirectory            string
+	PathScope                   []string
+	TimeoutSeconds              int
+	NetworkAllowed              bool
+	WorkspaceWriteAllowed       bool
+	ScratchWriteAllowed         bool
+	MaxStdoutBytes              int
+	MaxStderrBytes              int
+	ChangedPathsAllowed         bool
+	SourceProjectProbeReceiptID *spine.ExecutionReceiptID
+	SelectedTargetID            string
+	DeclaredTestTarget          *spine.ProjectProbeTestTargetCandidate
 }
 
 func commandPlanPolicyForInput(input spine.ExecutionCommandPlanCreateRequest) (commandPlanPolicy, error) {
@@ -824,6 +861,30 @@ func commandPlanPolicyForInput(input spine.ExecutionCommandPlanCreateRequest) (c
 	if strings.TrimSpace(input.UserCommand) != "" {
 		return commandPlanPolicy{}, &ValidationError{Field: "user_command", Message: "is not allowed"}
 	}
+	for _, field := range []struct {
+		name  string
+		value json.RawMessage
+	}{
+		{name: "run_all_tests", value: input.RunAllTests},
+		{name: "stdout_capture", value: input.StdoutCapture},
+		{name: "stderr_capture", value: input.StderrCapture},
+		{name: "artifacts_allowed", value: input.ArtifactsAllowed},
+		{name: "artifact_refs", value: input.ArtifactRefs},
+		{name: "allowed_artifact_kinds", value: input.AllowedArtifactKinds},
+		{name: "changed_paths_allowed", value: input.ChangedPathsAllowed},
+		{name: "changed_paths_summary", value: input.ChangedPathsSummary},
+		{name: "raw_source_upload", value: input.RawSourceUpload},
+		{name: "raw_source_uploaded", value: input.RawSourceUploaded},
+		{name: "raw_source_upload_allowed", value: input.RawSourceAllowed},
+		{name: "network_allowed", value: input.NetworkAllowed},
+		{name: "write_allowed", value: input.WriteAllowed},
+		{name: "workspace_write_allowed", value: input.WorkspaceWriteAllowed},
+		{name: "scratch_write_allowed", value: input.ScratchWriteAllowed},
+	} {
+		if len(field.value) != 0 {
+			return commandPlanPolicy{}, &ValidationError{Field: field.name, Message: "is server-owned and must be omitted"}
+		}
+	}
 	kind := strings.TrimSpace(input.CommandKind)
 	action := strings.TrimSpace(input.Action)
 	if kind == "" && action == "" {
@@ -832,6 +893,12 @@ func commandPlanPolicyForInput(input spine.ExecutionCommandPlanCreateRequest) (c
 	}
 	switch {
 	case kind == spine.ExecutionCommandKindBuiltinDiagnostic && action == spine.ExecutionCommandActionWorkspaceStatus:
+		if strings.TrimSpace(string(input.ProjectProbeReceiptID)) != "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "project_probe_receipt_id", Message: "must be omitted for builtin_diagnostic command plans"}
+		}
+		if strings.TrimSpace(input.SelectedTargetID) != "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "must be omitted for builtin_diagnostic command plans"}
+		}
 		return commandPlanPolicy{
 			CommandKind:      spine.ExecutionCommandKindBuiltinDiagnostic,
 			Action:           spine.ExecutionCommandActionWorkspaceStatus,
@@ -842,6 +909,12 @@ func commandPlanPolicyForInput(input spine.ExecutionCommandPlanCreateRequest) (c
 			MaxStderrBytes:   0,
 		}, nil
 	case kind == spine.ExecutionCommandKindProjectProbe && action == spine.ExecutionCommandActionDetectTestTargets:
+		if strings.TrimSpace(string(input.ProjectProbeReceiptID)) != "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "project_probe_receipt_id", Message: "must be omitted for project_probe command plans"}
+		}
+		if strings.TrimSpace(input.SelectedTargetID) != "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "must be omitted for project_probe command plans"}
+		}
 		return commandPlanPolicy{
 			CommandKind:      spine.ExecutionCommandKindProjectProbe,
 			Action:           spine.ExecutionCommandActionDetectTestTargets,
@@ -851,13 +924,172 @@ func commandPlanPolicyForInput(input spine.ExecutionCommandPlanCreateRequest) (c
 			MaxStdoutBytes:   0,
 			MaxStderrBytes:   0,
 		}, nil
+	case kind == spine.ExecutionCommandKindProjectTest && action == spine.ExecutionCommandActionRunTestTarget:
+		if strings.TrimSpace(string(input.ProjectProbeReceiptID)) == "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "project_probe_receipt_id", Message: "is required for project_test command plans"}
+		}
+		if err := validateUUIDv7Field("project_probe_receipt_id", string(input.ProjectProbeReceiptID)); err != nil {
+			return commandPlanPolicy{}, err
+		}
+		if strings.TrimSpace(input.SelectedTargetID) == "" {
+			return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "is required for project_test command plans"}
+		}
+		sourceReceiptID := input.ProjectProbeReceiptID
+		return commandPlanPolicy{
+			CommandKind:                 spine.ExecutionCommandKindProjectTest,
+			Action:                      spine.ExecutionCommandActionRunTestTarget,
+			WorkingDirectory:            ".",
+			PathScope:                   []string{"."},
+			TimeoutSeconds:              120,
+			NetworkAllowed:              false,
+			WorkspaceWriteAllowed:       false,
+			ScratchWriteAllowed:         false,
+			MaxStdoutBytes:              0,
+			MaxStderrBytes:              0,
+			ChangedPathsAllowed:         false,
+			SourceProjectProbeReceiptID: &sourceReceiptID,
+			SelectedTargetID:            strings.TrimSpace(input.SelectedTargetID),
+		}, nil
 	case kind == spine.ExecutionCommandKindBuiltinDiagnostic:
 		return commandPlanPolicy{}, &ValidationError{Field: "action", Message: "must be workspace_status"}
 	case kind == spine.ExecutionCommandKindProjectProbe:
 		return commandPlanPolicy{}, &ValidationError{Field: "action", Message: "must be detect_declared_test_targets"}
+	case kind == spine.ExecutionCommandKindProjectTest:
+		return commandPlanPolicy{}, &ValidationError{Field: "action", Message: "must be run_declared_test_target"}
 	default:
-		return commandPlanPolicy{}, &ValidationError{Field: "command_kind", Message: "must be builtin_diagnostic or project_probe"}
+		return commandPlanPolicy{}, &ValidationError{Field: "command_kind", Message: "must be builtin_diagnostic, project_probe, or project_test"}
 	}
+}
+
+func validateUUIDv7Field(field string, value string) error {
+	id, err := uuid.Parse(strings.TrimSpace(value))
+	if err != nil {
+		return &ValidationError{Field: field, Message: "must be a UUID"}
+	}
+	if id.Version() != 7 {
+		return &ValidationError{Field: field, Message: "must be a UUIDv7"}
+	}
+	return nil
+}
+
+func (s *Service) prepareCommandPlanPolicy(ctx context.Context, input spine.ExecutionCommandPlanCreateRequest, run spine.Run, job spine.ExecutionJob, policy commandPlanPolicy) (commandPlanPolicy, error) {
+	if policy.CommandKind != spine.ExecutionCommandKindProjectTest {
+		return policy, nil
+	}
+	if policy.SourceProjectProbeReceiptID == nil {
+		return commandPlanPolicy{}, &ValidationError{Field: "project_probe_receipt_id", Message: "is required for project_test command plans"}
+	}
+	probeReceipt, ok, err := s.ExecutionReceipts.Get(ctx, *policy.SourceProjectProbeReceiptID)
+	if err != nil {
+		return commandPlanPolicy{}, fmt.Errorf("get project probe execution receipt: %w", err)
+	}
+	if !ok {
+		return commandPlanPolicy{}, ErrExecutionReceiptNotFound
+	}
+	if probeReceipt.ExecutionMode != spine.ExecutionReceiptModeProjectProbe ||
+		probeReceipt.CommandKind != spine.ExecutionCommandKindProjectProbe ||
+		probeReceipt.Action != spine.ExecutionCommandActionDetectTestTargets ||
+		probeReceipt.ProjectProbeMetadata == nil {
+		return commandPlanPolicy{}, ErrInvalidCommandPlan
+	}
+	if probeReceipt.TaskID != job.TaskID ||
+		probeReceipt.CheckoutReceiptID != job.CheckoutReceiptID ||
+		probeReceipt.RepoBindingID != job.RepoBindingID ||
+		probeReceipt.TaskID != run.TaskID ||
+		probeReceipt.CheckoutReceiptID != run.CheckoutReceiptID {
+		return commandPlanPolicy{}, ErrInvalidCommandPlan
+	}
+	target, ok := findProjectProbeTarget(*probeReceipt.ProjectProbeMetadata, policy.SelectedTargetID)
+	if !ok {
+		return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "must match a declared project_probe test target"}
+	}
+	if !isSupportedProjectTestTarget(target) {
+		return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "uses an unsupported target family"}
+	}
+	if !isSafeRelativePath(target.SourcePath) {
+		return commandPlanPolicy{}, &ValidationError{Field: "selected_target_id", Message: "must point inside path_scope"}
+	}
+	selected := target
+	policy.DeclaredTestTarget = &selected
+	return policy, nil
+}
+
+func findProjectProbeTarget(metadata spine.ProjectProbeMetadata, selectedTargetID string) (spine.ProjectProbeTestTargetCandidate, bool) {
+	normalized := normalizeProjectProbeMetadata(metadata)
+	for _, candidate := range normalized.DeclaredTestTargetCandidates {
+		candidate = normalizeProjectProbeTarget(candidate)
+		if projectProbeTargetID(candidate) == selectedTargetID {
+			return candidate, true
+		}
+	}
+	return spine.ProjectProbeTestTargetCandidate{}, false
+}
+
+func normalizeProjectProbeTarget(candidate spine.ProjectProbeTestTargetCandidate) spine.ProjectProbeTestTargetCandidate {
+	candidate.Name = strings.TrimSpace(candidate.Name)
+	candidate.SourcePath = strings.TrimSpace(candidate.SourcePath)
+	candidate.SourceKind = strings.TrimSpace(candidate.SourceKind)
+	return candidate
+}
+
+func projectProbeTargetID(candidate spine.ProjectProbeTestTargetCandidate) string {
+	candidate = normalizeProjectProbeTarget(candidate)
+	return candidate.SourcePath + "#" + candidate.SourceKind + ":" + candidate.Name
+}
+
+func isSupportedProjectTestTarget(candidate spine.ProjectProbeTestTargetCandidate) bool {
+	candidate = normalizeProjectProbeTarget(candidate)
+	if candidate.SourceKind != "package_json_script" {
+		return false
+	}
+	return candidate.Name == "test" || strings.HasPrefix(candidate.Name, "test:")
+}
+
+func commandPlanMatchesPolicy(plan spine.ExecutionCommandPlan, policy commandPlanPolicy) bool {
+	if plan.CommandKind != policy.CommandKind ||
+		plan.Action != policy.Action ||
+		plan.WorkingDirectory != policy.WorkingDirectory ||
+		plan.TimeoutSeconds != policy.TimeoutSeconds ||
+		plan.MaxStdoutBytes != policy.MaxStdoutBytes ||
+		plan.MaxStderrBytes != policy.MaxStderrBytes ||
+		plan.NetworkAllowed != policy.NetworkAllowed ||
+		plan.WorkspaceWriteAllowed != policy.WorkspaceWriteAllowed ||
+		plan.ScratchWriteAllowed != policy.ScratchWriteAllowed ||
+		plan.ChangedPathsAllowed != policy.ChangedPathsAllowed ||
+		plan.ShellAllowed ||
+		plan.RawSourceUploadAllowed ||
+		len(plan.Argv) != 0 ||
+		len(plan.AllowedArtifactKinds) != 0 ||
+		len(plan.PathScope) != len(policy.PathScope) {
+		return false
+	}
+	for i := range plan.PathScope {
+		if plan.PathScope[i] != policy.PathScope[i] {
+			return false
+		}
+	}
+	if policy.SourceProjectProbeReceiptID == nil {
+		return plan.SourceProjectProbeReceiptID == nil && plan.SelectedTargetID == "" && plan.DeclaredTestTarget == nil
+	}
+	if plan.SourceProjectProbeReceiptID == nil || *plan.SourceProjectProbeReceiptID != *policy.SourceProjectProbeReceiptID || plan.SelectedTargetID != policy.SelectedTargetID {
+		return false
+	}
+	if policy.DeclaredTestTarget == nil || plan.DeclaredTestTarget == nil {
+		return policy.DeclaredTestTarget == nil && plan.DeclaredTestTarget == nil
+	}
+	return *plan.DeclaredTestTarget == *policy.DeclaredTestTarget
+}
+
+func decorateCommandPlanForResponse(plan spine.ExecutionCommandPlan) spine.ExecutionCommandPlan {
+	if plan.CommandKind == spine.ExecutionCommandKindProjectTest && plan.Action == spine.ExecutionCommandActionRunTestTarget {
+		plan.NextAction = &spine.ExecutionNextAction{
+			Kind:         spine.ExecutionCommandPlanNextActionRunnerProjectTestRequired,
+			Blocking:     true,
+			Available:    false,
+			PlannedSlice: spine.ExecutionCommandPlanNextActionProjectTestPlannedSlice,
+		}
+	}
+	return plan
 }
 
 func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {

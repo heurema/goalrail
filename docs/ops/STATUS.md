@@ -21,7 +21,7 @@ related_docs:
 ---
 # Goalrail Status
 
-Last updated: 2026-05-08
+Last updated: 2026-05-09
 Status: planning / product canon and pilot frame active; first local Go CLI with
 local Project Scan baseline / overlay commands and Go server intent-plane /
 public Contract aggregate and `/v1/contracts` lifecycle façade / read-only
@@ -64,7 +64,13 @@ allowlisted manifest/config files, with no shell, no arbitrary command strings,
 no user-provided argv, no stdout/stderr capture, no artifacts, no changed
 paths, no project test execution, one command receipt per Run, and Gate /
 Proof still deferred; ADR-0032 now defines the H2.6 typed project test command
-boundary as docs-first only, with no test execution implementation yet;
+boundary, and H2.6.1 now implements server-side plan preparation only:
+`ExecutionCommandPlan(project_test/run_declared_test_target)` can be created or
+returned from a matching `ExecutionReceipt(project_probe)` selected target,
+with no runner test execution, no `ExecutionReceipt(project_test)`, no shell,
+no arbitrary command string, no user-provided argv, no stdout/stderr capture, no
+artifacts, no changed paths, no raw source upload, no GateDecision, no Proof,
+and no WorkItem status transition;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -182,7 +188,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- thirty-one kernel/CLI/server/domain boundary ADRs
+- thirty-two kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -270,13 +276,17 @@ The project currently has:
   receipt per Run. H2.5.1+ smoke coverage pins the project-probe command plan,
   receipt metadata, fail-closed policy checks, and no raw manifest-body upload
   without adding product behavior.
-- ADR-0032 documents the H2.6 typed project test command boundary before
-  implementation. It defines `project_test/run_declared_test_target` as the
-  first allowed shape for a future server-owned plan derived from
-  project-probe metadata, but no H2.6 code exists yet. Shell, arbitrary command
-  strings, user-provided argv, "run all tests", stdout/stderr capture,
-  artifacts, changed paths, raw source upload, GateDecision, Proof, WorkItem
-  status transitions, and multi-command Runs remain deferred.
+- ADR-0032 documents the H2.6 typed project test command boundary. H2.6.1 now
+  implements server-side command plan preparation only:
+  `ExecutionCommandPlan(project_test/run_declared_test_target)` is derived from
+  a matching `ExecutionReceipt(project_probe)` and one selected declared target.
+  It records source receipt / target metadata, `working_directory`,
+  `path_scope`, timeout, network/write/output/artifact/raw-source policy, and
+  an unavailable `runner_project_test_required` next action for H2.6.2. It does
+  not execute tests, create `ExecutionReceipt(project_test)`, accept shell,
+  arbitrary command strings, user-provided argv, "run all tests",
+  stdout/stderr capture, artifacts, changed paths, raw source upload,
+  GateDecision, Proof, WorkItem status transitions, or multi-command Runs.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -449,7 +459,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and thirty-one boundary ADRs exist
+- kernel schema note and thirty-two boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -628,10 +638,11 @@ The project currently has:
   Gate, Proof, WorkItem status transitions, and runner trust hardening stay
   deferred. H2.5.1+ smoke coverage pins those regression boundaries without
   adding command execution behavior
-- ADR-0032 defines the next typed project test command boundary as docs-first
-  only. The future `project_test/run_declared_test_target` shape must be
-  server-owned, derived from project-probe metadata, one command per Run, and
-  evidence-only; no project test execution implementation has landed
+- ADR-0032 defines the typed project test command boundary, and H2.6.1
+  implements only server-side `project_test/run_declared_test_target` command
+  plan preparation from project-probe metadata. Runner test execution,
+  `ExecutionReceipt(project_test)`, stdout/stderr capture, artifacts, Gate, and
+  Proof remain deferred
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
