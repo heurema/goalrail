@@ -23,11 +23,13 @@ const (
 	EventTypeRunStarted                  = "run.started"
 	EventTypeExecutionCommandPlanCreated = "execution_command_plan.created"
 	EventTypeExecutionReceiptSubmitted   = "execution_receipt.submitted"
+	EventTypeRunnerCapabilityReported    = "runner_capability_report.created"
 
 	EntityTypeExecutionJob         = "ExecutionJob"
 	EntityTypeRun                  = "Run"
 	EntityTypeExecutionCommandPlan = "ExecutionCommandPlan"
 	EntityTypeExecutionReceipt     = "ExecutionReceipt"
+	EntityTypeRunnerCapability     = "RunnerCapabilityReport"
 
 	ExecutionModePrepareV0 = "prepare_v0"
 
@@ -131,6 +133,10 @@ type ExecutionReceiptStore interface {
 	GetByRun(context.Context, spine.RunID) (spine.ExecutionReceipt, bool, error)
 }
 
+type RunnerCapabilityReportStore interface {
+	Create(context.Context, spine.RunnerCapabilityReport) error
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
@@ -149,22 +155,24 @@ type IDGenerator interface {
 	NewRunID() (spine.RunID, error)
 	NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error)
 	NewExecutionReceiptID() (spine.ExecutionReceiptID, error)
+	NewRunnerCapabilityReportID() (spine.RunnerCapabilityReportID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
-	WorkItems         WorkItemReader
-	RepoBindings      RepoBindingReader
-	CheckoutReceipts  CheckoutReceiptReader
-	CheckoutJobs      CheckoutJobReader
-	Jobs              JobStore
-	Runs              RunStore
-	CommandPlans      ExecutionCommandPlanStore
-	ExecutionReceipts ExecutionReceiptStore
-	Events            EventLog
-	TxRunner          TransactionRunner
-	Clock             Clock
-	IDs               IDGenerator
+	WorkItems          WorkItemReader
+	RepoBindings       RepoBindingReader
+	CheckoutReceipts   CheckoutReceiptReader
+	CheckoutJobs       CheckoutJobReader
+	Jobs               JobStore
+	Runs               RunStore
+	CommandPlans       ExecutionCommandPlanStore
+	ExecutionReceipts  ExecutionReceiptStore
+	RunnerCapabilities RunnerCapabilityReportStore
+	Events             EventLog
+	TxRunner           TransactionRunner
+	Clock              Clock
+	IDs                IDGenerator
 }
 
 func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, commandPlans ExecutionCommandPlanStore, executionReceipts ExecutionReceiptStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
@@ -182,6 +190,67 @@ func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checko
 		Clock:             clock,
 		IDs:               ids,
 	}
+}
+
+func (s *Service) CreateRunnerCapabilityReport(ctx context.Context, input spine.RunnerCapabilityReportCreateRequest, membership spine.OrganizationMembership) (spine.RunnerCapabilityReport, error) {
+	if err := validateRunnerCapabilityReportInput(input); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if err := requireActiveMembership(membership); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if strings.TrimSpace(string(input.OrganizationID)) != "" && input.OrganizationID != membership.OrganizationID {
+		return spine.RunnerCapabilityReport{}, ErrOrganizationForbidden
+	}
+	if err := s.validateLeaseScope(ctx, input.ProjectID, input.RepoBindingID, membership); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if s.RunnerCapabilities == nil {
+		return spine.RunnerCapabilityReport{}, errors.New("runner capability report store is not configured")
+	}
+	reportID, err := s.IDs.NewRunnerCapabilityReportID()
+	if err != nil {
+		return spine.RunnerCapabilityReport{}, fmt.Errorf("new runner capability report id: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	report := spine.RunnerCapabilityReport{
+		ID:                              reportID,
+		RunnerID:                        strings.TrimSpace(input.RunnerID),
+		OrganizationID:                  membership.OrganizationID,
+		ProjectID:                       input.ProjectID,
+		RepoBindingID:                   input.RepoBindingID,
+		NetworkIsolationDeclared:        input.NetworkIsolationDeclared,
+		WorkspaceWriteIsolationDeclared: input.WorkspaceWriteIsolationDeclared,
+		ProcessTreeControlDeclared:      input.ProcessTreeControlDeclared,
+		StdoutStderrPolicyDeclared:      input.StdoutStderrPolicyDeclared,
+		ArtifactPolicyDeclared:          input.ArtifactPolicyDeclared,
+		TrustState:                      spine.RunnerCapabilityTrustSelfDeclaredUntrusted,
+		ReportedAt:                      now,
+		CreatedAt:                       now,
+		UpdatedAt:                       now,
+	}
+	event, err := s.event(EventTypeRunnerCapabilityReported, EntityTypeRunnerCapability, string(report.ID), report.OrganizationID, report.ProjectID, report.RepoBindingID, now, map[string]any{
+		"runner_capability_report_id": report.ID,
+		"runner_id":                   report.RunnerID,
+		"project_id":                  report.ProjectID,
+		"repo_binding_id":             report.RepoBindingID,
+		"trust_state":                 report.TrustState,
+	})
+	if err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.RunnerCapabilities.Create(txCtx, report); err != nil {
+			return fmt.Errorf("create runner capability report: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append runner capability report event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	return report, nil
 }
 
 func (s *Service) CreateOrReturnJob(ctx context.Context, taskID spine.WorkItemID, input spine.ExecutionJobCreateRequest, membership spine.OrganizationMembership) (spine.ExecutionJob, bool, error) {
@@ -865,6 +934,42 @@ func validateCreateInput(input spine.ExecutionJobCreateRequest) error {
 	}
 	if err := validateActor("requested_by", input.RequestedBy); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateRunnerCapabilityReportInput(input spine.RunnerCapabilityReportCreateRequest) error {
+	if strings.TrimSpace(input.RunnerID) == "" {
+		return &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.ProjectID)) == "" {
+		return &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) == "" {
+		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.TrustState) == "" {
+		return &ValidationError{Field: "trust_state", Message: "is required"}
+	}
+	if strings.TrimSpace(input.TrustState) != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+		return &ValidationError{Field: "trust_state", Message: "must be " + spine.RunnerCapabilityTrustSelfDeclaredUntrusted}
+	}
+	for _, field := range []struct {
+		name  string
+		value json.RawMessage
+	}{
+		{name: "network_enforcement", value: input.NetworkEnforcement},
+		{name: "workspace_write_enforcement", value: input.WorkspaceWriteEnforcement},
+		{name: "process_tree_enforcement", value: input.ProcessTreeEnforcement},
+		{name: "network_isolation_enforced", value: input.NetworkIsolationEnforced},
+		{name: "workspace_write_isolation_enforced", value: input.WorkspaceWriteIsolationEnforced},
+		{name: "process_tree_control_enforced", value: input.ProcessTreeControlEnforced},
+		{name: "attestation", value: input.Attestation},
+		{name: "trust_evidence", value: input.TrustEvidence},
+	} {
+		if len(field.value) != 0 {
+			return &ValidationError{Field: field.name, Message: "is deferred to a later runner trust boundary"}
+		}
 	}
 	return nil
 }
@@ -1707,6 +1812,14 @@ func (UUIDGenerator) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
 		return "", err
 	}
 	return spine.ExecutionReceiptID(id.String()), nil
+}
+
+func (UUIDGenerator) NewRunnerCapabilityReportID() (spine.RunnerCapabilityReportID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.RunnerCapabilityReportID(id.String()), nil
 }
 
 func (UUIDGenerator) NewEventID() (spine.EventID, error) {

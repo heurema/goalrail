@@ -59,6 +59,7 @@ type RouteHandlers struct {
 	RunCommandPlans               http.Handler
 	RunCommandPlan                http.Handler
 	RunReceipts                   http.Handler
+	RunnerCapabilityReports       http.Handler
 	ClarificationAnswers          http.Handler
 	ClarificationAnswerApply      http.Handler
 }
@@ -123,6 +124,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/runs/{id}/command-plans", mustHandler("run command plans", handlers.RunCommandPlans))
 	mux.Handle("GET /v1/runs/{id}/command-plans/{kind}/{action}", mustHandler("run command plan", handlers.RunCommandPlan))
 	mux.Handle("POST /v1/runs/{id}/receipts", mustHandler("run receipts", handlers.RunReceipts))
+	mux.Handle("POST /v1/runner-capability-reports", mustHandler("runner capability reports", handlers.RunnerCapabilityReports))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

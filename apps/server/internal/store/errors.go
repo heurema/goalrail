@@ -59,6 +59,8 @@ var (
 	ErrExecutionReceiptAlreadyExists      = errors.New("execution receipt already exists")
 	ErrExecutionReceiptAlreadySubmitted   = errors.New("run already has execution receipt")
 	ErrExecutionReceiptNotFound           = errors.New("execution receipt not found")
+
+	ErrRunnerCapabilityReportAlreadyExists = errors.New("runner capability report already exists")
 )
 
 type uniqueConstraintError struct {

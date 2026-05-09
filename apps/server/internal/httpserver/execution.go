@@ -16,6 +16,7 @@ type ExecutionService interface {
 	CreateOrReturnCommandPlan(context.Context, spine.RunID, spine.ExecutionCommandPlanCreateRequest, spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error)
 	GetCommandPlan(context.Context, spine.RunID, string, string, spine.OrganizationMembership) (spine.ExecutionCommandPlan, error)
 	SubmitReceipt(context.Context, spine.RunID, spine.ExecutionReceiptSubmitRequest, spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error)
+	CreateRunnerCapabilityReport(context.Context, spine.RunnerCapabilityReportCreateRequest, spine.OrganizationMembership) (spine.RunnerCapabilityReport, error)
 }
 
 type ExecutionHandler struct {
@@ -155,6 +156,25 @@ func (h *ExecutionHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request)
 		status = http.StatusCreated
 	}
 	RespondJSON(w, status, receipt)
+}
+
+func (h *ExecutionHandler) CreateRunnerCapabilityReport(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	var input spine.RunnerCapabilityReportCreateRequest
+	if err := decodeStrictJSON(r.Body, &input); err != nil {
+		respondInvalidJSON(w)
+		return
+	}
+	report, err := h.service.CreateRunnerCapabilityReport(r.Context(), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusCreated, report)
 }
 
 func (h *ExecutionHandler) respondServiceError(w http.ResponseWriter, err error) {

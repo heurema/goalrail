@@ -46,7 +46,7 @@ func main() {
 	workspaceRoot := strings.TrimSpace(os.Getenv("GOALRAIL_RUNNER_WORKSPACE_ROOT"))
 
 	flags := flag.NewFlagSet("goalrail-runner", flag.ExitOnError)
-	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, execution-start, execution-receipt, execution-diagnostic, execution-project-probe, or execution-project-test; also configurable with GOALRAIL_RUNNER_MODE")
+	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, capability-report, execution-start, execution-receipt, execution-diagnostic, execution-project-probe, or execution-project-test; also configurable with GOALRAIL_RUNNER_MODE")
 	flags.StringVar(&cfg.ServerURL, "server-url", cfg.ServerURL, "Goalrail API server URL; also configurable with GOALRAIL_RUNNER_SERVER_URL")
 	flags.StringVar(&cfg.ProjectID, "project-id", cfg.ProjectID, "Project scope for runner leases; also configurable with GOALRAIL_RUNNER_PROJECT_ID")
 	flags.StringVar(&cfg.RepoBindingID, "repo-binding-id", cfg.RepoBindingID, "RepoBinding scope for runner leases; also configurable with GOALRAIL_RUNNER_REPO_BINDING_ID")
@@ -70,6 +70,15 @@ func main() {
 	switch strings.TrimSpace(mode) {
 	case "checkout":
 		err = checkoutrunner.Run(ctx, cfg)
+	case "capability-report":
+		err = executionrunner.ReportCapabilities(ctx, executionrunner.Config{
+			ServerURL:     cfg.ServerURL,
+			BearerToken:   cfg.BearerToken,
+			ProjectID:     cfg.ProjectID,
+			RepoBindingID: cfg.RepoBindingID,
+			RunnerID:      cfg.RunnerID,
+			LogWriter:     cfg.LogWriter,
+		})
 	case "execution-start":
 		err = executionrunner.Run(ctx, executionrunner.Config{
 			ServerURL:       cfg.ServerURL,
