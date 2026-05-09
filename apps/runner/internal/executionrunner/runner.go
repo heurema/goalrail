@@ -25,6 +25,7 @@ type Config struct {
 	SubmitReceipt     bool
 	BuiltinDiagnostic bool
 	ProjectProbe      bool
+	ProjectTest       bool
 	PollInterval      time.Duration
 	LeaseTTLSeconds   int
 	Once              bool
@@ -193,6 +194,53 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 			}
 		}
 		r.logger.Printf("submitted project probe execution receipt receipt_id=%s run_id=%s execution_job_id=%s command_plan_id=%s", receipt.ID, receipt.RunID, receipt.ExecutionJobID, receipt.CommandPlanID)
+		return StepReceiptSubmitted, nil
+	}
+	if r.config.ProjectTest {
+		plan, err := r.client.getCommandPlan(ctx, run.ID, "project_test", "run_declared_test_target")
+		if err != nil {
+			return "", err
+		}
+		if err := r.validateProjectTestPlan(plan, lease, run); err != nil {
+			return "", err
+		}
+		startedAt := time.Now().UTC()
+		result := rejectProjectTestExecution()
+		finishedAt := time.Now().UTC()
+		receipt, err := r.client.submitReceipt(ctx, run.ID, executionReceiptRequest{
+			ExecutionJobID:      run.ExecutionJobID,
+			LeaseID:             lease.ID,
+			LeaseToken:          lease.LeaseToken,
+			RunnerID:            r.config.RunnerID,
+			WorkspaceRef:        r.config.WorkspaceRef,
+			CommitSHA:           r.config.CommitSHA,
+			BaselineID:          r.config.BaselineID,
+			OverlayID:           r.config.OverlayID,
+			ExecutionMode:       "project_test",
+			CommandPlanID:       plan.ID,
+			CommandKind:         "project_test",
+			Action:              "run_declared_test_target",
+			ProcessStatus:       result.ProcessStatus,
+			ExitCode:            result.ExitCode,
+			ArtifactRefs:        []string{},
+			ChangedPathsSummary: []string{},
+			RawSourceUploaded:   false,
+			RunnerStartedAt:     &startedAt,
+			RunnerFinishedAt:    &finishedAt,
+		})
+		if err != nil {
+			switch apiErrorCode(err) {
+			case "lease_expired":
+				r.logger.Printf("execution lease expired before project test receipt execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepLeaseExpired, nil
+			case "invalid_lease":
+				r.logger.Printf("execution lease rejected before project test receipt execution_job_id=%s task_id=%s; abandoning receipt", lease.ExecutionJobID, lease.TaskID)
+				return StepInvalidLease, nil
+			default:
+				return "", err
+			}
+		}
+		r.logger.Printf("submitted project test execution receipt receipt_id=%s run_id=%s execution_job_id=%s command_plan_id=%s process_status=%s", receipt.ID, receipt.RunID, receipt.ExecutionJobID, receipt.CommandPlanID, result.ProcessStatus)
 		return StepReceiptSubmitted, nil
 	}
 	if r.config.BuiltinDiagnostic {
@@ -411,7 +459,7 @@ func validateConfig(config Config) error {
 		return errors.New("runner id is required")
 	}
 	activeReceiptModes := 0
-	for _, enabled := range []bool{config.SubmitReceipt, config.BuiltinDiagnostic, config.ProjectProbe} {
+	for _, enabled := range []bool{config.SubmitReceipt, config.BuiltinDiagnostic, config.ProjectProbe, config.ProjectTest} {
 		if enabled {
 			activeReceiptModes++
 		}
@@ -419,7 +467,7 @@ func validateConfig(config Config) error {
 	if activeReceiptModes > 1 {
 		return errors.New("execution receipt modes are mutually exclusive")
 	}
-	if config.SubmitReceipt || config.BuiltinDiagnostic || config.ProjectProbe {
+	if config.SubmitReceipt || config.BuiltinDiagnostic || config.ProjectProbe || config.ProjectTest {
 		if strings.TrimSpace(config.WorkspaceRef) == "" {
 			return errors.New("workspace ref is required for execution receipt mode")
 		}
@@ -429,6 +477,9 @@ func validateConfig(config Config) error {
 	}
 	if config.ProjectProbe && strings.TrimSpace(config.WorkspaceRoot) == "" {
 		return errors.New("workspace root is required for project probe mode")
+	}
+	if config.ProjectTest && strings.TrimSpace(config.WorkspaceRoot) == "" {
+		return errors.New("workspace root is required for project test mode")
 	}
 	if config.PollInterval < 0 {
 		return errors.New("poll interval must be non-negative")

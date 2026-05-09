@@ -57,6 +57,7 @@ type RouteHandlers struct {
 	ExecutionJobLeases            http.Handler
 	ExecutionJobRuns              http.Handler
 	RunCommandPlans               http.Handler
+	RunCommandPlan                http.Handler
 	RunReceipts                   http.Handler
 	ClarificationAnswers          http.Handler
 	ClarificationAnswerApply      http.Handler
@@ -120,6 +121,7 @@ func NewRouter(handlers RouteHandlers) http.Handler {
 	mux.Handle("POST /v1/execution-jobs/leases", mustHandler("execution job leases", handlers.ExecutionJobLeases))
 	mux.Handle("POST /v1/execution-jobs/{id}/runs", mustHandler("execution job runs", handlers.ExecutionJobRuns))
 	mux.Handle("POST /v1/runs/{id}/command-plans", mustHandler("run command plans", handlers.RunCommandPlans))
+	mux.Handle("GET /v1/runs/{id}/command-plans/{kind}/{action}", mustHandler("run command plan", handlers.RunCommandPlan))
 	mux.Handle("POST /v1/runs/{id}/receipts", mustHandler("run receipts", handlers.RunReceipts))
 	mux.Handle("POST /v1/clarifications/{id}/answers", mustHandler("clarification answers", handlers.ClarificationAnswers))
 	mux.Handle("POST /v1/answers/{id}/applications", mustHandler("clarification answer apply", handlers.ClarificationAnswerApply))

@@ -151,6 +151,32 @@ func (c *apiClient) createCommandPlan(ctx context.Context, runID string, input e
 	return decoded, nil
 }
 
+func (c *apiClient) getCommandPlan(ctx context.Context, runID string, commandKind string, action string) (executionCommandPlan, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/runs/"+url.PathEscape(runID)+"/command-plans/"+url.PathEscape(commandKind)+"/"+url.PathEscape(action), nil)
+	if err != nil {
+		return executionCommandPlan{}, fmt.Errorf("build execution command plan get request: %w", err)
+	}
+	c.authorize(request)
+
+	response, err := c.client.Do(request)
+	if err != nil {
+		return executionCommandPlan{}, fmt.Errorf("get execution command plan: %w", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return executionCommandPlan{}, decodeAPIError(response)
+	}
+	var decoded executionCommandPlan
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return executionCommandPlan{}, fmt.Errorf("decode execution command plan: %w", err)
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return executionCommandPlan{}, errors.New("execution command plan response is missing id")
+	}
+	return decoded, nil
+}
+
 func (c *apiClient) submitReceipt(ctx context.Context, runID string, input executionReceiptRequest) (executionReceipt, error) {
 	body, err := json.Marshal(input)
 	if err != nil {

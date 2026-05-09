@@ -53,16 +53,20 @@
   stdout/stderr capture, no artifacts, evidence-only receipts, one command
   receipt per Run, and Gate / Proof still deferred. H2.5.1+ smoke coverage pins
   the project-probe boundary without adding product behavior.
-- ADR-0032 defines the H2.6 typed project test command boundary. H2.6.1 now
-  implements only server-side
+- ADR-0032 defines the H2.6 typed project test command boundary. H2.6.1
+  implements server-side
   `ExecutionCommandPlan(project_test/run_declared_test_target)` preparation
   from a matching project-probe receipt and one selected target metadata
-  record. It does not execute tests, create `ExecutionReceipt(project_test)`,
-  accept shell, user argv, arbitrary command strings, or "run all tests", and
-  still keeps stdout/stderr capture, artifacts, GateDecision, and Proof
-  deferred. H2.6.1+ smoke coverage pins the command-plan boundary as
-  regression-only; the next implementation step remains runner execution in a
-  later slice, not hidden test execution here.
+  record, and H2.6.2 now adds `goalrail-runner --mode execution-project-test`
+  plus server acceptance of bounded `ExecutionReceipt(project_test)`. The
+  runner fetches the existing server-owned plan, validates one selected root
+  `package_json_script` target plus fail-closed policy fields, and submits
+  `process_status=policy_rejected` instead of executing because network/write
+  sandbox controls are not implemented. Actual test process execution,
+  `os/exec`, shell, user argv, arbitrary command strings, "run all tests"
+  planning, stdout/stderr capture, artifacts, GateDecision, Proof, WorkItem
+  transitions, runner trust hardening, and OS-level sandboxing remain deferred.
+  The next safe slice is H2.6.2+ smoke coverage.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -248,14 +252,15 @@
   only typed `project_probe/detect_declared_test_targets` metadata probing from
   allowlisted manifest/config files. H2.5.1+ smoke coverage pins that
   project-probe metadata boundary. WorkItems still remain `planned`;
-  assignment, claiming, arbitrary shell/project command execution, project test
+  assignment, claiming, arbitrary shell/project command execution, broad test
   execution, gate, and proof are still deferred.
-- ADR-0032 records the H2.6 typed project test command boundary. H2.6.1 now
-  implements server-side `project_test/run_declared_test_target` command-plan
-  preparation only; it must not be treated as test execution, arbitrary shell,
-  package-manager command execution, "run all tests", GateDecision, or Proof.
-  H2.6.1+ smoke coverage now pins fail-closed plan creation and no receipt /
-  gate / proof side effects.
+- ADR-0032 records the H2.6 typed project test command boundary. H2.6.2 now
+  implements runner policy validation for the already planned
+  `project_test/run_declared_test_target` target and bounded
+  `ExecutionReceipt(project_test)` submission with `policy_rejected`; it must
+  not be treated as actual test execution, arbitrary shell, user-command
+  execution, "run all tests", GateDecision, Proof, or WorkItem completion.
+  H2.6.2+ should be regression smoke, not new behavior.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1004,11 +1009,13 @@ Done means:
      allowlisted manifest/config files, no shell, no arbitrary command string,
      no stdout/stderr capture, no artifacts, no changed paths, and no project
      test execution
-   - ADR-0032 defines H2.6 typed project test command execution. H2.6.1
-     implements only server-side `project_test/run_declared_test_target`
-     command-plan preparation derived from project-probe metadata, with shell,
-     user argv, runner test execution, Gate, and Proof deferred; H2.6.1+ adds
-     regression smoke for that planning-only boundary
+   - ADR-0032 defines H2.6 typed project test command execution. H2.6.2 now
+     implements runner-side policy validation for one server-planned
+     `project_test/run_declared_test_target` target and bounded
+     `ExecutionReceipt(project_test)` with `policy_rejected`, while actual test
+     process execution, stdout/stderr capture, artifacts, Gate, Proof, WorkItem
+     transitions, runner trust hardening, and OS-level sandboxing remain
+     deferred; H2.6.2+ should add regression smoke only
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

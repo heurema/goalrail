@@ -569,6 +569,54 @@ func (s *Service) CreateOrReturnCommandPlan(ctx context.Context, runID spine.Run
 	return decorateCommandPlanForResponse(plan), true, nil
 }
 
+func (s *Service) GetCommandPlan(ctx context.Context, runID spine.RunID, commandKind string, action string, membership spine.OrganizationMembership) (spine.ExecutionCommandPlan, error) {
+	kind := strings.TrimSpace(commandKind)
+	act := strings.TrimSpace(action)
+	if kind == "" {
+		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "command_kind", Message: "is required"}
+	}
+	if act == "" {
+		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "action", Message: "is required"}
+	}
+	run, ok, err := s.Runs.Get(ctx, runID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("get run: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, ErrRunNotFound
+	}
+	job, ok, err := s.Jobs.Get(ctx, run.ExecutionJobID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("get execution job: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, ErrExecutionJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.ExecutionCommandPlan{}, err
+	}
+	if run.State != spine.RunStateStarted {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("%w: %s", ErrInvalidRunState, run.State)
+	}
+	if job.State != spine.ExecutionJobStateRunStarted {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("%w: %s", ErrInvalidExecutionState, job.State)
+	}
+	plan, ok, err := s.CommandPlans.GetByRunAndAction(ctx, run.ID, kind, act)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("get execution command plan by run and action: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, ErrExecutionCommandPlanNotFound
+	}
+	if plan.OrganizationID != job.OrganizationID || plan.ProjectID != job.ProjectID || plan.RepoBindingID != job.RepoBindingID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.RunID != run.ID || plan.ExecutionJobID != job.ID || plan.TaskID != run.TaskID || plan.CheckoutReceiptID != run.CheckoutReceiptID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	return decorateCommandPlanForResponse(plan), nil
+}
+
 func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input spine.ExecutionReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error) {
 	if err := validateReceiptInput(input); err != nil {
 		return spine.ExecutionReceipt{}, false, err
@@ -634,6 +682,16 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		metadata := normalizeProjectProbeMetadata(*input.ProjectProbeMetadata)
 		projectProbeMetadata = &metadata
 	}
+	if input.ExecutionMode == spine.ExecutionReceiptModeProjectTest {
+		plan, err := s.validateProjectTestReceipt(ctx, input, run, job)
+		if err != nil {
+			return spine.ExecutionReceipt{}, false, err
+		}
+		id := plan.ID
+		commandPlanID = &id
+		commandKind = plan.CommandKind
+		action = plan.Action
+	}
 	receiptID, err := s.IDs.NewExecutionReceiptID()
 	if err != nil {
 		return spine.ExecutionReceipt{}, false, fmt.Errorf("new execution receipt id: %w", err)
@@ -657,6 +715,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		CommandKind:          commandKind,
 		Action:               action,
 		ProcessStatus:        strings.TrimSpace(input.ProcessStatus),
+		ExitCode:             input.ExitCode,
 		ArtifactRefs:         append([]string{}, input.ArtifactRefs...),
 		ChangedPathsSummary:  append([]string{}, input.ChangedPathsSummary...),
 		RawSourceUploaded:    false,
@@ -1113,9 +1172,6 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 	}
 	mode := strings.TrimSpace(input.ExecutionMode)
 	status := strings.TrimSpace(input.ProcessStatus)
-	if input.ExitCode != nil {
-		return &ValidationError{Field: "exit_code", Message: "must be omitted for current execution receipts"}
-	}
 	if len(input.ArtifactRefs) != 0 {
 		return &ValidationError{Field: "artifact_refs", Message: "must be empty for current execution receipts"}
 	}
@@ -1135,6 +1191,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		}
 		if strings.TrimSpace(input.Action) != "" {
 			return &ValidationError{Field: "action", Message: "must be omitted for no_command receipts"}
+		}
+		if input.ExitCode != nil {
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for no_command receipts"}
 		}
 		if input.RunnerStartedAt != nil {
 			return &ValidationError{Field: "runner_started_at", Message: "must be omitted for no_command receipts"}
@@ -1163,6 +1222,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if status != spine.ExecutionReceiptStatusMetadataOnly {
 			return &ValidationError{Field: "process_status", Message: "must be metadata_only for builtin_diagnostic receipts"}
 		}
+		if input.ExitCode != nil {
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for builtin_diagnostic receipts"}
+		}
 		if input.RunnerStartedAt == nil {
 			return &ValidationError{Field: "runner_started_at", Message: "is required for builtin_diagnostic receipts"}
 		}
@@ -1185,6 +1247,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if status != spine.ExecutionReceiptStatusMetadataOnly {
 			return &ValidationError{Field: "process_status", Message: "must be metadata_only for project_probe receipts"}
 		}
+		if input.ExitCode != nil {
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for project_probe receipts"}
+		}
 		if input.RunnerStartedAt == nil {
 			return &ValidationError{Field: "runner_started_at", Message: "is required for project_probe receipts"}
 		}
@@ -1197,8 +1262,33 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if err := validateProjectProbeMetadata(*input.ProjectProbeMetadata); err != nil {
 			return err
 		}
+	case spine.ExecutionReceiptModeProjectTest:
+		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
+			return &ValidationError{Field: "command_plan_id", Message: "is required for project_test receipts"}
+		}
+		if strings.TrimSpace(input.CommandKind) != spine.ExecutionCommandKindProjectTest {
+			return &ValidationError{Field: "command_kind", Message: "must be project_test"}
+		}
+		if strings.TrimSpace(input.Action) != spine.ExecutionCommandActionRunTestTarget {
+			return &ValidationError{Field: "action", Message: "must be run_declared_test_target"}
+		}
+		if status != spine.ExecutionReceiptStatusPolicyRejected {
+			return &ValidationError{Field: "process_status", Message: "must be policy_rejected for H2.6.2 project_test receipts"}
+		}
+		if input.ExitCode != nil {
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for H2.6.2 project_test receipts"}
+		}
+		if input.RunnerStartedAt == nil {
+			return &ValidationError{Field: "runner_started_at", Message: "is required for project_test receipts"}
+		}
+		if input.RunnerFinishedAt == nil {
+			return &ValidationError{Field: "runner_finished_at", Message: "is required for project_test receipts"}
+		}
+		if input.ProjectProbeMetadata != nil {
+			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for project_test receipts"}
+		}
 	default:
-		return &ValidationError{Field: "execution_mode", Message: "must be no_command, builtin_diagnostic, or project_probe"}
+		return &ValidationError{Field: "execution_mode", Message: "must be no_command, builtin_diagnostic, project_probe, or project_test"}
 	}
 	return nil
 }
@@ -1259,6 +1349,50 @@ func (s *Service) validateProjectProbeReceipt(ctx context.Context, input spine.E
 		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
 	}
 	if len(plan.AllowedArtifactKinds) != 0 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if input.RunnerStartedAt != nil && input.RunnerFinishedAt != nil && input.RunnerFinishedAt.Before(*input.RunnerStartedAt) {
+		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "runner_finished_at", Message: "must be after runner_started_at"}
+	}
+	return plan, nil
+}
+
+func (s *Service) validateProjectTestReceipt(ctx context.Context, input spine.ExecutionReceiptSubmitRequest, run spine.Run, job spine.ExecutionJob) (spine.ExecutionCommandPlan, error) {
+	plan, ok, err := s.CommandPlans.Get(ctx, input.CommandPlanID)
+	if err != nil {
+		return spine.ExecutionCommandPlan{}, fmt.Errorf("get execution command plan: %w", err)
+	}
+	if !ok {
+		return spine.ExecutionCommandPlan{}, ErrExecutionCommandPlanNotFound
+	}
+	if plan.OrganizationID != job.OrganizationID || plan.ProjectID != job.ProjectID || plan.RepoBindingID != job.RepoBindingID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.RunID != run.ID || plan.ExecutionJobID != job.ID || plan.TaskID != run.TaskID || plan.CheckoutReceiptID != run.CheckoutReceiptID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.State != spine.ExecutionCommandPlanStatePlanned {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.CommandKind != spine.ExecutionCommandKindProjectTest || plan.Action != spine.ExecutionCommandActionRunTestTarget {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.SourceProjectProbeReceiptID == nil || plan.SelectedTargetID == "" || plan.DeclaredTestTarget == nil {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if !isSupportedProjectTestTarget(*plan.DeclaredTestTarget) || !isSafeRelativePath(plan.DeclaredTestTarget.SourcePath) {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if projectProbeTargetID(*plan.DeclaredTestTarget) != plan.SelectedTargetID {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.ShellAllowed || len(plan.Argv) != 0 || plan.WorkingDirectory != "." || len(plan.PathScope) != 1 || plan.PathScope[0] != "." || plan.RawSourceUploadAllowed {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if len(plan.AllowedArtifactKinds) != 0 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 || plan.ChangedPathsAllowed {
+		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
+	}
+	if plan.NetworkAllowed || plan.WorkspaceWriteAllowed || plan.ScratchWriteAllowed {
 		return spine.ExecutionCommandPlan{}, ErrInvalidCommandPlan
 	}
 	if input.RunnerStartedAt != nil && input.RunnerFinishedAt != nil && input.RunnerFinishedAt.Before(*input.RunnerStartedAt) {

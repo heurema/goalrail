@@ -54,25 +54,32 @@ type executionCommandPlanRequest struct {
 }
 
 type executionCommandPlan struct {
-	ID                     string   `json:"id"`
-	ProjectID              string   `json:"project_id"`
-	RepoBindingID          string   `json:"repo_binding_id"`
-	TaskID                 string   `json:"task_id"`
-	CheckoutReceiptID      string   `json:"checkout_receipt_id"`
-	ExecutionJobID         string   `json:"execution_job_id"`
-	RunID                  string   `json:"run_id"`
-	CommandKind            string   `json:"command_kind"`
-	Action                 string   `json:"action"`
-	ShellAllowed           bool     `json:"shell_allowed"`
-	Argv                   []string `json:"argv"`
-	WorkingDirectory       string   `json:"working_directory"`
-	PathScope              []string `json:"path_scope"`
-	TimeoutSeconds         int      `json:"timeout_seconds"`
-	MaxStdoutBytes         int      `json:"max_stdout_bytes"`
-	MaxStderrBytes         int      `json:"max_stderr_bytes"`
-	AllowedArtifactKinds   []string `json:"allowed_artifact_kinds"`
-	RawSourceUploadAllowed bool     `json:"raw_source_upload_allowed"`
-	State                  string   `json:"state"`
+	ID                          string                           `json:"id"`
+	ProjectID                   string                           `json:"project_id"`
+	RepoBindingID               string                           `json:"repo_binding_id"`
+	TaskID                      string                           `json:"task_id"`
+	CheckoutReceiptID           string                           `json:"checkout_receipt_id"`
+	ExecutionJobID              string                           `json:"execution_job_id"`
+	RunID                       string                           `json:"run_id"`
+	CommandKind                 string                           `json:"command_kind"`
+	Action                      string                           `json:"action"`
+	SourceProjectProbeReceiptID string                           `json:"source_project_probe_receipt_id,omitempty"`
+	SelectedTargetID            string                           `json:"selected_target_id,omitempty"`
+	DeclaredTestTarget          *projectProbeTestTargetCandidate `json:"declared_test_target,omitempty"`
+	ShellAllowed                bool                             `json:"shell_allowed"`
+	Argv                        []string                         `json:"argv"`
+	WorkingDirectory            string                           `json:"working_directory"`
+	PathScope                   []string                         `json:"path_scope"`
+	TimeoutSeconds              int                              `json:"timeout_seconds"`
+	NetworkAllowed              bool                             `json:"network_allowed"`
+	WorkspaceWriteAllowed       bool                             `json:"workspace_write_allowed"`
+	ScratchWriteAllowed         bool                             `json:"scratch_write_allowed"`
+	MaxStdoutBytes              int                              `json:"max_stdout_bytes"`
+	MaxStderrBytes              int                              `json:"max_stderr_bytes"`
+	AllowedArtifactKinds        []string                         `json:"allowed_artifact_kinds"`
+	ChangedPathsAllowed         bool                             `json:"changed_paths_allowed"`
+	RawSourceUploadAllowed      bool                             `json:"raw_source_upload_allowed"`
+	State                       string                           `json:"state"`
 }
 
 type executionReceiptRequest struct {
@@ -89,6 +96,7 @@ type executionReceiptRequest struct {
 	CommandKind          string                `json:"command_kind,omitempty"`
 	Action               string                `json:"action,omitempty"`
 	ProcessStatus        string                `json:"process_status"`
+	ExitCode             *int                  `json:"exit_code,omitempty"`
 	ArtifactRefs         []string              `json:"artifact_refs"`
 	ChangedPathsSummary  []string              `json:"changed_paths_summary"`
 	RawSourceUploaded    bool                  `json:"raw_source_uploaded"`
@@ -107,6 +115,7 @@ type executionReceipt struct {
 	CommandKind    string `json:"command_kind,omitempty"`
 	Action         string `json:"action,omitempty"`
 	ProcessStatus  string `json:"process_status"`
+	ExitCode       *int   `json:"exit_code,omitempty"`
 }
 
 type projectProbeMetadata struct {
