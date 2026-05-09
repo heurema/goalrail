@@ -1201,6 +1201,75 @@ func TestProjectProbeCommandPlanAndReceipt(t *testing.T) {
 func TestProjectTestCommandPlanPreparation(t *testing.T) {
 	const selectedTargetID = "package.json#package_json_script:test"
 
+	t.Run("smoke pins planning-only boundary", func(t *testing.T) {
+		server := testServer(t)
+		probeJob, _, _, _, probeReceipt := createProjectProbeReceipt(t, server)
+		testJob, testRun := createStartedExecutionRunForProjectTestPlan(t, server, probeJob)
+
+		body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_test","action":"run_declared_test_target","project_probe_receipt_id":%q,"selected_target_id":%q}`, testJob.RepoBindingID, probeReceipt.ID, selectedTargetID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(testRun.ID)+"/command-plans", body)
+		if response.code != http.StatusCreated {
+			t.Fatalf("project test command plan smoke status = %d, want %d: %s", response.code, http.StatusCreated, response.body)
+		}
+		for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"execution_receipt_id\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\"", "\"sh -c\"", "\"stdout_capture\"", "\"stderr_capture\"", "\"artifact_refs\"", "\"changed_paths_summary\"", "\"execution_mode\"", "\"process_status\"", "\"exit_code\""} {
+			if strings.Contains(response.body, forbidden) {
+				t.Fatalf("project test command plan smoke response exposes forbidden field %s: %s", forbidden, response.body)
+			}
+		}
+		var plan spine.ExecutionCommandPlan
+		decodeJSON(t, response.body, &plan)
+		if plan.CommandKind != spine.ExecutionCommandKindProjectTest || plan.Action != spine.ExecutionCommandActionRunTestTarget {
+			t.Fatalf("project test command plan kind/action = %s/%s, want typed project_test", plan.CommandKind, plan.Action)
+		}
+		if plan.SourceProjectProbeReceiptID == nil || *plan.SourceProjectProbeReceiptID != probeReceipt.ID || plan.SelectedTargetID != selectedTargetID {
+			t.Fatalf("project test source receipt/target = %#v/%q, want %q/%q", plan.SourceProjectProbeReceiptID, plan.SelectedTargetID, probeReceipt.ID, selectedTargetID)
+		}
+		if plan.DeclaredTestTarget == nil || plan.DeclaredTestTarget.Name != "test" || plan.DeclaredTestTarget.SourcePath != "package.json" || plan.DeclaredTestTarget.SourceKind != "package_json_script" {
+			t.Fatalf("project test declared target = %#v, want selected package.json test metadata", plan.DeclaredTestTarget)
+		}
+		storedPlan := server.commandPlans.plans[plan.ID]
+		if storedPlan.DeclaredTestTarget == nil || *storedPlan.DeclaredTestTarget != *plan.DeclaredTestTarget || storedPlan.SourceProjectProbeReceiptID == nil || *storedPlan.SourceProjectProbeReceiptID != probeReceipt.ID {
+			t.Fatalf("stored project test plan = %#v, want persisted source receipt and target metadata", storedPlan)
+		}
+		if plan.ShellAllowed || len(plan.Argv) != 0 || plan.WorkingDirectory != "." || len(plan.PathScope) != 1 || plan.PathScope[0] != "." || plan.RawSourceUploadAllowed {
+			t.Fatalf("project test command plan smoke policy = %#v, want no shell/argv/raw source", plan)
+		}
+		if plan.TimeoutSeconds != 120 || plan.NetworkAllowed || plan.WorkspaceWriteAllowed || plan.ScratchWriteAllowed || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 || len(plan.AllowedArtifactKinds) != 0 || plan.ChangedPathsAllowed || plan.State != spine.ExecutionCommandPlanStatePlanned {
+			t.Fatalf("project test command plan smoke limits/state = %#v, want planning-only fail-closed policy", plan)
+		}
+		if plan.NextAction == nil || plan.NextAction.Kind != spine.ExecutionCommandPlanNextActionRunnerProjectTestRequired || plan.NextAction.Available || plan.NextAction.PlannedSlice != spine.ExecutionCommandPlanNextActionProjectTestPlannedSlice {
+			t.Fatalf("project test smoke next_action = %#v, want unavailable runner_project_test_required", plan.NextAction)
+		}
+		if len(server.executionReceipts.receipts) != 1 {
+			t.Fatalf("execution receipts = %d, want only prior project_probe receipt after project_test plan smoke", len(server.executionReceipts.receipts))
+		}
+		for id, receipt := range server.executionReceipts.receipts {
+			if receipt.ExecutionMode == spine.ExecutionCommandKindProjectTest || receipt.CommandKind == spine.ExecutionCommandKindProjectTest || receipt.Action == spine.ExecutionCommandActionRunTestTarget {
+				t.Fatalf("execution receipt %s = %#v, want no project_test receipt in H2.6.1+ smoke", id, receipt)
+			}
+		}
+		if got := server.runs.runs[testRun.ID].State; got != spine.RunStateStarted {
+			t.Fatalf("project test run state = %q, want started after plan-only smoke", got)
+		}
+		if got := server.executionJobs.jobs[testJob.ID].State; got != spine.ExecutionJobStateRunStarted {
+			t.Fatalf("project test job state = %q, want run_started after plan-only smoke", got)
+		}
+		storedTask, ok, err := server.workItems.Get(context.Background(), testRun.TaskID)
+		if err != nil || !ok {
+			t.Fatalf("workItems.Get() after project test plan smoke = %#v/%v/%v", storedTask, ok, err)
+		}
+		if storedTask.Status != spine.WorkItemStatusPlanned {
+			t.Fatalf("task status = %q, want planned after project test plan smoke", storedTask.Status)
+		}
+		if got := countEventType(server.events.Events(), execution.EventTypeExecutionCommandPlanCreated); got != 2 {
+			t.Fatalf("execution_command_plan.created events = %d, want project_probe + project_test plans only", got)
+		}
+		if got := countEventType(server.events.Events(), execution.EventTypeExecutionReceiptSubmitted); got != 1 {
+			t.Fatalf("execution_receipt.submitted events = %d, want only prior project_probe receipt", got)
+		}
+		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
 	t.Run("creates typed plan from project probe receipt without execution side effects", func(t *testing.T) {
 		server := testServer(t)
 		probeJob, _, _, _, probeReceipt := createProjectProbeReceipt(t, server)
@@ -1266,6 +1335,19 @@ func TestProjectTestCommandPlanPreparation(t *testing.T) {
 			t.Fatalf("existing project test command plan id/count = %q/%d, want %q/2", existing.ID, len(server.commandPlans.plans), plan.ID)
 		}
 		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
+	t.Run("rejects omitted project probe receipt id", func(t *testing.T) {
+		server := testServer(t)
+		probeJob, _, _, _, _ := createProjectProbeReceipt(t, server)
+		testJob, testRun := createStartedExecutionRunForProjectTestPlan(t, server, probeJob)
+
+		body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_test","action":"run_declared_test_target","selected_target_id":%q}`, testJob.RepoBindingID, selectedTargetID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(testRun.ID)+"/command-plans", body)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.commandPlans.plans) != 1 {
+			t.Fatalf("command plans = %d, want only prior project_probe plan after missing project_probe_receipt_id", len(server.commandPlans.plans))
+		}
 	})
 
 	t.Run("rejects missing project probe receipt", func(t *testing.T) {
@@ -1382,11 +1464,17 @@ func TestProjectTestCommandPlanPreparation(t *testing.T) {
 			{name: "stdout_capture", body: `,"stdout_capture":{"mode":"inline"}`},
 			{name: "stderr_capture", body: `,"stderr_capture":{"mode":"inline"}`},
 			{name: "artifacts_allowed", body: `,"artifacts_allowed":true`},
+			{name: "artifact_refs", body: `,"artifact_refs":["junit.xml"]`},
 			{name: "allowed_artifact_kinds", body: `,"allowed_artifact_kinds":["junit"]`},
 			{name: "changed_paths_allowed", body: `,"changed_paths_allowed":true`},
+			{name: "changed_paths_summary", body: `,"changed_paths_summary":["package.json"]`},
+			{name: "raw_source_upload", body: `,"raw_source_upload":true`},
+			{name: "raw_source_uploaded", body: `,"raw_source_uploaded":true`},
 			{name: "raw_source_upload_allowed", body: `,"raw_source_upload_allowed":true`},
 			{name: "network_allowed", body: `,"network_allowed":true`},
+			{name: "write_allowed", body: `,"write_allowed":true`},
 			{name: "workspace_write_allowed", body: `,"workspace_write_allowed":true`},
+			{name: "scratch_write_allowed", body: `,"scratch_write_allowed":true`},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				server := testServer(t)
