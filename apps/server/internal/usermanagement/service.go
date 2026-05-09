@@ -395,10 +395,6 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 		if !ok {
 			return ErrNotFound
 		}
-		if membership.State != spine.EntityStateActive {
-			return ErrNotFound
-		}
-
 		now := s.Clock.Now().UTC()
 		temporaryPassword, credential, err := s.newTemporaryCredential(user.ID, now)
 		if err != nil {

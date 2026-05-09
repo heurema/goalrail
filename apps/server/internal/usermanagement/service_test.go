@@ -631,7 +631,7 @@ func TestOwnerCanReactivateInactiveOrganizationMembership(t *testing.T) {
 	}
 }
 
-func TestInactiveOrganizationMembershipRejectsNonReactivationPatchAndPasswordReset(t *testing.T) {
+func TestInactiveOrganizationMembershipRejectsNonReactivationPatch(t *testing.T) {
 	store := newFakeStore()
 	originalMembership := membership(memberMembershipID, orgID, memberUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
 	store.memberships[key(orgID, memberUserID)] = originalMembership
@@ -649,18 +649,6 @@ func TestInactiveOrganizationMembershipRejectsNonReactivationPatchAndPasswordRes
 	}
 	if got := store.memberships[key(orgID, memberUserID)]; got != originalMembership {
 		t.Fatalf("inactive membership mutated by role patch:\n got: %#v\nwant: %#v", got, originalMembership)
-	}
-
-	_, err = service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
-		AuthenticatedUserID: ownerUserID,
-		OrganizationID:      orgID,
-		UserID:              memberUserID,
-	})
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("ResetTemporaryPassword() error = %v, want ErrNotFound", err)
-	}
-	if store.revoked[memberUserID] {
-		t.Fatalf("sessions for %q were revoked despite inactive membership", memberUserID)
 	}
 }
 
