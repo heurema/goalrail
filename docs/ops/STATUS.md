@@ -73,7 +73,9 @@ bounded `ExecutionReceipt(project_test)` fail-closed policy evidence for the
 existing server-owned plan. The runner validates the selected root
 `package_json_script` target and current network/write/output/artifact policy,
 then refuses execution with `process_status=policy_rejected` because OS-level
-network/write sandbox controls are not implemented. H2.6.2 still has no actual
+network/write sandbox controls are not implemented. H2.6.2+ smoke coverage now
+pins the server-owned project-test plan path, runner fail-closed receipt path,
+and one-command / one-receipt / one-Run invariant. H2.6.2 still has no actual
 test process execution, no `os/exec`, no shell, no arbitrary command string, no
 user-provided argv, no "run all tests" plan, no stdout/stderr capture, no
 artifacts, no changed paths, no raw source upload, no GateDecision, no Proof,
@@ -293,8 +295,10 @@ The project currently has:
   server-owned plan, validates one selected root `package_json_script` target,
   rejects unsafe plan policy, and submits `ExecutionReceipt(project_test)` with
   `process_status=policy_rejected` instead of executing because the runner
-  cannot yet enforce OS-level network/write sandbox controls. The receipt
-  remains evidence input only. There is still no actual test process execution,
+  cannot yet enforce OS-level network/write sandbox controls. H2.6.2+ smoke
+  coverage now pins this fail-closed path, including duplicate project-test
+  receipt idempotency for one Run. The receipt remains evidence input only.
+  There is still no actual test process execution,
   `os/exec`, arbitrary command string, user-provided argv, "run all tests"
   plan, stdout/stderr capture, artifacts, changed paths, raw source upload,
   GateDecision, Proof, WorkItem status transition, multi-command Run, runner
@@ -655,9 +659,11 @@ The project currently has:
   from project-probe metadata, and H2.6.2 adds runner-side policy validation
   for that server-owned plan plus bounded `ExecutionReceipt(project_test)` with
   `process_status=policy_rejected` when network/write sandbox controls are not
-  enforceable. Actual test process execution, `os/exec`, stdout/stderr capture,
-  artifacts, Gate, Proof, WorkItem transitions, runner trust hardening, and
-  OS-level sandboxing remain deferred
+  enforceable. H2.6.2+ smoke coverage now pins this as regression behavior,
+  including runner trace validation and duplicate receipt idempotency. Actual
+  test process execution, `os/exec`, stdout/stderr capture, artifacts, Gate,
+  Proof, WorkItem transitions, runner trust hardening, and OS-level sandboxing
+  remain deferred
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`

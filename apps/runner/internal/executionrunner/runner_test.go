@@ -410,6 +410,7 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	var getPlanRequests atomic.Int32
 	var createPlanRequests atomic.Int32
 	var receiptRequests atomic.Int32
+	var commandExecutionRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -436,6 +437,14 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"execution-receipt-1","run_id":"run-1","execution_job_id":"execution-job-1","runner_id":"runner-1","execution_mode":"project_test","command_plan_id":"command-plan-1","command_kind":"project_test","action":"run_declared_test_target","process_status":"policy_rejected"}`))
 		default:
+			if strings.Contains(r.URL.Path, "shell") ||
+				strings.Contains(r.URL.Path, "exec") ||
+				strings.Contains(r.URL.Path, "stdout") ||
+				strings.Contains(r.URL.Path, "stderr") ||
+				strings.Contains(r.URL.Path, "artifact") ||
+				strings.Contains(r.URL.Path, "source") {
+				commandExecutionRequests.Add(1)
+			}
 			http.NotFound(w, r)
 		}
 	}))
@@ -472,6 +481,9 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	if getPlanRequests.Load() != 1 || createPlanRequests.Load() != 0 || receiptRequests.Load() != 1 {
 		t.Fatalf("get/create/receipt requests = %d/%d/%d, want 1/0/1", getPlanRequests.Load(), createPlanRequests.Load(), receiptRequests.Load())
 	}
+	if commandExecutionRequests.Load() != 0 {
+		t.Fatalf("command/output/artifact/source requests = %d, want none", commandExecutionRequests.Load())
+	}
 	if receiptRequest.ExecutionMode != "project_test" || receiptRequest.CommandPlanID != "command-plan-1" || receiptRequest.CommandKind != "project_test" || receiptRequest.Action != "run_declared_test_target" || receiptRequest.ProcessStatus != "policy_rejected" {
 		t.Fatalf("project test receipt command metadata = %#v, want policy_rejected project_test metadata", receiptRequest)
 	}
@@ -481,7 +493,7 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	if receiptRequest.ProjectProbeMetadata != nil || receiptRequest.RawSourceUploaded || len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.RunnerStartedAt == nil || receiptRequest.RunnerFinishedAt == nil {
 		t.Fatalf("project test receipt evidence = %#v, want policy rejection without probe metadata/artifacts/raw source", receiptRequest)
 	}
-	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed"} {
+	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("logs = %q, want no %q", logs.String(), forbidden)
 		}
@@ -982,6 +994,139 @@ func TestStepRejectsUnsafeProjectTestPlan(t *testing.T) {
 				t.Fatalf("logs leaked execution lease token: %q", logs.String())
 			}
 		})
+	}
+}
+
+func TestStepRejectsProjectTestPlanTraceMismatches(t *testing.T) {
+	const secretToken = "secret-execution-token"
+	for _, tt := range []struct {
+		name    string
+		mutate  func(*executionCommandPlan)
+		wantErr string
+	}{
+		{
+			name: "project scope",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ProjectID = "project-other"
+			},
+			wantErr: "project_id",
+		},
+		{
+			name: "repo binding scope",
+			mutate: func(plan *executionCommandPlan) {
+				plan.RepoBindingID = "repo-other"
+			},
+			wantErr: "repo_binding_id",
+		},
+		{
+			name: "execution job lineage",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ExecutionJobID = "execution-job-other"
+			},
+			wantErr: "job id",
+		},
+		{
+			name: "run lineage",
+			mutate: func(plan *executionCommandPlan) {
+				plan.RunID = "run-other"
+			},
+			wantErr: "run id",
+		},
+		{
+			name: "task lineage",
+			mutate: func(plan *executionCommandPlan) {
+				plan.TaskID = "task-other"
+			},
+			wantErr: "task id",
+		},
+		{
+			name: "checkout receipt lineage",
+			mutate: func(plan *executionCommandPlan) {
+				plan.CheckoutReceiptID = "receipt-other"
+			},
+			wantErr: "checkout receipt id",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := projectTestPlanFixture()
+			tt.mutate(&plan)
+			planJSON, err := json.Marshal(plan)
+			if err != nil {
+				t.Fatalf("marshal command plan: %v", err)
+			}
+			var receiptRequests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+				case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/run-1/command-plans/project_test/run_declared_test_target":
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(planJSON)
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+					receiptRequests.Add(1)
+					http.Error(w, "unexpected receipt", http.StatusInternalServerError)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			var logs bytes.Buffer
+			runner, err := NewRunner(Config{
+				ServerURL:       server.URL,
+				BearerToken:     "runner-token",
+				ProjectID:       "project-1",
+				RepoBindingID:   "repo-1",
+				RunnerID:        "runner-1",
+				WorkspaceRef:    "mounted:/workspace/goalrail",
+				WorkspaceRoot:   t.TempDir(),
+				CommitSHA:       "abc123",
+				ProjectTest:     true,
+				PollInterval:    time.Millisecond,
+				LeaseTTLSeconds: 900,
+				Once:            true,
+				LogWriter:       &logs,
+			})
+			if err != nil {
+				t.Fatalf("NewRunner() error = %v", err)
+			}
+			_, err = runner.Step(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Step() error = %v, want %q trace rejection", err, tt.wantErr)
+			}
+			if receiptRequests.Load() != 0 {
+				t.Fatalf("receipt requests = %d, want 0 after trace mismatch", receiptRequests.Load())
+			}
+			if strings.Contains(logs.String(), secretToken) {
+				t.Fatalf("logs leaked execution lease token: %q", logs.String())
+			}
+		})
+	}
+}
+
+func TestProjectTestRunnerHasNoProcessExecutionPrimitives(t *testing.T) {
+	for _, file := range []string{"runner.go", "projecttest.go"} {
+		source, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		for _, forbidden := range []string{
+			`"os/exec"`,
+			"exec.Command",
+			"CommandContext(",
+			".StdoutPipe(",
+			".StderrPipe(",
+			".CombinedOutput(",
+		} {
+			if bytes.Contains(source, []byte(forbidden)) {
+				t.Fatalf("%s contains forbidden project-test execution primitive %q", file, forbidden)
+			}
+		}
 	}
 }
 

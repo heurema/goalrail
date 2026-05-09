@@ -66,7 +66,8 @@
   `os/exec`, shell, user argv, arbitrary command strings, "run all tests"
   planning, stdout/stderr capture, artifacts, GateDecision, Proof, WorkItem
   transitions, runner trust hardening, and OS-level sandboxing remain deferred.
-  The next safe slice is H2.6.2+ smoke coverage.
+  H2.6.2+ smoke coverage now pins this regression boundary; the next safe
+  execution slice remains deferred until a new bounded task defines it.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -244,7 +245,7 @@
   `ExecutionReceipt(project_test)` submission with `policy_rejected`; it must
   not be treated as actual test execution, arbitrary shell, user-command
   execution, "run all tests", GateDecision, Proof, or WorkItem completion.
-  H2.6.2+ should be regression smoke, not new behavior.
+  H2.6.2+ regression smoke now pins this behavior without adding new execution.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -999,7 +1000,8 @@ Done means:
      `ExecutionReceipt(project_test)` with `policy_rejected`, while actual test
      process execution, stdout/stderr capture, artifacts, Gate, Proof, WorkItem
      transitions, runner trust hardening, and OS-level sandboxing remain
-     deferred; H2.6.2+ should add regression smoke only
+     deferred; H2.6.2+ regression smoke now pins this behavior without adding
+     execution
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
