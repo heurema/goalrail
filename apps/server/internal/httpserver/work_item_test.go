@@ -1540,6 +1540,19 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 		if storedTask.Status != spine.WorkItemStatusPlanned {
 			t.Fatalf("task status = %q, want planned after project test receipt", storedTask.Status)
 		}
+		eventCountAfterFirstReceipt := len(server.events.Events())
+		secondReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false))
+		if secondReceiptResponse.code != http.StatusOK {
+			t.Fatalf("second project test receipt status = %d, want %d: %s", secondReceiptResponse.code, http.StatusOK, secondReceiptResponse.body)
+		}
+		var existingReceipt spine.ExecutionReceipt
+		decodeJSON(t, secondReceiptResponse.body, &existingReceipt)
+		if existingReceipt.ID != receipt.ID || len(server.executionReceipts.receipts) != 2 || len(server.executionReceipts.byRun) != 2 {
+			t.Fatalf("existing project test receipt id/count = %q/%d/%d, want %q/2/2", existingReceipt.ID, len(server.executionReceipts.receipts), len(server.executionReceipts.byRun), receipt.ID)
+		}
+		if len(server.events.Events()) != eventCountAfterFirstReceipt {
+			t.Fatalf("events = %d, want unchanged %d after duplicate project_test receipt", len(server.events.Events()), eventCountAfterFirstReceipt)
+		}
 		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 	})
 
