@@ -8,8 +8,9 @@ import (
 )
 
 type projectTestResult struct {
-	ProcessStatus string
-	ExitCode      *int
+	ProcessStatus     string
+	ExitCode          *int
+	EnforcementReport enforcementReport
 }
 
 func (r *Runner) validateProjectTestPlan(plan executionCommandPlan, lease executionLease, run runStarted) error {
@@ -84,7 +85,19 @@ func (r *Runner) validateProjectTestPlan(plan executionCommandPlan, lease execut
 }
 
 func rejectProjectTestExecution() projectTestResult {
-	return projectTestResult{ProcessStatus: "policy_rejected"}
+	return projectTestResult{
+		ProcessStatus: "policy_rejected",
+		EnforcementReport: enforcementReport{
+			NetworkPolicy:             "disabled_required",
+			NetworkEnforcement:        "unavailable",
+			WorkspaceWritePolicy:      "disabled_required",
+			WorkspaceWriteEnforcement: "unavailable",
+			ProcessTreeEnforcement:    "unavailable",
+			ScratchWritePolicy:        "allowed_runner_local",
+			Decision:                  "policy_rejected",
+			Reason:                    "enforcement_unavailable",
+		},
+	}
 }
 
 func projectTestWorkingDirectory(workspaceRoot string, workingDirectory string) (string, error) {

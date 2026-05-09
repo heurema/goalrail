@@ -1524,6 +1524,21 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 		if receipt.ProcessStatus != spine.ExecutionReceiptStatusPolicyRejected || receipt.ExitCode != nil || receipt.RawSourceUploaded {
 			t.Fatalf("project test receipt process evidence = %#v, want policy_rejected without exit_code/raw source", receipt)
 		}
+		if receipt.EnforcementReport == nil {
+			t.Fatal("project test receipt enforcement_report is nil, want fail-closed enforcement metadata")
+		}
+		if *receipt.EnforcementReport != (spine.ExecutionEnforcementReport{
+			NetworkPolicy:             spine.ExecutionEnforcementPolicyDisabledRequired,
+			NetworkEnforcement:        spine.ExecutionEnforcementUnavailable,
+			WorkspaceWritePolicy:      spine.ExecutionEnforcementPolicyDisabledRequired,
+			WorkspaceWriteEnforcement: spine.ExecutionEnforcementUnavailable,
+			ProcessTreeEnforcement:    spine.ExecutionEnforcementUnavailable,
+			ScratchWritePolicy:        spine.ExecutionScratchWritePolicyAllowedRunnerLocal,
+			Decision:                  spine.ExecutionEnforcementDecisionPolicyRejected,
+			Reason:                    spine.ExecutionEnforcementReasonUnavailable,
+		}) {
+			t.Fatalf("project test enforcement_report = %#v, want unavailable controls policy rejection", receipt.EnforcementReport)
+		}
 		if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 || receipt.ProjectProbeMetadata != nil {
 			t.Fatalf("project test evidence claims = artifacts=%#v changed=%#v probe=%#v, want process-only receipt", receipt.ArtifactRefs, receipt.ChangedPathsSummary, receipt.ProjectProbeMetadata)
 		}
@@ -1601,6 +1616,48 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 				name: "exit code for policy rejected",
 				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
 					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, intPtr(124), false)
+				},
+			},
+			{
+				name: "missing enforcement report",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `,"enforcement_report":`+projectTestEnforcementReportJSON(), "", 1)
+				},
+			},
+			{
+				name: "network enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"network_enforcement":"unavailable"`, `"network_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "workspace write enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"workspace_write_enforcement":"unavailable"`, `"workspace_write_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "process tree enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"process_tree_enforcement":"unavailable"`, `"process_tree_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "decision claimed allowed",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"decision":"policy_rejected"`, `"decision":"allowed"`, 1)
+				},
+			},
+			{
+				name: "unknown enforcement reason",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"reason":"enforcement_unavailable"`, `"reason":"operator_intent_only"`, 1)
 				},
 			},
 			{
@@ -2127,7 +2184,11 @@ func projectTestReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionL
 	if exitCode != nil {
 		exitCodeField = fmt.Sprintf(`,"exit_code":%d`, *exitCode)
 	}
-	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_test","command_plan_id":%q,"command_kind":"project_test","action":"run_declared_test_target","process_status":%q%s,"artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, jobID, leaseID, leaseToken, runnerID, planID, status, exitCodeField, rawSourceUploaded)
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_test","command_plan_id":%q,"command_kind":"project_test","action":"run_declared_test_target","process_status":%q%s,"artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z","enforcement_report":%s}`, jobID, leaseID, leaseToken, runnerID, planID, status, exitCodeField, rawSourceUploaded, projectTestEnforcementReportJSON())
+}
+
+func projectTestEnforcementReportJSON() string {
+	return `{"network_policy":"disabled_required","network_enforcement":"unavailable","workspace_write_policy":"disabled_required","workspace_write_enforcement":"unavailable","process_tree_enforcement":"unavailable","scratch_write_policy":"allowed_runner_local","decision":"policy_rejected","reason":"enforcement_unavailable"}`
 }
 
 func intPtr(value int) *int {

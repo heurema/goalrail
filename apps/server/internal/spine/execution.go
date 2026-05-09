@@ -55,6 +55,14 @@ const (
 )
 
 const (
+	ExecutionEnforcementPolicyDisabledRequired    = "disabled_required"
+	ExecutionEnforcementUnavailable               = "unavailable"
+	ExecutionScratchWritePolicyAllowedRunnerLocal = "allowed_runner_local"
+	ExecutionEnforcementDecisionPolicyRejected    = "policy_rejected"
+	ExecutionEnforcementReasonUnavailable         = "enforcement_unavailable"
+)
+
+const (
 	ExecutionCommandPlanNextActionRunnerProjectTestRequired = "runner_project_test_required"
 	ExecutionCommandPlanNextActionProjectTestPlannedSlice   = "H2.6.2"
 )
@@ -224,58 +232,60 @@ type ExecutionCommandPlan struct {
 }
 
 type ExecutionReceiptSubmitRequest struct {
-	ExecutionJobID       ExecutionJobID         `json:"execution_job_id"`
-	LeaseID              ExecutionLeaseID       `json:"lease_id"`
-	LeaseToken           string                 `json:"lease_token"`
-	RunnerID             string                 `json:"runner_id"`
-	WorkspaceRef         string                 `json:"workspace_ref"`
-	CommitSHA            string                 `json:"commit_sha"`
-	BaselineID           string                 `json:"baseline_id,omitempty"`
-	OverlayID            string                 `json:"overlay_id,omitempty"`
-	ExecutionMode        string                 `json:"execution_mode"`
-	CommandPlanID        ExecutionCommandPlanID `json:"command_plan_id,omitempty"`
-	CommandKind          string                 `json:"command_kind,omitempty"`
-	Action               string                 `json:"action,omitempty"`
-	ProcessStatus        string                 `json:"process_status"`
-	ExitCode             *int                   `json:"exit_code,omitempty"`
-	ArtifactRefs         []string               `json:"artifact_refs,omitempty"`
-	ChangedPathsSummary  []string               `json:"changed_paths_summary,omitempty"`
-	RawSourceUploaded    bool                   `json:"raw_source_uploaded"`
-	RunnerStartedAt      *time.Time             `json:"runner_started_at,omitempty"`
-	RunnerFinishedAt     *time.Time             `json:"runner_finished_at,omitempty"`
-	ProjectProbeMetadata *ProjectProbeMetadata  `json:"project_probe_metadata,omitempty"`
+	ExecutionJobID       ExecutionJobID              `json:"execution_job_id"`
+	LeaseID              ExecutionLeaseID            `json:"lease_id"`
+	LeaseToken           string                      `json:"lease_token"`
+	RunnerID             string                      `json:"runner_id"`
+	WorkspaceRef         string                      `json:"workspace_ref"`
+	CommitSHA            string                      `json:"commit_sha"`
+	BaselineID           string                      `json:"baseline_id,omitempty"`
+	OverlayID            string                      `json:"overlay_id,omitempty"`
+	ExecutionMode        string                      `json:"execution_mode"`
+	CommandPlanID        ExecutionCommandPlanID      `json:"command_plan_id,omitempty"`
+	CommandKind          string                      `json:"command_kind,omitempty"`
+	Action               string                      `json:"action,omitempty"`
+	ProcessStatus        string                      `json:"process_status"`
+	ExitCode             *int                        `json:"exit_code,omitempty"`
+	ArtifactRefs         []string                    `json:"artifact_refs,omitempty"`
+	ChangedPathsSummary  []string                    `json:"changed_paths_summary,omitempty"`
+	RawSourceUploaded    bool                        `json:"raw_source_uploaded"`
+	RunnerStartedAt      *time.Time                  `json:"runner_started_at,omitempty"`
+	RunnerFinishedAt     *time.Time                  `json:"runner_finished_at,omitempty"`
+	ProjectProbeMetadata *ProjectProbeMetadata       `json:"project_probe_metadata,omitempty"`
+	EnforcementReport    *ExecutionEnforcementReport `json:"enforcement_report,omitempty"`
 }
 
 type ExecutionReceipt struct {
-	ID                   ExecutionReceiptID      `json:"id"`
-	RunID                RunID                   `json:"run_id"`
-	ExecutionJobID       ExecutionJobID          `json:"execution_job_id"`
-	ExecutionLeaseID     ExecutionLeaseID        `json:"execution_lease_id"`
-	TaskID               WorkItemID              `json:"task_id"`
-	CheckoutReceiptID    CheckoutReceiptID       `json:"checkout_receipt_id"`
-	RepoBindingID        RepoBindingID           `json:"repo_binding_id"`
-	RunnerID             string                  `json:"runner_id"`
-	WorkspaceRef         string                  `json:"workspace_ref"`
-	CommitSHA            string                  `json:"commit_sha"`
-	BaselineID           string                  `json:"baseline_id,omitempty"`
-	OverlayID            string                  `json:"overlay_id,omitempty"`
-	ExecutionMode        string                  `json:"execution_mode"`
-	CommandPlanID        *ExecutionCommandPlanID `json:"command_plan_id,omitempty"`
-	CommandKind          string                  `json:"command_kind,omitempty"`
-	Action               string                  `json:"action,omitempty"`
-	ProcessStatus        string                  `json:"process_status"`
-	ExitCode             *int                    `json:"exit_code,omitempty"`
-	ArtifactRefs         []string                `json:"artifact_refs"`
-	ChangedPathsSummary  []string                `json:"changed_paths_summary"`
-	RawSourceUploaded    bool                    `json:"raw_source_uploaded"`
-	RunnerStartedAt      *time.Time              `json:"runner_started_at,omitempty"`
-	RunnerFinishedAt     *time.Time              `json:"runner_finished_at,omitempty"`
-	ProjectProbeMetadata *ProjectProbeMetadata   `json:"project_probe_metadata,omitempty"`
-	StartedAt            time.Time               `json:"started_at"`
-	FinishedAt           time.Time               `json:"finished_at"`
-	CreatedAt            time.Time               `json:"created_at"`
-	UpdatedAt            time.Time               `json:"updated_at"`
-	NextAction           ExecutionNextAction     `json:"next_action"`
+	ID                   ExecutionReceiptID          `json:"id"`
+	RunID                RunID                       `json:"run_id"`
+	ExecutionJobID       ExecutionJobID              `json:"execution_job_id"`
+	ExecutionLeaseID     ExecutionLeaseID            `json:"execution_lease_id"`
+	TaskID               WorkItemID                  `json:"task_id"`
+	CheckoutReceiptID    CheckoutReceiptID           `json:"checkout_receipt_id"`
+	RepoBindingID        RepoBindingID               `json:"repo_binding_id"`
+	RunnerID             string                      `json:"runner_id"`
+	WorkspaceRef         string                      `json:"workspace_ref"`
+	CommitSHA            string                      `json:"commit_sha"`
+	BaselineID           string                      `json:"baseline_id,omitempty"`
+	OverlayID            string                      `json:"overlay_id,omitempty"`
+	ExecutionMode        string                      `json:"execution_mode"`
+	CommandPlanID        *ExecutionCommandPlanID     `json:"command_plan_id,omitempty"`
+	CommandKind          string                      `json:"command_kind,omitempty"`
+	Action               string                      `json:"action,omitempty"`
+	ProcessStatus        string                      `json:"process_status"`
+	ExitCode             *int                        `json:"exit_code,omitempty"`
+	ArtifactRefs         []string                    `json:"artifact_refs"`
+	ChangedPathsSummary  []string                    `json:"changed_paths_summary"`
+	RawSourceUploaded    bool                        `json:"raw_source_uploaded"`
+	RunnerStartedAt      *time.Time                  `json:"runner_started_at,omitempty"`
+	RunnerFinishedAt     *time.Time                  `json:"runner_finished_at,omitempty"`
+	ProjectProbeMetadata *ProjectProbeMetadata       `json:"project_probe_metadata,omitempty"`
+	EnforcementReport    *ExecutionEnforcementReport `json:"enforcement_report,omitempty"`
+	StartedAt            time.Time                   `json:"started_at"`
+	FinishedAt           time.Time                   `json:"finished_at"`
+	CreatedAt            time.Time                   `json:"created_at"`
+	UpdatedAt            time.Time                   `json:"updated_at"`
+	NextAction           ExecutionNextAction         `json:"next_action"`
 }
 
 type ProjectProbeMetadata struct {
@@ -284,6 +294,17 @@ type ProjectProbeMetadata struct {
 	DeclaredTestTargetCandidates []ProjectProbeTestTargetCandidate     `json:"declared_test_target_candidates"`
 	UnsupportedOrUnknowns        []string                              `json:"unsupported_or_unknowns"`
 	PartialityReasons            []string                              `json:"partiality_reasons"`
+}
+
+type ExecutionEnforcementReport struct {
+	NetworkPolicy             string `json:"network_policy"`
+	NetworkEnforcement        string `json:"network_enforcement"`
+	WorkspaceWritePolicy      string `json:"workspace_write_policy"`
+	WorkspaceWriteEnforcement string `json:"workspace_write_enforcement"`
+	ProcessTreeEnforcement    string `json:"process_tree_enforcement"`
+	ScratchWritePolicy        string `json:"scratch_write_policy,omitempty"`
+	Decision                  string `json:"decision"`
+	Reason                    string `json:"reason"`
 }
 
 type ProjectProbeManifest struct {
