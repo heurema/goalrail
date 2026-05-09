@@ -593,6 +593,47 @@ func TestBuiltinDiagnosticCommandPlanMigrationAddsBoundedCommandBoundary(t *test
 	}
 }
 
+func TestProjectProbeCommandPlanMigrationAddsTypedProbeBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00007_project_probe_command_plans.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD CONSTRAINT execution_command_plans_kind_action_check CHECK",
+		"command_kind = 'project_probe' AND action = 'detect_declared_test_targets'",
+		"ADD COLUMN project_probe_metadata JSONB NOT NULL DEFAULT",
+		"ADD CONSTRAINT execution_receipts_mode_check CHECK (execution_mode IN ('no_command', 'builtin_diagnostic', 'project_probe'))",
+		"ADD CONSTRAINT execution_receipts_project_probe_check CHECK",
+		"project_probe_metadata ? 'detected_manifests'",
+		"project_probe_metadata ? 'package_manager_candidates'",
+		"project_probe_metadata ? 'declared_test_target_candidates'",
+		"project_probe_metadata ? 'unsupported_or_unknowns'",
+		"project_probe_metadata ? 'partiality_reasons'",
+		"jsonb_typeof(project_probe_metadata -> 'detected_manifests') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'package_manager_candidates') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'declared_test_target_candidates') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'unsupported_or_unknowns') = 'array'",
+		"jsonb_typeof(project_probe_metadata -> 'partiality_reasons') = 'array'",
+		"DELETE FROM execution_receipts",
+		"WHERE execution_mode = 'project_probe'",
+		"DELETE FROM execution_command_plans",
+		"WHERE command_kind = 'project_probe'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project probe migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "gate_decisions", "proofs", "bash -lc", "sh -c"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project probe migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project probe migration must not store lease tokens")
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

@@ -13,7 +13,7 @@ type ExecutionService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.ExecutionJobCreateRequest, spine.OrganizationMembership) (spine.ExecutionJob, bool, error)
 	AcquireNextLease(context.Context, spine.ExecutionJobLeaseCreateRequest, spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error)
 	StartRun(context.Context, spine.ExecutionJobID, spine.RunStartRequest, spine.OrganizationMembership) (spine.Run, bool, error)
-	CreateOrReturnBuiltinDiagnosticCommandPlan(context.Context, spine.RunID, spine.ExecutionCommandPlanCreateRequest, spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error)
+	CreateOrReturnCommandPlan(context.Context, spine.RunID, spine.ExecutionCommandPlanCreateRequest, spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error)
 	SubmitReceipt(context.Context, spine.RunID, spine.ExecutionReceiptSubmitRequest, spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error)
 }
 
@@ -107,7 +107,7 @@ func (h *ExecutionHandler) CreateCommandPlan(w http.ResponseWriter, r *http.Requ
 		respondInvalidJSON(w)
 		return
 	}
-	plan, created, err := h.service.CreateOrReturnBuiltinDiagnosticCommandPlan(r.Context(), spine.RunID(r.PathValue("id")), input, profile.OrganizationMembership)
+	plan, created, err := h.service.CreateOrReturnCommandPlan(r.Context(), spine.RunID(r.PathValue("id")), input, profile.OrganizationMembership)
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

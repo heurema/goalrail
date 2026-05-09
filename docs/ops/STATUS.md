@@ -56,11 +56,14 @@ execution boundary, and H2.4.1 now implements only the fixed
 `builtin_diagnostic/workspace_status` command-plan plus command-metadata
 receipt path while arbitrary shell, project commands, gate, and proof remain
 deferred, and H2.4.1+ smoke coverage pins that builtin diagnostic receipt path
-without changing the boundary; ADR-0031 now defines the H2.5 project command
-execution boundary as typed, allowlisted, server-owned project command plans
-only, with no shell, no arbitrary command strings, no user-provided argv, no
-project test execution, one command receipt per Run, and Gate / Proof still
-deferred;
+without changing the boundary; ADR-0031 defines the H2.5 project command
+execution boundary as typed, allowlisted, server-owned project command plans,
+and H2.5.1 now implements only
+`project_probe/detect_declared_test_targets` as a metadata probe over
+allowlisted manifest/config files, with no shell, no arbitrary command strings,
+no user-provided argv, no stdout/stderr capture, no artifacts, no changed
+paths, no project test execution, one command receipt per Run, and Gate /
+Proof still deferred;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -256,12 +259,14 @@ The project currently has:
   the current implementation. H2.4.1+ smoke coverage pins this path through a
   persisted command plan and builtin diagnostic receipt while keeping the
   one-receipt-per-run behavior explicit.
-- ADR-0031 documents the H2.5 project command execution boundary. The next
-  implementation should be `project_probe/detect_declared_test_targets` as a
-  typed allowlisted command plan with `working_directory` and `path_scope`, no
-  shell, no arbitrary command strings, no user-provided argv, no stdout/stderr
-  capture, no artifacts, no changed paths, no project test execution, and one
-  command receipt per Run. Project command execution is not implemented yet.
+- ADR-0031 documents the H2.5 project command execution boundary. H2.5.1 now
+  implements `project_probe/detect_declared_test_targets` as a typed
+  allowlisted command plan with `working_directory` and `path_scope`; the runner
+  reads only allowlisted root manifest/config files and submits structured
+  metadata on `ExecutionReceipt(project_probe)`. It still has no shell, no
+  arbitrary command strings, no user-provided argv, no stdout/stderr capture, no
+  artifacts, no changed paths, no project test execution, and one command
+  receipt per Run.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -604,11 +609,14 @@ The project currently has:
   `workspace_status` action, with no arbitrary shell or project command
   execution; H2.4.1+ smoke coverage pins this builtin diagnostic receipt path
   before any project command execution design
-- ADR-0031 defines the project command execution boundary before H2.5 code:
-  first project command execution must be typed, allowlisted, server-planned,
-  scoped by `working_directory` / `path_scope`, and receipt-only evidence; shell,
-  arbitrary command strings, user-provided argv, project test execution, Gate,
-  Proof, WorkItem status transitions, and runner trust hardening stay deferred
+- ADR-0031 defines the project command execution boundary, and H2.5.1 implements
+  only the first typed project-aware probe:
+  `project_probe/detect_declared_test_targets`. It is server-planned, scoped by
+  `working_directory` / `path_scope`, reads only allowlisted manifest/config
+  files from the runner workspace, and returns receipt-only structured metadata;
+  shell, arbitrary command strings, user-provided argv, project test execution,
+  Gate, Proof, WorkItem status transitions, and runner trust hardening stay
+  deferred
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`

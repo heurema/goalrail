@@ -1018,6 +1018,10 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 	if err != nil {
 		return fmt.Errorf("marshal execution receipt changed paths summary: %w", err)
 	}
+	projectProbeMetadata, err := json.Marshal(nonNilProjectProbeMetadata(receipt.ProjectProbeMetadata))
+	if err != nil {
+		return fmt.Errorf("marshal execution receipt project probe metadata: %w", err)
+	}
 	var exitCode any
 	if receipt.ExitCode != nil {
 		exitCode = *receipt.ExitCode
@@ -1063,6 +1067,7 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			"raw_source_uploaded",
 			"runner_started_at",
 			"runner_finished_at",
+			"project_probe_metadata",
 			"started_at",
 			"finished_at",
 			"created_at",
@@ -1092,6 +1097,7 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			receipt.RawSourceUploaded,
 			runnerStartedAt,
 			runnerFinishedAt,
+			projectProbeMetadata,
 			receipt.StartedAt.UTC(),
 			receipt.FinishedAt.UTC(),
 			receipt.CreatedAt.UTC(),
@@ -1141,6 +1147,7 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	var commandPlanID pgtype.UUID
 	var artifactRefs []byte
 	var changedPaths []byte
+	var projectProbeMetadata []byte
 	var exitCode pgtype.Int4
 	var runnerStartedAt pgtype.Timestamptz
 	var runnerFinishedAt pgtype.Timestamptz
@@ -1168,6 +1175,7 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 		&receipt.RawSourceUploaded,
 		&runnerStartedAt,
 		&runnerFinishedAt,
+		&projectProbeMetadata,
 		&receipt.StartedAt,
 		&receipt.FinishedAt,
 		&receipt.CreatedAt,
@@ -1196,6 +1204,11 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	if err := json.Unmarshal(changedPaths, &receipt.ChangedPathsSummary); err != nil {
 		return spine.ExecutionReceipt{}, fmt.Errorf("unmarshal execution receipt changed paths summary: %w", err)
 	}
+	metadata, err := decodeProjectProbeMetadata(projectProbeMetadata)
+	if err != nil {
+		return spine.ExecutionReceipt{}, err
+	}
+	receipt.ProjectProbeMetadata = metadata
 	receipt.StartedAt = receipt.StartedAt.UTC()
 	receipt.FinishedAt = receipt.FinishedAt.UTC()
 	if runnerStartedAt.Valid {
@@ -1242,9 +1255,54 @@ func executionReceiptColumns() []string {
 		"raw_source_uploaded",
 		"runner_started_at",
 		"runner_finished_at",
+		"project_probe_metadata",
 		"started_at",
 		"finished_at",
 		"created_at",
 		"updated_at",
 	}
+}
+
+func nonNilProjectProbeMetadata(metadata *spine.ProjectProbeMetadata) spine.ProjectProbeMetadata {
+	if metadata == nil {
+		return spine.ProjectProbeMetadata{
+			DetectedManifests:            []spine.ProjectProbeManifest{},
+			PackageManagerCandidates:     []spine.ProjectProbePackageManagerCandidate{},
+			DeclaredTestTargetCandidates: []spine.ProjectProbeTestTargetCandidate{},
+			UnsupportedOrUnknowns:        []string{},
+			PartialityReasons:            []string{},
+		}
+	}
+	value := *metadata
+	if value.DetectedManifests == nil {
+		value.DetectedManifests = []spine.ProjectProbeManifest{}
+	}
+	if value.PackageManagerCandidates == nil {
+		value.PackageManagerCandidates = []spine.ProjectProbePackageManagerCandidate{}
+	}
+	if value.DeclaredTestTargetCandidates == nil {
+		value.DeclaredTestTargetCandidates = []spine.ProjectProbeTestTargetCandidate{}
+	}
+	value.UnsupportedOrUnknowns = nonNilStrings(value.UnsupportedOrUnknowns)
+	value.PartialityReasons = nonNilStrings(value.PartialityReasons)
+	return value
+}
+
+func decodeProjectProbeMetadata(payload []byte) (*spine.ProjectProbeMetadata, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	var metadata spine.ProjectProbeMetadata
+	if err := json.Unmarshal(payload, &metadata); err != nil {
+		return nil, fmt.Errorf("unmarshal execution receipt project probe metadata: %w", err)
+	}
+	metadata = nonNilProjectProbeMetadata(&metadata)
+	if len(metadata.DetectedManifests) == 0 &&
+		len(metadata.PackageManagerCandidates) == 0 &&
+		len(metadata.DeclaredTestTargetCandidates) == 0 &&
+		len(metadata.UnsupportedOrUnknowns) == 0 &&
+		len(metadata.PartialityReasons) == 0 {
+		return nil, nil
+	}
+	return &metadata, nil
 }
