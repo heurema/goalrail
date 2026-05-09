@@ -215,27 +215,11 @@
   not appear in Console yet; current CLI `work start` treats that as a
   command/server failure, and a later received-intake lane or recovery feed can
   be added if this becomes operationally relevant.
-- Console Goal / Contract dashboard alignment: D-0091 records the
-  production direction as
-  `Agent -> Goalrail CLI -> Goalrail Server canonical state -> Console read-only dashboard`.
-  The first bounded frontend slice removes production Delivery Readiness
-  mutation controls and keeps Delivery Readiness / Contracts as read-only
-  Intent & Oversight surfaces. Behavior is simple frontend periodic polling of
-  read-only endpoints, not true long polling, SSE, WebSocket, daemon, or event
-  stream: initial authenticated refresh, repeat about every 5-10 seconds in an
-  active tab, skip scheduled polling while hidden, keep manual Refresh / Retry
-  as fallback, and keep existing visible state on transient errors. The
-  minimum feed remains `GET /v1/qualification-feed?limit=50`; the Contracts
-  rail/list uses `GET /v1/contracts?limit=50` plus state and repo-binding
-  filters when selected, and selected Contract detail uses
-  `GET /v1/contracts/{id}` plus
-  `GET /v1/contracts/{id}/current-draft` when `current_draft_id` is linked.
-  Delivery Readiness display now follows one primary status per card, D-0091
-  status priority, and calm browser-local time labels.
-  Do not add `Managed via CLI` labels, copy-CLI buttons, `Agent working`,
-  activity timeline, UI clarification answer forms, or fake Proof/readiness
-  data in that slice. Future `Agent working` requires a real daemon/status
-  heartbeat source of truth and remains deferred.
+- Console Goal / Contract read-only alignment is complete and checkpointed in
+  `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`. Future Console work
+  should start from that boundary and must not reintroduce workflow mutation
+  controls, fake downstream data, or `Agent working` without a real
+  daemon/status heartbeat source of truth.
 - H1 checkout instruction plus workspace receipt is implemented, and H1+ smoke
   coverage now pins `work checkout prepare` through runner checkout lease and
   persisted `CheckoutReceipt`. H2.1 execution preparation is implemented, and
