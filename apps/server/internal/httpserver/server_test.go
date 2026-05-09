@@ -141,6 +141,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		ExecutionJobLeases:            probeRoute("execution_job_leases"),
 		ExecutionJobRuns:              probeRoute("execution_job_runs"),
 		RunCommandPlans:               probeRoute("run_command_plans"),
+		RunCommandPlan:                probeRoute("run_command_plan"),
 		RunReceipts:                   probeRoute("run_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
@@ -202,6 +203,7 @@ func TestPublicV1RouteInventoryUsesResourcePaths(t *testing.T) {
 		{name: "execution_job_leases", method: http.MethodPost, path: "/v1/execution-jobs/leases", wantRoute: "execution_job_leases"},
 		{name: "execution_job_runs", method: http.MethodPost, path: "/v1/execution-jobs/job-1/runs", wantRoute: "execution_job_runs"},
 		{name: "run_command_plans", method: http.MethodPost, path: "/v1/runs/run-1/command-plans", wantRoute: "run_command_plans"},
+		{name: "run_command_plan", method: http.MethodGet, path: "/v1/runs/run-1/command-plans/project_test/run_declared_test_target", wantRoute: "run_command_plan"},
 		{name: "run_receipts", method: http.MethodPost, path: "/v1/runs/run-1/receipts", wantRoute: "run_receipts"},
 	}
 
@@ -276,6 +278,7 @@ func TestPublicV1OldVerbStyleRoutesAreNotRegistered(t *testing.T) {
 		ExecutionJobLeases:            probeRoute("execution_job_leases"),
 		ExecutionJobRuns:              probeRoute("execution_job_runs"),
 		RunCommandPlans:               probeRoute("run_command_plans"),
+		RunCommandPlan:                probeRoute("run_command_plan"),
 		RunReceipts:                   probeRoute("run_receipts"),
 		ClarificationAnswers:          probeRoute("clarification_answers"),
 		ClarificationAnswerApply:      probeRoute("clarification_answer_apply"),
@@ -466,6 +469,7 @@ func newRouter(
 		ExecutionJobLeases:            http.HandlerFunc(executionHandler.AcquireLease),
 		ExecutionJobRuns:              http.HandlerFunc(executionHandler.StartRun),
 		RunCommandPlans:               http.HandlerFunc(executionHandler.CreateCommandPlan),
+		RunCommandPlan:                http.HandlerFunc(executionHandler.GetCommandPlan),
 		RunReceipts:                   http.HandlerFunc(executionHandler.SubmitReceipt),
 		ClarificationAnswers:          http.HandlerFunc(clarificationHandler.RecordAnswer),
 		ClarificationAnswerApply:      http.HandlerFunc(clarificationHandler.ApplyAnswer),

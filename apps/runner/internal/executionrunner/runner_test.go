@@ -402,6 +402,92 @@ func TestStepSubmitsProjectProbeReceipt(t *testing.T) {
 	}
 }
 
+func TestStepSubmitsProjectTestReceipt(t *testing.T) {
+	const secretToken = "secret-execution-token"
+	workspaceRoot := t.TempDir()
+
+	var receiptRequest executionReceiptRequest
+	var getPlanRequests atomic.Int32
+	var createPlanRequests atomic.Int32
+	var receiptRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/run-1/command-plans/project_test/run_declared_test_target":
+			getPlanRequests.Add(1)
+			w.WriteHeader(http.StatusOK)
+			planJSON, err := json.Marshal(projectTestPlanFixture())
+			if err != nil {
+				t.Fatalf("marshal project test plan: %v", err)
+			}
+			_, _ = w.Write(planJSON)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/command-plans":
+			createPlanRequests.Add(1)
+			http.Error(w, "unexpected command plan create", http.StatusInternalServerError)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+			receiptRequests.Add(1)
+			decodeStrict(t, r, &receiptRequest)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"execution-receipt-1","run_id":"run-1","execution_job_id":"execution-job-1","runner_id":"runner-1","execution_mode":"project_test","command_plan_id":"command-plan-1","command_kind":"project_test","action":"run_declared_test_target","process_status":"policy_rejected"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	runner, err := NewRunner(Config{
+		ServerURL:       server.URL,
+		BearerToken:     "runner-token",
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		WorkspaceRoot:   workspaceRoot,
+		CommitSHA:       "abc123",
+		BaselineID:      "baseline-1",
+		OverlayID:       "overlay-1",
+		ProjectTest:     true,
+		PollInterval:    time.Millisecond,
+		LeaseTTLSeconds: 900,
+		Once:            true,
+		LogWriter:       &logs,
+	})
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+	result, err := runner.Step(context.Background())
+	if err != nil {
+		t.Fatalf("Step() error = %v", err)
+	}
+	if result != StepReceiptSubmitted {
+		t.Fatalf("Step() = %q, want %q", result, StepReceiptSubmitted)
+	}
+	if getPlanRequests.Load() != 1 || createPlanRequests.Load() != 0 || receiptRequests.Load() != 1 {
+		t.Fatalf("get/create/receipt requests = %d/%d/%d, want 1/0/1", getPlanRequests.Load(), createPlanRequests.Load(), receiptRequests.Load())
+	}
+	if receiptRequest.ExecutionMode != "project_test" || receiptRequest.CommandPlanID != "command-plan-1" || receiptRequest.CommandKind != "project_test" || receiptRequest.Action != "run_declared_test_target" || receiptRequest.ProcessStatus != "policy_rejected" {
+		t.Fatalf("project test receipt command metadata = %#v, want policy_rejected project_test metadata", receiptRequest)
+	}
+	if receiptRequest.ExitCode != nil {
+		t.Fatalf("project test receipt exit_code = %#v, want nil for policy_rejected", receiptRequest.ExitCode)
+	}
+	if receiptRequest.ProjectProbeMetadata != nil || receiptRequest.RawSourceUploaded || len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.RunnerStartedAt == nil || receiptRequest.RunnerFinishedAt == nil {
+		t.Fatalf("project test receipt evidence = %#v, want policy rejection without probe metadata/artifacts/raw source", receiptRequest)
+	}
+	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("logs = %q, want no %q", logs.String(), forbidden)
+		}
+	}
+}
+
 func TestProjectProbeDetectsOnlyAllowlistedRootManifests(t *testing.T) {
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "package.json"), []byte(`{"scripts":{"test":"node test.js"}}`), 0o600); err != nil {
@@ -442,6 +528,25 @@ func TestProjectProbeModeRequiresWorkspaceRoot(t *testing.T) {
 		WorkspaceRef:    "mounted:/workspace/goalrail",
 		CommitSHA:       "abc123",
 		ProjectProbe:    true,
+		PollInterval:    time.Millisecond,
+		LeaseTTLSeconds: 900,
+		Once:            true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "workspace root is required") {
+		t.Fatalf("NewRunner() error = %v, want workspace root requirement", err)
+	}
+}
+
+func TestProjectTestModeRequiresWorkspaceRoot(t *testing.T) {
+	_, err := NewRunner(Config{
+		ServerURL:       "http://127.0.0.1:9999",
+		BearerToken:     "runner-token",
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		ProjectTest:     true,
 		PollInterval:    time.Millisecond,
 		LeaseTTLSeconds: 900,
 		Once:            true,
@@ -662,6 +767,224 @@ func TestStepRejectsUnsafeProjectProbePlan(t *testing.T) {
 	}
 }
 
+func TestStepRejectsUnsafeProjectTestPlan(t *testing.T) {
+	const secretToken = "secret-execution-token"
+	for _, tt := range []struct {
+		name    string
+		mutate  func(*executionCommandPlan)
+		wantErr string
+	}{
+		{
+			name: "shell",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ShellAllowed = true
+			},
+			wantErr: "allows shell",
+		},
+		{
+			name: "argv",
+			mutate: func(plan *executionCommandPlan) {
+				plan.Argv = []string{"npm", "test"}
+			},
+			wantErr: "argv must be empty",
+		},
+		{
+			name: "wrong kind",
+			mutate: func(plan *executionCommandPlan) {
+				plan.CommandKind = "project_probe"
+			},
+			wantErr: "unsupported execution command kind",
+		},
+		{
+			name: "wrong action",
+			mutate: func(plan *executionCommandPlan) {
+				plan.Action = "run_tests"
+			},
+			wantErr: "unsupported execution command action",
+		},
+		{
+			name: "missing source receipt",
+			mutate: func(plan *executionCommandPlan) {
+				plan.SourceProjectProbeReceiptID = ""
+			},
+			wantErr: "source project probe receipt",
+		},
+		{
+			name: "missing selected target",
+			mutate: func(plan *executionCommandPlan) {
+				plan.SelectedTargetID = ""
+			},
+			wantErr: "selected target id",
+		},
+		{
+			name: "missing declared target",
+			mutate: func(plan *executionCommandPlan) {
+				plan.DeclaredTestTarget = nil
+			},
+			wantErr: "declared test target",
+		},
+		{
+			name: "unsupported target family",
+			mutate: func(plan *executionCommandPlan) {
+				plan.DeclaredTestTarget.SourceKind = "go_module_manifest"
+			},
+			wantErr: "unsupported project test target family",
+		},
+		{
+			name: "target mismatch",
+			mutate: func(plan *executionCommandPlan) {
+				plan.SelectedTargetID = "package.json#package_json_script:test:unit"
+			},
+			wantErr: "does not match declared target",
+		},
+		{
+			name: "nested source path",
+			mutate: func(plan *executionCommandPlan) {
+				plan.DeclaredTestTarget.SourcePath = "packages/app/package.json"
+				plan.SelectedTargetID = "packages/app/package.json#package_json_script:test"
+			},
+			wantErr: "outside root package manifest scope",
+		},
+		{
+			name: "working directory",
+			mutate: func(plan *executionCommandPlan) {
+				plan.WorkingDirectory = "packages/app"
+			},
+			wantErr: "working directory",
+		},
+		{
+			name: "path scope",
+			mutate: func(plan *executionCommandPlan) {
+				plan.PathScope = []string{"packages/app"}
+			},
+			wantErr: "path scope",
+		},
+		{
+			name: "timeout",
+			mutate: func(plan *executionCommandPlan) {
+				plan.TimeoutSeconds = 0
+			},
+			wantErr: "output/timeout policy",
+		},
+		{
+			name: "stdout capture",
+			mutate: func(plan *executionCommandPlan) {
+				plan.MaxStdoutBytes = 1024
+			},
+			wantErr: "output/timeout policy",
+		},
+		{
+			name: "stderr capture",
+			mutate: func(plan *executionCommandPlan) {
+				plan.MaxStderrBytes = 1024
+			},
+			wantErr: "output/timeout policy",
+		},
+		{
+			name: "network",
+			mutate: func(plan *executionCommandPlan) {
+				plan.NetworkAllowed = true
+			},
+			wantErr: "allows network",
+		},
+		{
+			name: "workspace writes",
+			mutate: func(plan *executionCommandPlan) {
+				plan.WorkspaceWriteAllowed = true
+			},
+			wantErr: "workspace writes",
+		},
+		{
+			name: "scratch writes",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ScratchWriteAllowed = true
+			},
+			wantErr: "scratch writes",
+		},
+		{
+			name: "artifacts",
+			mutate: func(plan *executionCommandPlan) {
+				plan.AllowedArtifactKinds = []string{"junit"}
+			},
+			wantErr: "allowed artifacts",
+		},
+		{
+			name: "changed paths",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ChangedPathsAllowed = true
+			},
+			wantErr: "changed paths",
+		},
+		{
+			name: "raw source upload",
+			mutate: func(plan *executionCommandPlan) {
+				plan.RawSourceUploadAllowed = true
+			},
+			wantErr: "raw source upload",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := projectTestPlanFixture()
+			tt.mutate(&plan)
+			planJSON, err := json.Marshal(plan)
+			if err != nil {
+				t.Fatalf("marshal command plan: %v", err)
+			}
+			var receiptRequests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+				case r.Method == http.MethodGet && r.URL.Path == "/v1/runs/run-1/command-plans/project_test/run_declared_test_target":
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write(planJSON)
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+					receiptRequests.Add(1)
+					http.Error(w, "unexpected receipt", http.StatusInternalServerError)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
+
+			var logs bytes.Buffer
+			runner, err := NewRunner(Config{
+				ServerURL:       server.URL,
+				BearerToken:     "runner-token",
+				ProjectID:       "project-1",
+				RepoBindingID:   "repo-1",
+				RunnerID:        "runner-1",
+				WorkspaceRef:    "mounted:/workspace/goalrail",
+				WorkspaceRoot:   t.TempDir(),
+				CommitSHA:       "abc123",
+				ProjectTest:     true,
+				PollInterval:    time.Millisecond,
+				LeaseTTLSeconds: 900,
+				Once:            true,
+				LogWriter:       &logs,
+			})
+			if err != nil {
+				t.Fatalf("NewRunner() error = %v", err)
+			}
+			_, err = runner.Step(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Step() error = %v, want %q policy rejection", err, tt.wantErr)
+			}
+			if receiptRequests.Load() != 0 {
+				t.Fatalf("receipt requests = %d, want 0 after unsafe command plan", receiptRequests.Load())
+			}
+			if strings.Contains(logs.String(), secretToken) {
+				t.Fatalf("logs leaked execution lease token: %q", logs.String())
+			}
+		})
+	}
+}
+
 func TestStepCanResumeReceiptAfterTransientSubmitFailure(t *testing.T) {
 	const firstSecretToken = "first-secret-execution-token"
 	const secondSecretToken = "second-secret-execution-token"
@@ -834,4 +1157,39 @@ func hasTestTarget(metadata *projectProbeMetadata, name string) bool {
 		}
 	}
 	return false
+}
+
+func projectTestPlanFixture() executionCommandPlan {
+	return executionCommandPlan{
+		ID:                          "command-plan-1",
+		ProjectID:                   "project-1",
+		RepoBindingID:               "repo-1",
+		TaskID:                      "task-1",
+		CheckoutReceiptID:           "receipt-1",
+		ExecutionJobID:              "execution-job-1",
+		RunID:                       "run-1",
+		CommandKind:                 "project_test",
+		Action:                      "run_declared_test_target",
+		SourceProjectProbeReceiptID: "probe-receipt-1",
+		SelectedTargetID:            "package.json#package_json_script:test",
+		DeclaredTestTarget: &projectProbeTestTargetCandidate{
+			Name:       "test",
+			SourcePath: "package.json",
+			SourceKind: "package_json_script",
+		},
+		ShellAllowed:           false,
+		Argv:                   []string{},
+		WorkingDirectory:       ".",
+		PathScope:              []string{"."},
+		TimeoutSeconds:         120,
+		NetworkAllowed:         false,
+		WorkspaceWriteAllowed:  false,
+		ScratchWriteAllowed:    false,
+		MaxStdoutBytes:         0,
+		MaxStderrBytes:         0,
+		AllowedArtifactKinds:   []string{},
+		ChangedPathsAllowed:    false,
+		RawSourceUploadAllowed: false,
+		State:                  "planned",
+	}
 }

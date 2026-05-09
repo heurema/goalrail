@@ -1492,6 +1492,123 @@ func TestProjectTestCommandPlanPreparation(t *testing.T) {
 	})
 }
 
+func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
+	t.Run("submits project test policy rejection receipt as evidence only", func(t *testing.T) {
+		server := testServer(t)
+		job, lease, run, plan := createProjectTestPlanFromSeededProbe(t, server)
+
+		getResponse := doJSON(t, server.router, http.MethodGet, "/v1/runs/"+string(run.ID)+"/command-plans/project_test/run_declared_test_target", "")
+		if getResponse.code != http.StatusOK {
+			t.Fatalf("get project test command plan status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
+		}
+		var fetchedPlan spine.ExecutionCommandPlan
+		decodeJSON(t, getResponse.body, &fetchedPlan)
+		if fetchedPlan.ID != plan.ID || fetchedPlan.CommandKind != spine.ExecutionCommandKindProjectTest || fetchedPlan.Action != spine.ExecutionCommandActionRunTestTarget {
+			t.Fatalf("fetched project test command plan = %#v, want existing project_test plan", fetchedPlan)
+		}
+
+		receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false))
+		if receiptResponse.code != http.StatusCreated {
+			t.Fatalf("project test receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+		}
+		for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"project_probe_metadata\"", "\"stdout\"", "\"stderr\""} {
+			if strings.Contains(receiptResponse.body, forbidden) {
+				t.Fatalf("project test receipt response exposes forbidden field %s: %s", forbidden, receiptResponse.body)
+			}
+		}
+		var receipt spine.ExecutionReceipt
+		decodeJSON(t, receiptResponse.body, &receipt)
+		if receipt.CommandPlanID == nil || *receipt.CommandPlanID != plan.ID || receipt.ExecutionMode != spine.ExecutionReceiptModeProjectTest || receipt.CommandKind != spine.ExecutionCommandKindProjectTest || receipt.Action != spine.ExecutionCommandActionRunTestTarget {
+			t.Fatalf("project test receipt command metadata = %#v, want fixed project_test metadata", receipt)
+		}
+		if receipt.ProcessStatus != spine.ExecutionReceiptStatusPolicyRejected || receipt.ExitCode != nil || receipt.RawSourceUploaded {
+			t.Fatalf("project test receipt process evidence = %#v, want policy_rejected without exit_code/raw source", receipt)
+		}
+		if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 || receipt.ProjectProbeMetadata != nil {
+			t.Fatalf("project test evidence claims = artifacts=%#v changed=%#v probe=%#v, want process-only receipt", receipt.ArtifactRefs, receipt.ChangedPathsSummary, receipt.ProjectProbeMetadata)
+		}
+		if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
+			t.Fatalf("project test run state = %q, want receipt_submitted", got)
+		}
+		if got := server.executionJobs.jobs[job.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+			t.Fatalf("project test execution job state = %q, want receipt_submitted", got)
+		}
+		storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+		if err != nil || !ok {
+			t.Fatalf("workItems.Get() after project test receipt = %#v/%v/%v", storedTask, ok, err)
+		}
+		if storedTask.Status != spine.WorkItemStatusPlanned {
+			t.Fatalf("task status = %q, want planned after project test receipt", storedTask.Status)
+		}
+		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
+	t.Run("rejects unsafe project test receipt claims", func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			body func(spine.ExecutionJob, spine.ExecutionJobLeaseCreated, spine.ExecutionCommandPlan) string
+		}{
+			{
+				name: "exited status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(0), false)
+				},
+			},
+			{
+				name: "exit code for policy rejected",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, intPtr(124), false)
+				},
+			},
+			{
+				name: "artifacts",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(1), false)
+					return strings.Replace(body, `"artifact_refs":[],"changed_paths_summary":[]`, `"artifact_refs":["junit.xml"],"changed_paths_summary":[]`, 1)
+				},
+			},
+			{
+				name: "changed paths",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(1), false)
+					return strings.Replace(body, `"artifact_refs":[],"changed_paths_summary":[]`, `"artifact_refs":[],"changed_paths_summary":["package.json"]`, 1)
+				},
+			},
+			{
+				name: "raw source upload",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(1), true)
+				},
+			},
+			{
+				name: "project probe metadata",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(0), false)
+					return strings.Replace(body, `"runner_finished_at":"2026-04-25T12:00:00Z"`, `"runner_finished_at":"2026-04-25T12:00:00Z","project_probe_metadata":{"partiality_reasons":["not allowed"]}`, 1)
+				},
+			},
+			{
+				name: "wrong command plan",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, _ spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "execution-command-plan-missing", spine.ExecutionReceiptStatusExited, intPtr(0), false)
+				},
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				job, lease, run, plan := createProjectTestPlanFromSeededProbe(t, server)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", tt.body(job, lease, plan))
+				if response.code != http.StatusBadRequest && response.code != http.StatusNotFound && response.code != http.StatusConflict {
+					t.Fatalf("project test unsafe receipt status = %d, want reject: %s", response.code, response.body)
+				}
+				if len(server.executionReceipts.byRun) != 1 {
+					t.Fatalf("execution receipt byRun count = %d, want only seeded project_probe receipt after unsafe project_test receipt", len(server.executionReceipts.byRun))
+				}
+			})
+		}
+	})
+}
+
 func TestExecutionRunnerRoutesCanRecoverReceiptAfterExpiredRunStartedLease(t *testing.T) {
 	server := testServer(t)
 	job, lease := createLeasedExecutionJob(t, server)
@@ -1962,6 +2079,18 @@ func projectProbeReceiptBodyWithTarget(jobID spine.ExecutionJobID, leaseID spine
 	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_probe","command_plan_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets","process_status":"metadata_only","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":false,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z","project_probe_metadata":{"detected_manifests":[{"path":"package.json","kind":"node_package_manifest"}],"package_manager_candidates":[{"name":"npm","source_path":"package.json"}],"declared_test_target_candidates":[{"name":%q,"source_path":%q,"source_kind":%q}],"unsupported_or_unknowns":[],"partiality_reasons":["probe reads only allowlisted manifest files under path_scope"]}}`, jobID, leaseID, leaseToken, runnerID, planID, targetName, targetSourcePath, targetSourceKind)
 }
 
+func projectTestReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, planID spine.ExecutionCommandPlanID, status string, exitCode *int, rawSourceUploaded bool) string {
+	exitCodeField := ""
+	if exitCode != nil {
+		exitCodeField = fmt.Sprintf(`,"exit_code":%d`, *exitCode)
+	}
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_test","command_plan_id":%q,"command_kind":"project_test","action":"run_declared_test_target","process_status":%q%s,"artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, jobID, leaseID, leaseToken, runnerID, planID, status, exitCodeField, rawSourceUploaded)
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
 func createProjectProbeReceipt(t *testing.T, server testServerDeps) (spine.ExecutionJob, spine.ExecutionJobLeaseCreated, spine.Run, spine.ExecutionCommandPlan, spine.ExecutionReceipt) {
 	t.Helper()
 
@@ -1987,6 +2116,73 @@ func createProjectProbeReceipt(t *testing.T, server testServerDeps) (spine.Execu
 	var receipt spine.ExecutionReceipt
 	decodeJSON(t, receiptResponse.body, &receipt)
 	return job, lease, run, plan, receipt
+}
+
+func createProjectTestPlanFromSeededProbe(t *testing.T, server testServerDeps) (spine.ExecutionJob, spine.ExecutionJobLeaseCreated, spine.Run, spine.ExecutionCommandPlan) {
+	t.Helper()
+
+	job, lease := createLeasedExecutionJob(t, server)
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+	probeReceipt := seedProjectProbeReceiptForJob(t, server, job)
+
+	body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_test","action":"run_declared_test_target","project_probe_receipt_id":%q,"selected_target_id":"package.json#package_json_script:test"}`, job.RepoBindingID, probeReceipt.ID)
+	planResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", body)
+	if planResponse.code != http.StatusCreated {
+		t.Fatalf("project test command plan status = %d, want %d: %s", planResponse.code, http.StatusCreated, planResponse.body)
+	}
+	var plan spine.ExecutionCommandPlan
+	decodeJSON(t, planResponse.body, &plan)
+	return job, lease, run, plan
+}
+
+func seedProjectProbeReceiptForJob(t *testing.T, server testServerDeps, job spine.ExecutionJob) spine.ExecutionReceipt {
+	t.Helper()
+
+	now := testTime()
+	receipt := spine.ExecutionReceipt{
+		ID:                  "018f0000-0000-7000-8004-000000000123",
+		RunID:               "run-seeded-project-probe",
+		ExecutionJobID:      "execution-job-seeded-project-probe",
+		ExecutionLeaseID:    "execution-lease-seeded-project-probe",
+		TaskID:              job.TaskID,
+		CheckoutReceiptID:   job.CheckoutReceiptID,
+		RepoBindingID:       job.RepoBindingID,
+		RunnerID:            "runner-1",
+		WorkspaceRef:        "mounted:/workspace/goalrail",
+		CommitSHA:           "abc123",
+		ExecutionMode:       spine.ExecutionReceiptModeProjectProbe,
+		CommandKind:         spine.ExecutionCommandKindProjectProbe,
+		Action:              spine.ExecutionCommandActionDetectTestTargets,
+		ProcessStatus:       spine.ExecutionReceiptStatusMetadataOnly,
+		ArtifactRefs:        []string{},
+		ChangedPathsSummary: []string{},
+		RawSourceUploaded:   false,
+		ProjectProbeMetadata: &spine.ProjectProbeMetadata{
+			DetectedManifests: []spine.ProjectProbeManifest{
+				{Path: "package.json", Kind: "node_package_manifest"},
+			},
+			PackageManagerCandidates: []spine.ProjectProbePackageManagerCandidate{
+				{Name: "npm", SourcePath: "package.json"},
+			},
+			DeclaredTestTargetCandidates: []spine.ProjectProbeTestTargetCandidate{
+				{Name: "test", SourcePath: "package.json", SourceKind: "package_json_script"},
+			},
+			UnsupportedOrUnknowns: []string{},
+			PartialityReasons:     []string{"seeded project_probe metadata for project_test receipt regression"},
+		},
+		StartedAt:  now,
+		FinishedAt: now,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	server.executionReceipts.receipts[receipt.ID] = receipt
+	server.executionReceipts.byRun[receipt.RunID] = receipt.ID
+	return receipt
 }
 
 func createStartedExecutionRunForProjectTestPlan(t *testing.T, server testServerDeps, sourceJob spine.ExecutionJob) (spine.ExecutionJob, spine.Run) {

@@ -43,8 +43,13 @@ const (
 	ExecutionReceiptModeNoCommand          = "no_command"
 	ExecutionReceiptModeBuiltinDiagnostic  = "builtin_diagnostic"
 	ExecutionReceiptModeProjectProbe       = "project_probe"
+	ExecutionReceiptModeProjectTest        = "project_test"
 	ExecutionReceiptStatusNotExecuted      = "not_executed"
 	ExecutionReceiptStatusMetadataOnly     = "metadata_only"
+	ExecutionReceiptStatusExited           = "exited"
+	ExecutionReceiptStatusTimedOut         = "timed_out"
+	ExecutionReceiptStatusRunnerError      = "runner_error"
+	ExecutionReceiptStatusPolicyRejected   = "policy_rejected"
 	ExecutionReceiptNextActionGateReview   = "gate_review"
 	ExecutionReceiptNextActionPlannedSlice = "I"
 )

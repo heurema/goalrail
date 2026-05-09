@@ -14,6 +14,7 @@ type ExecutionService interface {
 	AcquireNextLease(context.Context, spine.ExecutionJobLeaseCreateRequest, spine.OrganizationMembership) (spine.ExecutionJobLeaseCreated, bool, error)
 	StartRun(context.Context, spine.ExecutionJobID, spine.RunStartRequest, spine.OrganizationMembership) (spine.Run, bool, error)
 	CreateOrReturnCommandPlan(context.Context, spine.RunID, spine.ExecutionCommandPlanCreateRequest, spine.OrganizationMembership) (spine.ExecutionCommandPlan, bool, error)
+	GetCommandPlan(context.Context, spine.RunID, string, string, spine.OrganizationMembership) (spine.ExecutionCommandPlan, error)
 	SubmitReceipt(context.Context, spine.RunID, spine.ExecutionReceiptSubmitRequest, spine.OrganizationMembership) (spine.ExecutionReceipt, bool, error)
 }
 
@@ -117,6 +118,20 @@ func (h *ExecutionHandler) CreateCommandPlan(w http.ResponseWriter, r *http.Requ
 		status = http.StatusCreated
 	}
 	RespondJSON(w, status, plan)
+}
+
+func (h *ExecutionHandler) GetCommandPlan(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	plan, err := h.service.GetCommandPlan(r.Context(), spine.RunID(r.PathValue("id")), r.PathValue("kind"), r.PathValue("action"), profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, plan)
 }
 
 func (h *ExecutionHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) {
