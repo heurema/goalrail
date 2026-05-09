@@ -21,6 +21,7 @@ related_docs:
   - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
   - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
+  - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
 ---
@@ -125,37 +126,38 @@ related_docs:
 75. `docs/ops/INIT_LIFECYCLE.md`
 76. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
 77. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-78. `docs/ops/BRANCH_PROTECTION.md`
-79. `docs/ops/REPO_STRUCTURE.md`
-80. `docs/ops/GO_CODE_GUIDE.md`
-81. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-82. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-83. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-84. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-85. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-86. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-87. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-88. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-89. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-90. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-91. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-92. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-93. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-94. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+78. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+79. `docs/ops/BRANCH_PROTECTION.md`
+80. `docs/ops/REPO_STRUCTURE.md`
+81. `docs/ops/GO_CODE_GUIDE.md`
+82. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+83. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+84. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+85. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+86. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+87. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+88. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+89. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+90. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+91. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+92. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+93. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+94. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+95. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-95. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-96. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-97. `docs/reference/design/reference_screens/`
-98. `docs/reference/start-assistant/`
-99. `.goalrail/work/`
-100. `.goalrail/knowledge/`
-101. `.goalrail/public-kb/manifest.yaml`
-102. `.punk/publishing.toml`
-103. `.goalrail/flows/`
-104. `.goalrail/evals/`
-105. `docs/ops/PUBLISHING_MIGRATION.md`
-106. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+96. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+97. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+98. `docs/reference/design/reference_screens/`
+99. `docs/reference/start-assistant/`
+100. `.goalrail/work/`
+101. `.goalrail/knowledge/`
+102. `.goalrail/public-kb/manifest.yaml`
+103. `.punk/publishing.toml`
+104. `.goalrail/flows/`
+105. `.goalrail/evals/`
+106. `docs/ops/PUBLISHING_MIGRATION.md`
+107. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -285,6 +287,9 @@ related_docs:
 - `INIT_STABILIZATION_CHECKPOINT.md` — operational checkpoint for completed
   `goalrail init` stabilization slices, remaining risks, non-goals, and the
   next safe init follow-up options
+- `CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md` — operational checkpoint for
+  the completed read-only Console Goal / Contract tranche, implemented flow,
+  endpoints, boundaries, completed slices, and do-not-reintroduce non-goals
 - `BRANCH_PROTECTION.md` — operational record for verified GitHub `main` branch protection and required PR check contexts
 - `REPO_STRUCTURE.md` — operational map for where code, docs, tools, overlays, and root-level files belong
 - `GO_CODE_GUIDE.md` — repo-wide Go coding rules for keeping future Go work consistent with the current architecture and style
