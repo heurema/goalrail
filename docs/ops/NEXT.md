@@ -53,6 +53,12 @@
   stdout/stderr capture, no artifacts, evidence-only receipts, one command
   receipt per Run, and Gate / Proof still deferred. H2.5.1+ smoke coverage pins
   the project-probe boundary without adding product behavior.
+- ADR-0032 defines the H2.6 typed project test command boundary as docs-first
+  only. No typed project test execution is implemented yet. The next safe
+  implementation slice, after ADR review, is limited to one
+  `project_test/run_declared_test_target` path derived from project-probe
+  metadata, with no shell, no user argv, no "run all tests", no stdout/stderr
+  capture in the first slice, no artifacts, no GateDecision, and no Proof.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -240,6 +246,10 @@
   project-probe metadata boundary. WorkItems still remain `planned`;
   assignment, claiming, arbitrary shell/project command execution, project test
   execution, gate, and proof are still deferred.
+- ADR-0032 records the H2.6 typed project test command boundary for a future
+  `project_test/run_declared_test_target` action. It is not implemented yet and
+  must not be treated as arbitrary shell, package-manager command execution,
+  "run all tests", GateDecision, or Proof.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -988,6 +998,10 @@ Done means:
      allowlisted manifest/config files, no shell, no arbitrary command string,
      no stdout/stderr capture, no artifacts, no changed paths, and no project
      test execution
+   - ADR-0032 defines H2.6 typed project test command execution as the next
+     docs-first boundary. The first future command shape is
+     `project_test/run_declared_test_target`, derived from project-probe
+     metadata, with shell and user argv forbidden and Gate / Proof deferred
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

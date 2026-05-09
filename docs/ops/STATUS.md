@@ -63,7 +63,8 @@ and H2.5.1 now implements only
 allowlisted manifest/config files, with no shell, no arbitrary command strings,
 no user-provided argv, no stdout/stderr capture, no artifacts, no changed
 paths, no project test execution, one command receipt per Run, and Gate /
-Proof still deferred;
+Proof still deferred; ADR-0032 now defines the H2.6 typed project test command
+boundary as docs-first only, with no test execution implementation yet;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -269,6 +270,13 @@ The project currently has:
   receipt per Run. H2.5.1+ smoke coverage pins the project-probe command plan,
   receipt metadata, fail-closed policy checks, and no raw manifest-body upload
   without adding product behavior.
+- ADR-0032 documents the H2.6 typed project test command boundary before
+  implementation. It defines `project_test/run_declared_test_target` as the
+  first allowed shape for a future server-owned plan derived from
+  project-probe metadata, but no H2.6 code exists yet. Shell, arbitrary command
+  strings, user-provided argv, "run all tests", stdout/stderr capture,
+  artifacts, changed paths, raw source upload, GateDecision, Proof, WorkItem
+  status transitions, and multi-command Runs remain deferred.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -620,6 +628,10 @@ The project currently has:
   Gate, Proof, WorkItem status transitions, and runner trust hardening stay
   deferred. H2.5.1+ smoke coverage pins those regression boundaries without
   adding command execution behavior
+- ADR-0032 defines the next typed project test command boundary as docs-first
+  only. The future `project_test/run_declared_test_target` shape must be
+  server-owned, derived from project-probe metadata, one command per Run, and
+  evidence-only; no project test execution implementation has landed
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
@@ -742,5 +754,6 @@ Current packaging target:
 8. repository baseline or context-pack work could drift into hidden mutable memory, raw source upload, or background-scan truth
 9. reference screenshots or brand assets could be relicensed accidentally without a provenance audit
 10. project command execution could accidentally turn stdout/stderr, artifacts,
-    or multiple command attempts into pseudo-proof unless ADR-0031's typed
-    allowlist and one-command / one-receipt / one-Run rule are preserved
+    exit codes, or multiple command attempts into pseudo-proof unless
+    ADR-0031/ADR-0032 typed allowlists and the one-command / one-receipt /
+    one-Run rule are preserved
