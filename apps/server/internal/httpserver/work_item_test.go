@@ -1116,6 +1116,88 @@ func TestExecutionCommandPlanAndBuiltinDiagnosticReceipt(t *testing.T) {
 	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
 }
 
+func TestProjectProbeCommandPlanAndReceipt(t *testing.T) {
+	server := testServer(t)
+	job, lease := createLeasedExecutionJob(t, server)
+	runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+	if runResponse.code != http.StatusCreated {
+		t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+	}
+	var run spine.Run
+	decodeJSON(t, runResponse.body, &run)
+
+	planResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets"}`, job.RepoBindingID))
+	if planResponse.code != http.StatusCreated {
+		t.Fatalf("project probe command plan status = %d, want %d: %s", planResponse.code, http.StatusCreated, planResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\"", "\"sh -c\""} {
+		if strings.Contains(planResponse.body, forbidden) {
+			t.Fatalf("project probe command plan response exposes forbidden field %s: %s", forbidden, planResponse.body)
+		}
+	}
+	var plan spine.ExecutionCommandPlan
+	decodeJSON(t, planResponse.body, &plan)
+	if plan.ID == "" || plan.RunID != run.ID || plan.ExecutionJobID != job.ID || plan.TaskID != run.TaskID || plan.CheckoutReceiptID != run.CheckoutReceiptID || plan.RepoBindingID != job.RepoBindingID {
+		t.Fatalf("project probe command plan = %#v, want run/job/task/receipt scoped plan", plan)
+	}
+	if plan.CommandKind != spine.ExecutionCommandKindProjectProbe || plan.Action != spine.ExecutionCommandActionDetectTestTargets || plan.ShellAllowed || len(plan.Argv) != 0 || plan.WorkingDirectory != "." || len(plan.PathScope) != 1 || plan.PathScope[0] != "." || plan.RawSourceUploadAllowed {
+		t.Fatalf("project probe command plan policy = %#v, want typed probe without shell/argv/raw source", plan)
+	}
+	if plan.TimeoutSeconds != 30 || plan.MaxStdoutBytes != 0 || plan.MaxStderrBytes != 0 || len(plan.AllowedArtifactKinds) != 0 || plan.State != spine.ExecutionCommandPlanStatePlanned {
+		t.Fatalf("project probe command plan limits/state = %#v, want metadata-only probe policy", plan)
+	}
+	secondPlanResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets"}`, job.RepoBindingID))
+	if secondPlanResponse.code != http.StatusOK {
+		t.Fatalf("second project probe command plan status = %d, want %d: %s", secondPlanResponse.code, http.StatusOK, secondPlanResponse.body)
+	}
+	var existingPlan spine.ExecutionCommandPlan
+	decodeJSON(t, secondPlanResponse.body, &existingPlan)
+	if existingPlan.ID != plan.ID || len(server.commandPlans.plans) != 1 {
+		t.Fatalf("existing project probe command plan id/count = %q/%d, want %q/1", existingPlan.ID, len(server.commandPlans.plans), plan.ID)
+	}
+
+	receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectProbeReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID))
+	if receiptResponse.code != http.StatusCreated {
+		t.Fatalf("project probe receipt status = %d, want %d: %s", receiptResponse.code, http.StatusCreated, receiptResponse.body)
+	}
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"gate_decision_id\"", "\"proof_id\"", "\"bash -lc\"", "\"sh -c\"", "\"artifact_refs\":null", "\"changed_paths_summary\":null"} {
+		if strings.Contains(receiptResponse.body, forbidden) {
+			t.Fatalf("project probe receipt response exposes forbidden field %s: %s", forbidden, receiptResponse.body)
+		}
+	}
+	var receipt spine.ExecutionReceipt
+	decodeJSON(t, receiptResponse.body, &receipt)
+	if receipt.CommandPlanID == nil || *receipt.CommandPlanID != plan.ID || receipt.ExecutionMode != spine.ExecutionReceiptModeProjectProbe || receipt.CommandKind != spine.ExecutionCommandKindProjectProbe || receipt.Action != spine.ExecutionCommandActionDetectTestTargets {
+		t.Fatalf("project probe receipt command metadata = %#v, want fixed project probe metadata", receipt)
+	}
+	if receipt.ProcessStatus != spine.ExecutionReceiptStatusMetadataOnly || receipt.ExitCode != nil || receipt.RawSourceUploaded {
+		t.Fatalf("project probe receipt status = %#v, want metadata_only without exit/raw source", receipt)
+	}
+	if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 {
+		t.Fatalf("project probe artifact/path claims = %#v/%#v, want empty arrays", receipt.ArtifactRefs, receipt.ChangedPathsSummary)
+	}
+	if receipt.ProjectProbeMetadata == nil || len(receipt.ProjectProbeMetadata.DetectedManifests) != 1 || len(receipt.ProjectProbeMetadata.PackageManagerCandidates) != 1 || len(receipt.ProjectProbeMetadata.DeclaredTestTargetCandidates) != 1 || len(receipt.ProjectProbeMetadata.PartialityReasons) != 1 {
+		t.Fatalf("project probe metadata = %#v, want structured metadata evidence", receipt.ProjectProbeMetadata)
+	}
+	if receipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || receipt.NextAction.Available || receipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
+		t.Fatalf("project probe next_action = %#v, want unavailable gate_review", receipt.NextAction)
+	}
+	if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
+		t.Fatalf("run state = %q, want receipt_submitted", got)
+	}
+	if got := server.executionJobs.jobs[job.ID].State; got != spine.ExecutionJobStateReceiptSubmitted {
+		t.Fatalf("execution job state = %q, want receipt_submitted", got)
+	}
+	storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+	if err != nil || !ok {
+		t.Fatalf("workItems.Get() after project probe receipt = %#v/%v/%v", storedTask, ok, err)
+	}
+	if storedTask.Status != spine.WorkItemStatusPlanned {
+		t.Fatalf("task status = %q, want planned after project probe receipt", storedTask.Status)
+	}
+	assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+}
+
 func TestExecutionRunnerRoutesCanRecoverReceiptAfterExpiredRunStartedLease(t *testing.T) {
 	server := testServer(t)
 	job, lease := createLeasedExecutionJob(t, server)
@@ -1339,6 +1421,56 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		}
 	})
 
+	t.Run("command plan rejects non-allowlisted kind and action", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		if runResponse.code != http.StatusCreated {
+			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+		}
+		var run spine.Run
+		decodeJSON(t, runResponse.body, &run)
+
+		body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_command","action":"npm_test"}`, job.RepoBindingID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", body)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.commandPlans.plans) != 0 {
+			t.Fatalf("command plans = %d, want 0 after non-allowlisted command", len(server.commandPlans.plans))
+		}
+	})
+
+	t.Run("command plan rejects shell argv and user command strings", func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			body string
+		}{
+			{name: "shell", body: `,"shell":true`},
+			{name: "shell_allowed", body: `,"shell_allowed":true`},
+			{name: "argv", body: `,"argv":["npm","test"]`},
+			{name: "command", body: `,"command":"npm test"`},
+			{name: "command_string", body: `,"command_string":"go test ./..."`},
+			{name: "user_command", body: `,"user_command":"pytest"`},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				job, lease := createLeasedExecutionJob(t, server)
+				runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+				if runResponse.code != http.StatusCreated {
+					t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+				}
+				var run spine.Run
+				decodeJSON(t, runResponse.body, &run)
+
+				body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets"%s}`, job.RepoBindingID, tt.body)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", body)
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.commandPlans.plans) != 0 {
+					t.Fatalf("command plans = %d, want 0 after unsafe command request", len(server.commandPlans.plans))
+				}
+			})
+		}
+	})
+
 	t.Run("builtin diagnostic receipt rejects missing command plan", func(t *testing.T) {
 		server := testServer(t)
 		job, lease := createLeasedExecutionJob(t, server)
@@ -1352,6 +1484,30 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, response, http.StatusNotFound, "not_found")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after missing command plan", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("project probe receipt rejects missing metadata", func(t *testing.T) {
+		server := testServer(t)
+		job, lease := createLeasedExecutionJob(t, server)
+		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+		if runResponse.code != http.StatusCreated {
+			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+		}
+		var run spine.Run
+		decodeJSON(t, runResponse.body, &run)
+		planResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets"}`, job.RepoBindingID))
+		if planResponse.code != http.StatusCreated {
+			t.Fatalf("project probe command plan status = %d, want %d: %s", planResponse.code, http.StatusCreated, planResponse.body)
+		}
+		var plan spine.ExecutionCommandPlan
+		decodeJSON(t, planResponse.body, &plan)
+
+		body := fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","execution_mode":"project_probe","command_plan_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets","process_status":"metadata_only","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":false,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, job.ID, lease.ID, lease.LeaseToken, plan.ID)
+		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
+		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+		if len(server.executionReceipts.receipts) != 0 {
+			t.Fatalf("execution receipts = %d, want 0 after missing project probe metadata", len(server.executionReceipts.receipts))
 		}
 	})
 }
@@ -1446,6 +1602,10 @@ func executionReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLea
 
 func builtinDiagnosticReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, planID spine.ExecutionCommandPlanID) string {
 	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"builtin_diagnostic","command_plan_id":%q,"command_kind":"builtin_diagnostic","action":"workspace_status","process_status":"metadata_only","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":false,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, jobID, leaseID, leaseToken, runnerID, planID)
+}
+
+func projectProbeReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionLeaseID, leaseToken string, runnerID string, planID spine.ExecutionCommandPlanID) string {
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_probe","command_plan_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets","process_status":"metadata_only","artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":false,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z","project_probe_metadata":{"detected_manifests":[{"path":"package.json","kind":"node_package_manifest"}],"package_manager_candidates":[{"name":"npm","source_path":"package.json"}],"declared_test_target_candidates":[{"name":"test","source_path":"package.json","source_kind":"package_json_script"}],"unsupported_or_unknowns":[],"partiality_reasons":["probe reads only allowlisted manifest files under path_scope"]}}`, jobID, leaseID, leaseToken, runnerID, planID)
 }
 
 func TestCheckoutRunnerRoutesRejectUnauthenticatedRequests(t *testing.T) {

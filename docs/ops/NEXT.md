@@ -46,13 +46,12 @@
   provider adapters, GateDecision, and Proof remain deferred. H2.4.1+ smoke
   coverage pins this builtin diagnostic receipt path without changing product
   behavior.
-- ADR-0031 defines the H2.5 project command execution boundary before code:
-  no shell, no arbitrary command strings, no user-provided argv, typed
-  allowlisted server-owned command plans only, explicit `working_directory` and
-  `path_scope`, disabled stdout/stderr capture for the first project probe,
-  evidence-only receipts, one command receipt per Run, and Gate / Proof still
-  deferred. The next implementation is H2.5.1
-  `project_probe/detect_declared_test_targets`, not project test execution.
+- ADR-0031 defines the H2.5 project command execution boundary, and H2.5.1 now
+  implements only `project_probe/detect_declared_test_targets` as a typed
+  allowlisted metadata probe over runner-local manifest/config files. It keeps
+  no shell, no arbitrary command strings, no user-provided argv, no
+  stdout/stderr capture, no artifacts, evidence-only receipts, one command
+  receipt per Run, and Gate / Proof still deferred.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -234,11 +233,11 @@
   that no-command receipt path. H2.4.1 implements only fixed
   `builtin_diagnostic/workspace_status` command-plan plus receipt plumbing.
   H2.4.1+ smoke coverage now pins that builtin diagnostic receipt path.
-  ADR-0031 now records the H2.5 project command boundary; project command
-  execution is still not implemented, and the next code slice should be only
-  typed `project_probe/detect_declared_test_targets`. WorkItems still remain
-  `planned`; assignment, claiming, arbitrary shell/project command execution,
-  gate, and proof are still deferred.
+  ADR-0031 now records the H2.5 project command boundary; H2.5.1 implements
+  only typed `project_probe/detect_declared_test_targets` metadata probing from
+  allowlisted manifest/config files. WorkItems still remain `planned`;
+  assignment, claiming, arbitrary shell/project command execution, project test
+  execution, gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -982,10 +981,11 @@ Done means:
      artifacts as evidence refs only, `ExecutionReceipt` as evidence input
      only, one command receipt per Run, and separate future runner trust
      hardening
-   - next implementation: H2.5.1 typed
-     `project_probe/detect_declared_test_targets`, no shell, no arbitrary
-     command string, no stdout/stderr capture, no artifacts, no changed paths,
-     and no project test execution
+   - H2.5.1 implements typed
+     `project_probe/detect_declared_test_targets` metadata probing from
+     allowlisted manifest/config files, no shell, no arbitrary command string,
+     no stdout/stderr capture, no artifacts, no changed paths, and no project
+     test execution
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
@@ -996,9 +996,10 @@ Done means:
      path scope
    - keep execution receipts as evidence inputs only; they are not
      `GateDecision` or `Proof`
-   - first project command implementation must follow ADR-0031 and stay typed,
-     allowlisted, and metadata-only; arbitrary shell command execution requires
-     a later runtime-adapter ADR that explicitly narrows and authorizes it
+   - any later project command implementation must follow ADR-0031 and stay
+     typed, allowlisted, and policy-bound; arbitrary shell command execution
+     requires a later runtime-adapter ADR that explicitly narrows and
+     authorizes it
    - no assignment, claiming, provider adapter, LLM coding-agent integration,
      GateDecision, Proof, raw source upload, branch, commit, pull request, or
      merge request creation

@@ -43,14 +43,16 @@ func main() {
 	if raw := strings.TrimSpace(os.Getenv("GOALRAIL_RUNNER_PARTIAL")); raw == "true" || raw == "1" {
 		cfg.Partial = true
 	}
+	workspaceRoot := strings.TrimSpace(os.Getenv("GOALRAIL_RUNNER_WORKSPACE_ROOT"))
 
 	flags := flag.NewFlagSet("goalrail-runner", flag.ExitOnError)
-	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, execution-start, execution-receipt, or execution-diagnostic; also configurable with GOALRAIL_RUNNER_MODE")
+	flags.StringVar(&mode, "mode", mode, "runner mode: checkout, execution-start, execution-receipt, execution-diagnostic, or execution-project-probe; also configurable with GOALRAIL_RUNNER_MODE")
 	flags.StringVar(&cfg.ServerURL, "server-url", cfg.ServerURL, "Goalrail API server URL; also configurable with GOALRAIL_RUNNER_SERVER_URL")
 	flags.StringVar(&cfg.ProjectID, "project-id", cfg.ProjectID, "Project scope for runner leases; also configurable with GOALRAIL_RUNNER_PROJECT_ID")
 	flags.StringVar(&cfg.RepoBindingID, "repo-binding-id", cfg.RepoBindingID, "RepoBinding scope for runner leases; also configurable with GOALRAIL_RUNNER_REPO_BINDING_ID")
 	flags.StringVar(&cfg.RunnerID, "runner-id", cfg.RunnerID, "runner identity; also configurable with GOALRAIL_RUNNER_ID")
 	flags.StringVar(&cfg.WorkspaceRef, "workspace-ref", cfg.WorkspaceRef, "mounted workspace reference; also configurable with GOALRAIL_RUNNER_WORKSPACE_REF")
+	flags.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "local workspace root for project probe mode; also configurable with GOALRAIL_RUNNER_WORKSPACE_ROOT")
 	flags.StringVar(&cfg.CommitSHA, "commit-sha", cfg.CommitSHA, "workspace commit SHA; also configurable with GOALRAIL_RUNNER_COMMIT_SHA")
 	flags.StringVar(&cfg.BaselineID, "baseline-id", cfg.BaselineID, "optional repository baseline id")
 	flags.StringVar(&cfg.OverlayID, "overlay-id", cfg.OverlayID, "optional repository overlay id")
@@ -113,6 +115,24 @@ func main() {
 			LeaseTTLSeconds:   cfg.LeaseTTLSeconds,
 			Once:              cfg.Once,
 			LogWriter:         cfg.LogWriter,
+		})
+	case "execution-project-probe":
+		err = executionrunner.Run(ctx, executionrunner.Config{
+			ServerURL:       cfg.ServerURL,
+			BearerToken:     cfg.BearerToken,
+			ProjectID:       cfg.ProjectID,
+			RepoBindingID:   cfg.RepoBindingID,
+			RunnerID:        cfg.RunnerID,
+			WorkspaceRef:    cfg.WorkspaceRef,
+			WorkspaceRoot:   workspaceRoot,
+			CommitSHA:       cfg.CommitSHA,
+			BaselineID:      cfg.BaselineID,
+			OverlayID:       cfg.OverlayID,
+			ProjectProbe:    true,
+			PollInterval:    cfg.PollInterval,
+			LeaseTTLSeconds: cfg.LeaseTTLSeconds,
+			Once:            cfg.Once,
+			LogWriter:       cfg.LogWriter,
 		})
 	default:
 		err = fmt.Errorf("unsupported runner mode %q", mode)

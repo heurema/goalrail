@@ -76,24 +76,25 @@ type executionCommandPlan struct {
 }
 
 type executionReceiptRequest struct {
-	ExecutionJobID      string     `json:"execution_job_id"`
-	LeaseID             string     `json:"lease_id"`
-	LeaseToken          string     `json:"lease_token"`
-	RunnerID            string     `json:"runner_id"`
-	WorkspaceRef        string     `json:"workspace_ref"`
-	CommitSHA           string     `json:"commit_sha"`
-	BaselineID          string     `json:"baseline_id,omitempty"`
-	OverlayID           string     `json:"overlay_id,omitempty"`
-	ExecutionMode       string     `json:"execution_mode"`
-	CommandPlanID       string     `json:"command_plan_id,omitempty"`
-	CommandKind         string     `json:"command_kind,omitempty"`
-	Action              string     `json:"action,omitempty"`
-	ProcessStatus       string     `json:"process_status"`
-	ArtifactRefs        []string   `json:"artifact_refs"`
-	ChangedPathsSummary []string   `json:"changed_paths_summary"`
-	RawSourceUploaded   bool       `json:"raw_source_uploaded"`
-	RunnerStartedAt     *time.Time `json:"runner_started_at,omitempty"`
-	RunnerFinishedAt    *time.Time `json:"runner_finished_at,omitempty"`
+	ExecutionJobID       string                `json:"execution_job_id"`
+	LeaseID              string                `json:"lease_id"`
+	LeaseToken           string                `json:"lease_token"`
+	RunnerID             string                `json:"runner_id"`
+	WorkspaceRef         string                `json:"workspace_ref"`
+	CommitSHA            string                `json:"commit_sha"`
+	BaselineID           string                `json:"baseline_id,omitempty"`
+	OverlayID            string                `json:"overlay_id,omitempty"`
+	ExecutionMode        string                `json:"execution_mode"`
+	CommandPlanID        string                `json:"command_plan_id,omitempty"`
+	CommandKind          string                `json:"command_kind,omitempty"`
+	Action               string                `json:"action,omitempty"`
+	ProcessStatus        string                `json:"process_status"`
+	ArtifactRefs         []string              `json:"artifact_refs"`
+	ChangedPathsSummary  []string              `json:"changed_paths_summary"`
+	RawSourceUploaded    bool                  `json:"raw_source_uploaded"`
+	RunnerStartedAt      *time.Time            `json:"runner_started_at,omitempty"`
+	RunnerFinishedAt     *time.Time            `json:"runner_finished_at,omitempty"`
+	ProjectProbeMetadata *projectProbeMetadata `json:"project_probe_metadata,omitempty"`
 }
 
 type executionReceipt struct {
@@ -106,4 +107,28 @@ type executionReceipt struct {
 	CommandKind    string `json:"command_kind,omitempty"`
 	Action         string `json:"action,omitempty"`
 	ProcessStatus  string `json:"process_status"`
+}
+
+type projectProbeMetadata struct {
+	DetectedManifests            []projectProbeManifest                `json:"detected_manifests"`
+	PackageManagerCandidates     []projectProbePackageManagerCandidate `json:"package_manager_candidates"`
+	DeclaredTestTargetCandidates []projectProbeTestTargetCandidate     `json:"declared_test_target_candidates"`
+	UnsupportedOrUnknowns        []string                              `json:"unsupported_or_unknowns"`
+	PartialityReasons            []string                              `json:"partiality_reasons"`
+}
+
+type projectProbeManifest struct {
+	Path string `json:"path"`
+	Kind string `json:"kind"`
+}
+
+type projectProbePackageManagerCandidate struct {
+	Name       string `json:"name"`
+	SourcePath string `json:"source_path"`
+}
+
+type projectProbeTestTargetCandidate struct {
+	Name       string `json:"name"`
+	SourcePath string `json:"source_path"`
+	SourceKind string `json:"source_kind"`
 }
