@@ -51,7 +51,8 @@
   allowlisted metadata probe over runner-local manifest/config files. It keeps
   no shell, no arbitrary command strings, no user-provided argv, no
   stdout/stderr capture, no artifacts, evidence-only receipts, one command
-  receipt per Run, and Gate / Proof still deferred.
+  receipt per Run, and Gate / Proof still deferred. H2.5.1+ smoke coverage pins
+  the project-probe boundary without adding product behavior.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -235,7 +236,8 @@
   H2.4.1+ smoke coverage now pins that builtin diagnostic receipt path.
   ADR-0031 now records the H2.5 project command boundary; H2.5.1 implements
   only typed `project_probe/detect_declared_test_targets` metadata probing from
-  allowlisted manifest/config files. WorkItems still remain `planned`;
+  allowlisted manifest/config files. H2.5.1+ smoke coverage pins that
+  project-probe metadata boundary. WorkItems still remain `planned`;
   assignment, claiming, arbitrary shell/project command execution, project test
   execution, gate, and proof are still deferred.
 - Gate, proof, assignment/claiming, queue, outbox, runtime

@@ -266,7 +266,9 @@ The project currently has:
   metadata on `ExecutionReceipt(project_probe)`. It still has no shell, no
   arbitrary command strings, no user-provided argv, no stdout/stderr capture, no
   artifacts, no changed paths, no project test execution, and one command
-  receipt per Run.
+  receipt per Run. H2.5.1+ smoke coverage pins the project-probe command plan,
+  receipt metadata, fail-closed policy checks, and no raw manifest-body upload
+  without adding product behavior.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -616,7 +618,8 @@ The project currently has:
   files from the runner workspace, and returns receipt-only structured metadata;
   shell, arbitrary command strings, user-provided argv, project test execution,
   Gate, Proof, WorkItem status transitions, and runner trust hardening stay
-  deferred
+  deferred. H2.5.1+ smoke coverage pins those regression boundaries without
+  adding command execution behavior
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`

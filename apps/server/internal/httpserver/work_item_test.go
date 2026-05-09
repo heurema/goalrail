@@ -1422,20 +1422,32 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 	})
 
 	t.Run("command plan rejects non-allowlisted kind and action", func(t *testing.T) {
-		server := testServer(t)
-		job, lease := createLeasedExecutionJob(t, server)
-		runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
-		if runResponse.code != http.StatusCreated {
-			t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
-		}
-		var run spine.Run
-		decodeJSON(t, runResponse.body, &run)
+		for _, tt := range []struct {
+			name   string
+			kind   string
+			action string
+		}{
+			{name: "project command", kind: "project_command", action: "npm_test"},
+			{name: "project probe action", kind: "project_probe", action: "run_tests"},
+			{name: "builtin diagnostic action", kind: "builtin_diagnostic", action: "detect_declared_test_targets"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				job, lease := createLeasedExecutionJob(t, server)
+				runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+				if runResponse.code != http.StatusCreated {
+					t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+				}
+				var run spine.Run
+				decodeJSON(t, runResponse.body, &run)
 
-		body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_command","action":"npm_test"}`, job.RepoBindingID)
-		response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", body)
-		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
-		if len(server.commandPlans.plans) != 0 {
-			t.Fatalf("command plans = %d, want 0 after non-allowlisted command", len(server.commandPlans.plans))
+				body := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":%q,"action":%q}`, job.RepoBindingID, tt.kind, tt.action)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", body)
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.commandPlans.plans) != 0 {
+					t.Fatalf("command plans = %d, want 0 after non-allowlisted command", len(server.commandPlans.plans))
+				}
+			})
 		}
 	})
 
@@ -1508,6 +1520,50 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after missing project probe metadata", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("project probe receipt rejects artifact changed path and raw source claims", func(t *testing.T) {
+		for _, tt := range []struct {
+			name   string
+			mutate func(string) string
+		}{
+			{
+				name: "artifacts and changed paths",
+				mutate: func(body string) string {
+					return strings.Replace(body, `"artifact_refs":[],"changed_paths_summary":[]`, `"artifact_refs":["artifact-1"],"changed_paths_summary":["file.go"]`, 1)
+				},
+			},
+			{
+				name: "raw source upload",
+				mutate: func(body string) string {
+					return strings.Replace(body, `"raw_source_uploaded":false`, `"raw_source_uploaded":true`, 1)
+				},
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				job, lease := createLeasedExecutionJob(t, server)
+				runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+				if runResponse.code != http.StatusCreated {
+					t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+				}
+				var run spine.Run
+				decodeJSON(t, runResponse.body, &run)
+				planResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/command-plans", fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"command_kind":"project_probe","action":"detect_declared_test_targets"}`, job.RepoBindingID))
+				if planResponse.code != http.StatusCreated {
+					t.Fatalf("project probe command plan status = %d, want %d: %s", planResponse.code, http.StatusCreated, planResponse.body)
+				}
+				var plan spine.ExecutionCommandPlan
+				decodeJSON(t, planResponse.body, &plan)
+
+				body := tt.mutate(projectProbeReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID))
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.executionReceipts.receipts) != 0 {
+					t.Fatalf("execution receipts = %d, want 0 after unsafe project probe receipt", len(server.executionReceipts.receipts))
+				}
+			})
 		}
 	})
 }
