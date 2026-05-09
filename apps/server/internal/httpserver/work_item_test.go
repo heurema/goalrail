@@ -1568,6 +1568,36 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 				},
 			},
 			{
+				name: "not executed status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusNotExecuted, nil, false)
+				},
+			},
+			{
+				name: "metadata only status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusMetadataOnly, nil, false)
+				},
+			},
+			{
+				name: "timed out status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusTimedOut, nil, false)
+				},
+			},
+			{
+				name: "runner error status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusRunnerError, nil, false)
+				},
+			},
+			{
+				name: "unknown status",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, "succeeded", nil, false)
+				},
+			},
+			{
 				name: "exit code for policy rejected",
 				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
 					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, intPtr(124), false)
