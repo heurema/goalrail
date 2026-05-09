@@ -395,6 +395,9 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 		if !ok {
 			return ErrNotFound
 		}
+		if membership.State != spine.EntityStateActive {
+			return ErrNotFound
+		}
 		now := s.Clock.Now().UTC()
 		temporaryPassword, credential, err := s.newTemporaryCredential(user.ID, now)
 		if err != nil {
@@ -423,35 +426,6 @@ func (s *Service) ResetTemporaryPassword(ctx context.Context, input ResetTempora
 
 func patchReactivatesMembership(input PatchUserInput) bool {
 	return input.State != nil && *input.State == string(spine.EntityStateActive)
-}
-
-func (s *Service) createMembershipForExistingUser(ctx context.Context, user spine.User, input CreateUserInput, now time.Time) (spine.OrganizationMembership, bool, error) {
-	if _, ok, err := s.Store.GetOrganizationMembership(ctx, input.OrganizationID, user.ID); err != nil {
-		return spine.OrganizationMembership{}, false, fmt.Errorf("get existing organization membership: %w", err)
-	} else if ok {
-		return spine.OrganizationMembership{}, false, nil
-	}
-
-	membershipID, err := s.IDs.NewOrganizationMembershipID()
-	if err != nil {
-		return spine.OrganizationMembership{}, false, fmt.Errorf("new organization membership id: %w", err)
-	}
-	membership := spine.OrganizationMembership{
-		ID:             membershipID,
-		OrganizationID: input.OrganizationID,
-		UserID:         user.ID,
-		Role:           spine.OrganizationMembershipRole(input.Role),
-		State:          spine.EntityStateActive,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-	}
-	if err := s.Store.CreateOrganizationMembership(ctx, membership); err != nil {
-		if _, exists, lookupErr := s.Store.GetOrganizationMembership(ctx, input.OrganizationID, user.ID); lookupErr == nil && exists {
-			return spine.OrganizationMembership{}, false, ErrUserExists
-		}
-		return spine.OrganizationMembership{}, false, fmt.Errorf("create organization membership: %w", err)
-	}
-	return membership, true, nil
 }
 
 func (s *Service) requireOwner(ctx context.Context, organizationID spine.OrganizationID, userID spine.UserID) error {

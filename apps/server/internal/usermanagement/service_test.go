@@ -338,11 +338,11 @@ func TestOwnerCanResetExistingUserTemporaryPassword(t *testing.T) {
 	}
 }
 
-func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
+func TestResetTemporaryPasswordRejectsInactiveOrganizationMembership(t *testing.T) {
 	store := newFakeStore()
 	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Inactive User", "inactive@example.com", spine.EntityStateInactive)
 	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
-	store.credentials[secondOwnerUserID] = spine.UserPasswordCredential{
+	originalCredential := spine.UserPasswordCredential{
 		UserID:             secondOwnerUserID,
 		PasswordHash:       "hash:old-inactive-password",
 		MustChangePassword: false,
@@ -350,6 +350,7 @@ func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
 		CreatedAt:          testNow.Add(-2 * time.Hour),
 		UpdatedAt:          testNow.Add(-time.Hour),
 	}
+	store.credentials[secondOwnerUserID] = originalCredential
 	service := newTestService(store)
 
 	result, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
@@ -357,18 +358,17 @@ func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
 		OrganizationID:      orgID,
 		UserID:              secondOwnerUserID,
 	})
-	if err != nil {
-		t.Fatalf("ResetTemporaryPassword() error = %v", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ResetTemporaryPassword() error = %v, want ErrNotFound", err)
 	}
-	if result.TemporaryPassword != "temporary-password" {
-		t.Fatalf("TemporaryPassword = %q, want generated password", result.TemporaryPassword)
+	if result.TemporaryPassword != "" {
+		t.Fatalf("TemporaryPassword = %q, want empty on inactive membership", result.TemporaryPassword)
 	}
-	credential := store.credentials[secondOwnerUserID]
-	if credential.PasswordHash != "hash:temporary-password" || !credential.MustChangePassword || credential.PasswordChangedAt != nil {
-		t.Fatalf("credential = %#v, want reset temporary credential", credential)
+	if got := store.credentials[secondOwnerUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("inactive user credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	if !store.revoked[secondOwnerUserID] {
-		t.Fatalf("sessions for %q were not revoked", secondOwnerUserID)
+	if store.revoked[secondOwnerUserID] {
+		t.Fatalf("sessions for %q were revoked despite inactive membership", secondOwnerUserID)
 	}
 }
 
