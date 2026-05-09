@@ -245,7 +245,9 @@
   `ExecutionReceipt(project_test)` submission with `policy_rejected`; it must
   not be treated as actual test execution, arbitrary shell, user-command
   execution, "run all tests", GateDecision, Proof, or WorkItem completion.
-  H2.6.2+ regression smoke now pins this behavior without adding new execution.
+  H2.6.2+ regression smoke now pins this fail-closed behavior without adding
+  new execution; the next execution design boundary is runner
+  sandbox/write/network enforcement, not unsandboxed test execution.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1000,8 +1002,8 @@ Done means:
      `ExecutionReceipt(project_test)` with `policy_rejected`, while actual test
      process execution, stdout/stderr capture, artifacts, Gate, Proof, WorkItem
      transitions, runner trust hardening, and OS-level sandboxing remain
-     deferred; H2.6.2+ regression smoke now pins this behavior without adding
-     execution
+     deferred; H2.6.2+ regression smoke now pins this fail-closed behavior
+     without adding product behavior
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

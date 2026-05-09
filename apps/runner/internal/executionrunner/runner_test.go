@@ -405,6 +405,16 @@ func TestStepSubmitsProjectProbeReceipt(t *testing.T) {
 func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	const secretToken = "secret-execution-token"
 	workspaceRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspaceRoot, "package.json"), []byte(`{"scripts":{"test":"node should-not-run.js"}}`), 0o600); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	fakeBin := t.TempDir()
+	executionMarker := filepath.Join(t.TempDir(), "npm-executed")
+	if err := os.WriteFile(filepath.Join(fakeBin, "npm"), []byte("#!/bin/sh\nprintf executed > \"$GOALRAIL_TEST_EXECUTION_MARKER\"\nexit 0\n"), 0o700); err != nil {
+		t.Fatalf("write fake npm: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GOALRAIL_TEST_EXECUTION_MARKER", executionMarker)
 
 	var receiptRequest executionReceiptRequest
 	var getPlanRequests atomic.Int32
@@ -492,6 +502,9 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	}
 	if receiptRequest.ProjectProbeMetadata != nil || receiptRequest.RawSourceUploaded || len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.RunnerStartedAt == nil || receiptRequest.RunnerFinishedAt == nil {
 		t.Fatalf("project test receipt evidence = %#v, want policy rejection without probe metadata/artifacts/raw source", receiptRequest)
+	}
+	if _, err := os.Stat(executionMarker); !os.IsNotExist(err) {
+		t.Fatalf("project test execution marker stat = %v, want no npm/process execution", err)
 	}
 	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
 		if strings.Contains(logs.String(), forbidden) {
