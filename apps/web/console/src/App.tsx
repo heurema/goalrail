@@ -50,6 +50,7 @@ import type { ContractDraftResponse, ContractDraftSourceRef } from './contractDr
 import { READINESS_DISPLAY_LANES, projectReadinessDisplay, sortReadinessItems } from './readinessDisplay';
 import { formatCalmTimestamp } from './uiTime';
 import StartPage from './StartPage';
+import DemoContractsPage from './DemoContractsPage';
 
 import './App.css';
 
@@ -1928,6 +1929,12 @@ function ConsoleApp() {
           </div>
         </section>
       )}
+
+      {screen === 'console' && activeSurface === 'contracts' ? (
+        <div className="demoContractsOverlay">
+          <DemoContractsPage />
+        </div>
+      ) : null}
 
       {isDrawerOpen ? (
         <>
