@@ -71,7 +71,10 @@
   ADR-0033 now defines the H2.7 runner sandbox/write/network enforcement
   semantics, and H2.7.1 adds explicit unavailable-control
   `enforcement_report` metadata to fail-closed `project_test` receipts without
-  actual test execution.
+  actual test execution. H2.7.1+ smoke coverage pins canonical unavailable
+  enforcement metadata, active-control rejection, `no_command` process-status
+  rejection, and the runner no-process / no-token-leak boundary without adding
+  product behavior.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan

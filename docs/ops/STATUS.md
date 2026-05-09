@@ -88,7 +88,9 @@ sandbox/write/network enforcement boundary as docs-only and keeps
 H2.7.1 now adds explicit `enforcement_report` metadata to fail-closed
 `project_test` receipts so the runner records unavailable network,
 workspace-write, and process-tree controls without claiming execution or
-sandboxing;
+sandboxing; H2.7.1+ smoke coverage now pins canonical unavailable enforcement
+metadata, active-control rejection, the `no_command` process-status guard, and
+the runner no-process / no-token-leak boundary without adding product behavior;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -332,6 +334,11 @@ The project currently has:
   claim active controls. This still does not execute tests, implement
   sandboxing, capture stdout/stderr, upload artifacts, create GateDecision /
   Proof, or move WorkItems out of `planned`.
+- H2.7.1+ smoke coverage pins the enforcement-report boundary without adding
+  product behavior. It verifies canonical unavailable enforcement metadata on
+  `project_test` `policy_rejected` receipts, rejects active/enforced control
+  claims, keeps invalid `no_command` process statuses rejected, and preserves
+  the runner no-process / no-token-leak boundary.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`

@@ -1542,6 +1542,9 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 		if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 || receipt.ProjectProbeMetadata != nil {
 			t.Fatalf("project test evidence claims = artifacts=%#v changed=%#v probe=%#v, want process-only receipt", receipt.ArtifactRefs, receipt.ChangedPathsSummary, receipt.ProjectProbeMetadata)
 		}
+		if receipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || receipt.NextAction.Available || receipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
+			t.Fatalf("project test receipt next_action = %#v, want unavailable gate_review", receipt.NextAction)
+		}
 		if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
 			t.Fatalf("project test run state = %q, want receipt_submitted", got)
 		}
@@ -1633,6 +1636,13 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 				},
 			},
 			{
+				name: "network enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"network_enforcement":"unavailable"`, `"network_enforcement":"active"`, 1)
+				},
+			},
+			{
 				name: "workspace write enforcement claimed active",
 				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
 					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
@@ -1640,10 +1650,24 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 				},
 			},
 			{
+				name: "workspace write enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"workspace_write_enforcement":"unavailable"`, `"workspace_write_enforcement":"active"`, 1)
+				},
+			},
+			{
 				name: "process tree enforcement claimed active",
 				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
 					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
 					return strings.Replace(body, `"process_tree_enforcement":"unavailable"`, `"process_tree_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "process tree enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"process_tree_enforcement":"unavailable"`, `"process_tree_enforcement":"active"`, 1)
 				},
 			},
 			{
@@ -1886,6 +1910,36 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
 		if len(server.executionReceipts.receipts) != 0 {
 			t.Fatalf("execution receipts = %d, want 0 after raw source upload", len(server.executionReceipts.receipts))
+		}
+	})
+
+	t.Run("receipt submit rejects no-command invalid process statuses", func(t *testing.T) {
+		for _, status := range []string{
+			spine.ExecutionReceiptStatusPolicyRejected,
+			spine.ExecutionReceiptStatusExited,
+			spine.ExecutionReceiptStatusTimedOut,
+			spine.ExecutionReceiptStatusRunnerError,
+			"succeeded",
+		} {
+			t.Run(status, func(t *testing.T) {
+				server := testServer(t)
+				job, lease := createLeasedExecutionJob(t, server)
+				runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+				if runResponse.code != http.StatusCreated {
+					t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+				}
+				var run spine.Run
+				decodeJSON(t, runResponse.body, &run)
+
+				body := executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false)
+				body = strings.Replace(body, `"process_status":"not_executed"`, fmt.Sprintf(`"process_status":%q`, status), 1)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.executionReceipts.receipts) != 0 {
+					t.Fatalf("execution receipts = %d, want 0 after no-command status %q", len(server.executionReceipts.receipts), status)
+				}
+				assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+			})
 		}
 	})
 

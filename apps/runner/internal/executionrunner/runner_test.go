@@ -404,6 +404,7 @@ func TestStepSubmitsProjectProbeReceipt(t *testing.T) {
 
 func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	const secretToken = "secret-execution-token"
+	const runnerToken = "runner-token"
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "package.json"), []byte(`{"scripts":{"test":"node should-not-run.js"}}`), 0o600); err != nil {
 		t.Fatalf("write package.json: %v", err)
@@ -463,7 +464,7 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	var logs bytes.Buffer
 	runner, err := NewRunner(Config{
 		ServerURL:       server.URL,
-		BearerToken:     "runner-token",
+		BearerToken:     runnerToken,
 		ProjectID:       "project-1",
 		RepoBindingID:   "repo-1",
 		RunnerID:        "runner-1",
@@ -521,7 +522,7 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	if _, err := os.Stat(executionMarker); !os.IsNotExist(err) {
 		t.Fatalf("project test execution marker stat = %v, want no npm/process execution", err)
 	}
-	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
+	for _, forbidden := range []string{secretToken, runnerToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("logs = %q, want no %q", logs.String(), forbidden)
 		}
