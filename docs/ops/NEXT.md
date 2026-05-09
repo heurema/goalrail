@@ -74,7 +74,9 @@
   actual test execution. H2.7.1+ smoke coverage pins canonical unavailable
   enforcement metadata, active-control rejection, `no_command` process-status
   rejection, and the runner no-process / no-token-leak boundary without adding
-  product behavior.
+  product behavior. ADR-0034 now defines the H2.7.2 runner capability model
+  boundary: self-declared capabilities are untrusted metadata only and do not
+  unlock project-test execution.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -260,6 +262,9 @@
   controls are enforceable for the command process tree and evidenced in a
   receipt. H2.7.1 implements capability declaration / fail-closed reporting
   only, not actual test execution.
+- ADR-0034 records the H2.7.2 runner capability model boundary. Capability
+  reports are self-declared and untrusted until a later runner registration /
+  trust boundary; they must not unlock `project_test` process outcomes.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1020,6 +1025,9 @@ Done means:
      boundary; before any `project_test` receipt may record `exited` or
      `timed_out`, unavailable controls remain `policy_rejected` and H2.7.1
      records that through explicit enforcement-report metadata
+   - ADR-0034 defines runner capability reports as self-declared untrusted
+     metadata only; trusted capability and execution unlock remain later
+     boundaries
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid
