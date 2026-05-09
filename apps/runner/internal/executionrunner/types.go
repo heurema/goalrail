@@ -103,6 +103,7 @@ type executionReceiptRequest struct {
 	RunnerStartedAt      *time.Time            `json:"runner_started_at,omitempty"`
 	RunnerFinishedAt     *time.Time            `json:"runner_finished_at,omitempty"`
 	ProjectProbeMetadata *projectProbeMetadata `json:"project_probe_metadata,omitempty"`
+	EnforcementReport    *enforcementReport    `json:"enforcement_report,omitempty"`
 }
 
 type executionReceipt struct {
@@ -116,6 +117,17 @@ type executionReceipt struct {
 	Action         string `json:"action,omitempty"`
 	ProcessStatus  string `json:"process_status"`
 	ExitCode       *int   `json:"exit_code,omitempty"`
+}
+
+type enforcementReport struct {
+	NetworkPolicy             string `json:"network_policy"`
+	NetworkEnforcement        string `json:"network_enforcement"`
+	WorkspaceWritePolicy      string `json:"workspace_write_policy"`
+	WorkspaceWriteEnforcement string `json:"workspace_write_enforcement"`
+	ProcessTreeEnforcement    string `json:"process_tree_enforcement"`
+	ScratchWritePolicy        string `json:"scratch_write_policy,omitempty"`
+	Decision                  string `json:"decision"`
+	Reason                    string `json:"reason"`
 }
 
 type projectProbeMetadata struct {

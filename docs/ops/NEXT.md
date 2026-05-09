@@ -68,8 +68,10 @@
   transitions, runner trust hardening, and OS-level sandboxing remain deferred.
   H2.6.2+ smoke coverage now pins this regression boundary; the next safe
   execution slice remains deferred until a new bounded task defines it.
-  ADR-0033 now defines that next H2.7 boundary as runner sandbox/write/network
-  enforcement semantics, not actual test execution.
+  ADR-0033 now defines the H2.7 runner sandbox/write/network enforcement
+  semantics, and H2.7.1 adds explicit unavailable-control
+  `enforcement_report` metadata to fail-closed `project_test` receipts without
+  actual test execution.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -253,8 +255,8 @@
 - ADR-0033 records the H2.7 runner sandbox/write/network enforcement boundary.
   It keeps `project_test` fail-closed until network and workspace-write
   controls are enforceable for the command process tree and evidenced in a
-  receipt. The next implementation slice should be H2.7.1 capability
-  declaration / fail-closed reporting only, not actual test execution.
+  receipt. H2.7.1 implements capability declaration / fail-closed reporting
+  only, not actual test execution.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1013,8 +1015,8 @@ Done means:
      without adding product behavior
    - ADR-0033 defines the H2.7 runner sandbox/write/network enforcement
      boundary; before any `project_test` receipt may record `exited` or
-     `timed_out`, a later slice must add capability reporting and keep
-     unavailable controls `policy_rejected`
+     `timed_out`, unavailable controls remain `policy_rejected` and H2.7.1
+     records that through explicit enforcement-report metadata
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

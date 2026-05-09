@@ -227,6 +227,7 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 			RawSourceUploaded:   false,
 			RunnerStartedAt:     &startedAt,
 			RunnerFinishedAt:    &finishedAt,
+			EnforcementReport:   &result.EnforcementReport,
 		})
 		if err != nil {
 			switch apiErrorCode(err) {

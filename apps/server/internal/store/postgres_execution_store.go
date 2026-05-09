@@ -1093,6 +1093,10 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 	if err != nil {
 		return fmt.Errorf("marshal execution receipt project probe metadata: %w", err)
 	}
+	enforcementReport, err := json.Marshal(nonNilExecutionEnforcementReport(receipt.EnforcementReport))
+	if err != nil {
+		return fmt.Errorf("marshal execution receipt enforcement report: %w", err)
+	}
 	var exitCode any
 	if receipt.ExitCode != nil {
 		exitCode = *receipt.ExitCode
@@ -1139,6 +1143,7 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			"runner_started_at",
 			"runner_finished_at",
 			"project_probe_metadata",
+			"enforcement_report",
 			"started_at",
 			"finished_at",
 			"created_at",
@@ -1169,6 +1174,7 @@ func (s *PostgresExecutionReceiptStore) Create(ctx context.Context, receipt spin
 			runnerStartedAt,
 			runnerFinishedAt,
 			projectProbeMetadata,
+			enforcementReport,
 			receipt.StartedAt.UTC(),
 			receipt.FinishedAt.UTC(),
 			receipt.CreatedAt.UTC(),
@@ -1239,6 +1245,7 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 	var artifactRefs []byte
 	var changedPaths []byte
 	var projectProbeMetadata []byte
+	var enforcementReport []byte
 	var exitCode pgtype.Int4
 	var runnerStartedAt pgtype.Timestamptz
 	var runnerFinishedAt pgtype.Timestamptz
@@ -1267,6 +1274,7 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 		&runnerStartedAt,
 		&runnerFinishedAt,
 		&projectProbeMetadata,
+		&enforcementReport,
 		&receipt.StartedAt,
 		&receipt.FinishedAt,
 		&receipt.CreatedAt,
@@ -1300,6 +1308,11 @@ func scanExecutionReceipt(row pgx.Row) (spine.ExecutionReceipt, error) {
 		return spine.ExecutionReceipt{}, err
 	}
 	receipt.ProjectProbeMetadata = metadata
+	report, err := decodeExecutionEnforcementReport(enforcementReport)
+	if err != nil {
+		return spine.ExecutionReceipt{}, err
+	}
+	receipt.EnforcementReport = report
 	receipt.StartedAt = receipt.StartedAt.UTC()
 	receipt.FinishedAt = receipt.FinishedAt.UTC()
 	if runnerStartedAt.Valid {
@@ -1347,11 +1360,40 @@ func executionReceiptColumns() []string {
 		"runner_started_at",
 		"runner_finished_at",
 		"project_probe_metadata",
+		"enforcement_report",
 		"started_at",
 		"finished_at",
 		"created_at",
 		"updated_at",
 	}
+}
+
+func nonNilExecutionEnforcementReport(report *spine.ExecutionEnforcementReport) any {
+	if report == nil {
+		return map[string]string{}
+	}
+	return *report
+}
+
+func decodeExecutionEnforcementReport(payload []byte) (*spine.ExecutionEnforcementReport, error) {
+	if len(payload) == 0 {
+		return nil, nil
+	}
+	var report spine.ExecutionEnforcementReport
+	if err := json.Unmarshal(payload, &report); err != nil {
+		return nil, fmt.Errorf("unmarshal execution receipt enforcement report: %w", err)
+	}
+	if report.NetworkPolicy == "" &&
+		report.NetworkEnforcement == "" &&
+		report.WorkspaceWritePolicy == "" &&
+		report.WorkspaceWriteEnforcement == "" &&
+		report.ProcessTreeEnforcement == "" &&
+		report.ScratchWritePolicy == "" &&
+		report.Decision == "" &&
+		report.Reason == "" {
+		return nil, nil
+	}
+	return &report, nil
 }
 
 func nonNilProjectProbeMetadata(metadata *spine.ProjectProbeMetadata) spine.ProjectProbeMetadata {

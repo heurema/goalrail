@@ -500,6 +500,21 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	if receiptRequest.ExitCode != nil {
 		t.Fatalf("project test receipt exit_code = %#v, want nil for policy_rejected", receiptRequest.ExitCode)
 	}
+	if receiptRequest.EnforcementReport == nil {
+		t.Fatal("project test receipt enforcement_report is nil, want unavailable control metadata")
+	}
+	if *receiptRequest.EnforcementReport != (enforcementReport{
+		NetworkPolicy:             "disabled_required",
+		NetworkEnforcement:        "unavailable",
+		WorkspaceWritePolicy:      "disabled_required",
+		WorkspaceWriteEnforcement: "unavailable",
+		ProcessTreeEnforcement:    "unavailable",
+		ScratchWritePolicy:        "allowed_runner_local",
+		Decision:                  "policy_rejected",
+		Reason:                    "enforcement_unavailable",
+	}) {
+		t.Fatalf("project test receipt enforcement_report = %#v, want unavailable controls policy rejection", receiptRequest.EnforcementReport)
+	}
 	if receiptRequest.ProjectProbeMetadata != nil || receiptRequest.RawSourceUploaded || len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.RunnerStartedAt == nil || receiptRequest.RunnerFinishedAt == nil {
 		t.Fatalf("project test receipt evidence = %#v, want policy rejection without probe metadata/artifacts/raw source", receiptRequest)
 	}

@@ -85,6 +85,10 @@ H2.6.2+ smoke coverage pins the project-probe -> project-test plan ->
 adding product behavior; ADR-0033 now defines the H2.7 runner
 sandbox/write/network enforcement boundary as docs-only and keeps
 `project_test` fail-closed until controls are defined, available, and evidenced;
+H2.7.1 now adds explicit `enforcement_report` metadata to fail-closed
+`project_test` receipts so the runner records unavailable network,
+workspace-write, and process-tree controls without claiming execution or
+sandboxing;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -320,6 +324,14 @@ The project currently has:
   ADR-0033 does not implement OS sandboxing, actual test execution, stdout /
   stderr capture, artifacts, GateDecision, Proof, WorkItem transitions, or
   runner trust hardening.
+- H2.7.1 implements fail-closed enforcement capability reporting for
+  `project_test` receipts. The runner submits `enforcement_report` with
+  `network_enforcement`, `workspace_write_enforcement`, and
+  `process_tree_enforcement` set to `unavailable`; the server requires that
+  metadata for `policy_rejected` project-test receipts and rejects reports that
+  claim active controls. This still does not execute tests, implement
+  sandboxing, capture stdout/stderr, upload artifacts, create GateDecision /
+  Proof, or move WorkItems out of `planned`.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -682,7 +694,8 @@ The project currently has:
   Actual test process execution, `os/exec`, stdout/stderr capture, artifacts,
   Gate, Proof, WorkItem transitions, runner trust hardening, and OS-level
   sandboxing remain deferred. ADR-0033 now defines the H2.7
-  sandbox/write/network enforcement boundary as docs-only; actual enforcement
+  sandbox/write/network enforcement boundary; H2.7.1 adds unavailable
+  enforcement reporting on `policy_rejected` receipts, while actual enforcement
   and actual test execution remain unimplemented
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
@@ -801,9 +814,10 @@ Current packaging target:
   `project_probe_metadata`. In `--mode execution-project-test`, it fetches the
   existing server-owned `project_test/run_declared_test_target` plan, validates
   shell/argv/target/path/output/artifact/network/write policy, and submits
-  `ExecutionReceipt(project_test)` with `process_status=policy_rejected`
-  instead of executing because OS-level network/write sandbox controls are not
-  implemented. It uses local API DTOs only and does not import server internals
+  `ExecutionReceipt(project_test)` with `process_status=policy_rejected` and
+  unavailable-control `enforcement_report` metadata instead of executing
+  because OS-level network/write sandbox controls are not implemented. It uses
+  local API DTOs only and does not import server internals
   or Postgres stores. It does not clone/fetch repositories, assign or claim
   WorkItems, call `os/exec`, run arbitrary shell or project commands, execute
   project tests, write `GateDecision`, create `Proof`, or add a

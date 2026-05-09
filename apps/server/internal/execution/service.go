@@ -670,6 +670,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		action = plan.Action
 	}
 	var projectProbeMetadata *spine.ProjectProbeMetadata
+	var enforcementReport *spine.ExecutionEnforcementReport
 	if input.ExecutionMode == spine.ExecutionReceiptModeProjectProbe {
 		plan, err := s.validateProjectProbeReceipt(ctx, input, run, job)
 		if err != nil {
@@ -691,6 +692,8 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		commandPlanID = &id
 		commandKind = plan.CommandKind
 		action = plan.Action
+		report := normalizeExecutionEnforcementReport(*input.EnforcementReport)
+		enforcementReport = &report
 	}
 	receiptID, err := s.IDs.NewExecutionReceiptID()
 	if err != nil {
@@ -722,6 +725,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		RunnerStartedAt:      utcTimePtr(input.RunnerStartedAt),
 		RunnerFinishedAt:     utcTimePtr(input.RunnerFinishedAt),
 		ProjectProbeMetadata: projectProbeMetadata,
+		EnforcementReport:    enforcementReport,
 		StartedAt:            run.StartedAt.UTC(),
 		FinishedAt:           now,
 		CreatedAt:            now,
@@ -1204,6 +1208,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for no_command receipts"}
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for no_command receipts"}
+		}
 		switch status {
 		case spine.ExecutionReceiptStatusNotExecuted, spine.ExecutionReceiptStatusMetadataOnly:
 		default:
@@ -1234,6 +1241,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for builtin_diagnostic receipts"}
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for builtin_diagnostic receipts"}
+		}
 	case spine.ExecutionReceiptModeProjectProbe:
 		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
 			return &ValidationError{Field: "command_plan_id", Message: "is required for project_probe receipts"}
@@ -1262,6 +1272,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if err := validateProjectProbeMetadata(*input.ProjectProbeMetadata); err != nil {
 			return err
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for project_probe receipts"}
+		}
 	case spine.ExecutionReceiptModeProjectTest:
 		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
 			return &ValidationError{Field: "command_plan_id", Message: "is required for project_test receipts"}
@@ -1273,10 +1286,10 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 			return &ValidationError{Field: "action", Message: "must be run_declared_test_target"}
 		}
 		if status != spine.ExecutionReceiptStatusPolicyRejected {
-			return &ValidationError{Field: "process_status", Message: "must be policy_rejected for H2.6.2 project_test receipts"}
+			return &ValidationError{Field: "process_status", Message: "must be policy_rejected for H2.7.1 project_test receipts"}
 		}
 		if input.ExitCode != nil {
-			return &ValidationError{Field: "exit_code", Message: "must be omitted for H2.6.2 project_test receipts"}
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for H2.7.1 project_test receipts"}
 		}
 		if input.RunnerStartedAt == nil {
 			return &ValidationError{Field: "runner_started_at", Message: "is required for project_test receipts"}
@@ -1286,6 +1299,12 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		}
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for project_test receipts"}
+		}
+		if input.EnforcementReport == nil {
+			return &ValidationError{Field: "enforcement_report", Message: "is required for project_test policy_rejected receipts"}
+		}
+		if err := validateProjectTestEnforcementReport(*input.EnforcementReport); err != nil {
+			return err
 		}
 	default:
 		return &ValidationError{Field: "execution_mode", Message: "must be no_command, builtin_diagnostic, project_probe, or project_test"}
@@ -1399,6 +1418,44 @@ func (s *Service) validateProjectTestReceipt(ctx context.Context, input spine.Ex
 		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "runner_finished_at", Message: "must be after runner_started_at"}
 	}
 	return plan, nil
+}
+
+func validateProjectTestEnforcementReport(report spine.ExecutionEnforcementReport) error {
+	normalized := normalizeExecutionEnforcementReport(report)
+	expected := []struct {
+		field string
+		got   string
+		want  string
+	}{
+		{"enforcement_report.network_policy", normalized.NetworkPolicy, spine.ExecutionEnforcementPolicyDisabledRequired},
+		{"enforcement_report.network_enforcement", normalized.NetworkEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.workspace_write_policy", normalized.WorkspaceWritePolicy, spine.ExecutionEnforcementPolicyDisabledRequired},
+		{"enforcement_report.workspace_write_enforcement", normalized.WorkspaceWriteEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.process_tree_enforcement", normalized.ProcessTreeEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.decision", normalized.Decision, spine.ExecutionEnforcementDecisionPolicyRejected},
+		{"enforcement_report.reason", normalized.Reason, spine.ExecutionEnforcementReasonUnavailable},
+	}
+	for _, item := range expected {
+		if item.got != item.want {
+			return &ValidationError{Field: item.field, Message: "must be " + item.want}
+		}
+	}
+	if normalized.ScratchWritePolicy != "" && normalized.ScratchWritePolicy != spine.ExecutionScratchWritePolicyAllowedRunnerLocal {
+		return &ValidationError{Field: "enforcement_report.scratch_write_policy", Message: "must be omitted or " + spine.ExecutionScratchWritePolicyAllowedRunnerLocal}
+	}
+	return nil
+}
+
+func normalizeExecutionEnforcementReport(report spine.ExecutionEnforcementReport) spine.ExecutionEnforcementReport {
+	report.NetworkPolicy = strings.TrimSpace(report.NetworkPolicy)
+	report.NetworkEnforcement = strings.TrimSpace(report.NetworkEnforcement)
+	report.WorkspaceWritePolicy = strings.TrimSpace(report.WorkspaceWritePolicy)
+	report.WorkspaceWriteEnforcement = strings.TrimSpace(report.WorkspaceWriteEnforcement)
+	report.ProcessTreeEnforcement = strings.TrimSpace(report.ProcessTreeEnforcement)
+	report.ScratchWritePolicy = strings.TrimSpace(report.ScratchWritePolicy)
+	report.Decision = strings.TrimSpace(report.Decision)
+	report.Reason = strings.TrimSpace(report.Reason)
+	return report
 }
 
 func validateProjectProbeMetadata(metadata spine.ProjectProbeMetadata) error {
