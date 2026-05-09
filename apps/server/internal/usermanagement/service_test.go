@@ -172,7 +172,7 @@ func TestCreateUserWithExistingEmailReturnsConflictWithoutMutatingExistingRecord
 	}
 }
 
-func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *testing.T) {
+func TestCreateUserWithExistingUserOutsideOrganizationReturnsConflict(t *testing.T) {
 	store := newFakeStore()
 	originalUser := user(otherExistingUserID, "Existing Other", "other-existing@example.com", spine.EntityStateActive)
 	originalCredential := spine.UserPasswordCredential{
@@ -195,11 +195,11 @@ func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *
 		DisplayName:         "Ignored Name",
 		Role:                "admin",
 	})
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
 	}
 	if result.TemporaryPassword != "" {
-		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user", result.TemporaryPassword)
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
 	}
 	if got := store.users[otherExistingUserID]; got != originalUser {
 		t.Fatalf("existing user mutated:\n got: %#v\nwant: %#v", got, originalUser)
@@ -207,16 +207,15 @@ func TestCreateUserWithExistingUserOutsideOrganizationAttachesMembershipOnly(t *
 	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
 		t.Fatalf("existing credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	membership := store.memberships[key(orgID, otherExistingUserID)]
-	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleAdmin || membership.State != spine.EntityStateActive {
-		t.Fatalf("attached membership = %#v, want active admin membership", membership)
+	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
+		t.Fatalf("unexpected membership created for existing user")
 	}
 	if encoded := mustJSON(t, result); strings.Contains(encoded, "temporary_password") || strings.Contains(encoded, "existing-other-password") || strings.Contains(encoded, "password_hash") {
 		t.Fatalf("attach response leaked temporary password or credential material: %s", encoded)
 	}
 }
 
-func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
+func TestCreateUserDuplicateEmailInsertRaceReturnsConflict(t *testing.T) {
 	store := newFakeStore()
 	originalUser := user(otherExistingUserID, "Race", "race@example.com", spine.EntityStateActive)
 	originalCredential := spine.UserPasswordCredential{
@@ -238,11 +237,11 @@ func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
 		DisplayName:         "Race",
 		Role:                "member",
 	})
-	if err != nil {
-		t.Fatalf("CreateUser() error = %v", err)
+	if !errors.Is(err, ErrUserExists) {
+		t.Fatalf("CreateUser() error = %v, want ErrUserExists", err)
 	}
 	if result.TemporaryPassword != "" {
-		t.Fatalf("TemporaryPassword = %q, want empty when attaching existing user after race", result.TemporaryPassword)
+		t.Fatalf("TemporaryPassword = %q, want empty on conflict", result.TemporaryPassword)
 	}
 	if got := store.users[otherExistingUserID]; got != originalUser {
 		t.Fatalf("existing user mutated after race:\n got: %#v\nwant: %#v", got, originalUser)
@@ -250,9 +249,8 @@ func TestCreateUserDuplicateEmailInsertRaceAttachesExistingUser(t *testing.T) {
 	if got := store.credentials[otherExistingUserID]; !sameCredential(got, originalCredential) {
 		t.Fatalf("existing credential mutated after race:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	membership := store.memberships[key(orgID, otherExistingUserID)]
-	if membership.ID != newMembershipID || membership.Role != spine.OrganizationMembershipRoleMember || membership.State != spine.EntityStateActive {
-		t.Fatalf("attached membership = %#v, want active member membership", membership)
+	if _, ok := store.memberships[key(orgID, otherExistingUserID)]; ok {
+		t.Fatalf("unexpected membership created for existing user")
 	}
 }
 
@@ -340,11 +338,11 @@ func TestOwnerCanResetExistingUserTemporaryPassword(t *testing.T) {
 	}
 }
 
-func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
+func TestResetTemporaryPasswordRejectsInactiveOrganizationMembership(t *testing.T) {
 	store := newFakeStore()
 	store.users[secondOwnerUserID] = user(secondOwnerUserID, "Inactive User", "inactive@example.com", spine.EntityStateInactive)
 	store.memberships[key(orgID, secondOwnerUserID)] = membership(secondOwnerMembershipID, orgID, secondOwnerUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
-	store.credentials[secondOwnerUserID] = spine.UserPasswordCredential{
+	originalCredential := spine.UserPasswordCredential{
 		UserID:             secondOwnerUserID,
 		PasswordHash:       "hash:old-inactive-password",
 		MustChangePassword: false,
@@ -352,6 +350,7 @@ func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
 		CreatedAt:          testNow.Add(-2 * time.Hour),
 		UpdatedAt:          testNow.Add(-time.Hour),
 	}
+	store.credentials[secondOwnerUserID] = originalCredential
 	service := newTestService(store)
 
 	result, err := service.ResetTemporaryPassword(context.Background(), ResetTemporaryPasswordInput{
@@ -359,18 +358,17 @@ func TestOwnerCanResetInactiveNonSelfUserTemporaryPassword(t *testing.T) {
 		OrganizationID:      orgID,
 		UserID:              secondOwnerUserID,
 	})
-	if err != nil {
-		t.Fatalf("ResetTemporaryPassword() error = %v", err)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ResetTemporaryPassword() error = %v, want ErrNotFound", err)
 	}
-	if result.TemporaryPassword != "temporary-password" {
-		t.Fatalf("TemporaryPassword = %q, want generated password", result.TemporaryPassword)
+	if result.TemporaryPassword != "" {
+		t.Fatalf("TemporaryPassword = %q, want empty on inactive membership", result.TemporaryPassword)
 	}
-	credential := store.credentials[secondOwnerUserID]
-	if credential.PasswordHash != "hash:temporary-password" || !credential.MustChangePassword || credential.PasswordChangedAt != nil {
-		t.Fatalf("credential = %#v, want reset temporary credential", credential)
+	if got := store.credentials[secondOwnerUserID]; !sameCredential(got, originalCredential) {
+		t.Fatalf("inactive user credential mutated:\n got: %#v\nwant: %#v", got, originalCredential)
 	}
-	if !store.revoked[secondOwnerUserID] {
-		t.Fatalf("sessions for %q were not revoked", secondOwnerUserID)
+	if store.revoked[secondOwnerUserID] {
+		t.Fatalf("sessions for %q were revoked despite inactive membership", secondOwnerUserID)
 	}
 }
 
@@ -603,6 +601,54 @@ func TestDisablingOrganizationMembershipDoesNotDisableGlobalUserOrRevokeSessions
 	}
 	if store.revoked[secondOwnerUserID] {
 		t.Fatalf("sessions for %q were revoked for membership-only disable", secondOwnerUserID)
+	}
+}
+
+func TestOwnerCanReactivateInactiveOrganizationMembership(t *testing.T) {
+	store := newFakeStore()
+	store.memberships[key(orgID, memberUserID)] = membership(memberMembershipID, orgID, memberUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
+	nextState := string(spine.EntityStateActive)
+	originalUser := store.users[memberUserID]
+	service := newTestService(store)
+
+	result, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              memberUserID,
+		State:               &nextState,
+	})
+	if err != nil {
+		t.Fatalf("PatchUser() error = %v", err)
+	}
+	if got := store.users[memberUserID]; got != originalUser {
+		t.Fatalf("global user mutated on membership reactivation:\n got: %#v\nwant: %#v", got, originalUser)
+	}
+	if result.OrganizationMembership.State != spine.EntityStateActive {
+		t.Fatalf("membership state = %q, want active", result.OrganizationMembership.State)
+	}
+	if store.revoked[memberUserID] {
+		t.Fatalf("sessions for %q were revoked for membership-only reactivation", memberUserID)
+	}
+}
+
+func TestInactiveOrganizationMembershipRejectsNonReactivationPatch(t *testing.T) {
+	store := newFakeStore()
+	originalMembership := membership(memberMembershipID, orgID, memberUserID, spine.OrganizationMembershipRoleMember, spine.EntityStateInactive)
+	store.memberships[key(orgID, memberUserID)] = originalMembership
+	nextRole := "viewer"
+	service := newTestService(store)
+
+	_, err := service.PatchUser(context.Background(), PatchUserInput{
+		AuthenticatedUserID: ownerUserID,
+		OrganizationID:      orgID,
+		UserID:              memberUserID,
+		Role:                &nextRole,
+	})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PatchUser() error = %v, want ErrNotFound", err)
+	}
+	if got := store.memberships[key(orgID, memberUserID)]; got != originalMembership {
+		t.Fatalf("inactive membership mutated by role patch:\n got: %#v\nwant: %#v", got, originalMembership)
 	}
 }
 
