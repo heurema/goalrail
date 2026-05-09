@@ -91,6 +91,10 @@ workspace-write, and process-tree controls without claiming execution or
 sandboxing; H2.7.1+ smoke coverage now pins canonical unavailable enforcement
 metadata, active-control rejection, the `no_command` process-status guard, and
 the runner no-process / no-token-leak boundary without adding product behavior;
+ADR-0034 now defines the H2.7.2 runner capability model boundary:
+self-declared runner capabilities are untrusted metadata only, trusted
+capabilities require a later runner registration / trust boundary, and
+capability metadata does not unlock `project_test` execution;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -339,6 +343,13 @@ The project currently has:
   `project_test` `policy_rejected` receipts, rejects active/enforced control
   claims, keeps invalid `no_command` process statuses rejected, and preserves
   the runner no-process / no-token-leak boundary.
+- ADR-0034 documents the H2.7.2 runner capability model boundary. A future
+  `RunnerCapabilityReport` can record self-declared runner capability metadata,
+  but `trust_state=self_declared_untrusted` is metadata only and cannot unlock
+  execution. Trusted capabilities require a later runner registration / trust
+  boundary with server-side runner identity, scope, operator configuration or
+  attestation semantics, and per-command enforcement evidence. `project_test`
+  remains fail-closed with `process_status=policy_rejected`.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -703,7 +714,9 @@ The project currently has:
   sandboxing remain deferred. ADR-0033 now defines the H2.7
   sandbox/write/network enforcement boundary; H2.7.1 adds unavailable
   enforcement reporting on `policy_rejected` receipts, while actual enforcement
-  and actual test execution remain unimplemented
+  and actual test execution remain unimplemented. ADR-0034 now defines runner
+  capability reports as self-declared untrusted metadata only; capability
+  metadata does not unlock project-test process outcomes
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
