@@ -380,6 +380,15 @@ func TestStepSubmitsProjectProbeReceipt(t *testing.T) {
 	if hasTestTarget(receiptRequest.ProjectProbeMetadata, "build") {
 		t.Fatalf("project probe test targets = %#v, must not include non-test package scripts", receiptRequest.ProjectProbeMetadata.DeclaredTestTargetCandidates)
 	}
+	metadataPayload, err := json.Marshal(receiptRequest.ProjectProbeMetadata)
+	if err != nil {
+		t.Fatalf("marshal project probe metadata: %v", err)
+	}
+	for _, rawBody := range []string{"vitest run", "vite build", "module example.com/project"} {
+		if strings.Contains(string(metadataPayload), rawBody) {
+			t.Fatalf("project probe metadata contains raw manifest body %q: %s", rawBody, metadataPayload)
+		}
+	}
 	if commandExecutionRequests.Load() != 0 {
 		t.Fatalf("command execution requests = %d, want none", commandExecutionRequests.Load())
 	}
@@ -498,57 +507,158 @@ func TestStepRejectsUnsafeBuiltinDiagnosticPlan(t *testing.T) {
 
 func TestStepRejectsUnsafeProjectProbePlan(t *testing.T) {
 	const secretToken = "secret-execution-token"
-	workspaceRoot := t.TempDir()
-	var receiptRequests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/command-plans":
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"command-plan-1","project_id":"project-1","repo_binding_id":"repo-1","task_id":"task-1","checkout_receipt_id":"receipt-1","execution_job_id":"execution-job-1","run_id":"run-1","command_kind":"project_probe","action":"detect_declared_test_targets","shell_allowed":false,"argv":["npm","test"],"working_directory":".","path_scope":["."],"timeout_seconds":30,"max_stdout_bytes":0,"max_stderr_bytes":0,"allowed_artifact_kinds":[],"raw_source_upload_allowed":false,"state":"planned"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
-			receiptRequests.Add(1)
-			http.Error(w, "unexpected receipt", http.StatusInternalServerError)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
+	basePlan := executionCommandPlan{
+		ID:                   "command-plan-1",
+		ProjectID:            "project-1",
+		RepoBindingID:        "repo-1",
+		TaskID:               "task-1",
+		CheckoutReceiptID:    "receipt-1",
+		ExecutionJobID:       "execution-job-1",
+		RunID:                "run-1",
+		CommandKind:          "project_probe",
+		Action:               "detect_declared_test_targets",
+		WorkingDirectory:     ".",
+		PathScope:            []string{"."},
+		TimeoutSeconds:       30,
+		AllowedArtifactKinds: []string{},
+		State:                "planned",
+	}
+	for _, tt := range []struct {
+		name    string
+		mutate  func(*executionCommandPlan)
+		wantErr string
+	}{
+		{
+			name: "shell",
+			mutate: func(plan *executionCommandPlan) {
+				plan.ShellAllowed = true
+			},
+			wantErr: "allows shell",
+		},
+		{
+			name: "argv",
+			mutate: func(plan *executionCommandPlan) {
+				plan.Argv = []string{"npm", "test"}
+			},
+			wantErr: "argv must be empty",
+		},
+		{
+			name: "working directory",
+			mutate: func(plan *executionCommandPlan) {
+				plan.WorkingDirectory = "packages/app"
+			},
+			wantErr: "working directory",
+		},
+		{
+			name: "path scope",
+			mutate: func(plan *executionCommandPlan) {
+				plan.PathScope = []string{"packages/app"}
+			},
+			wantErr: "path scope",
+		},
+		{
+			name: "stdout capture",
+			mutate: func(plan *executionCommandPlan) {
+				plan.MaxStdoutBytes = 1024
+			},
+			wantErr: "output/timeout policy",
+		},
+		{
+			name: "stderr capture",
+			mutate: func(plan *executionCommandPlan) {
+				plan.MaxStderrBytes = 1024
+			},
+			wantErr: "output/timeout policy",
+		},
+		{
+			name: "artifacts",
+			mutate: func(plan *executionCommandPlan) {
+				plan.AllowedArtifactKinds = []string{"log"}
+			},
+			wantErr: "allowed artifacts",
+		},
+		{
+			name: "raw source upload",
+			mutate: func(plan *executionCommandPlan) {
+				plan.RawSourceUploadAllowed = true
+			},
+			wantErr: "raw source upload",
+		},
+		{
+			name: "wrong kind",
+			mutate: func(plan *executionCommandPlan) {
+				plan.CommandKind = "builtin_diagnostic"
+			},
+			wantErr: "unsupported execution command kind",
+		},
+		{
+			name: "wrong action",
+			mutate: func(plan *executionCommandPlan) {
+				plan.Action = "run_tests"
+			},
+			wantErr: "unsupported execution command action",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			workspaceRoot := t.TempDir()
+			plan := basePlan
+			tt.mutate(&plan)
+			planJSON, err := json.Marshal(plan)
+			if err != nil {
+				t.Fatalf("marshal command plan: %v", err)
+			}
+			var receiptRequests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/leases":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"lease-1","execution_job_id":"execution-job-1","task_id":"task-1","checkout_receipt_id":"receipt-1","repo_binding_id":"repo-1","runner_id":"runner-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","execution_job":{"id":"execution-job-1","task_id":"task-1","repo_binding_id":"repo-1","checkout_receipt_id":"receipt-1","state":"leased"}}`))
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/execution-jobs/execution-job-1/runs":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write([]byte(`{"id":"run-1","execution_job_id":"execution-job-1","execution_lease_id":"lease-1","task_id":"task-1","checkout_receipt_id":"receipt-1","runner_id":"runner-1","state":"started"}`))
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/command-plans":
+					w.WriteHeader(http.StatusCreated)
+					_, _ = w.Write(planJSON)
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/runs/run-1/receipts":
+					receiptRequests.Add(1)
+					http.Error(w, "unexpected receipt", http.StatusInternalServerError)
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer server.Close()
 
-	var logs bytes.Buffer
-	runner, err := NewRunner(Config{
-		ServerURL:       server.URL,
-		BearerToken:     "runner-token",
-		ProjectID:       "project-1",
-		RepoBindingID:   "repo-1",
-		RunnerID:        "runner-1",
-		WorkspaceRef:    "mounted:/workspace/goalrail",
-		WorkspaceRoot:   workspaceRoot,
-		CommitSHA:       "abc123",
-		ProjectProbe:    true,
-		PollInterval:    time.Millisecond,
-		LeaseTTLSeconds: 900,
-		Once:            true,
-		LogWriter:       &logs,
-	})
-	if err != nil {
-		t.Fatalf("NewRunner() error = %v", err)
-	}
-	_, err = runner.Step(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "argv must be empty") {
-		t.Fatalf("Step() error = %v, want argv policy rejection", err)
-	}
-	if receiptRequests.Load() != 0 {
-		t.Fatalf("receipt requests = %d, want 0 after unsafe command plan", receiptRequests.Load())
-	}
-	if strings.Contains(logs.String(), secretToken) {
-		t.Fatalf("logs leaked execution lease token: %q", logs.String())
+			var logs bytes.Buffer
+			runner, err := NewRunner(Config{
+				ServerURL:       server.URL,
+				BearerToken:     "runner-token",
+				ProjectID:       "project-1",
+				RepoBindingID:   "repo-1",
+				RunnerID:        "runner-1",
+				WorkspaceRef:    "mounted:/workspace/goalrail",
+				WorkspaceRoot:   workspaceRoot,
+				CommitSHA:       "abc123",
+				ProjectProbe:    true,
+				PollInterval:    time.Millisecond,
+				LeaseTTLSeconds: 900,
+				Once:            true,
+				LogWriter:       &logs,
+			})
+			if err != nil {
+				t.Fatalf("NewRunner() error = %v", err)
+			}
+			_, err = runner.Step(context.Background())
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Step() error = %v, want %q policy rejection", err, tt.wantErr)
+			}
+			if receiptRequests.Load() != 0 {
+				t.Fatalf("receipt requests = %d, want 0 after unsafe command plan", receiptRequests.Load())
+			}
+			if strings.Contains(logs.String(), secretToken) {
+				t.Fatalf("logs leaked execution lease token: %q", logs.String())
+			}
+		})
 	}
 }
 
