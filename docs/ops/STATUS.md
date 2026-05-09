@@ -82,7 +82,9 @@ artifacts, no changed paths, no raw source upload, no GateDecision, no Proof,
 no WorkItem status transition, and no runner trust / OS sandbox hardening.
 H2.6.2+ smoke coverage pins the project-probe -> project-test plan ->
 `policy_rejected` receipt path plus the no-process runner sentinel without
-adding product behavior;
+adding product behavior; ADR-0033 now defines the H2.7 runner
+sandbox/write/network enforcement boundary as docs-only and keeps
+`project_test` fail-closed until controls are defined, available, and evidenced;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -309,6 +311,15 @@ The project currently has:
   H2.6.2+ smoke coverage pins that fail-closed receipt path, including
   non-`policy_rejected` process status rejection and a runner no-process
   sentinel, without adding product behavior.
+- ADR-0033 documents the H2.7 runner sandbox/write/network enforcement
+  boundary required before `project_test` can record `exited`, `timed_out`, or
+  runner-process outcomes. It defines `network_allowed=false` and
+  `workspace_write_allowed=false` as enforceable process-tree controls, not
+  runner intent. Current runner controls are still unavailable, so
+  `project_test` remains fail-closed with `process_status=policy_rejected`.
+  ADR-0033 does not implement OS sandboxing, actual test execution, stdout /
+  stderr capture, artifacts, GateDecision, Proof, WorkItem transitions, or
+  runner trust hardening.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -670,7 +681,9 @@ The project currently has:
   and non-`policy_rejected` status rejection, without adding product behavior.
   Actual test process execution, `os/exec`, stdout/stderr capture, artifacts,
   Gate, Proof, WorkItem transitions, runner trust hardening, and OS-level
-  sandboxing remain deferred
+  sandboxing remain deferred. ADR-0033 now defines the H2.7
+  sandbox/write/network enforcement boundary as docs-only; actual enforcement
+  and actual test execution remain unimplemented
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
