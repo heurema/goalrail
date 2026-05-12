@@ -269,7 +269,12 @@
   reports are self-declared and untrusted until a later runner registration /
   trust boundary. H2.7.3 now records self-declared untrusted
   `RunnerCapabilityReport` metadata, but those reports must not unlock
-  `project_test` process outcomes.
+  `project_test` process outcomes. H2.7.3+ smoke coverage now pins append-only
+  report persistence, trusted/enforced claim rejection, runner token-log
+  safety, and continued rejection of `project_test` `exited` / `timed_out`
+  outcomes after capability reports. The next trust step remains docs-first
+  runner registration / trust boundary work, not sandbox implementation or
+  actual test execution.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
