@@ -1596,17 +1596,29 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 			}
 		}
 
-		exitedReceiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusExited, intPtr(0), false))
-		assertErrorCode(t, exitedReceiptResponse, http.StatusBadRequest, "validation_failed")
-		if _, ok := server.executionReceipts.byRun[run.ID]; ok {
-			t.Fatalf("project_test receipt for run %q was stored after exited attempt", run.ID)
-		}
-		storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
-		if err != nil || !ok {
-			t.Fatalf("workItems.Get() after rejected exited receipt = %#v/%v/%v", storedTask, ok, err)
-		}
-		if storedTask.Status != spine.WorkItemStatusPlanned {
-			t.Fatalf("task status = %q, want planned after rejected exited receipt", storedTask.Status)
+		for _, tt := range []struct {
+			name     string
+			status   string
+			exitCode *int
+		}{
+			{name: "exited", status: spine.ExecutionReceiptStatusExited, exitCode: intPtr(0)},
+			{name: "timed_out", status: spine.ExecutionReceiptStatusTimedOut},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, tt.status, tt.exitCode, false))
+				assertErrorCode(t, receiptResponse, http.StatusBadRequest, "validation_failed")
+				if _, ok := server.executionReceipts.byRun[run.ID]; ok {
+					t.Fatalf("project_test receipt for run %q was stored after %s attempt", run.ID, tt.status)
+				}
+				storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+				if err != nil || !ok {
+					t.Fatalf("workItems.Get() after rejected %s receipt = %#v/%v/%v", tt.status, storedTask, ok, err)
+				}
+				if storedTask.Status != spine.WorkItemStatusPlanned {
+					t.Fatalf("task status = %q, want planned after rejected %s receipt", storedTask.Status, tt.status)
+				}
+				assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+			})
 		}
 	})
 
@@ -2190,6 +2202,89 @@ func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 		assertErrorCode(t, response, http.StatusConflict, "project_context_mismatch")
 		if len(server.checkoutJobs.jobs) != 0 {
 			t.Fatalf("checkout jobs = %d, want 0 after project mismatch", len(server.checkoutJobs.jobs))
+		}
+	})
+}
+
+func TestRunnerCapabilityReportSmokeCoverage(t *testing.T) {
+	const (
+		organizationID = "018f0000-0000-7000-8000-000000000002"
+		projectID      = "018f0000-0000-7000-8000-000000000003"
+		repoBindingID  = "018f0000-0000-7000-8000-000000000004"
+	)
+
+	reportBody := func(trustState string, extra string) string {
+		return fmt.Sprintf(`{"runner_id":"runner-1","organization_id":%q,"project_id":%q,"repo_binding_id":%q,"network_isolation_declared":true,"workspace_write_isolation_declared":true,"process_tree_control_declared":true,"stdout_stderr_policy_declared":true,"artifact_policy_declared":true,"trust_state":%q%s}`, organizationID, projectID, repoBindingID, trustState, extra)
+	}
+
+	t.Run("persists append-only self-declared untrusted reports", func(t *testing.T) {
+		server := testServer(t)
+
+		firstResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(spine.RunnerCapabilityTrustSelfDeclaredUntrusted, ""))
+		if firstResponse.code != http.StatusCreated {
+			t.Fatalf("first runner capability report status = %d, want %d: %s", firstResponse.code, http.StatusCreated, firstResponse.body)
+		}
+		var firstReport spine.RunnerCapabilityReport
+		decodeJSON(t, firstResponse.body, &firstReport)
+
+		secondResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(spine.RunnerCapabilityTrustSelfDeclaredUntrusted, ""))
+		if secondResponse.code != http.StatusCreated {
+			t.Fatalf("second runner capability report status = %d, want %d: %s", secondResponse.code, http.StatusCreated, secondResponse.body)
+		}
+		var secondReport spine.RunnerCapabilityReport
+		decodeJSON(t, secondResponse.body, &secondReport)
+
+		if firstReport.ID == "" || secondReport.ID == "" || firstReport.ID == secondReport.ID {
+			t.Fatalf("runner capability report ids = %q/%q, want distinct append-only reports", firstReport.ID, secondReport.ID)
+		}
+		if len(server.runnerCapabilities.reports) != 2 {
+			t.Fatalf("runner capability reports = %d, want two append-only records", len(server.runnerCapabilities.reports))
+		}
+		for _, report := range server.runnerCapabilities.reports {
+			if report.RunnerID != "runner-1" || report.OrganizationID != organizationID || report.ProjectID != projectID || report.RepoBindingID != repoBindingID {
+				t.Fatalf("runner capability report scope = %#v, want runner/org/project/repo binding scope", report)
+			}
+			if report.TrustState != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+				t.Fatalf("runner capability report trust_state = %q, want self_declared_untrusted", report.TrustState)
+			}
+			if !report.NetworkIsolationDeclared || !report.WorkspaceWriteIsolationDeclared || !report.ProcessTreeControlDeclared || !report.StdoutStderrPolicyDeclared || !report.ArtifactPolicyDeclared {
+				t.Fatalf("runner capability report declarations = %#v, want persisted self-declared metadata", report)
+			}
+		}
+		if got := countEventType(server.events.Events(), execution.EventTypeRunnerCapabilityReported); got != 2 {
+			t.Fatalf("runner_capability_report.created events = %d, want 2", got)
+		}
+		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
+	t.Run("rejects trusted enforced and attestation claims", func(t *testing.T) {
+		for _, tt := range []struct {
+			name       string
+			trustState string
+			extra      string
+		}{
+			{name: "trusted trust state", trustState: "trusted"},
+			{name: "verified trust state", trustState: "verified"},
+			{name: "operator trusted state", trustState: "operator_trusted"},
+			{name: "active trust state", trustState: "active"},
+			{name: "enforced trust state", trustState: "enforced"},
+			{name: "network enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"network_enforcement":"active"`},
+			{name: "workspace write enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"workspace_write_enforcement":"enforced"`},
+			{name: "process tree enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"process_tree_enforcement":"active"`},
+			{name: "network isolation enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"network_isolation_enforced":true`},
+			{name: "workspace write isolation enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"workspace_write_isolation_enforced":true`},
+			{name: "process tree control enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"process_tree_control_enforced":true`},
+			{name: "attestation", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"attestation":{"kind":"local"}`},
+			{name: "trust evidence", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"trust_evidence":{"source":"operator"}`},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(tt.trustState, tt.extra))
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.runnerCapabilities.reports) != 0 {
+					t.Fatalf("runner capability reports = %d, want no stored report for %s", len(server.runnerCapabilities.reports), tt.name)
+				}
+			})
 		}
 	})
 }

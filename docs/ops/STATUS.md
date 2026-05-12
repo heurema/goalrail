@@ -98,7 +98,10 @@ capability metadata does not unlock `project_test` execution; H2.7.3 now adds
 self-declared untrusted `RunnerCapabilityReport` persistence plus
 `goalrail-runner --mode capability-report` so runner capability declarations
 can be recorded as metadata only while `project_test` remains
-`policy_rejected`;
+`policy_rejected`; H2.7.3+ smoke coverage now pins append-only persistence,
+trusted/enforced claim rejection, runner token-log safety, and the
+`project_test` no-unlock boundary without adding trusted capabilities,
+sandboxing, or test execution;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -357,6 +360,11 @@ The project currently has:
   trust boundary with server-side runner identity, scope, operator
   configuration or attestation semantics, and per-command enforcement evidence.
   `project_test` remains fail-closed with `process_status=policy_rejected`.
+- H2.7.3+ smoke coverage pins the runner capability report boundary without
+  adding product behavior. It verifies append-only self-declared untrusted
+  report persistence, rejects trusted/enforced/attestation claims, keeps
+  `project_test` `exited` / `timed_out` rejected after capability reports, and
+  preserves the runner no-token-leak / no-command-execution boundary.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
