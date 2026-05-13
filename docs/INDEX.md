@@ -150,16 +150,17 @@ related_docs:
 ### 9. Advisory research, reference material, and overlay working surfaces
 98. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
 99. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-100. `docs/reference/design/reference_screens/`
-101. `docs/reference/start-assistant/`
-102. `.goalrail/work/`
-103. `.goalrail/knowledge/`
-104. `.goalrail/public-kb/manifest.yaml`
-105. `.punk/publishing.toml`
-106. `.goalrail/flows/`
-107. `.goalrail/evals/`
-108. `docs/ops/PUBLISHING_MIGRATION.md`
-109. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+100. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
+101. `docs/reference/design/reference_screens/`
+102. `docs/reference/start-assistant/`
+103. `.goalrail/work/`
+104. `.goalrail/knowledge/`
+105. `.goalrail/public-kb/manifest.yaml`
+106. `.punk/publishing.toml`
+107. `.goalrail/flows/`
+108. `.goalrail/evals/`
+109. `docs/ops/PUBLISHING_MIGRATION.md`
+110. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -321,6 +322,7 @@ related_docs:
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
+- `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md` — advisory market-signal intake on OpenAI/Tomoro/Anthropic deployment-company moves; validates deployment-engine thesis but does not override product canon or expand MVP scope
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory

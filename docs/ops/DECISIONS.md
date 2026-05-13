@@ -2514,3 +2514,41 @@ Rationale:
   review reaction was detected. Recording the exception prevents treating admin
   merge as the default workflow while preserving a practical recovery path when
   a procedural review-freshness gate blocks an otherwise validated PR.
+
+## D-0093 — Goalrail treats DeployCo/FDE market signal as validation, not MVP expansion
+Date: 2026-05-13
+Status: accepted
+Review after: 2026-08-15
+
+Decision:
+- Goalrail will use the OpenAI/Tomoro/Anthropic deployment-company moves as
+  validation for the deployment-engine thesis.
+- Goalrail will not copy broad enterprise AI consulting, PE-backed
+  distribution, or staff-augmentation FDE models.
+- Goalrail may borrow only bounded operating patterns that fit its productized
+  operating layer:
+  - structured diagnostic / qualification
+  - small priority workflow selection
+  - managed pilot
+  - proof / readout
+  - reusable deployment primitive loop
+- This decision does not approve code changes, runtime integration, analytics,
+  CRM, broad enterprise governance, generic AI consulting,
+  provider-specific deployment doctrine, gate implementation, proof
+  implementation, or MVP expansion.
+
+Rationale:
+- Frontier AI vendors are validating that the hard part of enterprise AI is
+  deployment into real workflows, controls, evaluations, and adoption.
+- Goalrail already has a narrower and stronger wedge: AI-assisted software
+  delivery from business goal to verified code change.
+- The useful lesson is to strengthen pilot / deployment packaging and
+  productization loops, not to broaden the product category.
+
+What this prevents:
+- turning Goalrail into a generic AI deployment consultancy
+- expanding MVP scope based on external hype
+- replacing the fixed contract-to-proof core with bespoke customer process
+  redesign
+- provider lock-in or model-specific execution doctrine
+- treating managed rollout as staff augmentation

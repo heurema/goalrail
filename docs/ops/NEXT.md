@@ -6,6 +6,7 @@
 
 - **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
+- Candidate docs-only strategy intake: capture DeployCo-inspired deployment-engine research as advisory material, then decide whether to promote the reusable deployment primitive loop into deployment / pilot docs. This does not approve MVP expansion, runtime work, broad enterprise consulting, analytics, CRM, provider integrations, gate, proof, or new implementation behavior.
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` is now the single canonical multilingual EN/RU console source with static i18next resources, existing server login / optional password-change / `/v1/me` / logout endpoints, in-memory tokens only, no locale storage, and `goalrail.console.theme` as the only browser-storage key; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source is removed and live `console.goalrail.ru` remains separate
