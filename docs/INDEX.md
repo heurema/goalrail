@@ -14,10 +14,12 @@ supersedes: []
 superseded_by: null
 related_docs:
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
+  - docs/product/GOALRAIL_PROOF_GAP_ENTRY.md
   - docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/PUBLIC_CLAIMS.md
   - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
   - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
@@ -71,97 +73,98 @@ related_docs:
 26. `docs/product/GOALRAIL_PROVIDER_BOUNDARIES.md`
 27. `docs/product/GOALRAIL_COMPETITOR_MAP.md`
 28. `docs/product/GOALRAIL_REFERENCE_DECISION.md`
+29. `docs/product/GOALRAIL_PROOF_GAP_ENTRY.md` — artifact-led Proof Gap entry / wedge doc; not a replacement for the long-term product canon
 
 ### 6. Architecture canon
-29. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-30. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
-31. `docs/PROJECT_SPINE_SCHEMA.md`
-32. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
-33. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
-34. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
-35. `docs/adr/ADR-0003-go-cli-layout.md`
-36. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
-37. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
-38. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
-39. `docs/adr/ADR-0007-clarification-request-boundary.md`
-40. `docs/adr/ADR-0008-runner-checkout-boundary.md`
-41. `docs/adr/ADR-0009-clarification-answer-boundary.md`
-42. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
-43. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
-44. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
-45. `docs/adr/ADR-0013-contract-seed-boundary.md`
-46. `docs/adr/ADR-0014-contract-draft-boundary.md`
-47. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
-48. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
-49. `docs/adr/ADR-0017-contract-approval-boundary.md`
-50. `docs/adr/ADR-0018-workitem-planning-boundary.md`
-51. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
-52. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
-53. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
-54. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
-55. `docs/adr/ADR-0022-installation-boundary.md`
-56. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
-57. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
-58. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
-59. `docs/adr/ADR-0027-organization-user-management-boundary.md`
-60. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
-61. `docs/adr/ADR-0029-run-execution-receipt-boundary.md`
-62. `docs/adr/ADR-0030-bounded-command-execution-boundary.md`
-63. `docs/adr/ADR-0031-project-command-execution-boundary.md`
-64. `docs/adr/ADR-0032-typed-project-test-command-boundary.md`
-65. `docs/adr/ADR-0033-runner-sandbox-enforcement-boundary.md`
-66. `docs/adr/ADR-0034-runner-capability-model-boundary.md`
+30. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
+31. `docs/product/GOALRAIL_PROJECT_SCAN_AND_CONTEXT_PACK_V0.md`
+32. `docs/PROJECT_SPINE_SCHEMA.md`
+33. `docs/product/GOALRAIL_PARALLEL_EXECUTION_MODEL.md`
+34. `docs/adr/ADR-0001-runtime-neutral-cli-first.md`
+35. `docs/adr/ADR-0002-single-writer-and-advisory-panels.md`
+36. `docs/adr/ADR-0003-go-cli-layout.md`
+37. `docs/adr/ADR-0004-go-server-boundary-and-selected-stack.md`
+38. `docs/adr/ADR-0005-intake-to-goal-promotion-boundary.md`
+39. `docs/adr/ADR-0006-goal-clarification-readiness-boundary.md`
+40. `docs/adr/ADR-0007-clarification-request-boundary.md`
+41. `docs/adr/ADR-0008-runner-checkout-boundary.md`
+42. `docs/adr/ADR-0009-clarification-answer-boundary.md`
+43. `docs/adr/ADR-0010-organization-project-repo-binding-persistence-boundary.md`
+44. `docs/adr/ADR-0011-answer-application-to-goal-hints-boundary.md`
+45. `docs/adr/ADR-0012-explicit-readiness-recheck-after-applied-answers.md`
+46. `docs/adr/ADR-0013-contract-seed-boundary.md`
+47. `docs/adr/ADR-0014-contract-draft-boundary.md`
+48. `docs/adr/ADR-0015-contract-draft-review-update-boundary.md`
+49. `docs/adr/ADR-0016-contract-draft-ready-for-approval-boundary.md`
+50. `docs/adr/ADR-0017-contract-approval-boundary.md`
+51. `docs/adr/ADR-0018-workitem-planning-boundary.md`
+52. `docs/adr/ADR-0019-workitem-planning-controller-runner-boundary.md`
+53. `docs/adr/ADR-0020-public-contract-identity-boundary.md`
+54. `docs/adr/ADR-0021-workitem-plan-pull-lease-boundary.md`
+55. `docs/adr/ADR-0024-minimal-planning-worker-loop-boundary.md`
+56. `docs/adr/ADR-0022-installation-boundary.md`
+57. `docs/adr/ADR-0023-user-bootstrap-auth-and-cli-login-boundary.md`
+58. `docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md`
+59. `docs/adr/ADR-0026-agent-driven-pull-loop-protocol.md`
+60. `docs/adr/ADR-0027-organization-user-management-boundary.md`
+61. `docs/adr/ADR-0028-runner-checkout-instruction-receipt-boundary.md`
+62. `docs/adr/ADR-0029-run-execution-receipt-boundary.md`
+63. `docs/adr/ADR-0030-bounded-command-execution-boundary.md`
+64. `docs/adr/ADR-0031-project-command-execution-boundary.md`
+65. `docs/adr/ADR-0032-typed-project-test-command-boundary.md`
+66. `docs/adr/ADR-0033-runner-sandbox-enforcement-boundary.md`
+67. `docs/adr/ADR-0034-runner-capability-model-boundary.md`
 
 ### 7. Governance and change control
-67. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-68. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-69. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-70. `docs/product/GOALRAIL_RULE_STACK.md`
+68. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+69. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+70. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+71. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-71. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-72. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-73. `docs/ops/STATUS.md`
-74. `docs/ops/NEXT.md`
-75. `docs/ops/DECISIONS.md`
-76. `docs/ops/COMPONENTS.yaml`
-77. `docs/ops/INIT_LIFECYCLE.md`
-78. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-79. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-80. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
-81. `docs/ops/BRANCH_PROTECTION.md`
-82. `docs/ops/REPO_STRUCTURE.md`
-83. `docs/ops/GO_CODE_GUIDE.md`
-84. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-85. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-86. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-87. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-88. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-89. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-90. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-91. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-92. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-93. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-94. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-95. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-96. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-97. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+72. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+73. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+74. `docs/ops/STATUS.md`
+75. `docs/ops/NEXT.md`
+76. `docs/ops/DECISIONS.md`
+77. `docs/ops/PUBLIC_CLAIMS.md`
+78. `docs/ops/COMPONENTS.yaml`
+79. `docs/ops/INIT_LIFECYCLE.md`
+80. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+81. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+82. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+83. `docs/ops/BRANCH_PROTECTION.md`
+84. `docs/ops/REPO_STRUCTURE.md`
+85. `docs/ops/GO_CODE_GUIDE.md`
+86. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+87. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+88. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+89. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+90. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+91. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+92. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+93. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+94. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+95. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+96. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+97. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+98. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+99. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-98. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-99. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-100. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
-101. `docs/reference/design/reference_screens/`
-102. `docs/reference/start-assistant/`
-103. `.goalrail/work/`
-104. `.goalrail/knowledge/`
-105. `.goalrail/public-kb/manifest.yaml`
-106. `.punk/publishing.toml`
-107. `.goalrail/flows/`
-108. `.goalrail/evals/`
-109. `docs/ops/PUBLISHING_MIGRATION.md`
-110. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
-
+100. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+101. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+102. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
+103. `docs/reference/design/reference_screens/`
+104. `docs/reference/start-assistant/`
+105. `.goalrail/work/`
+106. `.goalrail/knowledge/`
+107. `.goalrail/public-kb/manifest.yaml`
+108. `.punk/publishing.toml`
+109. `.goalrail/flows/`
+110. `.goalrail/evals/`
+111. `docs/ops/PUBLISHING_MIGRATION.md`
+112. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 ## Roles of the main docs
 
@@ -202,6 +205,7 @@ related_docs:
 - `GOALRAIL_PROVIDER_BOUNDARIES.md` — что строим, что оборачиваем, где не конкурируем
 - `GOALRAIL_COMPETITOR_MAP.md` — reference market map
 - `GOALRAIL_REFERENCE_DECISION.md` — внешний reference posture
+- `GOALRAIL_PROOF_GAP_ENTRY.md` — artifact-led entry / wedge: task/change/evidence -> `Proof Gap Report` -> optional one-repo pilot; не замена long-term product canon
 
 ### Architecture canon
 - `GOALRAIL_MVP_BLUEPRINT.md` — перевод концепта в продуктовые слои и архитектурные границы
@@ -289,6 +293,7 @@ related_docs:
 - `STATUS.md` — текущее состояние
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
+- `PUBLIC_CLAIMS.md` — operational wording guardrail для safe/qualified/unsafe public claims while Proof Gap Entry стабилизируется
 - `COMPONENTS.yaml` — component map
 - `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
   modes, local marker / snapshot / Project Scan distinctions, trust boundary,

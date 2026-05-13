@@ -2552,3 +2552,36 @@ What this prevents:
   redesign
 - provider lock-in or model-specific execution doctrine
 - treating managed rollout as staff augmentation
+
+## D-0094 — Goalrail starts stabilization from artifact-led Proof Gap entry
+Date: 2026-05-13
+Status: accepted
+Review after: 2026-06-15
+
+Decision:
+- Goalrail will stabilize its first market-entry mechanism as an artifact-led
+  Proof Gap entry.
+- The first public/user-facing value demonstration is:
+  task/change/evidence -> Proof Gap Report -> optional one-repo pilot.
+- Proof Gap Report is an entry diagnostic artifact, not a replacement for the
+  long-term contract-to-proof product canon.
+- Goalrail should eventually support baseline-vs-Goalrail evaluation to show
+  measurable delta over raw AI-assisted execution.
+- This decision does not approve GitHub App work, OAuth, PR bot, tracker sync,
+  runtime expansion, server Gate implementation, server Proof implementation,
+  or self-serve SaaS.
+
+Rationale:
+- Users should be able to see Goalrail value on their own work before any call,
+  broad onboarding, or platform claim.
+- A working contract alone does not prove product value; the project needs an
+  evidence model showing how Goalrail changes outcomes.
+- The artifact-led entry helps prevent classic sales-first drift and broad
+  platform sprawl.
+
+What this prevents:
+- leading with pitches instead of artifacts
+- building integrations before the first artifact is clear
+- confusing Proof Gap Report with future Proof
+- claiming PR verification before gate/proof exists
+- turning Goalrail into generic AI code review

@@ -4,6 +4,11 @@
 
 ## Active phase
 
+- **5-7 day stabilization freeze:** first target is the artifact-led Proof Gap
+  entry. No new runtime/platform work until the entry contract, claims, and
+  examples are stable; defer GitHub Action, PR bot, provider OAuth, tracker
+  sync, deeper runner work, server Gate / Proof claims, and broad surface
+  expansion.
 - **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
 - Candidate docs-only strategy intake: capture DeployCo-inspired deployment-engine research as advisory material, then decide whether to promote the reusable deployment primitive loop into deployment / pilot docs. This does not approve MVP expansion, runtime work, broad enterprise consulting, analytics, CRM, provider integrations, gate, proof, or new implementation behavior.
