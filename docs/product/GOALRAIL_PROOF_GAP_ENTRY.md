@@ -14,6 +14,7 @@ review_after: 2026-06-15
 supersedes: []
 superseded_by: null
 related_docs:
+  - docs/product/GOALRAIL_PROOF_GAP_REPORT.md
   - docs/product/GOALRAIL_PRODUCT_CONCEPT.md
   - docs/product/GOALRAIL_OPERATING_MODEL.md
   - docs/product/GOALRAIL_PILOT_MODEL.md

@@ -9,6 +9,9 @@
   examples are stable; defer GitHub Action, PR bot, provider OAuth, tracker
   sync, deeper runner work, server Gate / Proof claims, and broad surface
   expansion.
+- Proof Gap Report schema is now the artifact spec for manual examples and
+  future renderer/parser work. Future implementation still requires a bounded
+  implementation slice and must not be introduced in this docs task.
 - **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
 - Candidate docs-only strategy intake: capture DeployCo-inspired deployment-engine research as advisory material, then decide whether to promote the reusable deployment primitive loop into deployment / pilot docs. This does not approve MVP expansion, runtime work, broad enterprise consulting, analytics, CRM, provider integrations, gate, proof, or new implementation behavior.
