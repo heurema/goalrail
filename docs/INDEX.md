@@ -24,6 +24,7 @@ related_docs:
   - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
+  - docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md
 ---
 # Goalrail Docs Index
 
@@ -161,6 +162,7 @@ related_docs:
 108. `.goalrail/evals/`
 109. `docs/ops/PUBLISHING_MIGRATION.md`
 110. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+111. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
 
 
 ## Roles of the main docs
@@ -334,6 +336,7 @@ related_docs:
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `docs/ops/PUBLISHING_MIGRATION.md` — planning for legacy Punk workspace migration
 - `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md` — machine contract for external publishing workspace resolution
+- `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md` — repo-local public content strategy boundary for writing agents; runtime styles, drafts, receipts and metrics remain in the external publishing workspace
 
 ## Source-of-truth priority
 

@@ -2552,3 +2552,34 @@ What this prevents:
   redesign
 - provider lock-in or model-specific execution doctrine
 - treating managed rollout as staff augmentation
+
+## D-0094 — Public writing uses a repo-local content operating layer
+Date: 2026-05-15
+Status: accepted
+Review after: 2026-06-15
+
+Decision:
+- Goalrail keeps a small repository-local public content operating layer at
+  `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`.
+- The operating layer guides public writing toward qualified relationships
+  around controlled AI delivery, not generic creator growth or product pitch.
+- Runtime publishing artifacts, channel-specific styles, drafts, receipts,
+  metrics, credentials, sessions, local helpers, and validators remain in the
+  external publishing workspace resolved through `.punk/publishing.toml`.
+- The content layer must not be interpreted as approval for publishing
+  automation, scraping, outreach automation, schedulers, CRM, or social platform
+  integrations.
+
+Rationale:
+- Public writing needs a stable repo-local boundary so future agents can align
+  posts with Goalrail product truth, current public language, and human
+  sign-off / proof framing.
+- The external publishing workspace remains the right place for channel style
+  experiments and execution artifacts.
+
+What this prevents:
+- random posting disconnected from product truth
+- vanity-metric optimization
+- premature product pitch or unsupported product claims
+- generic AI thought leadership
+- unsafe drift into social automation or outreach tooling
