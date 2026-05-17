@@ -204,26 +204,17 @@
   Delivery Readiness cards now use one frontend-projected primary status,
   D-0091 display priority, and calm browser-local timestamps while preserving
   read-only clarification question text and context.
-- The Console Contracts surface now consumes authenticated,
-  organization-scoped, read-only Contract discovery:
-  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`.
-  It loads `GET /v1/contracts?limit=50` by default, renders a compact
-  contract rail/list with selected aggregate detail, supports state and
-  repo-binding filtering plus manual refresh, keeps manual ID lookup as a
-  secondary fallback, and does not create contracts, recompute readiness,
-  create plans, or drive lifecycle transitions. Selected Contract detail uses
-  authenticated, organization-scoped,
-  read-only `GET /v1/contracts/{id}` and presents the public Contract aggregate
-  with one lifecycle status, linked ids, calm timestamps, and the current draft
-  body through read-only `GET /v1/contracts/{id}/current-draft` when
-  `current_draft_id` is present. The same Contracts surface also reads
-  `/v1/me` organization context and
-  `GET /v1/organizations/{organization_id}/repository-context` to show a
-  metadata-only Organization / Project / Repository context panel, preferring
-  the selected Contract `repo_binding_id` match, falling back to the first
-  Organization context when no Contract is selected, and showing honest empty
-  or missing-binding states. Task, execution, gate, runner, and proof data
-  remain unavailable in that view.
+- The Console Contracts entry now renders the imported RU demo contracts page
+  shell from `apps/web/demo-change-packet-ru` after authentication, isolated
+  from the rest of the Console CSS, and backs its contract rows/detail/current
+  draft state with authenticated, organization-scoped read-only Contract
+  discovery / detail endpoints:
+  `GET /v1/contracts?project_id=&repo_binding_id=&goal_id=&state=&limit=`,
+  `GET /v1/contracts/{id}`, and
+  `GET /v1/contracts/{id}/current-draft`, plus metadata-only repository context
+  from `GET /v1/organizations/{organization_id}/repository-context`. It remains
+  a read-only Console surface and does not expose Contract lifecycle mutation
+  controls.
 - Known qualification-feed gap: the read model starts at promoted Goals. A
   received-only IntakeRecord from a partial `intake -> promote` failure will
   not appear in Console yet; current CLI `work start` treats that as a

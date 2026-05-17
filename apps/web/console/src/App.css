@@ -175,6 +175,15 @@ select:focus-visible {
   border: 0;
 }
 
+.demoContractsOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
 .brand {
   display: flex;
   align-items: center;
