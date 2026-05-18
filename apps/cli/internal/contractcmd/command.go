@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heurema/goalrail/apps/cli/internal/authsession"
 	"github.com/heurema/goalrail/apps/cli/internal/authstore"
 	"github.com/heurema/goalrail/apps/cli/internal/contract"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
@@ -241,17 +242,12 @@ func runDraft(ctx context.Context, out *term.Output, workDir string, args []stri
 		return err
 	}
 
-	session, serverURL, err := loadUsableSession(options)
+	session, serverURL, client, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
 	if strings.TrimRight(config.ServerURL, "/") != serverURL {
 		return exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
-	}
-
-	client := options.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
 	}
 
 	profile, err := getCurrentProfile(ctx, client, session)
@@ -336,7 +332,7 @@ func runUpdate(ctx context.Context, out *term.Output, workDir string, args []str
 		return err
 	}
 
-	session, serverURL, err := loadUsableSession(options)
+	session, serverURL, client, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -350,11 +346,6 @@ func runUpdate(ctx context.Context, out *term.Output, workDir string, args []str
 	}
 	update.ProjectID = config.ProjectID
 	update.RepoBindingID = config.RepoBindingID
-
-	client := options.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
 
 	profile, err := getCurrentProfile(ctx, client, session)
 	if err != nil {
@@ -516,7 +507,7 @@ func loadContractCommandContext(ctx context.Context, workDir string, command str
 		return contractCommandContext{}, err
 	}
 
-	session, serverURL, err := loadUsableSession(options)
+	session, serverURL, client, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return contractCommandContext{}, err
 	}
@@ -524,10 +515,6 @@ func loadContractCommandContext(ctx context.Context, workDir string, command str
 		return contractCommandContext{}, exitcode.ValidationError(errors.New("local .goalrail/project.yml is bound to a different GoalRail server; run goalrail login for that server or re-initialize this repository"))
 	}
 
-	client := options.HTTPClient
-	if client == nil {
-		client = http.DefaultClient
-	}
 	profile, err := getCurrentProfile(ctx, client, session)
 	if err != nil {
 		return contractCommandContext{}, err
@@ -599,38 +586,24 @@ func ApproveUsage() string {
 	return "Usage: goalrail contract approve --contract-id <contract_id> --confirm-user-approval [--format text|json]\n\nApproves a submitted Contract only after explicit user approval. The command requires --confirm-user-approval, validates the Git-root .goalrail/project.yml marker plus login and Organization marker, and sends project/repo expectations. It does not create WorkItems, run workers, gates, proof, or verification.\n"
 }
 
-func loadUsableSession(options Options) (authstore.Session, string, error) {
-	session, err := loadSession(options)
-	if err != nil {
-		return authstore.Session{}, "", err
-	}
-	now := time.Now
-	if options.Now != nil {
-		now = options.Now
-	}
-	if !session.AccessTokenExpiresAt.After(now().UTC()) {
-		return authstore.Session{}, "", exitcode.UsageError(fmt.Errorf("login expired; run goalrail login %s", session.ServerURL))
-	}
-	return session, strings.TrimRight(session.ServerURL, "/"), nil
-}
-
-func loadSession(options Options) (authstore.Session, error) {
+func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, error) {
 	store := options.Store
 	if store == nil {
 		path, err := authstore.DefaultPath()
 		if err != nil {
-			return authstore.Session{}, exitcode.RuntimeError(err)
+			return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
 		}
 		store = authstore.NewFileStore(path)
 	}
-	session, err := store.Load()
-	if err != nil {
-		if errors.Is(err, authstore.ErrSessionNotFound) {
-			return authstore.Session{}, exitcode.UsageError(errors.New("not logged in; run goalrail login <server_url>"))
-		}
-		return authstore.Session{}, exitcode.RuntimeError(err)
+	client := options.HTTPClient
+	if client == nil {
+		client = http.DefaultClient
 	}
-	return session, nil
+	return authsession.LoadUsable(ctx, authsession.Options{
+		Store:  store,
+		Client: client,
+		Now:    options.Now,
+	})
 }
 
 func getCurrentProfile(ctx context.Context, client HTTPClient, session authstore.Session) (meResponse, error) {

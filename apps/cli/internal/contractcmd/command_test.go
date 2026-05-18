@@ -219,6 +219,72 @@ func TestRunShowReturnsContractAndCurrentDraftJSON(t *testing.T) {
 	}
 }
 
+func TestRunShowRefreshesExpiredAccessTokenBeforeRequests(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var refreshCount, meCount, contractCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/auth/refresh":
+			refreshCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("refresh method = %s, want POST", r.Method)
+			}
+			if r.Header.Get("Authorization") != "" {
+				t.Errorf("refresh Authorization = %q, want empty", r.Header.Get("Authorization"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"refreshed-access-token","access_token_expires_at":"2026-05-05T11:30:00Z","token_type":"Bearer"}`))
+		case "/v1/me":
+			meCount.Add(1)
+			if r.Header.Get("Authorization") != "Bearer refreshed-access-token" {
+				t.Errorf("me Authorization = %q, want refreshed bearer", r.Header.Get("Authorization"))
+				http.Error(w, "bad auth", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009":
+			contractCount.Add(1)
+			if r.Header.Get("Authorization") != "Bearer refreshed-access-token" {
+				t.Errorf("contract Authorization = %q, want refreshed bearer", r.Header.Get("Authorization"))
+				http.Error(w, "bad auth", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"approved"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	store := &fakeSavingSessionStore{session: authstore.Session{
+		ServerURL:            server.URL,
+		AccessToken:          "expired-access-token",
+		RefreshToken:         "stored-refresh-token",
+		AccessTokenExpiresAt: time.Date(2026, 5, 5, 9, 59, 0, 0, time.UTC),
+		TokenType:            "Bearer",
+	}}
+	output, err := runShowJSON(t, repoDir, store, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(contract show) error = %v", err)
+	}
+	if output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ContractState != spine.ContractStateApproved {
+		t.Fatalf("contract output = %q/%q, want approved contract", output.ContractID, output.ContractState)
+	}
+	if refreshCount.Load() != 1 || meCount.Load() != 1 || contractCount.Load() != 1 || store.saveCount.Load() != 1 {
+		t.Fatalf("counts refresh/me/contract/save = %d/%d/%d/%d, want 1/1/1/1", refreshCount.Load(), meCount.Load(), contractCount.Load(), store.saveCount.Load())
+	}
+	if store.saved.AccessToken != "refreshed-access-token" || store.saved.RefreshToken != "stored-refresh-token" {
+		t.Fatalf("saved session = %#v, want refreshed access token and preserved refresh token", store.saved)
+	}
+}
+
 func TestRunShowTextRendersReviewAndApprovalNote(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -1315,7 +1381,7 @@ func runDraftJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...
 	return output, nil
 }
 
-func runShowJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...string) (spine.ContractShowOutput, error) {
+func runShowJSON(t *testing.T, repoDir string, store SessionStore, args ...string) (spine.ContractShowOutput, error) {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
@@ -1476,6 +1542,23 @@ func (s fakeSessionStore) Load() (authstore.Session, error) {
 		return authstore.Session{}, s.err
 	}
 	return s.session, nil
+}
+
+type fakeSavingSessionStore struct {
+	session   authstore.Session
+	saved     authstore.Session
+	saveCount atomic.Int32
+}
+
+func (s *fakeSavingSessionStore) Load() (authstore.Session, error) {
+	return s.session, nil
+}
+
+func (s *fakeSavingSessionStore) Save(session authstore.Session) error {
+	s.saved = session
+	s.session = session
+	s.saveCount.Add(1)
+	return nil
 }
 
 func requireGit(t *testing.T) {

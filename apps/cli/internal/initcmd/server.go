@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/heurema/goalrail/apps/cli/internal/authsession"
 	"github.com/heurema/goalrail/apps/cli/internal/authstore"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
 	"github.com/heurema/goalrail/apps/cli/internal/projectscan"
@@ -51,7 +52,7 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 		return err
 	}
 
-	session, serverURL, err := loadUsableSession(options)
+	session, serverURL, client, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -67,8 +68,6 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 	}); err != nil {
 		return err
 	}
-
-	client := initHTTPClient(options.HTTPClient)
 
 	requestPayload := spine.RepoBindingInitRequest{
 		Provider:              draft.Provider,
@@ -173,7 +172,7 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 		return err
 	}
 
-	session, serverURL, err := loadUsableSession(options)
+	session, serverURL, client, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -188,8 +187,6 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 	}); err != nil {
 		return err
 	}
-
-	client := initHTTPClient(options.HTTPClient)
 
 	requestPayload := spine.RepositoryContextInitRequest{
 		Provider:                    draft.Provider,
@@ -309,38 +306,24 @@ func validateServerBackedDraft(draft spine.RepoBindingDraft) error {
 	return nil
 }
 
-func loadUsableSession(options Options) (authstore.Session, string, error) {
-	session, err := loadSession(options)
-	if err != nil {
-		return authstore.Session{}, "", err
-	}
-	now := time.Now
-	if options.Now != nil {
-		now = options.Now
-	}
-	if !session.AccessTokenExpiresAt.After(now().UTC()) {
-		return authstore.Session{}, "", exitcode.UsageError(fmt.Errorf("login expired; run goalrail login %s", session.ServerURL))
-	}
-	return session, strings.TrimRight(session.ServerURL, "/"), nil
-}
-
-func loadSession(options Options) (authstore.Session, error) {
+func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, error) {
 	store := options.Store
 	if store == nil {
 		path, err := authstore.DefaultPath()
 		if err != nil {
-			return authstore.Session{}, exitcode.RuntimeError(err)
+			return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
 		}
 		store = authstore.NewFileStore(path)
 	}
-	session, err := store.Load()
-	if err != nil {
-		if errors.Is(err, authstore.ErrSessionNotFound) {
-			return authstore.Session{}, exitcode.UsageError(errors.New("not logged in; run goalrail login <server_url>"))
-		}
-		return authstore.Session{}, exitcode.RuntimeError(err)
+	client := initHTTPClient(options.HTTPClient)
+	if client == nil {
+		client = http.DefaultClient
 	}
-	return session, nil
+	return authsession.LoadUsable(ctx, authsession.Options{
+		Store:  store,
+		Client: client,
+		Now:    options.Now,
+	})
 }
 
 func initStepOK(name string, message string) spine.InitStepResult {
