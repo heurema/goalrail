@@ -113,3 +113,35 @@ type ContractTransitionOutput struct {
 	Display         DisplaySummary `json:"display"`
 	NextAction      NextAction     `json:"next_action"`
 }
+
+type ContractShowDraft struct {
+	ID                         string   `json:"id"`
+	State                      string   `json:"state"`
+	Title                      string   `json:"title,omitempty"`
+	IntentSummary              string   `json:"intent_summary,omitempty"`
+	ProposedScope              []string `json:"proposed_scope,omitempty"`
+	ProposedNonGoals           []string `json:"proposed_non_goals,omitempty"`
+	ProposedConstraints        []string `json:"proposed_constraints,omitempty"`
+	ProposedAcceptanceCriteria []string `json:"proposed_acceptance_criteria,omitempty"`
+	ProposedExpectedChecks     []string `json:"proposed_expected_checks,omitempty"`
+	ProposedProofExpectations  []string `json:"proposed_proof_expectations,omitempty"`
+	RiskHints                  []string `json:"risk_hints,omitempty"`
+}
+
+type ContractShowOutput struct {
+	SchemaVersion   string             `json:"schema_version"`
+	Mode            string             `json:"mode"`
+	ServerURL       string             `json:"server_url"`
+	OrganizationID  string             `json:"organization_id"`
+	ProjectID       string             `json:"project_id"`
+	RepoBindingID   RepoBindingID      `json:"repo_binding_id"`
+	GoalID          string             `json:"goal_id"`
+	ContractID      ContractID         `json:"contract_id"`
+	ContractState   ContractState      `json:"contract_state"`
+	CurrentSeedID   string             `json:"current_seed_id,omitempty"`
+	CurrentDraftID  string             `json:"current_draft_id,omitempty"`
+	CurrentDraft    *ContractShowDraft `json:"current_draft,omitempty"`
+	LocalConfigPath string             `json:"local_config_path"`
+	Display         DisplaySummary     `json:"display"`
+	NextAction      NextAction         `json:"next_action"`
+}

@@ -32,7 +32,7 @@ var rootCommands = []commandSummary{
 	{name: "project", summary: "scan and report local project freshness"},
 	{name: "work", summary: "start and continue server-backed work from a local project marker"},
 	{name: "readiness", summary: "scan local repository readiness evidence"},
-	{name: "contract", summary: "draft, update, submit, approve, and validate contract state"},
+	{name: "contract", summary: "show, draft, update, submit, approve, and validate contract state"},
 	{name: "proof", summary: "render proof JSON files"},
 }
 
@@ -269,7 +269,7 @@ func newReadinessCommand(env clienv.Env) *cobra.Command {
 func newContractCommand(env clienv.Env) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "contract",
-		Short:              "draft, update, and validate contract state",
+		Short:              "show, draft, update, and validate contract state",
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, args, contractcmd.Options{})
@@ -281,6 +281,14 @@ func newContractCommand(env clienv.Env) *cobra.Command {
 	cmd.SetUsageFunc(func(cmd *cobra.Command) error {
 		_, err := fmt.Fprint(cmd.OutOrStdout(), contractcmd.Usage())
 		return err
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:                "show",
+		Short:              "inspect a server Contract without mutating state",
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return contractcmd.RunWithOptions(cmd.Context(), outputFor(cmd), env.WorkDir, append([]string{"show"}, args...), contractcmd.Options{})
+		},
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:                "draft",
@@ -402,6 +410,8 @@ func helpFor(cmd *cobra.Command) string {
 		return projectcmd.StatusUsage()
 	case "goalrail contract":
 		return contractcmd.Usage()
+	case "goalrail contract show":
+		return contractcmd.ShowUsage()
 	case "goalrail contract draft":
 		return contractcmd.DraftUsage()
 	case "goalrail contract update":

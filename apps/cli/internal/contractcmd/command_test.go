@@ -140,6 +140,199 @@ func TestBuildDraftOutputDoesNotOfferUpdateForNonDraftContract(t *testing.T) {
 	}
 }
 
+func TestRunShowReturnsContractAndCurrentDraftJSON(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, contractCount, draftCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/me method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009":
+			contractCount.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/contracts/{id} method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_approval","current_seed_id":"018f0000-0000-7000-8000-000000000007","current_draft_id":"018f0000-0000-7000-8000-000000000008"}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/current-draft":
+			draftCount.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/contracts/{id}/current-draft method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000008","contract_id":"018f0000-0000-7000-8000-000000000009","contract_seed_id":"018f0000-0000-7000-8000-000000000007","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_approval","title":"Review contract from CLI","intent_summary":"Show a contract before approval.","proposed_scope":["Add goalrail contract show","Support text and JSON output"],"proposed_non_goals":["Do not approve"],"proposed_constraints":["Read-only"],"proposed_acceptance_criteria":["Developer can inspect before approval"],"proposed_expected_checks":["go test ./..."],"proposed_proof_expectations":["PR shows command output"],"risk_hints":["approval-ux"]}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runShowJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(contract show) error = %v", err)
+	}
+
+	if output.SchemaVersion != "goalrail.cli.v1" || output.Mode != "server" {
+		t.Fatalf("schema/mode = %q/%q, want goalrail.cli.v1/server", output.SchemaVersion, output.Mode)
+	}
+	if output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ContractState != spine.ContractStateReadyForApproval {
+		t.Fatalf("contract = %q/%q, want ready contract", output.ContractID, output.ContractState)
+	}
+	if output.GoalID != "018f0000-0000-7000-8000-000000000006" || output.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
+		t.Fatalf("goal/repo = %q/%q, want aggregate context", output.GoalID, output.RepoBindingID)
+	}
+	if output.CurrentSeedID != "018f0000-0000-7000-8000-000000000007" || output.CurrentDraftID != "018f0000-0000-7000-8000-000000000008" {
+		t.Fatalf("seed/draft = %q/%q, want current ids", output.CurrentSeedID, output.CurrentDraftID)
+	}
+	if output.CurrentDraft == nil {
+		t.Fatal("current_draft = nil, want draft body")
+	}
+	if output.CurrentDraft.Title != "Review contract from CLI" || output.CurrentDraft.IntentSummary != "Show a contract before approval." {
+		t.Fatalf("draft title/intent = %q/%q, want server draft fields", output.CurrentDraft.Title, output.CurrentDraft.IntentSummary)
+	}
+	if !equalStrings(output.CurrentDraft.ProposedScope, []string{"Add goalrail contract show", "Support text and JSON output"}) {
+		t.Fatalf("draft scope = %#v, want server scope", output.CurrentDraft.ProposedScope)
+	}
+	if output.NextAction.Kind != "approve_contract" || !output.NextAction.Blocking || !output.NextAction.Available {
+		t.Fatalf("next_action = %#v, want blocking approve_contract", output.NextAction)
+	}
+	if output.NextAction.Command != "goalrail contract approve --contract-id 018f0000-0000-7000-8000-000000000009 --confirm-user-approval --format json" {
+		t.Fatalf("next_action.command = %q, want approve command", output.NextAction.Command)
+	}
+	if meCount.Load() != 1 || contractCount.Load() != 1 || draftCount.Load() != 1 {
+		t.Fatalf("request counts me/contract/draft = %d/%d/%d, want 1/1/1", meCount.Load(), contractCount.Load(), draftCount.Load())
+	}
+}
+
+func TestRunShowTextRendersReviewAndApprovalNote(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009":
+			if r.Method != http.MethodGet {
+				t.Errorf("contract method = %s, want GET", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"ready_for_approval","current_draft_id":"018f0000-0000-7000-8000-000000000008"}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/current-draft":
+			if r.Method != http.MethodGet {
+				t.Errorf("draft method = %s, want GET", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000008","contract_id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"ready_for_approval","title":"Review contract from CLI","intent_summary":"Show a contract before approval.","proposed_scope":["Add goalrail contract show"],"proposed_non_goals":["Do not approve"],"proposed_constraints":["Read-only"],"proposed_acceptance_criteria":["Developer can inspect before approval"],"proposed_expected_checks":["go test ./..."],"proposed_proof_expectations":["PR shows command output"],"risk_hints":["approval-ux"]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"show", "--contract-id", "018f0000-0000-7000-8000-000000000009"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(contract show text) error = %v", err)
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"Contract review",
+		"Contract identity",
+		"Title\nReview contract from CLI",
+		"Proposed scope\n- Add goalrail contract show",
+		"Proposed non-goals\n- Do not approve",
+		"This command is read-only and does not approve or mutate the Contract.",
+		"Human approval is required before running: goalrail contract approve --contract-id 018f0000-0000-7000-8000-000000000009 --confirm-user-approval",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want containing %q", got, want)
+		}
+	}
+}
+
+func TestRunShowRequiresContractID(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"show", "--format", "json"}, Options{})
+	if err == nil {
+		t.Fatal("Run(contract show) error = nil, want missing contract id")
+	}
+	if got := exitcode.ForError(err); got != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage", got)
+	}
+	if !strings.Contains(err.Error(), "--contract-id is required") {
+		t.Fatalf("error = %q, want contract id hint", err.Error())
+	}
+}
+
+func TestRunShowHandlesMissingCurrentDraftID(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var draftCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009":
+			if r.Method != http.MethodGet {
+				t.Errorf("contract method = %s, want GET", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"seeded","current_seed_id":"018f0000-0000-7000-8000-000000000007"}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/current-draft":
+			draftCount.Add(1)
+			http.Error(w, "unexpected current draft request", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runShowJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(contract show) error = %v", err)
+	}
+	if output.CurrentDraft != nil {
+		t.Fatalf("current_draft = %#v, want nil without current_draft_id", output.CurrentDraft)
+	}
+	if output.CurrentSeedID != "018f0000-0000-7000-8000-000000000007" || output.CurrentDraftID != "" {
+		t.Fatalf("seed/draft ids = %q/%q, want seed only", output.CurrentSeedID, output.CurrentDraftID)
+	}
+	if draftCount.Load() != 0 {
+		t.Fatalf("current draft requests = %d, want 0 without current_draft_id", draftCount.Load())
+	}
+}
+
 func TestRunDraftMissingProjectConfigFailsBeforeHTTP(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -1118,6 +1311,26 @@ func runDraftJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode contract draft JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runShowJSON(t *testing.T, repoDir string, store fakeSessionStore, args ...string) (spine.ContractShowOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, append([]string{"show"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.ContractShowOutput{}, err
+	}
+	var output spine.ContractShowOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode contract show JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }
