@@ -145,6 +145,28 @@ func TestRootCommandContractUpdateHelpUsesCobraArgsAndWriters(t *testing.T) {
 	}
 }
 
+func TestRootCommandContractShowHelpUsesCobraArgsAndWriters(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	cmd := NewRootCommand(clienv.Env{WorkDir: "."})
+	cmd.SetArgs([]string{"contract", "show", "--help"})
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("ExecuteContext(contract show --help) error = %v", err)
+	}
+
+	want := "Usage: goalrail contract show --contract-id <contract_id> [--format text|json]"
+	if got := stdout.String(); !strings.Contains(got, want) {
+		t.Fatalf("stdout = %q, want usage containing %q", got, want)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+}
+
 func TestRootCommandContractSubmitHelpUsesCobraArgsAndWriters(t *testing.T) {
 	t.Parallel()
 

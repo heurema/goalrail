@@ -59,6 +59,8 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	switch args[0] {
 	case "validate":
 		return runValidate(ctx, out, workDir, args[1:])
+	case "show":
+		return runShow(ctx, out, workDir, args[1:], options)
 	case "draft":
 		return runDraft(ctx, out, workDir, args[1:], options)
 	case "update":
@@ -70,6 +72,70 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown contract command %q", args[0]))
 	}
+}
+
+func runShow(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail contract show", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	contractID := flags.String("contract-id", "", "Contract ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, ShowUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedContractID := strings.TrimSpace(*contractID)
+	if normalizedContractID == "" {
+		return exitcode.UsageError(errors.New("--contract-id is required"))
+	}
+	if err := validateUUIDLike("contract_id", normalizedContractID); err != nil {
+		return err
+	}
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	commandContext, err := loadContractCommandContext(ctx, workDir, "show", options)
+	if err != nil {
+		return err
+	}
+	aggregate, err := getContractAggregate(ctx, commandContext.Client, commandContext.Session, normalizedContractID)
+	if err != nil {
+		return err
+	}
+	if err := validateContractAggregateContext(commandContext.Config, normalizedContractID, aggregate); err != nil {
+		return err
+	}
+
+	var draft *contractDraftBodyResponse
+	if strings.TrimSpace(aggregate.CurrentDraftID) != "" {
+		loadedDraft, err := getContractCurrentDraft(ctx, commandContext.Client, commandContext.Session, normalizedContractID)
+		if err != nil {
+			return err
+		}
+		if err := validateContractDraftBodyContext(commandContext.Config, normalizedContractID, aggregate.CurrentDraftID, loadedDraft); err != nil {
+			return err
+		}
+		draft = &loadedDraft
+	}
+
+	output := buildShowOutput(commandContext.Config, commandContext.ServerURL, aggregate, draft)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderShowText(output))
+	return err
 }
 
 func runValidate(ctx context.Context, out *term.Output, workDir string, args []string) error {
@@ -506,11 +572,15 @@ func writeText(w io.Writer, report spine.ContractValidationReport) error {
 }
 
 func Usage() string {
-	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  draft       create or return a server Contract draft handle for a ready Goal\n  update      update proposed fields on a server ContractDraft\n  submit      submit a draft Contract for explicit user approval\n  approve     approve a submitted Contract after explicit user confirmation\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
+	return "Usage: goalrail contract <command> [options]\n\nCommands:\n  show        inspect a server Contract and current draft without mutating state\n  draft       create or return a server Contract draft handle for a ready Goal\n  update      update proposed fields on a server ContractDraft\n  submit      submit a draft Contract for explicit user approval\n  approve     approve a submitted Contract after explicit user confirmation\n  validate    validate a contract JSON file\n\nRun goalrail contract <command> --help for command usage.\n"
 }
 
 func ValidateUsage() string {
 	return "Usage: goalrail contract validate --file <contract.json> [--format text|json]\n\nValidates the minimum contract fields needed before approval or execution.\n"
+}
+
+func ShowUsage() string {
+	return "Usage: goalrail contract show --contract-id <contract_id> [--format text|json]\n\nInspects a server Contract and its current draft body, when available, using read-only authenticated API requests. The command validates the Git-root .goalrail/project.yml marker plus login and Organization marker. It does not create, update, submit, approve, plan, run workers, gates, proof, or verification.\n"
 }
 
 func DraftUsage() string {
@@ -742,6 +812,66 @@ func uniqueStrings(values []string) []string {
 		result = append(result, value)
 	}
 	return result
+}
+
+func getContractAggregate(ctx context.Context, client HTTPClient, session authstore.Session, contractID string) (contractAggregateResponse, error) {
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/v1/contracts/"+contractID, nil)
+	if err != nil {
+		return contractAggregateResponse{}, exitcode.RuntimeError(fmt.Errorf("build contract show request: %w", err))
+	}
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return contractAggregateResponse{}, exitcode.RuntimeError(fmt.Errorf("load contract from %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return contractAggregateResponse{}, mapHTTPError("contract show request", response, serverURL)
+	}
+	var decoded contractAggregateResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return contractAggregateResponse{}, exitcode.RuntimeError(fmt.Errorf("decode contract show response: %w", err))
+	}
+	if strings.TrimSpace(string(decoded.ID)) == "" {
+		return contractAggregateResponse{}, exitcode.RuntimeError(errors.New("contract show response did not include id"))
+	}
+	if strings.TrimSpace(string(decoded.State)) == "" {
+		return contractAggregateResponse{}, exitcode.RuntimeError(errors.New("contract show response did not include state"))
+	}
+	return decoded, nil
+}
+
+func getContractCurrentDraft(ctx context.Context, client HTTPClient, session authstore.Session, contractID string) (contractDraftBodyResponse, error) {
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/v1/contracts/"+contractID+"/current-draft", nil)
+	if err != nil {
+		return contractDraftBodyResponse{}, exitcode.RuntimeError(fmt.Errorf("build contract current draft request: %w", err))
+	}
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return contractDraftBodyResponse{}, exitcode.RuntimeError(fmt.Errorf("load contract current draft from %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return contractDraftBodyResponse{}, mapHTTPError("contract current draft request", response, serverURL)
+	}
+	var decoded contractDraftBodyResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return contractDraftBodyResponse{}, exitcode.RuntimeError(fmt.Errorf("decode contract current draft response: %w", err))
+	}
+	if strings.TrimSpace(decoded.ID) == "" {
+		return contractDraftBodyResponse{}, exitcode.RuntimeError(errors.New("contract current draft response did not include id"))
+	}
+	if strings.TrimSpace(decoded.State) == "" {
+		return contractDraftBodyResponse{}, exitcode.RuntimeError(errors.New("contract current draft response did not include state"))
+	}
+	return decoded, nil
 }
 
 func postContractDraft(ctx context.Context, client HTTPClient, session authstore.Session, goalID string, config projectconfig.Config) (contractDraftResponse, error) {
@@ -1124,6 +1254,106 @@ func validateContractUpdateContext(config projectconfig.Config, contractID strin
 	return nil
 }
 
+func validateContractAggregateContext(config projectconfig.Config, contractID string, contractResponse contractAggregateResponse) error {
+	if string(contractResponse.ID) != contractID {
+		return exitcode.ValidationError(errors.New("contract show response id does not match requested Contract"))
+	}
+	if contractResponse.RepoBindingID != "" && string(contractResponse.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("contract show response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the Contract"))
+	}
+	return nil
+}
+
+func validateContractDraftBodyContext(config projectconfig.Config, contractID string, currentDraftID string, draft contractDraftBodyResponse) error {
+	if draft.ID != currentDraftID {
+		return exitcode.ValidationError(errors.New("contract current draft response id does not match public Contract current_draft_id"))
+	}
+	if draft.ContractID != "" && draft.ContractID != contractID {
+		return exitcode.ValidationError(errors.New("contract current draft response contract_id does not match requested Contract"))
+	}
+	if draft.RepoBindingID != "" && string(draft.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("contract current draft response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the Contract"))
+	}
+	return nil
+}
+
+func buildShowOutput(config projectconfig.Config, serverURL string, contractResponse contractAggregateResponse, draft *contractDraftBodyResponse) spine.ContractShowOutput {
+	nextAction := contractShowNextAction(contractResponse)
+	summary := fmt.Sprintf("Contract %s is %s.", contractResponse.ID, contractResponse.State)
+	if draft != nil {
+		summary = fmt.Sprintf("Contract %s is %s and current draft review fields are loaded.", contractResponse.ID, contractResponse.State)
+	}
+	output := spine.ContractShowOutput{
+		SchemaVersion:   cliSchemaVersion,
+		Mode:            serverMode,
+		ServerURL:       serverURL,
+		OrganizationID:  config.OrganizationID,
+		ProjectID:       config.ProjectID,
+		RepoBindingID:   contractResponse.RepoBindingID,
+		GoalID:          contractResponse.GoalID,
+		ContractID:      contractResponse.ID,
+		ContractState:   contractResponse.State,
+		CurrentSeedID:   contractResponse.CurrentSeedID,
+		CurrentDraftID:  contractResponse.CurrentDraftID,
+		LocalConfigPath: projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: summary,
+		},
+		NextAction: nextAction,
+	}
+	if output.RepoBindingID == "" {
+		output.RepoBindingID = spine.RepoBindingID(config.RepoBindingID)
+	}
+	if draft != nil {
+		output.CurrentDraft = &spine.ContractShowDraft{
+			ID:                         draft.ID,
+			State:                      draft.State,
+			Title:                      draft.Title,
+			IntentSummary:              draft.IntentSummary,
+			ProposedScope:              append([]string{}, draft.ProposedScope...),
+			ProposedNonGoals:           append([]string{}, draft.ProposedNonGoals...),
+			ProposedConstraints:        append([]string{}, draft.ProposedConstraints...),
+			ProposedAcceptanceCriteria: append([]string{}, draft.ProposedAcceptanceCriteria...),
+			ProposedExpectedChecks:     append([]string{}, draft.ProposedExpectedChecks...),
+			ProposedProofExpectations:  append([]string{}, draft.ProposedProofExpectations...),
+			RiskHints:                  append([]string{}, draft.RiskHints...),
+		}
+	}
+	return output
+}
+
+func contractShowNextAction(contractResponse contractAggregateResponse) spine.NextAction {
+	switch contractResponse.State {
+	case spine.ContractStateDraft:
+		return spine.NextAction{
+			Kind:      "review_or_update_contract",
+			Blocking:  true,
+			Available: true,
+			Command:   fmt.Sprintf("goalrail contract update --contract-id %s --fields-file - --format json", contractResponse.ID),
+		}
+	case spine.ContractStateReadyForApproval:
+		return spine.NextAction{
+			Kind:      "approve_contract",
+			Blocking:  true,
+			Available: true,
+			Command:   fmt.Sprintf("goalrail contract approve --contract-id %s --confirm-user-approval --format json", contractResponse.ID),
+		}
+	case spine.ContractStateApproved:
+		return spine.NextAction{
+			Kind:      "plan_work",
+			Blocking:  false,
+			Available: true,
+			Command:   fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
+		}
+	default:
+		return spine.NextAction{
+			Kind:      "review_contract",
+			Blocking:  true,
+			Available: false,
+		}
+	}
+}
+
 func buildDraftOutput(config projectconfig.Config, serverURL string, goalID string, contractDraft contractDraftResponse, receipt spine.LocalRepoReceipt) spine.ContractDraftOutput {
 	summary := fmt.Sprintf("Found a Contract handle in state %s. Contract update is only available while the Contract is draft.", contractDraft.State)
 	nextAction := spine.NextAction{
@@ -1222,6 +1452,78 @@ func buildApproveOutput(config projectconfig.Config, serverURL string, contractR
 			Command:   fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
 		},
 	}
+}
+
+func renderShowText(output spine.ContractShowOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contract review\n\n")
+	fmt.Fprintf(&b, "Contract identity\n")
+	fmt.Fprintf(&b, "- contract_id: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "- state: %s\n", output.ContractState)
+	fmt.Fprintf(&b, "- goal_id: %s\n", output.GoalID)
+	fmt.Fprintf(&b, "- repo_binding_id: %s\n", output.RepoBindingID)
+	if output.CurrentSeedID != "" {
+		fmt.Fprintf(&b, "- current_seed_id: %s\n", output.CurrentSeedID)
+	}
+	if output.CurrentDraftID != "" {
+		fmt.Fprintf(&b, "- current_draft_id: %s\n", output.CurrentDraftID)
+	}
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "- local_config: %s\n", output.LocalConfigPath)
+	}
+	b.WriteString("\n")
+
+	if output.CurrentDraft == nil {
+		b.WriteString("Current draft\n")
+		b.WriteString("No current draft body is available for this Contract.\n")
+	} else {
+		writeShowStringSection(&b, "Title", output.CurrentDraft.Title)
+		writeShowStringSection(&b, "Intent summary", output.CurrentDraft.IntentSummary)
+		writeShowListSection(&b, "Proposed scope", output.CurrentDraft.ProposedScope)
+		writeShowListSection(&b, "Proposed non-goals", output.CurrentDraft.ProposedNonGoals)
+		writeShowListSection(&b, "Proposed constraints", output.CurrentDraft.ProposedConstraints)
+		writeShowListSection(&b, "Proposed acceptance criteria", output.CurrentDraft.ProposedAcceptanceCriteria)
+		writeShowListSection(&b, "Proposed expected checks", output.CurrentDraft.ProposedExpectedChecks)
+		writeShowListSection(&b, "Proposed proof expectations", output.CurrentDraft.ProposedProofExpectations)
+		writeShowListSection(&b, "Risk hints", output.CurrentDraft.RiskHints)
+	}
+
+	b.WriteString("\nApproval note\n")
+	b.WriteString("This command is read-only and does not approve or mutate the Contract.\n")
+	b.WriteString("\nNext\n")
+	switch output.ContractState {
+	case spine.ContractStateReadyForApproval:
+		fmt.Fprintf(&b, "Human approval is required before running: goalrail contract approve --contract-id %s --confirm-user-approval\n", output.ContractID)
+	case spine.ContractStateDraft:
+		fmt.Fprintf(&b, "Review the draft, update it if needed, then submit with: goalrail contract submit --contract-id %s --format json\n", output.ContractID)
+	case spine.ContractStateApproved:
+		fmt.Fprintf(&b, "The Contract is already approved. The next normal stage is planning: goalrail work plan --contract-id %s --format json\n", output.ContractID)
+	default:
+		fmt.Fprintf(&b, "Review current Contract state before choosing the next lifecycle command.\n")
+	}
+	return b.String()
+}
+
+func writeShowStringSection(b *strings.Builder, title string, value string) {
+	fmt.Fprintf(b, "%s\n", title)
+	value = strings.TrimSpace(value)
+	if value == "" {
+		b.WriteString("(empty)\n\n")
+		return
+	}
+	fmt.Fprintf(b, "%s\n\n", value)
+}
+
+func writeShowListSection(b *strings.Builder, title string, values []string) {
+	fmt.Fprintf(b, "%s\n", title)
+	if len(values) == 0 {
+		b.WriteString("- (none)\n\n")
+		return
+	}
+	for _, value := range values {
+		fmt.Fprintf(b, "- %s\n", value)
+	}
+	b.WriteString("\n")
 }
 
 func renderDraftText(output spine.ContractDraftOutput) string {
@@ -1394,6 +1696,33 @@ type contractUpdateRequest struct {
 type contractTransitionRequest struct {
 	ProjectID     string `json:"project_id"`
 	RepoBindingID string `json:"repo_binding_id"`
+}
+
+type contractAggregateResponse struct {
+	ID             spine.ContractID    `json:"id"`
+	RepoBindingID  spine.RepoBindingID `json:"repo_binding_id"`
+	GoalID         string              `json:"goal_id"`
+	State          spine.ContractState `json:"state"`
+	CurrentSeedID  string              `json:"current_seed_id,omitempty"`
+	CurrentDraftID string              `json:"current_draft_id,omitempty"`
+}
+
+type contractDraftBodyResponse struct {
+	ID                         string              `json:"id"`
+	ContractID                 string              `json:"contract_id"`
+	ContractSeedID             string              `json:"contract_seed_id"`
+	GoalID                     string              `json:"goal_id"`
+	RepoBindingID              spine.RepoBindingID `json:"repo_binding_id"`
+	Title                      string              `json:"title"`
+	IntentSummary              string              `json:"intent_summary"`
+	ProposedScope              []string            `json:"proposed_scope"`
+	ProposedNonGoals           []string            `json:"proposed_non_goals"`
+	ProposedConstraints        []string            `json:"proposed_constraints"`
+	ProposedAcceptanceCriteria []string            `json:"proposed_acceptance_criteria"`
+	ProposedExpectedChecks     []string            `json:"proposed_expected_checks"`
+	ProposedProofExpectations  []string            `json:"proposed_proof_expectations"`
+	RiskHints                  []string            `json:"risk_hints"`
+	State                      string              `json:"state"`
 }
 
 type contractUpdateActorRef struct {
