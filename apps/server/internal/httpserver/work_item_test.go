@@ -1524,8 +1524,26 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 		if receipt.ProcessStatus != spine.ExecutionReceiptStatusPolicyRejected || receipt.ExitCode != nil || receipt.RawSourceUploaded {
 			t.Fatalf("project test receipt process evidence = %#v, want policy_rejected without exit_code/raw source", receipt)
 		}
+		if receipt.EnforcementReport == nil {
+			t.Fatal("project test receipt enforcement_report is nil, want fail-closed enforcement metadata")
+		}
+		if *receipt.EnforcementReport != (spine.ExecutionEnforcementReport{
+			NetworkPolicy:             spine.ExecutionEnforcementPolicyDisabledRequired,
+			NetworkEnforcement:        spine.ExecutionEnforcementUnavailable,
+			WorkspaceWritePolicy:      spine.ExecutionEnforcementPolicyDisabledRequired,
+			WorkspaceWriteEnforcement: spine.ExecutionEnforcementUnavailable,
+			ProcessTreeEnforcement:    spine.ExecutionEnforcementUnavailable,
+			ScratchWritePolicy:        spine.ExecutionScratchWritePolicyAllowedRunnerLocal,
+			Decision:                  spine.ExecutionEnforcementDecisionPolicyRejected,
+			Reason:                    spine.ExecutionEnforcementReasonUnavailable,
+		}) {
+			t.Fatalf("project test enforcement_report = %#v, want unavailable controls policy rejection", receipt.EnforcementReport)
+		}
 		if len(receipt.ArtifactRefs) != 0 || len(receipt.ChangedPathsSummary) != 0 || receipt.ProjectProbeMetadata != nil {
 			t.Fatalf("project test evidence claims = artifacts=%#v changed=%#v probe=%#v, want process-only receipt", receipt.ArtifactRefs, receipt.ChangedPathsSummary, receipt.ProjectProbeMetadata)
+		}
+		if receipt.NextAction.Kind != spine.ExecutionReceiptNextActionGateReview || receipt.NextAction.Available || receipt.NextAction.PlannedSlice != spine.ExecutionReceiptNextActionPlannedSlice {
+			t.Fatalf("project test receipt next_action = %#v, want unavailable gate_review", receipt.NextAction)
 		}
 		if got := server.runs.runs[run.ID].State; got != spine.RunStateReceiptSubmitted {
 			t.Fatalf("project test run state = %q, want receipt_submitted", got)
@@ -1554,6 +1572,54 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 			t.Fatalf("events = %d, want unchanged %d after duplicate project_test receipt", len(server.events.Events()), eventCountAfterFirstReceipt)
 		}
 		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
+	t.Run("runner capability report does not unlock project test execution outcomes", func(t *testing.T) {
+		server := testServer(t)
+		job, lease, run, plan := createProjectTestPlanFromSeededProbe(t, server)
+
+		capabilityBody := fmt.Sprintf(`{"runner_id":"runner-1","organization_id":"018f0000-0000-7000-8000-000000000002","project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"network_isolation_declared":true,"workspace_write_isolation_declared":true,"process_tree_control_declared":true,"stdout_stderr_policy_declared":true,"artifact_policy_declared":true,"trust_state":"self_declared_untrusted"}`, job.RepoBindingID)
+		firstCapabilityResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", capabilityBody)
+		if firstCapabilityResponse.code != http.StatusCreated {
+			t.Fatalf("first capability report status = %d, want %d: %s", firstCapabilityResponse.code, http.StatusCreated, firstCapabilityResponse.body)
+		}
+		secondCapabilityResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", capabilityBody)
+		if secondCapabilityResponse.code != http.StatusCreated {
+			t.Fatalf("second capability report status = %d, want %d: %s", secondCapabilityResponse.code, http.StatusCreated, secondCapabilityResponse.body)
+		}
+		if len(server.runnerCapabilities.reports) != 2 {
+			t.Fatalf("runner capability reports = %d, want append-only reports", len(server.runnerCapabilities.reports))
+		}
+		for _, report := range server.runnerCapabilities.reports {
+			if report.TrustState != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+				t.Fatalf("runner capability report trust_state = %q, want self_declared_untrusted", report.TrustState)
+			}
+		}
+
+		for _, tt := range []struct {
+			name     string
+			status   string
+			exitCode *int
+		}{
+			{name: "exited", status: spine.ExecutionReceiptStatusExited, exitCode: intPtr(0)},
+			{name: "timed_out", status: spine.ExecutionReceiptStatusTimedOut},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				receiptResponse := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, tt.status, tt.exitCode, false))
+				assertErrorCode(t, receiptResponse, http.StatusBadRequest, "validation_failed")
+				if _, ok := server.executionReceipts.byRun[run.ID]; ok {
+					t.Fatalf("project_test receipt for run %q was stored after %s attempt", run.ID, tt.status)
+				}
+				storedTask, ok, err := server.workItems.Get(context.Background(), run.TaskID)
+				if err != nil || !ok {
+					t.Fatalf("workItems.Get() after rejected %s receipt = %#v/%v/%v", tt.status, storedTask, ok, err)
+				}
+				if storedTask.Status != spine.WorkItemStatusPlanned {
+					t.Fatalf("task status = %q, want planned after rejected %s receipt", storedTask.Status, tt.status)
+				}
+				assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+			})
+		}
 	})
 
 	t.Run("rejects unsafe project test receipt claims", func(t *testing.T) {
@@ -1601,6 +1667,69 @@ func TestProjectTestCommandPlanAndReceipt(t *testing.T) {
 				name: "exit code for policy rejected",
 				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
 					return projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, intPtr(124), false)
+				},
+			},
+			{
+				name: "missing enforcement report",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `,"enforcement_report":`+projectTestEnforcementReportJSON(), "", 1)
+				},
+			},
+			{
+				name: "network enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"network_enforcement":"unavailable"`, `"network_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "network enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"network_enforcement":"unavailable"`, `"network_enforcement":"active"`, 1)
+				},
+			},
+			{
+				name: "workspace write enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"workspace_write_enforcement":"unavailable"`, `"workspace_write_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "workspace write enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"workspace_write_enforcement":"unavailable"`, `"workspace_write_enforcement":"active"`, 1)
+				},
+			},
+			{
+				name: "process tree enforcement claimed active",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"process_tree_enforcement":"unavailable"`, `"process_tree_enforcement":"enforced"`, 1)
+				},
+			},
+			{
+				name: "process tree enforcement claimed available",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"process_tree_enforcement":"unavailable"`, `"process_tree_enforcement":"active"`, 1)
+				},
+			},
+			{
+				name: "decision claimed allowed",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"decision":"policy_rejected"`, `"decision":"allowed"`, 1)
+				},
+			},
+			{
+				name: "unknown enforcement reason",
+				body: func(job spine.ExecutionJob, lease spine.ExecutionJobLeaseCreated, plan spine.ExecutionCommandPlan) string {
+					body := projectTestReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", plan.ID, spine.ExecutionReceiptStatusPolicyRejected, nil, false)
+					return strings.Replace(body, `"reason":"enforcement_unavailable"`, `"reason":"operator_intent_only"`, 1)
 				},
 			},
 			{
@@ -1832,6 +1961,36 @@ func TestExecutionRunnerRoutesRejectBoundaryFailures(t *testing.T) {
 		}
 	})
 
+	t.Run("receipt submit rejects no-command invalid process statuses", func(t *testing.T) {
+		for _, status := range []string{
+			spine.ExecutionReceiptStatusPolicyRejected,
+			spine.ExecutionReceiptStatusExited,
+			spine.ExecutionReceiptStatusTimedOut,
+			spine.ExecutionReceiptStatusRunnerError,
+			"succeeded",
+		} {
+			t.Run(status, func(t *testing.T) {
+				server := testServer(t)
+				job, lease := createLeasedExecutionJob(t, server)
+				runResponse := doJSON(t, server.router, http.MethodPost, "/v1/execution-jobs/"+string(job.ID)+"/runs", fmt.Sprintf(`{"lease_id":%q,"lease_token":%q,"runner_id":"runner-1"}`, lease.ID, lease.LeaseToken))
+				if runResponse.code != http.StatusCreated {
+					t.Fatalf("run start status = %d, want %d: %s", runResponse.code, http.StatusCreated, runResponse.body)
+				}
+				var run spine.Run
+				decodeJSON(t, runResponse.body, &run)
+
+				body := executionReceiptBody(job.ID, lease.ID, lease.LeaseToken, "runner-1", "mounted:/workspace/goalrail", "abc123", false)
+				body = strings.Replace(body, `"process_status":"not_executed"`, fmt.Sprintf(`"process_status":%q`, status), 1)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runs/"+string(run.ID)+"/receipts", body)
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.executionReceipts.receipts) != 0 {
+					t.Fatalf("execution receipts = %d, want 0 after no-command status %q", len(server.executionReceipts.receipts), status)
+				}
+				assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+			})
+		}
+	})
+
 	t.Run("receipt submit rejects artifact and changed path claims", func(t *testing.T) {
 		server := testServer(t)
 		job, lease := createLeasedExecutionJob(t, server)
@@ -2047,6 +2206,89 @@ func TestPostTaskCheckoutJobsRejectsAuthAndContextMismatch(t *testing.T) {
 	})
 }
 
+func TestRunnerCapabilityReportSmokeCoverage(t *testing.T) {
+	const (
+		organizationID = "018f0000-0000-7000-8000-000000000002"
+		projectID      = "018f0000-0000-7000-8000-000000000003"
+		repoBindingID  = "018f0000-0000-7000-8000-000000000004"
+	)
+
+	reportBody := func(trustState string, extra string) string {
+		return fmt.Sprintf(`{"runner_id":"runner-1","organization_id":%q,"project_id":%q,"repo_binding_id":%q,"network_isolation_declared":true,"workspace_write_isolation_declared":true,"process_tree_control_declared":true,"stdout_stderr_policy_declared":true,"artifact_policy_declared":true,"trust_state":%q%s}`, organizationID, projectID, repoBindingID, trustState, extra)
+	}
+
+	t.Run("persists append-only self-declared untrusted reports", func(t *testing.T) {
+		server := testServer(t)
+
+		firstResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(spine.RunnerCapabilityTrustSelfDeclaredUntrusted, ""))
+		if firstResponse.code != http.StatusCreated {
+			t.Fatalf("first runner capability report status = %d, want %d: %s", firstResponse.code, http.StatusCreated, firstResponse.body)
+		}
+		var firstReport spine.RunnerCapabilityReport
+		decodeJSON(t, firstResponse.body, &firstReport)
+
+		secondResponse := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(spine.RunnerCapabilityTrustSelfDeclaredUntrusted, ""))
+		if secondResponse.code != http.StatusCreated {
+			t.Fatalf("second runner capability report status = %d, want %d: %s", secondResponse.code, http.StatusCreated, secondResponse.body)
+		}
+		var secondReport spine.RunnerCapabilityReport
+		decodeJSON(t, secondResponse.body, &secondReport)
+
+		if firstReport.ID == "" || secondReport.ID == "" || firstReport.ID == secondReport.ID {
+			t.Fatalf("runner capability report ids = %q/%q, want distinct append-only reports", firstReport.ID, secondReport.ID)
+		}
+		if len(server.runnerCapabilities.reports) != 2 {
+			t.Fatalf("runner capability reports = %d, want two append-only records", len(server.runnerCapabilities.reports))
+		}
+		for _, report := range server.runnerCapabilities.reports {
+			if report.RunnerID != "runner-1" || report.OrganizationID != organizationID || report.ProjectID != projectID || report.RepoBindingID != repoBindingID {
+				t.Fatalf("runner capability report scope = %#v, want runner/org/project/repo binding scope", report)
+			}
+			if report.TrustState != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+				t.Fatalf("runner capability report trust_state = %q, want self_declared_untrusted", report.TrustState)
+			}
+			if !report.NetworkIsolationDeclared || !report.WorkspaceWriteIsolationDeclared || !report.ProcessTreeControlDeclared || !report.StdoutStderrPolicyDeclared || !report.ArtifactPolicyDeclared {
+				t.Fatalf("runner capability report declarations = %#v, want persisted self-declared metadata", report)
+			}
+		}
+		if got := countEventType(server.events.Events(), execution.EventTypeRunnerCapabilityReported); got != 2 {
+			t.Fatalf("runner_capability_report.created events = %d, want 2", got)
+		}
+		assertNoForbiddenPostReceiptSideEffects(t, server.events.Events())
+	})
+
+	t.Run("rejects trusted enforced and attestation claims", func(t *testing.T) {
+		for _, tt := range []struct {
+			name       string
+			trustState string
+			extra      string
+		}{
+			{name: "trusted trust state", trustState: "trusted"},
+			{name: "verified trust state", trustState: "verified"},
+			{name: "operator trusted state", trustState: "operator_trusted"},
+			{name: "active trust state", trustState: "active"},
+			{name: "enforced trust state", trustState: "enforced"},
+			{name: "network enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"network_enforcement":"active"`},
+			{name: "workspace write enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"workspace_write_enforcement":"enforced"`},
+			{name: "process tree enforcement", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"process_tree_enforcement":"active"`},
+			{name: "network isolation enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"network_isolation_enforced":true`},
+			{name: "workspace write isolation enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"workspace_write_isolation_enforced":true`},
+			{name: "process tree control enforced", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"process_tree_control_enforced":true`},
+			{name: "attestation", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"attestation":{"kind":"local"}`},
+			{name: "trust evidence", trustState: spine.RunnerCapabilityTrustSelfDeclaredUntrusted, extra: `,"trust_evidence":{"source":"operator"}`},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				server := testServer(t)
+				response := doJSON(t, server.router, http.MethodPost, "/v1/runner-capability-reports", reportBody(tt.trustState, tt.extra))
+				assertErrorCode(t, response, http.StatusBadRequest, "validation_failed")
+				if len(server.runnerCapabilities.reports) != 0 {
+					t.Fatalf("runner capability reports = %d, want no stored report for %s", len(server.runnerCapabilities.reports), tt.name)
+				}
+			})
+		}
+	})
+}
+
 func createCheckoutReceipt(t *testing.T, server testServerDeps, taskID spine.WorkItemID) (spine.CheckoutJob, spine.CheckoutReceipt) {
 	t.Helper()
 
@@ -2127,7 +2369,11 @@ func projectTestReceiptBody(jobID spine.ExecutionJobID, leaseID spine.ExecutionL
 	if exitCode != nil {
 		exitCodeField = fmt.Sprintf(`,"exit_code":%d`, *exitCode)
 	}
-	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_test","command_plan_id":%q,"command_kind":"project_test","action":"run_declared_test_target","process_status":%q%s,"artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z"}`, jobID, leaseID, leaseToken, runnerID, planID, status, exitCodeField, rawSourceUploaded)
+	return fmt.Sprintf(`{"execution_job_id":%q,"lease_id":%q,"lease_token":%q,"runner_id":%q,"workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","baseline_id":"baseline-1","overlay_id":"overlay-1","execution_mode":"project_test","command_plan_id":%q,"command_kind":"project_test","action":"run_declared_test_target","process_status":%q%s,"artifact_refs":[],"changed_paths_summary":[],"raw_source_uploaded":%t,"runner_started_at":"2026-04-25T12:00:00Z","runner_finished_at":"2026-04-25T12:00:00Z","enforcement_report":%s}`, jobID, leaseID, leaseToken, runnerID, planID, status, exitCodeField, rawSourceUploaded, projectTestEnforcementReportJSON())
+}
+
+func projectTestEnforcementReportJSON() string {
+	return `{"network_policy":"disabled_required","network_enforcement":"unavailable","workspace_write_policy":"disabled_required","workspace_write_enforcement":"unavailable","process_tree_enforcement":"unavailable","scratch_write_policy":"allowed_runner_local","decision":"policy_rejected","reason":"enforcement_unavailable"}`
 }
 
 func intPtr(value int) *int {

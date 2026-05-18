@@ -39,7 +39,7 @@ and `docs/ops/COMPONENTS.yaml`.
 
 ## Boundaries
 
-This local flow can prove that a developer can run a self-hosted Goalrail
+This local flow can demonstrate that a developer can run a self-hosted Goalrail
 control plane, bootstrap an owner, authenticate the CLI, initialize a local Git
 worktree, create a Goal, answer clarification, draft/update/submit/approve a
 Contract, create a WorkItemPlan, run the minimal planning worker once, accept a

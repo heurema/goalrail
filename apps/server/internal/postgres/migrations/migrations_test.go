@@ -677,6 +677,97 @@ func TestProjectTestCommandPlanMigrationAddsPlanningOnlyBoundary(t *testing.T) {
 	}
 }
 
+func TestProjectTestReceiptEnforcementReportMigrationAddsFailClosedBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00009_project_test_receipt_enforcement_report.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"ADD COLUMN enforcement_report JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"execution_mode IN ('no_command', 'builtin_diagnostic', 'project_probe', 'project_test')",
+		"process_status IN ('not_executed', 'metadata_only', 'policy_rejected')",
+		"ADD CONSTRAINT execution_receipts_project_test_check CHECK",
+		"command_kind = 'project_test'",
+		"action = 'run_declared_test_target'",
+		"process_status IN ('not_executed', 'metadata_only')",
+		"process_status = 'policy_rejected'",
+		"AND process_status IN ('not_executed', 'metadata_only')",
+		"exit_code IS NULL",
+		"artifact_refs = '[]'::jsonb",
+		"changed_paths_summary = '[]'::jsonb",
+		"raw_source_uploaded = FALSE",
+		"project_probe_metadata = '{",
+		"UPDATE execution_receipts",
+		"WHERE execution_mode = 'project_test'",
+		`"reason": "enforcement_unavailable"`,
+		`"scratch_write_policy": "allowed_runner_local"`,
+		`"network_policy": "disabled_required"`,
+		`"network_enforcement": "unavailable"`,
+		`"workspace_write_policy": "disabled_required"`,
+		`"workspace_write_enforcement": "unavailable"`,
+		`"process_tree_enforcement": "unavailable"`,
+		`"decision": "policy_rejected"`,
+		"enforcement_report = '{",
+		"WHERE execution_mode = 'project_test'",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("project test receipt enforcement migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{"os/exec", "exec.Command", "bash -lc", "sh -c", "stdout", "stderr"} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("project test receipt enforcement migration must not include %q", forbidden)
+		}
+	}
+	if strings.Contains(sql, "lease_token TEXT") || strings.Contains(sql, "lease_token_hash") {
+		t.Fatalf("project test receipt enforcement migration must not store lease tokens")
+	}
+}
+
+func TestRunnerCapabilityReportMigrationAddsUntrustedMetadataBoundary(t *testing.T) {
+	contents, err := FS.ReadFile("00010_runner_capability_reports.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE TABLE runner_capability_reports",
+		"runner_id TEXT NOT NULL",
+		"organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE",
+		"project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE",
+		"repo_binding_id UUID NOT NULL REFERENCES repo_bindings(id) ON DELETE CASCADE",
+		"network_isolation_declared BOOLEAN NOT NULL DEFAULT FALSE",
+		"workspace_write_isolation_declared BOOLEAN NOT NULL DEFAULT FALSE",
+		"process_tree_control_declared BOOLEAN NOT NULL DEFAULT FALSE",
+		"stdout_stderr_policy_declared BOOLEAN NOT NULL DEFAULT FALSE",
+		"artifact_policy_declared BOOLEAN NOT NULL DEFAULT FALSE",
+		"trust_state TEXT NOT NULL",
+		"CONSTRAINT runner_capability_reports_trust_state_check CHECK (trust_state = 'self_declared_untrusted')",
+		"CREATE INDEX runner_capability_reports_scope_idx",
+		"DROP TABLE IF EXISTS runner_capability_reports;",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("runner capability migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"execution_receipts",
+		"gate_decisions",
+		"proofs",
+		"lease_token",
+		"stdout_capture",
+		"stderr_capture",
+		"artifact_refs",
+		"raw_source",
+		"attestation",
+	} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("runner capability migration must not include %q", forbidden)
+		}
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

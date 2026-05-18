@@ -25,6 +25,7 @@ related_docs:
   - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
+  - docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md
 ---
 # Goalrail Docs Index
 
@@ -111,56 +112,59 @@ related_docs:
 63. `docs/adr/ADR-0031-project-command-execution-boundary.md`
 64. `docs/adr/ADR-0032-typed-project-test-command-boundary.md`
 65. `docs/adr/ADR-0033-runner-sandbox-enforcement-boundary.md`
+66. `docs/adr/ADR-0034-runner-capability-model-boundary.md`
 
 ### 7. Governance and change control
-66. `docs/product/GOALRAIL_RESEARCH_GATE.md`
-67. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
-68. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
-69. `docs/product/GOALRAIL_RULE_STACK.md`
+67. `docs/product/GOALRAIL_RESEARCH_GATE.md`
+68. `docs/product/GOALRAIL_RESEARCH_INTAKE.md`
+69. `docs/product/GOALRAIL_DOC_GOVERNANCE.md`
+70. `docs/product/GOALRAIL_RULE_STACK.md`
 
 ### 8. Delivery, build, and pilot operations
-70. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
-71. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
-72. `docs/ops/STATUS.md`
-73. `docs/ops/NEXT.md`
-74. `docs/ops/DECISIONS.md`
-75. `docs/ops/COMPONENTS.yaml`
-76. `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`
-77. `docs/ops/INIT_LIFECYCLE.md`
-78. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-79. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-80. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
-81. `docs/ops/BRANCH_PROTECTION.md`
-82. `docs/ops/REPO_STRUCTURE.md`
-83. `docs/ops/GO_CODE_GUIDE.md`
-84. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-85. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-86. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-87. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-88. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-89. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-90. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-91. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-92. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-93. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-94. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-95. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-96. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-97. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+71. `docs/product/GOALRAIL_BUILD_ROADMAP.md`
+72. `docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md`
+73. `docs/ops/STATUS.md`
+74. `docs/ops/NEXT.md`
+75. `docs/ops/DECISIONS.md`
+76. `docs/ops/COMPONENTS.yaml`
+77. `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`
+78. `docs/ops/INIT_LIFECYCLE.md`
+79. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+80. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+81. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+82. `docs/ops/BRANCH_PROTECTION.md`
+83. `docs/ops/REPO_STRUCTURE.md`
+84. `docs/ops/GO_CODE_GUIDE.md`
+85. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+86. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+87. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+88. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+89. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+90. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+91. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+92. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+93. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+94. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+95. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+96. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+97. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+98. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-98. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-99. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-100. `docs/reference/design/reference_screens/`
-101. `docs/reference/start-assistant/`
-102. `.goalrail/work/`
-103. `.goalrail/knowledge/`
-104. `.goalrail/public-kb/manifest.yaml`
-105. `.punk/publishing.toml`
-106. `.goalrail/flows/`
-107. `.goalrail/evals/`
-108. `docs/ops/PUBLISHING_MIGRATION.md`
-109. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+99. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+100. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+101. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
+102. `docs/reference/design/reference_screens/`
+103. `docs/reference/start-assistant/`
+104. `.goalrail/work/`
+105. `.goalrail/knowledge/`
+106. `.goalrail/public-kb/manifest.yaml`
+107. `.punk/publishing.toml`
+108. `.goalrail/flows/`
+109. `.goalrail/evals/`
+110. `docs/ops/PUBLISHING_MIGRATION.md`
+111. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+112. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
 
 
 ## Roles of the main docs
@@ -272,6 +276,10 @@ related_docs:
   network/workspace-write enforcement semantics before any project-test
   `exited` or `timed_out` receipt, keeping unavailable controls fail-closed as
   `policy_rejected`
+- `ADR-0034` — runner capability model boundary; H2.7.2 direction for
+  self-declared runner capabilities as untrusted metadata only, with trusted
+  capabilities deferred to a later runner registration / trust boundary and no
+  execution unlock
 
 ### Governance and change control
 - `GOALRAIL_RESEARCH_GATE.md` — когда обязателен research перед изменением product / architecture / governance / public-claim boundaries
@@ -321,6 +329,7 @@ related_docs:
 ### Advisory research, reference material, and overlay working surfaces
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
+- `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md` — advisory market-signal intake on OpenAI/Tomoro/Anthropic deployment-company moves; validates deployment-engine thesis but does not override product canon or expand MVP scope
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
@@ -332,6 +341,7 @@ related_docs:
 - `.goalrail/evals/` — planned eval/spec boundary for future verification semantics
 - `docs/ops/PUBLISHING_MIGRATION.md` — planning for legacy Punk workspace migration
 - `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md` — machine contract for external publishing workspace resolution
+- `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md` — repo-local public content strategy boundary for writing agents; runtime styles, drafts, receipts and metrics remain in the external publishing workspace
 
 ## Source-of-truth priority
 

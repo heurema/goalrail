@@ -45,28 +45,29 @@ const validIntakeJSON = `{
 }`
 
 type testServerDeps struct {
-	router            http.Handler
-	intakes           *fakeIntakeStore
-	goals             *fakeGoalStore
-	clarifications    *fakeClarificationStore
-	answers           *fakeClarificationAnswerStore
-	contracts         *fakeContractStore
-	contractSeeds     *fakeContractSeedStore
-	contractDrafts    *fakeContractDraftStore
-	approvedContracts *fakeApprovedContractStore
-	workItems         *fakeWorkItemStore
-	workItemPlans     *fakeWorkItemPlanStore
-	workItemLeases    *fakeWorkItemPlanLeaseStore
-	workItemProposals *fakeWorkItemPlanProposalStore
-	repoBindings      *fakeRepoBindingStore
-	checkoutJobs      *fakeCheckoutJobStore
-	checkoutReceipts  *fakeCheckoutReceiptStore
-	executionJobs     *fakeExecutionJobStore
-	runs              *fakeRunStore
-	commandPlans      *fakeExecutionCommandPlanStore
-	executionReceipts *fakeExecutionReceiptStore
-	events            *fakeEventLog
-	idFactory         *sequenceIDs
+	router             http.Handler
+	intakes            *fakeIntakeStore
+	goals              *fakeGoalStore
+	clarifications     *fakeClarificationStore
+	answers            *fakeClarificationAnswerStore
+	contracts          *fakeContractStore
+	contractSeeds      *fakeContractSeedStore
+	contractDrafts     *fakeContractDraftStore
+	approvedContracts  *fakeApprovedContractStore
+	workItems          *fakeWorkItemStore
+	workItemPlans      *fakeWorkItemPlanStore
+	workItemLeases     *fakeWorkItemPlanLeaseStore
+	workItemProposals  *fakeWorkItemPlanProposalStore
+	repoBindings       *fakeRepoBindingStore
+	checkoutJobs       *fakeCheckoutJobStore
+	checkoutReceipts   *fakeCheckoutReceiptStore
+	executionJobs      *fakeExecutionJobStore
+	runs               *fakeRunStore
+	commandPlans       *fakeExecutionCommandPlanStore
+	executionReceipts  *fakeExecutionReceiptStore
+	runnerCapabilities *fakeRunnerCapabilityReportStore
+	events             *fakeEventLog
+	idFactory          *sequenceIDs
 }
 
 func TestPostIntakeReturnsAccepted(t *testing.T) {
@@ -1750,6 +1751,7 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	runStore := newFakeRunStore()
 	commandPlanStore := newFakeExecutionCommandPlanStore()
 	executionReceiptStore := newFakeExecutionReceiptStore()
+	runnerCapabilityStore := newFakeRunnerCapabilityReportStore()
 	events := newFakeEventLog()
 	ids := &sequenceIDs{}
 	txRunner := &fakeTransactionRunner{}
@@ -1773,31 +1775,33 @@ func testServerWithResolverAndContinuationAuth(t *testing.T, resolver intake.Pro
 	checkoutService := checkout.NewService(workItemStore, repoBindingStore, checkoutJobStore, checkoutReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
 	checkoutHandler := httpserver.NewCheckoutHandler(authService, checkoutService)
 	executionService := execution.NewService(workItemStore, repoBindingStore, checkoutReceiptStore, checkoutJobStore, executionJobStore, runStore, commandPlanStore, executionReceiptStore, events, txRunner, fixedClock{now: testTime()}, ids)
+	executionService.RunnerCapabilities = runnerCapabilityStore
 	executionHandler := httpserver.NewExecutionHandler(authService, executionService)
 
 	return testServerDeps{
-		router:            baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler, executionHandler),
-		intakes:           intakeStore,
-		goals:             goalStore,
-		clarifications:    clarificationStore,
-		answers:           answerStore,
-		contracts:         contractStore,
-		contractSeeds:     contractSeedStore,
-		contractDrafts:    contractDraftStore,
-		approvedContracts: approvedContractStore,
-		workItems:         workItemStore,
-		workItemPlans:     workItemPlanStore,
-		workItemLeases:    workItemLeaseStore,
-		workItemProposals: workItemPlanProposalStore,
-		repoBindings:      repoBindingStore,
-		checkoutJobs:      checkoutJobStore,
-		checkoutReceipts:  checkoutReceiptStore,
-		executionJobs:     executionJobStore,
-		runs:              runStore,
-		commandPlans:      commandPlanStore,
-		executionReceipts: executionReceiptStore,
-		events:            events,
-		idFactory:         ids,
+		router:             baseHandlers(intakeHandler, goalHandler, clarificationHandler, continuationHandler, contractHandler, workItemHandler, workItemPlanHandler, checkoutHandler, executionHandler),
+		intakes:            intakeStore,
+		goals:              goalStore,
+		clarifications:     clarificationStore,
+		answers:            answerStore,
+		contracts:          contractStore,
+		contractSeeds:      contractSeedStore,
+		contractDrafts:     contractDraftStore,
+		approvedContracts:  approvedContractStore,
+		workItems:          workItemStore,
+		workItemPlans:      workItemPlanStore,
+		workItemLeases:     workItemLeaseStore,
+		workItemProposals:  workItemPlanProposalStore,
+		repoBindings:       repoBindingStore,
+		checkoutJobs:       checkoutJobStore,
+		checkoutReceipts:   checkoutReceiptStore,
+		executionJobs:      executionJobStore,
+		runs:               runStore,
+		commandPlans:       commandPlanStore,
+		executionReceipts:  executionReceiptStore,
+		runnerCapabilities: runnerCapabilityStore,
+		events:             events,
+		idFactory:          ids,
 	}
 }
 
@@ -2840,6 +2844,26 @@ func (s *fakeExecutionReceiptStore) GetByRun(_ context.Context, runID spine.RunI
 	return receipt, ok, nil
 }
 
+type fakeRunnerCapabilityReportStore struct {
+	reports []spine.RunnerCapabilityReport
+	byID    map[spine.RunnerCapabilityReportID]spine.RunnerCapabilityReport
+}
+
+func newFakeRunnerCapabilityReportStore() *fakeRunnerCapabilityReportStore {
+	return &fakeRunnerCapabilityReportStore{
+		byID: map[spine.RunnerCapabilityReportID]spine.RunnerCapabilityReport{},
+	}
+}
+
+func (s *fakeRunnerCapabilityReportStore) Create(_ context.Context, report spine.RunnerCapabilityReport) error {
+	if _, ok := s.byID[report.ID]; ok {
+		return fmt.Errorf("runner capability report already exists")
+	}
+	s.reports = append(s.reports, report)
+	s.byID[report.ID] = report
+	return nil
+}
+
 type fakeEventLog struct {
 	events []spine.Event
 }
@@ -2943,6 +2967,7 @@ type sequenceIDs struct {
 	run               int
 	commandPlan       int
 	executionReceipt  int
+	runnerCapability  int
 	event             int
 }
 
@@ -3049,6 +3074,11 @@ func (g *sequenceIDs) NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID,
 func (g *sequenceIDs) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
 	g.executionReceipt++
 	return spine.ExecutionReceiptID(fmt.Sprintf("018f0000-0000-7000-8004-%012d", g.executionReceipt)), nil
+}
+
+func (g *sequenceIDs) NewRunnerCapabilityReportID() (spine.RunnerCapabilityReportID, error) {
+	g.runnerCapability++
+	return spine.RunnerCapabilityReportID(fmt.Sprintf("runner-capability-report-%d", g.runnerCapability)), nil
 }
 
 func testTime() time.Time {

@@ -404,6 +404,7 @@ func TestStepSubmitsProjectProbeReceipt(t *testing.T) {
 
 func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	const secretToken = "secret-execution-token"
+	const runnerToken = "runner-token"
 	workspaceRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(workspaceRoot, "package.json"), []byte(`{"scripts":{"test":"node should-not-run.js"}}`), 0o600); err != nil {
 		t.Fatalf("write package.json: %v", err)
@@ -463,7 +464,7 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	var logs bytes.Buffer
 	runner, err := NewRunner(Config{
 		ServerURL:       server.URL,
-		BearerToken:     "runner-token",
+		BearerToken:     runnerToken,
 		ProjectID:       "project-1",
 		RepoBindingID:   "repo-1",
 		RunnerID:        "runner-1",
@@ -500,15 +501,91 @@ func TestStepSubmitsProjectTestReceipt(t *testing.T) {
 	if receiptRequest.ExitCode != nil {
 		t.Fatalf("project test receipt exit_code = %#v, want nil for policy_rejected", receiptRequest.ExitCode)
 	}
+	if receiptRequest.EnforcementReport == nil {
+		t.Fatal("project test receipt enforcement_report is nil, want unavailable control metadata")
+	}
+	if *receiptRequest.EnforcementReport != (enforcementReport{
+		NetworkPolicy:             "disabled_required",
+		NetworkEnforcement:        "unavailable",
+		WorkspaceWritePolicy:      "disabled_required",
+		WorkspaceWriteEnforcement: "unavailable",
+		ProcessTreeEnforcement:    "unavailable",
+		ScratchWritePolicy:        "allowed_runner_local",
+		Decision:                  "policy_rejected",
+		Reason:                    "enforcement_unavailable",
+	}) {
+		t.Fatalf("project test receipt enforcement_report = %#v, want unavailable controls policy rejection", receiptRequest.EnforcementReport)
+	}
 	if receiptRequest.ProjectProbeMetadata != nil || receiptRequest.RawSourceUploaded || len(receiptRequest.ArtifactRefs) != 0 || len(receiptRequest.ChangedPathsSummary) != 0 || receiptRequest.RunnerStartedAt == nil || receiptRequest.RunnerFinishedAt == nil {
 		t.Fatalf("project test receipt evidence = %#v, want policy rejection without probe metadata/artifacts/raw source", receiptRequest)
 	}
 	if _, err := os.Stat(executionMarker); !os.IsNotExist(err) {
 		t.Fatalf("project test execution marker stat = %v, want no npm/process execution", err)
 	}
-	for _, forbidden := range []string{secretToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
+	for _, forbidden := range []string{secretToken, runnerToken, "gate", "proof", "shell", "executed", "stdout", "stderr", "raw manifest", "secret"} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("logs = %q, want no %q", logs.String(), forbidden)
+		}
+	}
+}
+
+func TestReportCapabilitiesSubmitsSelfDeclaredUntrustedMetadata(t *testing.T) {
+	const runnerToken = "runner-token"
+	var reportRequest runnerCapabilityReportRequest
+	var reportRequests atomic.Int32
+	var unexpectedRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/runner-capability-reports":
+			reportRequests.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer "+runnerToken {
+				t.Fatalf("authorization header = %q, want bearer token", got)
+			}
+			decodeStrict(t, r, &reportRequest)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"capability-report-1","runner_id":"runner-1","project_id":"project-1","repo_binding_id":"repo-1","trust_state":"self_declared_untrusted"}`))
+		default:
+			unexpectedRequests.Add(1)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	var logs bytes.Buffer
+	err := ReportCapabilities(context.Background(), Config{
+		ServerURL:     server.URL,
+		BearerToken:   runnerToken,
+		ProjectID:     "project-1",
+		RepoBindingID: "repo-1",
+		RunnerID:      "runner-1",
+		LogWriter:     &logs,
+	})
+	if err != nil {
+		t.Fatalf("ReportCapabilities() error = %v", err)
+	}
+	if reportRequests.Load() != 1 || unexpectedRequests.Load() != 0 {
+		t.Fatalf("report/unexpected requests = %d/%d, want 1/0", reportRequests.Load(), unexpectedRequests.Load())
+	}
+	if reportRequest.RunnerID != "runner-1" || reportRequest.ProjectID != "project-1" || reportRequest.RepoBindingID != "repo-1" {
+		t.Fatalf("capability report scope = %#v, want runner/project/repo binding scope", reportRequest)
+	}
+	if reportRequest.TrustState != "self_declared_untrusted" {
+		t.Fatalf("trust_state = %q, want self_declared_untrusted", reportRequest.TrustState)
+	}
+	if reportRequest.NetworkIsolationDeclared ||
+		reportRequest.WorkspaceWriteIsolationDeclared ||
+		reportRequest.ProcessTreeControlDeclared ||
+		reportRequest.StdoutStderrPolicyDeclared ||
+		reportRequest.ArtifactPolicyDeclared {
+		t.Fatalf("capability declarations = %#v, want unavailable self-declared metadata by default", reportRequest)
+	}
+	if strings.Contains(logs.String(), runnerToken) {
+		t.Fatalf("logs leaked runner token: %q", logs.String())
+	}
+	for _, forbidden := range []string{"trust_state=trusted", "enforced", "executed", "shell", "gate", "proof"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("logs = %q, want no %q claim", logs.String(), forbidden)
 		}
 	}
 }

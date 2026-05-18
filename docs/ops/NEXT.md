@@ -6,6 +6,7 @@
 
 - **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
+- Candidate docs-only strategy intake: capture DeployCo-inspired deployment-engine research as advisory material, then decide whether to promote the reusable deployment primitive loop into deployment / pilot docs. This does not approve MVP expansion, runtime work, broad enterprise consulting, analytics, CRM, provider integrations, gate, proof, or new implementation behavior.
 - repo overlay structure now keeps Goalrail artifacts in `.goalrail/` and Punk publishing artifacts in `.punk/`
 - `apps/web/` now exists as the shared namespace for frontend resources
 - `apps/web/console` is now the single canonical multilingual EN/RU console source with static i18next resources, existing server login / optional password-change / `/v1/me` / logout endpoints, in-memory tokens only, no locale storage, and `goalrail.console.theme` as the only browser-storage key; the main deployment is live at `https://goalrail.dev` with API base URL `https://api.goalrail.dev` through `11me/infra` Flux GitOps, while the old `apps/web/console-ru` workspace source is removed and live `console.goalrail.ru` remains separate
@@ -68,8 +69,18 @@
   transitions, runner trust hardening, and OS-level sandboxing remain deferred.
   H2.6.2+ smoke coverage now pins this regression boundary; the next safe
   execution slice remains deferred until a new bounded task defines it.
-  ADR-0033 now defines that next H2.7 boundary as runner sandbox/write/network
-  enforcement semantics, not actual test execution.
+  ADR-0033 now defines the H2.7 runner sandbox/write/network enforcement
+  semantics, and H2.7.1 adds explicit unavailable-control
+  `enforcement_report` metadata to fail-closed `project_test` receipts without
+  actual test execution. H2.7.1+ smoke coverage pins canonical unavailable
+  enforcement metadata, active-control rejection, `no_command` process-status
+  rejection, and the runner no-process / no-token-leak boundary without adding
+  product behavior. ADR-0034 now defines the H2.7.2 runner capability model
+  boundary: self-declared capabilities are untrusted metadata only and do not
+  unlock project-test execution. H2.7.3 now implements self-declared untrusted
+  `RunnerCapabilityReport` storage and `goalrail-runner --mode
+  capability-report` without sandboxing, trusted capabilities, or any
+  project-test execution unlock.
 - `goalrail init` stabilization is complete through INIT-07 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
@@ -257,8 +268,18 @@
 - ADR-0033 records the H2.7 runner sandbox/write/network enforcement boundary.
   It keeps `project_test` fail-closed until network and workspace-write
   controls are enforceable for the command process tree and evidenced in a
-  receipt. The next implementation slice should be H2.7.1 capability
-  declaration / fail-closed reporting only, not actual test execution.
+  receipt. H2.7.1 implements capability declaration / fail-closed reporting
+  only, not actual test execution.
+- ADR-0034 records the H2.7.2 runner capability model boundary. Capability
+  reports are self-declared and untrusted until a later runner registration /
+  trust boundary. H2.7.3 now records self-declared untrusted
+  `RunnerCapabilityReport` metadata, but those reports must not unlock
+  `project_test` process outcomes. H2.7.3+ smoke coverage now pins append-only
+  report persistence, trusted/enforced claim rejection, runner token-log
+  safety, and continued rejection of `project_test` `exited` / `timed_out`
+  outcomes after capability reports. The next trust step remains docs-first
+  runner registration / trust boundary work, not sandbox implementation or
+  actual test execution.
 - Gate, proof, assignment/claiming, queue, outbox, runtime
   registry, provider OAuth, VcsConnection, token storage, provider clients, live
   metadata listing, and arbitrary shell/project command execution behavior
@@ -1017,8 +1038,11 @@ Done means:
      without adding product behavior
    - ADR-0033 defines the H2.7 runner sandbox/write/network enforcement
      boundary; before any `project_test` receipt may record `exited` or
-     `timed_out`, a later slice must add capability reporting and keep
-     unavailable controls `policy_rejected`
+     `timed_out`, unavailable controls remain `policy_rejected` and H2.7.1
+     records that through explicit enforcement-report metadata
+   - ADR-0034 defines runner capability reports as self-declared untrusted
+     metadata only; H2.7.3 records that metadata, while trusted capability and
+     execution unlock remain later boundaries
    - start with `ExecutionJob` as the server-owned leaseable execution
      preparation object
    - create `Run` only when a runner explicitly starts execution with valid

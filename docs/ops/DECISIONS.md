@@ -2514,3 +2514,72 @@ Rationale:
   review reaction was detected. Recording the exception prevents treating admin
   merge as the default workflow while preserving a practical recovery path when
   a procedural review-freshness gate blocks an otherwise validated PR.
+
+## D-0093 — Goalrail treats DeployCo/FDE market signal as validation, not MVP expansion
+Date: 2026-05-13
+Status: accepted
+Review after: 2026-08-15
+
+Decision:
+- Goalrail will use the OpenAI/Tomoro/Anthropic deployment-company moves as
+  validation for the deployment-engine thesis.
+- Goalrail will not copy broad enterprise AI consulting, PE-backed
+  distribution, or staff-augmentation FDE models.
+- Goalrail may borrow only bounded operating patterns that fit its productized
+  operating layer:
+  - structured diagnostic / qualification
+  - small priority workflow selection
+  - managed pilot
+  - proof / readout
+  - reusable deployment primitive loop
+- This decision does not approve code changes, runtime integration, analytics,
+  CRM, broad enterprise governance, generic AI consulting,
+  provider-specific deployment doctrine, gate implementation, proof
+  implementation, or MVP expansion.
+
+Rationale:
+- Frontier AI vendors are validating that the hard part of enterprise AI is
+  deployment into real workflows, controls, evaluations, and adoption.
+- Goalrail already has a narrower and stronger wedge: AI-assisted software
+  delivery from business goal to verified code change.
+- The useful lesson is to strengthen pilot / deployment packaging and
+  productization loops, not to broaden the product category.
+
+What this prevents:
+- turning Goalrail into a generic AI deployment consultancy
+- expanding MVP scope based on external hype
+- replacing the fixed contract-to-proof core with bespoke customer process
+  redesign
+- provider lock-in or model-specific execution doctrine
+- treating managed rollout as staff augmentation
+
+## D-0094 — Public writing uses a repo-local content operating layer
+Date: 2026-05-15
+Status: accepted
+Review after: 2026-06-15
+
+Decision:
+- Goalrail keeps a small repository-local public content operating layer at
+  `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`.
+- The operating layer guides public writing toward qualified relationships
+  around controlled AI delivery, not generic creator growth or product pitch.
+- Runtime publishing artifacts, channel-specific styles, drafts, receipts,
+  metrics, credentials, sessions, local helpers, and validators remain in the
+  external publishing workspace resolved through `.punk/publishing.toml`.
+- The content layer must not be interpreted as approval for publishing
+  automation, scraping, outreach automation, schedulers, CRM, or social platform
+  integrations.
+
+Rationale:
+- Public writing needs a stable repo-local boundary so future agents can align
+  posts with Goalrail product truth, current public language, and human
+  sign-off / proof framing.
+- The external publishing workspace remains the right place for channel style
+  experiments and execution artifacts.
+
+What this prevents:
+- random posting disconnected from product truth
+- vanity-metric optimization
+- premature product pitch or unsupported product claims
+- generic AI thought leadership
+- unsafe drift into social automation or outreach tooling

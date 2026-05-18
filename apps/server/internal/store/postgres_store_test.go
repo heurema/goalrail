@@ -91,6 +91,45 @@ func TestPostgresUserManagementStoreCreateUserTreatsLowerEmailUniqueViolationAsN
 	}
 }
 
+func TestPostgresRunnerCapabilityReportStoreCreateBuildsUntrustedMetadataInsert(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	store := NewPostgresRunnerCapabilityReportStoreWithExecutor(exec)
+
+	err := store.Create(ctx, spine.RunnerCapabilityReport{
+		ID:                              "018f0000-0000-7000-8000-000000000701",
+		RunnerID:                        "runner-1",
+		OrganizationID:                  "018f0000-0000-7000-8000-000000000002",
+		ProjectID:                       "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:                   "018f0000-0000-7000-8000-000000000004",
+		NetworkIsolationDeclared:        false,
+		WorkspaceWriteIsolationDeclared: false,
+		ProcessTreeControlDeclared:      false,
+		StdoutStderrPolicyDeclared:      false,
+		ArtifactPolicyDeclared:          false,
+		TrustState:                      spine.RunnerCapabilityTrustSelfDeclaredUntrusted,
+		ReportedAt:                      testStoreTime(),
+		CreatedAt:                       testStoreTime(),
+		UpdatedAt:                       testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(exec.calls) != 1 {
+		t.Fatalf("Exec calls = %d, want 1", len(exec.calls))
+	}
+	call := exec.calls[0]
+	if !strings.Contains(call.sql, "INSERT INTO runner_capability_reports") {
+		t.Fatalf("SQL = %q, want runner capability insert", call.sql)
+	}
+	if strings.Contains(call.sql, "execution_receipts") || strings.Contains(call.sql, "gate_decisions") || strings.Contains(call.sql, "proofs") {
+		t.Fatalf("SQL = %q, must not mutate receipts, gate, or proof tables", call.sql)
+	}
+	if got, want := len(call.args), 14; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+}
+
 func TestPostgresIntakeStoreGetScansRecord(t *testing.T) {
 	ctx := context.Background()
 	now := testStoreTime()

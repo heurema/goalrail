@@ -58,6 +58,29 @@ func Run(ctx context.Context, config Config) error {
 	return runner.Run(ctx)
 }
 
+func ReportCapabilities(ctx context.Context, config Config) error {
+	runner, err := NewRunner(config)
+	if err != nil {
+		return err
+	}
+	report, err := runner.client.submitRunnerCapabilityReport(ctx, runnerCapabilityReportRequest{
+		RunnerID:                        runner.config.RunnerID,
+		ProjectID:                       runner.config.ProjectID,
+		RepoBindingID:                   runner.config.RepoBindingID,
+		NetworkIsolationDeclared:        false,
+		WorkspaceWriteIsolationDeclared: false,
+		ProcessTreeControlDeclared:      false,
+		StdoutStderrPolicyDeclared:      false,
+		ArtifactPolicyDeclared:          false,
+		TrustState:                      "self_declared_untrusted",
+	})
+	if err != nil {
+		return err
+	}
+	runner.logger.Printf("submitted runner capability report report_id=%s runner_id=%s project_id=%s repo_binding_id=%s trust_state=%s", report.ID, report.RunnerID, report.ProjectID, report.RepoBindingID, report.TrustState)
+	return nil
+}
+
 func NewRunner(config Config) (*Runner, error) {
 	if err := validateConfig(config); err != nil {
 		return nil, err
@@ -227,6 +250,7 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 			RawSourceUploaded:   false,
 			RunnerStartedAt:     &startedAt,
 			RunnerFinishedAt:    &finishedAt,
+			EnforcementReport:   &result.EnforcementReport,
 		})
 		if err != nil {
 			switch apiErrorCode(err) {

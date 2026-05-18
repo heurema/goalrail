@@ -85,6 +85,23 @@ H2.6.2+ smoke coverage pins the project-probe -> project-test plan ->
 adding product behavior; ADR-0033 now defines the H2.7 runner
 sandbox/write/network enforcement boundary as docs-only and keeps
 `project_test` fail-closed until controls are defined, available, and evidenced;
+H2.7.1 now adds explicit `enforcement_report` metadata to fail-closed
+`project_test` receipts so the runner records unavailable network,
+workspace-write, and process-tree controls without claiming execution or
+sandboxing; H2.7.1+ smoke coverage now pins canonical unavailable enforcement
+metadata, active-control rejection, the `no_command` process-status guard, and
+the runner no-process / no-token-leak boundary without adding product behavior;
+ADR-0034 now defines the H2.7.2 runner capability model boundary:
+self-declared runner capabilities are untrusted metadata only, trusted
+capabilities require a later runner registration / trust boundary, and
+capability metadata does not unlock `project_test` execution; H2.7.3 now adds
+self-declared untrusted `RunnerCapabilityReport` persistence plus
+`goalrail-runner --mode capability-report` so runner capability declarations
+can be recorded as metadata only while `project_test` remains
+`policy_rejected`; H2.7.3+ smoke coverage now pins append-only persistence,
+trusted/enforced claim rejection, runner token-log safety, and the
+`project_test` no-unlock boundary without adding trusted capabilities,
+sandboxing, or test execution;
 runner-facing checkout and execution lease routes are bearer-authenticated
 through the current active OrganizationMembership boundary, and lease
 acquisition is scoped by requested project / repo binding before any job is
@@ -202,7 +219,7 @@ The project currently has:
 - parallel execution model
 - implementation guide
 - project spine schema note
-- thirty-two kernel/CLI/server/domain boundary ADRs
+- thirty-four kernel/CLI/server/domain boundary ADRs
 - ops rails
 - repo-tracked Goalrail and Punk overlay surfaces
 - planned flow / eval structure
@@ -320,6 +337,34 @@ The project currently has:
   ADR-0033 does not implement OS sandboxing, actual test execution, stdout /
   stderr capture, artifacts, GateDecision, Proof, WorkItem transitions, or
   runner trust hardening.
+- H2.7.1 implements fail-closed enforcement capability reporting for
+  `project_test` receipts. The runner submits `enforcement_report` with
+  `network_enforcement`, `workspace_write_enforcement`, and
+  `process_tree_enforcement` set to `unavailable`; the server requires that
+  metadata for `policy_rejected` project-test receipts and rejects reports that
+  claim active controls. This still does not execute tests, implement
+  sandboxing, capture stdout/stderr, upload artifacts, create GateDecision /
+  Proof, or move WorkItems out of `planned`.
+- H2.7.1+ smoke coverage pins the enforcement-report boundary without adding
+  product behavior. It verifies canonical unavailable enforcement metadata on
+  `project_test` `policy_rejected` receipts, rejects active/enforced control
+  claims, keeps invalid `no_command` process statuses rejected, and preserves
+  the runner no-process / no-token-leak boundary.
+- ADR-0034 documents the H2.7.2 runner capability model boundary. H2.7.3 now
+  implements self-declared `RunnerCapabilityReport` metadata with
+  `trust_state=self_declared_untrusted`, scoped to runner / organization /
+  project / repo binding. The server persists those reports and the runner can
+  submit the canonical unavailable declaration through
+  `goalrail-runner --mode capability-report`, but capability metadata cannot
+  unlock execution. Trusted capabilities require a later runner registration /
+  trust boundary with server-side runner identity, scope, operator
+  configuration or attestation semantics, and per-command enforcement evidence.
+  `project_test` remains fail-closed with `process_status=policy_rejected`.
+- H2.7.3+ smoke coverage pins the runner capability report boundary without
+  adding product behavior. It verifies append-only self-declared untrusted
+  report persistence, rejects trusted/enforced/attestation claims, keeps
+  `project_test` `exited` / `timed_out` rejected after capability reports, and
+  preserves the runner no-token-leak / no-command-execution boundary.
 - ADR-0010 documents the MVP Organization / Project / RepoBinding and
   persistence bootstrap boundary
 - MVP will use direct `RepoBinding` before `RepositoryRecord`
@@ -492,7 +537,7 @@ The project currently has:
 - bounded slice workflow defined
 - implementation discipline fixed: `punk`
 - execution parallelism and advisory parallelism are separated conceptually
-- kernel schema note and thirty-two boundary ADRs exist
+- kernel schema note and thirty-four boundary ADRs exist
 
 ### Repo structure
 - the repo now mirrors `punk`-style planning boundaries
@@ -682,8 +727,11 @@ The project currently has:
   Actual test process execution, `os/exec`, stdout/stderr capture, artifacts,
   Gate, Proof, WorkItem transitions, runner trust hardening, and OS-level
   sandboxing remain deferred. ADR-0033 now defines the H2.7
-  sandbox/write/network enforcement boundary as docs-only; actual enforcement
-  and actual test execution remain unimplemented
+  sandbox/write/network enforcement boundary; H2.7.1 adds unavailable
+  enforcement reporting on `policy_rejected` receipts, while actual enforcement
+  and actual test execution remain unimplemented. ADR-0034 now defines runner
+  capability reports as self-declared untrusted metadata only, and H2.7.3 now
+  records that metadata without unlocking project-test process outcomes
 - the `ClarificationAnswer` boundary is documented in ADR-0009; the answer application to Goal hints boundary is documented in ADR-0011, and clarification request/answer state is durable with Postgres when configured
 - the explicit readiness re-check after applied answers boundary is documented in ADR-0012, and the existing readiness endpoint is verified to move an applied-answer Goal to `ready_for_contract_seed` without creating contract/work/gate/proof artifacts
 - the `ContractSeed` boundary is documented in ADR-0013 and implemented as a Postgres-backed internal snapshot when DB is configured; there is no standalone public ContractSeed route, and the public `POST /v1/contracts` façade composes internal seed plus draft creation under one stable `contract_id`; standalone seed creation does not approve Contract, create `WorkItem`, write `GateDecision`, or create `Proof`
@@ -801,14 +849,17 @@ Current packaging target:
   `project_probe_metadata`. In `--mode execution-project-test`, it fetches the
   existing server-owned `project_test/run_declared_test_target` plan, validates
   shell/argv/target/path/output/artifact/network/write policy, and submits
-  `ExecutionReceipt(project_test)` with `process_status=policy_rejected`
-  instead of executing because OS-level network/write sandbox controls are not
-  implemented. It uses local API DTOs only and does not import server internals
+  `ExecutionReceipt(project_test)` with `process_status=policy_rejected` and
+  unavailable-control `enforcement_report` metadata instead of executing
+  because OS-level network/write sandbox controls are not implemented. In
+  `--mode capability-report`, it submits a self-declared untrusted runner
+  capability report with unavailable control declarations. It uses local API
+  DTOs only and does not import server internals
   or Postgres stores. It does not clone/fetch repositories, assign or claim
   WorkItems, call `os/exec`, run arbitrary shell or project commands, execute
   project tests, write `GateDecision`, create `Proof`, or add a
   queue/outbox/runtime registry.
-- `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepositoryContextSnapshot recording, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, authenticated bounded Goal continuation reconciliation, authenticated clarification answer continuation, authenticated create-or-return public Contract draft creation through `/v1/contracts`, authenticated read-only Contract discovery through `GET /v1/contracts`, authenticated read-only public Contract detail through `GET /v1/contracts/{id}`, authenticated read-only current draft detail through `GET /v1/contracts/{id}/current-draft`, authenticated public Contract update/submit/approve routes, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle facade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, ExecutionJob preparation storage, execution lease storage, Run(started) storage, metadata-only and command-scoped ExecutionReceipt storage, server-owned `ExecutionCommandPlan(builtin_diagnostic/workspace_status)`, `ExecutionCommandPlan(project_probe/detect_declared_test_targets)`, and `ExecutionCommandPlan(project_test/run_declared_test_target)` storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `RepositoryContextSnapshot`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `ExecutionJob(queued/leased/run_started/receipt_submitted)`, `Run(started/receipt_submitted)`, `ExecutionCommandPlan(planned)`, `ExecutionReceipt(no_command/builtin_diagnostic/project_probe/project_test)`, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, checkout job lease/receipt state, execution job preparation/lease/run-start/receipt state, Run receipt state, session state, and one-time CLI code consumption only, exposes single task read by ID plus read-only Contract list/detail discovery, returns or creates exactly one open ClarificationRequest during continuation reconciliation after verifying active OrganizationMembership matches the Goal organization, records/applies clarification answers only after resolving ClarificationRequest -> Goal and verifying active OrganizationMembership matches the Goal organization, creates or returns one draft Contract only after verifying active OrganizationMembership matches a ready Goal organization and local marker expectations match Goal project/repo binding, lists and reads public Contracts only after resolving an active OrganizationMembership and scoping to that Organization, updates/submits/approves public Contracts only after verifying active OrganizationMembership matches the Contract organization and supplied project/repo expectations match the Contract, scopes checkout and execution runner leases by authenticated OrganizationMembership plus requested project/repo binding before leasing, derives update/submit/approval audit actors from the authenticated user on public routes, has an ADR-0026 route-level smoke fixture through `WorkItem(planned)`, an H2.1+ smoke extension through runner checkout lease, persisted `CheckoutReceipt`, and `ExecutionJob(queued)`, an H2.2+ smoke extension through execution lease and `Run(started)`, an H2.3+ route-level smoke extension through metadata-only `ExecutionReceipt`, an H2.4.1+ smoke extension through `ExecutionCommandPlan(builtin_diagnostic/workspace_status)` plus `ExecutionReceipt(builtin_diagnostic)`, H2.5.1 project-probe command-plan/receipt coverage, and H2.6.2 project-test policy-rejected receipt coverage while keeping arbitrary shell/project command execution, actual test process execution, gate, and proof absent, and does not claim automatic/background readiness re-check outside explicit answer/continuation/readiness calls, repo-aware planning computation, WorkItem assignment/claiming, arbitrary shell/project command execution, actual test process execution, gate, proof, repo readiness scoring, worker platforms beyond apps/worker and apps/runner, provider integration, public Organization creation, actual repository clone/fetch, or arbitrary shell/project command execution
+- `apps/server` provides a verified Go server bootstrap plus authenticated repository-context init, authenticated metadata-only RepositoryContextSnapshot recording, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake with Project / RepoBinding context validation, Goal promotion, deterministic Goal readiness state, authenticated bounded Goal continuation reconciliation, authenticated clarification answer continuation, authenticated create-or-return public Contract draft creation through `/v1/contracts`, authenticated read-only Contract discovery through `GET /v1/contracts`, authenticated read-only public Contract detail through `GET /v1/contracts/{id}`, authenticated read-only current draft detail through `GET /v1/contracts/{id}/current-draft`, authenticated public Contract update/submit/approve routes, durable ClarificationRequest / ClarificationAnswer storage, public `/v1/contracts` lifecycle facade, public Contract aggregate persistence, internal ContractSeed creation, internal ContractDraft creation/update/ready_for_approval, internal ApprovedContract approval, WorkItem plan/proposal/acceptance planning storage, ExecutionJob preparation storage, execution lease storage, Run(started) storage, metadata-only and command-scoped ExecutionReceipt storage, self-declared untrusted RunnerCapabilityReport storage, server-owned `ExecutionCommandPlan(builtin_diagnostic/workspace_status)`, `ExecutionCommandPlan(project_probe/detect_declared_test_targets)`, and `ExecutionCommandPlan(project_test/run_declared_test_target)` storage, Auth API and CLI code exchange, EventLog persistence, transactional canonical write + event append hardening, and explicit re-check-after-applied-answers when DB is configured; it creates repo-backed `Project(active)`, `RepoBinding(active, metadata_only)`, `RepositoryContextSnapshot`, `IntakeRecord`, non-executable `Goal`, open `ClarificationRequest`, recorded `ClarificationAnswer`, `Contract(seed/draft/ready_for_approval/approved)`, `ContractSeed(created)`, `ContractDraft(draft/ready_for_approval)`, `ApprovedContract(approved)`, `WorkItemPlan`, `WorkItemPlanProposal`, accepted `WorkItem(planned)` records, `ExecutionJob(queued/leased/run_started/receipt_submitted)`, `Run(started/receipt_submitted)`, `ExecutionCommandPlan(planned)`, `ExecutionReceipt(no_command/builtin_diagnostic/project_probe/project_test)`, `RunnerCapabilityReport(self_declared_untrusted)`, `UserSession`, and hashed `CLIAuthCode` records with S256 verifier challenge metadata only, updates RepoBinding workflow base branch and metadata, Goal readiness state, request answered state, Goal intent-plane hints, answer applied marker, Contract aggregate state/pointers, ContractDraft proposed fields, ContractDraft readiness state, plan state, proposal acceptance state, checkout job lease/receipt state, execution job preparation/lease/run-start/receipt state, Run receipt state, session state, and one-time CLI code consumption only, exposes single task read by ID plus read-only Contract list/detail discovery and authenticated self-declared runner capability report creation, returns or creates exactly one open ClarificationRequest during continuation reconciliation after verifying active OrganizationMembership matches the Goal organization, records/applies clarification answers only after resolving ClarificationRequest -> Goal and verifying active OrganizationMembership matches the Goal organization, creates or returns one draft Contract only after verifying active OrganizationMembership matches a ready Goal organization and local marker expectations match Goal project/repo binding, lists and reads public Contracts only after resolving an active OrganizationMembership and scoping to that Organization, updates/submits/approves public Contracts only after verifying active OrganizationMembership matches the Contract organization and supplied project/repo expectations match the Contract, scopes checkout and execution runner leases by authenticated OrganizationMembership plus requested project/repo binding before leasing, derives update/submit/approval audit actors from the authenticated user on public routes, has an ADR-0026 route-level smoke fixture through `WorkItem(planned)`, an H2.1+ smoke extension through runner checkout lease, persisted `CheckoutReceipt`, and `ExecutionJob(queued)`, an H2.2+ smoke extension through execution lease and `Run(started)`, an H2.3+ route-level smoke extension through metadata-only `ExecutionReceipt`, an H2.4.1+ smoke extension through `ExecutionCommandPlan(builtin_diagnostic/workspace_status)` plus `ExecutionReceipt(builtin_diagnostic)`, H2.5.1 project-probe command-plan/receipt coverage, and H2.6.2 project-test policy-rejected receipt coverage while keeping arbitrary shell/project command execution, actual test process execution, gate, and proof absent, and does not claim automatic/background readiness re-check outside explicit answer/continuation/readiness calls, repo-aware planning computation, WorkItem assignment/claiming, arbitrary shell/project command execution, actual test process execution, gate, proof, trusted runner capability, repo readiness scoring, worker platforms beyond apps/worker and apps/runner, provider integration, public Organization creation, actual repository clone/fetch, or arbitrary shell/project command execution
 - `apps/web/pilot-intake-ru` provides a verified public RU business-first pilot landing for `ИИ-кодинг без хаоса`: it sells a safe 2-week пилот ИИ-разработки on one bounded product area, shows illustrative repository readiness / controlled task / pilot result cards with disclaimers, and keeps lead capture limited to `POST /api/pilot-lead` with local JSONL notification status, retry after `notification_failed`, in-flight `received` / `pending` rows blocked as duplicate submissions, duplicate suppression for notified / legacy processed / in-flight rows, no user-agent/IP/cookie/session/fingerprint tracking, a local JSONL purge command, `mailto:pilot@goalrail.dev` fallback, and visible Telegram channel `@goalrail`. The repo source for that narrow endpoint/digest is a landing-owned Go sidecar under `apps/web/pilot-intake-ru/server`, not the core `apps/server` API. Canonical copy and governance live in `docs/product/GOALRAIL_LANDING_COPY_PILOT_FIRST.md`; D-0055 demotes the previous 5-step technical walkthrough to internal / technical demo or checkpoint status; D-0047 boundaries remain intact except for D-0056's narrow lead-capture exception (no LLM/API, no repo provider integration, no code execution, no analytics or session tracking, no cookies, no sessions, no CRM, no Google Sheets, no broad backend platform, no chat UI, no file upload, no model selector, no real repository scan claim). The active target domain remains `pilot.goalrail.ru` per D-0053 with public path `/`; canonical metadata remains `https://pilot.goalrail.ru/`; SSH static deployment remains the hosting path per D-0051; the timestamped static release has been uploaded and `current` switched on the operator-managed server, live endpoint wiring uses the Go sidecar rather than PHP-FPM, and public DNS / HTTPS / `/api/pilot-lead` smoke passed.
 - `apps/web/` remains a shared multi-resource namespace instead of a single runnable app surface
 - repository community health and OSS baseline are explicit and inspectable

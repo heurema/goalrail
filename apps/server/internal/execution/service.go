@@ -23,11 +23,13 @@ const (
 	EventTypeRunStarted                  = "run.started"
 	EventTypeExecutionCommandPlanCreated = "execution_command_plan.created"
 	EventTypeExecutionReceiptSubmitted   = "execution_receipt.submitted"
+	EventTypeRunnerCapabilityReported    = "runner_capability_report.created"
 
 	EntityTypeExecutionJob         = "ExecutionJob"
 	EntityTypeRun                  = "Run"
 	EntityTypeExecutionCommandPlan = "ExecutionCommandPlan"
 	EntityTypeExecutionReceipt     = "ExecutionReceipt"
+	EntityTypeRunnerCapability     = "RunnerCapabilityReport"
 
 	ExecutionModePrepareV0 = "prepare_v0"
 
@@ -131,6 +133,10 @@ type ExecutionReceiptStore interface {
 	GetByRun(context.Context, spine.RunID) (spine.ExecutionReceipt, bool, error)
 }
 
+type RunnerCapabilityReportStore interface {
+	Create(context.Context, spine.RunnerCapabilityReport) error
+}
+
 type EventLog interface {
 	Append(context.Context, spine.Event) error
 }
@@ -149,22 +155,24 @@ type IDGenerator interface {
 	NewRunID() (spine.RunID, error)
 	NewExecutionCommandPlanID() (spine.ExecutionCommandPlanID, error)
 	NewExecutionReceiptID() (spine.ExecutionReceiptID, error)
+	NewRunnerCapabilityReportID() (spine.RunnerCapabilityReportID, error)
 	NewEventID() (spine.EventID, error)
 }
 
 type Service struct {
-	WorkItems         WorkItemReader
-	RepoBindings      RepoBindingReader
-	CheckoutReceipts  CheckoutReceiptReader
-	CheckoutJobs      CheckoutJobReader
-	Jobs              JobStore
-	Runs              RunStore
-	CommandPlans      ExecutionCommandPlanStore
-	ExecutionReceipts ExecutionReceiptStore
-	Events            EventLog
-	TxRunner          TransactionRunner
-	Clock             Clock
-	IDs               IDGenerator
+	WorkItems          WorkItemReader
+	RepoBindings       RepoBindingReader
+	CheckoutReceipts   CheckoutReceiptReader
+	CheckoutJobs       CheckoutJobReader
+	Jobs               JobStore
+	Runs               RunStore
+	CommandPlans       ExecutionCommandPlanStore
+	ExecutionReceipts  ExecutionReceiptStore
+	RunnerCapabilities RunnerCapabilityReportStore
+	Events             EventLog
+	TxRunner           TransactionRunner
+	Clock              Clock
+	IDs                IDGenerator
 }
 
 func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checkoutReceipts CheckoutReceiptReader, checkoutJobs CheckoutJobReader, jobs JobStore, runs RunStore, commandPlans ExecutionCommandPlanStore, executionReceipts ExecutionReceiptStore, events EventLog, txRunner TransactionRunner, clock Clock, ids IDGenerator) *Service {
@@ -182,6 +190,67 @@ func NewService(workItems WorkItemReader, repoBindings RepoBindingReader, checko
 		Clock:             clock,
 		IDs:               ids,
 	}
+}
+
+func (s *Service) CreateRunnerCapabilityReport(ctx context.Context, input spine.RunnerCapabilityReportCreateRequest, membership spine.OrganizationMembership) (spine.RunnerCapabilityReport, error) {
+	if err := validateRunnerCapabilityReportInput(input); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if err := requireActiveMembership(membership); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if strings.TrimSpace(string(input.OrganizationID)) != "" && input.OrganizationID != membership.OrganizationID {
+		return spine.RunnerCapabilityReport{}, ErrOrganizationForbidden
+	}
+	if err := s.validateLeaseScope(ctx, input.ProjectID, input.RepoBindingID, membership); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if s.RunnerCapabilities == nil {
+		return spine.RunnerCapabilityReport{}, errors.New("runner capability report store is not configured")
+	}
+	reportID, err := s.IDs.NewRunnerCapabilityReportID()
+	if err != nil {
+		return spine.RunnerCapabilityReport{}, fmt.Errorf("new runner capability report id: %w", err)
+	}
+	now := s.Clock.Now().UTC()
+	report := spine.RunnerCapabilityReport{
+		ID:                              reportID,
+		RunnerID:                        strings.TrimSpace(input.RunnerID),
+		OrganizationID:                  membership.OrganizationID,
+		ProjectID:                       input.ProjectID,
+		RepoBindingID:                   input.RepoBindingID,
+		NetworkIsolationDeclared:        input.NetworkIsolationDeclared,
+		WorkspaceWriteIsolationDeclared: input.WorkspaceWriteIsolationDeclared,
+		ProcessTreeControlDeclared:      input.ProcessTreeControlDeclared,
+		StdoutStderrPolicyDeclared:      input.StdoutStderrPolicyDeclared,
+		ArtifactPolicyDeclared:          input.ArtifactPolicyDeclared,
+		TrustState:                      spine.RunnerCapabilityTrustSelfDeclaredUntrusted,
+		ReportedAt:                      now,
+		CreatedAt:                       now,
+		UpdatedAt:                       now,
+	}
+	event, err := s.event(EventTypeRunnerCapabilityReported, EntityTypeRunnerCapability, string(report.ID), report.OrganizationID, report.ProjectID, report.RepoBindingID, now, map[string]any{
+		"runner_capability_report_id": report.ID,
+		"runner_id":                   report.RunnerID,
+		"project_id":                  report.ProjectID,
+		"repo_binding_id":             report.RepoBindingID,
+		"trust_state":                 report.TrustState,
+	})
+	if err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	if err := s.TxRunner.RunReadCommitted(ctx, func(txCtx context.Context) error {
+		if err := s.RunnerCapabilities.Create(txCtx, report); err != nil {
+			return fmt.Errorf("create runner capability report: %w", err)
+		}
+		if err := s.Events.Append(txCtx, event); err != nil {
+			return fmt.Errorf("append runner capability report event: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return spine.RunnerCapabilityReport{}, err
+	}
+	return report, nil
 }
 
 func (s *Service) CreateOrReturnJob(ctx context.Context, taskID spine.WorkItemID, input spine.ExecutionJobCreateRequest, membership spine.OrganizationMembership) (spine.ExecutionJob, bool, error) {
@@ -670,6 +739,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		action = plan.Action
 	}
 	var projectProbeMetadata *spine.ProjectProbeMetadata
+	var enforcementReport *spine.ExecutionEnforcementReport
 	if input.ExecutionMode == spine.ExecutionReceiptModeProjectProbe {
 		plan, err := s.validateProjectProbeReceipt(ctx, input, run, job)
 		if err != nil {
@@ -691,6 +761,8 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		commandPlanID = &id
 		commandKind = plan.CommandKind
 		action = plan.Action
+		report := normalizeExecutionEnforcementReport(*input.EnforcementReport)
+		enforcementReport = &report
 	}
 	receiptID, err := s.IDs.NewExecutionReceiptID()
 	if err != nil {
@@ -722,6 +794,7 @@ func (s *Service) SubmitReceipt(ctx context.Context, runID spine.RunID, input sp
 		RunnerStartedAt:      utcTimePtr(input.RunnerStartedAt),
 		RunnerFinishedAt:     utcTimePtr(input.RunnerFinishedAt),
 		ProjectProbeMetadata: projectProbeMetadata,
+		EnforcementReport:    enforcementReport,
 		StartedAt:            run.StartedAt.UTC(),
 		FinishedAt:           now,
 		CreatedAt:            now,
@@ -861,6 +934,42 @@ func validateCreateInput(input spine.ExecutionJobCreateRequest) error {
 	}
 	if err := validateActor("requested_by", input.RequestedBy); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateRunnerCapabilityReportInput(input spine.RunnerCapabilityReportCreateRequest) error {
+	if strings.TrimSpace(input.RunnerID) == "" {
+		return &ValidationError{Field: "runner_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.ProjectID)) == "" {
+		return &ValidationError{Field: "project_id", Message: "is required"}
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) == "" {
+		return &ValidationError{Field: "repo_binding_id", Message: "is required"}
+	}
+	if strings.TrimSpace(input.TrustState) == "" {
+		return &ValidationError{Field: "trust_state", Message: "is required"}
+	}
+	if strings.TrimSpace(input.TrustState) != spine.RunnerCapabilityTrustSelfDeclaredUntrusted {
+		return &ValidationError{Field: "trust_state", Message: "must be " + spine.RunnerCapabilityTrustSelfDeclaredUntrusted}
+	}
+	for _, field := range []struct {
+		name  string
+		value json.RawMessage
+	}{
+		{name: "network_enforcement", value: input.NetworkEnforcement},
+		{name: "workspace_write_enforcement", value: input.WorkspaceWriteEnforcement},
+		{name: "process_tree_enforcement", value: input.ProcessTreeEnforcement},
+		{name: "network_isolation_enforced", value: input.NetworkIsolationEnforced},
+		{name: "workspace_write_isolation_enforced", value: input.WorkspaceWriteIsolationEnforced},
+		{name: "process_tree_control_enforced", value: input.ProcessTreeControlEnforced},
+		{name: "attestation", value: input.Attestation},
+		{name: "trust_evidence", value: input.TrustEvidence},
+	} {
+		if len(field.value) != 0 {
+			return &ValidationError{Field: field.name, Message: "is deferred to a later runner trust boundary"}
+		}
 	}
 	return nil
 }
@@ -1204,6 +1313,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for no_command receipts"}
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for no_command receipts"}
+		}
 		switch status {
 		case spine.ExecutionReceiptStatusNotExecuted, spine.ExecutionReceiptStatusMetadataOnly:
 		default:
@@ -1234,6 +1346,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for builtin_diagnostic receipts"}
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for builtin_diagnostic receipts"}
+		}
 	case spine.ExecutionReceiptModeProjectProbe:
 		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
 			return &ValidationError{Field: "command_plan_id", Message: "is required for project_probe receipts"}
@@ -1262,6 +1377,9 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		if err := validateProjectProbeMetadata(*input.ProjectProbeMetadata); err != nil {
 			return err
 		}
+		if input.EnforcementReport != nil {
+			return &ValidationError{Field: "enforcement_report", Message: "must be omitted for project_probe receipts"}
+		}
 	case spine.ExecutionReceiptModeProjectTest:
 		if strings.TrimSpace(string(input.CommandPlanID)) == "" {
 			return &ValidationError{Field: "command_plan_id", Message: "is required for project_test receipts"}
@@ -1273,10 +1391,10 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 			return &ValidationError{Field: "action", Message: "must be run_declared_test_target"}
 		}
 		if status != spine.ExecutionReceiptStatusPolicyRejected {
-			return &ValidationError{Field: "process_status", Message: "must be policy_rejected for H2.6.2 project_test receipts"}
+			return &ValidationError{Field: "process_status", Message: "must be policy_rejected for H2.7.1 project_test receipts"}
 		}
 		if input.ExitCode != nil {
-			return &ValidationError{Field: "exit_code", Message: "must be omitted for H2.6.2 project_test receipts"}
+			return &ValidationError{Field: "exit_code", Message: "must be omitted for H2.7.1 project_test receipts"}
 		}
 		if input.RunnerStartedAt == nil {
 			return &ValidationError{Field: "runner_started_at", Message: "is required for project_test receipts"}
@@ -1286,6 +1404,12 @@ func validateReceiptInput(input spine.ExecutionReceiptSubmitRequest) error {
 		}
 		if input.ProjectProbeMetadata != nil {
 			return &ValidationError{Field: "project_probe_metadata", Message: "must be omitted for project_test receipts"}
+		}
+		if input.EnforcementReport == nil {
+			return &ValidationError{Field: "enforcement_report", Message: "is required for project_test policy_rejected receipts"}
+		}
+		if err := validateProjectTestEnforcementReport(*input.EnforcementReport); err != nil {
+			return err
 		}
 	default:
 		return &ValidationError{Field: "execution_mode", Message: "must be no_command, builtin_diagnostic, project_probe, or project_test"}
@@ -1399,6 +1523,44 @@ func (s *Service) validateProjectTestReceipt(ctx context.Context, input spine.Ex
 		return spine.ExecutionCommandPlan{}, &ValidationError{Field: "runner_finished_at", Message: "must be after runner_started_at"}
 	}
 	return plan, nil
+}
+
+func validateProjectTestEnforcementReport(report spine.ExecutionEnforcementReport) error {
+	normalized := normalizeExecutionEnforcementReport(report)
+	expected := []struct {
+		field string
+		got   string
+		want  string
+	}{
+		{"enforcement_report.network_policy", normalized.NetworkPolicy, spine.ExecutionEnforcementPolicyDisabledRequired},
+		{"enforcement_report.network_enforcement", normalized.NetworkEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.workspace_write_policy", normalized.WorkspaceWritePolicy, spine.ExecutionEnforcementPolicyDisabledRequired},
+		{"enforcement_report.workspace_write_enforcement", normalized.WorkspaceWriteEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.process_tree_enforcement", normalized.ProcessTreeEnforcement, spine.ExecutionEnforcementUnavailable},
+		{"enforcement_report.decision", normalized.Decision, spine.ExecutionEnforcementDecisionPolicyRejected},
+		{"enforcement_report.reason", normalized.Reason, spine.ExecutionEnforcementReasonUnavailable},
+	}
+	for _, item := range expected {
+		if item.got != item.want {
+			return &ValidationError{Field: item.field, Message: "must be " + item.want}
+		}
+	}
+	if normalized.ScratchWritePolicy != "" && normalized.ScratchWritePolicy != spine.ExecutionScratchWritePolicyAllowedRunnerLocal {
+		return &ValidationError{Field: "enforcement_report.scratch_write_policy", Message: "must be omitted or " + spine.ExecutionScratchWritePolicyAllowedRunnerLocal}
+	}
+	return nil
+}
+
+func normalizeExecutionEnforcementReport(report spine.ExecutionEnforcementReport) spine.ExecutionEnforcementReport {
+	report.NetworkPolicy = strings.TrimSpace(report.NetworkPolicy)
+	report.NetworkEnforcement = strings.TrimSpace(report.NetworkEnforcement)
+	report.WorkspaceWritePolicy = strings.TrimSpace(report.WorkspaceWritePolicy)
+	report.WorkspaceWriteEnforcement = strings.TrimSpace(report.WorkspaceWriteEnforcement)
+	report.ProcessTreeEnforcement = strings.TrimSpace(report.ProcessTreeEnforcement)
+	report.ScratchWritePolicy = strings.TrimSpace(report.ScratchWritePolicy)
+	report.Decision = strings.TrimSpace(report.Decision)
+	report.Reason = strings.TrimSpace(report.Reason)
+	return report
 }
 
 func validateProjectProbeMetadata(metadata spine.ProjectProbeMetadata) error {
@@ -1650,6 +1812,14 @@ func (UUIDGenerator) NewExecutionReceiptID() (spine.ExecutionReceiptID, error) {
 		return "", err
 	}
 	return spine.ExecutionReceiptID(id.String()), nil
+}
+
+func (UUIDGenerator) NewRunnerCapabilityReportID() (spine.RunnerCapabilityReportID, error) {
+	id, err := uuid.NewV7()
+	if err != nil {
+		return "", err
+	}
+	return spine.RunnerCapabilityReportID(id.String()), nil
 }
 
 func (UUIDGenerator) NewEventID() (spine.EventID, error) {

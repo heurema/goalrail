@@ -6,14 +6,19 @@ workspace_ref = "punk-publishing://project/goalrail"
 source_truth = [
   "docs/INDEX.md",
   "docs/product/GOALRAIL_PRODUCT_CONCEPT.md",
+  "docs/product/GOALRAIL_MESSAGE_HIERARCHY.md",
+  "docs/product/GOALRAIL_PUBLIC_NARRATIVE.md",
+  "docs/product/GOALRAIL_PUBLIC_LANGUAGE.md",
   "docs/product/GOALRAIL_MVP_BLUEPRINT.md",
   "docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md",
   "docs/product/GOALRAIL_RULE_STACK.md",
+  "docs/brand/SHORT_FORM_CONTENT_SYSTEM.md",
   "docs/ops/STATUS.md",
   "docs/ops/NEXT.md",
   "docs/ops/DECISIONS.md",
   "docs/ops/COMPONENTS.yaml",
   "docs/ops/REPO_STRUCTURE.md",
+  "docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md",
   "AGENTS.md",
   "README.md"
 ]
