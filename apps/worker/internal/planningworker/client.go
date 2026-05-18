@@ -87,11 +87,13 @@ func (c *apiClient) acquireLease(ctx context.Context, input leaseCreateRequest) 
 	return decoded, true, nil
 }
 
-func (c *apiClient) getPlan(ctx context.Context, id string) (workItemPlan, error) {
+func (c *apiClient) getPlan(ctx context.Context, id string, lease planLease) (workItemPlan, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/plans/"+url.PathEscape(id), nil)
 	if err != nil {
 		return workItemPlan{}, fmt.Errorf("build plan request: %w", err)
 	}
+	request.Header.Set("X-Goalrail-Lease-ID", lease.ID)
+	request.Header.Set("X-Goalrail-Lease-Token", lease.LeaseToken)
 	response, err := c.client.Do(request)
 	if err != nil {
 		return workItemPlan{}, fmt.Errorf("get planning plan: %w", err)

@@ -203,6 +203,32 @@ func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, i
 }
 
 func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
+	return s.getPlan(ctx, id)
+}
+
+func (s *Service) GetPlanForLease(ctx context.Context, id spine.WorkItemPlanID, leaseID spine.WorkItemPlanLeaseID, leaseToken string) (spine.WorkItemPlan, error) {
+	if strings.TrimSpace(string(leaseID)) == "" {
+		return spine.WorkItemPlan{}, &ValidationError{Field: "lease_id", Message: "is required"}
+	}
+	if strings.TrimSpace(leaseToken) == "" {
+		return spine.WorkItemPlan{}, &ValidationError{Field: "lease_token", Message: "is required"}
+	}
+	plan, err := s.getPlan(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	lease, err := s.GetLease(ctx, leaseID)
+	if err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	now := s.Clock.Now().UTC()
+	if err := validateLeaseProof(lease, plan.ID, leaseTokenHash(leaseToken), now); err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	return s.attachApprovedContract(ctx, plan)
+}
+
+func (s *Service) getPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
 	plan, ok, err := s.Plans.Get(ctx, id)
 	if err != nil {
 		return spine.WorkItemPlan{}, fmt.Errorf("get work item plan: %w", err)
@@ -210,7 +236,7 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 	if !ok {
 		return spine.WorkItemPlan{}, ErrPlanNotFound
 	}
-	return s.attachApprovedContract(ctx, plan)
+	return plan, nil
 }
 
 func (s *Service) GetPlanStatus(ctx context.Context, id spine.WorkItemPlanID, input spine.WorkItemPlanStatusRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanStatus, error) {

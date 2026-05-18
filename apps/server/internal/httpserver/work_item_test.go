@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,30 @@ func TestGetPlanReturnsPlanAndUnknownReturnsNotFound(t *testing.T) {
 	if got.ID != plan.ID {
 		t.Fatalf("id = %q, want %q", got.ID, plan.ID)
 	}
+	if got.ApprovedContract != nil || strings.Contains(response.body, "\"approved_contract\":") {
+		t.Fatalf("plain plan response exposed approved_contract: %s", response.body)
+	}
+
+	partialProof := requestJSONWithHeaders(t, server.router, http.MethodGet, "/v1/plans/"+string(plan.ID), "", map[string]string{
+		"X-Goalrail-Lease-ID": "lease-1",
+	})
+	assertErrorCode(t, partialProof, http.StatusBadRequest, "validation_failed")
+
+	lease := acquireLease(t, server)
+	invalidProof := requestJSONWithHeaders(t, server.router, http.MethodGet, "/v1/plans/"+string(plan.ID), "", map[string]string{
+		"X-Goalrail-Lease-ID":    string(lease.ID),
+		"X-Goalrail-Lease-Token": "wrong-token",
+	})
+	assertErrorCode(t, invalidProof, http.StatusConflict, "invalid_lease")
+
+	proven := requestJSONWithHeaders(t, server.router, http.MethodGet, "/v1/plans/"+string(plan.ID), "", map[string]string{
+		"X-Goalrail-Lease-ID":    string(lease.ID),
+		"X-Goalrail-Lease-Token": lease.LeaseToken,
+	})
+	if proven.code != http.StatusOK {
+		t.Fatalf("lease-proven status = %d, want %d: %s", proven.code, http.StatusOK, proven.body)
+	}
+	decodeJSON(t, proven.body, &got)
 	if got.ApprovedContract == nil {
 		t.Fatal("approved_contract projection is nil")
 	}
@@ -2664,6 +2689,31 @@ func createPlan(t *testing.T, server testServerDeps, contractID spine.ContractID
 	var plan spine.WorkItemPlan
 	decodeJSON(t, response.body, &plan)
 	return plan
+}
+
+func requestJSONWithHeaders(t *testing.T, handler http.Handler, method string, path string, body string, headers map[string]string) routeResponse {
+	t.Helper()
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
+	handler.ServeHTTP(recorder, request)
+
+	contentType := recorder.Header().Get("Content-Type")
+	if recorder.Code != http.StatusNoContent && !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("Content-Type = %q, want application/json", contentType)
+	}
+	return routeResponse{
+		code:        recorder.Code,
+		contentType: contentType,
+		header:      recorder.Header(),
+		body:        recorder.Body.String(),
+	}
 }
 
 func storeApprovedPlanningFixture(t *testing.T, server testServerDeps) spine.ApprovedContract {

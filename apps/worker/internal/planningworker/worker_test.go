@@ -107,6 +107,12 @@ func TestRunOnceAcquiresLeaseAndSubmitsProposal(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"lease-1","plan_id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/plans/plan-1":
+			if got := r.Header.Get("X-Goalrail-Lease-ID"); got != "lease-1" {
+				t.Fatalf("lease proof id header = %q, want lease-1", got)
+			}
+			if got := r.Header.Get("X-Goalrail-Lease-Token"); got != secretToken {
+				t.Fatalf("lease proof token header was not forwarded")
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"leased","current_lease_id":"lease-1","approved_contract":{"id":"approved-1","contract_id":"contract-1","contract_draft_id":"draft-1","contract_seed_id":"seed-1","goal_id":"goal-1","repo_binding_id":"repo-1","title":"DOGFOOD-004: Contract-aware planning proposal generation","intent_summary":"Project approved Contract fields into useful proposal task fields.","scope":["Derive title from the approved Contract title.","Derive scope from proposed_scope items."],"non_goals":["Do not introduce an LLM planner."],"constraints":["Keep output deterministic."],"acceptance_criteria":["Proposal title reflects the Contract title.","Proposal scope includes Contract scope."],"expected_checks":["Run worker tests."],"proof_expectations":["Show deterministic projection coverage."],"risk_hints":["proposal-quality"],"state":"approved"},"created_at":"2026-05-07T12:44:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/plans/plan-1/proposals":
