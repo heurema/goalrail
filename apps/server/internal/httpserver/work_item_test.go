@@ -145,6 +145,12 @@ func TestGetPlanReturnsPlanAndUnknownReturnsNotFound(t *testing.T) {
 	if got.ID != plan.ID {
 		t.Fatalf("id = %q, want %q", got.ID, plan.ID)
 	}
+	if got.ApprovedContract == nil {
+		t.Fatal("approved_contract projection is nil")
+	}
+	if got.ApprovedContract.ID != approved.ID || got.ApprovedContract.Title != approved.Title || got.ApprovedContract.IntentSummary != approved.IntentSummary {
+		t.Fatalf("approved_contract = %#v, want approved Contract projection", got.ApprovedContract)
+	}
 
 	missing := doJSON(t, server.router, http.MethodGet, "/v1/plans/missing", "")
 	assertErrorCode(t, missing, http.StatusNotFound, "not_found")

@@ -75,6 +75,34 @@ func TestServicePlanProposalAcceptanceFlow(t *testing.T) {
 	}
 }
 
+func TestServiceGetPlanIncludesApprovedContractProjection(t *testing.T) {
+	service, _, _, _, _, _, _, _ := planningService(t)
+	approved := validApprovedContract()
+	plan, _, err := service.CreatePlan(context.Background(), approved.ContractID, spine.WorkItemPlanCreateRequest{
+		RequestedBy: spine.ActorRef{Kind: "user", ID: "requester"},
+	}, activeMembership(approved.OrganizationID))
+	if err != nil {
+		t.Fatalf("CreatePlan() error = %v", err)
+	}
+
+	got, err := service.GetPlan(context.Background(), plan.ID)
+	if err != nil {
+		t.Fatalf("GetPlan() error = %v", err)
+	}
+	if got.ApprovedContract == nil {
+		t.Fatal("ApprovedContract projection is nil")
+	}
+	if got.ApprovedContract.ID != approved.ID || got.ApprovedContract.ContractID != approved.ContractID || got.ApprovedContract.RepoBindingID != approved.RepoBindingID {
+		t.Fatalf("approved projection ids = %#v, want approved contract ids", got.ApprovedContract)
+	}
+	if got.ApprovedContract.Title != approved.Title || got.ApprovedContract.IntentSummary != approved.IntentSummary {
+		t.Fatalf("approved projection text = %#v, want title/intent from approved Contract", got.ApprovedContract)
+	}
+	if len(got.ApprovedContract.Scope) != len(approved.Scope) || got.ApprovedContract.Scope[0] != approved.Scope[0] {
+		t.Fatalf("approved projection scope = %#v, want %#v", got.ApprovedContract.Scope, approved.Scope)
+	}
+}
+
 func TestServiceRejectsDuplicatePlanProposalAndAcceptance(t *testing.T) {
 	service, _, _, _, _, _, _, _ := planningService(t)
 	approved := validApprovedContract()

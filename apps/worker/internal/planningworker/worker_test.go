@@ -108,7 +108,7 @@ func TestRunOnceAcquiresLeaseAndSubmitsProposal(t *testing.T) {
 			_, _ = w.Write([]byte(`{"id":"lease-1","plan_id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/plans/plan-1":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"leased","current_lease_id":"lease-1","created_at":"2026-05-07T12:44:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
+			_, _ = w.Write([]byte(`{"id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"leased","current_lease_id":"lease-1","approved_contract":{"id":"approved-1","contract_id":"contract-1","contract_draft_id":"draft-1","contract_seed_id":"seed-1","goal_id":"goal-1","repo_binding_id":"repo-1","title":"DOGFOOD-004: Contract-aware planning proposal generation","intent_summary":"Project approved Contract fields into useful proposal task fields.","scope":["Derive title from the approved Contract title.","Derive scope from proposed_scope items."],"non_goals":["Do not introduce an LLM planner."],"constraints":["Keep output deterministic."],"acceptance_criteria":["Proposal title reflects the Contract title.","Proposal scope includes Contract scope."],"expected_checks":["Run worker tests."],"proof_expectations":["Show deterministic projection coverage."],"risk_hints":["proposal-quality"],"state":"approved"},"created_at":"2026-05-07T12:44:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/plans/plan-1/proposals":
 			proposalRequests.Add(1)
 			decodeStrict(t, r, &proposalRequest)
@@ -147,8 +147,34 @@ func TestRunOnceAcquiresLeaseAndSubmitsProposal(t *testing.T) {
 	if len(proposalRequest.ProposedTasks) != 1 {
 		t.Fatalf("proposed tasks = %d, want 1", len(proposalRequest.ProposedTasks))
 	}
-	if len(proposalRequest.ProposedTasks[0].AcceptanceRefs) == 0 || len(proposalRequest.ProposedTasks[0].ProofExpectationRefs) == 0 {
-		t.Fatalf("proposal task refs = %#v, want acceptance and proof refs", proposalRequest.ProposedTasks[0])
+	task := proposalRequest.ProposedTasks[0]
+	if task.Title != "DOGFOOD-004: Contract-aware planning proposal generation" {
+		t.Fatalf("task title = %q, want Contract-derived title", task.Title)
+	}
+	if task.Summary != "Project approved Contract fields into useful proposal task fields." {
+		t.Fatalf("task summary = %q, want Contract-derived summary", task.Summary)
+	}
+	for _, want := range []string{
+		"Derive title from the approved Contract title.",
+		"Derive scope from proposed_scope items.",
+		"Constraint: Keep output deterministic.",
+		"Non-goal: Do not introduce an LLM planner.",
+	} {
+		if !containsString(task.Scope, want) {
+			t.Fatalf("task scope = %#v, missing %q", task.Scope, want)
+		}
+	}
+	if strings.Contains(task.Title, "Implement approved contract") || strings.Contains(task.Summary, "Implement the approved Contract according") {
+		t.Fatalf("proposal task remained generic: %#v", task)
+	}
+	if got, want := task.AcceptanceRefs, []string{"acceptance_criteria[0]", "acceptance_criteria[1]"}; !equalStrings(got, want) {
+		t.Fatalf("acceptance refs = %#v, want %#v", got, want)
+	}
+	if got, want := task.ProofExpectationRefs, []string{"proof_expectations[0]"}; !equalStrings(got, want) {
+		t.Fatalf("proof refs = %#v, want %#v", got, want)
+	}
+	if proposalRequest.Planner["mode"] != "contract_projection" {
+		t.Fatalf("planner mode = %#v, want contract_projection", proposalRequest.Planner["mode"])
 	}
 	if strings.Contains(logs.String(), secretToken) {
 		t.Fatalf("logs leaked lease token: %q", logs.String())
@@ -180,7 +206,7 @@ func TestRunOnceLeaseConflictsDoNotRetryStaleProposal(t *testing.T) {
 					_, _ = w.Write([]byte(`{"id":"lease-1","plan_id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"active","lease_token":"` + secretToken + `","expires_at":"2026-05-07T13:00:00Z","created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 				case r.Method == http.MethodGet && r.URL.Path == "/v1/plans/plan-1":
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = w.Write([]byte(`{"id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"leased","created_at":"2026-05-07T12:44:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
+					_, _ = w.Write([]byte(`{"id":"plan-1","contract_id":"contract-1","approved_contract_id":"approved-1","repo_binding_id":"repo-1","state":"leased","approved_contract":{"id":"approved-1","contract_id":"contract-1","contract_draft_id":"draft-1","contract_seed_id":"seed-1","goal_id":"goal-1","repo_binding_id":"repo-1","title":"Refactor CSV export filters","intent_summary":"Extract duplicate filter logic.","scope":["Update export filter construction."],"acceptance_criteria":["Behavior is preserved."],"proof_expectations":["Show tests."],"state":"approved"},"created_at":"2026-05-07T12:44:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
 				case r.Method == http.MethodPost && r.URL.Path == "/v1/plans/plan-1/proposals":
 					proposalRequests.Add(1)
 					w.Header().Set("Content-Type", "application/json")
@@ -303,6 +329,27 @@ func TestWorkerDoesNotImportServerStoresPostgresOrExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk worker module: %v", err)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func equalStrings(left []string, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeStrict(t *testing.T, r *http.Request, target any) {

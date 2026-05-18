@@ -2,7 +2,7 @@ package planningworker
 
 import "time"
 
-const plannerVersion = "0.1.0"
+const plannerVersion = "0.2.0"
 
 type actorRef struct {
 	Kind string `json:"kind"`
@@ -33,16 +33,36 @@ type planLease struct {
 }
 
 type workItemPlan struct {
-	ID                 string     `json:"id"`
-	ContractID         string     `json:"contract_id"`
-	ApprovedContractID string     `json:"approved_contract_id"`
-	RepoBindingID      string     `json:"repo_binding_id"`
-	State              string     `json:"state"`
-	CurrentLeaseID     string     `json:"current_lease_id,omitempty"`
-	LeasedBy           *actorRef  `json:"leased_by,omitempty"`
-	LeaseExpiresAt     *time.Time `json:"lease_expires_at,omitempty"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	ID                 string                    `json:"id"`
+	ContractID         string                    `json:"contract_id"`
+	ApprovedContractID string                    `json:"approved_contract_id"`
+	RepoBindingID      string                    `json:"repo_binding_id"`
+	State              string                    `json:"state"`
+	CurrentLeaseID     string                    `json:"current_lease_id,omitempty"`
+	LeasedBy           *actorRef                 `json:"leased_by,omitempty"`
+	LeaseExpiresAt     *time.Time                `json:"lease_expires_at,omitempty"`
+	ApprovedContract   *approvedContractSnapshot `json:"approved_contract,omitempty"`
+	CreatedAt          time.Time                 `json:"created_at"`
+	UpdatedAt          time.Time                 `json:"updated_at"`
+}
+
+type approvedContractSnapshot struct {
+	ID                 string   `json:"id"`
+	ContractID         string   `json:"contract_id"`
+	ContractDraftID    string   `json:"contract_draft_id"`
+	ContractSeedID     string   `json:"contract_seed_id"`
+	GoalID             string   `json:"goal_id"`
+	RepoBindingID      string   `json:"repo_binding_id"`
+	Title              string   `json:"title"`
+	IntentSummary      string   `json:"intent_summary"`
+	Scope              []string `json:"scope"`
+	NonGoals           []string `json:"non_goals"`
+	Constraints        []string `json:"constraints"`
+	AcceptanceCriteria []string `json:"acceptance_criteria"`
+	ExpectedChecks     []string `json:"expected_checks"`
+	ProofExpectations  []string `json:"proof_expectations"`
+	RiskHints          []string `json:"risk_hints"`
+	State              string   `json:"state"`
 }
 
 type proposalSubmitRequest struct {

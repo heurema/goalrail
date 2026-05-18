@@ -210,7 +210,7 @@ func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.W
 	if !ok {
 		return spine.WorkItemPlan{}, ErrPlanNotFound
 	}
-	return plan, nil
+	return s.attachApprovedContract(ctx, plan)
 }
 
 func (s *Service) GetPlanStatus(ctx context.Context, id spine.WorkItemPlanID, input spine.WorkItemPlanStatusRequest, membership spine.OrganizationMembership) (spine.WorkItemPlanStatus, error) {
@@ -766,6 +766,38 @@ func leaseCreatedResponse(lease spine.WorkItemPlanLease, token string) spine.Wor
 		CreatedAt:          lease.CreatedAt,
 		UpdatedAt:          lease.UpdatedAt,
 	}
+}
+
+func (s *Service) attachApprovedContract(ctx context.Context, plan spine.WorkItemPlan) (spine.WorkItemPlan, error) {
+	if strings.TrimSpace(string(plan.ApprovedContractID)) == "" {
+		return plan, nil
+	}
+	approved, ok, err := s.ApprovedContracts.Get(ctx, plan.ApprovedContractID)
+	if err != nil {
+		return spine.WorkItemPlan{}, fmt.Errorf("get approved contract for plan: %w", err)
+	}
+	if !ok {
+		return spine.WorkItemPlan{}, ErrApprovedContractNotFound
+	}
+	plan.ApprovedContract = &spine.PlanApprovedContract{
+		ID:                 approved.ID,
+		ContractID:         approved.ContractID,
+		ContractDraftID:    approved.ContractDraftID,
+		ContractSeedID:     approved.ContractSeedID,
+		GoalID:             approved.GoalID,
+		RepoBindingID:      approved.RepoBindingID,
+		Title:              strings.TrimSpace(approved.Title),
+		IntentSummary:      strings.TrimSpace(approved.IntentSummary),
+		Scope:              cloneNonBlankStrings(approved.Scope),
+		NonGoals:           cloneNonBlankStrings(approved.NonGoals),
+		Constraints:        cloneNonBlankStrings(approved.Constraints),
+		AcceptanceCriteria: cloneNonBlankStrings(approved.AcceptanceCriteria),
+		ExpectedChecks:     cloneNonBlankStrings(approved.ExpectedChecks),
+		ProofExpectations:  cloneNonBlankStrings(approved.ProofExpectations),
+		RiskHints:          cloneNonBlankStrings(approved.RiskHints),
+		State:              approved.State,
+	}
+	return plan, nil
 }
 
 func cloneProposedTasksWithOrder(tasks []spine.ProposedWorkItem) []spine.ProposedWorkItem {
