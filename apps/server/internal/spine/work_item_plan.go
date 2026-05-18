@@ -33,19 +33,39 @@ const (
 )
 
 type WorkItemPlan struct {
-	ID                 WorkItemPlanID       `json:"id"`
-	OrganizationID     OrganizationID       `json:"-"`
-	ProjectID          ProjectID            `json:"-"`
-	ContractID         ContractID           `json:"contract_id"`
-	ApprovedContractID ApprovedContractID   `json:"approved_contract_id"`
-	RepoBindingID      RepoBindingID        `json:"repo_binding_id"`
-	State              WorkItemPlanState    `json:"state"`
-	RequestedBy        ActorRef             `json:"requested_by"`
-	CurrentLeaseID     *WorkItemPlanLeaseID `json:"current_lease_id,omitempty"`
-	LeasedBy           *ActorRef            `json:"leased_by,omitempty"`
-	LeaseExpiresAt     *time.Time           `json:"lease_expires_at,omitempty"`
-	CreatedAt          time.Time            `json:"created_at"`
-	UpdatedAt          time.Time            `json:"updated_at"`
+	ID                 WorkItemPlanID        `json:"id"`
+	OrganizationID     OrganizationID        `json:"-"`
+	ProjectID          ProjectID             `json:"-"`
+	ContractID         ContractID            `json:"contract_id"`
+	ApprovedContractID ApprovedContractID    `json:"approved_contract_id"`
+	RepoBindingID      RepoBindingID         `json:"repo_binding_id"`
+	State              WorkItemPlanState     `json:"state"`
+	RequestedBy        ActorRef              `json:"requested_by"`
+	CurrentLeaseID     *WorkItemPlanLeaseID  `json:"current_lease_id,omitempty"`
+	LeasedBy           *ActorRef             `json:"leased_by,omitempty"`
+	LeaseExpiresAt     *time.Time            `json:"lease_expires_at,omitempty"`
+	ApprovedContract   *PlanApprovedContract `json:"approved_contract,omitempty"`
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
+}
+
+type PlanApprovedContract struct {
+	ID                 ApprovedContractID    `json:"id"`
+	ContractID         ContractID            `json:"contract_id"`
+	ContractDraftID    ContractDraftID       `json:"contract_draft_id"`
+	ContractSeedID     ContractSeedID        `json:"contract_seed_id"`
+	GoalID             GoalID                `json:"goal_id"`
+	RepoBindingID      RepoBindingID         `json:"repo_binding_id"`
+	Title              string                `json:"title"`
+	IntentSummary      string                `json:"intent_summary"`
+	Scope              []string              `json:"scope"`
+	NonGoals           []string              `json:"non_goals"`
+	Constraints        []string              `json:"constraints"`
+	AcceptanceCriteria []string              `json:"acceptance_criteria"`
+	ExpectedChecks     []string              `json:"expected_checks"`
+	ProofExpectations  []string              `json:"proof_expectations"`
+	RiskHints          []string              `json:"risk_hints"`
+	State              ApprovedContractState `json:"state"`
 }
 
 type WorkItemPlanLease struct {

@@ -203,6 +203,32 @@ func (s *Service) CreatePlan(ctx context.Context, contractID spine.ContractID, i
 }
 
 func (s *Service) GetPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
+	return s.getPlan(ctx, id)
+}
+
+func (s *Service) GetPlanForLease(ctx context.Context, id spine.WorkItemPlanID, leaseID spine.WorkItemPlanLeaseID, leaseToken string) (spine.WorkItemPlan, error) {
+	if strings.TrimSpace(string(leaseID)) == "" {
+		return spine.WorkItemPlan{}, &ValidationError{Field: "lease_id", Message: "is required"}
+	}
+	if strings.TrimSpace(leaseToken) == "" {
+		return spine.WorkItemPlan{}, &ValidationError{Field: "lease_token", Message: "is required"}
+	}
+	plan, err := s.getPlan(ctx, id)
+	if err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	lease, err := s.GetLease(ctx, leaseID)
+	if err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	now := s.Clock.Now().UTC()
+	if err := validateLeaseProof(lease, plan.ID, leaseTokenHash(leaseToken), now); err != nil {
+		return spine.WorkItemPlan{}, err
+	}
+	return s.attachApprovedContract(ctx, plan)
+}
+
+func (s *Service) getPlan(ctx context.Context, id spine.WorkItemPlanID) (spine.WorkItemPlan, error) {
 	plan, ok, err := s.Plans.Get(ctx, id)
 	if err != nil {
 		return spine.WorkItemPlan{}, fmt.Errorf("get work item plan: %w", err)
@@ -766,6 +792,38 @@ func leaseCreatedResponse(lease spine.WorkItemPlanLease, token string) spine.Wor
 		CreatedAt:          lease.CreatedAt,
 		UpdatedAt:          lease.UpdatedAt,
 	}
+}
+
+func (s *Service) attachApprovedContract(ctx context.Context, plan spine.WorkItemPlan) (spine.WorkItemPlan, error) {
+	if strings.TrimSpace(string(plan.ApprovedContractID)) == "" {
+		return plan, nil
+	}
+	approved, ok, err := s.ApprovedContracts.Get(ctx, plan.ApprovedContractID)
+	if err != nil {
+		return spine.WorkItemPlan{}, fmt.Errorf("get approved contract for plan: %w", err)
+	}
+	if !ok {
+		return spine.WorkItemPlan{}, ErrApprovedContractNotFound
+	}
+	plan.ApprovedContract = &spine.PlanApprovedContract{
+		ID:                 approved.ID,
+		ContractID:         approved.ContractID,
+		ContractDraftID:    approved.ContractDraftID,
+		ContractSeedID:     approved.ContractSeedID,
+		GoalID:             approved.GoalID,
+		RepoBindingID:      approved.RepoBindingID,
+		Title:              strings.TrimSpace(approved.Title),
+		IntentSummary:      strings.TrimSpace(approved.IntentSummary),
+		Scope:              cloneNonBlankStrings(approved.Scope),
+		NonGoals:           cloneNonBlankStrings(approved.NonGoals),
+		Constraints:        cloneNonBlankStrings(approved.Constraints),
+		AcceptanceCriteria: cloneNonBlankStrings(approved.AcceptanceCriteria),
+		ExpectedChecks:     cloneNonBlankStrings(approved.ExpectedChecks),
+		ProofExpectations:  cloneNonBlankStrings(approved.ProofExpectations),
+		RiskHints:          cloneNonBlankStrings(approved.RiskHints),
+		State:              approved.State,
+	}
+	return plan, nil
 }
 
 func cloneProposedTasksWithOrder(tasks []spine.ProposedWorkItem) []spine.ProposedWorkItem {

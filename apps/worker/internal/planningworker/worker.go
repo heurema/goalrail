@@ -110,7 +110,7 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	}
 	r.logger.Printf("acquired planning lease lease_id=%s plan_id=%s", lease.ID, lease.PlanID)
 
-	plan, err := r.client.getPlan(ctx, lease.PlanID)
+	plan, err := r.client.getPlan(ctx, lease.PlanID, lease)
 	if err != nil {
 		return "", err
 	}

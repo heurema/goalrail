@@ -12,6 +12,7 @@ import (
 type WorkItemPlanService interface {
 	CreatePlan(context.Context, spine.ContractID, spine.WorkItemPlanCreateRequest, spine.OrganizationMembership) (spine.WorkItemPlan, bool, error)
 	GetPlan(context.Context, spine.WorkItemPlanID) (spine.WorkItemPlan, error)
+	GetPlanForLease(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanLeaseID, string) (spine.WorkItemPlan, error)
 	GetPlanStatus(context.Context, spine.WorkItemPlanID, spine.WorkItemPlanStatusRequest, spine.OrganizationMembership) (spine.WorkItemPlanStatus, error)
 	AcquireNextLease(context.Context, spine.WorkItemPlanLeaseCreateRequest) (spine.WorkItemPlanLeaseCreated, bool, error)
 	GetLease(context.Context, spine.WorkItemPlanLeaseID) (spine.WorkItemPlanLease, error)
@@ -57,7 +58,20 @@ func (h *WorkItemPlanHandler) CreatePlan(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *WorkItemPlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
-	plan, err := h.service.GetPlan(r.Context(), spine.WorkItemPlanID(r.PathValue("id")))
+	leaseID := r.Header.Get("X-Goalrail-Lease-ID")
+	leaseToken := r.Header.Get("X-Goalrail-Lease-Token")
+	var (
+		plan spine.WorkItemPlan
+		err  error
+	)
+	switch {
+	case leaseID == "" && leaseToken == "":
+		plan, err = h.service.GetPlan(r.Context(), spine.WorkItemPlanID(r.PathValue("id")))
+	case leaseID == "" || leaseToken == "":
+		err = &workitemplan.ValidationError{Field: "lease_proof", Message: "requires both X-Goalrail-Lease-ID and X-Goalrail-Lease-Token"}
+	default:
+		plan, err = h.service.GetPlanForLease(r.Context(), spine.WorkItemPlanID(r.PathValue("id")), spine.WorkItemPlanLeaseID(leaseID), leaseToken)
+	}
 	if err != nil {
 		h.respondServiceError(w, err)
 		return

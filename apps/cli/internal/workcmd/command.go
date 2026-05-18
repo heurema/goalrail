@@ -2093,6 +2093,7 @@ type workPlanResponse struct {
 	ApprovedContractID string              `json:"approved_contract_id"`
 	RepoBindingID      spine.RepoBindingID `json:"repo_binding_id"`
 	State              string              `json:"state"`
+	ApprovedContract   json.RawMessage     `json:"approved_contract,omitempty"`
 }
 
 type workPlanStatusResponse struct {
