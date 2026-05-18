@@ -206,12 +206,12 @@ type retryingClient struct {
 }
 
 func (c retryingClient) Do(request *http.Request) (*http.Response, error) {
-	prepared, err := c.prepareRequest(request)
+	prepared, err := c.prepareRequest(request, false)
 	if err != nil {
 		return nil, err
 	}
 	response, err := c.manager.client.Do(prepared)
-	if err != nil || response == nil || response.StatusCode != http.StatusUnauthorized || !requestReplayable(request) {
+	if err != nil || response == nil || response.StatusCode != http.StatusUnauthorized || !requestAutoRetryAllowed(request) {
 		return response, err
 	}
 	_ = response.Body.Close()
@@ -219,16 +219,16 @@ func (c retryingClient) Do(request *http.Request) (*http.Response, error) {
 	if _, err := c.manager.refresh(request.Context()); err != nil {
 		return nil, err
 	}
-	retry, err := c.prepareRequest(request)
+	retry, err := c.prepareRequest(request, true)
 	if err != nil {
 		return nil, err
 	}
 	return c.manager.client.Do(retry)
 }
 
-func (c retryingClient) prepareRequest(request *http.Request) (*http.Request, error) {
+func (c retryingClient) prepareRequest(request *http.Request, rebuildBody bool) (*http.Request, error) {
 	prepared := request.Clone(request.Context())
-	if request.Body != nil {
+	if rebuildBody && request.Body != nil {
 		if request.GetBody == nil {
 			return nil, exitcode.RuntimeError(errors.New("authenticated request body cannot be replayed"))
 		}
@@ -245,6 +245,11 @@ func (c retryingClient) prepareRequest(request *http.Request) (*http.Request, er
 	return prepared, nil
 }
 
-func requestReplayable(request *http.Request) bool {
+func requestAutoRetryAllowed(request *http.Request) bool {
+	switch request.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+	default:
+		return false
+	}
 	return request.Body == nil || request.GetBody != nil
 }

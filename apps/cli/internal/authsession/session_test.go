@@ -180,6 +180,53 @@ func TestRetryingClientDoesNotLoopRefreshAttempts(t *testing.T) {
 	}
 }
 
+func TestRetryingClientDoesNotRetryUnauthorizedPOST(t *testing.T) {
+	t.Parallel()
+
+	var refreshCount atomic.Int32
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/auth/refresh":
+			refreshCount.Add(1)
+			http.Error(w, "unexpected refresh", http.StatusInternalServerError)
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009/submit":
+			requestCount.Add(1)
+			if r.Method != http.MethodPost {
+				t.Errorf("method = %s, want POST", r.Method)
+			}
+			http.Error(w, `{"error":{"code":"unauthorized","message":"expired"}}`, http.StatusUnauthorized)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	store := &memoryStore{session: validSession(server.URL)}
+	_, _, client, err := LoadUsable(context.Background(), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("LoadUsable() error = %v", err)
+	}
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, server.URL+"/v1/contracts/018f0000-0000-7000-8000-000000000009/submit", strings.NewReader(`{"confirm":true}`))
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("Do() error = %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want final 401 without retry", response.StatusCode)
+	}
+	if refreshCount.Load() != 0 || requestCount.Load() != 1 {
+		t.Fatalf("refresh/request counts = %d/%d, want 0/1", refreshCount.Load(), requestCount.Load())
+	}
+}
+
 func TestRefreshFailureDoesNotLeakTokenValues(t *testing.T) {
 	t.Parallel()
 
