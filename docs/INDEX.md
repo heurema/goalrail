@@ -154,17 +154,19 @@ related_docs:
 99. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
 100. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
 101. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
-102. `docs/reference/design/reference_screens/`
-103. `docs/reference/start-assistant/`
-104. `.goalrail/work/`
-105. `.goalrail/knowledge/`
-106. `.goalrail/public-kb/manifest.yaml`
-107. `.punk/publishing.toml`
-108. `.goalrail/flows/`
-109. `.goalrail/evals/`
-110. `docs/ops/PUBLISHING_MIGRATION.md`
-111. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
-112. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
+102. `docs/research/GOALRAIL_FRONTIER_AI_DEPLOYMENT_WAVE_2026.md`
+103. `docs/research/GOALRAIL_FRONTIER_AI_DEPLOYMENT_WAVE_SYNTHESIS_2026.md`
+104. `docs/reference/design/reference_screens/`
+105. `docs/reference/start-assistant/`
+106. `.goalrail/work/`
+107. `.goalrail/knowledge/`
+108. `.goalrail/public-kb/manifest.yaml`
+109. `.punk/publishing.toml`
+110. `.goalrail/flows/`
+111. `.goalrail/evals/`
+112. `docs/ops/PUBLISHING_MIGRATION.md`
+113. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+114. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
 
 
 ## Roles of the main docs
@@ -330,6 +332,8 @@ related_docs:
 - `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md` — advisory synthesis of adjacent experiments such as Punk; useful for intake and anti-pattern extraction, but not canonical product truth
 - `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md` — advisory discovery workshop synthesis on AI-SDLC pain, validation, pilot candidates, and proof-oriented delivery; discussion input, not product canon
 - `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md` — advisory market-signal intake on OpenAI/Tomoro/Anthropic deployment-company moves; validates deployment-engine thesis but does not override product canon or expand MVP scope
+- `docs/research/GOALRAIL_FRONTIER_AI_DEPLOYMENT_WAVE_2026.md` — advisory research on the 2026 OpenAI/Tomoro, Anthropic, Palantir, consultancy, and Macrohard/xAI deployment-company wave; validates Goalrail's deployment-control thesis without expanding MVP scope
+- `docs/research/GOALRAIL_FRONTIER_AI_DEPLOYMENT_WAVE_SYNTHESIS_2026.md` — advisory strategic synthesis / founder memo for the same research; packaging input only, not product canon
 - `docs/reference/design/reference_screens/` — visual reference material without product-truth authority
 - `docs/reference/start-assistant/` — static quick questions and answer source material for the `/start` guided assistant surface
 - `.goalrail/work/` — Goalrail-tracked goals, reports, and bounded slice memory
