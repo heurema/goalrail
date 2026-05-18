@@ -35,6 +35,23 @@ Pilot — это:
 - managed rollout motion
 - lightweight proof required from day one
 
+### Proof-of-Value framing
+The managed pilot may use **2-week Proof-of-Value for controlled AI-assisted
+software delivery** as a subtitle or descriptor.
+
+This is wording, not scope expansion.
+
+It keeps the same pilot boundary:
+- one team
+- one repo by default
+- one main real case
+- one visible task-to-proof workflow
+- one proof/readout and expansion decision
+
+The Proof-of-Value framing must not turn the pilot into broad AI
+transformation, full enterprise governance rollout, staff augmentation, or a
+long custom discovery engagement.
+
 ### Extended recommendation
 - 1 команда
 - 1–2 репо

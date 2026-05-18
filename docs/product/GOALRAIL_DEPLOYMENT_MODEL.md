@@ -154,6 +154,26 @@ Guided rollout — позже.
 Результат:
 - stabilized deployment profile
 
+### Deployment learning loop
+Goalrail deployment should produce reusable product learning without turning
+into bespoke consulting.
+
+Every managed pilot should attempt to identify at least one reusable primitive:
+- contract template
+- proof template
+- verification expectation
+- policy / profile knob
+- terminology mapping
+- adoption blocker / playbook note
+- rollout decision pattern
+
+This loop is advisory for early pilots:
+
+`pilot run -> proof/readout -> reusable primitive -> product/canon review`
+
+The loop must not change the fixed operating core, expand MVP scope, or create
+company-specific custom process logic.
+
 ### Phase 6 — Expansion
 Решается, куда расширяться дальше.
 

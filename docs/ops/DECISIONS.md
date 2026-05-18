@@ -2583,3 +2583,44 @@ What this prevents:
 - premature product pitch or unsupported product claims
 - generic AI thought leadership
 - unsafe drift into social automation or outreach tooling
+
+## D-0095 — Frontier AI deployment wave validates Goalrail deployment-control thesis
+Date: 2026-05-18
+Status: accepted
+Review after: 2026-08-15
+
+Decision:
+- Treat the broader 2026 frontier-AI deployment-company wave as validation of
+  Goalrail's operating-layer thesis.
+- Extend D-0093 from the OpenAI/Tomoro/Anthropic DeployCo signal into a wider
+  advisory research intake that also covers Palantir, consultancies, SMB
+  workflow packaging, partner deployment motions, and Macrohard/xAI autonomy
+  narratives.
+- Adopt only deployment primitives that fit Goalrail: working-contract
+  diagnostic, priority workflow selection, compact deployment cell,
+  proof/eval discipline, human approval, runtime neutrality, and
+  field-to-product reusable primitives.
+- Do not copy OpenAI DeployCo, Anthropic's services company, Tomoro, Palantir,
+  PE-backed distribution, broad SI/consulting identity, or Macrohard-style
+  autonomy promises.
+- Keep Goalrail focused on AI-assisted software delivery from business goal to
+  verified code change.
+- Keep the current pilot-first boundary: one team, one repo by default, one
+  real workflow, one proof/readout, unless a separate decision changes scope.
+- This decision is docs/research/positioning input only and does not approve
+  implementation, runtime, analytics, CRM, enterprise governance,
+  partner-channel, provider-integration, runner, gate, proof, or MVP expansion.
+
+Rationale:
+- OpenAI/Tomoro, Anthropic, Palantir, and consultancies validate deployment,
+  evals, approvals, reusable playbooks, and proof as strategic infrastructure.
+- Goalrail's durable wedge remains a productized deployment-control layer for
+  AI-assisted software delivery, not a broad deployment services company.
+
+What this prevents:
+- generic AI consulting drift
+- FDE-company mimicry
+- provider lock-in
+- Macrohard-style autonomy theatre
+- premature enterprise-governance expansion
+- MVP scope creep from market news

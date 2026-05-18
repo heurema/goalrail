@@ -71,6 +71,22 @@ Qualification остаётся бесплатным, чтобы:
 - remote-first
 - lightweight proof required from day one
 
+### Proof-of-Value description
+The paid managed pilot can be explained as:
+
+**a 2-week Proof-of-Value for controlled AI-assisted software delivery.**
+
+This means Goalrail proves value on one real workflow by adding a working
+contract, bounded execution, verification expectations, and inspectable proof
+around the team's existing AI/human/runtime execution path.
+
+This does not change the commercial object:
+- qualification remains free
+- the paid object remains the managed pilot
+- pilot scope remains one team, one repo by default, and one visible
+  task-to-proof workflow
+- expansion starts only after the pilot readout
+
 ### Extended pilot shape
 - 1 команда
 - 1–2 repo
