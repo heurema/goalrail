@@ -475,11 +475,11 @@ curl -sS -X POST http://localhost:8080/v1/plans/leases \
   }'
 ```
 
-The current server has the typed lease API but still has no worker,
-controller, or runner binary. A future worker/planner submits its proposal
-through the API with the lease proof. The server validates and stores the
-Proposal, marks the lease `completed`, and does not create canonical WorkItems
-yet:
+The current server has the typed lease API, and the separate minimal
+`apps/worker` prototype can poll it and submit one deterministic development
+proposal with lease proof. The API server validates and stores the Proposal,
+marks the lease `completed`, and does not create canonical WorkItems at
+proposal submission time:
 
 ```bash
 curl -sS -X POST http://localhost:8080/v1/plans/{plan_id}/proposals \

@@ -75,6 +75,10 @@
   safe options are limited to narrow advisory snapshot / Project Scan
   cancellation semantics cleanup, a marker repair design note, or an optional
   small collector spike only after deciding whether the MVP needs it.
+- Local dogfooding now has an operational runbook at
+  `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`. DOGFOOD slices should use it for the
+  current self-hosted server / bootstrap / auth / init / work / contract /
+  planning flow and capture UX friction as observations, not product claims.
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured

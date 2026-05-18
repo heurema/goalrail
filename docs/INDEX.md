@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/LOCAL_DOGFOOD_RUNBOOK.md
   - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
   - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
@@ -124,41 +125,42 @@ related_docs:
 73. `docs/ops/NEXT.md`
 74. `docs/ops/DECISIONS.md`
 75. `docs/ops/COMPONENTS.yaml`
-76. `docs/ops/INIT_LIFECYCLE.md`
-77. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-78. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-79. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
-80. `docs/ops/BRANCH_PROTECTION.md`
-81. `docs/ops/REPO_STRUCTURE.md`
-82. `docs/ops/GO_CODE_GUIDE.md`
-83. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-84. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-85. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-86. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-87. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-88. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-89. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-90. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-91. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-92. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-93. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-94. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-95. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-96. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+76. `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`
+77. `docs/ops/INIT_LIFECYCLE.md`
+78. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+79. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+80. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+81. `docs/ops/BRANCH_PROTECTION.md`
+82. `docs/ops/REPO_STRUCTURE.md`
+83. `docs/ops/GO_CODE_GUIDE.md`
+84. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+85. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+86. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+87. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+88. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+89. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+90. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+91. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+92. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+93. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+94. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+95. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+96. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+97. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-97. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-98. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-99. `docs/reference/design/reference_screens/`
-100. `docs/reference/start-assistant/`
-101. `.goalrail/work/`
-102. `.goalrail/knowledge/`
-103. `.goalrail/public-kb/manifest.yaml`
-104. `.punk/publishing.toml`
-105. `.goalrail/flows/`
-106. `.goalrail/evals/`
-107. `docs/ops/PUBLISHING_MIGRATION.md`
-108. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+98. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+99. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+100. `docs/reference/design/reference_screens/`
+101. `docs/reference/start-assistant/`
+102. `.goalrail/work/`
+103. `.goalrail/knowledge/`
+104. `.goalrail/public-kb/manifest.yaml`
+105. `.punk/publishing.toml`
+106. `.goalrail/flows/`
+107. `.goalrail/evals/`
+108. `docs/ops/PUBLISHING_MIGRATION.md`
+109. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
 
 
 ## Roles of the main docs
@@ -284,6 +286,9 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `LOCAL_DOGFOOD_RUNBOOK.md` — operational runbook for using current local
+  Goalrail to dogfood Goalrail through server, CLI, Contract, planning, and PR
+  handoff while keeping UX findings separate from product claims
 - `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
   modes, local marker / snapshot / Project Scan distinctions, trust boundary,
   and MVP partial-failure recovery direction
