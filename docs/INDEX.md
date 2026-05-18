@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_DOC_GOVERNANCE.md
   - docs/adr/ADR-0025-repository-baseline-profile-lifecycle.md
   - docs/ops/STATUS.md
+  - docs/ops/LOCAL_DOGFOOD_RUNBOOK.md
   - docs/ops/INIT_LIFECYCLE.md
   - docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md
   - docs/ops/INIT_STABILIZATION_CHECKPOINT.md
@@ -126,43 +127,44 @@ related_docs:
 74. `docs/ops/NEXT.md`
 75. `docs/ops/DECISIONS.md`
 76. `docs/ops/COMPONENTS.yaml`
-77. `docs/ops/INIT_LIFECYCLE.md`
-78. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
-79. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
-80. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
-81. `docs/ops/BRANCH_PROTECTION.md`
-82. `docs/ops/REPO_STRUCTURE.md`
-83. `docs/ops/GO_CODE_GUIDE.md`
-84. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
-85. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
-86. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
-87. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
-88. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
-89. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
-90. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
-91. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
-92. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
-93. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
-94. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
-95. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
-96. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
-97. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+77. `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`
+78. `docs/ops/INIT_LIFECYCLE.md`
+79. `docs/ops/SNAPSHOT_SCAN_SHARED_SHAPE.md`
+80. `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`
+81. `docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md`
+82. `docs/ops/BRANCH_PROTECTION.md`
+83. `docs/ops/REPO_STRUCTURE.md`
+84. `docs/ops/GO_CODE_GUIDE.md`
+85. `docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md`
+86. `docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md`
+87. `docs/ops/START_ASSISTANT_IMPLEMENTATION_PLAN.md`
+88. `docs/ops/START_ASSISTANT_WORKER_ARCHITECTURE.md`
+89. `docs/ops/START_ASSISTANT_PUBLIC_KB_PIPELINE.md`
+90. `docs/ops/START_ASSISTANT_STAGE_3B_PLAN.md`
+91. `docs/ops/START_ASSISTANT_LIVE_RUNBOOK.md`
+92. `docs/ops/START_ASSISTANT_KNOWLEDGE_SYNC.md`
+93. `docs/ops/START_ASSISTANT_SECURITY_AND_PRIVACY.md`
+94. `docs/ops/START_ASSISTANT_API_CONTRACT.md`
+95. `docs/ops/DECISION_LOG_START_ASSISTANT_WORKER_SNIPPET.md`
+96. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
+97. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
+98. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
 
 ### 9. Advisory research, reference material, and overlay working surfaces
-98. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
-99. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
-100. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
-101. `docs/reference/design/reference_screens/`
-102. `docs/reference/start-assistant/`
-103. `.goalrail/work/`
-104. `.goalrail/knowledge/`
-105. `.goalrail/public-kb/manifest.yaml`
-106. `.punk/publishing.toml`
-107. `.goalrail/flows/`
-108. `.goalrail/evals/`
-109. `docs/ops/PUBLISHING_MIGRATION.md`
-110. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
-111. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
+99. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`
+100. `docs/research/GOALRAIL_AI_SDLC_DISCOVERY_WORKSHOP.md`
+101. `docs/research/GOALRAIL_DEPLOYCO_DEPLOYMENT_ENGINE_RESEARCH.md`
+102. `docs/reference/design/reference_screens/`
+103. `docs/reference/start-assistant/`
+104. `.goalrail/work/`
+105. `.goalrail/knowledge/`
+106. `.goalrail/public-kb/manifest.yaml`
+107. `.punk/publishing.toml`
+108. `.goalrail/flows/`
+109. `.goalrail/evals/`
+110. `docs/ops/PUBLISHING_MIGRATION.md`
+111. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+112. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
 
 
 ## Roles of the main docs
@@ -292,6 +294,9 @@ related_docs:
 - `NEXT.md` — ближайшие bounded slices
 - `DECISIONS.md` — компактный decision log
 - `COMPONENTS.yaml` — component map
+- `LOCAL_DOGFOOD_RUNBOOK.md` — operational runbook for using current local
+  Goalrail to dogfood Goalrail through server, CLI, Contract, planning, and PR
+  handoff while keeping UX findings separate from product claims
 - `INIT_LIFECYCLE.md` — operational design note for current `goalrail init`
   modes, local marker / snapshot / Project Scan distinctions, trust boundary,
   and MVP partial-failure recovery direction
