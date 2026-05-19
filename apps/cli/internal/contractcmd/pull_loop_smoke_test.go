@@ -151,6 +151,9 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 	if !strings.Contains(submitted.NextAction.Command, "--confirm-user-approval") {
 		t.Fatalf("approve_contract command = %q, want explicit confirmation flag", submitted.NextAction.Command)
 	}
+	if submitted.NextAction.RequiresHumanApproval == nil || !*submitted.NextAction.RequiresHumanApproval {
+		t.Fatalf("approve_contract requires_human_approval = %#v, want true", submitted.NextAction.RequiresHumanApproval)
+	}
 
 	var approved spine.ContractTransitionOutput
 	if err := runSmokeContractCommand(t, repoDir, store, "", &approved, "approve", "--contract-id", string(submitted.ContractID), "--confirm-user-approval", "--format", "json"); err != nil {
@@ -168,7 +171,10 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("work plan smoke error = %v", err)
 	}
 	assertSmokeSchema(t, planned.SchemaVersion)
-	assertNextAction(t, planned.NextAction, "planning_worker_required", false, true, "")
+	assertNextAction(t, planned.NextAction, "planning_worker_required", true, true, "")
+	if planned.NextAction.CommandPacket == nil || !strings.Contains(planned.NextAction.CommandPacket.SafetyNote, "does not accept proposals") {
+		t.Fatalf("planning worker command_packet = %#v, want bounded safety note", planned.NextAction.CommandPacket)
+	}
 	if planned.PlanID != smokePlanID || planned.PlanState != "queued" {
 		t.Fatalf("work plan id/state = %q/%q, want %q/queued", planned.PlanID, planned.PlanState, smokePlanID)
 	}
@@ -179,6 +185,9 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 	}
 	assertSmokeSchema(t, status.SchemaVersion)
 	assertNextAction(t, status.NextAction, "accept_proposal", true, true, "")
+	if status.NextAction.RequiresHumanApproval == nil || !*status.NextAction.RequiresHumanApproval {
+		t.Fatalf("accept_proposal requires_human_approval = %#v, want true", status.NextAction.RequiresHumanApproval)
+	}
 	if status.ProposalID != smokeProposalID || status.ProposalState != "submitted" || len(status.ProposedTasks) != 1 {
 		t.Fatalf("plan status proposal = %q/%q/%d, want submitted proposal", status.ProposalID, status.ProposalState, len(status.ProposedTasks))
 	}
@@ -191,13 +200,15 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 		t.Fatalf("work proposal accept smoke error = %v", err)
 	}
 	assertSmokeSchema(t, accepted.SchemaVersion)
-	assertNextAction(t, accepted.NextAction, "prepare_checkout", true, false, "")
+	assertNextAction(t, accepted.NextAction, "show_work_item", true, false, "")
 	if accepted.ProposalID != smokeProposalID || accepted.PlanID != smokePlanID || len(accepted.CreatedTaskIDs) != 1 || accepted.CreatedTaskIDs[0] != smokeWorkItemID {
 		t.Fatalf("proposal accept output = %#v, want one planned WorkItem trace", accepted)
 	}
-	wantCheckoutCommand := "goalrail work checkout prepare --task-id " + smokeWorkItemID + " --format json"
-	if accepted.NextAction.Command != wantCheckoutCommand {
-		t.Fatalf("proposal accept next command = %q, want %q", accepted.NextAction.Command, wantCheckoutCommand)
+	if !strings.Contains(accepted.NextAction.Command, "goalrail work item show --task-id "+smokeWorkItemID) {
+		t.Fatalf("proposal accept next command = %q, want WorkItem detail command", accepted.NextAction.Command)
+	}
+	if accepted.NextAction.MutatesState == nil || *accepted.NextAction.MutatesState {
+		t.Fatalf("proposal accept next mutates_state = %#v, want false for WorkItem show", accepted.NextAction.MutatesState)
 	}
 
 	var checkoutPrepared spine.WorkCheckoutPrepareOutput

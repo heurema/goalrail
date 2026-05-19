@@ -29,6 +29,8 @@ const (
 	workStartedMessage = "Work intake started."
 	workStartedNote    = "This created an IntakeRecord and promoted it to a Goal on the GoalRail server.\nNo audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 	maxWorkBodyBytes   = 1 << 20
+	cliModuleCWD       = "apps/cli"
+	workerModuleCWD    = "apps/worker"
 )
 
 type SessionStore interface {
@@ -1019,7 +1021,12 @@ func renderPlanText(output spine.WorkPlanOutput) string {
 	}
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
 	if output.NextAction.Kind != "" {
-		if output.NextAction.Available && output.NextAction.Command != "" {
+		if output.NextAction.Kind == "planning_worker_required" {
+			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
+			if output.NextAction.CommandPacket != nil {
+				fmt.Fprintf(&b, "A structured worker command packet is available in JSON output.\n")
+			}
+		} else if output.NextAction.Available && output.NextAction.Command != "" {
 			fmt.Fprintf(&b, "\nNext: %s\n", output.NextAction.Command)
 		} else {
 			fmt.Fprintf(&b, "\nNext action: %s\n", renderPlanNextActionText(output.NextAction.Kind))
@@ -1241,7 +1248,7 @@ func renderContinueText(output spine.WorkContinueOutput) string {
 }
 
 func buildPlanOutput(config projectconfig.Config, serverURL string, plan workPlanResponse) spine.WorkPlanOutput {
-	summary, nextAction := planStateResult(plan.State, plan.ID, "")
+	summary, nextAction := planStateResult(plan.State, plan.ID, "", serverURL)
 	return spine.WorkPlanOutput{
 		SchemaVersion:   cliSchemaVersion,
 		Mode:            serverMode,
@@ -1261,7 +1268,7 @@ func buildPlanOutput(config projectconfig.Config, serverURL string, plan workPla
 }
 
 func buildPlanStatusOutput(config projectconfig.Config, serverURL string, status workPlanStatusResponse) spine.WorkPlanStatusOutput {
-	summary, nextAction := planStatusResult(status.Plan.State, status.Plan.ID, status.proposalID())
+	summary, nextAction := planStatusResult(status.Plan.State, status.Plan.ID, status.proposalID(), serverURL)
 	output := spine.WorkPlanStatusOutput{
 		SchemaVersion:   cliSchemaVersion,
 		Mode:            serverMode,
@@ -1291,6 +1298,17 @@ func buildProposalAcceptOutput(config projectconfig.Config, serverURL string, ac
 	for _, taskID := range accepted.CreatedTaskIDs {
 		taskIDs = append(taskIDs, taskID)
 	}
+	nextAction := spine.NextAction{
+		Kind:      "show_work_item",
+		Blocking:  false,
+		Available: false,
+	}
+	if len(taskIDs) > 0 {
+		nextAction = workItemShowAction(taskIDs[0])
+		if len(taskIDs) > 1 {
+			nextAction.RelatedIDs["created_task_count"] = fmt.Sprintf("%d", len(taskIDs))
+		}
+	}
 	return spine.WorkProposalAcceptOutput{
 		SchemaVersion:   cliSchemaVersion,
 		Mode:            serverMode,
@@ -1307,12 +1325,7 @@ func buildProposalAcceptOutput(config projectconfig.Config, serverURL string, ac
 		Display: spine.DisplaySummary{
 			Summary: fmt.Sprintf("Accepted the planning proposal and created %d planned WorkItem record(s). Execution is not available yet.", len(taskIDs)),
 		},
-		NextAction: spine.NextAction{
-			Kind:      "prepare_checkout",
-			Blocking:  false,
-			Available: len(taskIDs) > 0,
-			Command:   firstCheckoutCommand(taskIDs),
-		},
+		NextAction: nextAction,
 	}
 }
 
@@ -1328,19 +1341,14 @@ func buildWorkItemShowOutput(config projectconfig.Config, serverURL string, deta
 	if strings.TrimSpace(taskID) == "" {
 		taskID = detail.ID
 	}
-	nextAction := spine.NextAction{
-		Kind:      detail.NextAction.Kind,
-		Blocking:  detail.NextAction.Blocking,
-		Command:   detail.NextAction.Command,
-		Available: detail.NextAction.Available,
+	nextAction := spine.NextAction{}
+	if strings.TrimSpace(detail.NextAction.Kind) != "" {
+		nextAction = checkoutPrepareAction(taskID, detail.NextAction.Command, detail.NextAction.Available)
+		nextAction.Kind = detail.NextAction.Kind
+		nextAction.Blocking = detail.NextAction.Blocking
 	}
 	if nextAction.Kind == "" {
-		nextAction = spine.NextAction{
-			Kind:      "prepare_checkout",
-			Blocking:  false,
-			Available: detail.Status == "planned",
-			Command:   firstCheckoutCommand([]string{taskID}),
-		}
+		nextAction = checkoutPrepareAction(taskID, firstCheckoutCommand([]string{taskID}), detail.Status == "planned")
 	}
 	return spine.WorkItemShowOutput{
 		SchemaVersion:        cliSchemaVersion,
@@ -1430,14 +1438,167 @@ func firstCheckoutCommand(taskIDs []string) string {
 	return fmt.Sprintf("goalrail work checkout prepare --task-id %s --format json", taskIDs[0])
 }
 
-func planStateResult(state string, planID string, proposalID string) (string, spine.NextAction) {
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func commandPacket(cwd string, argv []string, description string, safetyNote string, stopCondition string) *spine.CommandPacket {
+	return &spine.CommandPacket{
+		CWD:           cwd,
+		Argv:          append([]string(nil), argv...),
+		Description:   description,
+		SafetyNote:    safetyNote,
+		StopCondition: stopCondition,
+	}
+}
+
+func cliCommandPacket(argv []string, description string, safetyNote string, stopCondition string) *spine.CommandPacket {
+	return commandPacket(cliModuleCWD, argv, description, safetyNote, stopCondition)
+}
+
+func shellCommandFromPacket(packet *spine.CommandPacket) string {
+	if packet == nil || len(packet.Argv) == 0 {
+		return ""
+	}
+	command := strings.Join(packet.Argv, " ")
+	if packet.CWD == "" {
+		return command
+	}
+	return fmt.Sprintf("cd %s && %s", packet.CWD, command)
+}
+
+func workItemShowAction(taskID string) spine.NextAction {
+	argv := []string{"go", "run", "./cmd/goalrail", "work", "item", "show", "--task-id", taskID, "--format", "json"}
+	packet := cliCommandPacket(
+		argv,
+		"Inspect the created WorkItem detail before checkout.",
+		"Read-only WorkItem detail inspection; does not start checkout, execution, runner, gate, proof, or verification.",
+		"Inspect the WorkItem detail and stop before checkout unless the human/operator explicitly chooses the next stage.",
+	)
+	return spine.NextAction{
+		Kind:          "show_work_item",
+		Blocking:      false,
+		Available:     taskID != "",
+		Command:       shellCommandFromPacket(packet),
+		CommandPacket: packet,
+		MutatesState:  boolPtr(false),
+		RelatedIDs: map[string]string{
+			"work_item_id": taskID,
+			"task_id":      taskID,
+		},
+	}
+}
+
+func checkoutPrepareAction(taskID string, command string, available bool) spine.NextAction {
+	if command == "" && taskID != "" {
+		command = firstCheckoutCommand([]string{taskID})
+	}
+	argv := []string{"go", "run", "./cmd/goalrail", "work", "checkout", "prepare", "--task-id", taskID, "--format", "json"}
+	packet := cliCommandPacket(
+		argv,
+		"Prepare a checkout job for the planned WorkItem.",
+		"Checkout preparation mutates Goalrail state but does not execute code, create a Run, gate, proof, or verify work. It was not run by the command that returned this next_action.",
+		"Stop after checkout preparation and wait for runner checkout receipt guidance before execution preparation.",
+	)
+	return spine.NextAction{
+		Kind:          "prepare_checkout",
+		Blocking:      false,
+		Available:     available,
+		Command:       command,
+		CommandPacket: packet,
+		MutatesState:  boolPtr(true),
+		RelatedIDs: map[string]string{
+			"work_item_id": taskID,
+			"task_id":      taskID,
+		},
+	}
+}
+
+func proposalAcceptAction(proposalID string) spine.NextAction {
+	argv := []string{"go", "run", "./cmd/goalrail", "work", "proposal", "accept", "--proposal-id", proposalID, "--confirm-user-acceptance", "--format", "json"}
+	packet := cliCommandPacket(
+		argv,
+		"Accept the submitted WorkItemPlanProposal after explicit human approval.",
+		"Proposal acceptance mutates Goalrail state by materializing planned WorkItems and requires explicit human acceptance.",
+		"Stop unless the human has explicitly approved proposal acceptance; after acceptance, inspect created WorkItems before checkout.",
+	)
+	return spine.NextAction{
+		Kind:                  "accept_proposal",
+		Blocking:              true,
+		Available:             proposalID != "",
+		Command:               fmt.Sprintf("goalrail work proposal accept --proposal-id %s --confirm-user-acceptance --format json", proposalID),
+		CommandPacket:         packet,
+		RequiresHumanApproval: boolPtr(true),
+		MutatesState:          boolPtr(true),
+		RelatedIDs: map[string]string{
+			"proposal_id": proposalID,
+		},
+	}
+}
+
+func planStatusAction(planID string) spine.NextAction {
+	argv := []string{"go", "run", "./cmd/goalrail", "work", "plan", "status", "--plan-id", planID, "--format", "json"}
+	packet := cliCommandPacket(
+		argv,
+		"Read WorkItemPlan status and proposal details.",
+		"Read-only plan status inspection; does not accept proposals or create WorkItems.",
+		"Review proposal details and stop for explicit proposal acceptance if a submitted proposal is present.",
+	)
+	return spine.NextAction{
+		Kind:          "review_plan_proposal",
+		Blocking:      true,
+		Available:     planID != "",
+		Command:       fmt.Sprintf("goalrail work plan status --plan-id %s --format json", planID),
+		CommandPacket: packet,
+		MutatesState:  boolPtr(false),
+		RelatedIDs: map[string]string{
+			"plan_id": planID,
+		},
+	}
+}
+
+func planningWorkerRequiredAction(serverURL string, planID string) spine.NextAction {
+	workerID := "goalrail-planner-" + shortID(planID)
+	argv := []string{"go", "run", "./cmd/goalrail-worker", "--server-url", serverURL, "--worker-id", workerID, "--once"}
+	packet := commandPacket(
+		workerModuleCWD,
+		argv,
+		"Run the planning worker once to produce a WorkItemPlanProposal.",
+		"Runs the planning worker once; it may acquire a plan lease and submit a proposal, but does not accept proposals, create WorkItems directly, checkout, execute, gate, proof, or verify work.",
+		"After the worker exits, inspect plan status before asking for proposal acceptance.",
+	)
+	return spine.NextAction{
+		Kind:          "planning_worker_required",
+		Blocking:      true,
+		Available:     true,
+		Command:       shellCommandFromPacket(packet),
+		CommandPacket: packet,
+		MutatesState:  boolPtr(true),
+		RelatedIDs: map[string]string{
+			"plan_id":   planID,
+			"worker_id": workerID,
+		},
+	}
+}
+
+func shortID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "unknown"
+	}
+	if index := strings.Index(id, "-"); index > 0 {
+		return id[:index]
+	}
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
+}
+
+func planStateResult(state string, planID string, proposalID string, serverURL string) (string, spine.NextAction) {
 	switch state {
 	case "queued":
-		return "A server-owned WorkItemPlan is queued. A planning worker is required to produce a proposal.", spine.NextAction{
-			Kind:      "planning_worker_required",
-			Blocking:  true,
-			Available: false,
-		}
+		return "A server-owned WorkItemPlan is queued. A planning worker is required to produce a proposal.", planningWorkerRequiredAction(serverURL, planID)
 	case "leased":
 		return "A server-owned WorkItemPlan is already leased. Planning is in progress and no proposal is available yet.", spine.NextAction{
 			Kind:      "planning_in_progress",
@@ -1445,18 +1606,10 @@ func planStateResult(state string, planID string, proposalID string) (string, sp
 			Available: false,
 		}
 	case "proposal_submitted":
-		action := spine.NextAction{
-			Kind:      "accept_proposal",
-			Blocking:  true,
-			Available: true,
-		}
 		if proposalID != "" {
-			action.Command = fmt.Sprintf("goalrail work proposal accept --proposal-id %s --confirm-user-acceptance --format json", proposalID)
-			return "A WorkItemPlan proposal is ready for user review and explicit acceptance.", action
+			return "A WorkItemPlan proposal is ready for user review and explicit acceptance.", proposalAcceptAction(proposalID)
 		}
-		action.Kind = "review_plan_proposal"
-		action.Command = fmt.Sprintf("goalrail work plan status --plan-id %s --format json", planID)
-		return "A WorkItemPlan proposal has been submitted. Read plan status to review proposal details before accepting.", action
+		return "A WorkItemPlan proposal has been submitted. Read plan status to review proposal details before accepting.", planStatusAction(planID)
 	case "accepted":
 		return "This WorkItemPlan has been accepted and planned WorkItems exist server-side. Agent-facing execution is not available yet.", spine.NextAction{
 			Kind:         "planned_workitems_ready",
@@ -1473,8 +1626,8 @@ func planStateResult(state string, planID string, proposalID string) (string, sp
 	}
 }
 
-func planStatusResult(state string, planID string, proposalID string) (string, spine.NextAction) {
-	return planStateResult(state, planID, proposalID)
+func planStatusResult(state string, planID string, proposalID string, serverURL string) (string, spine.NextAction) {
+	return planStateResult(state, planID, proposalID, serverURL)
 }
 
 func renderPlanNextActionText(kind string) string {

@@ -29,6 +29,7 @@ const (
 	serverMode             = "server"
 	cliSchemaVersion       = "goalrail.cli.v1"
 	maxContractUpdateBytes = 1 << 20
+	cliModuleCWD           = "apps/cli"
 )
 
 type SessionStore interface {
@@ -1381,6 +1382,63 @@ func buildUpdateOutput(config projectconfig.Config, serverURL string, contractRe
 	}
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func commandPacket(argv []string, description string, safetyNote string, stopCondition string) *spine.CommandPacket {
+	return &spine.CommandPacket{
+		CWD:           cliModuleCWD,
+		Argv:          append([]string(nil), argv...),
+		Description:   description,
+		SafetyNote:    safetyNote,
+		StopCondition: stopCondition,
+	}
+}
+
+func contractApproveNextAction(contractID spine.ContractID) spine.NextAction {
+	argv := []string{"go", "run", "./cmd/goalrail", "contract", "approve", "--contract-id", string(contractID), "--confirm-user-approval", "--format", "json"}
+	packet := commandPacket(
+		argv,
+		"Approve the submitted Contract after explicit human approval.",
+		"Contract approval mutates Goalrail state and must only run after the human has reviewed and approved the Contract.",
+		"Stop and ask the human for explicit approval before executing this command.",
+	)
+	return spine.NextAction{
+		Kind:                  "approve_contract",
+		Blocking:              true,
+		Available:             true,
+		Command:               fmt.Sprintf("goalrail contract approve --contract-id %s --confirm-user-approval --format json", contractID),
+		CommandPacket:         packet,
+		RequiresHumanApproval: boolPtr(true),
+		MutatesState:          boolPtr(true),
+		RelatedIDs: map[string]string{
+			"contract_id": string(contractID),
+		},
+	}
+}
+
+func workPlanNextAction(contractID spine.ContractID) spine.NextAction {
+	argv := []string{"go", "run", "./cmd/goalrail", "work", "plan", "--contract-id", string(contractID), "--format", "json"}
+	packet := commandPacket(
+		argv,
+		"Create or return a WorkItemPlan for the approved Contract.",
+		"Work planning mutates Goalrail planning state but does not run the planning worker, accept proposals, checkout, execute, gate, proof, or verify work.",
+		"Inspect the returned next_action and stop before running a planning worker unless the flow explicitly allows it.",
+	)
+	return spine.NextAction{
+		Kind:          "plan_work",
+		Blocking:      false,
+		Available:     true,
+		Command:       fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractID),
+		CommandPacket: packet,
+		MutatesState:  boolPtr(true),
+		RelatedIDs: map[string]string{
+			"contract_id": string(contractID),
+		},
+	}
+}
+
 func buildSubmitOutput(config projectconfig.Config, serverURL string, contractResponse contractDraftResponse) spine.ContractTransitionOutput {
 	return spine.ContractTransitionOutput{
 		SchemaVersion:   cliSchemaVersion,
@@ -1395,12 +1453,7 @@ func buildSubmitOutput(config projectconfig.Config, serverURL string, contractRe
 		Display: spine.DisplaySummary{
 			Summary: "Submitted Contract for explicit user approval. Ask the user to approve before calling approve.",
 		},
-		NextAction: spine.NextAction{
-			Kind:      "approve_contract",
-			Blocking:  true,
-			Available: true,
-			Command:   fmt.Sprintf("goalrail contract approve --contract-id %s --confirm-user-approval --format json", contractResponse.ID),
-		},
+		NextAction: contractApproveNextAction(contractResponse.ID),
 	}
 }
 
@@ -1418,12 +1471,7 @@ func buildApproveOutput(config projectconfig.Config, serverURL string, contractR
 		Display: spine.DisplaySummary{
 			Summary: "Approved Contract snapshot created. Create the queued WorkItemPlan next.",
 		},
-		NextAction: spine.NextAction{
-			Kind:      "plan_work",
-			Blocking:  false,
-			Available: true,
-			Command:   fmt.Sprintf("goalrail work plan --contract-id %s --format json", contractResponse.ID),
-		},
+		NextAction: workPlanNextAction(contractResponse.ID),
 	}
 }
 
