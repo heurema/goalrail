@@ -1163,6 +1163,15 @@ func TestRunSubmitMovesContractToApprovalReview(t *testing.T) {
 	if output.NextAction.Command != wantCommand {
 		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
 	}
+	if output.NextAction.RequiresHumanApproval == nil || !*output.NextAction.RequiresHumanApproval {
+		t.Fatalf("requires_human_approval = %#v, want true", output.NextAction.RequiresHumanApproval)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want true", output.NextAction.MutatesState)
+	}
+	if output.NextAction.CommandPacket == nil || !strings.Contains(output.NextAction.CommandPacket.SafetyNote, "must only run after the human") {
+		t.Fatalf("command_packet = %#v, want approval human-gate safety note", output.NextAction.CommandPacket)
+	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("submit request project/repo = %q/%q, want local marker context", request.ProjectID, request.RepoBindingID)
 	}
@@ -1251,6 +1260,15 @@ func TestRunApproveCreatesApprovedSnapshotAndExposesWorkPlan(t *testing.T) {
 	wantCommand := "goalrail work plan --contract-id 018f0000-0000-7000-8000-000000000009 --format json"
 	if output.NextAction.Command != wantCommand {
 		t.Fatalf("next_action.command = %q, want %q", output.NextAction.Command, wantCommand)
+	}
+	if output.NextAction.RequiresHumanApproval != nil {
+		t.Fatalf("requires_human_approval = %#v, want omitted for work plan", output.NextAction.RequiresHumanApproval)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want true", output.NextAction.MutatesState)
+	}
+	if output.NextAction.CommandPacket == nil || !strings.Contains(output.NextAction.CommandPacket.SafetyNote, "does not run the planning worker") {
+		t.Fatalf("command_packet = %#v, want work plan safety note", output.NextAction.CommandPacket)
 	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("approve request project/repo = %q/%q, want local marker context", request.ProjectID, request.RepoBindingID)

@@ -5,13 +5,26 @@ type DisplaySummary struct {
 }
 
 type NextAction struct {
-	Kind         string                     `json:"kind"`
-	Blocking     bool                       `json:"blocking"`
-	Command      string                     `json:"command,omitempty"`
-	Available    bool                       `json:"available"`
-	PlannedSlice string                     `json:"planned_slice,omitempty"`
-	RequestID    string                     `json:"request_id,omitempty"`
-	Questions    []ClarificationQuestionRef `json:"questions,omitempty"`
+	Kind                  string                     `json:"kind"`
+	Blocking              bool                       `json:"blocking"`
+	Command               string                     `json:"command,omitempty"`
+	Available             bool                       `json:"available"`
+	RequiresHumanApproval *bool                      `json:"requires_human_approval,omitempty"`
+	MutatesState          *bool                      `json:"mutates_state,omitempty"`
+	CommandPacket         *CommandPacket             `json:"command_packet,omitempty"`
+	RelatedIDs            map[string]string          `json:"related_ids,omitempty"`
+	PlannedSlice          string                     `json:"planned_slice,omitempty"`
+	RequestID             string                     `json:"request_id,omitempty"`
+	Questions             []ClarificationQuestionRef `json:"questions,omitempty"`
+}
+
+type CommandPacket struct {
+	CWD           string            `json:"cwd,omitempty"`
+	Argv          []string          `json:"argv"`
+	Env           map[string]string `json:"env,omitempty"`
+	Description   string            `json:"description,omitempty"`
+	SafetyNote    string            `json:"safety_note,omitempty"`
+	StopCondition string            `json:"stop_condition,omitempty"`
 }
 
 type ClarificationQuestionRef struct {

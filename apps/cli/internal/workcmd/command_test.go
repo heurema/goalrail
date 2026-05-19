@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -867,8 +868,14 @@ func TestRunPlanCreatesQueuedWorkItemPlan(t *testing.T) {
 	if output.Display.Summary == "" {
 		t.Fatal("display.summary is empty")
 	}
-	if output.NextAction.Kind != "planning_worker_required" || !output.NextAction.Blocking || output.NextAction.Available {
-		t.Fatalf("next_action = %#v, want unavailable blocking planning_worker_required", output.NextAction)
+	if output.NextAction.Kind != "planning_worker_required" || !output.NextAction.Blocking || !output.NextAction.Available {
+		t.Fatalf("next_action = %#v, want available blocking planning_worker_required", output.NextAction)
+	}
+	if output.NextAction.CommandPacket == nil || !reflect.DeepEqual(output.NextAction.CommandPacket.Argv, []string{"go", "run", "./cmd/goalrail-worker", "--server-url", server.URL, "--worker-id", "goalrail-planner-018f0000", "--once"}) {
+		t.Fatalf("command_packet = %#v, want one-shot worker argv", output.NextAction.CommandPacket)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want true", output.NextAction.MutatesState)
 	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("work plan request project/repo = %q/%q, want marker context", request.ProjectID, request.RepoBindingID)
@@ -895,6 +902,7 @@ func TestRunPlanMapsExistingPlanStatesHonestly(t *testing.T) {
 			planState: "queued",
 			nextKind:  "planning_worker_required",
 			blocking:  true,
+			available: true,
 		},
 		{
 			name:      "leased",
@@ -1148,7 +1156,7 @@ func TestRunPlanTextDoesNotClaimWorkerProposalOrProof(t *testing.T) {
 		t.Fatalf("Run(work plan text) error = %v", err)
 	}
 	got := stdout.String()
-	for _, forbidden := range []string{"proposal submitted", "created workitems", "workitems created", "run", "proof", "verified"} {
+	for _, forbidden := range []string{"proposal submitted", "created workitems", "workitems created", "proof", "verified"} {
 		if strings.Contains(strings.ToLower(got), forbidden) {
 			t.Fatalf("stdout = %q, want no %q claim", got, forbidden)
 		}
@@ -1204,6 +1212,15 @@ func TestRunPlanStatusReturnsSubmittedProposalAndAcceptNextAction(t *testing.T) 
 	}
 	if output.NextAction.Kind != "accept_proposal" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "--confirm-user-acceptance") {
 		t.Fatalf("next_action = %#v, want available explicit proposal accept", output.NextAction)
+	}
+	if output.NextAction.RequiresHumanApproval == nil || !*output.NextAction.RequiresHumanApproval {
+		t.Fatalf("requires_human_approval = %#v, want true", output.NextAction.RequiresHumanApproval)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want true", output.NextAction.MutatesState)
+	}
+	if output.NextAction.CommandPacket == nil || !strings.Contains(output.NextAction.CommandPacket.SafetyNote, "requires explicit human acceptance") {
+		t.Fatalf("command_packet = %#v, want proposal acceptance safety note", output.NextAction.CommandPacket)
 	}
 	if statusRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || statusRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("status request project/repo = %q/%q, want marker context", statusRequest.ProjectID, statusRequest.RepoBindingID)
@@ -1322,15 +1339,21 @@ func TestRunProposalAcceptCreatesPlannedWorkItemsNextUnavailable(t *testing.T) {
 	if output.ProposalID != "018f0000-0000-7000-8000-000000000302" || len(output.CreatedTaskIDs) != 1 {
 		t.Fatalf("proposal/tasks = %q/%d, want accepted proposal with task", output.ProposalID, len(output.CreatedTaskIDs))
 	}
-	if output.NextAction.Kind != "prepare_checkout" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401") {
-		t.Fatalf("next_action = %#v, want available checkout preparation next", output.NextAction)
+	if output.NextAction.Kind != "show_work_item" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "goalrail work item show --task-id 018f0000-0000-7000-8000-000000000401") {
+		t.Fatalf("next_action = %#v, want available WorkItem detail next", output.NextAction)
+	}
+	if output.NextAction.CommandPacket == nil || !reflect.DeepEqual(output.NextAction.CommandPacket.Argv, []string{"go", "run", "./cmd/goalrail", "work", "item", "show", "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "json"}) {
+		t.Fatalf("command_packet = %#v, want WorkItem show argv", output.NextAction.CommandPacket)
+	}
+	if output.NextAction.MutatesState == nil || *output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want false", output.NextAction.MutatesState)
 	}
 	if acceptRequest.ProjectID != "018f0000-0000-7000-8000-000000000003" || acceptRequest.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("accept request project/repo = %q/%q, want marker context", acceptRequest.ProjectID, acceptRequest.RepoBindingID)
 	}
 }
 
-func TestRenderProposalAcceptTextShowsAvailableCheckoutCommand(t *testing.T) {
+func TestRenderProposalAcceptTextShowsAvailableWorkItemShowCommand(t *testing.T) {
 	t.Parallel()
 
 	output := spine.WorkProposalAcceptOutput{
@@ -1347,17 +1370,17 @@ func TestRenderProposalAcceptTextShowsAvailableCheckoutCommand(t *testing.T) {
 			Summary: "Accepted proposal.",
 		},
 		NextAction: spine.NextAction{
-			Kind:      "prepare_checkout",
+			Kind:      "show_work_item",
 			Available: true,
-			Command:   "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json",
+			Command:   "goalrail work item show --task-id 018f0000-0000-7000-8000-000000000401 --format json",
 		},
 	}
 
 	got := renderProposalAcceptText(output)
-	if !strings.Contains(got, "Next: goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json") {
-		t.Fatalf("renderProposalAcceptText() = %q, want checkout command", got)
+	if !strings.Contains(got, "Next: goalrail work item show --task-id 018f0000-0000-7000-8000-000000000401 --format json") {
+		t.Fatalf("renderProposalAcceptText() = %q, want WorkItem show command", got)
 	}
-	if strings.Contains(got, "Next action: prepare a checkout job") {
+	if strings.Contains(got, "Next action: show_work_item") {
 		t.Fatalf("renderProposalAcceptText() = %q, want concrete command instead of generic next action", got)
 	}
 }
@@ -1415,6 +1438,12 @@ func TestRunWorkItemShowJSONReadsTaskDetail(t *testing.T) {
 	}
 	if output.NextAction.Kind != "prepare_checkout" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401") {
 		t.Fatalf("next_action = %#v, want checkout preparation guidance", output.NextAction)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState {
+		t.Fatalf("mutates_state = %#v, want true", output.NextAction.MutatesState)
+	}
+	if output.NextAction.CommandPacket == nil || !strings.Contains(output.NextAction.CommandPacket.SafetyNote, "was not run") {
+		t.Fatalf("command_packet = %#v, want checkout safety note", output.NextAction.CommandPacket)
 	}
 	if meCount.Load() != 1 || detailCount.Load() != 1 {
 		t.Fatalf("request counts me/detail = %d/%d, want 1/1", meCount.Load(), detailCount.Load())
