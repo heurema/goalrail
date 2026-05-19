@@ -16,7 +16,15 @@ func TestServiceGetsPlannedWorkItem(t *testing.T) {
 	if err := workItems.Create(context.Background(), created); err != nil {
 		t.Fatalf("workItems.Create() error = %v", err)
 	}
-	service := workitem.NewService(workItems)
+	contracts := newFakeContractStore()
+	contracts.contracts[created.ContractID] = spine.Contract{
+		ID:             created.ContractID,
+		OrganizationID: created.OrganizationID,
+		ProjectID:      created.ProjectID,
+		RepoBindingID:  created.RepoBindingID,
+		GoalID:         "goal-1",
+	}
+	service := workitem.NewService(workItems, contracts)
 
 	got, err := service.Get(context.Background(), created.ID)
 	if err != nil {
@@ -34,11 +42,68 @@ func TestServiceGetsPlannedWorkItem(t *testing.T) {
 }
 
 func TestServiceGetUnknownWorkItemReturnsNotFound(t *testing.T) {
-	service := workitem.NewService(newFakeWorkItemStore())
+	service := workitem.NewService(newFakeWorkItemStore(), nil)
 
 	_, err := service.Get(context.Background(), "missing")
 	if !errors.Is(err, workitem.ErrWorkItemNotFound) {
 		t.Fatalf("Get() error = %v, want ErrWorkItemNotFound", err)
+	}
+}
+
+func TestServiceGetsAuthorizedWorkItemDetail(t *testing.T) {
+	workItems := newFakeWorkItemStore()
+	created := validWorkItem()
+	if err := workItems.Create(context.Background(), created); err != nil {
+		t.Fatalf("workItems.Create() error = %v", err)
+	}
+	contracts := newFakeContractStore()
+	contracts.contracts[created.ContractID] = spine.Contract{
+		ID:             created.ContractID,
+		OrganizationID: created.OrganizationID,
+		ProjectID:      created.ProjectID,
+		RepoBindingID:  created.RepoBindingID,
+		GoalID:         "goal-1",
+	}
+	service := workitem.NewService(workItems, contracts)
+
+	got, err := service.GetDetail(context.Background(), created.ID, spine.WorkItemDetailRequest{
+		ProjectID:     created.ProjectID,
+		RepoBindingID: created.RepoBindingID,
+	}, spine.OrganizationMembership{
+		OrganizationID: created.OrganizationID,
+		State:          spine.EntityStateActive,
+	})
+	if err != nil {
+		t.Fatalf("GetDetail() error = %v", err)
+	}
+	if got.WorkItemID != created.ID || got.TaskID != created.ID || got.GoalID != "goal-1" {
+		t.Fatalf("GetDetail() identity = %#v, want work item/task id and goal", got)
+	}
+	if got.Title != created.Title || got.Summary != created.Summary || len(got.Scope) != 1 {
+		t.Fatalf("GetDetail() body = %#v, want WorkItem body fields", got)
+	}
+	if got.NextAction.Kind != "prepare_checkout" || !got.NextAction.Available {
+		t.Fatalf("GetDetail() next_action = %#v, want available checkout preparation", got.NextAction)
+	}
+}
+
+func TestServiceGetDetailRejectsWrongScope(t *testing.T) {
+	workItems := newFakeWorkItemStore()
+	created := validWorkItem()
+	if err := workItems.Create(context.Background(), created); err != nil {
+		t.Fatalf("workItems.Create() error = %v", err)
+	}
+	service := workitem.NewService(workItems, nil)
+	membership := spine.OrganizationMembership{
+		OrganizationID: created.OrganizationID,
+		State:          spine.EntityStateActive,
+	}
+
+	if _, err := service.GetDetail(context.Background(), created.ID, spine.WorkItemDetailRequest{ProjectID: "other-project"}, membership); !errors.Is(err, workitem.ErrProjectMismatch) {
+		t.Fatalf("GetDetail() project mismatch error = %v, want ErrProjectMismatch", err)
+	}
+	if _, err := service.GetDetail(context.Background(), created.ID, spine.WorkItemDetailRequest{}, spine.OrganizationMembership{OrganizationID: "other-org", State: spine.EntityStateActive}); !errors.Is(err, workitem.ErrOrganizationForbidden) {
+		t.Fatalf("GetDetail() org mismatch error = %v, want ErrOrganizationForbidden", err)
 	}
 }
 
@@ -84,4 +149,17 @@ func (s *fakeWorkItemStore) Create(_ context.Context, item spine.WorkItem) error
 func (s *fakeWorkItemStore) Get(_ context.Context, id spine.WorkItemID) (spine.WorkItem, bool, error) {
 	item, ok := s.items[id]
 	return item, ok, nil
+}
+
+type fakeContractStore struct {
+	contracts map[spine.ContractID]spine.Contract
+}
+
+func (s *fakeContractStore) Get(_ context.Context, id spine.ContractID) (spine.Contract, bool, error) {
+	contract, ok := s.contracts[id]
+	return contract, ok, nil
+}
+
+func newFakeContractStore() *fakeContractStore {
+	return &fakeContractStore{contracts: map[spine.ContractID]spine.Contract{}}
 }

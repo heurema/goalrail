@@ -551,14 +551,17 @@ func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 		}
 	}
 
-	getResponse := doJSON(t, server.router, http.MethodGet, "/v1/tasks/"+string(accepted.CreatedTaskIDs[0]), "")
+	getResponse := doJSON(t, server.router, http.MethodGet, "/v1/tasks/"+string(accepted.CreatedTaskIDs[0])+"?project_id=018f0000-0000-7000-8000-000000000003&repo_binding_id=018f0000-0000-7000-8000-000000000004", "")
 	if getResponse.code != http.StatusOK {
 		t.Fatalf("GET task status = %d, want %d: %s", getResponse.code, http.StatusOK, getResponse.body)
 	}
-	var task spine.WorkItem
+	var task spine.WorkItemDetail
 	decodeJSON(t, getResponse.body, &task)
-	if task.ID != accepted.CreatedTaskIDs[0] {
-		t.Fatalf("task id = %q, want %q", task.ID, accepted.CreatedTaskIDs[0])
+	if task.TaskID != accepted.CreatedTaskIDs[0] || task.WorkItemID != accepted.CreatedTaskIDs[0] {
+		t.Fatalf("task ids = %q/%q, want %q", task.TaskID, task.WorkItemID, accepted.CreatedTaskIDs[0])
+	}
+	if task.Title == "" || len(task.Scope) == 0 || task.PlanID != plan.ID || task.ProposalID != proposal.ID {
+		t.Fatalf("task detail = %#v, want materialized WorkItem detail", task)
 	}
 
 	storedPlan, _, _ := server.workItemPlans.Get(context.Background(), plan.ID)
@@ -575,6 +578,69 @@ func TestPostProposalAcceptanceCreatesDurableWorkItems(t *testing.T) {
 	if got := countEventType(server.events.Events(), workitem.EventTypeWorkItemCreated); got != 2 {
 		t.Fatalf("work_item.created events = %d, want 2", got)
 	}
+}
+
+func TestGetTaskDetailRequiresAuthAndContext(t *testing.T) {
+	server := testServer(t)
+	task := storedTaskFixture()
+	server.workItems.items[task.ID] = task
+	server.contracts.contracts[task.ContractID] = spine.Contract{
+		ID:             task.ContractID,
+		OrganizationID: task.OrganizationID,
+		ProjectID:      task.ProjectID,
+		RepoBindingID:  task.RepoBindingID,
+		GoalID:         "018f0000-0000-7000-8000-000000000006",
+	}
+	beforeEvents := len(server.events.Events())
+	path := "/v1/tasks/" + string(task.ID) + "?project_id=" + string(task.ProjectID) + "&repo_binding_id=" + string(task.RepoBindingID)
+
+	response := requestJSONWithHeaders(t, server.router, http.MethodGet, path, "", map[string]string{
+		"Authorization": "Bearer access-token",
+	})
+	if response.code != http.StatusOK {
+		t.Fatalf("GET task detail status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	var detail spine.WorkItemDetail
+	decodeJSON(t, response.body, &detail)
+	if detail.ID != task.ID || detail.WorkItemID != task.ID || detail.TaskID != task.ID {
+		t.Fatalf("detail identity = %#v, want task aliases", detail)
+	}
+	if detail.ProjectID != task.ProjectID || detail.RepoBindingID != task.RepoBindingID || detail.GoalID != "018f0000-0000-7000-8000-000000000006" {
+		t.Fatalf("detail lineage = %#v, want project/repo/goal lineage", detail)
+	}
+	if detail.Title != task.Title || detail.Summary != task.Summary || len(detail.Scope) != len(task.Scope) {
+		t.Fatalf("detail body = %#v, want stored WorkItem body", detail)
+	}
+	if detail.NextAction.Kind != "prepare_checkout" || !detail.NextAction.Available || !strings.Contains(detail.NextAction.Command, string(task.ID)) {
+		t.Fatalf("detail next_action = %#v, want checkout preparation guidance", detail.NextAction)
+	}
+	if len(server.workItems.items) != 1 || len(server.events.Events()) != beforeEvents {
+		t.Fatalf("GET task detail mutated state: work_items=%d events=%d/%d", len(server.workItems.items), len(server.events.Events()), beforeEvents)
+	}
+
+	missingAuth := testServerWithContinuationAuth(t, fakeHTTPAuthService{meErr: auth.ErrInvalidToken})
+	missingAuth.workItems.items[task.ID] = task
+	authResponse := requestJSONWithHeaders(t, missingAuth.router, http.MethodGet, path, "", nil)
+	assertErrorCode(t, authResponse, http.StatusUnauthorized, "unauthorized")
+
+	wrongOrg := testServerWithContinuationAuth(t, fakeHTTPAuthService{
+		profile: continuationAuthProfile("018f0000-0000-7000-8000-000000000099"),
+	})
+	wrongOrg.workItems.items[task.ID] = task
+	orgResponse := requestJSONWithHeaders(t, wrongOrg.router, http.MethodGet, path, "", map[string]string{
+		"Authorization": "Bearer access-token",
+	})
+	assertErrorCode(t, orgResponse, http.StatusForbidden, "forbidden")
+
+	projectMismatch := requestJSONWithHeaders(t, server.router, http.MethodGet, "/v1/tasks/"+string(task.ID)+"?project_id=018f0000-0000-7000-8000-000000000099&repo_binding_id="+string(task.RepoBindingID), "", map[string]string{
+		"Authorization": "Bearer access-token",
+	})
+	assertErrorCode(t, projectMismatch, http.StatusConflict, "project_context_mismatch")
+
+	unknown := requestJSONWithHeaders(t, server.router, http.MethodGet, "/v1/tasks/018f0000-0000-7000-8000-000000000999?project_id="+string(task.ProjectID)+"&repo_binding_id="+string(task.RepoBindingID), "", map[string]string{
+		"Authorization": "Bearer access-token",
+	})
+	assertErrorCode(t, unknown, http.StatusNotFound, "not_found")
 }
 
 func TestPostProposalAcceptanceRejectsDuplicateAndInvalidContext(t *testing.T) {
@@ -2689,6 +2755,33 @@ func createPlan(t *testing.T, server testServerDeps, contractID spine.ContractID
 	var plan spine.WorkItemPlan
 	decodeJSON(t, response.body, &plan)
 	return plan
+}
+
+func storedTaskFixture() spine.WorkItem {
+	orderIndex := 0
+	return spine.WorkItem{
+		ID:                   "018f0000-0000-7000-8000-000000000401",
+		OrganizationID:       "018f0000-0000-7000-8000-000000000002",
+		ProjectID:            "018f0000-0000-7000-8000-000000000003",
+		ContractID:           "018f0000-0000-7000-8000-000000000009",
+		ApprovedContractID:   "018f0000-0000-7000-8000-000000000010",
+		PlanID:               "018f0000-0000-7000-8000-000000000301",
+		ProposalID:           "018f0000-0000-7000-8000-000000000302",
+		RepoBindingID:        "018f0000-0000-7000-8000-000000000004",
+		Title:                "DOGFOOD-005: WorkItem detail visibility",
+		Summary:              "Add a read-only WorkItem detail command.",
+		Scope:                []string{"Add GET task detail surface", "Add goalrail work item show"},
+		AcceptanceRefs:       []string{"acceptance_criteria[0]"},
+		ProofExpectationRefs: []string{"proof_expectations[0]"},
+		Status:               spine.WorkItemStatusPlanned,
+		OwnerHint:            "cli",
+		OrderIndex:           &orderIndex,
+		SourceRefs: []spine.SourceRef{
+			{Kind: workitem.SourceRefKindApprovedContract, ID: "018f0000-0000-7000-8000-000000000010"},
+			{Kind: workitemplan.SourceRefKindProposal, ID: "018f0000-0000-7000-8000-000000000302"},
+		},
+		CreatedAt: testTime(),
+	}
 }
 
 func requestJSONWithHeaders(t *testing.T, handler http.Handler, method string, path string, body string, headers map[string]string) routeResponse {
