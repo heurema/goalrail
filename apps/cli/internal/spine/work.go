@@ -136,6 +136,34 @@ type WorkProposalAcceptOutput struct {
 	NextAction      NextAction     `json:"next_action"`
 }
 
+type WorkItemShowOutput struct {
+	SchemaVersion        string         `json:"schema_version"`
+	Mode                 string         `json:"mode"`
+	ServerURL            string         `json:"server_url"`
+	OrganizationID       string         `json:"organization_id"`
+	ProjectID            string         `json:"project_id"`
+	RepoBindingID        RepoBindingID  `json:"repo_binding_id"`
+	WorkItemID           string         `json:"work_item_id"`
+	TaskID               string         `json:"task_id"`
+	GoalID               string         `json:"goal_id,omitempty"`
+	ContractID           ContractID     `json:"contract_id"`
+	ApprovedContractID   string         `json:"approved_contract_id"`
+	PlanID               string         `json:"plan_id"`
+	ProposalID           string         `json:"proposal_id"`
+	Status               string         `json:"status"`
+	Title                string         `json:"title"`
+	Summary              string         `json:"summary"`
+	Scope                []string       `json:"scope"`
+	AcceptanceRefs       []string       `json:"acceptance_refs"`
+	ProofExpectationRefs []string       `json:"proof_expectation_refs"`
+	SourceRefs           []SourceRef    `json:"source_refs,omitempty"`
+	OwnerHint            string         `json:"owner_hint,omitempty"`
+	OrderIndex           *int           `json:"order_index,omitempty"`
+	LocalConfigPath      string         `json:"local_config_path"`
+	Display              DisplaySummary `json:"display"`
+	NextAction           NextAction     `json:"next_action"`
+}
+
 type CheckoutInstruction struct {
 	JobID              string        `json:"job_id"`
 	TaskID             string        `json:"task_id"`

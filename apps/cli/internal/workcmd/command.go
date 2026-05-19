@@ -77,6 +77,8 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 		return runPlan(ctx, out, workDir, args[1:], options)
 	case "proposal":
 		return runProposal(ctx, out, workDir, args[1:], options)
+	case "item":
+		return runItem(ctx, out, workDir, args[1:], options)
 	case "checkout":
 		return runCheckout(ctx, out, workDir, args[1:], options)
 	case "execution":
@@ -87,7 +89,7 @@ func RunWithOptions(ctx context.Context, out *term.Output, workDir string, args 
 }
 
 func Usage() string {
-	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n  checkout   prepare runner checkout instructions for planned WorkItems\n  execution  prepare execution jobs from checkout receipts\n\nRun goalrail work <command> --help for command usage.\n"
+	return "Usage: goalrail work <command> [options]\n\nCommands:\n  start      create a server-backed IntakeRecord and Goal from the local project marker\n  continue   reconcile Goal readiness and return the next action\n  answer     submit clarification answers and return the next action\n  plan       create, return, or inspect a server WorkItemPlan\n  proposal   review bridge commands for WorkItemPlanProposal state\n  item       inspect planned WorkItems without starting checkout or execution\n  checkout   prepare runner checkout instructions for planned WorkItems\n  execution  prepare execution jobs from checkout receipts\n\nRun goalrail work <command> --help for command usage.\n"
 }
 
 func StartUsage() string {
@@ -116,6 +118,14 @@ func ProposalUsage() string {
 
 func ProposalAcceptUsage() string {
 	return "Usage: goalrail work proposal accept --proposal-id <proposal_id> --confirm-user-acceptance [--format text|json]\n\nAccepts a submitted WorkItemPlanProposal after explicit user acceptance and materializes server-owned WorkItem(planned) records.\n\nThis command does not assign, claim, run, checkout, gate, proof, or verify work.\n"
+}
+
+func ItemUsage() string {
+	return "Usage: goalrail work item <command> [options]\n\nCommands:\n  show   inspect a materialized WorkItem without starting checkout or execution\n\nRun goalrail work item <command> --help for command usage.\n"
+}
+
+func ItemShowUsage() string {
+	return "Usage: goalrail work item show --task-id <task_id> [--format text|json]\n\nReads a materialized WorkItem using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command is read-only. It does not start checkout, prepare execution, create runs, gate, proof, verify, or complete work.\n"
 }
 
 func CheckoutUsage() string {
@@ -618,6 +628,73 @@ func runProposalAccept(ctx context.Context, out *term.Output, workDir string, ar
 	return err
 }
 
+func runItem(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if len(args) == 0 {
+		_, err := fmt.Fprint(out.Stdout, ItemUsage())
+		return err
+	}
+	switch args[0] {
+	case "--help", "-h":
+		_, err := fmt.Fprint(out.Stdout, ItemUsage())
+		return err
+	case "show":
+		return runItemShow(ctx, out, workDir, args[1:], options)
+	default:
+		return exitcode.UsageError(fmt.Errorf("unknown work item command %q", args[0]))
+	}
+}
+
+func runItemShow(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work item show", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	taskIDValue := flags.String("task-id", "", "work item/task ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, ItemShowUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedTaskID := strings.TrimSpace(*taskIDValue)
+	if normalizedTaskID == "" {
+		return exitcode.UsageError(errors.New("--task-id is required"))
+	}
+	if err := validateUUIDLike("task_id", normalizedTaskID); err != nil {
+		return err
+	}
+	normalizedTaskID = strings.ToLower(normalizedTaskID)
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	work, err := loadWorkContext(ctx, workDir, options, "work item show")
+	if err != nil {
+		return err
+	}
+	detail, err := getWorkItemDetail(ctx, work.Client, work.Session, normalizedTaskID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateWorkItemDetailContext(work.Config, normalizedTaskID, detail); err != nil {
+		return err
+	}
+	output := buildWorkItemShowOutput(work.Config, work.ServerURL, detail)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderWorkItemShowText(output))
+	return err
+}
+
 func runCheckout(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
 	if len(args) == 0 {
 		_, err := fmt.Fprint(out.Stdout, CheckoutUsage())
@@ -1012,6 +1089,50 @@ func renderProposalAcceptText(output spine.WorkProposalAcceptOutput) string {
 	return b.String()
 }
 
+func renderWorkItemShowText(output spine.WorkItemShowOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "WorkItem detail\n\n")
+	fmt.Fprintf(&b, "Identity / lineage\n")
+	fmt.Fprintf(&b, "- WorkItem: %s\n", output.WorkItemID)
+	fmt.Fprintf(&b, "- Task: %s\n", output.TaskID)
+	if output.GoalID != "" {
+		fmt.Fprintf(&b, "- Goal: %s\n", output.GoalID)
+	}
+	fmt.Fprintf(&b, "- Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "- Approved contract: %s\n", output.ApprovedContractID)
+	fmt.Fprintf(&b, "- Plan: %s\n", output.PlanID)
+	fmt.Fprintf(&b, "- Proposal: %s\n", output.ProposalID)
+	fmt.Fprintf(&b, "- Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "- Repo binding: %s\n", output.RepoBindingID)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "- Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\nStatus\n%s\n", output.Status)
+	fmt.Fprintf(&b, "\nTitle\n%s\n", output.Title)
+	fmt.Fprintf(&b, "\nSummary\n%s\n", output.Summary)
+	renderStringList(&b, "\nScope", output.Scope)
+	renderStringList(&b, "\nAcceptance refs", output.AcceptanceRefs)
+	renderStringList(&b, "\nProof expectation refs", output.ProofExpectationRefs)
+	renderSourceRefs(&b, "\nSource refs", output.SourceRefs)
+	if output.OwnerHint != "" {
+		fmt.Fprintf(&b, "\nOwner hint\n%s\n", output.OwnerHint)
+	}
+	if output.OrderIndex != nil {
+		fmt.Fprintf(&b, "\nOrder index\n%d\n", *output.OrderIndex)
+	}
+	fmt.Fprintf(&b, "\nRead-only note\nThis command is read-only. It did not start checkout, prepare execution, create runs, gate, proof, verify, or complete work.\n")
+	fmt.Fprintf(&b, "\nNext\n")
+	if output.Status == "planned" && output.NextAction.Available && output.NextAction.Command != "" {
+		fmt.Fprintf(&b, "Checkout preparation is the next normal stage for planned WorkItems, but it was not run by this command.\n")
+		fmt.Fprintf(&b, "Run only if the human/operator chooses: %s\n", output.NextAction.Command)
+	} else if output.NextAction.Kind != "" {
+		fmt.Fprintf(&b, "Next action: %s\n", output.NextAction.Kind)
+	} else {
+		fmt.Fprintf(&b, "No next action was returned.\n")
+	}
+	return b.String()
+}
+
 func renderCheckoutPrepareText(output spine.WorkCheckoutPrepareOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Checkout job prepared\n\n")
@@ -1057,6 +1178,32 @@ func renderExecutionPrepareText(output spine.WorkExecutionPrepareOutput) string 
 		}
 	}
 	return b.String()
+}
+
+func renderStringList(b *strings.Builder, title string, values []string) {
+	fmt.Fprintf(b, "%s\n", title)
+	if len(values) == 0 {
+		fmt.Fprintf(b, "- none\n")
+		return
+	}
+	for _, value := range values {
+		fmt.Fprintf(b, "- %s\n", value)
+	}
+}
+
+func renderSourceRefs(b *strings.Builder, title string, refs []spine.SourceRef) {
+	fmt.Fprintf(b, "%s\n", title)
+	if len(refs) == 0 {
+		fmt.Fprintf(b, "- none\n")
+		return
+	}
+	for _, ref := range refs {
+		if ref.Kind == "" {
+			fmt.Fprintf(b, "- %s\n", ref.ID)
+			continue
+		}
+		fmt.Fprintf(b, "- %s:%s\n", ref.Kind, ref.ID)
+	}
 }
 
 func renderContinueText(output spine.WorkContinueOutput) string {
@@ -1166,6 +1313,63 @@ func buildProposalAcceptOutput(config projectconfig.Config, serverURL string, ac
 			Available: len(taskIDs) > 0,
 			Command:   firstCheckoutCommand(taskIDs),
 		},
+	}
+}
+
+func buildWorkItemShowOutput(config projectconfig.Config, serverURL string, detail workItemDetailResponse) spine.WorkItemShowOutput {
+	workItemID := detail.WorkItemID
+	if strings.TrimSpace(workItemID) == "" {
+		workItemID = detail.ID
+	}
+	taskID := detail.TaskID
+	if strings.TrimSpace(taskID) == "" {
+		taskID = workItemID
+	}
+	if strings.TrimSpace(taskID) == "" {
+		taskID = detail.ID
+	}
+	nextAction := spine.NextAction{
+		Kind:      detail.NextAction.Kind,
+		Blocking:  detail.NextAction.Blocking,
+		Command:   detail.NextAction.Command,
+		Available: detail.NextAction.Available,
+	}
+	if nextAction.Kind == "" {
+		nextAction = spine.NextAction{
+			Kind:      "prepare_checkout",
+			Blocking:  false,
+			Available: detail.Status == "planned",
+			Command:   firstCheckoutCommand([]string{taskID}),
+		}
+	}
+	return spine.WorkItemShowOutput{
+		SchemaVersion:        cliSchemaVersion,
+		Mode:                 serverMode,
+		ServerURL:            serverURL,
+		OrganizationID:       config.OrganizationID,
+		ProjectID:            config.ProjectID,
+		RepoBindingID:        spine.RepoBindingID(config.RepoBindingID),
+		WorkItemID:           workItemID,
+		TaskID:               taskID,
+		GoalID:               detail.GoalID,
+		ContractID:           detail.ContractID,
+		ApprovedContractID:   detail.ApprovedContractID,
+		PlanID:               detail.PlanID,
+		ProposalID:           detail.ProposalID,
+		Status:               detail.Status,
+		Title:                detail.Title,
+		Summary:              detail.Summary,
+		Scope:                append([]string(nil), detail.Scope...),
+		AcceptanceRefs:       append([]string(nil), detail.AcceptanceRefs...),
+		ProofExpectationRefs: append([]string(nil), detail.ProofExpectationRefs...),
+		SourceRefs:           append([]spine.SourceRef(nil), detail.SourceRefs...),
+		OwnerHint:            detail.OwnerHint,
+		OrderIndex:           detail.OrderIndex,
+		LocalConfigPath:      projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: "Read WorkItem detail. This command is read-only and did not start checkout or execution.",
+		},
+		NextAction: nextAction,
 	}
 }
 
@@ -1562,6 +1766,41 @@ func validateProposalAcceptanceContext(proposalID string, accepted workPlanAccep
 	return nil
 }
 
+func validateWorkItemDetailContext(config projectconfig.Config, taskID string, detail workItemDetailResponse) error {
+	responseTaskID := detail.TaskID
+	if strings.TrimSpace(responseTaskID) == "" {
+		responseTaskID = detail.WorkItemID
+	}
+	if strings.TrimSpace(responseTaskID) == "" {
+		responseTaskID = detail.ID
+	}
+	if !sameUUIDText(responseTaskID, taskID) {
+		return exitcode.ValidationError(errors.New("work item detail response task_id does not match requested WorkItem"))
+	}
+	if detail.WorkItemID != "" && !sameUUIDText(detail.WorkItemID, taskID) {
+		return exitcode.ValidationError(errors.New("work item detail response work_item_id does not match requested WorkItem"))
+	}
+	if detail.ProjectID != "" && detail.ProjectID != config.ProjectID {
+		return exitcode.ValidationError(errors.New("work item detail response project_id does not match local .goalrail/project.yml; run this command from the repository bound to the WorkItem"))
+	}
+	if detail.RepoBindingID != "" && string(detail.RepoBindingID) != config.RepoBindingID {
+		return exitcode.ValidationError(errors.New("work item detail response repo_binding_id does not match local .goalrail/project.yml; run this command from the repository bound to the WorkItem"))
+	}
+	if strings.TrimSpace(string(detail.ContractID)) == "" {
+		return exitcode.RuntimeError(errors.New("work item detail response did not include contract_id"))
+	}
+	if strings.TrimSpace(detail.PlanID) == "" {
+		return exitcode.RuntimeError(errors.New("work item detail response did not include plan_id"))
+	}
+	if strings.TrimSpace(detail.ProposalID) == "" {
+		return exitcode.RuntimeError(errors.New("work item detail response did not include proposal_id"))
+	}
+	if strings.TrimSpace(detail.Status) == "" {
+		return exitcode.RuntimeError(errors.New("work item detail response did not include status"))
+	}
+	return nil
+}
+
 func validateCheckoutJobContext(config projectconfig.Config, taskID string, job checkoutJobResponse) error {
 	if !sameUUIDText(job.TaskID, taskID) {
 		return exitcode.ValidationError(errors.New("checkout job response task_id does not match requested WorkItem"))
@@ -1845,6 +2084,37 @@ func postProposalAcceptance(ctx context.Context, client HTTPClient, session auth
 	return decoded, nil
 }
 
+func getWorkItemDetail(ctx context.Context, client HTTPClient, session authstore.Session, taskID string, config projectconfig.Config) (workItemDetailResponse, error) {
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	values := url.Values{}
+	values.Set("project_id", config.ProjectID)
+	values.Set("repo_binding_id", config.RepoBindingID)
+	endpoint := serverURL + "/v1/tasks/" + url.PathEscape(taskID) + "?" + values.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return workItemDetailResponse{}, exitcode.RuntimeError(fmt.Errorf("build work item detail request: %w", err))
+	}
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return workItemDetailResponse{}, exitcode.RuntimeError(fmt.Errorf("load work item detail on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return workItemDetailResponse{}, mapHTTPError("work item detail request", response, serverURL)
+	}
+	var decoded workItemDetailResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return workItemDetailResponse{}, exitcode.RuntimeError(fmt.Errorf("decode work item detail response: %w", err))
+	}
+	if strings.TrimSpace(decoded.TaskID) == "" && strings.TrimSpace(decoded.WorkItemID) == "" && strings.TrimSpace(decoded.ID) == "" {
+		return workItemDetailResponse{}, exitcode.RuntimeError(errors.New("work item detail response did not include task_id"))
+	}
+	return decoded, nil
+}
+
 func postCheckoutJob(ctx context.Context, client HTTPClient, session authstore.Session, taskID string, config projectconfig.Config) (checkoutJobResponse, error) {
 	payload := workPlanCreateRequest{
 		ProjectID:     config.ProjectID,
@@ -2124,6 +2394,37 @@ type workPlanAcceptanceResponse struct {
 	ContractID     spine.ContractID `json:"contract_id"`
 	State          string           `json:"state"`
 	CreatedTaskIDs []string         `json:"created_task_ids"`
+}
+
+type workItemNextActionResponse struct {
+	Kind      string `json:"kind"`
+	Blocking  bool   `json:"blocking"`
+	Command   string `json:"command,omitempty"`
+	Available bool   `json:"available"`
+}
+
+type workItemDetailResponse struct {
+	ID                   string                     `json:"id"`
+	WorkItemID           string                     `json:"work_item_id"`
+	TaskID               string                     `json:"task_id"`
+	OrganizationID       string                     `json:"organization_id,omitempty"`
+	ProjectID            string                     `json:"project_id,omitempty"`
+	GoalID               string                     `json:"goal_id,omitempty"`
+	ContractID           spine.ContractID           `json:"contract_id"`
+	ApprovedContractID   string                     `json:"approved_contract_id"`
+	PlanID               string                     `json:"plan_id"`
+	ProposalID           string                     `json:"proposal_id"`
+	RepoBindingID        spine.RepoBindingID        `json:"repo_binding_id"`
+	Status               string                     `json:"status"`
+	Title                string                     `json:"title"`
+	Summary              string                     `json:"summary"`
+	Scope                []string                   `json:"scope"`
+	AcceptanceRefs       []string                   `json:"acceptance_refs"`
+	ProofExpectationRefs []string                   `json:"proof_expectation_refs"`
+	SourceRefs           []spine.SourceRef          `json:"source_refs,omitempty"`
+	OwnerHint            string                     `json:"owner_hint,omitempty"`
+	OrderIndex           *int                       `json:"order_index,omitempty"`
+	NextAction           workItemNextActionResponse `json:"next_action"`
 }
 
 type checkoutJobResponse struct {

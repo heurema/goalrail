@@ -1362,6 +1362,145 @@ func TestRenderProposalAcceptTextShowsAvailableCheckoutCommand(t *testing.T) {
 	}
 }
 
+func TestRunWorkItemShowJSONReadsTaskDetail(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	var meCount, detailCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token" {
+			t.Errorf("Authorization = %q, want bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			meCount.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401":
+			detailCount.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/tasks/{id} method = %s", r.Method)
+			}
+			if r.URL.Query().Get("project_id") != "018f0000-0000-7000-8000-000000000003" || r.URL.Query().Get("repo_binding_id") != "018f0000-0000-7000-8000-000000000004" {
+				t.Errorf("query project/repo = %q/%q, want marker context", r.URL.Query().Get("project_id"), r.URL.Query().Get("repo_binding_id"))
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000401","work_item_id":"018f0000-0000-7000-8000-000000000401","task_id":"018f0000-0000-7000-8000-000000000401","project_id":"018f0000-0000-7000-8000-000000000003","goal_id":"018f0000-0000-7000-8000-000000000006","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","status":"planned","title":"DOGFOOD-005: WorkItem detail visibility","summary":"Add read-only WorkItem detail visibility.","scope":["Add GET task detail surface","Add goalrail work item show"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"source_refs":[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000010"}],"owner_hint":"cli","order_index":0,"next_action":{"kind":"prepare_checkout","blocking":false,"available":true,"command":"goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401/checkout-jobs", "/v1/tasks/018f0000-0000-7000-8000-000000000401/execution-jobs":
+			t.Errorf("work item show unexpectedly called mutation endpoint %s", r.URL.Path)
+			http.NotFound(w, r)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	output, err := runWorkItemShowJSON(t, repoDir, fakeSessionStore{session: validSession(server.URL)}, "--task-id", "018F0000-0000-7000-8000-000000000401", "--format", "json")
+	if err != nil {
+		t.Fatalf("Run(work item show) error = %v", err)
+	}
+	if output.SchemaVersion != "goalrail.cli.v1" || output.TaskID != "018f0000-0000-7000-8000-000000000401" || output.WorkItemID != output.TaskID {
+		t.Fatalf("output identity = %#v, want work item detail envelope", output)
+	}
+	if output.GoalID != "018f0000-0000-7000-8000-000000000006" || output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.PlanID == "" || output.ProposalID == "" {
+		t.Fatalf("output lineage = %#v, want contract/goal/plan/proposal lineage", output)
+	}
+	if output.Title != "DOGFOOD-005: WorkItem detail visibility" || len(output.Scope) != 2 || len(output.AcceptanceRefs) != 1 || len(output.ProofExpectationRefs) != 1 {
+		t.Fatalf("output body = %#v, want WorkItem delivery fields", output)
+	}
+	if output.NextAction.Kind != "prepare_checkout" || !output.NextAction.Available || !strings.Contains(output.NextAction.Command, "goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401") {
+		t.Fatalf("next_action = %#v, want checkout preparation guidance", output.NextAction)
+	}
+	if meCount.Load() != 1 || detailCount.Load() != 1 {
+		t.Fatalf("request counts me/detail = %d/%d, want 1/1", meCount.Load(), detailCount.Load())
+	}
+}
+
+func TestRunWorkItemShowTextIncludesReadOnlyNote(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401":
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/tasks/{id} method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000401","work_item_id":"018f0000-0000-7000-8000-000000000401","task_id":"018f0000-0000-7000-8000-000000000401","project_id":"018f0000-0000-7000-8000-000000000003","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","status":"planned","title":"DOGFOOD-005: WorkItem detail visibility","summary":"Add read-only WorkItem detail visibility.","scope":["Add goalrail work item show"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"next_action":{"kind":"prepare_checkout","blocking":false,"available":true,"command":"goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"item", "show", "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "text"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work item show text) error = %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"WorkItem detail",
+		"Identity / lineage",
+		"Read-only note",
+		"did not start checkout",
+		"goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("text output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRunWorkItemShowRequiresTaskID(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"item", "show", "--format", "json"}, Options{
+		Store: fakeSessionStore{session: validSession("https://goalrail.example")},
+	})
+	if err == nil {
+		t.Fatal("Run(work item show without task-id) error = nil, want usage error")
+	}
+	if exitcode.ForError(err) != exitcode.Usage {
+		t.Fatalf("exit code = %d, want usage: %v", exitcode.ForError(err), err)
+	}
+}
+
+func TestRunWorkItemHelpUsage(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr bytes.Buffer
+	if err := Run(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"item", "--help"}); err != nil {
+		t.Fatalf("Run(work item --help) error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "show   inspect a materialized WorkItem") {
+		t.Fatalf("item help = %q, want show command", stdout.String())
+	}
+	stdout.Reset()
+	if err := Run(context.Background(), term.New(&stdout, &stderr), t.TempDir(), []string{"item", "show", "--help"}); err != nil {
+		t.Fatalf("Run(work item show --help) error = %v", err)
+	}
+	if !strings.Contains(stdout.String(), "read-only") {
+		t.Fatalf("item show help = %q, want read-only note", stdout.String())
+	}
+}
+
 func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -1775,6 +1914,27 @@ func runProposalAcceptJSON(t *testing.T, workDir string, store fakeSessionStore,
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&output); err != nil {
 		t.Fatalf("decode work proposal accept JSON %q: %v", stdout.String(), err)
+	}
+	return output, nil
+}
+
+func runWorkItemShowJSON(t *testing.T, workDir string, store fakeSessionStore, args ...string) (spine.WorkItemShowOutput, error) {
+	t.Helper()
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), workDir, append([]string{"item", "show"}, args...), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		return spine.WorkItemShowOutput{}, err
+	}
+
+	var output spine.WorkItemShowOutput
+	decoder := json.NewDecoder(&stdout)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work item show JSON %q: %v", stdout.String(), err)
 	}
 	return output, nil
 }
