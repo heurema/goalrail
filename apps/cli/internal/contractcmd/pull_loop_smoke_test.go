@@ -220,11 +220,17 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 	if checkoutPrepared.TaskID != smokeWorkItemID || checkoutPrepared.CheckoutJobID != smokeCheckoutJobID || checkoutPrepared.CheckoutJobState != "queued" {
 		t.Fatalf("checkout prepare output = %#v, want queued checkout job for planned WorkItem", checkoutPrepared)
 	}
+	if checkoutPrepared.WorkItemID != smokeWorkItemID || checkoutPrepared.GoalID != smokeGoalID || string(checkoutPrepared.ContractID) != smokeContractID || checkoutPrepared.ApprovedContractID != smokeApprovedSnapshotID || checkoutPrepared.PlanID != smokePlanID || checkoutPrepared.ProposalID != smokeProposalID {
+		t.Fatalf("checkout prepare lineage = %#v, want work item and planning lineage", checkoutPrepared)
+	}
 	if checkoutPrepared.Instruction.JobID != smokeCheckoutJobID || checkoutPrepared.Instruction.TaskID != smokeWorkItemID || checkoutPrepared.Instruction.RepoBindingID != spine.RepoBindingID(smokeRepoBindingID) {
 		t.Fatalf("checkout instruction identity = %#v, want job/task/repo-bound instruction", checkoutPrepared.Instruction)
 	}
 	if checkoutPrepared.Instruction.RepositoryFullName != "heurema/goalrail" || checkoutPrepared.Instruction.WorkflowBaseBranch != "main" || checkoutPrepared.Instruction.RawSourceUploaded {
 		t.Fatalf("checkout instruction repository/raw-source = %#v, want metadata-only instruction", checkoutPrepared.Instruction)
+	}
+	if checkoutPrepared.NextAction.CommandPacket != nil || checkoutPrepared.NextAction.MutatesState == nil || !*checkoutPrepared.NextAction.MutatesState || checkoutPrepared.NextAction.RequiresHumanApproval == nil || !*checkoutPrepared.NextAction.RequiresHumanApproval || checkoutPrepared.NextAction.SafetyNote == "" || checkoutPrepared.NextAction.StopCondition == "" {
+		t.Fatalf("checkout runner handoff next_action = %#v, want explicit boundary metadata without fabricated command packet", checkoutPrepared.NextAction)
 	}
 
 	var executionPrepared spine.WorkExecutionPrepareOutput
@@ -245,6 +251,7 @@ func TestAgentPullLoopCLISmokeThroughWorkItemPlanned(t *testing.T) {
 	server.AssertCalled(t, http.MethodPost, "/v1/contracts/"+smokeContractID+"/plans", 1)
 	server.AssertCalled(t, http.MethodPost, "/v1/plans/"+smokePlanID+"/status", 1)
 	server.AssertCalled(t, http.MethodPost, "/v1/proposals/"+smokeProposalID+"/acceptance", 1)
+	server.AssertCalled(t, http.MethodGet, "/v1/tasks/"+smokeWorkItemID, 1)
 	server.AssertCalled(t, http.MethodPost, "/v1/tasks/"+smokeWorkItemID+"/checkout-jobs", 1)
 	server.AssertCalled(t, http.MethodPost, "/v1/tasks/"+smokeWorkItemID+"/execution-jobs", 1)
 }
@@ -373,7 +380,7 @@ func (s *pullLoopSmokeServer) AssertNoForbiddenCalls(t *testing.T) {
 func (s *pullLoopSmokeServer) handle(w http.ResponseWriter, r *http.Request) {
 	s.record(r)
 
-	if isForbiddenSmokePath(r.URL.Path) && r.URL.Path != "/v1/tasks/"+smokeWorkItemID+"/checkout-jobs" && r.URL.Path != "/v1/tasks/"+smokeWorkItemID+"/execution-jobs" {
+	if isForbiddenSmokePath(r.URL.Path) && r.URL.Path != "/v1/tasks/"+smokeWorkItemID && r.URL.Path != "/v1/tasks/"+smokeWorkItemID+"/checkout-jobs" && r.URL.Path != "/v1/tasks/"+smokeWorkItemID+"/execution-jobs" {
 		s.recordForbidden(r)
 		http.Error(w, "forbidden smoke path", http.StatusInternalServerError)
 		return
@@ -488,6 +495,12 @@ func (s *pullLoopSmokeServer) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeSmokeJSON(w, http.StatusCreated, `{"proposal_id":"`+smokeProposalID+`","plan_id":"`+smokePlanID+`","contract_id":"`+smokeContractID+`","state":"accepted","created_task_ids":["`+smokeWorkItemID+`"]}`)
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/tasks/"+smokeWorkItemID:
+		if r.URL.Query().Get("project_id") != smokeProjectID || r.URL.Query().Get("repo_binding_id") != smokeRepoBindingID {
+			http.Error(w, "bad work item query", http.StatusBadRequest)
+			return
+		}
+		writeSmokeJSON(w, http.StatusOK, smokeWorkItemJSON())
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks/"+smokeWorkItemID+"/checkout-jobs":
 		if !decodeSmokeTransition(w, r) {
 			return
@@ -575,6 +588,10 @@ func smokePlanJSON(state string) string {
 
 func smokeProposalJSON() string {
 	return `{"id":"` + smokeProposalID + `","plan_id":"` + smokePlanID + `","contract_id":"` + smokeContractID + `","approved_contract_id":"` + smokeApprovedSnapshotID + `","repo_binding_id":"` + smokeRepoBindingID + `","state":"submitted","proposed_tasks":[{"title":"Refactor CSV export filters","summary":"Refactor duplicate filter construction while preserving current behavior.","scope":["Update export filter construction"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"order_index":0}]}`
+}
+
+func smokeWorkItemJSON() string {
+	return `{"id":"` + smokeWorkItemID + `","work_item_id":"` + smokeWorkItemID + `","task_id":"` + smokeWorkItemID + `","project_id":"` + smokeProjectID + `","goal_id":"` + smokeGoalID + `","contract_id":"` + smokeContractID + `","approved_contract_id":"` + smokeApprovedSnapshotID + `","plan_id":"` + smokePlanID + `","proposal_id":"` + smokeProposalID + `","repo_binding_id":"` + smokeRepoBindingID + `","status":"planned","title":"Refactor CSV export filters","summary":"Refactor duplicate filter construction while preserving current behavior.","scope":["Update export filter construction"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"source_refs":[{"kind":"approved_contract","id":"` + smokeApprovedSnapshotID + `"}],"next_action":{"kind":"prepare_checkout","blocking":false,"available":true,"command":"goalrail work checkout prepare --task-id ` + smokeWorkItemID + ` --format json"}}`
 }
 
 func smokeCheckoutJobJSON(state string) string {

@@ -1607,7 +1607,7 @@ func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	requireGit(t)
 
 	repoDir := setupGitRepo(t)
-	var meCount, checkoutCount atomic.Int32
+	var meCount, taskCount, checkoutCount atomic.Int32
 	var request workPlanCreateRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer access-token" {
@@ -1620,6 +1620,13 @@ func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 			meCount.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401":
+			taskCount.Add(1)
+			if r.Method != http.MethodGet {
+				t.Errorf("GET /v1/tasks/{id} method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000401","work_item_id":"018f0000-0000-7000-8000-000000000401","task_id":"018f0000-0000-7000-8000-000000000401","project_id":"018f0000-0000-7000-8000-000000000003","goal_id":"018f0000-0000-7000-8000-000000000006","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","status":"planned","title":"DOGFOOD-009: Checkout prepare handoff visibility","summary":"Improve checkout handoff visibility.","scope":["Expose checkout job identity"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"source_refs":[{"kind":"approved_contract","id":"018f0000-0000-7000-8000-000000000010"}],"next_action":{"kind":"prepare_checkout","blocking":false,"available":true,"command":"goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json"}}`))
 		case "/v1/tasks/018f0000-0000-7000-8000-000000000401/checkout-jobs":
 			checkoutCount.Add(1)
 			if r.Method != http.MethodPost {
@@ -1650,17 +1657,87 @@ func TestRunCheckoutPrepareCreatesCheckoutJob(t *testing.T) {
 	if output.SchemaVersion != "goalrail.cli.v1" || output.TaskID != "018f0000-0000-7000-8000-000000000401" || output.CheckoutJobID != "018f0000-0000-7000-8000-000000000501" {
 		t.Fatalf("output = %#v, want checkout job envelope", output)
 	}
+	if output.WorkItemID != output.TaskID || output.GoalID != "018f0000-0000-7000-8000-000000000006" || output.ContractID != "018f0000-0000-7000-8000-000000000009" || output.ApprovedContractID != "018f0000-0000-7000-8000-000000000010" || output.PlanID != "018f0000-0000-7000-8000-000000000301" || output.ProposalID != "018f0000-0000-7000-8000-000000000302" {
+		t.Fatalf("lineage = work_item:%q goal:%q contract:%q approved:%q plan:%q proposal:%q, want WorkItem lineage", output.WorkItemID, output.GoalID, output.ContractID, output.ApprovedContractID, output.PlanID, output.ProposalID)
+	}
 	if output.Instruction.RawSourceUploaded || output.Instruction.RepositoryFullName != "heurema/goalrail" {
 		t.Fatalf("instruction = %#v, want no raw source and repository metadata", output.Instruction)
+	}
+	if output.AuthSession == nil || output.AuthSession.ServerURL != server.URL || !output.AuthSession.UsedStoredAccessToken {
+		t.Fatalf("auth_session = %#v, want non-secret stored session metadata", output.AuthSession)
 	}
 	if output.NextAction.Kind != "runner_checkout_required" || !output.NextAction.Blocking || output.NextAction.Available {
 		t.Fatalf("next_action = %#v, want unavailable runner checkout requirement", output.NextAction)
 	}
+	if output.NextAction.CommandPacket != nil {
+		t.Fatalf("next_action.command_packet = %#v, want nil because no runner checkout CLI command exists", output.NextAction.CommandPacket)
+	}
+	if output.NextAction.MutatesState == nil || !*output.NextAction.MutatesState || output.NextAction.RequiresHumanApproval == nil || !*output.NextAction.RequiresHumanApproval {
+		t.Fatalf("next_action mutation/human flags = %#v/%#v, want conservative runner boundary", output.NextAction.MutatesState, output.NextAction.RequiresHumanApproval)
+	}
+	if !strings.Contains(output.NextAction.SafetyNote, "did not run runner checkout") || !strings.Contains(output.NextAction.StopCondition, "approved Contract") {
+		t.Fatalf("next_action safety = %q stop = %q, want explicit runner boundary", output.NextAction.SafetyNote, output.NextAction.StopCondition)
+	}
+	if output.NextAction.RelatedIDs["checkout_job_id"] != "018f0000-0000-7000-8000-000000000501" || output.NextAction.RelatedIDs["work_item_id"] != output.WorkItemID || output.NextAction.RelatedIDs["contract_id"] != string(output.ContractID) || output.NextAction.RelatedIDs["plan_id"] != output.PlanID {
+		t.Fatalf("next_action.related_ids = %#v, want checkout, WorkItem, and lineage IDs", output.NextAction.RelatedIDs)
+	}
 	if request.ProjectID != "018f0000-0000-7000-8000-000000000003" || request.RepoBindingID != "018f0000-0000-7000-8000-000000000004" {
 		t.Fatalf("checkout request project/repo = %q/%q, want marker context", request.ProjectID, request.RepoBindingID)
 	}
-	if meCount.Load() != 1 || checkoutCount.Load() != 1 {
-		t.Fatalf("request counts me/checkout = %d/%d, want 1/1", meCount.Load(), checkoutCount.Load())
+	if meCount.Load() != 1 || taskCount.Load() != 1 || checkoutCount.Load() != 1 {
+		t.Fatalf("request counts me/task/checkout = %d/%d/%d, want 1/1/1", meCount.Load(), taskCount.Load(), checkoutCount.Load())
+	}
+}
+
+func TestRunCheckoutPrepareTextShowsRunnerBoundary(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000401","work_item_id":"018f0000-0000-7000-8000-000000000401","task_id":"018f0000-0000-7000-8000-000000000401","project_id":"018f0000-0000-7000-8000-000000000003","goal_id":"018f0000-0000-7000-8000-000000000006","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","status":"planned","title":"DOGFOOD-009: Checkout prepare handoff visibility","summary":"Improve checkout handoff visibility.","scope":["Expose checkout job identity"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"next_action":{"kind":"prepare_checkout","blocking":false,"available":true}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401/checkout-jobs":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000501","task_id":"018f0000-0000-7000-8000-000000000401","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","state":"queued","instruction":{"job_id":"018f0000-0000-7000-8000-000000000501","task_id":"018f0000-0000-7000-8000-000000000401","repo_binding_id":"018f0000-0000-7000-8000-000000000004","access_mode":"metadata_only","provider":"github","repository_full_name":"heurema/goalrail","repository_url":"https://github.com/heurema/goalrail","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"018f0000-0000-7000-8000-000000000401"},"raw_source_uploaded":false}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"checkout", "prepare", "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "text"}, Options{
+		Store: fakeSessionStore{session: validSession(server.URL)},
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work checkout prepare text) error = %v", err)
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"Checkout job prepared",
+		"Identity / lineage",
+		"Checkout instruction",
+		"WorkItem: 018f0000-0000-7000-8000-000000000401",
+		"Goal: 018f0000-0000-7000-8000-000000000006",
+		"Contract: 018f0000-0000-7000-8000-000000000009",
+		"Repository: heurema/goalrail",
+		"Runner handoff",
+		"Runner checkout, execution preparation, gate, proof, verification, and completion were not run.",
+		"No runner command packet is available",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("text output missing %q:\n%s", want, got)
+		}
 	}
 }
 

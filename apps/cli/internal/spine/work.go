@@ -11,6 +11,8 @@ type NextAction struct {
 	Available             bool                       `json:"available"`
 	RequiresHumanApproval *bool                      `json:"requires_human_approval,omitempty"`
 	MutatesState          *bool                      `json:"mutates_state,omitempty"`
+	SafetyNote            string                     `json:"safety_note,omitempty"`
+	StopCondition         string                     `json:"stop_condition,omitempty"`
 	CommandPacket         *CommandPacket             `json:"command_packet,omitempty"`
 	RelatedIDs            map[string]string          `json:"related_ids,omitempty"`
 	PlannedSlice          string                     `json:"planned_slice,omitempty"`
@@ -199,20 +201,26 @@ type CheckoutInstruction struct {
 }
 
 type WorkCheckoutPrepareOutput struct {
-	SchemaVersion    string               `json:"schema_version"`
-	Mode             string               `json:"mode"`
-	ServerURL        string               `json:"server_url"`
-	AuthSession      *AuthSessionMetadata `json:"auth_session,omitempty"`
-	OrganizationID   string               `json:"organization_id"`
-	ProjectID        string               `json:"project_id"`
-	RepoBindingID    RepoBindingID        `json:"repo_binding_id"`
-	TaskID           string               `json:"task_id"`
-	CheckoutJobID    string               `json:"checkout_job_id"`
-	CheckoutJobState string               `json:"checkout_job_state"`
-	Instruction      CheckoutInstruction  `json:"instruction"`
-	LocalConfigPath  string               `json:"local_config_path"`
-	Display          DisplaySummary       `json:"display"`
-	NextAction       NextAction           `json:"next_action"`
+	SchemaVersion      string               `json:"schema_version"`
+	Mode               string               `json:"mode"`
+	ServerURL          string               `json:"server_url"`
+	AuthSession        *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID     string               `json:"organization_id"`
+	ProjectID          string               `json:"project_id"`
+	RepoBindingID      RepoBindingID        `json:"repo_binding_id"`
+	TaskID             string               `json:"task_id"`
+	WorkItemID         string               `json:"work_item_id"`
+	GoalID             string               `json:"goal_id,omitempty"`
+	ContractID         ContractID           `json:"contract_id"`
+	ApprovedContractID string               `json:"approved_contract_id"`
+	PlanID             string               `json:"plan_id"`
+	ProposalID         string               `json:"proposal_id"`
+	CheckoutJobID      string               `json:"checkout_job_id"`
+	CheckoutJobState   string               `json:"checkout_job_state"`
+	Instruction        CheckoutInstruction  `json:"instruction"`
+	LocalConfigPath    string               `json:"local_config_path"`
+	Display            DisplaySummary       `json:"display"`
+	NextAction         NextAction           `json:"next_action"`
 }
 
 type WorkExecutionPrepareOutput struct {
