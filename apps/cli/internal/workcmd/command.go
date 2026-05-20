@@ -759,6 +759,14 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 		return err
 	}
 
+	detail, err := getWorkItemDetail(ctx, work.Client, work.Session, normalizedTaskID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateWorkItemDetailContext(work.Config, normalizedTaskID, detail); err != nil {
+		return err
+	}
+
 	job, err := postCheckoutJob(ctx, work.Client, work.Session, normalizedTaskID, work.Config)
 	if err != nil {
 		return err
@@ -767,7 +775,7 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 		return err
 	}
 
-	output := buildCheckoutPrepareOutput(work.Config, work.ServerURL, job)
+	output := buildCheckoutPrepareOutput(work.Config, work.ServerURL, detail, job)
 	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
@@ -1153,22 +1161,53 @@ func renderWorkItemShowText(output spine.WorkItemShowOutput) string {
 func renderCheckoutPrepareText(output spine.WorkCheckoutPrepareOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Checkout job prepared\n\n")
-	fmt.Fprintf(&b, "Server: %s\n", output.ServerURL)
-	fmt.Fprintf(&b, "Project: %s\n", output.ProjectID)
-	fmt.Fprintf(&b, "Repo binding: %s\n", output.RepoBindingID)
-	fmt.Fprintf(&b, "Task: %s\n", output.TaskID)
-	fmt.Fprintf(&b, "Checkout job: %s\n", output.CheckoutJobID)
-	fmt.Fprintf(&b, "State: %s\n", output.CheckoutJobState)
-	fmt.Fprintf(&b, "Repository: %s\n", output.Instruction.RepositoryFullName)
-	fmt.Fprintf(&b, "Workflow base branch: %s\n", output.Instruction.WorkflowBaseBranch)
-	if output.LocalConfigPath != "" {
-		fmt.Fprintf(&b, "Local config: %s\n", output.LocalConfigPath)
+	fmt.Fprintf(&b, "Identity / lineage\n")
+	fmt.Fprintf(&b, "- Checkout job: %s\n", output.CheckoutJobID)
+	fmt.Fprintf(&b, "- Checkout state: %s\n", output.CheckoutJobState)
+	fmt.Fprintf(&b, "- WorkItem: %s\n", output.WorkItemID)
+	fmt.Fprintf(&b, "- Task: %s\n", output.TaskID)
+	if output.GoalID != "" {
+		fmt.Fprintf(&b, "- Goal: %s\n", output.GoalID)
 	}
+	fmt.Fprintf(&b, "- Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "- Approved contract: %s\n", output.ApprovedContractID)
+	fmt.Fprintf(&b, "- Plan: %s\n", output.PlanID)
+	fmt.Fprintf(&b, "- Proposal: %s\n", output.ProposalID)
+	fmt.Fprintf(&b, "- Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "- Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "- Server: %s\n", output.ServerURL)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "- Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\nCheckout instruction\n")
+	fmt.Fprintf(&b, "- Instruction job: %s\n", output.Instruction.JobID)
+	fmt.Fprintf(&b, "- Instruction task: %s\n", output.Instruction.TaskID)
+	fmt.Fprintf(&b, "- Access mode: %s\n", output.Instruction.AccessMode)
+	fmt.Fprintf(&b, "- Provider: %s\n", output.Instruction.Provider)
+	fmt.Fprintf(&b, "- Repository: %s\n", output.Instruction.RepositoryFullName)
+	fmt.Fprintf(&b, "- Repository URL: %s\n", output.Instruction.RepositoryURL)
+	fmt.Fprintf(&b, "- Workflow base branch: %s\n", output.Instruction.WorkflowBaseBranch)
+	fmt.Fprintf(&b, "- Path scope: %s\n", output.Instruction.PathScope)
+	if output.Instruction.SourceRef.ID != "" {
+		fmt.Fprintf(&b, "- Source ref: %s:%s\n", output.Instruction.SourceRef.Kind, output.Instruction.SourceRef.ID)
+	}
+	fmt.Fprintf(&b, "- Raw source uploaded: %t\n", output.Instruction.RawSourceUploaded)
 	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	fmt.Fprintf(&b, "\nBoundary\nCheckout preparation created or returned a checkout job only. Runner checkout, execution preparation, gate, proof, verification, and completion were not run.\n")
 	if output.NextAction.Kind != "" {
-		fmt.Fprintf(&b, "\nNext action: %s\n", output.NextAction.Kind)
+		fmt.Fprintf(&b, "\nRunner handoff\n")
+		fmt.Fprintf(&b, "Next action: %s\n", output.NextAction.Kind)
 		if output.NextAction.PlannedSlice != "" {
 			fmt.Fprintf(&b, "Planned slice: %s\n", output.NextAction.PlannedSlice)
+		}
+		if output.NextAction.SafetyNote != "" {
+			fmt.Fprintf(&b, "Safety note: %s\n", output.NextAction.SafetyNote)
+		}
+		if output.NextAction.StopCondition != "" {
+			fmt.Fprintf(&b, "Stop condition: %s\n", output.NextAction.StopCondition)
+		}
+		if output.NextAction.CommandPacket == nil {
+			fmt.Fprintf(&b, "No runner command packet is available from this CLI command.\n")
 		}
 	}
 	return b.String()
@@ -1391,26 +1430,65 @@ func buildWorkItemShowOutput(config projectconfig.Config, serverURL string, deta
 	}
 }
 
-func buildCheckoutPrepareOutput(config projectconfig.Config, serverURL string, job checkoutJobResponse) spine.WorkCheckoutPrepareOutput {
+func buildCheckoutPrepareOutput(config projectconfig.Config, serverURL string, detail workItemDetailResponse, job checkoutJobResponse) spine.WorkCheckoutPrepareOutput {
+	workItemID := firstNonEmpty(detail.WorkItemID, detail.TaskID, detail.ID, job.TaskID)
+	taskID := firstNonEmpty(detail.TaskID, detail.WorkItemID, detail.ID, job.TaskID)
+	contractID := job.ContractID
+	if strings.TrimSpace(string(contractID)) == "" {
+		contractID = detail.ContractID
+	}
+	approvedContractID := firstNonEmpty(job.ApprovedContractID, detail.ApprovedContractID)
+	planID := firstNonEmpty(job.PlanID, detail.PlanID)
+	proposalID := firstNonEmpty(job.ProposalID, detail.ProposalID)
+	repoBindingID := job.RepoBindingID
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		repoBindingID = detail.RepoBindingID
+	}
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		repoBindingID = spine.RepoBindingID(config.RepoBindingID)
+	}
+	mutatesState := true
+	requiresHumanApproval := true
 	return spine.WorkCheckoutPrepareOutput{
-		SchemaVersion:    cliSchemaVersion,
-		Mode:             serverMode,
-		ServerURL:        serverURL,
-		OrganizationID:   config.OrganizationID,
-		ProjectID:        config.ProjectID,
-		RepoBindingID:    spine.RepoBindingID(config.RepoBindingID),
-		TaskID:           job.TaskID,
-		CheckoutJobID:    job.ID,
-		CheckoutJobState: job.State,
-		Instruction:      job.Instruction,
-		LocalConfigPath:  projectconfig.RelativePath,
+		SchemaVersion:      cliSchemaVersion,
+		Mode:               serverMode,
+		ServerURL:          serverURL,
+		OrganizationID:     config.OrganizationID,
+		ProjectID:          config.ProjectID,
+		RepoBindingID:      repoBindingID,
+		TaskID:             taskID,
+		WorkItemID:         workItemID,
+		GoalID:             detail.GoalID,
+		ContractID:         contractID,
+		ApprovedContractID: approvedContractID,
+		PlanID:             planID,
+		ProposalID:         proposalID,
+		CheckoutJobID:      job.ID,
+		CheckoutJobState:   job.State,
+		Instruction:        job.Instruction,
+		LocalConfigPath:    projectconfig.RelativePath,
 		Display: spine.DisplaySummary{
 			Summary: "Prepared a runner checkout job and checkout instruction. Execution, Run, gate, and proof are not available in this step.",
 		},
 		NextAction: spine.NextAction{
-			Kind:         "runner_checkout_required",
-			Blocking:     true,
-			Available:    false,
+			Kind:                  "runner_checkout_required",
+			Blocking:              true,
+			Available:             false,
+			RequiresHumanApproval: &requiresHumanApproval,
+			MutatesState:          &mutatesState,
+			SafetyNote:            "Checkout preparation did not run runner checkout, execution preparation, gate, proof, verification, or completion. No runner command packet is available from this CLI surface.",
+			StopCondition:         "Stop here unless a later approved Contract explicitly authorizes runner checkout.",
+			RelatedIDs: map[string]string{
+				"task_id":              taskID,
+				"work_item_id":         workItemID,
+				"goal_id":              detail.GoalID,
+				"contract_id":          string(contractID),
+				"approved_contract_id": approvedContractID,
+				"plan_id":              planID,
+				"proposal_id":          proposalID,
+				"checkout_job_id":      job.ID,
+				"repo_binding_id":      string(repoBindingID),
+			},
 			PlannedSlice: "H2",
 		},
 	}
@@ -1446,6 +1524,15 @@ func firstCheckoutCommand(taskIDs []string) string {
 		return ""
 	}
 	return fmt.Sprintf("goalrail work checkout prepare --task-id %s --format json", taskIDs[0])
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func boolPtr(value bool) *bool {
