@@ -205,6 +205,81 @@ XDG_CONFIG_HOME=/tmp/goalrail-dogfood-xdg \
 go run ./cmd/goalrail project status --format json
 ```
 
+## Component Refresh Guidance
+
+Local dogfood runs use several current-source components at once: CLI, server,
+planning worker, migrations, scripts, and docs. After a merge or local change,
+classify changed paths before live validation so you do not accidentally test a
+stale server, stale worker, or stale installed CLI binary.
+
+The default rule is guidance-first and non-destructive. Identify what changed,
+decide which component needs refresh, perform only the refresh that is in scope
+for the current dogfood step, then validate with explicit checks. Do not print
+server wrapper environment values, JWT secrets, database URLs or passwords,
+auth files, token material, private host details, or local machine paths in
+reports.
+
+### Decision table
+
+| Changed paths | Refresh action | Validation | Notes |
+| --- | --- | --- | --- |
+| `apps/cli/**` | Use current-source CLI with `go run ./cmd/goalrail ...` from `apps/cli`, or rebuild the CLI before using an installed binary. | Run targeted CLI tests and the exact current-source command being validated. | Do not assume an installed `goalrail` binary reflects branch or `main` changes. |
+| `apps/server/**` except migrations-only changes | Rebuild and restart the local server from current source before live validation. | Check `GET /livez`, `GET /readyz`, and `GET /version`, then rerun the relevant CLI/API smoke. | Do not print wrapper env, JWT secrets, DB URLs, passwords, or private host details. |
+| `apps/server/internal/postgres/migrations/**` or other server migration paths | Apply migrations before validating server behavior that depends on the schema, then refresh the server if server code also changed. | Run the migration command, then health-check and targeted server tests. | Avoid printing DB credentials. |
+| `apps/worker/**` | Rerun the planning worker from current source for one-shot planning validation, or rebuild the worker binary if using one. | Run worker tests and the scoped `goalrail-worker --once` command only when that step is in scope. | Worker rerun is separate from server restart. |
+| `docs/**`, `README.md`, `AGENTS.md`, docs-only root Markdown | No runtime refresh normally needed. | Run docs/repo checks that match the change. | Do not claim runtime behavior changed from docs-only edits. |
+| `scripts/**` | Rerun the changed script or its documented checks. | Test representative inputs, especially when the script guides local refresh decisions. | Scripts should not imply a broader Goalrail runtime exists. |
+| Mixed code paths | Apply the ordered refresh needed by all affected components. | Validate in dependency order. | Examples below. |
+
+### Mixed-change ordering
+
+- Migrations plus server: apply migrations, rebuild/restart the server, then
+  health-check and run server/API validation.
+- Server plus CLI: rebuild/restart the server first, then run current-source
+  CLI commands against it.
+- Worker plus server: rebuild/restart the server if server APIs changed, then
+  rerun the worker from current source for planning validation.
+- Docs plus code: perform the code component refresh and run appropriate docs
+  checks.
+- CLI plus worker: use current-source CLI for CLI validation and rerun the
+  worker from current source if planning-worker behavior is being validated.
+
+### Agent refresh checklist
+
+A Goalrail-aware agent should:
+
+1. Inspect changed paths from the PR, merge, or local diff.
+2. Map paths to affected components using the decision table.
+3. Produce a refresh plan before live validation.
+4. Prefer current-source `go run` for local CLI and worker checks.
+5. Stop for human gates in the Goalrail flow.
+6. Never run checkout, execution, runner, gate, proof, or verification commands
+   unless the current approved slice explicitly includes them.
+7. Never print secrets or commit `.goalrail/project.yml`, auth files, token
+   material, local DB passwords, JWT secrets, wrapper contents, private host
+   details, or personal machine paths.
+
+### Helper script
+
+For a dry-run recommendation without changing local state, use:
+
+```bash
+scripts/local-refresh-plan.sh --base origin/main
+```
+
+or pass explicit paths:
+
+```bash
+scripts/local-refresh-plan.sh \
+  apps/cli/internal/workcmd/command.go \
+  apps/server/internal/httpserver/work_item.go
+```
+
+The helper prints affected components, ordered refresh recommendations,
+validation reminders, and secret-handling notes. It does not apply migrations,
+restart the server, run workers, mutate Goalrail state, or inspect secret
+environment values.
+
 ## Contract-First Dogfood Commands
 
 Create a Goal from a local body file:

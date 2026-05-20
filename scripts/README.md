@@ -9,3 +9,5 @@ Current rule:
 ## Current scripts
 
 - `check-staged.sh` — runs the docs-check changed-files ratchet against staged files, including repo-structure placement rules.
+- `local-refresh-plan.sh` — prints non-destructive component refresh guidance
+  for local dogfood changes based on changed paths or explicit path arguments.
