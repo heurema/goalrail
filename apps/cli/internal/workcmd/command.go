@@ -49,10 +49,11 @@ type Options struct {
 }
 
 type workContext struct {
-	Config    projectconfig.Config
-	Session   authstore.Session
-	ServerURL string
-	Client    HTTPClient
+	Config      projectconfig.Config
+	Session     authstore.Session
+	ServerURL   string
+	Client      HTTPClient
+	AuthSession authsession.MetadataReporter
 }
 
 func Run(ctx context.Context, out *term.Output, workDir string, args []string) error {
@@ -205,7 +206,7 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -251,6 +252,7 @@ func runStart(ctx context.Context, out *term.Output, workDir string, args []stri
 		SchemaVersion:   cliSchemaVersion,
 		Mode:            serverMode,
 		ServerURL:       serverURL,
+		AuthSession:     authSessionOutput(authMetadata),
 		OrganizationID:  intake.OrganizationID,
 		ProjectID:       intake.ProjectID,
 		RepoBindingID:   intake.RepoBindingID,
@@ -333,7 +335,7 @@ func runContinue(ctx context.Context, out *term.Output, workDir string, args []s
 		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -357,6 +359,7 @@ func runContinue(ctx context.Context, out *term.Output, workDir string, args []s
 	if err != nil {
 		return err
 	}
+	output.AuthSession = authSessionOutput(authMetadata)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -412,7 +415,7 @@ func runAnswer(ctx context.Context, out *term.Output, workDir string, args []str
 		return exitcode.UsageError(errors.New("missing .goalrail/project.yml; run goalrail init first"))
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -441,6 +444,7 @@ func runAnswer(ctx context.Context, out *term.Output, workDir string, args []str
 		return err
 	}
 	output := buildAnswerOutput(continued, normalizedRequestID)
+	output.AuthSession = authSessionOutput(authMetadata)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -497,6 +501,7 @@ func runPlan(ctx context.Context, out *term.Output, workDir string, args []strin
 	}
 
 	output := buildPlanOutput(work.Config, work.ServerURL, plan)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -550,6 +555,7 @@ func runPlanStatus(ctx context.Context, out *term.Output, workDir string, args [
 	}
 
 	output := buildPlanStatusOutput(work.Config, work.ServerURL, status)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -623,6 +629,7 @@ func runProposalAccept(ctx context.Context, out *term.Output, workDir string, ar
 	}
 
 	output := buildProposalAcceptOutput(work.Config, work.ServerURL, accepted)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -690,6 +697,7 @@ func runItemShow(ctx context.Context, out *term.Output, workDir string, args []s
 		return err
 	}
 	output := buildWorkItemShowOutput(work.Config, work.ServerURL, detail)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -760,6 +768,7 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 	}
 
 	output := buildCheckoutPrepareOutput(work.Config, work.ServerURL, job)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -839,6 +848,7 @@ func runExecutionPrepare(ctx context.Context, out *term.Output, workDir string, 
 	}
 
 	output := buildExecutionPrepareOutput(work.Config, work.ServerURL, job)
+	output.AuthSession = authSessionOutput(work.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -1738,12 +1748,12 @@ func readLimitedBody(reader io.Reader, source string) ([]byte, error) {
 	return raw, nil
 }
 
-func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, error) {
+func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, authsession.MetadataReporter, error) {
 	store := options.Store
 	if store == nil {
 		path, err := authstore.DefaultPath()
 		if err != nil {
-			return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
+			return authstore.Session{}, "", nil, nil, exitcode.RuntimeError(err)
 		}
 		store = authstore.NewFileStore(path)
 	}
@@ -1751,11 +1761,25 @@ func loadUsableSession(ctx context.Context, options Options) (authstore.Session,
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return authsession.LoadUsable(ctx, authsession.Options{
+	return authsession.LoadUsableWithMetadata(ctx, authsession.Options{
 		Store:  store,
 		Client: client,
 		Now:    options.Now,
 	})
+}
+
+func authSessionOutput(reporter authsession.MetadataReporter) *spine.AuthSessionMetadata {
+	if reporter == nil {
+		return nil
+	}
+	metadata := reporter.AuthSessionMetadata()
+	return &spine.AuthSessionMetadata{
+		ServerURL:             metadata.ServerURL,
+		UsedStoredAccessToken: metadata.UsedStoredAccessToken,
+		RefreshAttempted:      metadata.RefreshAttempted,
+		AccessTokenRefreshed:  metadata.AccessTokenRefreshed,
+		Reason:                metadata.Reason,
+	}
 }
 
 func getCurrentProfile(ctx context.Context, client HTTPClient, session authstore.Session) (meResponse, error) {
@@ -1829,7 +1853,7 @@ func loadWorkContext(ctx context.Context, workDir string, options Options, comma
 		return workContext{}, err
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return workContext{}, err
 	}
@@ -1846,10 +1870,11 @@ func loadWorkContext(ctx context.Context, workDir string, options Options, comma
 	}
 
 	return workContext{
-		Config:    config,
-		Session:   session,
-		ServerURL: serverURL,
-		Client:    client,
+		Config:      config,
+		Session:     session,
+		ServerURL:   serverURL,
+		Client:      client,
+		AuthSession: authMetadata,
 	}, nil
 }
 
