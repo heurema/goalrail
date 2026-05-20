@@ -70,6 +70,69 @@ func TestLoadUsableRefreshesExpiredSessionAndSavesMetadata(t *testing.T) {
 	}
 }
 
+func TestLoadUsableWithMetadataReportsValidStoredAccessToken(t *testing.T) {
+	t.Parallel()
+
+	store := &memoryStore{session: validSession("https://goalrail.example")}
+	session, serverURL, _, reporter, err := LoadUsableWithMetadata(context.Background(), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("LoadUsableWithMetadata() error = %v", err)
+	}
+	if session.AccessToken != "old-access-token" || serverURL != "https://goalrail.example" {
+		t.Fatalf("session/server = %q/%q, want stored session", session.AccessToken, serverURL)
+	}
+	metadata := reporter.AuthSessionMetadata()
+	if metadata.ServerURL != "https://goalrail.example" {
+		t.Fatalf("metadata server_url = %q, want session server", metadata.ServerURL)
+	}
+	if !metadata.UsedStoredAccessToken || metadata.RefreshAttempted || metadata.AccessTokenRefreshed {
+		t.Fatalf("metadata = %#v, want stored access token with no refresh", metadata)
+	}
+	if metadata.Reason != "access_token_valid" {
+		t.Fatalf("metadata reason = %q, want access_token_valid", metadata.Reason)
+	}
+}
+
+func TestLoadUsableWithMetadataReportsInitialRefresh(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/refresh" {
+			t.Errorf("path = %s, want /v1/auth/refresh", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access-token","access_token_expires_at":"2026-05-05T11:30:00Z","token_type":"Bearer"}`))
+	}))
+	defer server.Close()
+
+	store := &memoryStore{session: authstore.Session{
+		ServerURL:            server.URL,
+		AccessToken:          "expired-access-token",
+		RefreshToken:         "stored-refresh-token",
+		AccessTokenExpiresAt: time.Date(2026, 5, 5, 9, 59, 0, 0, time.UTC),
+		TokenType:            "Bearer",
+	}}
+	_, _, _, reporter, err := LoadUsableWithMetadata(context.Background(), Options{
+		Store: store,
+		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("LoadUsableWithMetadata() error = %v", err)
+	}
+	metadata := reporter.AuthSessionMetadata()
+	if metadata.UsedStoredAccessToken || !metadata.RefreshAttempted || !metadata.AccessTokenRefreshed {
+		t.Fatalf("metadata = %#v, want attempted successful refresh", metadata)
+	}
+	if metadata.Reason != "refresh_succeeded" {
+		t.Fatalf("metadata reason = %q, want refresh_succeeded", metadata.Reason)
+	}
+}
+
 func TestRetryingClientRefreshesAndRetriesUnauthorizedRequestOnce(t *testing.T) {
 	t.Parallel()
 
@@ -106,7 +169,7 @@ func TestRetryingClientRefreshesAndRetriesUnauthorizedRequestOnce(t *testing.T) 
 		AccessTokenExpiresAt: time.Date(2026, 5, 5, 11, 0, 0, 0, time.UTC),
 		TokenType:            "Bearer",
 	}}
-	session, _, client, err := LoadUsable(context.Background(), Options{
+	session, _, client, reporter, err := LoadUsableWithMetadata(context.Background(), Options{
 		Store: store,
 		Now:   func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
 	})
@@ -132,6 +195,10 @@ func TestRetryingClientRefreshesAndRetriesUnauthorizedRequestOnce(t *testing.T) 
 	}
 	if store.saved.AccessToken != "new-access-token" || store.saved.RefreshToken != "rotated-refresh-token" {
 		t.Fatalf("saved session = %#v, want refreshed access and rotated refresh token", store.saved)
+	}
+	metadata := reporter.AuthSessionMetadata()
+	if metadata.UsedStoredAccessToken || !metadata.RefreshAttempted || !metadata.AccessTokenRefreshed {
+		t.Fatalf("metadata = %#v, want retry refresh metadata", metadata)
 	}
 }
 

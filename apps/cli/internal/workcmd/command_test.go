@@ -1445,8 +1445,80 @@ func TestRunWorkItemShowJSONReadsTaskDetail(t *testing.T) {
 	if output.NextAction.CommandPacket == nil || !strings.Contains(output.NextAction.CommandPacket.SafetyNote, "was not run") {
 		t.Fatalf("command_packet = %#v, want checkout safety note", output.NextAction.CommandPacket)
 	}
+	if output.AuthSession == nil {
+		t.Fatal("auth_session = nil, want non-secret auth metadata")
+	}
+	if output.AuthSession.ServerURL != server.URL || !output.AuthSession.UsedStoredAccessToken || output.AuthSession.RefreshAttempted || output.AuthSession.AccessTokenRefreshed {
+		t.Fatalf("auth_session = %#v, want stored token/no refresh metadata", output.AuthSession)
+	}
 	if meCount.Load() != 1 || detailCount.Load() != 1 {
 		t.Fatalf("request counts me/detail = %d/%d, want 1/1", meCount.Load(), detailCount.Load())
+	}
+}
+
+func TestRunWorkItemShowJSONDoesNotPrintTokenMaterial(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token-SHOULD-NOT-LEAK" {
+			t.Errorf("Authorization = %q, want distinctive bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/tasks/018f0000-0000-7000-8000-000000000401":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000401","work_item_id":"018f0000-0000-7000-8000-000000000401","task_id":"018f0000-0000-7000-8000-000000000401","project_id":"018f0000-0000-7000-8000-000000000003","contract_id":"018f0000-0000-7000-8000-000000000009","approved_contract_id":"018f0000-0000-7000-8000-000000000010","plan_id":"018f0000-0000-7000-8000-000000000301","proposal_id":"018f0000-0000-7000-8000-000000000302","repo_binding_id":"018f0000-0000-7000-8000-000000000004","status":"planned","title":"DOGFOOD-008: Non-secret CLI auth refresh observability","summary":"Add auth session metadata.","scope":["Add auth_session JSON"],"acceptance_refs":["acceptance_criteria[0]"],"proof_expectation_refs":["proof_expectations[0]"],"next_action":{"kind":"prepare_checkout","blocking":false,"available":true,"command":"goalrail work checkout prepare --task-id 018f0000-0000-7000-8000-000000000401 --format json"}}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"item", "show", "--task-id", "018f0000-0000-7000-8000-000000000401", "--format", "json"}, Options{
+		Store: fakeSessionStore{session: authstore.Session{
+			ServerURL:            server.URL,
+			AccessToken:          "access-token-SHOULD-NOT-LEAK",
+			RefreshToken:         "refresh-token-SHOULD-NOT-LEAK",
+			AccessTokenExpiresAt: time.Date(2026, 5, 5, 11, 0, 0, 0, time.UTC),
+			TokenType:            "Bearer",
+		}},
+		Now: func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(work item show) error = %v", err)
+	}
+	raw := stdout.String()
+	for _, forbidden := range []string{
+		"access-token-SHOULD-NOT-LEAK",
+		"refresh-token-SHOULD-NOT-LEAK",
+		"Bearer access-token-SHOULD-NOT-LEAK",
+		`"access_token"`,
+		`"refresh_token"`,
+	} {
+		if strings.Contains(raw, forbidden) {
+			t.Fatalf("work item show JSON leaked %q in %s", forbidden, raw)
+		}
+	}
+	var output spine.WorkItemShowOutput
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode work item show JSON %q: %v", raw, err)
+	}
+	if output.AuthSession == nil || output.AuthSession.ServerURL != server.URL {
+		t.Fatalf("auth_session = %#v, want safe metadata", output.AuthSession)
+	}
+	if output.NextAction.CommandPacket == nil {
+		t.Fatal("next_action.command_packet = nil, want existing agent packet preserved")
 	}
 }
 

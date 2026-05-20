@@ -133,6 +133,7 @@ func runShow(ctx context.Context, out *term.Output, workDir string, args []strin
 	}
 
 	output := buildShowOutput(commandContext.Config, commandContext.ServerURL, aggregate, draft)
+	output.AuthSession = authSessionOutput(commandContext.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -243,7 +244,7 @@ func runDraft(ctx context.Context, out *term.Output, workDir string, args []stri
 		return err
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -272,6 +273,7 @@ func runDraft(ctx context.Context, out *term.Output, workDir string, args []stri
 	}
 
 	output := buildDraftOutput(config, serverURL, normalizedGoalID, contractDraft, receipt)
+	output.AuthSession = authSessionOutput(authMetadata)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -333,7 +335,7 @@ func runUpdate(ctx context.Context, out *term.Output, workDir string, args []str
 		return err
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return err
 	}
@@ -366,6 +368,7 @@ func runUpdate(ctx context.Context, out *term.Output, workDir string, args []str
 	}
 
 	output := buildUpdateOutput(config, serverURL, contractResponse, update.changedFields)
+	output.AuthSession = authSessionOutput(authMetadata)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -418,6 +421,7 @@ func runSubmit(ctx context.Context, out *term.Output, workDir string, args []str
 	}
 
 	output := buildSubmitOutput(commandContext.Config, commandContext.ServerURL, contractResponse)
+	output.AuthSession = authSessionOutput(commandContext.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -474,6 +478,7 @@ func runApprove(ctx context.Context, out *term.Output, workDir string, args []st
 	}
 
 	output := buildApproveOutput(commandContext.Config, commandContext.ServerURL, contractResponse)
+	output.AuthSession = authSessionOutput(commandContext.AuthSession)
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
@@ -482,11 +487,12 @@ func runApprove(ctx context.Context, out *term.Output, workDir string, args []st
 }
 
 type contractCommandContext struct {
-	Config    projectconfig.Config
-	Session   authstore.Session
-	ServerURL string
-	Client    HTTPClient
-	Profile   meResponse
+	Config      projectconfig.Config
+	Session     authstore.Session
+	ServerURL   string
+	Client      HTTPClient
+	Profile     meResponse
+	AuthSession authsession.MetadataReporter
 }
 
 func loadContractCommandContext(ctx context.Context, workDir string, command string, options Options) (contractCommandContext, error) {
@@ -508,7 +514,7 @@ func loadContractCommandContext(ctx context.Context, workDir string, command str
 		return contractCommandContext{}, err
 	}
 
-	session, serverURL, client, err := loadUsableSession(ctx, options)
+	session, serverURL, client, authMetadata, err := loadUsableSession(ctx, options)
 	if err != nil {
 		return contractCommandContext{}, err
 	}
@@ -525,11 +531,12 @@ func loadContractCommandContext(ctx context.Context, workDir string, command str
 	}
 
 	return contractCommandContext{
-		Config:    config,
-		Session:   session,
-		ServerURL: serverURL,
-		Client:    client,
-		Profile:   profile,
+		Config:      config,
+		Session:     session,
+		ServerURL:   serverURL,
+		Client:      client,
+		Profile:     profile,
+		AuthSession: authMetadata,
 	}, nil
 }
 
@@ -587,12 +594,12 @@ func ApproveUsage() string {
 	return "Usage: goalrail contract approve --contract-id <contract_id> --confirm-user-approval [--format text|json]\n\nApproves a submitted Contract only after explicit user approval. The command requires --confirm-user-approval, validates the Git-root .goalrail/project.yml marker plus login and Organization marker, and sends project/repo expectations. It does not create WorkItems, run workers, gates, proof, or verification.\n"
 }
 
-func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, error) {
+func loadUsableSession(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, authsession.MetadataReporter, error) {
 	store := options.Store
 	if store == nil {
 		path, err := authstore.DefaultPath()
 		if err != nil {
-			return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
+			return authstore.Session{}, "", nil, nil, exitcode.RuntimeError(err)
 		}
 		store = authstore.NewFileStore(path)
 	}
@@ -600,11 +607,25 @@ func loadUsableSession(ctx context.Context, options Options) (authstore.Session,
 	if client == nil {
 		client = http.DefaultClient
 	}
-	return authsession.LoadUsable(ctx, authsession.Options{
+	return authsession.LoadUsableWithMetadata(ctx, authsession.Options{
 		Store:  store,
 		Client: client,
 		Now:    options.Now,
 	})
+}
+
+func authSessionOutput(reporter authsession.MetadataReporter) *spine.AuthSessionMetadata {
+	if reporter == nil {
+		return nil
+	}
+	metadata := reporter.AuthSessionMetadata()
+	return &spine.AuthSessionMetadata{
+		ServerURL:             metadata.ServerURL,
+		UsedStoredAccessToken: metadata.UsedStoredAccessToken,
+		RefreshAttempted:      metadata.RefreshAttempted,
+		AccessTokenRefreshed:  metadata.AccessTokenRefreshed,
+		Reason:                metadata.Reason,
+	}
 }
 
 func getCurrentProfile(ctx context.Context, client HTTPClient, session authstore.Session) (meResponse, error) {

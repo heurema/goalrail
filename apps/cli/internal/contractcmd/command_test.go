@@ -214,6 +214,12 @@ func TestRunShowReturnsContractAndCurrentDraftJSON(t *testing.T) {
 	if output.NextAction.Command != "goalrail contract approve --contract-id 018f0000-0000-7000-8000-000000000009 --confirm-user-approval --format json" {
 		t.Fatalf("next_action.command = %q, want approve command", output.NextAction.Command)
 	}
+	if output.AuthSession == nil {
+		t.Fatal("auth_session = nil, want non-secret auth metadata")
+	}
+	if output.AuthSession.ServerURL != server.URL || !output.AuthSession.UsedStoredAccessToken || output.AuthSession.RefreshAttempted || output.AuthSession.AccessTokenRefreshed {
+		t.Fatalf("auth_session = %#v, want stored token/no refresh metadata", output.AuthSession)
+	}
 	if meCount.Load() != 1 || contractCount.Load() != 1 || draftCount.Load() != 1 {
 		t.Fatalf("request counts me/contract/draft = %d/%d/%d, want 1/1/1", meCount.Load(), contractCount.Load(), draftCount.Load())
 	}
@@ -282,6 +288,75 @@ func TestRunShowRefreshesExpiredAccessTokenBeforeRequests(t *testing.T) {
 	}
 	if store.saved.AccessToken != "refreshed-access-token" || store.saved.RefreshToken != "stored-refresh-token" {
 		t.Fatalf("saved session = %#v, want refreshed access token and preserved refresh token", store.saved)
+	}
+	if output.AuthSession == nil {
+		t.Fatal("auth_session = nil, want non-secret auth metadata")
+	}
+	if output.AuthSession.UsedStoredAccessToken || !output.AuthSession.RefreshAttempted || !output.AuthSession.AccessTokenRefreshed {
+		t.Fatalf("auth_session = %#v, want initial refresh metadata", output.AuthSession)
+	}
+}
+
+func TestRunShowJSONDoesNotPrintTokenMaterial(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir := setupGitRepo(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer access-token-SHOULD-NOT-LEAK" {
+			t.Errorf("Authorization = %q, want distinctive bearer token", r.Header.Get("Authorization"))
+			http.Error(w, "bad auth", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/me":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"user":{"id":"018f0000-0000-7000-8000-000000000001","display_name":"Developer"},"organization_membership":{"organization_id":"018f0000-0000-7000-8000-000000000002","role":"member","state":"active"}}`))
+		case "/v1/contracts/018f0000-0000-7000-8000-000000000009":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"018f0000-0000-7000-8000-000000000009","repo_binding_id":"018f0000-0000-7000-8000-000000000004","goal_id":"018f0000-0000-7000-8000-000000000006","state":"approved"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	writeProjectConfigFixture(t, repoDir, server.URL)
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"show", "--contract-id", "018f0000-0000-7000-8000-000000000009", "--format", "json"}, Options{
+		Store: fakeSessionStore{session: authstore.Session{
+			ServerURL:            server.URL,
+			AccessToken:          "access-token-SHOULD-NOT-LEAK",
+			RefreshToken:         "refresh-token-SHOULD-NOT-LEAK",
+			AccessTokenExpiresAt: time.Date(2026, 5, 5, 11, 0, 0, 0, time.UTC),
+			TokenType:            "Bearer",
+		}},
+		Now: func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("Run(contract show) error = %v", err)
+	}
+	raw := stdout.String()
+	for _, forbidden := range []string{
+		"access-token-SHOULD-NOT-LEAK",
+		"refresh-token-SHOULD-NOT-LEAK",
+		"Bearer access-token-SHOULD-NOT-LEAK",
+		`"access_token"`,
+		`"refresh_token"`,
+	} {
+		if strings.Contains(raw, forbidden) {
+			t.Fatalf("contract show JSON leaked %q in %s", forbidden, raw)
+		}
+	}
+	var output spine.ContractShowOutput
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&output); err != nil {
+		t.Fatalf("decode contract show JSON %q: %v", raw, err)
+	}
+	if output.AuthSession == nil || output.AuthSession.ServerURL != server.URL {
+		t.Fatalf("auth_session = %#v, want safe metadata", output.AuthSession)
 	}
 }
 

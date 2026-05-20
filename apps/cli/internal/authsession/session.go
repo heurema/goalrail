@@ -35,6 +35,18 @@ type Options struct {
 	Now    func() time.Time
 }
 
+type Metadata struct {
+	ServerURL             string
+	UsedStoredAccessToken bool
+	RefreshAttempted      bool
+	AccessTokenRefreshed  bool
+	Reason                string
+}
+
+type MetadataReporter interface {
+	AuthSessionMetadata() Metadata
+}
+
 type refreshResponse struct {
 	AccessToken          string `json:"access_token"`
 	RefreshToken         string `json:"refresh_token"`
@@ -49,20 +61,25 @@ type serverErrorResponse struct {
 }
 
 func LoadUsable(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, error) {
+	session, serverURL, client, _, err := LoadUsableWithMetadata(ctx, options)
+	return session, serverURL, client, err
+}
+
+func LoadUsableWithMetadata(ctx context.Context, options Options) (authstore.Session, string, HTTPClient, MetadataReporter, error) {
 	store := options.Store
 	if store == nil {
 		path, err := authstore.DefaultPath()
 		if err != nil {
-			return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
+			return authstore.Session{}, "", nil, nil, exitcode.RuntimeError(err)
 		}
 		store = authstore.NewFileStore(path)
 	}
 	session, err := store.Load()
 	if err != nil {
 		if errors.Is(err, authstore.ErrSessionNotFound) {
-			return authstore.Session{}, "", nil, exitcode.UsageError(errors.New("not logged in; run goalrail login <server_url>"))
+			return authstore.Session{}, "", nil, nil, exitcode.UsageError(errors.New("not logged in; run goalrail login <server_url>"))
 		}
-		return authstore.Session{}, "", nil, exitcode.RuntimeError(err)
+		return authstore.Session{}, "", nil, nil, exitcode.RuntimeError(err)
 	}
 	client := options.Client
 	if client == nil {
@@ -72,30 +89,49 @@ func LoadUsable(ctx context.Context, options Options) (authstore.Session, string
 	if options.Now != nil {
 		now = options.Now
 	}
-	manager := &Manager{
-		store:   store,
-		client:  client,
-		session: session,
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	currentTime := now().UTC()
+	metadata := Metadata{
+		ServerURL: serverURL,
 	}
-	if !session.AccessTokenExpiresAt.After(now().UTC()) {
+	if session.AccessTokenExpiresAt.After(currentTime) {
+		metadata.UsedStoredAccessToken = true
+		metadata.Reason = "access_token_valid"
+	} else {
+		metadata.Reason = "access_token_expired"
+	}
+	manager := &Manager{
+		store:    store,
+		client:   client,
+		session:  session,
+		metadata: metadata,
+	}
+	if !session.AccessTokenExpiresAt.After(currentTime) {
 		refreshed, err := manager.refresh(ctx)
 		if err != nil {
-			return authstore.Session{}, "", nil, err
+			return authstore.Session{}, "", nil, manager, err
 		}
 		session = refreshed
 	}
-	return session, strings.TrimRight(session.ServerURL, "/"), manager.Client(), nil
+	return session, serverURL, manager.Client(), manager, nil
 }
 
 type Manager struct {
-	mu      sync.Mutex
-	store   SessionStore
-	client  HTTPClient
-	session authstore.Session
+	mu       sync.Mutex
+	store    SessionStore
+	client   HTTPClient
+	session  authstore.Session
+	metadata Metadata
 }
 
 func (m *Manager) Client() HTTPClient {
 	return retryingClient{manager: m}
+}
+
+func (m *Manager) AuthSessionMetadata() Metadata {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.metadata
 }
 
 func (m *Manager) refresh(ctx context.Context) (authstore.Session, error) {
@@ -107,45 +143,58 @@ func (m *Manager) refresh(ctx context.Context) (authstore.Session, error) {
 func (m *Manager) refreshLocked(ctx context.Context) (authstore.Session, error) {
 	session := m.session
 	serverURL := strings.TrimRight(session.ServerURL, "/")
+	m.metadata.RefreshAttempted = true
+	m.metadata.UsedStoredAccessToken = false
 	if strings.TrimSpace(session.RefreshToken) == "" {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.UsageError(fmt.Errorf("login expired and no refresh token is available; run goalrail login %s", serverURL))
 	}
 	savingStore, ok := m.store.(SavingSessionStore)
 	if !ok {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.UsageError(fmt.Errorf("login expired; run goalrail login %s", serverURL))
 	}
 
 	body, err := json.Marshal(map[string]string{"refresh_token": session.RefreshToken})
 	if err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.RuntimeError(fmt.Errorf("encode token refresh request: %w", err))
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, serverURL+"/v1/auth/refresh", bytes.NewReader(body))
 	if err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.RuntimeError(fmt.Errorf("build token refresh request: %w", err))
 	}
 	request.Header.Set("Content-Type", "application/json")
 
 	response, err := m.client.Do(request)
 	if err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.RuntimeError(fmt.Errorf("refresh access token from %s: %w", serverURL, err))
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, refreshHTTPError(response, serverURL)
 	}
 	var decoded refreshResponse
 	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.RuntimeError(fmt.Errorf("decode token refresh response: %w", err))
 	}
 	refreshed, err := refreshedSession(session, decoded)
 	if err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, err
 	}
 	if err := savingStore.Save(refreshed); err != nil {
+		m.metadata.Reason = "refresh_failed"
 		return authstore.Session{}, exitcode.RuntimeError(fmt.Errorf("save refreshed auth session: %w", err))
 	}
 	m.session = refreshed
+	m.metadata.AccessTokenRefreshed = true
+	m.metadata.Reason = "refresh_succeeded"
 	return refreshed, nil
 }
 

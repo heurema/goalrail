@@ -70,48 +70,51 @@ type LocalRepoReceipt struct {
 }
 
 type ContractDraftOutput struct {
-	SchemaVersion    string           `json:"schema_version"`
-	Mode             string           `json:"mode"`
-	ServerURL        string           `json:"server_url"`
-	OrganizationID   string           `json:"organization_id"`
-	ProjectID        string           `json:"project_id"`
-	RepoBindingID    RepoBindingID    `json:"repo_binding_id"`
-	GoalID           string           `json:"goal_id"`
-	ContractID       ContractID       `json:"contract_id"`
-	ContractState    ContractState    `json:"contract_state"`
-	LocalRepoReceipt LocalRepoReceipt `json:"local_repo_receipt"`
-	LocalConfigPath  string           `json:"local_config_path"`
-	Display          DisplaySummary   `json:"display"`
-	NextAction       NextAction       `json:"next_action"`
+	SchemaVersion    string               `json:"schema_version"`
+	Mode             string               `json:"mode"`
+	ServerURL        string               `json:"server_url"`
+	AuthSession      *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID   string               `json:"organization_id"`
+	ProjectID        string               `json:"project_id"`
+	RepoBindingID    RepoBindingID        `json:"repo_binding_id"`
+	GoalID           string               `json:"goal_id"`
+	ContractID       ContractID           `json:"contract_id"`
+	ContractState    ContractState        `json:"contract_state"`
+	LocalRepoReceipt LocalRepoReceipt     `json:"local_repo_receipt"`
+	LocalConfigPath  string               `json:"local_config_path"`
+	Display          DisplaySummary       `json:"display"`
+	NextAction       NextAction           `json:"next_action"`
 }
 
 type ContractUpdateOutput struct {
-	SchemaVersion   string         `json:"schema_version"`
-	Mode            string         `json:"mode"`
-	ServerURL       string         `json:"server_url"`
-	OrganizationID  string         `json:"organization_id"`
-	ProjectID       string         `json:"project_id"`
-	RepoBindingID   RepoBindingID  `json:"repo_binding_id"`
-	ContractID      ContractID     `json:"contract_id"`
-	ContractState   ContractState  `json:"contract_state"`
-	ChangedFields   []string       `json:"changed_fields"`
-	LocalConfigPath string         `json:"local_config_path"`
-	Display         DisplaySummary `json:"display"`
-	NextAction      NextAction     `json:"next_action"`
+	SchemaVersion   string               `json:"schema_version"`
+	Mode            string               `json:"mode"`
+	ServerURL       string               `json:"server_url"`
+	AuthSession     *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID  string               `json:"organization_id"`
+	ProjectID       string               `json:"project_id"`
+	RepoBindingID   RepoBindingID        `json:"repo_binding_id"`
+	ContractID      ContractID           `json:"contract_id"`
+	ContractState   ContractState        `json:"contract_state"`
+	ChangedFields   []string             `json:"changed_fields"`
+	LocalConfigPath string               `json:"local_config_path"`
+	Display         DisplaySummary       `json:"display"`
+	NextAction      NextAction           `json:"next_action"`
 }
 
 type ContractTransitionOutput struct {
-	SchemaVersion   string         `json:"schema_version"`
-	Mode            string         `json:"mode"`
-	ServerURL       string         `json:"server_url"`
-	OrganizationID  string         `json:"organization_id"`
-	ProjectID       string         `json:"project_id"`
-	RepoBindingID   RepoBindingID  `json:"repo_binding_id"`
-	ContractID      ContractID     `json:"contract_id"`
-	ContractState   ContractState  `json:"contract_state"`
-	LocalConfigPath string         `json:"local_config_path"`
-	Display         DisplaySummary `json:"display"`
-	NextAction      NextAction     `json:"next_action"`
+	SchemaVersion   string               `json:"schema_version"`
+	Mode            string               `json:"mode"`
+	ServerURL       string               `json:"server_url"`
+	AuthSession     *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID  string               `json:"organization_id"`
+	ProjectID       string               `json:"project_id"`
+	RepoBindingID   RepoBindingID        `json:"repo_binding_id"`
+	ContractID      ContractID           `json:"contract_id"`
+	ContractState   ContractState        `json:"contract_state"`
+	LocalConfigPath string               `json:"local_config_path"`
+	Display         DisplaySummary       `json:"display"`
+	NextAction      NextAction           `json:"next_action"`
 }
 
 type ContractShowDraft struct {
@@ -129,19 +132,20 @@ type ContractShowDraft struct {
 }
 
 type ContractShowOutput struct {
-	SchemaVersion   string             `json:"schema_version"`
-	Mode            string             `json:"mode"`
-	ServerURL       string             `json:"server_url"`
-	OrganizationID  string             `json:"organization_id"`
-	ProjectID       string             `json:"project_id"`
-	RepoBindingID   RepoBindingID      `json:"repo_binding_id"`
-	GoalID          string             `json:"goal_id"`
-	ContractID      ContractID         `json:"contract_id"`
-	ContractState   ContractState      `json:"contract_state"`
-	CurrentSeedID   string             `json:"current_seed_id,omitempty"`
-	CurrentDraftID  string             `json:"current_draft_id,omitempty"`
-	CurrentDraft    *ContractShowDraft `json:"current_draft,omitempty"`
-	LocalConfigPath string             `json:"local_config_path"`
-	Display         DisplaySummary     `json:"display"`
-	NextAction      NextAction         `json:"next_action"`
+	SchemaVersion   string               `json:"schema_version"`
+	Mode            string               `json:"mode"`
+	ServerURL       string               `json:"server_url"`
+	AuthSession     *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID  string               `json:"organization_id"`
+	ProjectID       string               `json:"project_id"`
+	RepoBindingID   RepoBindingID        `json:"repo_binding_id"`
+	GoalID          string               `json:"goal_id"`
+	ContractID      ContractID           `json:"contract_id"`
+	ContractState   ContractState        `json:"contract_state"`
+	CurrentSeedID   string               `json:"current_seed_id,omitempty"`
+	CurrentDraftID  string               `json:"current_draft_id,omitempty"`
+	CurrentDraft    *ContractShowDraft   `json:"current_draft,omitempty"`
+	LocalConfigPath string               `json:"local_config_path"`
+	Display         DisplaySummary       `json:"display"`
+	NextAction      NextAction           `json:"next_action"`
 }
