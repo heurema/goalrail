@@ -807,6 +807,87 @@ func TestCheckoutJobLeaseAndReceiptRecordWorkspaceOnly(t *testing.T) {
 	}
 }
 
+func TestCheckoutJobLeaseCanTargetSpecificJobWithoutFallback(t *testing.T) {
+	server := testServer(t)
+
+	firstApproved := createApprovedContract(t, server)
+	firstPlan := createPlan(t, server, firstApproved.ContractID)
+	firstProposal := submitProposal(t, server, firstPlan.ID, string(firstApproved.ID))
+	firstAccepted := acceptProposal(t, server, firstProposal.ID)
+	firstJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(firstAccepted.CreatedTaskIDs[0])+"/checkout-jobs", `{}`)
+	if firstJobResponse.code != http.StatusCreated {
+		t.Fatalf("first checkout job status = %d, want %d: %s", firstJobResponse.code, http.StatusCreated, firstJobResponse.body)
+	}
+	var firstJob spine.CheckoutJob
+	decodeJSON(t, firstJobResponse.body, &firstJob)
+
+	secondApproved := createApprovedContract(t, server)
+	secondPlan := createPlan(t, server, secondApproved.ContractID)
+	secondProposal := submitProposal(t, server, secondPlan.ID, string(secondApproved.ID))
+	secondAccepted := acceptProposal(t, server, secondProposal.ID)
+	secondJobResponse := doJSON(t, server.router, http.MethodPost, "/v1/tasks/"+string(secondAccepted.CreatedTaskIDs[0])+"/checkout-jobs", `{}`)
+	if secondJobResponse.code != http.StatusCreated {
+		t.Fatalf("second checkout job status = %d, want %d: %s", secondJobResponse.code, http.StatusCreated, secondJobResponse.body)
+	}
+	var secondJob spine.CheckoutJob
+	decodeJSON(t, secondJobResponse.body, &secondJob)
+
+	leaseBody := fmt.Sprintf(`{"project_id":"018f0000-0000-7000-8000-000000000003","repo_binding_id":%q,"checkout_job_id":%q,"runner_id":"runner-1"}`, secondJob.RepoBindingID, secondJob.ID)
+	leaseResponse := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", leaseBody)
+	if leaseResponse.code != http.StatusCreated {
+		t.Fatalf("targeted lease status = %d, want %d: %s", leaseResponse.code, http.StatusCreated, leaseResponse.body)
+	}
+	var lease spine.CheckoutJobLeaseCreated
+	decodeJSON(t, leaseResponse.body, &lease)
+	if lease.JobID != secondJob.ID {
+		t.Fatalf("lease job_id = %q, want targeted job %q", lease.JobID, secondJob.ID)
+	}
+	if server.checkoutJobs.jobs[firstJob.ID].State != spine.CheckoutJobStateQueued {
+		t.Fatalf("first job state = %q, want queued after targeting second job", server.checkoutJobs.jobs[firstJob.ID].State)
+	}
+
+	retry := doJSON(t, server.router, http.MethodPost, "/v1/checkout-jobs/leases", leaseBody)
+	assertErrorCode(t, retry, http.StatusConflict, "invalid_state")
+	if server.checkoutJobs.jobs[firstJob.ID].State != spine.CheckoutJobStateQueued {
+		t.Fatalf("first job state = %q, want no fallback lease after targeted conflict", server.checkoutJobs.jobs[firstJob.ID].State)
+	}
+}
+
+func TestGetCheckoutJobInspectionIsReadOnlyAndIncludesReceipt(t *testing.T) {
+	server := testServer(t)
+	approved := createApprovedContract(t, server)
+	plan := createPlan(t, server, approved.ContractID)
+	proposal := submitProposal(t, server, plan.ID, string(approved.ID))
+	accepted := acceptProposal(t, server, proposal.ID)
+	job, receipt := createCheckoutReceipt(t, server, accepted.CreatedTaskIDs[0])
+	eventsBefore := len(server.events.Events())
+
+	response := doJSON(t, server.router, http.MethodGet, "/v1/checkout-jobs/"+string(job.ID)+"?project_id=018f0000-0000-7000-8000-000000000003&repo_binding_id=018f0000-0000-7000-8000-000000000004", "")
+	if response.code != http.StatusOK {
+		t.Fatalf("checkout job inspection status = %d, want %d: %s", response.code, http.StatusOK, response.body)
+	}
+	assertNoHiddenContext(t, response.body)
+	for _, forbidden := range []string{"\"lease_token\"", "\"lease_token_hash\"", "\"run_id\"", "\"proof_id\""} {
+		if strings.Contains(response.body, forbidden) {
+			t.Fatalf("checkout job inspection exposes forbidden field %s: %s", forbidden, response.body)
+		}
+	}
+	var inspection spine.CheckoutJobInspection
+	decodeJSON(t, response.body, &inspection)
+	if inspection.Job.ID != job.ID || inspection.Job.State != spine.CheckoutJobStateReceiptSubmitted {
+		t.Fatalf("inspection job = %#v, want receipt-submitted checkout job %s", inspection.Job, job.ID)
+	}
+	if inspection.Receipt == nil || inspection.Receipt.ID != receipt.ID {
+		t.Fatalf("inspection receipt = %#v, want receipt %s", inspection.Receipt, receipt.ID)
+	}
+	if len(server.events.Events()) != eventsBefore {
+		t.Fatalf("events = %d, want read-only inspection to keep %d", len(server.events.Events()), eventsBefore)
+	}
+
+	mismatch := doJSON(t, server.router, http.MethodGet, "/v1/checkout-jobs/"+string(job.ID)+"?project_id=project-mismatch&repo_binding_id=018f0000-0000-7000-8000-000000000004", "")
+	assertErrorCode(t, mismatch, http.StatusConflict, "project_context_mismatch")
+}
+
 func TestPostTaskExecutionJobsCreatesQueuedJobWithoutRuntimeSideEffects(t *testing.T) {
 	server := testServer(t)
 	approved := createApprovedContract(t, server)

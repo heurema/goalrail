@@ -69,6 +69,7 @@ type JobLeaseInput struct {
 	OrganizationID spine.OrganizationID
 	ProjectID      spine.ProjectID
 	RepoBindingID  spine.RepoBindingID
+	CheckoutJobID  spine.CheckoutJobID
 	RunnerID       string
 	LeaseTokenHash string
 	LeaseExpiresAt time.Time
@@ -85,6 +86,7 @@ type JobStore interface {
 
 type ReceiptStore interface {
 	Create(context.Context, spine.CheckoutReceipt) error
+	GetByJobID(context.Context, spine.CheckoutJobID) (spine.CheckoutReceipt, bool, error)
 }
 
 type EventLog interface {
@@ -220,10 +222,17 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 		return spine.CheckoutJobLeaseCreated{}, false, fmt.Errorf("new checkout lease token: %w", err)
 	}
 	now := s.Clock.Now().UTC()
+	checkoutJobID := input.CheckoutJobID
+	if strings.TrimSpace(string(checkoutJobID)) != "" {
+		if err := s.validateTargetedLeaseJob(ctx, checkoutJobID, projectID, repoBindingID, membership, now); err != nil {
+			return spine.CheckoutJobLeaseCreated{}, false, err
+		}
+	}
 	leaseInput := JobLeaseInput{
 		OrganizationID: membership.OrganizationID,
 		ProjectID:      projectID,
 		RepoBindingID:  repoBindingID,
+		CheckoutJobID:  checkoutJobID,
 		RunnerID:       runnerID,
 		LeaseTokenHash: leaseTokenHash(token),
 		LeaseExpiresAt: now.Add(ttl),
@@ -255,6 +264,34 @@ func (s *Service) AcquireNextLease(ctx context.Context, input spine.CheckoutJobL
 		CreatedAt:      job.CreatedAt,
 		UpdatedAt:      job.UpdatedAt,
 	}, true, nil
+}
+
+func (s *Service) InspectJob(ctx context.Context, jobID spine.CheckoutJobID, input spine.CheckoutJobInspectRequest, membership spine.OrganizationMembership) (spine.CheckoutJobInspection, error) {
+	job, ok, err := s.Jobs.Get(ctx, jobID)
+	if err != nil {
+		return spine.CheckoutJobInspection{}, fmt.Errorf("get checkout job: %w", err)
+	}
+	if !ok {
+		return spine.CheckoutJobInspection{}, ErrCheckoutJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return spine.CheckoutJobInspection{}, err
+	}
+	if strings.TrimSpace(string(input.ProjectID)) != "" && input.ProjectID != job.ProjectID {
+		return spine.CheckoutJobInspection{}, ErrProjectMismatch
+	}
+	if strings.TrimSpace(string(input.RepoBindingID)) != "" && input.RepoBindingID != job.RepoBindingID {
+		return spine.CheckoutJobInspection{}, ErrRepoBindingMismatch
+	}
+	receipt, ok, err := s.Receipts.GetByJobID(ctx, job.ID)
+	if err != nil {
+		return spine.CheckoutJobInspection{}, fmt.Errorf("get checkout receipt by job id: %w", err)
+	}
+	inspection := spine.CheckoutJobInspection{Job: job}
+	if ok {
+		inspection.Receipt = &receipt
+	}
+	return inspection, nil
 }
 
 func (s *Service) SubmitReceipt(ctx context.Context, jobID spine.CheckoutJobID, input spine.CheckoutReceiptSubmitRequest, membership spine.OrganizationMembership) (spine.CheckoutReceipt, error) {
@@ -349,6 +386,32 @@ func (s *Service) validateLeaseScope(ctx context.Context, projectID spine.Projec
 		return ErrProjectMismatch
 	}
 	return nil
+}
+
+func (s *Service) validateTargetedLeaseJob(ctx context.Context, checkoutJobID spine.CheckoutJobID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership, now time.Time) error {
+	job, ok, err := s.Jobs.Get(ctx, checkoutJobID)
+	if err != nil {
+		return fmt.Errorf("get targeted checkout job: %w", err)
+	}
+	if !ok {
+		return ErrCheckoutJobNotFound
+	}
+	if err := authorizeTaskAccess(membership, job.OrganizationID); err != nil {
+		return err
+	}
+	if job.ProjectID != projectID {
+		return ErrProjectMismatch
+	}
+	if job.RepoBindingID != repoBindingID {
+		return ErrRepoBindingMismatch
+	}
+	if job.State == spine.CheckoutJobStateQueued {
+		return nil
+	}
+	if job.State == spine.CheckoutJobStateLeased && job.LeaseExpiresAt != nil && !job.LeaseExpiresAt.After(now) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s", ErrInvalidCheckoutState, job.State)
 }
 
 func (s *Service) loadAuthorizedTaskContext(ctx context.Context, taskID spine.WorkItemID, projectID spine.ProjectID, repoBindingID spine.RepoBindingID, membership spine.OrganizationMembership) (spine.WorkItem, spine.RepoBinding, error) {

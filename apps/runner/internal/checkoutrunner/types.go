@@ -5,6 +5,7 @@ import "time"
 type checkoutLeaseCreateRequest struct {
 	ProjectID     string `json:"project_id"`
 	RepoBindingID string `json:"repo_binding_id"`
+	CheckoutJobID string `json:"checkout_job_id,omitempty"`
 	RunnerID      string `json:"runner_id"`
 	TTLSeconds    int    `json:"ttl_seconds,omitempty"`
 }

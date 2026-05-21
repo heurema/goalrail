@@ -16,6 +16,7 @@ type Config struct {
 	BearerToken     string
 	ProjectID       string
 	RepoBindingID   string
+	CheckoutJobID   string
 	RunnerID        string
 	WorkspaceRef    string
 	CommitSHA       string
@@ -103,6 +104,7 @@ func (r *Runner) Step(ctx context.Context) (StepResult, error) {
 	lease, ok, err := r.client.acquireLease(ctx, checkoutLeaseCreateRequest{
 		ProjectID:     r.config.ProjectID,
 		RepoBindingID: r.config.RepoBindingID,
+		CheckoutJobID: strings.TrimSpace(r.config.CheckoutJobID),
 		RunnerID:      r.config.RunnerID,
 		TTLSeconds:    r.config.LeaseTTLSeconds,
 	})

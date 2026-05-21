@@ -137,6 +137,9 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	if leaseRequest.ProjectID != "project-1" || leaseRequest.RepoBindingID != "repo-1" || leaseRequest.RunnerID != "runner-1" || leaseRequest.TTLSeconds != 900 {
 		t.Fatalf("lease request = %#v, want scoped runner lease request", leaseRequest)
 	}
+	if leaseRequest.CheckoutJobID != "" {
+		t.Fatalf("lease request checkout_job_id = %q, want empty without explicit target", leaseRequest.CheckoutJobID)
+	}
 	if receiptRequests.Load() != 1 {
 		t.Fatalf("receipt requests = %d, want 1", receiptRequests.Load())
 	}
@@ -151,6 +154,86 @@ func TestRunOnceAcquiresLeaseAndSubmitsReceipt(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), secretToken) {
 		t.Fatalf("logs leaked checkout lease token: %q", logs.String())
+	}
+}
+
+func TestRunOnceSendsExplicitCheckoutJobTarget(t *testing.T) {
+	t.Parallel()
+
+	const leaseProof = "lease-proof-2"
+	var leaseRequest checkoutLeaseCreateRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases":
+			assertBearer(t, r)
+			decodeStrict(t, r, &leaseRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"job_id":"job-2","task_id":"task-2","state":"leased","runner_id":"runner-1","lease_token":"` + leaseProof + `","lease_expires_at":"2026-05-07T13:00:00Z","instruction":{"job_id":"job-2","task_id":"task-2","repo_binding_id":"repo-1","access_mode":"customer_mounted_workspace","provider":"github","repository_full_name":"heurema/goalrail","repository_url":"https://github.com/heurema/goalrail","workflow_base_branch":"main","path_scope":".","source_ref":{"kind":"work_item","id":"task-2"},"raw_source_uploaded":false},"created_at":"2026-05-07T12:45:00Z","updated_at":"2026-05-07T12:45:00Z"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/job-2/receipts":
+			assertBearer(t, r)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"receipt-2","job_id":"job-2","task_id":"task-2","repo_binding_id":"repo-1","runner_id":"runner-1","workspace_ref":"mounted:/workspace/goalrail","commit_sha":"abc123","raw_source_uploaded":false}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	if err := Run(context.Background(), Config{
+		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		CheckoutJobID:   "job-2",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		LeaseTTLSeconds: 900,
+		Once:            true,
+	}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if leaseRequest.CheckoutJobID != "job-2" {
+		t.Fatalf("lease request checkout_job_id = %q, want explicit target", leaseRequest.CheckoutJobID)
+	}
+}
+
+func TestRunOnceExplicitTargetFailureDoesNotRetryUntargeted(t *testing.T) {
+	t.Parallel()
+
+	var leaseRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/checkout-jobs/leases" {
+			assertBearer(t, r)
+			leaseRequests.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":{"code":"invalid_state","message":"checkout job state does not allow this transition"}}`))
+			return
+		}
+		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	err := Run(context.Background(), Config{
+		ServerURL:       server.URL,
+		BearerToken:     testBearerToken,
+		ProjectID:       "project-1",
+		RepoBindingID:   "repo-1",
+		CheckoutJobID:   "job-2",
+		RunnerID:        "runner-1",
+		WorkspaceRef:    "mounted:/workspace/goalrail",
+		CommitSHA:       "abc123",
+		LeaseTTLSeconds: 900,
+		Once:            true,
+	})
+	if err == nil {
+		t.Fatal("Run() error = nil, want targeted lease failure")
+	}
+	if leaseRequests.Load() != 1 {
+		t.Fatalf("lease requests = %d, want one targeted attempt and no untargeted fallback", leaseRequests.Load())
 	}
 }
 

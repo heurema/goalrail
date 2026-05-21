@@ -132,11 +132,15 @@ func ItemShowUsage() string {
 }
 
 func CheckoutUsage() string {
-	return "Usage: goalrail work checkout <command> [options]\n\nCommands:\n  prepare   create or return a runner checkout job for a planned WorkItem\n\nRun goalrail work checkout <command> --help for command usage.\n"
+	return "Usage: goalrail work checkout <command> [options]\n\nCommands:\n  prepare   create or return a runner checkout job for a planned WorkItem\n  show      inspect a checkout job and receipt without running runner checkout\n\nRun goalrail work checkout <command> --help for command usage.\n"
 }
 
 func CheckoutPrepareUsage() string {
 	return "Usage: goalrail work checkout prepare --task-id <task_id> [--format text|json]\n\nCreates or returns a server-owned checkout job and checkout instruction for a planned WorkItem using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command does not assign, claim, execute commands, create Run, gate, proof, or verify work.\n"
+}
+
+func CheckoutShowUsage() string {
+	return "Usage: goalrail work checkout show --checkout-job-id <checkout_job_id> [--format text|json]\n\nReads a checkout job and any submitted checkout receipt using the current Git root .goalrail/project.yml marker and the stored goalrail login profile.\n\nThis command is read-only. It does not lease runner checkout, submit receipts, prepare execution, create runs, gate, proof, verify, or complete work.\n"
 }
 
 func ExecutionUsage() string {
@@ -716,6 +720,8 @@ func runCheckout(ctx context.Context, out *term.Output, workDir string, args []s
 		return err
 	case "prepare":
 		return runCheckoutPrepare(ctx, out, workDir, args[1:], options)
+	case "show":
+		return runCheckoutShow(ctx, out, workDir, args[1:], options)
 	default:
 		return exitcode.UsageError(fmt.Errorf("unknown work checkout command %q", args[0]))
 	}
@@ -781,6 +787,70 @@ func runCheckoutPrepare(ctx context.Context, out *term.Output, workDir string, a
 		return term.WriteJSON(out.Stdout, output)
 	}
 	_, err = fmt.Fprint(out.Stdout, renderCheckoutPrepareText(output))
+	return err
+}
+
+func runCheckoutShow(ctx context.Context, out *term.Output, workDir string, args []string, options Options) error {
+	if err := ctx.Err(); err != nil {
+		return exitcode.RuntimeError(err)
+	}
+
+	flags := flag.NewFlagSet("goalrail work checkout show", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	checkoutJobID := flags.String("checkout-job-id", "", "CheckoutJob ID")
+	formatValue := flags.String("format", string(term.FormatText), "output format: text or json")
+
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			_, writeErr := fmt.Fprint(out.Stdout, CheckoutShowUsage())
+			return writeErr
+		}
+		return exitcode.UsageError(err)
+	}
+	if flags.NArg() != 0 {
+		return exitcode.UsageError(fmt.Errorf("unexpected arguments: %v", flags.Args()))
+	}
+	normalizedCheckoutJobID := strings.TrimSpace(*checkoutJobID)
+	if normalizedCheckoutJobID == "" {
+		return exitcode.UsageError(errors.New("--checkout-job-id is required"))
+	}
+	if err := validateUUIDLike("checkout_job_id", normalizedCheckoutJobID); err != nil {
+		return err
+	}
+	normalizedCheckoutJobID = strings.ToLower(normalizedCheckoutJobID)
+	format, err := term.ParseFormat(*formatValue)
+	if err != nil {
+		return exitcode.UsageError(err)
+	}
+
+	work, err := loadWorkContext(ctx, workDir, options, "work checkout show")
+	if err != nil {
+		return err
+	}
+	inspection, err := getCheckoutJobInspection(ctx, work.Client, work.Session, normalizedCheckoutJobID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateCheckoutJobContext(work.Config, inspection.Job.TaskID, inspection.Job); err != nil {
+		return err
+	}
+	if !strings.EqualFold(inspection.Job.ID, normalizedCheckoutJobID) {
+		return exitcode.ValidationError(errors.New("checkout job inspection response id does not match requested checkout job"))
+	}
+	detail, err := getWorkItemDetail(ctx, work.Client, work.Session, inspection.Job.TaskID, work.Config)
+	if err != nil {
+		return err
+	}
+	if err := validateWorkItemDetailContext(work.Config, inspection.Job.TaskID, detail); err != nil {
+		return err
+	}
+
+	output := buildCheckoutShowOutput(work.Config, work.ServerURL, detail, inspection)
+	output.AuthSession = authSessionOutput(work.AuthSession)
+	if format == term.FormatJSON {
+		return term.WriteJSON(out.Stdout, output)
+	}
+	_, err = fmt.Fprint(out.Stdout, renderCheckoutShowText(output))
 	return err
 }
 
@@ -1213,6 +1283,73 @@ func renderCheckoutPrepareText(output spine.WorkCheckoutPrepareOutput) string {
 	return b.String()
 }
 
+func renderCheckoutShowText(output spine.WorkCheckoutShowOutput) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Checkout job inspection\n\n")
+	fmt.Fprintf(&b, "Read-only note\nThis command did not lease runner checkout, submit a checkout receipt, prepare execution, create runs, gate, proof, verify, or complete work.\n")
+	fmt.Fprintf(&b, "\nIdentity / lineage\n")
+	fmt.Fprintf(&b, "- Checkout job: %s\n", output.CheckoutJobID)
+	fmt.Fprintf(&b, "- Checkout state: %s\n", output.CheckoutJobState)
+	fmt.Fprintf(&b, "- WorkItem: %s\n", output.WorkItemID)
+	fmt.Fprintf(&b, "- Task: %s\n", output.TaskID)
+	if output.GoalID != "" {
+		fmt.Fprintf(&b, "- Goal: %s\n", output.GoalID)
+	}
+	fmt.Fprintf(&b, "- Contract: %s\n", output.ContractID)
+	fmt.Fprintf(&b, "- Approved contract: %s\n", output.ApprovedContractID)
+	fmt.Fprintf(&b, "- Plan: %s\n", output.PlanID)
+	fmt.Fprintf(&b, "- Proposal: %s\n", output.ProposalID)
+	fmt.Fprintf(&b, "- Project: %s\n", output.ProjectID)
+	fmt.Fprintf(&b, "- Repo binding: %s\n", output.RepoBindingID)
+	fmt.Fprintf(&b, "- Server: %s\n", output.ServerURL)
+	if output.LocalConfigPath != "" {
+		fmt.Fprintf(&b, "- Local config: %s\n", output.LocalConfigPath)
+	}
+	fmt.Fprintf(&b, "\nCheckout instruction\n")
+	fmt.Fprintf(&b, "- Instruction job: %s\n", output.Instruction.JobID)
+	fmt.Fprintf(&b, "- Instruction task: %s\n", output.Instruction.TaskID)
+	fmt.Fprintf(&b, "- Access mode: %s\n", output.Instruction.AccessMode)
+	fmt.Fprintf(&b, "- Provider: %s\n", output.Instruction.Provider)
+	fmt.Fprintf(&b, "- Repository: %s\n", output.Instruction.RepositoryFullName)
+	fmt.Fprintf(&b, "- Repository URL: %s\n", output.Instruction.RepositoryURL)
+	fmt.Fprintf(&b, "- Workflow base branch: %s\n", output.Instruction.WorkflowBaseBranch)
+	fmt.Fprintf(&b, "- Path scope: %s\n", output.Instruction.PathScope)
+	fmt.Fprintf(&b, "- Raw source uploaded: %t\n", output.Instruction.RawSourceUploaded)
+	if output.Receipt != nil {
+		fmt.Fprintf(&b, "\nCheckout receipt\n")
+		fmt.Fprintf(&b, "- Receipt: %s\n", output.Receipt.ID)
+		fmt.Fprintf(&b, "- Runner: %s\n", output.Receipt.RunnerID)
+		fmt.Fprintf(&b, "- Workspace ref: %s\n", output.Receipt.WorkspaceRef)
+		fmt.Fprintf(&b, "- Commit SHA: %s\n", output.Receipt.CommitSHA)
+		if output.Receipt.BaselineID != "" {
+			fmt.Fprintf(&b, "- Baseline: %s\n", output.Receipt.BaselineID)
+		}
+		if output.Receipt.OverlayID != "" {
+			fmt.Fprintf(&b, "- Overlay: %s\n", output.Receipt.OverlayID)
+		}
+		fmt.Fprintf(&b, "- Dirty: %t\n", output.Receipt.Dirty)
+		fmt.Fprintf(&b, "- Partial: %t\n", output.Receipt.Partial)
+		fmt.Fprintf(&b, "- Raw source uploaded: %t\n", output.Receipt.RawSourceUploaded)
+	} else {
+		fmt.Fprintf(&b, "\nCheckout receipt\nNo checkout receipt has been submitted for this checkout job.\n")
+	}
+	fmt.Fprintf(&b, "\n%s\n", output.Display.Summary)
+	if output.NextAction.Kind != "" {
+		fmt.Fprintf(&b, "\nBoundary\n")
+		fmt.Fprintf(&b, "Next action: %s\n", output.NextAction.Kind)
+		if output.NextAction.SafetyNote != "" {
+			fmt.Fprintf(&b, "Safety note: %s\n", output.NextAction.SafetyNote)
+		}
+		if output.NextAction.StopCondition != "" {
+			fmt.Fprintf(&b, "Stop condition: %s\n", output.NextAction.StopCondition)
+		}
+		if output.NextAction.CommandPacket == nil {
+			fmt.Fprintf(&b, "No command packet is emitted because runner checkout requires operator-owned runner auth/env values.\n")
+		}
+	}
+	return b.String()
+}
+
 func renderExecutionPrepareText(output spine.WorkExecutionPrepareOutput) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Execution job prepared\n\n")
@@ -1491,6 +1628,115 @@ func buildCheckoutPrepareOutput(config projectconfig.Config, serverURL string, d
 			},
 			PlannedSlice: "H2",
 		},
+	}
+}
+
+func buildCheckoutShowOutput(config projectconfig.Config, serverURL string, detail workItemDetailResponse, inspection checkoutJobInspectionResponse) spine.WorkCheckoutShowOutput {
+	job := inspection.Job
+	workItemID := firstNonEmpty(detail.WorkItemID, detail.TaskID, detail.ID, job.TaskID)
+	taskID := firstNonEmpty(detail.TaskID, detail.WorkItemID, detail.ID, job.TaskID)
+	contractID := job.ContractID
+	if strings.TrimSpace(string(contractID)) == "" {
+		contractID = detail.ContractID
+	}
+	approvedContractID := firstNonEmpty(job.ApprovedContractID, detail.ApprovedContractID)
+	planID := firstNonEmpty(job.PlanID, detail.PlanID)
+	proposalID := firstNonEmpty(job.ProposalID, detail.ProposalID)
+	repoBindingID := job.RepoBindingID
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		repoBindingID = detail.RepoBindingID
+	}
+	if strings.TrimSpace(string(repoBindingID)) == "" {
+		repoBindingID = spine.RepoBindingID(config.RepoBindingID)
+	}
+	mutatesState := true
+	requiresHumanApproval := true
+	displaySummary := "Inspected checkout job state and checkout instruction. Runner checkout, execution preparation, gate, proof, verification, and completion were not run."
+	nextAction := spine.NextAction{
+		Kind:                  "runner_checkout_required",
+		Blocking:              true,
+		Available:             false,
+		RequiresHumanApproval: &requiresHumanApproval,
+		MutatesState:          &mutatesState,
+		SafetyNote:            "This read-only inspection did not run runner checkout. Runner checkout requires operator-owned runner auth/env values and mutates checkout job/receipt state.",
+		StopCondition:         "Stop here unless a later approved Contract and explicit human approval authorize one bounded runner checkout invocation.",
+		RelatedIDs: map[string]string{
+			"task_id":              taskID,
+			"work_item_id":         workItemID,
+			"goal_id":              detail.GoalID,
+			"contract_id":          string(contractID),
+			"approved_contract_id": approvedContractID,
+			"plan_id":              planID,
+			"proposal_id":          proposalID,
+			"checkout_job_id":      job.ID,
+			"repo_binding_id":      string(repoBindingID),
+		},
+		PlannedSlice: "H2",
+	}
+	var receipt *spine.CheckoutReceipt
+	if inspection.Receipt != nil {
+		receipt = &spine.CheckoutReceipt{
+			ID:                inspection.Receipt.ID,
+			JobID:             inspection.Receipt.JobID,
+			TaskID:            inspection.Receipt.TaskID,
+			RepoBindingID:     inspection.Receipt.RepoBindingID,
+			RunnerID:          inspection.Receipt.RunnerID,
+			WorkspaceRef:      inspection.Receipt.WorkspaceRef,
+			CommitSHA:         inspection.Receipt.CommitSHA,
+			BaselineID:        inspection.Receipt.BaselineID,
+			OverlayID:         inspection.Receipt.OverlayID,
+			Dirty:             inspection.Receipt.Dirty,
+			Partial:           inspection.Receipt.Partial,
+			RawSourceUploaded: inspection.Receipt.RawSourceUploaded,
+		}
+		displaySummary = "Inspected checkout job and checkout receipt metadata. Execution preparation, gate, proof, verification, and completion were not run."
+		mutatesState = false
+		nextAction = spine.NextAction{
+			Kind:                  "checkout_receipt_available",
+			Blocking:              false,
+			Available:             false,
+			RequiresHumanApproval: &requiresHumanApproval,
+			MutatesState:          &mutatesState,
+			SafetyNote:            "A checkout receipt is present, but this command did not prepare execution, create a Run, gate, proof, verify, or complete work.",
+			StopCondition:         "Stop here unless a later approved Contract explicitly authorizes execution preparation.",
+			RelatedIDs: map[string]string{
+				"task_id":              taskID,
+				"work_item_id":         workItemID,
+				"goal_id":              detail.GoalID,
+				"contract_id":          string(contractID),
+				"approved_contract_id": approvedContractID,
+				"plan_id":              planID,
+				"proposal_id":          proposalID,
+				"checkout_job_id":      job.ID,
+				"checkout_receipt_id":  inspection.Receipt.ID,
+				"repo_binding_id":      string(repoBindingID),
+			},
+			PlannedSlice: "H2.1",
+		}
+	}
+	return spine.WorkCheckoutShowOutput{
+		SchemaVersion:      cliSchemaVersion,
+		Mode:               serverMode,
+		ServerURL:          serverURL,
+		OrganizationID:     config.OrganizationID,
+		ProjectID:          config.ProjectID,
+		RepoBindingID:      repoBindingID,
+		TaskID:             taskID,
+		WorkItemID:         workItemID,
+		GoalID:             detail.GoalID,
+		ContractID:         contractID,
+		ApprovedContractID: approvedContractID,
+		PlanID:             planID,
+		ProposalID:         proposalID,
+		CheckoutJobID:      job.ID,
+		CheckoutJobState:   job.State,
+		Receipt:            receipt,
+		Instruction:        job.Instruction,
+		LocalConfigPath:    projectconfig.RelativePath,
+		Display: spine.DisplaySummary{
+			Summary: displaySummary,
+		},
+		NextAction: nextAction,
 	}
 }
 
@@ -2426,6 +2672,46 @@ func postCheckoutJob(ctx context.Context, client HTTPClient, session authstore.S
 	return decoded, nil
 }
 
+func getCheckoutJobInspection(ctx context.Context, client HTTPClient, session authstore.Session, checkoutJobID string, config projectconfig.Config) (checkoutJobInspectionResponse, error) {
+	serverURL := strings.TrimRight(session.ServerURL, "/")
+	values := url.Values{}
+	values.Set("project_id", config.ProjectID)
+	values.Set("repo_binding_id", config.RepoBindingID)
+	endpoint := serverURL + "/v1/checkout-jobs/" + url.PathEscape(checkoutJobID) + "?" + values.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(fmt.Errorf("build checkout job inspection request: %w", err))
+	}
+	request.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+	response, err := client.Do(request)
+	if err != nil {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(fmt.Errorf("inspect checkout job on %s: %w", serverURL, err))
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return checkoutJobInspectionResponse{}, mapHTTPError("checkout job inspection request", response, serverURL)
+	}
+	var decoded checkoutJobInspectionResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(fmt.Errorf("decode checkout job inspection response: %w", err))
+	}
+	if strings.TrimSpace(decoded.Job.ID) == "" {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(errors.New("checkout job inspection response did not include job.id"))
+	}
+	if strings.TrimSpace(decoded.Job.TaskID) == "" {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(errors.New("checkout job inspection response did not include job.task_id"))
+	}
+	if strings.TrimSpace(decoded.Job.State) == "" {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(errors.New("checkout job inspection response did not include job.state"))
+	}
+	if strings.TrimSpace(decoded.Job.Instruction.JobID) == "" {
+		return checkoutJobInspectionResponse{}, exitcode.RuntimeError(errors.New("checkout job inspection response did not include job.instruction.job_id"))
+	}
+	return decoded, nil
+}
+
 func postExecutionJob(ctx context.Context, client HTTPClient, session authstore.Session, taskID string, checkoutReceiptID string, config projectconfig.Config) (executionJobResponse, error) {
 	payload := executionJobCreateRequest{
 		ProjectID:         config.ProjectID,
@@ -2702,6 +2988,26 @@ type checkoutJobResponse struct {
 	RepoBindingID      spine.RepoBindingID       `json:"repo_binding_id"`
 	State              string                    `json:"state"`
 	Instruction        spine.CheckoutInstruction `json:"instruction"`
+}
+
+type checkoutReceiptResponse struct {
+	ID                string `json:"id"`
+	JobID             string `json:"job_id"`
+	TaskID            string `json:"task_id"`
+	RepoBindingID     string `json:"repo_binding_id"`
+	RunnerID          string `json:"runner_id"`
+	WorkspaceRef      string `json:"workspace_ref"`
+	CommitSHA         string `json:"commit_sha"`
+	BaselineID        string `json:"baseline_id,omitempty"`
+	OverlayID         string `json:"overlay_id,omitempty"`
+	Dirty             bool   `json:"dirty"`
+	Partial           bool   `json:"partial"`
+	RawSourceUploaded bool   `json:"raw_source_uploaded"`
+}
+
+type checkoutJobInspectionResponse struct {
+	Job     checkoutJobResponse      `json:"job"`
+	Receipt *checkoutReceiptResponse `json:"receipt,omitempty"`
 }
 
 type executionJobResponse struct {
