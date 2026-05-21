@@ -171,18 +171,32 @@ func (s *PostgresCheckoutJobStore) AcquireNextLease(ctx context.Context, input c
 	if err != nil {
 		return spine.CheckoutJob{}, false, err
 	}
+	var checkoutJobID any
+	targetPredicate := ""
+	if input.CheckoutJobID != "" {
+		checkoutJobID, err = uuidValue(input.CheckoutJobID, "checkout job lease checkout job id")
+		if err != nil {
+			return spine.CheckoutJob{}, false, err
+		}
+		targetPredicate = " AND id = $7"
+	}
 	now := input.UpdatedAt.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
-	row := s.query.QueryRow(ctx, `
+	query := `
 SELECT id, organization_id, project_id, task_id, contract_id, approved_contract_id, plan_id, proposal_id, repo_binding_id, state, requested_by, instruction, current_runner_id, lease_token_hash, lease_expires_at, created_at, updated_at
 FROM checkout_jobs
-WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3 AND (state = $4 OR (state = $5 AND lease_expires_at <= $6))
+WHERE organization_id = $1 AND project_id = $2 AND repo_binding_id = $3` + targetPredicate + ` AND (state = $4 OR (state = $5 AND lease_expires_at <= $6))
 ORDER BY created_at ASC, id ASC
 LIMIT 1
 FOR UPDATE SKIP LOCKED
-`, orgID, projectID, repoBindingID, spine.CheckoutJobStateQueued, spine.CheckoutJobStateLeased, now)
+`
+	args := []any{orgID, projectID, repoBindingID, spine.CheckoutJobStateQueued, spine.CheckoutJobStateLeased, now}
+	if input.CheckoutJobID != "" {
+		args = append(args, checkoutJobID)
+	}
+	row := s.query.QueryRow(ctx, query, args...)
 	job, err := scanCheckoutJob(row)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -455,6 +469,29 @@ func (s *PostgresCheckoutReceiptStore) Get(ctx context.Context, id spine.Checkou
 			return spine.CheckoutReceipt{}, false, nil
 		}
 		return spine.CheckoutReceipt{}, false, fmt.Errorf("get checkout receipt: %w", err)
+	}
+	return receipt, true, nil
+}
+
+func (s *PostgresCheckoutReceiptStore) GetByJobID(ctx context.Context, id spine.CheckoutJobID) (spine.CheckoutReceipt, bool, error) {
+	jobID, err := uuidValue(id, "checkout receipt job id")
+	if err != nil {
+		return spine.CheckoutReceipt{}, false, err
+	}
+	stmt := s.psql.
+		Select(checkoutReceiptColumns()...).
+		From("checkout_receipts").
+		Where(squirrel.Eq{"job_id": jobID})
+	row, err := queryRow(ctx, s.query, "get checkout receipt by job id", stmt)
+	if err != nil {
+		return spine.CheckoutReceipt{}, false, err
+	}
+	receipt, err := scanCheckoutReceipt(row)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return spine.CheckoutReceipt{}, false, nil
+		}
+		return spine.CheckoutReceipt{}, false, fmt.Errorf("get checkout receipt by job id: %w", err)
 	}
 	return receipt, true, nil
 }

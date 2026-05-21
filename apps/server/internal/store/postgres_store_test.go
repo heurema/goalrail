@@ -1480,6 +1480,43 @@ func TestPostgresCheckoutJobStoreAcquireNextLeaseScopesByProjectAndRepoBinding(t
 	}
 }
 
+func TestPostgresCheckoutJobStoreAcquireNextLeaseCanTargetCheckoutJob(t *testing.T) {
+	ctx := context.Background()
+	exec := &recordingProjectContextExecer{}
+	query := &recordingProjectContextQuerier{row: fakeProjectContextRow{err: pgx.ErrNoRows}}
+	store := NewPostgresCheckoutJobStoreWithExecutorAndQuerier(exec, query)
+
+	_, ok, err := store.AcquireNextLease(ctx, checkout.JobLeaseInput{
+		OrganizationID: "018f0000-0000-7000-8000-000000000002",
+		ProjectID:      "018f0000-0000-7000-8000-000000000003",
+		RepoBindingID:  "018f0000-0000-7000-8000-000000000004",
+		CheckoutJobID:  "018f0000-0000-7000-8000-000000000b01",
+		RunnerID:       "runner-1",
+		LeaseTokenHash: "token-hash",
+		LeaseExpiresAt: testStoreTime().Add(time.Hour),
+		UpdatedAt:      testStoreTime(),
+	})
+	if err != nil {
+		t.Fatalf("AcquireNextLease() error = %v", err)
+	}
+	if ok {
+		t.Fatal("AcquireNextLease() ok = true, want false for no rows")
+	}
+	if len(query.calls) != 1 {
+		t.Fatalf("query calls = %d, want 1", len(query.calls))
+	}
+	call := query.calls[0]
+	if !strings.Contains(call.sql, "AND id = $7") {
+		t.Fatalf("acquire SQL = %q, want checkout job id target filter", call.sql)
+	}
+	if got, want := len(call.args), 7; got != want {
+		t.Fatalf("args len = %d, want %d", got, want)
+	}
+	if len(exec.calls) != 0 {
+		t.Fatalf("exec calls = %d, want none when targeted lease candidate is unavailable", len(exec.calls))
+	}
+}
+
 func validPostgresCheckoutJob() spine.CheckoutJob {
 	jobID := spine.CheckoutJobID("018f0000-0000-7000-8000-000000000b01")
 	taskID := spine.WorkItemID("018f0000-0000-7000-8000-000000000701")

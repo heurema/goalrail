@@ -57,6 +57,7 @@ type CheckoutJobCreateRequest struct {
 type CheckoutJobLeaseCreateRequest struct {
 	ProjectID     ProjectID     `json:"project_id,omitempty"`
 	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+	CheckoutJobID CheckoutJobID `json:"checkout_job_id,omitempty"`
 	RunnerID      string        `json:"runner_id"`
 	TTLSeconds    int           `json:"ttl_seconds,omitempty"`
 }
@@ -88,6 +89,16 @@ type CheckoutReceipt struct {
 	PartialReasons    []string          `json:"partial_reasons,omitempty"`
 	RawSourceUploaded bool              `json:"raw_source_uploaded"`
 	CreatedAt         time.Time         `json:"created_at"`
+}
+
+type CheckoutJobInspectRequest struct {
+	ProjectID     ProjectID     `json:"project_id,omitempty"`
+	RepoBindingID RepoBindingID `json:"repo_binding_id,omitempty"`
+}
+
+type CheckoutJobInspection struct {
+	Job     CheckoutJob      `json:"job"`
+	Receipt *CheckoutReceipt `json:"receipt,omitempty"`
 }
 
 type CheckoutReceiptSubmitRequest struct {

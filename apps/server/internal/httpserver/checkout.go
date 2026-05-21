@@ -12,6 +12,7 @@ import (
 type CheckoutService interface {
 	CreateOrReturnJob(context.Context, spine.WorkItemID, spine.CheckoutJobCreateRequest, spine.OrganizationMembership) (spine.CheckoutJob, bool, error)
 	AcquireNextLease(context.Context, spine.CheckoutJobLeaseCreateRequest, spine.OrganizationMembership) (spine.CheckoutJobLeaseCreated, bool, error)
+	InspectJob(context.Context, spine.CheckoutJobID, spine.CheckoutJobInspectRequest, spine.OrganizationMembership) (spine.CheckoutJobInspection, error)
 	SubmitReceipt(context.Context, spine.CheckoutJobID, spine.CheckoutReceiptSubmitRequest, spine.OrganizationMembership) (spine.CheckoutReceipt, error)
 }
 
@@ -69,6 +70,24 @@ func (h *CheckoutHandler) AcquireLease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	RespondJSON(w, http.StatusCreated, lease)
+}
+
+func (h *CheckoutHandler) InspectJob(w http.ResponseWriter, r *http.Request) {
+	profile, err := h.authService.Me(r.Context(), bearerToken(r.Header.Get("Authorization")))
+	if err != nil {
+		respondAuthError(w, err)
+		return
+	}
+	input := spine.CheckoutJobInspectRequest{
+		ProjectID:     spine.ProjectID(r.URL.Query().Get("project_id")),
+		RepoBindingID: spine.RepoBindingID(r.URL.Query().Get("repo_binding_id")),
+	}
+	inspection, err := h.service.InspectJob(r.Context(), spine.CheckoutJobID(r.PathValue("id")), input, profile.OrganizationMembership)
+	if err != nil {
+		h.respondServiceError(w, err)
+		return
+	}
+	RespondJSON(w, http.StatusOK, inspection)
 }
 
 func (h *CheckoutHandler) SubmitReceipt(w http.ResponseWriter, r *http.Request) {
