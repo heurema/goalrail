@@ -223,6 +223,45 @@ type WorkCheckoutPrepareOutput struct {
 	NextAction         NextAction           `json:"next_action"`
 }
 
+type CheckoutReceipt struct {
+	ID                string `json:"id"`
+	JobID             string `json:"job_id"`
+	TaskID            string `json:"task_id"`
+	RepoBindingID     string `json:"repo_binding_id"`
+	RunnerID          string `json:"runner_id,omitempty"`
+	WorkspaceRef      string `json:"workspace_ref,omitempty"`
+	CommitSHA         string `json:"commit_sha,omitempty"`
+	BaselineID        string `json:"baseline_id,omitempty"`
+	OverlayID         string `json:"overlay_id,omitempty"`
+	Dirty             bool   `json:"dirty"`
+	Partial           bool   `json:"partial"`
+	RawSourceUploaded bool   `json:"raw_source_uploaded"`
+}
+
+type WorkCheckoutShowOutput struct {
+	SchemaVersion      string               `json:"schema_version"`
+	Mode               string               `json:"mode"`
+	ServerURL          string               `json:"server_url"`
+	AuthSession        *AuthSessionMetadata `json:"auth_session,omitempty"`
+	OrganizationID     string               `json:"organization_id"`
+	ProjectID          string               `json:"project_id"`
+	RepoBindingID      RepoBindingID        `json:"repo_binding_id"`
+	TaskID             string               `json:"task_id"`
+	WorkItemID         string               `json:"work_item_id"`
+	GoalID             string               `json:"goal_id,omitempty"`
+	ContractID         ContractID           `json:"contract_id"`
+	ApprovedContractID string               `json:"approved_contract_id"`
+	PlanID             string               `json:"plan_id"`
+	ProposalID         string               `json:"proposal_id"`
+	CheckoutJobID      string               `json:"checkout_job_id"`
+	CheckoutJobState   string               `json:"checkout_job_state"`
+	Receipt            *CheckoutReceipt     `json:"receipt,omitempty"`
+	Instruction        CheckoutInstruction  `json:"instruction"`
+	LocalConfigPath    string               `json:"local_config_path"`
+	Display            DisplaySummary       `json:"display"`
+	NextAction         NextAction           `json:"next_action"`
+}
+
 type WorkExecutionPrepareOutput struct {
 	SchemaVersion     string               `json:"schema_version"`
 	Mode              string               `json:"mode"`

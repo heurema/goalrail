@@ -23,6 +23,7 @@ func main() {
 		BearerToken:     os.Getenv("GOALRAIL_RUNNER_BEARER_TOKEN"),
 		ProjectID:       os.Getenv("GOALRAIL_RUNNER_PROJECT_ID"),
 		RepoBindingID:   os.Getenv("GOALRAIL_RUNNER_REPO_BINDING_ID"),
+		CheckoutJobID:   os.Getenv("GOALRAIL_RUNNER_CHECKOUT_JOB_ID"),
 		RunnerID:        os.Getenv("GOALRAIL_RUNNER_ID"),
 		WorkspaceRef:    os.Getenv("GOALRAIL_RUNNER_WORKSPACE_REF"),
 		CommitSHA:       os.Getenv("GOALRAIL_RUNNER_COMMIT_SHA"),
@@ -50,6 +51,7 @@ func main() {
 	flags.StringVar(&cfg.ServerURL, "server-url", cfg.ServerURL, "Goalrail API server URL; also configurable with GOALRAIL_RUNNER_SERVER_URL")
 	flags.StringVar(&cfg.ProjectID, "project-id", cfg.ProjectID, "Project scope for runner leases; also configurable with GOALRAIL_RUNNER_PROJECT_ID")
 	flags.StringVar(&cfg.RepoBindingID, "repo-binding-id", cfg.RepoBindingID, "RepoBinding scope for runner leases; also configurable with GOALRAIL_RUNNER_REPO_BINDING_ID")
+	flags.StringVar(&cfg.CheckoutJobID, "checkout-job-id", cfg.CheckoutJobID, "optional checkout job target for checkout mode; also configurable with GOALRAIL_RUNNER_CHECKOUT_JOB_ID")
 	flags.StringVar(&cfg.RunnerID, "runner-id", cfg.RunnerID, "runner identity; also configurable with GOALRAIL_RUNNER_ID")
 	flags.StringVar(&cfg.WorkspaceRef, "workspace-ref", cfg.WorkspaceRef, "mounted workspace reference; also configurable with GOALRAIL_RUNNER_WORKSPACE_REF")
 	flags.StringVar(&workspaceRoot, "workspace-root", workspaceRoot, "local workspace root for project probe mode; also configurable with GOALRAIL_RUNNER_WORKSPACE_ROOT")
@@ -61,6 +63,11 @@ func main() {
 	flags.DurationVar(&cfg.PollInterval, "poll-interval", cfg.PollInterval, "poll interval when no checkout job is available")
 	flags.IntVar(&cfg.LeaseTTLSeconds, "lease-ttl-seconds", cfg.LeaseTTLSeconds, "requested lease TTL in seconds")
 	flags.BoolVar(&cfg.Once, "once", cfg.Once, "run one poll iteration and exit")
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "Usage: goalrail-runner --mode checkout --server-url <url> --project-id <project-id> --repo-binding-id <repo-binding-id> --runner-id <runner-id> --workspace-ref <workspace-ref> --commit-sha <commit-sha> [--checkout-job-id <checkout-job-id>] [--once]\n\n")
+		fmt.Fprintf(flags.Output(), "Checkout mode acquires a checkout job lease and submits a workspace metadata receipt. It requires GOALRAIL_RUNNER_BEARER_TOKEN or equivalent runtime secret injection, but help and logs must not print token values. Checkout mode does not prepare execution, run commands, gate, proof, verify, or complete WorkItems.\n\n")
+		flags.PrintDefaults()
+	}
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)

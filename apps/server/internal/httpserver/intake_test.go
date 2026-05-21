@@ -2540,6 +2540,9 @@ func (s *fakeCheckoutJobStore) AcquireNextLease(_ context.Context, input checkou
 	var selected spine.CheckoutJob
 	found := false
 	for _, job := range s.jobs {
+		if input.CheckoutJobID != "" && job.ID != input.CheckoutJobID {
+			continue
+		}
 		if input.OrganizationID != "" && job.OrganizationID != input.OrganizationID {
 			continue
 		}
@@ -2599,6 +2602,15 @@ func (s *fakeCheckoutReceiptStore) Create(_ context.Context, receipt spine.Check
 
 func (s *fakeCheckoutReceiptStore) Get(_ context.Context, id spine.CheckoutReceiptID) (spine.CheckoutReceipt, bool, error) {
 	receipt, ok := s.receipts[id]
+	return receipt, ok, nil
+}
+
+func (s *fakeCheckoutReceiptStore) GetByJobID(_ context.Context, id spine.CheckoutJobID) (spine.CheckoutReceipt, bool, error) {
+	receiptID, ok := s.byJob[id]
+	if !ok {
+		return spine.CheckoutReceipt{}, false, nil
+	}
+	receipt, ok := s.receipts[receiptID]
 	return receipt, ok, nil
 }
 
