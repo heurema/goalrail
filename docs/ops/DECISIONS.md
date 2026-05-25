@@ -2624,3 +2624,34 @@ What this prevents:
 - Macrohard-style autonomy theatre
 - premature enterprise-governance expansion
 - MVP scope creep from market news
+
+## D-0096 — Team Pilot templates live under docs/ops/templates
+Date: 2026-05-25
+Status: accepted
+Review after: 2026-08-25
+
+Decision:
+- TEAM-PILOT-001 stores Team Pilot Contract and PR handoff templates under
+  `docs/ops/templates`.
+- `.goalrail/templates` is deferred until after Team Pilot Readiness is
+  complete and a later approved slice decides repo-native Goalrail template
+  policy.
+- `.goalrail/project.yml` remains a local marker file and must stay untracked
+  and uncommitted.
+- `.goalrail` tracking policy and `.gitignore` marker policy are unchanged by
+  TEAM-PILOT-001.
+
+Rationale:
+- The Team Pilot needs durable, reviewable guidance that a small team can read
+  in normal docs and PR review.
+- Keeping templates under `docs/ops/templates` avoids confusing local Goalrail
+  marker state with committed process templates.
+- Deferring `.goalrail/templates` preserves the current marker policy until
+  the team has evidence from 3-5 low-risk pilot PRs.
+
+What this prevents:
+- accidentally committing local Goalrail marker state
+- implying `.goalrail` is now the committed template home
+- changing marker or ignore policy as a side effect of a docs/template slice
+- making Team Pilot depend on runner checkout, execution, gate, proof,
+  verification, or completion behavior

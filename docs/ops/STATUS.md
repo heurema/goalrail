@@ -17,12 +17,14 @@ related_docs:
   - docs/product/GOALRAIL_BUILD_ROADMAP.md
   - docs/product/GOALRAIL_IMPLEMENTATION_GUIDE.md
   - docs/ops/COMPONENTS.yaml
+  - docs/ops/GOALRAIL_AGENT_SKILL.md
+  - docs/ops/TEAM_PILOT_RUNBOOK.md
   - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
 ---
 # Goalrail Status
 
-Last updated: 2026-05-09
+Last updated: 2026-05-25
 Status: planning / product canon and pilot frame active; first local Go CLI with
 local Project Scan baseline / overlay commands and Go server intent-plane /
 public Contract aggregate and `/v1/contracts` lifecycle façade / read-only
@@ -204,6 +206,16 @@ outside the bounded start-assistant Worker, repo integration, runtime
 execution, gate, proof, or broad backend platform behavior.
 
 ## Current state
+
+Team Pilot Readiness is now the active adoption path for the next small-team
+stage. The operating posture is Goalrail as a contract-first PR control plane:
+Goal -> Clarification -> Contract -> Plan -> Proposal -> WorkItem -> PR
+handoff. `docs/ops/GOALRAIL_AGENT_SKILL.md`,
+`docs/ops/TEAM_PILOT_RUNBOOK.md`, and `docs/ops/templates/` define the
+agent guidance, pilot runbook, and docs-hosted Contract / PR handoff templates
+for this stage. This does not promote runner checkout, checkout prepare,
+execution, gate, proof, verification, or WorkItem completion into the team
+pilot path.
 
 The project currently has:
 - product concept canon

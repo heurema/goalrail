@@ -11,6 +11,9 @@
    - `GOALRAIL_IMPLEMENTATION_GUIDE.md`
 3. Then read `docs/ops/*`.
 4. Before adding or moving files, read `docs/ops/REPO_STRUCTURE.md`.
+5. For Team Pilot contract-first PR handoff work, read
+   `docs/ops/GOALRAIL_AGENT_SKILL.md` and
+   `docs/ops/TEAM_PILOT_RUNBOOK.md`.
 
 ## Source-of-truth priority
 
