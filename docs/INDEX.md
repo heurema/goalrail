@@ -25,6 +25,8 @@ related_docs:
   - docs/ops/CONSOLE_READONLY_GOAL_CONTRACT_CHECKPOINT.md
   - docs/ops/CONSOLE_MAIN_DEPLOYMENT_WIRING.md
   - docs/ops/CONSOLE_RU_DEPLOYMENT_WIRING.md
+  - docs/ops/GOALRAIL_AGENT_SKILL.md
+  - docs/ops/TEAM_PILOT_RUNBOOK.md
   - docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md
 ---
 # Goalrail Docs Index
@@ -149,6 +151,13 @@ related_docs:
 96. `docs/ops/DECISION_LOG_START_ASSISTANT_SNIPPET.md`
 97. `docs/product/GOALRAIL_PILOT_PROPOSAL_TEMPLATE.md`
 98. `docs/product/GOALRAIL_QUALIFICATION_CHECKLIST.md`
+
+Team Pilot Readiness addendum:
+- `docs/ops/GOALRAIL_AGENT_SKILL.md` — agent/operator guidance for using Goalrail as a contract-first PR control plane during the team pilot.
+- `docs/ops/TEAM_PILOT_RUNBOOK.md` — small-team pilot runbook for 3-5 low-risk PRs through Goal -> Contract -> Plan -> Proposal -> WorkItem -> PR handoff.
+- `docs/ops/templates/CONTRACT_TEMPLATE.md` — docs-hosted Contract template for team-pilot slices.
+- `docs/ops/templates/PR_HANDOFF_TEMPLATE.md` — docs-hosted PR handoff template for Goalrail-managed PRs.
+- `docs/ops/templates/WORKITEM_HANDOFF_CHECKLIST.md` — compact checklist for moving from accepted WorkItem to PR handoff.
 
 ### 9. Advisory research, reference material, and overlay working surfaces
 99. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`

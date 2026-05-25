@@ -4,6 +4,14 @@
 
 ## Active phase
 
+- **Team Pilot Readiness is active:** use Goalrail as a contract-first PR
+  control plane for 3-5 low-risk PRs through Goal -> Clarification ->
+  Contract -> Plan -> Proposal -> WorkItem -> PR handoff. Use
+  `docs/ops/GOALRAIL_AGENT_SKILL.md`,
+  `docs/ops/TEAM_PILOT_RUNBOOK.md`, and `docs/ops/templates/` for the pilot
+  operating model, handoff shape, and human-gate guidance. Runner checkout,
+  checkout prepare, execution, gate, proof, verification, and WorkItem
+  completion remain deferred for this stage.
 - **Phase 1 canonical multilingual console source integration complete; main console/API routing is live via infra; post-PR-#120 CORS cleanup remains**
 - product and deployment canon is now in place
 - Bounded docs-only follow-up: review the frontier-AI deployment-wave advisory intake and decide whether to promote the reusable primitive ledger / Proof-of-Value pilot readout templates into existing pilot packaging docs. This does not approve MVP expansion, code, runtime work, broad enterprise consulting, analytics, CRM, provider integrations, gate, proof, partner channels, or new backend behavior.
