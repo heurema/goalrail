@@ -21,6 +21,17 @@ related_docs:
 Use this template for Team Pilot PRs. Replace placeholders and remove sections
 that are genuinely not applicable.
 
+Placeholder values should be replaced with the real Goalrail IDs from the
+accepted WorkItem. Keep non-applicable sections short instead of deleting
+boundary confirmations that reviewers need.
+
+Example placeholder values:
+- goal_id: `goal_01EXAMPLE`
+- contract_id: `contract_01EXAMPLE`
+- plan_id: `plan_01EXAMPLE`
+- proposal_id: `proposal_01EXAMPLE`
+- work_item_id: `work_item_01EXAMPLE`
+
 ## Goalrail IDs
 
 - goal_id:
