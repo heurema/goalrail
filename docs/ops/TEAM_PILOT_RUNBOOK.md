@@ -194,11 +194,41 @@ Compact handoff body:
 - Updated the runbook wording in the approved docs path.
 - Preserved the accepted WorkItem scope and non-goals.
 
+## Non-Goals Respected
+
+- No runner checkout.
+- No checkout prepare.
+- No execution prepare.
+- No execution.
+- No gate/proof/verification/completion.
+- No WorkItem completion.
+
 ## Checks Run
 
 - docs-check changed-files mode: pass
 - git diff --check: pass
 - scripts/check-staged.sh: pass
+
+## Artifacts Changed
+
+- docs/ops/TEAM_PILOT_RUNBOOK.md
+
+## Deferred Work
+
+- Next pilot PR candidates remain separate.
+- Runner/execution track remains deferred.
+
+## Human Gates Respected
+
+- Contract approval: yes.
+- Proposal acceptance: yes.
+- PR review/merge: pending.
+
+## Secret and Local-State Confirmation
+
+- .goalrail/project.yml was not committed.
+- Auth files, tokens, local DB passwords, provider credentials, private paths,
+  and temporary passwords were not committed or printed.
 
 ## Runner and Execution Boundary Confirmation
 
