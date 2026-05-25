@@ -148,6 +148,102 @@ Developers should not manually construct long CLI sequences. Agents should use
 the surfaced `next_action.command_packet` where available and report when the
 surface is missing or unclear.
 
+## Quickstart Example: Accepted WorkItem to PR Handoff
+
+Use this shape for a low-risk docs-only pilot task such as
+`PILOT-EXAMPLE: docs-only runbook wording refinement`.
+
+Example placeholders:
+- goal_id: `goal_01EXAMPLE`
+- contract_id: `contract_01EXAMPLE`
+- plan_id: `plan_01EXAMPLE`
+- proposal_id: `proposal_01EXAMPLE`
+- work_item_id: `work_item_01EXAMPLE`
+
+After Proposal acceptance:
+1. Inspect the WorkItem with the surfaced read-only command packet, or with
+   `goalrail work item show --task-id work_item_01EXAMPLE --format json`.
+2. Confirm that the title, summary, scope, acceptance refs, proof/check refs,
+   and non-goals match the approved Contract.
+3. Prepare the PR handoff from
+   `docs/ops/templates/PR_HANDOFF_TEMPLATE.md`; replace placeholders with the
+   Goalrail IDs and summarize the docs-only change.
+4. Run checks appropriate for the files changed, such as docs-check
+   changed-files mode, `git diff --check`, `git diff --cached --check`, and
+   `scripts/check-staged.sh`.
+5. Open the PR with the handoff body and leave normal GitHub review/merge to
+   the human reviewer.
+
+Compact handoff body:
+
+```markdown
+## Goalrail IDs
+
+- goal_id: goal_01EXAMPLE
+- contract_id: contract_01EXAMPLE
+- plan_id: plan_01EXAMPLE
+- proposal_id: proposal_01EXAMPLE
+- work_item_id: work_item_01EXAMPLE
+
+## Summary
+
+- Refined docs-only runbook wording for a Team Pilot task.
+
+## Scope Delivered
+
+- Updated the runbook wording in the approved docs path.
+- Preserved the accepted WorkItem scope and non-goals.
+
+## Non-Goals Respected
+
+- No runner checkout.
+- No checkout prepare.
+- No execution prepare.
+- No execution.
+- No gate/proof/verification/completion.
+- No WorkItem completion.
+
+## Checks Run
+
+- docs-check changed-files mode: pass
+- git diff --check: pass
+- scripts/check-staged.sh: pass
+
+## Artifacts Changed
+
+- docs/ops/TEAM_PILOT_RUNBOOK.md
+
+## Deferred Work
+
+- Next pilot PR candidates remain separate.
+- Runner/execution track remains deferred.
+
+## Human Gates Respected
+
+- Contract approval: yes.
+- Proposal acceptance: yes.
+- PR review/merge: pending.
+
+## Secret and Local-State Confirmation
+
+- .goalrail/project.yml was not committed.
+- Auth files, tokens, local DB passwords, provider credentials, private paths,
+  and temporary passwords were not committed or printed.
+
+## Runner and Execution Boundary Confirmation
+
+- Runner checkout was not run.
+- Checkout prepare was not run.
+- Execution prepare was not run.
+- Execution was not run.
+- Gate/proof/verification/completion were not run.
+```
+
+Keep `.goalrail/project.yml` local, untracked, and uncommitted. Redact tokens,
+auth file contents, local DB passwords, provider credentials, private host
+details, and private paths. WorkItem completion is also deferred for this
+stage.
+
 ## Success Criteria
 
 The pilot is useful when:
