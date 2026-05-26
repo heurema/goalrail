@@ -248,6 +248,38 @@ auth file contents, local DB passwords, provider credentials, private host
 details, and private paths. WorkItem completion is also deferred for this
 stage.
 
+## Missing GitHub Checks
+
+The normal Team Pilot PR merge path is:
+
+```text
+PR ready for review -> GitHub checks appear -> required checks pass -> human merge
+```
+
+Missing checks are different from failing checks. A missing-checks case means
+GitHub has not created the expected status checks for the PR head. Common signs
+are an empty `statusCheckRollup`, `gh pr checks` reporting no checks, and no
+workflow runs or check-runs for the branch or head commit.
+
+When checks are missing:
+1. Inspect the PR Checks tab for approval prompts, disabled workflow messages,
+   or missing required checks.
+2. Inspect the Actions tab filtered by the PR branch.
+3. Compare workflow runs for the branch and the head commit.
+4. Inspect branch protection or rulesets for required check names and source
+   apps.
+5. Check whether workflow approval, organization policy, or incident recovery
+   is suppressing runs.
+6. Check for required check name or source mismatches, especially after workflow
+   or job renames.
+
+Do not treat missing checks as green checks. Do not merge while required checks
+are missing. Do not repeatedly push empty commits. If there is no workflow run
+to rerun, use at most one deliberate empty-commit retrigger after a repo admin
+or human confirms that settings or a GitHub incident have been resolved. If
+checks still do not appear, stop and ask a repo admin to inspect GitHub UI
+settings before trying again.
+
 ## Success Criteria
 
 The pilot is useful when:

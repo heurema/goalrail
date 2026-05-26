@@ -193,6 +193,28 @@ handoffs. At minimum, include:
 - secret and local-state confirmation;
 - runner/execution boundary confirmation.
 
+## Missing GitHub Checks
+
+When preparing or merging a Team Pilot PR, distinguish missing checks from
+failing checks. Missing checks mean the PR has no created status checks for the
+current head, for example an empty `statusCheckRollup`, `gh pr checks`
+reporting no checks, or no workflow runs/check-runs for the branch or head
+commit.
+
+In that case, stop before merge and collect diagnostics:
+- PR Checks tab state;
+- Actions tab filtered by branch;
+- workflow runs for branch and head commit;
+- branch protection or ruleset required check names;
+- workflow approval, suppression, or incident state;
+- required check name or source mismatches.
+
+Do not merge without green required checks. Do not repeatedly push empty commits
+to force checks. If no run exists to rerun, use at most one deliberate
+empty-commit retrigger only after a human or repo admin confirms the setting or
+GitHub incident has been resolved. If checks remain missing, ask for repo-admin
+UI inspection instead of bypassing the gate.
+
 ## Partial Progress and Blockers
 
 When blocked, report:
