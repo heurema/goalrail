@@ -158,6 +158,7 @@ Team Pilot Readiness addendum:
 - `docs/ops/templates/CONTRACT_TEMPLATE.md` — docs-hosted Contract template for team-pilot slices.
 - `docs/ops/templates/PR_HANDOFF_TEMPLATE.md` — docs-hosted PR handoff template for Goalrail-managed PRs.
 - `docs/ops/templates/WORKITEM_HANDOFF_CHECKLIST.md` — compact checklist for moving from accepted WorkItem to PR handoff.
+- `docs/ops/templates/PILOT_CANDIDATE_CHECKLIST.md` — binary checklist and risk flags for choosing low-risk Team Pilot PR candidates.
 
 ### 9. Advisory research, reference material, and overlay working surfaces
 99. `docs/research/GOALRAIL_ADJACENT_EXPERIMENTS_SYNTHESIS.md`

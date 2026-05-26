@@ -18,6 +18,7 @@ related_docs:
   - docs/product/GOALRAIL_PILOT_MODEL.md
   - docs/ops/GOALRAIL_AGENT_SKILL.md
   - docs/ops/templates/CONTRACT_TEMPLATE.md
+  - docs/ops/templates/PILOT_CANDIDATE_CHECKLIST.md
   - docs/ops/templates/PR_HANDOFF_TEMPLATE.md
 ---
 # Goalrail Team Pilot Runbook
@@ -90,6 +91,9 @@ Good Team Pilot candidates are low-risk and easy to review:
 - test coverage improvement;
 - small internal tooling cleanup;
 - bounded developer-experience improvement.
+
+Use `docs/ops/templates/PILOT_CANDIDATE_CHECKLIST.md` before starting a Goal
+when the team is choosing the next 3-5 pilot PR candidates.
 
 ## Unsuitable Pilot Tasks
 
