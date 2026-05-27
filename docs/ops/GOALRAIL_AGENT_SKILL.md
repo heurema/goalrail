@@ -97,6 +97,18 @@ approval. Human approval gates include:
 Team Pilot work stops before runner and execution boundaries unless a future
 Contract explicitly approves them.
 
+## WorkItem Inspection Stop Rule
+
+For Team Pilot and controlled rollout, inspect planned WorkItems as read-only
+handoff artifacts. A WorkItem may surface `prepare_checkout` as the normal next
+action, but controlled rollout does not follow that action.
+
+After WorkItem inspection, confirm the accepted scope and non-goals, then stop
+before checkout prepare, runner checkout, execution, gate, proof, verification,
+or completion. Implementation proceeds manually from the accepted WorkItem
+scope, and the PR handoff should use
+`docs/ops/templates/PR_HANDOFF_TEMPLATE.md`.
+
 ## Related IDs
 
 Use `next_action.related_ids` to preserve traceability. PR handoffs should carry

@@ -152,6 +152,24 @@ Developers should not manually construct long CLI sequences. Agents should use
 the surfaced `next_action.command_packet` where available and report when the
 surface is missing or unclear.
 
+## Controlled Rollout Stop Rule
+
+During Team Pilot and controlled rollout, WorkItem inspection is the stop point
+before checkout. A planned WorkItem may show `prepare_checkout` as the normal
+next action, but controlled rollout does not follow that action.
+
+After inspecting the WorkItem, the agent/operator should:
+1. confirm that the title, scope, acceptance refs, proof/check refs, and
+   non-goals match the approved Contract;
+2. stop before checkout prepare, runner checkout, execution, gate, proof,
+   verification, or completion;
+3. implement manually from the accepted WorkItem scope;
+4. prepare the PR handoff with `docs/ops/templates/PR_HANDOFF_TEMPLATE.md`;
+5. leave PR review and merge to the human reviewer.
+
+This stop rule keeps controlled rollout as a contract-first PR handoff flow. It
+does not change runtime behavior or promote runner/execution stages.
+
 ## Quickstart Example: Accepted WorkItem to PR Handoff
 
 Use this shape for a low-risk docs-only pilot task such as
@@ -169,13 +187,14 @@ After Proposal acceptance:
    `goalrail work item show --task-id work_item_01EXAMPLE --format json`.
 2. Confirm that the title, summary, scope, acceptance refs, proof/check refs,
    and non-goals match the approved Contract.
-3. Prepare the PR handoff from
+3. Stop before checkout prepare even if the WorkItem next action mentions it.
+4. Prepare the PR handoff from
    `docs/ops/templates/PR_HANDOFF_TEMPLATE.md`; replace placeholders with the
    Goalrail IDs and summarize the docs-only change.
-4. Run checks appropriate for the files changed, such as docs-check
+5. Run checks appropriate for the files changed, such as docs-check
    changed-files mode, `git diff --check`, `git diff --cached --check`, and
    `scripts/check-staged.sh`.
-5. Open the PR with the handoff body and leave normal GitHub review/merge to
+6. Open the PR with the handoff body and leave normal GitHub review/merge to
    the human reviewer.
 
 Compact handoff body:
