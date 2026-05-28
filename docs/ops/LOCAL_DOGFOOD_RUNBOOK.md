@@ -392,6 +392,68 @@ After proposal acceptance, hand off to a normal draft PR. Do not run checkout,
 execution, runner, gate, or proof commands unless a later approved contract
 requires them.
 
+## Controlled Rollout Troubleshooting
+
+Use this section for local operator friction during Team Pilot or controlled
+rollout commands. Keep fixes narrow and local to the failing development
+surface.
+
+### Temporary Go cache corruption
+
+When `HOME` is overridden for CLI auth context, always run current-source Go
+commands with explicit temporary caches:
+
+```bash
+HOME=/tmp/goalrail-dogfood-xdg \
+XDG_CONFIG_HOME=/tmp/goalrail-dogfood-xdg \
+GOMODCACHE=/tmp/goalrail-team-pilot-gomodcache \
+GOCACHE=/tmp/goalrail-team-pilot-gocache \
+go run ./cmd/goalrail <command>
+```
+
+If a command fails with corruption in those explicit temporary caches, clean
+only the explicit temporary module cache once, then retry the same command:
+
+```bash
+GOMODCACHE=/tmp/goalrail-team-pilot-gomodcache \
+GOCACHE=/tmp/goalrail-team-pilot-gocache \
+go clean -modcache
+```
+
+Do not use temporary Go cache friction as a reason to clean broader Go state,
+auth files, local database state, server state, secrets, provider credentials,
+or `.goalrail/project.yml`.
+
+### Stale server or source freshness suspicion
+
+The health endpoints are useful smoke checks:
+
+```bash
+curl -fsS http://localhost:8080/livez
+curl -fsS http://localhost:8080/readyz
+curl -fsS http://localhost:8080/version
+```
+
+They prove that a server is responding, and `/version` proves the version
+response shape. They do not always prove that the running local server binary
+was rebuilt from the current repository source, especially in launchd,
+wrapper-based, or temporary-binary dogfood setups.
+
+Before treating a live result as current-source evidence:
+
+1. Confirm the repository `HEAD` and changed paths you expect to validate.
+2. Use current-source CLI commands through `go run` from `apps/cli`.
+3. If server code changed, rebuild or restart the local server from current
+   source before validating server behavior.
+4. Rerun `/livez`, `/readyz`, `/version`, and the targeted CLI/API smoke after
+   the refresh.
+5. Report any remaining stale-server suspicion as operator friction.
+
+Do not wipe local Postgres, rotate secrets, clean auth state, change provider
+credentials, run checkout prepare, runner checkout, execution, gate, proof,
+verification, or completion while investigating source freshness unless a
+later approved contract explicitly scopes that work.
+
 ## Mac And Codex Notes
 
 - On macOS, `os.UserConfigDir()` uses `HOME/Library/Application Support`.

@@ -139,6 +139,12 @@ GOCACHE=/tmp/goalrail-gocache
 
 These are examples, not durable repo configuration.
 
+If an explicit temporary Go cache appears corrupt during a controlled rollout
+command, clean only that explicit temporary cache once and retry the same
+command. Do not clean broad Go state, auth state, local DB state, secrets, or
+provider credentials. Use `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md` for the
+operator troubleshooting steps.
+
 ## Secret Redaction
 
 Never print or commit:
