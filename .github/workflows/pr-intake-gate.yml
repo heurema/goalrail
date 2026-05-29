@@ -32,7 +32,7 @@ jobs:
       - name: Run PR intake gate
         # Pinned from repo-governance main.
         # pull_request_target must not execute mutable tags.
-        uses: heurema/repo-governance/actions/pr-intake-gate@v0.4.0
+        uses: heurema/repo-governance/actions/pr-intake-gate@v0.5.0
         with:
           policy-path: .github/pr-intake-gate.yml
           github-token: ${{ secrets.GITHUB_TOKEN }}
