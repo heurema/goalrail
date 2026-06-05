@@ -186,11 +186,135 @@ Use recurring concepts as anchors, not as mandatory slogans in every post.
 
 ## Channel adaptations
 
-- **LinkedIn:** concise, sharp, one failure mode, one practical frame, one question. Relationship-building first.
-- **Setka:** shorter, more conversational, operator notes, failure modes, punchy hooks.
-- **vc.ru:** business framing, cost transfer, team impact, practical artifact.
-- **Habr:** more technical, concrete examples, templates, limitations, implementation-adjacent, not product-pitchy.
-- **Telegram:** warmer, shorter, field-note style, "for our people", less formal.
+Use one source thesis across channels, then adapt the angle, evidence density,
+formatting, and call-to-conversation for each surface.
+
+Do not copy one channel shape into another:
+- Telegram should not inherit LinkedIn framing or closing questions by default.
+- LinkedIn should not look like a local changelog or receipt dump.
+- vc.ru should not read like a private build diary.
+- Habr should not become a product pitch.
+- Setka should not rely on formatting that collapses in the editor.
+
+### Telegram
+
+Role:
+- warm field note;
+- compact build-in-public update;
+- direct note for people already close to the topic.
+
+Use:
+- short, practical observations;
+- honest current boundaries;
+- what changed, what did not change, and why the boundary matters;
+- less formal phrasing than LinkedIn or Habr.
+
+Avoid:
+- LinkedIn-style closing questions by default;
+- broad thought-leadership framing;
+- technical changelog density in weekly reports;
+- over-explaining repo internals.
+
+Weekly reports should stay compact and outward-facing:
+- not a technical changelog;
+- no false claims about runner, gate, proof, or automation;
+- proofread against current repo truth before publishing.
+
+### LinkedIn
+
+Role:
+- relationship pipeline for CTOs, founders, engineering leaders, operators,
+  devtools / AI infra builders, and investors.
+
+Use:
+- concise English build notes by default when writing for the international
+  devtools / AI SDLC audience;
+- one failure mode;
+- one practical frame;
+- one soft conversation hook;
+- at most three hashtags at the end when hashtags are useful.
+
+Avoid:
+- URL in the body when a first-comment source link is enough;
+- local receipt markup, backticks, or changelog structure;
+- direct product pitch;
+- generic AI productivity claims.
+
+Good LinkedIn output should give a qualified person a reason to continue the
+conversation without feeling sold to.
+
+### vc.ru
+
+Role:
+- business-facing explanation for founders, operators, product leaders, and
+  engineering managers.
+
+Use:
+- cost transfer framing;
+- team impact;
+- review cost;
+- delivery risk;
+- practical artifacts such as a checklist, decision frame, or operating
+  template.
+
+Avoid:
+- deep Goalrail architecture;
+- narrow repo diary details;
+- pure personal notes without business consequence;
+- claiming implemented product capability beyond repo truth.
+
+Good vc.ru output should answer: what changed for the team, where the cost moved,
+and what artifact helps them act differently tomorrow.
+
+### Habr
+
+Role:
+- technical, implementation-adjacent explanation for engineers and technical
+  leaders.
+
+Use:
+- concrete examples;
+- templates;
+- limitations;
+- tradeoffs;
+- failure modes;
+- boundary models;
+- enough implementation detail to be useful without turning into product docs.
+
+Avoid:
+- product-pitch tone;
+- vague management framing without technical substance;
+- unsupported claims about Goalrail runtime capability;
+- hiding limitations.
+
+Good Habr output should leave the reader with a reusable artifact or mental
+model: for example a task contract template, review checklist, receipt shape, or
+boundary model for why diff / CI / summary is not proof.
+
+### Setka
+
+Role:
+- shorter conversational operator notes with sharp hooks and visible failure
+  modes.
+
+Use:
+- punchy openings;
+- tight paragraphs;
+- concrete operator observations;
+- direct "signal vs conclusion" framing;
+- paste-safe helper files when editor spacing is fragile.
+
+Avoid:
+- long technical exposition;
+- LinkedIn relationship framing;
+- fragile spacing assumptions;
+- bodies that exceed the practical editor ceiling.
+
+Setka drafts need strict paste hygiene:
+- preserve paragraph spacing;
+- use copy-safe spacer lines when the editor collapses blank lines;
+- keep the body under the current 4096-character ceiling unless the channel
+  style file explicitly changes that limit.
 
 Channel-specific style, formatting, and draft mechanics stay in the external publishing workspace.
 
