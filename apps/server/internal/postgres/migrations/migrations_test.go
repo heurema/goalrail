@@ -768,6 +768,45 @@ func TestRunnerCapabilityReportMigrationAddsUntrustedMetadataBoundary(t *testing
 	}
 }
 
+func TestInitSchemaParityMigrationBackfillsMutableInitDeltas(t *testing.T) {
+	contents, err := FS.ReadFile("00011_init_schema_parity.sql")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	sql := string(contents)
+	for _, want := range []string{
+		"CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_unique",
+		"ADD COLUMN IF NOT EXISTS workflow_base_branch TEXT",
+		"SET workflow_base_branch = COALESCE(NULLIF(default_branch, ''), 'main')",
+		"ALTER COLUMN workflow_base_branch SET NOT NULL",
+		"CREATE UNIQUE INDEX IF NOT EXISTS repo_bindings_one_active_per_org_repository_idx",
+		"CREATE TABLE IF NOT EXISTS repository_context_snapshots",
+		"CREATE UNIQUE INDEX IF NOT EXISTS repository_context_snapshots_repo_binding_fingerprint_idx",
+		"ADD COLUMN IF NOT EXISTS current_lease_id UUID NULL",
+		"ADD COLUMN IF NOT EXISTS leased_by JSONB NULL",
+		"ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ NULL",
+		"CREATE TABLE IF NOT EXISTS work_item_plan_leases",
+		"CONSTRAINT work_item_plan_leases_token_hash_check CHECK (lease_token_hash <> '')",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Fatalf("init schema parity migration missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"DROP TABLE users",
+		"DROP TABLE repo_bindings",
+		"DROP TABLE work_item_plans;",
+		"DROP TABLE contracts;",
+		"gate_decisions",
+		"proofs",
+		"raw_source",
+	} {
+		if strings.Contains(sql, forbidden) {
+			t.Fatalf("init schema parity migration must not include %q", forbidden)
+		}
+	}
+}
+
 func TestInitMigrationCreatesWorkItemPlanAndProposalTables(t *testing.T) {
 	contents, err := FS.ReadFile("00001_init.sql")
 	if err != nil {

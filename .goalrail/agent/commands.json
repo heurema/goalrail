@@ -1,0 +1,259 @@
+{
+  "version": "goalrail.agent.v0",
+  "source": "goalrail",
+  "commands": {
+    "start_work": {
+      "command": "goalrail work start --title <title> --body-file - --format json",
+      "stdin": "task_body",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree"
+      ],
+      "creates": [
+        "IntakeRecord",
+        "Goal"
+      ],
+      "does_not_create": [
+        "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "continue_work": {
+      "command": "goalrail work continue --goal-id <goal_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "goal_id"
+      ],
+      "does_not_create": [
+        "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "answer_clarification": {
+      "command": "goalrail work answer --clarification-request-id <id> --answers-file - --format json",
+      "stdin": "structured_answers_json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "clarification_request_id"
+      ],
+      "creates": [
+        "ClarificationAnswer"
+      ],
+      "does_not_create": [
+        "Contract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "draft_contract": {
+      "command": "goalrail contract draft --goal-id <goal_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "goal_id"
+      ],
+      "creates": [
+        "Contract",
+        "ContractSeed",
+        "ContractDraft"
+      ],
+      "returns": [
+        "local_repo_receipt"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "update_contract": {
+      "command": "goalrail contract update --contract-id <contract_id> --fields-file - --format json",
+      "stdin": "structured_contract_fields_json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id"
+      ],
+      "updates": [
+        "ContractDraft"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ],
+      "does_not_upload": [
+        "raw_source"
+      ]
+    },
+    "submit_contract": {
+      "command": "goalrail contract submit --contract-id <contract_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "reviewed_contract_draft"
+      ],
+      "updates": [
+        "ContractDraft"
+      ],
+      "does_not_create": [
+        "ApprovedContract",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "approve_contract": {
+      "command": "goalrail contract approve --contract-id <contract_id> --confirm-user-approval --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "explicit_user_approval"
+      ],
+      "creates": [
+        "ApprovedContract"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "plan_work": {
+      "command": "goalrail work plan --contract-id <contract_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "contract_id",
+        "approved_contract"
+      ],
+      "creates": [
+        "WorkItemPlan"
+      ],
+      "does_not_create": [
+        "WorkItemPlanLease",
+        "WorkItemPlanProposal",
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "plan_status": {
+      "command": "goalrail work plan status --plan-id <plan_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "plan_id"
+      ],
+      "returns": [
+        "WorkItemPlan",
+        "WorkItemPlanProposal"
+      ],
+      "does_not_create": [
+        "WorkItem",
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "accept_plan_proposal": {
+      "command": "goalrail work proposal accept --proposal-id <proposal_id> --confirm-user-acceptance --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "proposal_id",
+        "explicit_user_acceptance"
+      ],
+      "creates": [
+        "WorkItem"
+      ],
+      "does_not_create": [
+        "Run",
+        "Decision",
+        "Proof"
+      ]
+    },
+    "prepare_checkout": {
+      "command": "goalrail work checkout prepare --task-id <task_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "task_id",
+        "planned_workitem"
+      ],
+      "creates": [
+        "CheckoutJob",
+        "CheckoutInstruction"
+      ],
+      "does_not_create": [
+        "Assignment",
+        "Claim",
+        "Run",
+        "Decision",
+        "Proof"
+      ],
+      "does_not_execute": [
+        "commands",
+        "tests",
+        "checkout"
+      ]
+    },
+    "prepare_execution": {
+      "command": "goalrail work execution prepare --task-id <task_id> --checkout-receipt-id <checkout_receipt_id> --format json",
+      "requires": [
+        "goalrail_login",
+        "goalrail_init",
+        "git_worktree",
+        "task_id",
+        "checkout_receipt_id",
+        "planned_workitem"
+      ],
+      "creates": [
+        "ExecutionJob"
+      ],
+      "does_not_create": [
+        "Run",
+        "ExecutionReceipt",
+        "Decision",
+        "GateDecision",
+        "Proof"
+      ],
+      "does_not_execute": [
+        "commands",
+        "tests",
+        "provider_runtime"
+      ]
+    }
+  },
+  "agent_rules": {
+    "do_not_call_unavailable_next_actions": true
+  }
+}

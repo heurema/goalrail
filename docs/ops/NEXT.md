@@ -25,7 +25,7 @@
   push-to-live pipeline
 - `apps/web/demo-change-packet` and `apps/web/demo-change-packet-ru` are separate EN/RU demo resources with independent domains; future web work should follow `apps/web/<resource>`
 - `apps/web/pilot-intake-ru` now targets a business-first RU pilot landing for `ИИ-кодинг без хаоса`: a mostly static Founding Pilot page for a safe 2-week пилот ИИ-разработки on one bounded product area, with repository readiness, project context, controlled tasks, verified result, a D-0056 minimal `POST /api/pilot-lead` endpoint with duplicate suppression, D-0059 Resend HTTPS notification transport when configured, and direct `mailto:` fallback. D-0055 supersedes the previous technical interactive walkthrough as the primary public RU landing; that walkthrough is demoted to internal / technical demo or checkpoint status in git history. D-0047 boundaries remain in full except for the narrow D-0056 lead-capture endpoint (no analytics, tracking, CRM, Google Sheets, cookies, sessions, LLM/API, repo integration, code execution, broad backend platform, chat UI, file upload, model selector, or real repository scan claim). Active target domain remains `pilot.goalrail.ru` per D-0053; SSH static hosting remains the path per D-0051; server upload, operator-managed Go sidecar endpoint wiring, server-side TLS provisioning, public DNS verification, public HTTPS smoke, and public `/api/pilot-lead` smoke are complete.
-- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, authenticated read-only `GET /v1/qualification-feed` for intent / qualification discovery, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, checkout job / checkout receipt preparation storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image still predates that app-level CORS code, so infra currently keeps nginx ingress CORS as a temporary bridge; future server work should stay bounded and avoid fake canonical state claims
+- `apps/server` now exists as a Go server bootstrap with health/version endpoints plus authenticated repository-context init, authenticated metadata-only RepoBinding init, Postgres-backed source-neutral intake, Project / RepoBinding context validation for intake, Goal promotion, Goal readiness state, ClarificationRequest / ClarificationAnswer storage, authenticated clarification answer continuation, authenticated read-only `GET /v1/qualification-feed` for intent / qualification discovery, ContractSeed creation, ContractDraft creation/update/ready_for_approval, ApprovedContract approval, WorkItem plan/lease/proposal/acceptance planning storage, checkout job / checkout receipt preparation storage, durable EventLog persistence, transactional canonical write + event append hardening, explicit re-check, and exact-origin CORS allowlist support for the `goalrail.dev` -> `api.goalrail.dev` browser API split; the live server image now includes the post-PR-#120 server code, while infra CORS cleanup remains a separate deployment hygiene task; future server work should stay bounded and avoid fake canonical state claims
 - ADR-0008 now defines the runner and repository checkout boundary; future repository checkout/check work must happen behind runners, not inside the API server
 - ADR-0028 now defines and H1 implements the runner checkout instruction and
   workspace receipt boundary: the code can create or return a checkout job from
@@ -89,15 +89,61 @@
   `RunnerCapabilityReport` storage and `goalrail-runner --mode
   capability-report` without sandboxing, trusted capabilities, or any
   project-test execution unlock.
-- `goalrail init` stabilization is complete through INIT-07 and recorded in
+- `goalrail init` stabilization is complete through INIT-08 and recorded in
   `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. If init work continues, the next
   safe options are limited to narrow advisory snapshot / Project Scan
   cancellation semantics cleanup, a marker repair design note, or an optional
-  small collector spike only after deciding whether the MVP needs it.
+  small collector spike only after deciding whether the MVP needs it. INIT-08
+  keeps init as bootstrap-only and adds a compact human Project Scan summary
+  after successful server-backed init without new API, DB, source upload,
+  provider, runner, gate, proof, or verification behavior.
 - Local dogfooding now has an operational runbook at
   `docs/ops/LOCAL_DOGFOOD_RUNBOOK.md`. DOGFOOD slices should use it for the
   current self-hosted server / bootstrap / auth / init / work / contract /
   planning flow and capture UX friction as observations, not product claims.
+- DOGFOOD-01 remote Goalrail-on-Goalrail smoke passed against
+  `https://api.goalrail.dev` and is documented in
+  `docs/ops/DOGFOOD_REMOTE_SMOKE.md`: CLI build/login, server-backed
+  `goalrail init`, INIT-08 Project Scan summary, `agent install`, `project
+  status`, `project scan --refresh`, and `work start --title "Dogfood Goalrail
+  on Goalrail"` all passed. The smoke required two smallest blocker fixes:
+  pinning a current server image for existing repository-context routes and
+  applying schema parity for already-required mutable `00001_init.sql` deltas.
+  DOGFOOD-02 remote deploy hygiene then passed: a server image containing
+  `00011_init_schema_parity` is deployed, remote `goose_db_version` records
+  version `11`, API health is green, and the same remote smoke loop from
+  `init` through `work start` still passes. DOGFOOD-02.5 repo/deploy
+  traceability checkpoint is clean: the dirty set is classified as INIT-08,
+  DOGFOOD-01/02, generated Goalrail files, and prior INIT docs; no unrelated
+  or suspicious files were found. DOGFOOD-03 first attempt was blocked by
+  expired local CLI auth, but DOGFOOD-03R passed after browser-loopback login:
+  remote `work continue --goal-id 019e39cd-09b1-7e9d-946c-c4e05991cfb4
+  --format json` returned valid JSON for the requested Goal with
+  `state=needs_clarification` and available `next_action.kind=ask_user`.
+  DOGFOOD-04 then passed without another browser login: remote `work answer`
+  submitted structured answers for ClarificationRequest
+  `019e39eb-3d7e-7af7-b84d-48fcfaab716b`, the Goal moved to
+  `ready_for_contract_seed`, and follow-up `work continue` returned
+  `next_action.kind=draft_contract`. DOGFOOD-05 then passed after a fresh
+  browser-loopback login: remote `contract draft --goal-id
+  019e39cd-09b1-7e9d-946c-c4e05991cfb4 --format json` returned draft Contract
+  `019e39fd-fc79-764d-94c3-0675bf037e84` with a metadata-only local repository
+  receipt (`raw_source_uploaded=false`). Follow-up `work continue` still
+  recommends `draft_contract` rather than surfacing the existing draft handle,
+  which is a state-surface follow-up but not a DOGFOOD-05 blocker. DOGFOOD-06
+  then passed after another browser-loopback login: remote `contract update
+  --contract-id 019e39fd-fc79-764d-94c3-0675bf037e84 --fields-file - --format
+  json` accepted structured draft field updates, kept the Contract in
+  `draft`, and returned `next_action.kind=review_contract`. The stale
+  `work continue` surface persists after update: it still returns
+  `ready_for_contract_seed` / `draft_contract` instead of surfacing the existing
+  updated draft handle. The next bounded action is DOGFOOD-07 contract
+  review/read-surface checkpoint before any submit/approval/planning path:
+  verify how a human or CLI can inspect the updated draft Contract fields and
+  decide whether `contract submit` is safe, while avoiding approval, work item
+  planning, checkout, runner execution, provider integration, gate, proof,
+  verification, source upload, clone, branch creation, deploy keys, and new
+  init/auth scope.
 - ADR-0009 now defines the ClarificationAnswer recording boundary; future answer work must record evidence before Goal hint application or readiness re-check
 - ADR-0010 now defines the MVP Organization / Project / RepoBinding and persistence bootstrap boundary; future persistence work should keep direct RepoBinding before RepositoryRecord
 - ADR-0011 now defines answer application to Goal hints; the server keeps readiness re-check separate and persists clarification request/answer state with Postgres when configured

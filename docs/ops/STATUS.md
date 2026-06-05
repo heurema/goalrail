@@ -113,17 +113,17 @@ source-level core server CORS allowlist support exists through exact
 wildcard origins rejected; the main console/API
 deployment is now live through `11me/infra` Flux GitOps at
 `https://goalrail.dev` and `https://api.goalrail.dev`, with Flux revision
-`main@sha1:918c12936b03b469e3cb014a2c0ab119a850563e`, Kustomization
+`main@sha1:e96a63d7`, Kustomization
 `flux-system/apps-personal` Ready=True, console/server rollouts successful,
 public DNS/TLS ready, frontend/API smoke passed, `/start` live with SPA
 fallback, and the console bundle built against `https://api.goalrail.dev`; the
 same-origin `POST /api/start-chat` route is live through the separate
 Cloudflare Worker from `apps/workers/start-assistant`, with public KB revision
 `263075db460d762fe7fa1f09d30709bc68e8eb5c` and an operator-triggered public KB
-sync workflow for future revisions; live API CORS is temporarily handled by
-nginx ingress annotations allowing `https://goalrail.dev` because the deployed
-server image still predates the app-level CORS implementation from Goalrail
-PR #120; pilot-intake-ru is now a business-first public RU pilot landing per
+sync workflow for future revisions; the live server image now includes the
+post-PR-#120 server code, while infra CORS cleanup remains a deployment hygiene
+task because nginx ingress CORS annotations may still be configured for
+`https://goalrail.dev`; pilot-intake-ru is now a business-first public RU pilot landing per
 D-0055 (`ИИ-кодинг без хаоса`, safe 2-week пилот ИИ-разработки, repository
 readiness, project context, controlled tasks, verified result) rather than the
 previous technical interactive walkthrough; active target domain remains
@@ -195,12 +195,36 @@ public smoke. The public RU pilot surface is live through the operator-managed
 SSH static server, with `/api/pilot-lead` routed to the Go sidecar rather than
 the previous PHP-FPM wiring. The RU console shell is also live through the same
 operator-managed static-server pattern, but remains a static visual shell only
-and is not the main `goalrail.dev` deployment. Core server app-level CORS is
-source-level configuration only until a post-PR-#120 server image is pinned in
-infra; current live API CORS is a temporary nginx ingress bridge for
-`https://goalrail.dev`. This status does not claim committed server config,
-required human review, signed-commit enforcement, real-device mobile QA, or
-native-speaker copy proofread. It also does not approve analytics, CRM,
+and is not the main `goalrail.dev` deployment. DOGFOOD-01 remote smoke now
+passes through CLI login, server-backed `goalrail init`, INIT-08 Project Scan
+summary, `agent install`, `project status`, `project scan --refresh`, and
+`work start` on `https://api.goalrail.dev`. The smoke required a current server
+image pin plus a schema-parity fix for older live DB state. DOGFOOD-02 remote
+deploy hygiene is now complete: live server image
+`ghcr.io/heurema/goalrail-server:dev-e99a1ed-20260518063148` contains migration
+`00011_init_schema_parity`, the remote migration runner has recorded goose
+version `11`, API health remains green, and the remote smoke loop from `init`
+through `work start` still passes. DOGFOOD-03R also confirms remote
+`work continue` reaches the API for Goal
+`019e39cd-09b1-7e9d-946c-c4e05991cfb4` after browser-loopback login and returns
+intent-plane `needs_clarification` / `ask_user` JSON. DOGFOOD-04 then confirms
+remote `work answer` accepts structured answers for ClarificationRequest
+`019e39eb-3d7e-7af7-b84d-48fcfaab716b`, moves the Goal to
+`ready_for_contract_seed`, and returns `draft_contract` as the next
+intent-plane action. DOGFOOD-05 then confirms remote `contract draft` returns
+draft Contract `019e39fd-fc79-764d-94c3-0675bf037e84` for that Goal with a
+metadata-only local repository receipt (`raw_source_uploaded=false`); follow-up
+`work continue` still recommends `draft_contract` rather than surfacing the
+existing draft handle, so that continuation state surface remains a follow-up
+risk. DOGFOOD-06 then confirms remote `contract update` accepts structured
+draft field updates for Contract `019e39fd-fc79-764d-94c3-0675bf037e84`, keeps
+the Contract in `draft`, and returns `review_contract` as the next
+control-plane action; the stale `work continue` surface still persists after
+update. No runner, provider, gate, proof, verification, source upload, clone,
+branch, deploy-key, approval, WorkItem planning, checkout, or execution behavior
+was triggered. This status does not claim committed server config, required human
+review, signed-commit enforcement, real-device mobile QA, or native-speaker copy
+proofread. It also does not approve analytics, CRM,
 database, generic queue, repo-aware planning worker implementation, LLM/API
 outside the bounded start-assistant Worker, repo integration, runtime
 execution, gate, proof, or broad backend platform behavior.
@@ -494,13 +518,14 @@ The project currently has:
   remains local-only and does not add server baseline persistence, server clone,
   source upload, background daemon, runner, context-pack generation, gate, or
   proof.
-- The `goalrail init` stabilization sequence through INIT-07 is complete and
+- The `goalrail init` stabilization sequence through INIT-08 is complete and
   recorded in `docs/ops/INIT_STABILIZATION_CHECKPOINT.md`. This is an
   operational checkpoint for bounded init behavior, marker safety, advisory
-  snapshot / Project Scan warnings, retry context, and shared metadata-only
-  repository-shape signal guardrails; it does not add server clone, source
-  upload, repair command, runner, gate, proof, checkout, provider integration,
-  schema/API/DB changes, or runtime execution behavior.
+  snapshot / Project Scan warnings, retry context, shared metadata-only
+  repository-shape signal guardrails, and compact human Project Scan summary
+  output after successful server-backed init; it does not add server clone,
+  source upload, repair command, runner, gate, proof, checkout, provider
+  integration, schema/API/DB changes, or runtime execution behavior.
 - ADR-0027 documents the Organization user management boundary:
   regular Organization users are created through Console UI backed by
   server API, not through CLI user creation; canonical identity is `User`,
