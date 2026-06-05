@@ -2655,3 +2655,29 @@ What this prevents:
 - changing marker or ignore policy as a side effect of a docs/template slice
 - making Team Pilot depend on runner checkout, execution, gate, proof,
   verification, or completion behavior
+
+## D-0097 — Keep init bootstrap-only while exposing Project Scan summary
+Date: 2026-05-16
+Status: accepted
+Review after: 2026-06-15
+
+Decision:
+- Keep `goalrail init` as a bootstrap surface.
+- Show a compact human Project Scan summary in successful server-backed init
+  output using the existing best-effort local Project Scan baseline / overlay
+  path.
+- Keep JSON init output on the existing scalar `project_scan_*` fields for now
+  to avoid surprising strict CLI JSON consumers.
+- Do not add server API, database migration, source upload, provider
+  integration, clone semantics, runtime execution, gate, proof, verification,
+  marker repair, or strict `--require-scan` behavior.
+
+Rationale:
+- Repository understanding belongs to Project Scan / shared repo-shape logic;
+  init should only expose the bounded facts already collected during bootstrap.
+- Compact deterministic output is enough for dogfooding without claiming that
+  Goalrail fully understands the repository.
+
+What this prevents:
+- scope creep into source upload, clone/provider behavior, arbitrary execution,
+  proof, or fake "repo understood" claims

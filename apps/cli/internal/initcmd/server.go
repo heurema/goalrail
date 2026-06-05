@@ -25,6 +25,7 @@ import (
 const (
 	serverMode             = "server"
 	nextSuggestedCommand   = "goalrail work start --title <title>"
+	dogfoodNextCommand     = "goalrail work start --title \"Dogfood Goalrail on Goalrail\""
 	serverRegistrationNote = "This registered repository metadata on the GoalRail server, wrote a non-secret GoalRail repository marker, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 	repositoryContextNote  = "This initialized GoalRail repository context for your existing organization, wrote a non-secret GoalRail repository marker, attempted a metadata-only repository context snapshot, and ran a local Project Scan.\nNo server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured."
 
@@ -163,7 +164,7 @@ func runServerBackedInit(ctx context.Context, out *term.Output, draft spine.Repo
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
-	_, err = fmt.Fprint(out.Stdout, renderServerText(output))
+	_, err = fmt.Fprint(out.Stdout, renderServerText(output, scanResult.Summary))
 	return err
 }
 
@@ -289,7 +290,7 @@ func runRepositoryContextInit(ctx context.Context, out *term.Output, draft spine
 	if format == term.FormatJSON {
 		return term.WriteJSON(out.Stdout, output)
 	}
-	_, err = fmt.Fprint(out.Stdout, renderRepositoryContextText(output))
+	_, err = fmt.Fprint(out.Stdout, renderRepositoryContextText(output, scanResult.Summary))
 	return err
 }
 
@@ -723,7 +724,7 @@ func decodeServerErrorMessage(body io.Reader, statusCode int) string {
 	return fmt.Sprintf("HTTP %d", statusCode)
 }
 
-func renderServerText(output spine.RepoBindingInitOutput) string {
+func renderServerText(output spine.RepoBindingInitOutput, scanSummaries ...initProjectScanSummary) string {
 	var b strings.Builder
 	title := "Repository binding initialized"
 	if !output.Created {
@@ -753,17 +754,17 @@ func renderServerText(output spine.RepoBindingInitOutput) string {
 		fmt.Fprintf(&b, "Local config: %s (%s)\n", output.LocalConfigPath, output.LocalConfigStatus)
 	}
 	writeLocalConfigText(&b, output.LocalConfigMessage, output.LocalIgnorePath, output.LocalIgnoreStatus)
-	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
+	writeProjectScanSummaryText(&b, outputProjectScanSummary(output.ProjectScanStatus, output.ProjectScanWarning, scanSummaries...))
 	writeInitStepNotices(&b, output.Steps)
 	if output.Status == spine.InitOverallStatusPartialFailed {
-		fmt.Fprintf(&b, "\nServer binding succeeded, but local init did not complete.\n\nNext: %s\n", output.NextCommand)
+		fmt.Fprintf(&b, "\nServer binding succeeded, but local init did not complete.\n\nNext: %s\n", humanInitNextCommand(output.NextCommand, output.Status))
 	} else {
-		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", serverRegistrationNote, output.NextCommand)
+		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", serverRegistrationNote, humanInitNextCommand(output.NextCommand, output.Status))
 	}
 	return b.String()
 }
 
-func renderRepositoryContextText(output spine.RepositoryContextInitOutput) string {
+func renderRepositoryContextText(output spine.RepositoryContextInitOutput, scanSummaries ...initProjectScanSummary) string {
 	var b strings.Builder
 	title := "Repository context initialized"
 	if !output.ProjectCreated && !output.RepoBindingCreated {
@@ -805,14 +806,21 @@ func renderRepositoryContextText(output spine.RepositoryContextInitOutput) strin
 	if output.ContextSnapshotID != "" {
 		fmt.Fprintf(&b, "Repository context snapshot: %s (%s)\n", output.ContextSnapshotID, output.ContextSnapshotStatus)
 	}
-	writeProjectScanText(&b, output.ProjectScanStatus, output.ProjectScanBaselineID, output.ProjectScanFreshness, output.ProjectScanWarning)
+	writeProjectScanSummaryText(&b, outputProjectScanSummary(output.ProjectScanStatus, output.ProjectScanWarning, scanSummaries...))
 	writeInitStepNotices(&b, output.Steps)
 	if output.Status == spine.InitOverallStatusPartialFailed {
-		fmt.Fprintf(&b, "\nServer repository context succeeded, but local init did not complete.\n\nNext: %s\n", output.NextCommand)
+		fmt.Fprintf(&b, "\nServer repository context succeeded, but local init did not complete.\n\nNext: %s\n", humanInitNextCommand(output.NextCommand, output.Status))
 	} else {
-		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, output.NextCommand)
+		fmt.Fprintf(&b, "\n%s\n\nNext: %s\n", repositoryContextNote, humanInitNextCommand(output.NextCommand, output.Status))
 	}
 	return b.String()
+}
+
+func humanInitNextCommand(nextCommand string, status spine.InitOverallStatus) string {
+	if status != spine.InitOverallStatusPartialFailed && nextCommand == nextSuggestedCommand {
+		return dogfoodNextCommand
+	}
+	return nextCommand
 }
 
 type initProjectScanResult struct {
@@ -821,23 +829,62 @@ type initProjectScanResult struct {
 	OverlayID  string
 	Freshness  string
 	Warning    string
+	Summary    initProjectScanSummary
 }
 
 func runInitProjectScan(ctx context.Context, gitRoot string, repoBindingID string, options Options) initProjectScanResult {
 	cache := projectscan.NewCache(options.ProjectScanCacheRoot)
 	baseline, err := projectscan.BuildBaseline(ctx, gitRoot, repoBindingID, projectscan.DefaultBuildOptions())
 	if err != nil {
-		return initProjectScanResult{Status: projectscan.BaselineStatusError, Warning: err.Error()}
+		return initProjectScanResult{
+			Status:  projectscan.BaselineStatusError,
+			Warning: err.Error(),
+			Summary: unavailableProjectScanSummary(err.Error()),
+		}
+	}
+	_, baselineCached, err := cache.LoadLatestBaseline(repoBindingID, baseline.CanonicalRepoRoot)
+	if err != nil {
+		warning := fmt.Errorf("read project scan cache: %w", err).Error()
+		return initProjectScanResult{
+			Status:  projectscan.BaselineStatusError,
+			Warning: warning,
+			Summary: unavailableProjectScanSummary(warning),
+		}
+	}
+	baselineAction := projectScanArtifactCreated
+	if baselineCached {
+		baselineAction = projectScanArtifactRefreshed
 	}
 	if err := cache.WriteBaseline(baseline); err != nil {
-		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, Warning: err.Error()}
+		return initProjectScanResult{
+			Status:     projectscan.BaselineStatusError,
+			BaselineID: baseline.RepositoryBaselineProfileID,
+			Warning:    err.Error(),
+			Summary:    unavailableProjectScanSummary(err.Error()),
+		}
+	}
+	_, overlayCached, _ := cache.LoadCurrentOverlay(repoBindingID, baseline.CanonicalRepoRoot)
+	overlayAction := projectScanArtifactCreated
+	if overlayCached {
+		overlayAction = projectScanArtifactRefreshed
 	}
 	overlay, rawStatus, err := projectscan.BuildOverlay(ctx, gitRoot, repoBindingID, &baseline, projectscan.OverlayOptions{Now: options.Now})
 	if err != nil {
-		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, Warning: err.Error()}
+		return initProjectScanResult{
+			Status:     projectscan.BaselineStatusError,
+			BaselineID: baseline.RepositoryBaselineProfileID,
+			Warning:    err.Error(),
+			Summary:    unavailableProjectScanSummary(err.Error()),
+		}
 	}
 	if err := cache.WriteOverlay(overlay, rawStatus); err != nil {
-		return initProjectScanResult{Status: projectscan.BaselineStatusError, BaselineID: baseline.RepositoryBaselineProfileID, OverlayID: overlay.WorkspaceOverlayID, Warning: err.Error()}
+		return initProjectScanResult{
+			Status:     projectscan.BaselineStatusError,
+			BaselineID: baseline.RepositoryBaselineProfileID,
+			OverlayID:  overlay.WorkspaceOverlayID,
+			Warning:    err.Error(),
+			Summary:    unavailableProjectScanSummary(err.Error()),
+		}
 	}
 	freshness := projectscan.EvaluateFreshness(baseline.HeadSHA, &baseline, overlay)
 	return initProjectScanResult{
@@ -845,6 +892,7 @@ func runInitProjectScan(ctx context.Context, gitRoot string, repoBindingID strin
 		BaselineID: baseline.RepositoryBaselineProfileID,
 		OverlayID:  overlay.WorkspaceOverlayID,
 		Freshness:  freshness.Status,
+		Summary:    summarizeInitProjectScan(baselineAction, overlayAction, baseline, overlay, freshness),
 	}
 }
 
@@ -868,21 +916,14 @@ func applyRepositoryContextProjectScan(ctx context.Context, gitRoot string, repo
 	return result
 }
 
-func writeProjectScanText(b *strings.Builder, status string, baselineID string, freshness string, warning string) {
-	if status == "" {
-		return
+func outputProjectScanSummary(status string, warning string, summaries ...initProjectScanSummary) initProjectScanSummary {
+	if len(summaries) > 0 && (summaries[0].Baseline != "" || summaries[0].Overlay != "") {
+		return summaries[0]
 	}
-	fmt.Fprintf(b, "Project scan: %s", status)
-	if baselineID != "" {
-		fmt.Fprintf(b, " (%s)", baselineID)
+	if status == projectscan.BaselineStatusError || warning != "" {
+		return unavailableProjectScanSummary(warning)
 	}
-	if freshness != "" {
-		fmt.Fprintf(b, ", freshness: %s", freshness)
-	}
-	b.WriteByte('\n')
-	if warning != "" {
-		fmt.Fprintf(b, "Project scan warning: %s\n", warning)
-	}
+	return initProjectScanSummary{}
 }
 
 func writeInitStatusText(b *strings.Builder, status spine.InitOverallStatus) {
@@ -898,6 +939,9 @@ func writeInitStepNotices(b *strings.Builder, steps []spine.InitStepResult) {
 		case spine.InitStepStatusWarning:
 			if step.Message != "" {
 				fmt.Fprintf(b, "Warning: %s\n", step.Message)
+			}
+			if step.Name == initStepProjectScan {
+				continue
 			}
 			if step.RetryCommand != "" {
 				fmt.Fprintf(b, "Recovery hint: retry with `%s`.\n", step.RetryCommand)

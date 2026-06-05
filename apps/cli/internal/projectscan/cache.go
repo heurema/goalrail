@@ -68,6 +68,28 @@ func (c Cache) LoadLatestBaseline(repoBindingID string, canonicalRepoRoot string
 	return baseline, true, nil
 }
 
+func (c Cache) LoadCurrentOverlay(repoBindingID string, canonicalRepoRoot string) (WorkspaceOverlay, bool, error) {
+	dir, err := c.Directory(repoBindingID, canonicalRepoRoot)
+	if err != nil {
+		return WorkspaceOverlay{}, false, err
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, overlayCurrentFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return WorkspaceOverlay{}, false, nil
+	}
+	if err != nil {
+		return WorkspaceOverlay{}, false, err
+	}
+	var overlay WorkspaceOverlay
+	if err := json.Unmarshal(raw, &overlay); err != nil {
+		return WorkspaceOverlay{}, false, nil
+	}
+	if strings.TrimSpace(overlay.WorkspaceOverlayID) == "" {
+		return WorkspaceOverlay{}, false, nil
+	}
+	return overlay, true, nil
+}
+
 func (c Cache) WriteBaseline(profile RepositoryBaselineProfile) error {
 	dir, err := c.Directory(profile.RepoBindingID, profile.CanonicalRepoRoot)
 	if err != nil {

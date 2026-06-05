@@ -17,6 +17,7 @@ import (
 
 	"github.com/heurema/goalrail/apps/cli/internal/authstore"
 	"github.com/heurema/goalrail/apps/cli/internal/exitcode"
+	"github.com/heurema/goalrail/apps/cli/internal/projectscan"
 	"github.com/heurema/goalrail/apps/cli/internal/spine"
 	"github.com/heurema/goalrail/apps/cli/internal/term"
 )
@@ -264,6 +265,9 @@ func TestRunRepositoryContextInitSendsExpectedRequestJSON(t *testing.T) {
 	if output.Status != spine.InitOverallStatusSuccess {
 		t.Fatalf("status = %q, want success", output.Status)
 	}
+	if output.NextCommand != nextSuggestedCommand {
+		t.Fatalf("json next_suggested_command = %q, want existing generic command %q", output.NextCommand, nextSuggestedCommand)
+	}
 	assertInitSteps(t, output.Steps, []wantInitStep{
 		{name: initStepRepositoryContext, status: spine.InitStepStatusOK},
 		{name: initStepLocalMarker, status: spine.InitStepStatusOK},
@@ -329,6 +333,15 @@ func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
 	requireGit(t)
 
 	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	writeFile(t, repoDir, "apps/cli/go.mod", "module github.com/heurema/goalrail/apps/cli\n")
+	writeFile(t, repoDir, "apps/cli/main_test.go", "package main\n")
+	writeFile(t, repoDir, "apps/web/package.json", `{"name":"goalrail-web","scripts":{"test":"vitest"}}`)
+	writeFile(t, repoDir, "apps/web/package-lock.json", `{"lockfileVersion":3}`)
+	writeFile(t, repoDir, ".github/workflows/ci.yml", "name: ci\n")
+	writeFile(t, repoDir, "AGENTS.md", "# Agent rules\n")
+	writeFile(t, repoDir, "CODEOWNERS", "* @goalrail/owners\n")
+	runGit(t, repoDir, "add", ".")
+	runGit(t, repoDir, "commit", "-m", "add project scan summary fixture")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/init/repository-context":
@@ -363,13 +376,28 @@ func TestRunRepositoryContextInitTextNamesRepositorySnapshot(t *testing.T) {
 		"Local state ignore rules: .goalrail/.gitignore (written)",
 		"Commit .goalrail/project.yml and .goalrail/.gitignore with this repository.",
 		"Repository context snapshot: 018f0000-0000-7000-8000-000000000301 (recorded)",
-		"Project scan: quick",
+		"Project scan:\n",
+		"  baseline: created",
+		"  overlay: created",
+		"  toolchains: go, node",
+		"  package managers: npm",
+		"  workspaces: apps/cli, apps/web",
+		"  tests: detected",
+		"  ci: detected",
+		"  agent rules: detected",
+		"  codeowners: detected",
+		"  partiality: none",
+		"  freshness: current_head",
 		"This initialized GoalRail repository context for your existing organization, wrote a non-secret GoalRail repository marker, attempted a metadata-only repository context snapshot, and ran a local Project Scan.",
 		"No server clone, audit, hooks, branch creation, deploy keys, provider integration, runner, gate, proof, or verification were configured.",
+		`Next: goalrail work start --title "Dogfood Goalrail on Goalrail"`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout = %q, want %q", got, want)
 		}
+	}
+	if strings.Count(got, "\nNext: ") != 1 {
+		t.Fatalf("stdout = %q, want exactly one Next command", got)
 	}
 	if strings.Contains(got, "Project context snapshot") {
 		t.Fatalf("stdout = %q, want repository snapshot wording", got)
@@ -785,6 +813,57 @@ func TestRunServerBackedInitProjectScanFailureReturnsWarningStatus(t *testing.T)
 	step := findInitStep(output.Steps, initStepProjectScan)
 	if step == nil || step.Status != spine.InitStepStatusWarning || !step.Recoverable || !strings.Contains(step.RetryCommand, "goalrail project scan") {
 		t.Fatalf("project_scan step = %#v, want recoverable warning with project scan retry", step)
+	}
+	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
+		t.Fatalf("local marker stat error = %v, want marker written before scan warning", err)
+	}
+}
+
+func TestRunServerBackedInitProjectScanFailureTextShowsUnavailableSummary(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	projectID := "018f0000-0000-7000-8000-000000000003"
+	server := httptest.NewServer(repoBindingInitHandler(t, projectID))
+	defer server.Close()
+	cacheRootFile := filepath.Join(t.TempDir(), "project-scan-cache-root")
+	if err := os.WriteFile(cacheRootFile, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("write cache root file: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := RunWithOptions(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--project", projectID}, Options{
+		Store:                fakeSessionStore{session: validSession(server.URL)},
+		Now:                  func() time.Time { return time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC) },
+		ProjectScanCacheRoot: cacheRootFile,
+	})
+	if err != nil {
+		t.Fatalf("Run(init --project) error = %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Init status: success_with_warnings",
+		"Project scan:\n",
+		"  baseline: unavailable",
+		"  overlay: unavailable",
+		"  tests: unknown",
+		"  partiality: not_checked",
+		"  freshness: unknown",
+		"  warnings:",
+		"Warning: Local Project Scan cache could not be written:",
+		`Next: goalrail work start --title "Dogfood Goalrail on Goalrail"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout = %q, want %q", got, want)
+		}
+	}
+	if strings.Count(got, "\nNext: ") != 1 {
+		t.Fatalf("stdout = %q, want exactly one Next command", got)
+	}
+	if strings.Contains(got, "goalrail project scan --format json") {
+		t.Fatalf("stdout = %q, want Project Scan warning without extra command recommendation", got)
 	}
 	if _, err := os.Stat(filepath.Join(repoDir, projectConfigRelativePath)); err != nil {
 		t.Fatalf("local marker stat error = %v, want marker written before scan warning", err)
@@ -1242,6 +1321,71 @@ func TestRunLocalDemoDoesNotWriteProjectConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(repoDir, projectConfigIgnoreRelativePath)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("local-state gitignore stat error = %v, want not exist", err)
+	}
+}
+
+func TestRunLocalDemoTextDoesNotPretendProjectScanRan(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+
+	repoDir, _ := setupGitRepoWithOriginHead(t, "git@github.com:heurema/goalrail.git")
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), term.New(&stdout, &stderr), repoDir, []string{"--local-demo"})
+	if err != nil {
+		t.Fatalf("Run(init --local-demo) error = %v", err)
+	}
+	got := stdout.String()
+	if strings.Contains(got, "Project scan") {
+		t.Fatalf("stdout = %q, want no Project Scan claim in local-demo mode", got)
+	}
+	if !strings.Contains(got, localDemoMessage) {
+		t.Fatalf("stdout = %q, want local-demo boundary message", got)
+	}
+}
+
+func TestProjectScanSummaryFormattingShowsPartialWarnings(t *testing.T) {
+	t.Parallel()
+
+	baseline := projectscan.RepositoryBaselineProfile{
+		Status: projectscan.BaselineStatusPartial,
+		Shape: projectscan.RepositoryShape{
+			Toolchains:      []string{"node", "go"},
+			PackageManagers: []string{"npm"},
+			Workspaces:      []string{"apps/web", "apps/cli"},
+		},
+		ReadinessSignals: projectscan.ReadinessSignals{
+			Tests:      []string{"apps/web/package.json"},
+			AgentRules: []string{"AGENTS.md"},
+		},
+		Partiality: projectscan.Partiality{
+			ShallowRepository: true,
+			Truncated:         true,
+			Reasons:           []string{"scan_budget_truncated"},
+		},
+	}
+	overlay := projectscan.WorkspaceOverlay{State: projectscan.OverlayStateClean}
+	freshness := projectscan.FreshnessResult{Status: projectscan.FreshnessPartial}
+
+	var b strings.Builder
+	writeProjectScanSummaryText(&b, summarizeInitProjectScan(projectScanArtifactRefreshed, projectScanArtifactRefreshed, baseline, overlay, freshness))
+	got := b.String()
+	for _, want := range []string{
+		"  baseline: refreshed",
+		"  overlay: refreshed",
+		"  toolchains: go, node",
+		"  package managers: npm",
+		"  workspaces: apps/cli, apps/web",
+		"  tests: detected",
+		"  ci: not_detected",
+		"  agent rules: detected",
+		"  codeowners: not_detected",
+		"  partiality: shallow_repo, truncated",
+		"  freshness: current_head",
+		"  warnings: partial scan: shallow_repo, truncated",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("summary = %q, want %q", got, want)
+		}
 	}
 }
 

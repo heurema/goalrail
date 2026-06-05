@@ -48,6 +48,7 @@ database scope.
 | INIT-05-SNAPSHOT-SCAN-PARITY | Added snapshot / Project Scan shared-signal parity tests and documented accepted path-model divergence. |
 | INIT-06-SNAPSHOT-SCAN-SHARED-SHAPE-DESIGN | Documented the shared repository-shape direction. |
 | INIT-07-SHARED-SHAPE-SIGNAL-TABLE | Added `apps/cli/internal/reposhape` and routed snapshot inventory plus Project Scan detection through shared signal definitions. |
+| INIT-08-PROJECT-SCAN-SUMMARY | Added compact human Project Scan summary to successful server-backed `goalrail init` output. |
 
 ## Stabilized behavior
 
@@ -62,6 +63,9 @@ database scope.
 - `goalrail project scan --refresh` exists as the preferred local rescan alias.
 - Snapshot and Project Scan now have parity guardrails and shared signal
   definitions for metadata-only repository-shape signals.
+- Successful server-backed `goalrail init` prints compact Project Scan
+  baseline / overlay / repository-shape / partiality / freshness facts from the
+  existing best-effort local scan path.
 
 ## Remaining known risks
 
