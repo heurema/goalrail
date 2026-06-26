@@ -5596,7 +5596,7 @@ class _HostLaunchAttempt:
         no code.
     :param error: Human-readable failure message from the host, e.g.
         ``"harness 'codex' is not configured on host 'laptop' — run
-        `omnigent setup` ..."``; ``None`` when there was no error.
+        `goalrail setup` ..."``; ``None`` when there was no error.
     """
 
     runner_id: str
@@ -6947,7 +6947,7 @@ async def _persist_host_launch_failure_turn(
     boot (:func:`_persist_native_terminal_failure`) — the server records
     the user's message (so the input is consumed, not silently dropped)
     and a sibling ``type="error"`` item carrying the host's message
-    (which names the fix, ``omnigent setup``), then publishes the same
+    (which names the fix, ``goalrail setup``), then publishes the same
     live error/status events the web renders as an error banner. The host
     binding is left intact so a later message relaunches once the user has
     run setup.
@@ -6959,8 +6959,8 @@ async def _persist_host_launch_failure_turn(
     :param conversation_store: Store used for the durable append.
     :param host_error: The host's human-readable refusal, e.g.
         ``"harness 'codex' is not configured on host 'laptop' — run
-        `omnigent setup` ..."``. ``None`` falls back to a generic
-        ``omnigent setup`` pointer so the banner is never empty.
+        `goalrail setup` ..."``. ``None`` falls back to a generic
+        ``goalrail setup`` pointer so the banner is never empty.
     :param runner_router: Router used to resolve a sub-agent's runner for
         the parent-wake forward, or ``None`` in in-process / test setups.
     :param created_by: Authenticated posting actor, e.g.
@@ -6979,7 +6979,7 @@ async def _persist_host_launch_failure_turn(
             # the code, but the banner must stay actionable if a
             # third-party host omits it.
             else (
-                "the agent's harness is not configured on the selected host — run `omnigent setup`"
+                "the agent's harness is not configured on the selected host — run `goalrail setup`"
             )
         ),
     )
@@ -13284,7 +13284,7 @@ def create_sessions_router(
                 if result.get("status") == "failed":
                     # Lenient on every create-time launch failure, including
                     # an unconfigured harness: the picker's readiness data
-                    # can be stale (the user may have run `omnigent setup`
+                    # can be stale (the user may have run `goalrail setup`
                     # since the host last connected), so we never block the
                     # create. The session opens with the binding intact; the
                     # first message drives the real runner start, and if the
@@ -18079,7 +18079,7 @@ def create_sessions_router(
                         # configured there. This message was the real
                         # runner-start attempt, so consume it and record a
                         # transcript error (the host's message names the
-                        # fix, `omnigent setup`) the web renders as a
+                        # fix, `goalrail setup`) the web renders as a
                         # banner — instead of timing out into a generic
                         # RUNNER_UNAVAILABLE. The binding stays so a later
                         # message relaunches once setup is done.

@@ -18,14 +18,14 @@ def format_native_resume_command(
 
     :param native_command: Native wrapper subcommand, e.g.
         ``"claude"``.
-    :param session_id: Omnigent conversation id, e.g.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
-    :param server: Optional Omnigent server URL, e.g.
+    :param server: Optional Goalrail server URL, e.g.
         ``"https://example.databricks.com"``.
     :returns: Shell-quoted command string, e.g.
-        ``"omnigent claude --resume conv_abc123"``.
+        ``"goalrail claude --resume conv_abc123"``.
     """
-    parts = ["omnigent", native_command]
+    parts = ["goalrail", native_command]
     if server is not None:
         parts.extend(["--server", server])
     parts.extend(["--resume", session_id])
@@ -43,9 +43,9 @@ def echo_native_resume_hint(
 
     :param native_command: Native wrapper subcommand, e.g.
         ``"codex"``.
-    :param session_id: Omnigent conversation id, e.g.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
-    :param server: Optional Omnigent server URL, e.g.
+    :param server: Optional Goalrail server URL, e.g.
         ``"https://example.databricks.com"``.
     :returns: None.
     """

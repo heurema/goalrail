@@ -579,16 +579,16 @@ class HostProcess:
         Shared by the login-redirect and HTTP 401 messages.
 
         :returns: An actionable remedy sentence naming the exact
-            command, e.g. ``"Run `omnigent login <url>` ..."``.
+            command, e.g. ``"Run `goalrail login <url>` ..."``.
         """
         return (
-            f"Run `omnigent login {self._server_url}` to authenticate (it "
+            f"Run `goalrail login {self._server_url}` to authenticate (it "
             "detects Databricks-fronted servers and logs in to the right "
             "workspace), or check your ambient Databricks credentials."
         )
 
     def _login_fix_hint(self) -> str:
-        """Suggest ``omnigent login`` as a remedy for an auth rejection.
+        """Suggest ``goalrail login`` as a remedy for an auth rejection.
 
         The host tunnel's bearer is resolved from a stored ``omnigent
         login`` record first, then ambient Databricks credentials (see
@@ -599,12 +599,12 @@ class HostProcess:
         server directly, which stores the session token the tunnel needs.
 
         :returns: A one-sentence remedy naming the exact command, e.g.
-            ``"If this server uses Omnigent accounts or OIDC login, run
-            `omnigent login http://localhost:6767` to authenticate."``.
+            ``"If this server uses Goalrail accounts or OIDC login, run
+            `goalrail login http://localhost:6767` to authenticate."``.
         """
         return (
-            "If this server uses Omnigent accounts or OIDC login, run "
-            f"`omnigent login {self._server_url}` to authenticate."
+            "If this server uses Goalrail accounts or OIDC login, run "
+            f"`goalrail login {self._server_url}` to authenticate."
         )
 
     def _fatal_upgrade_error(self, exc: InvalidURI | InvalidStatus) -> HostConnectError | None:

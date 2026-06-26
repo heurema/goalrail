@@ -1671,7 +1671,7 @@ class _SessionsChatReplAdapter:
             if self._runner_id is None:
                 raise RuntimeError(
                     "Sessions API dispatch requires a registered runner id. "
-                    "Start through `omnigent run <agent>` or pass --server so the CLI "
+                    "Start through `goalrail run <agent>` or pass --server so the CLI "
                     "can launch and bind a runner."
                 )
             if self._bound_runner_id == self._runner_id:
@@ -4644,7 +4644,7 @@ def _build_model_readout_lines(
     configured:`` line lists them (friendly names + glyphs) with honest
     guidance: ``/model`` only changes the model within the active
     provider — switching the active provider mid-session is not wired, so
-    it goes through ``omnigent setup --no-internal-beta`` + a restart. Falls
+    it goes through ``goalrail setup --no-internal-beta`` + a restart. Falls
     back to the legacy ``(agent default)`` line when nothing is configured
     for the harness's surface.
 
@@ -4691,7 +4691,7 @@ def _build_model_readout_lines(
         else:
             lines.append("Active:  None  ·  None")
             lines.append(
-                "no model configured — run `omnigent setup --no-internal-beta` to add one"
+                "no model configured — run `goalrail setup --no-internal-beta` to add one"
             )
         lines.append("usage: /model <name> · /model default | off | reset to clear")
         return lines
@@ -4743,7 +4743,7 @@ def _build_model_readout_lines(
         # so it goes through `configure harnesses` + a restart.
         lines.append(
             "  /model <name> changes the model. To switch provider: "
-            "omnigent setup --no-internal-beta (then restart)."
+            "goalrail setup --no-internal-beta (then restart)."
         )
     return lines
 
@@ -4859,7 +4859,7 @@ async def _cmd_model(
     a bare ``/model <active-provider>`` resolves that provider's default
     model. A value naming a **different** configured provider fails loud
     with guidance — switching the active provider mid-session is not wired
-    (it goes through ``omnigent setup --no-internal-beta`` + a restart).
+    (it goes through ``goalrail setup --no-internal-beta`` + a restart).
     ``/model default|off|reset`` clears the override.
     """
     from rich.text import Text
@@ -4924,7 +4924,7 @@ async def _cmd_model(
         host.output(
             Text.from_markup(
                 f"  [{fmt.muted}]Active provider: {active_label}. To use {target_label}, run "
-                f"`omnigent setup --no-internal-beta` and select it as the "
+                f"`goalrail setup --no-internal-beta` and select it as the "
                 f"default, then restart. "
                 f"(You can still change the model within {active_label}: /model <model-name>.)"
                 f"[/{fmt.muted}]"

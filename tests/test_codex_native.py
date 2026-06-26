@@ -5740,7 +5740,7 @@ def test_local_run_prints_resume_hint_after_attach(
 
     captured = capsys.readouterr()
     web_ui = "Web UI: http://127.0.0.1:23456/c/conv_codex_fresh"
-    resume_hint = "Resume with: omnigent codex --resume conv_codex_fresh"
+    resume_hint = "Resume with: goalrail codex --resume conv_codex_fresh"
     assert web_ui in captured.err
     assert resume_hint in captured.err
     assert captured.err.index(web_ui) < captured.err.index(resume_hint)

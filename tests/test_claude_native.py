@@ -745,7 +745,7 @@ def test_local_run_persists_launch_state_on_fresh_session(
     )
     captured = capsys.readouterr()
     web_ui = "Web UI: http://127.0.0.1:12345/c/conv_local_fresh"
-    resume_hint = "Resume with: omnigent claude --resume conv_local_fresh"
+    resume_hint = "Resume with: goalrail claude --resume conv_local_fresh"
     assert web_ui in captured.err
     assert resume_hint in captured.err
     assert captured.err.index(web_ui) < captured.err.index(resume_hint)
@@ -4015,7 +4015,7 @@ async def test_resolve_cold_resume_args_rejects_non_claude_native_conv() -> None
     # Redirect hint includes the right command and conv id so the
     # user can copy-paste to recover. If this assertion fails, the
     # error becomes a dead-end.
-    assert "omnigent run --resume conv_abc" in excinfo.value.message
+    assert "goalrail run --resume conv_abc" in excinfo.value.message
 
 
 @pytest.mark.asyncio

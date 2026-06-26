@@ -1176,7 +1176,7 @@ class ClaudeSDKExecutor(Executor):
                 f"Model {model!r} is a Databricks-hosted model but gateway "
                 "routing is disabled (gateway=False). "
                 "Set executor.profile in the agent spec, or configure a "
-                "Databricks provider with `omnigent setup`, to route through "
+                "Databricks provider with `goalrail setup`, to route through "
                 "the Databricks Anthropic gateway."
             )
         self._cwd = cwd

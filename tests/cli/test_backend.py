@@ -1430,7 +1430,7 @@ def test_ensure_backend_databricks_preflight_hints_headless(
     with pytest.raises(click.ClickException) as exc:
         _ensure_backend("https://myapp-1234.aws.databricksapps.com")
 
-    assert "omnigent login https://myapp-1234.aws.databricksapps.com" in str(exc.value)
+    assert "goalrail login https://myapp-1234.aws.databricksapps.com" in str(exc.value)
     # No browser flow attempted off-TTY.
     assert login_calls == []
 

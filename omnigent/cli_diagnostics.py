@@ -387,7 +387,7 @@ def print_setup_hint() -> None:
     the model-configuration command. The dominant root cause for CLI
     failures in the wild is a missing or misconfigured model
     credential — a hint that nudges the user toward
-    ``omnigent setup`` keeps the recovery path obvious without
+    ``goalrail setup`` keeps the recovery path obvious without
     requiring per-call classification of "is this auth?".
 
     Like :func:`log_cli_error_hint`, the line is written through
@@ -400,7 +400,7 @@ def print_setup_hint() -> None:
     dest = getattr(sys.stderr, "_original_stderr", sys.stderr)
     print(
         "If this looks like an auth or configuration problem, run "
-        "`omnigent setup` to configure a model credential.",
+        "`goalrail setup` to configure a model credential.",
         file=dest,
     )
 

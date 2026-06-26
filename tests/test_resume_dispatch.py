@@ -343,7 +343,7 @@ def test_dispatch_by_runtime_non_wrapper_local_raises_with_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Local non-wrapper conv surfaces the ``omnigent run --resume`` hint.
+    Local non-wrapper conv surfaces the ``goalrail run --resume`` hint.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
@@ -362,7 +362,7 @@ def test_dispatch_by_runtime_non_wrapper_local_raises_with_hint(
 
     msg = excinfo.value.message
     assert "conv_chat" in msg
-    assert "omnigent run --resume" in msg
+    assert "goalrail run --resume" in msg
     assert "<agent.yaml>" in msg
 
 
@@ -398,12 +398,38 @@ def test_read_wrapper_label_local_reads_persistent_store(
     assert result == "codex-native-ui"
 
 
+def test_read_wrapper_label_local_missing_conversation_names_goalrail_server(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    Missing local sessions tell the user how to target a remote Goalrail server.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Temporary persistent Goalrail directory.
+    :returns: None.
+    """
+    import omnigent.chat as chat_mod
+    from omnigent.stores.conversation_store.sqlalchemy_store import (
+        SqlAlchemyConversationStore,
+    )
+
+    db_path = tmp_path / "chat.db"
+    SqlAlchemyConversationStore(f"sqlite:///{db_path}")
+    monkeypatch.setattr(chat_mod, "_omnigent_persistent_dir", lambda: tmp_path)
+
+    with pytest.raises(click.ClickException) as excinfo:
+        resume_dispatch._read_wrapper_label_local(conv_id="conv_missing")
+
+    assert "remote Goalrail server" in excinfo.value.message
+
+
 def test_dispatch_by_runtime_non_claude_native_remote_raises_with_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     Remote non-claude-native conv ⇒ ``ClickException`` with a
-    copy-pasteable ``omnigent run --resume`` hint.
+    copy-pasteable ``goalrail run --resume`` hint.
 
     The hint MUST include both the conv id and the original
     ``--server`` URL so the user's next attempt works without
@@ -432,7 +458,7 @@ def test_dispatch_by_runtime_non_claude_native_remote_raises_with_hint(
     msg = excinfo.value.message
     # All three load-bearing pieces of the hint must appear.
     assert "conv_xyz" in msg
-    assert "omnigent run --resume" in msg
+    assert "goalrail run --resume" in msg
     assert "https://example.com" in msg
 
 

@@ -204,7 +204,7 @@ def test_required_cli_for_cli_backed_harness(harness: str, binary: str) -> None:
 @pytest.mark.parametrize("harness", ["cursor-native", "native-cursor"])
 def test_setup_hint_for_native_cursor_points_at_vendor_installer(harness: str) -> None:
     """Native Cursor's "not configured" hint names the curl installer + login,
-    never ``omnigent setup`` — which only configures the SDK ``cursor`` harness
+    never ``goalrail setup`` — which only configures the SDK ``cursor`` harness
     (``cursor-sdk`` + ``CURSOR_API_KEY``) and never installs ``cursor-agent``.
 
     A regression to the generic hint sends a native-Cursor user down a dead end
@@ -214,7 +214,7 @@ def test_setup_hint_for_native_cursor_points_at_vendor_installer(harness: str) -
     assert "cursor-agent" in hint
     assert "cursor.com/install" in hint
     assert "cursor-agent login" in hint
-    assert "omnigent setup" not in hint
+    assert "goalrail setup" not in hint
 
 
 @pytest.mark.parametrize("harness", ["kiro-native", "native-kiro"])
@@ -223,15 +223,15 @@ def test_setup_hint_for_native_kiro_points_at_vendor_installer(harness: str) -> 
     hint = hi.harness_setup_hint(harness)
     assert "kiro-cli" in hint
     assert "cli.kiro.dev/install" in hint
-    assert "omnigent setup" not in hint
+    assert "goalrail setup" not in hint
 
 
 @pytest.mark.parametrize("harness", ["claude-native", "codex", "pi", "claude-sdk", None])
 def test_setup_hint_defaults_to_omnigent_setup(harness: str | None) -> None:
-    """Harnesses whose CLI ``omnigent setup`` installs (npm CLIs) — and the
-    SDK / unknown / ``None`` cases — route to the ``omnigent setup`` hint."""
+    """Harnesses whose CLI ``goalrail setup`` installs (npm CLIs) — and the
+    SDK / unknown / ``None`` cases — route to the ``goalrail setup`` hint."""
     hint = hi.harness_setup_hint(harness)
-    assert "omnigent setup" in hint
+    assert "goalrail setup" in hint
 
 
 @pytest.mark.parametrize("harness", ["cursor", "claude-sdk", "openai-agents"])

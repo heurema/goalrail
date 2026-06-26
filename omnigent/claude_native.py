@@ -1367,7 +1367,7 @@ def _strip_resume_from_claude_args(args: tuple[str, ...]) -> tuple[str, ...]:
             continue
         if arg in ("--resume", "-r"):
             _logger.warning(
-                "Stripped stray %s from claude args; use `omnigent claude --resume`.", arg
+                "Stripped stray %s from claude args; use `goalrail claude --resume`.", arg
             )
             consume_value = True
             continue
@@ -1413,7 +1413,7 @@ def _ucode_config_for_profile(profile: str | None) -> ClaudeNativeUcodeConfig | 
     if agent_state is None:
         raise click.ClickException(
             f"ucode state for profile {profile!r} does not include a Claude agent entry. "
-            "Run `omnigent setup --internal-beta` to refresh ucode configuration."
+            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
         )
 
     base_url = agent_state.env.get(_UCODE_CLAUDE_BASE_URL_ENV) or agent_state.base_url
@@ -1423,12 +1423,12 @@ def _ucode_config_for_profile(profile: str | None) -> ClaudeNativeUcodeConfig | 
         raise click.ClickException(
             f"ucode state for profile {profile!r} is missing Claude base URL "
             f"({_UCODE_CLAUDE_BASE_URL_ENV} / base_url). "
-            "Run `omnigent setup --internal-beta` to refresh ucode configuration."
+            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
         )
     if not agent_state.auth_command:
         raise click.ClickException(
             f"ucode state for profile {profile!r} is missing Claude auth_command. "
-            "Run `omnigent setup --internal-beta` to refresh ucode configuration."
+            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
         )
 
     refresh_interval_ms = (
@@ -1721,7 +1721,7 @@ def resolve_native_claude_config(
         return _native_claude_config_from_entry(entry)
     _logger.info(
         "native-claude routing: Claude CLI login (no provider configured for the Claude "
-        "harness, no Databricks profile). Run `omnigent setup --no-internal-beta` to route "
+        "harness, no Databricks profile). Run `goalrail setup --no-internal-beta` to route "
         "through a provider."
     )
     return None
@@ -2927,7 +2927,7 @@ def _run_with_remote_server(
                 # TCP connection — the Omnigent server at this URL isn't reachable.
                 # Fail loud with the URL instead of a raw httpx traceback.
                 raise click.ClickException(
-                    f"Could not reach the omnigent server at {base_url}. "
+                    f"Could not reach the Goalrail server at {base_url}. "
                     "Confirm the server is running and reachable from here "
                     f"(e.g. `curl {base_url}/health`), and that --server is correct."
                 ) from exc
@@ -3212,7 +3212,7 @@ async def _fetch_claude_session_labels(
     if resp.status_code == 404:
         raise click.ClickException(
             f"Conversation {session_id!r} not found on the server. "
-            "Run `omnigent claude` (no --resume) to start a new session.",
+            "Run `goalrail claude` (no --resume) to start a new session.",
         )
     if resp.status_code >= 400:
         raise click.ClickException(
@@ -3256,7 +3256,7 @@ async def _resolve_cold_resume_args(
     if resp.status_code == 404:
         raise click.ClickException(
             f"Conversation {session_id!r} not found on the server. "
-            "Run `omnigent claude` (no --resume) to start a new session.",
+            "Run `goalrail claude` (no --resume) to start a new session.",
         )
     if resp.status_code >= 400:
         raise click.ClickException(
@@ -3274,7 +3274,7 @@ async def _resolve_cold_resume_args(
     if wrapper != _WRAPPER_LABEL_VALUE:
         raise click.ClickException(
             f"Conversation {session_id!r} is not a claude-native session "
-            f"(wrapper={wrapper!r}). Use `omnigent run --resume "
+            f"(wrapper={wrapper!r}). Use `goalrail run --resume "
             f"{session_id}` to resume it through the right runtime.",
         )
     external_session_id = payload.get("external_session_id")
@@ -3705,7 +3705,7 @@ def _preflight_local_tools(command: str) -> None:
     if shutil.which(command) is None:
         raise click.ClickException(
             f"Claude Code CLI command {command!r} was not found on local PATH. "
-            "--server selects the Omnigent server only; Claude still runs locally."
+            "--server selects the Goalrail server only; Claude still runs locally."
         )
     if shutil.which("tmux") is None:
         raise click.ClickException(

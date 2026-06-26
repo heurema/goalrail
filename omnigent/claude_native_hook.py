@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     conversation_url = _conversation_url_for_active_session(bridge_dir, args.conversation_url)
     if conversation_url and payload.get("hook_event_name") == "SessionStart":
         print(
-            json.dumps({"systemMessage": (f"Open this session in Omnigent: {conversation_url}")})
+            json.dumps({"systemMessage": (f"Open this session in Goalrail: {conversation_url}")})
         )
     return 0
 

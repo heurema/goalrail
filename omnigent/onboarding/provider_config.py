@@ -420,7 +420,7 @@ def resolve_secret(ref: str) -> str:
       :func:`os.path.expandvars` with an unresolved-variable check.
     - ``"keychain:<name>"`` — read ``<name>`` from the omnigent secret
       store (OS keychain, else a ``0600`` JSON file). The store is
-      populated by ``omnigent setup --no-internal-beta`` — see
+      populated by ``goalrail setup --no-internal-beta`` — see
       :mod:`omnigent.onboarding.secrets`.
 
     :param ref: The secret reference, e.g. ``"env:OPENROUTER_API_KEY"``,
@@ -440,7 +440,7 @@ def resolve_secret(ref: str) -> str:
         if value is None:
             raise OmnigentError(
                 f"no stored secret named {name!r}; run "
-                "`omnigent setup --no-internal-beta` to set it.",
+                "`goalrail setup --no-internal-beta` to set it.",
                 code=ErrorCode.INVALID_INPUT,
             )
         return value

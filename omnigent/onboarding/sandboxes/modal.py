@@ -415,7 +415,7 @@ class ModalSandboxLauncher(SandboxLauncher):
             present to satisfy the launcher contract).
         """
         click.echo(
-            f"  → Modal caps sandbox lifetime at 24 hours; re-run `omnigent "
+            f"  → Modal caps sandbox lifetime at 24 hours; re-run `goalrail "
             f"sandbox create --provider modal` for a fresh host after "
             f"'{sandbox_id}' expires."
         )

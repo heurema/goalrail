@@ -185,7 +185,7 @@ async def test_handle_launch_refuses_unconfigured_harness(
     """
     Verify _handle_launch refuses to spawn when the frame's harness is
     not configured, with the structured error_code and a message that
-    names the harness, the host, and the `omnigent setup` fix.
+    names the harness, the host, and the `goalrail setup` fix.
 
     If this regresses, an unconfigured launch spawns a runner whose
     first turn dies inside the executor — the exact dead-session UX
@@ -218,7 +218,7 @@ async def test_handle_launch_refuses_unconfigured_harness(
     # harness, the host, and the remediation command.
     assert "'codex'" in (result.error or "")
     assert "test-laptop" in (result.error or "")
-    assert "omnigent setup" in (result.error or "")
+    assert "goalrail setup" in (result.error or "")
     assert result.runner_id is None
     # No runner subprocess may exist after a refusal.
     assert host._runners == {}
@@ -230,7 +230,7 @@ async def test_handle_launch_native_cursor_message_points_at_cursor_installer(
 ) -> None:
     """
     A native-Cursor refusal must name the ``cursor-agent`` installer and
-    login, not ``omnigent setup`` — which only configures the SDK ``cursor``
+    login, not ``goalrail setup`` — which only configures the SDK ``cursor``
     harness and never installs the ``cursor-agent`` CLI ``omni cursor`` boots.
 
     Here ``harness_setup_hint`` is the real function (only the readiness check
@@ -259,7 +259,7 @@ async def test_handle_launch_native_cursor_message_points_at_cursor_installer(
     assert "test-laptop" in message
     assert "cursor.com/install" in message
     assert "cursor-agent login" in message
-    assert "omnigent setup" not in message
+    assert "goalrail setup" not in message
     assert host._runners == {}
 
 
@@ -1823,7 +1823,7 @@ async def test_run_retries_on_login_redirect(
     ``InvalidURI`` because the redirect scheme isn't ws/wss. This can
     happen transiently during server restarts, so the host must retry
     with backoff rather than dying. The warning still surfaces the single
-    ``omnigent login`` remediation so the operator can act if the cause
+    ``goalrail login`` remediation so the operator can act if the cause
     is persistent.
     """
     monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
@@ -1842,10 +1842,10 @@ async def test_run_retries_on_login_redirect(
     # 2 = redirect attempt + cancel attempt → it genuinely reconnected.
     assert spy.call_count == 2
     # The warning surfaces the login-page cause and the credentials hint —
-    # the single remediation message recommending `omnigent login <url>`.
+    # the single remediation message recommending `goalrail login <url>`.
     assert any("login page" in r.message for r in caplog.records)
     assert any(
-        "omnigent login https://app.example.databricks.com" in r.message for r in caplog.records
+        "goalrail login https://app.example.databricks.com" in r.message for r in caplog.records
     )
 
 
@@ -1859,7 +1859,7 @@ async def test_login_redirect_prints_warning_to_terminal(
     not-logged-in ``omnigent host`` sat completely silent on the terminal
     while retrying (the user's only signal was Ctrl-C and reading the log).
     The terminal warning must name the cause and the copy-pasteable
-    ``omnigent login <url>`` remedy.
+    ``goalrail login <url>`` remedy.
     """
     monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
     spy = _ConnectSpy(
@@ -1878,7 +1878,7 @@ async def test_login_redirect_prints_warning_to_terminal(
     # regression is back (warning only in the log file).
     assert "login page" in err
     # The exact remedy command, URL included, so the user can copy-paste.
-    assert "omnigent login https://app.example.databricks.com" in err
+    assert "goalrail login https://app.example.databricks.com" in err
 
 
 async def test_fresh_host_fails_loud_after_persistent_login_redirects(
@@ -1905,7 +1905,7 @@ async def test_fresh_host_fails_loud_after_persistent_login_redirects(
     message = str(excinfo.value)
     # The fatal message identifies the auth cause and the exact remedy.
     assert "login page" in message
-    assert "omnigent login https://app.example.databricks.com" in message
+    assert "goalrail login https://app.example.databricks.com" in message
     # 3 = _LOGIN_REDIRECT_FATAL_ATTEMPTS: enough retries to absorb a
     # one-off proxy blip, then fail. 1 would mean the blip
     # tolerance regressed; more (or no raise at all) would mean the
@@ -2004,7 +2004,7 @@ async def test_run_fails_loud_on_permanent_4xx(
 async def test_auth_rejection_suggests_omnigent_login(
     monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    """401/403 rejections point the user at ``omnigent login``.
+    """401/403 rejections point the user at ``goalrail login``.
 
     Both statuses are auth failures the user can resolve by logging in to
     an accounts/OIDC-mode server (a Databricks profile token may
@@ -2022,13 +2022,13 @@ async def test_auth_rejection_suggests_omnigent_login(
 
     # The exact, copy-pasteable command — URL included — must be present,
     # not just the bare word "login".
-    assert f"omnigent login {server_url}" in str(excinfo.value)
+    assert f"goalrail login {server_url}" in str(excinfo.value)
 
 
 async def test_non_auth_permanent_4xx_omits_login_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-auth permanent 4xx (404) does NOT suggest ``omnigent login``.
+    """A non-auth permanent 4xx (404) does NOT suggest ``goalrail login``.
 
     The login remedy is specific to credential/authorization failures;
     surfacing it on a 404 ("wrong URL / route missing") would misdirect
@@ -2045,7 +2045,7 @@ async def test_non_auth_permanent_4xx_omits_login_hint(
     # Confirm we got the actual 404 fatal message (not some unrelated
     # error that happens to lack "login") before asserting the absence.
     assert "HTTP 404" in message
-    assert "omnigent login" not in message
+    assert "goalrail login" not in message
 
 
 @pytest.mark.parametrize("status", [408, 429, 500, 503])

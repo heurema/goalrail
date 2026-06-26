@@ -480,7 +480,7 @@ async def test_launch_runner_harness_not_configured_returns_412(
     the runner bind.
 
     If this degrades to the generic 502, the client loses the
-    machine-readable code (and the `omnigent setup` hint) on the
+    machine-readable code (and the `goalrail setup` hint) on the
     fork-resume relaunch path.
     """
     from omnigent.errors import OmnigentError
@@ -524,7 +524,7 @@ async def test_launch_runner_harness_not_configured_returns_412(
                             HostLaunchRunnerResultFrame(
                                 request_id=frame.request_id,
                                 status="failed",
-                                error=("harness 'codex' is not configured — run `omnigent setup`"),
+                                error=("harness 'codex' is not configured — run `goalrail setup`"),
                                 error_code="harness_not_configured",
                             )
                         ),
@@ -545,10 +545,10 @@ async def test_launch_runner_harness_not_configured_returns_412(
     assert resp.status_code == 412, f"Expected 412, got {resp.status_code}: {resp.text}"
     body = resp.json()
     assert body["error"]["code"] == "harness_not_configured"
-    assert "omnigent setup" in body["error"]["message"]
+    assert "goalrail setup" in body["error"]["message"]
 
     # _rollback_failed_launch ran: the session is fully unbound so a
-    # retry after `omnigent setup` starts clean.
+    # retry after `goalrail setup` starts clean.
     updated = conv_store.get_conversation(conv.id)
     assert updated is not None
     assert updated.runner_id is None, "failed launch must unbind runner_id"

@@ -4828,7 +4828,7 @@ async def _auto_create_claude_terminal(
             "native-claude: could not derive a provider/ucode launch config "
             "— FALLING BACK to Claude Code's own login; "
             "your configured provider will NOT be used. Check "
-            "`omnigent setup --no-internal-beta` "
+            "`goalrail setup --no-internal-beta` "
             "and that the secret resolves in this process.",
             exc_info=True,
         )

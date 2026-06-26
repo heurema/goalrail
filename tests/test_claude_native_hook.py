@@ -107,7 +107,7 @@ def test_session_start_hook_emits_conversation_url_system_message(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
-        "systemMessage": "Open this session in Omnigent: http://127.0.0.1:8787/c/conv_abc"
+        "systemMessage": "Open this session in Goalrail: http://127.0.0.1:8787/c/conv_abc"
     }
     assert captured.err == ""
     assert read_transcript_path(bridge_dir) == transcript_path
@@ -159,7 +159,7 @@ def test_session_start_hook_maps_workspace_hosted_server_to_ui_mount(
     assert exit_code == 0
     assert json.loads(captured.out) == {
         "systemMessage": (
-            "Open this session in Omnigent: "
+            "Open this session in Goalrail: "
             "https://example.databricks.com/omnigent/c/conv_abc?o=2850744067564480"
         )
     }
@@ -303,7 +303,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
-        "systemMessage": "Open this session in Omnigent: http://127.0.0.1:8787/c/conv_new"
+        "systemMessage": "Open this session in Goalrail: http://127.0.0.1:8787/c/conv_new"
     }
     assert captured.err == ""
     assert requests == [
@@ -502,7 +502,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
-        "systemMessage": "Open this session in Omnigent: http://127.0.0.1:8787/c/conv_fork"
+        "systemMessage": "Open this session in Goalrail: http://127.0.0.1:8787/c/conv_fork"
     }
     assert captured.err == ""
     assert requests == [
@@ -611,7 +611,7 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
     captured = capsys.readouterr()
     assert exit_code == 0
     assert json.loads(captured.out) == {
-        "systemMessage": "Open this session in Omnigent: http://127.0.0.1:8787/c/conv_old"
+        "systemMessage": "Open this session in Goalrail: http://127.0.0.1:8787/c/conv_old"
     }
     recorded = (bridge_dir / "hooks.jsonl").read_text(encoding="utf-8")
     assert "omnigent_fork_detected" not in recorded

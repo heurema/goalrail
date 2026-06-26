@@ -1098,7 +1098,7 @@ def _finish_native_redirect_progress(
     click.echo(
         (
             f"\n  Conversation {conversation_id} is a {wrapper_name} "
-            f"session — redirecting to `omnigent {native_command} --resume`.\n"
+            f"session - redirecting to `goalrail {native_command} --resume`.\n"
         ),
         err=True,
     )
@@ -1970,7 +1970,7 @@ def _poll_remote_runner(
             if resp.status_code in {401, 403}:
                 raise click.ClickException(
                     f"Remote runner status check was rejected ({resp.status_code}); "
-                    "run `omnigent login <server-url>` or check remote auth credentials."
+                    "run `goalrail login <server-url>` or check remote auth credentials."
                     f"{format_runner_log_tail(log_path)}"
                 )
         except httpx.HTTPError as exc:
@@ -2324,7 +2324,7 @@ async def _query_sessions_once(
     if runner_id is None:
         raise RuntimeError(
             "Sessions API headless prompt requires a registered runner id. "
-            "Start through `omnigent run <agent>` or pass --server so the CLI "
+            "Start through `goalrail run <agent>` or pass --server so the CLI "
             "can launch and bind a runner."
         )
     tool_callables = _sessions_tool_callables(tool_handler, agent_name)

@@ -1445,7 +1445,7 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
     if entry is None:
         _logger.info(
             "native-codex routing: Codex CLI login (no provider configured for the Codex "
-            "harness, no Databricks profile). Run `omnigent setup --no-internal-beta` to route "
+            "harness, no Databricks profile). Run `goalrail setup --no-internal-beta` to route "
             "through a provider."
         )
         return NativeCodexLaunch(config_overrides=no_provider_overrides, model=model, profile=None)

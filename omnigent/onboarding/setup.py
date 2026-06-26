@@ -180,7 +180,7 @@ def _databrickscfg_path() -> Path:
     """Return the active Databricks config file path.
 
     Honors ``DATABRICKS_CONFIG_FILE`` so callers that want to operate on
-    a temporary copy (e.g. during ``omnigent setup``) can redirect all
+    a temporary copy (e.g. during ``goalrail setup``) can redirect all
     direct configparser writes without touching the user's real file.
     """
     env = os.environ.get("DATABRICKS_CONFIG_FILE")
@@ -648,6 +648,6 @@ def maybe_run_onboarding() -> None:
         run_onboarding()
     else:
         console.print(
-            "  [dim]run `omnigent setup --internal-beta` when ready "
+            "  [dim]run `goalrail setup --internal-beta` when ready "
             f"(or `{SKIP_ENV_VAR}=1` to silence).[/dim]"
         )

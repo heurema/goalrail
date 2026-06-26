@@ -1,4 +1,4 @@
-"""Top-level ``omnigent resume`` dispatch.
+"""Top-level ``goalrail resume`` dispatch.
 
 Glue layer that converts the user's "take me back to where I was"
 intent into the right wrapper invocation. Lives outside ``cli.py`` so
@@ -8,15 +8,15 @@ not need to import the claude-native wrapper at every CLI startup.
 
 The dispatch contract:
 
-- ``omnigent resume <conv_id>`` — fetch the conversation, read its
+- ``goalrail resume <conv_id>`` — fetch the conversation, read its
   ``omnigent.wrapper`` label, and dispatch by runtime.
-- ``omnigent resume`` (no id) — open the cross-agent picker (see
+- ``goalrail resume`` (no id) — open the cross-agent picker (see
   :func:`omnigent.repl._resume_picker.pick_conversation_cross_agent_from_sdk`)
   and dispatch the selection the same way.
 
 Terminal-native conversations are dispatched in-process today.
 Everything else surfaces a copy-pasteable hint to the existing
-``omnigent run --resume`` invocation — the agentless ``run
+``goalrail run --resume`` invocation — the agentless ``run
 --resume`` shape is tracked separately.
 """
 
@@ -69,8 +69,8 @@ def run_resume(
     if target is None:
         if server is None:
             raise click.UsageError(
-                "`omnigent resume` (no id) requires `--server <url>`. "
-                "Pass a conversation id (`omnigent resume conv_...`) "
+                "`goalrail resume` (no id) requires `--server <url>`. "
+                "Pass a conversation id (`goalrail resume conv_...`) "
                 "to use the persistent local store.",
             )
         target = _pick_conversation_for_resume(server=server)
@@ -118,7 +118,7 @@ def _pick_conversation_for_resume(
         """
         # Deferred import: ``omnigent_client`` carries the full SDK
         # surface and is only needed for the picker, not for every
-        # ``omnigent`` invocation.
+        # ``goalrail`` invocation.
         from omnigent_client import OmnigentClient
 
         async with OmnigentClient(base_url=base_url, headers=headers) as client:
@@ -155,7 +155,7 @@ def _dispatch_by_runtime(
     Terminal-native sessions route into their wrapper entry point
     carrying ``--server`` through. Non-wrapper
     conversations surface a clear ``ClickException`` pointing at
-    the existing ``omnigent run --resume`` invocation — the
+    the existing ``goalrail run --resume`` invocation — the
     agentless ``run --resume`` (drops the ``AGENT`` requirement
     via server-side agent lookup) is tracked separately and not in
     this PR's scope.
@@ -179,7 +179,7 @@ def _dispatch_by_runtime(
         raise click.ClickException(
             f"Conversation {target!r} is not a terminal-native session "
             f"(wrapper={wrapper!r}). To resume it, run "
-            f"`omnigent run --resume {target} <agent.yaml> --server "
+            f"`goalrail run --resume {target} <agent.yaml> --server "
             f"{server}`. The agentless form is tracked separately.",
         )
 
@@ -193,7 +193,7 @@ def _dispatch_by_runtime(
     raise click.ClickException(
         f"Conversation {target!r} is not a terminal-native session "
         f"(wrapper={wrapper!r}). To resume it, run "
-        f"`omnigent run --resume {target} <agent.yaml>`. "
+        f"`goalrail run --resume {target} <agent.yaml>`. "
         "The agentless form is tracked separately.",
     )
 
@@ -330,7 +330,7 @@ def _read_wrapper_label_local(*, conv_id: str) -> str | None:
     if conversation is None:
         raise click.ClickException(
             f"Conversation {conv_id!r} not found in the local persistent store. "
-            "Pass --server if the conversation lives on a remote Omnigent server.",
+            "Pass --server if the conversation lives on a remote Goalrail server.",
         )
     labels = conversation.labels
     return labels.get(_WRAPPER_LABEL_KEY) if isinstance(labels, dict) else None

@@ -342,7 +342,7 @@ def test_run_with_remote_server_detach_prints_resume_hint(
     # Exact resume command: server + session only — a --profile part
     # here would tell the user to run a flag that no longer exists.
     assert (
-        "Resume with: omnigent claude --server https://example.com --resume conv_existing"
+        "Resume with: goalrail claude --server https://example.com --resume conv_existing"
     ) in err
 
 
@@ -395,6 +395,6 @@ def test_run_with_remote_server_unreachable_server_raises_clean_error(
             claude_args=(),
         )
 
-    assert "Could not reach the omnigent server at https://unreachable.example" in str(
+    assert "Could not reach the Goalrail server at https://unreachable.example" in str(
         exc_info.value
     )

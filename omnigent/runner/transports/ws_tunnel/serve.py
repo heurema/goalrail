@@ -319,7 +319,7 @@ async def serve_tunnel(
                     f"{RUNNER_TUNNEL_REJECTION_PREFIX}"
                     f"(redirect to non-WebSocket URL {redirect_url}); "
                     "the server likely requires auth — "
-                    "run `omnigent setup` to configure credentials"
+                    "run `goalrail setup` to configure credentials"
                 ) from exc
             http_status = _websocket_http_status(exc)
             if http_status in _REFRESHABLE_HTTP_STATUSES:
