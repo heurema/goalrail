@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-22
 **agy version:** 1.0.10 (`/Users/bryanli/.local/bin/agy --version` → `1.0.10`)
-**Host:** standalone attended agy in a dedicated tmux session `agy-spike` (no `--dangerously-skip-permissions`), launched with `HOME=/Users/bryanli`. NOT the `:6767` omnigent; fully isolated from the `rdv-*` sessions.
+**Host:** standalone attended agy in a dedicated tmux session `agy-spike` (no `--dangerously-skip-permissions`), launched with `HOME=/Users/bryanli`. NOT the `:6767` Goalrail; fully isolated from the `rdv-*` sessions.
 **Conversation captured:** `2399249c-4a48-40f1-bf3b-4c6e5d3a5a0e` (= cascadeId = brain-dir UUID).
 **RPC port discovered:** `53485` via `discover_language_server_port(17262)` (PID 17262), confirmed by `_conversation_matches(port, conv) → True`.
 

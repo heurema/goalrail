@@ -1,9 +1,14 @@
-# Omnigent bot identities & attribution setup
+# Goalrail bot identities & attribution setup
 
-This doc explains how commits and automated PR reviews in the
-`omnigent-ai/omnigent` repo are attributed, and how the supporting GitHub App
-was set up. There are **two deliberately distinct identities** — do not
-conflate them:
+This doc records the current legacy bot identity setup used by commits and
+automated PR reviews.
+
+> **Transition note:** the repo is being rebranded to Goalrail, but the
+> workflow identities below still use legacy `omnigent-*` names until the CI
+> identity migration happens. Do not rename those values without updating the
+> matching workflows, examples, and GitHub App setup in the same change.
+
+There are **two deliberately distinct identities** — do not conflate them:
 
 | Identity | Used for | Why this identity |
 | --- | --- | --- |

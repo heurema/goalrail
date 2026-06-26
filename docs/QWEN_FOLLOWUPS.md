@@ -9,7 +9,7 @@ Tracks pending work and known limitations for the Qwen Code harness
 - ACP executor: streaming turns, system-prompt folding, session-not-found
   reset, missing-binary handling.
 - **Permission gating** (`session/request_permission`): routed through
-  Omnigent's TOOL_CALL policy + human-consent elicitation
+  Goalrail's TOOL_CALL policy + human-consent elicitation
   (`_decide_permission`), mirroring claude-sdk — a hard policy DENY rejects,
   otherwise the user is asked; default-deny on policy-ASK with no handler.
   Standalone/test use (no bridges wired) falls back to allow.
@@ -64,9 +64,9 @@ Tracks pending work and known limitations for the Qwen Code harness
   advertises `clientCapabilities.fs` in `initialize`, so qwen routes its file
   reads/writes back to us as `fs/read_text_file` / `fs/write_text_file` requests
   (qwen's `AcpFileSystemService` swaps in only when the capability is set). The
-  handlers execute the I/O through the Omnigent `OSEnvironment`, so the spec's
+  handlers execute the I/O through the Goalrail `OSEnvironment`, so the spec's
   sandbox read/write roots are enforced at the Python layer — and the bytes flow
-  through Omnigent rather than qwen touching disk directly. Disabled (qwen uses
+  through Goalrail rather than qwen touching disk directly. Disabled (qwen uses
   its own tools) when there's no `os_env` or it's a `fork` env (a forked tree's
   path would diverge from the qwen subprocess cwd). Binary/non-UTF-8 reads are
   refused; missing-file reads map to qwen's ENOENT code. (Same fix applied to
@@ -132,7 +132,7 @@ comments; this is the *what*, not the *how*.)
   `ComposerStatusLine` in `ap-web/src/pages/ChatPage.tsx`). It was showing the
   bound spec's *default* model (`claude-sonnet-4-6`) because the qwen-native-ui
   spec sets no model and qwen picks its model inside the vendor TUI (OpenAI-compat
-  env / qwen's own `/model`), so Omnigent's `llmModel` was a misleading default.
+  env / qwen's own `/model`), so Goalrail's `llmModel` was a misleading default.
   Hiding it is the interim; the real fix is to **surface qwen's actual model**
   (and effort/approval-mode if meaningful). The data is already on qwen's
   `--json-file` stream — `assistant` message events carry `message.model` (e.g.
@@ -158,7 +158,7 @@ comments; this is the *what*, not the *how*.)
   used to relaunch a **blank** `qwen` TUI (only the web chat kept history, via the
   forwarder). Fixed, using the **same `external_session_id` convention as
   claude-/codex-/pi-native** (so it's consistent and fork-capable):
-  `_auto_create_qwen_terminal` persists the qwen session id on the Omnigent
+  `_auto_create_qwen_terminal` persists the qwen session id on the Goalrail
   session (`_persist_qwen_external_session_id` → `PATCH /v1/sessions/{id}`), reads
   it back from the snapshot (`launch_config.external_session_id`) on the next
   launch, and it's stamped as `omnigent.fork.source_external_session_id` for fork
@@ -188,7 +188,7 @@ comments; this is the *what*, not the *how*.)
   newTokenCount, compressionStatus}}` and an internal `chat_compressed` event).
   Native-qwen does **not** surface any of this in the web UI today — during a
   compression the Chat tab just shows the turn stall, and afterward the mirrored
-  token counts don't reflect the shrink. Omnigent already has the web-facing
+  token counts don't reflect the shrink. Goalrail already has the web-facing
   primitives — `response.compaction.in_progress` / `.completed` / `.failed`
   (`omnigent/runtime/compaction.py`, `omnigent/server/schemas.py:3158+`,
   rendered by `ap-web` as the "Compacting…" spinner / compaction divider) — so
@@ -238,13 +238,13 @@ comments; this is the *what*, not the *how*.)
   - *Full route:* spec with `executor.profile: <db-profile>` (or a
     `databricks-*` model), then `omni run`; confirm the runner log's
     `qwen gateway routing:` line shows the Databricks base URL + profile.
-- [ ] **Omnigent tools.** Qwen can only call its own built-in tools; tools
-  defined by Omnigent aren't exposed to it (so they can't be invoked or
+- [ ] **Goalrail tools.** Qwen can only call its own built-in tools; tools
+  defined by Goalrail aren't exposed to it (so they can't be invoked or
   recorded). Permission gating on qwen's *own* tool calls already works.
-- [ ] **File I/O recording / content policy.** Omnigent now *executes* delegated
+- [ ] **File I/O recording / content policy.** Goalrail now *executes* delegated
   file reads/writes through the `OSEnvironment` (see "File I/O delegation" in
-  What works today), so the bytes flow through Omnigent and the sandbox roots are
-  enforced. Still missing on top of that: (a) emitting the I/O into Omnigent's
+  What works today), so the bytes flow through Goalrail and the sandbox roots are
+  enforced. Still missing on top of that: (a) emitting the I/O into Goalrail's
   event stream (ToolCall-style records) so it shows in history, and (b) running
   TOOL_RESULT-phase content policy on the read/written content. Both build on the
   `_handle_fs_read` / `_handle_fs_write` handlers — the byte-level hook now

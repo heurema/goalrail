@@ -1,6 +1,6 @@
-# Deploying Omnigent
+# Deploying Goalrail
 
-Omnigent ships several ways to deploy the server, organized by
+Goalrail ships several ways to deploy the server, organized by
 target platform. Pick the one that matches your environment.
 
 Deploying buys you a stable URL: sessions become reachable from any device,
@@ -11,11 +11,11 @@ the machines that register as hosts (see [Execution model](#execution-model)).
 ## Deploy in one click
 
 No local tooling needed. Pick a platform, click the button, and your
-Omnigent server is live with HTTPS in a few minutes.
+Goalrail server is live with HTTPS in a few minutes.
 
 | Platform | Button | Docs |
 |---|---|---|
-| **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnigent-ai/omnigent) | [`render/README.md`](render/README.md) |
+| **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/heurema/goalrail) | [`render/README.md`](render/README.md) |
 | **Railway** | *(button pending; see below)* | [`railway/README.md`](railway/README.md) |
 
 <!-- TODO(oss-release): publish the Railway template at railway.com/new/template
@@ -171,7 +171,7 @@ Modal app pins `memory=1024` for the same reason.
 
 ## Execution model
 
-Omnigent runs in two pieces that talk to each other over a
+Goalrail runs in two pieces that talk to each other over a
 WebSocket tunnel:
 
 - **Server**: the FastAPI app you deploy here. Handles HTTP / SSE
@@ -233,7 +233,7 @@ omnigent sandbox connect --provider modal --sandbox-id <id> --server https://you
 
 > [!NOTE]
 > Modal caps sandbox lifetime at 24 hours. Re-run `create` + `connect` to
-> roll the host onto a fresh sandbox. Daytona and Islo have no Omnigent-imposed
+> roll the host onto a fresh sandbox. Daytona and Islo have no Goalrail-imposed
 > lifetime cap; Daytona free-tier orgs restrict egress to an allowlist; see
 > [`daytona/README.md`](daytona/README.md) for the relay workaround. E2B
 > shares Modal's 24-hour cap **and** boots from a pre-built E2B *template*
@@ -264,7 +264,7 @@ no user credentials ever enter the sandbox.
 **The host image.** Sandboxes boot from the official prebaked host image
 (`ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI from the `host`
 target of [`docker/Dockerfile`](docker/Dockerfile)), so the host starts in
-seconds instead of installing Omnigent at boot. The image ships the
+seconds instead of installing Goalrail at boot. The image ships the
 coding-harness CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run
 in the sandbox with nothing extra to install. To run sandboxes from your own
 image instead (a fork, or extra tooling baked in), build the same `host`

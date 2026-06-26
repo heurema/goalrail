@@ -1,6 +1,6 @@
-# Omnigent on Railway
+# Goalrail on Railway
 
-Deploy Omnigent to Railway. Railway pulls the pre-built image, runs it next to
+Deploy Goalrail to Railway. Railway pulls the pre-built image, runs it next to
 a managed Postgres, and serves it over HTTPS on `*.up.railway.app`.
 
 > **Railway is not yet a true one-click.** Unlike Render's `render.yaml` (fully
@@ -140,7 +140,7 @@ Railway redeploys automatically when a new image tag is pushed to GHCR
 ## Cost
 
 Railway Hobby plan: ~$5/month base + per-minute CPU/memory usage. A lightly
-loaded Omnigent instance (few concurrent users) typically stays under
+loaded Goalrail instance (few concurrent users) typically stays under
 $10–15/month total including the Postgres plugin.
 
 ## Publishing the template
@@ -148,7 +148,7 @@ $10–15/month total including the Postgres plugin.
 One-time setup done by the repo owner after the repository is public:
 
 1. Go to `railway.com/new/template` and click **Create template**.
-2. Point it at `github.com/omnigent-ai/omnigent`.
+2. Point it at `github.com/heurema/goalrail`.
 3. Select the **Postgres** plugin.
 4. Pre-fill default env vars with descriptions for the optional OIDC fields.
 5. Click **Publish**. Copy the generated deploy URL and update the badge at the

@@ -1,6 +1,6 @@
 # Upgrade experience: `omni upgrade` + release-available notices
 
-How Omnigent keeps a user's CLI — and the local processes it spawns — current
+How Goalrail keeps a user's CLI — and the local processes it spawns — current
 across PyPI releases. Three pieces ship together:
 
 1. A **version-aware server signature** so a running local server is cycled

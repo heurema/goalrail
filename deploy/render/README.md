@@ -1,12 +1,12 @@
-# Omnigent on Render
+# Goalrail on Render
 
-Deploy Omnigent to Render in one click. Render provisions the app and a
+Deploy Goalrail to Render in one click. Render provisions the app and a
 managed Postgres database, assigns an HTTPS URL on `*.onrender.com`, and
 handles SSL automatically. No local tooling required.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnigent-ai/omnigent)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/heurema/goalrail)
 
-> **Note:** The button points at the public repo `github.com/omnigent-ai/omnigent`.
+> **Note:** The button points at the public repo `github.com/heurema/goalrail`.
 > It goes live once that repo **and** the `ghcr.io/omnigent-ai/omnigent-server`
 > package are public; until then it only works if you connect Render to the
 > (private) repo in the dashboard first.

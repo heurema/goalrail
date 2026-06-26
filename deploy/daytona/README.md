@@ -1,7 +1,7 @@
-# Omnigent on Daytona
+# Goalrail on Daytona
 
 [Daytona](https://www.daytona.io) sandboxes give you disposable cloud
-machines for running Omnigent hosts, two ways:
+machines for running Goalrail hosts, two ways:
 
 - **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
@@ -37,7 +37,7 @@ pip install 'omnigent[daytona]'   # installs the daytona SDK extra
 > public domains (git hosts, package managers, the major AI provider
 > APIs) that org admins **cannot modify**. Two consequences:
 >
-> 1. The in-sandbox host's dial-back to your Omnigent `server_url` is
+> 1. The in-sandbox host's dial-back to your Goalrail `server_url` is
 >    blocked unless that URL is on the allowlist — otherwise the
 >    launch times out with "managed host did not come online".
 > 2. The agent's LLM calls only work against an **allowlisted model
@@ -212,7 +212,7 @@ Daytona free-tier (Tier 1/2) sandboxes can only reach an
 [allowlisted set of domains](https://www.daytona.io/docs/en/network-limits);
 `*.workers.dev` is on it. The ready-to-deploy Cloudflare Worker in this
 directory lives there and transparently reverse-proxies every request —
-plain HTTP and WebSocket upgrades — to your real Omnigent server, so a
+plain HTTP and WebSocket upgrades — to your real Goalrail server, so a
 managed host's dial-back (the host tunnel WS, the runner tunnel WS, and
 plain HTTP) reaches the server through the firewall.
 
@@ -247,7 +247,7 @@ it.
   a stronger posture; this is the main security difference between the
   two providers.)
 - **All managed sandboxes share one Daytona org + API key.**
-  Cross-user isolation between Omnigent users rides entirely on
+  Cross-user isolation between Goalrail users rides entirely on
   Daytona's sandbox boundaries, and the shared org key can enumerate
   and delete any user's sandbox. Same single-tenant-org shape as the
   Modal provider; scope the org to this workload and nothing else.
@@ -285,7 +285,7 @@ it.
 ## Lifecycle notes
 
 - **No platform lifetime cap.** Unlike Modal's 24-hour limit, Daytona
-  sandboxes run until deleted. Omnigent disables Daytona's 15-minute
+  sandboxes run until deleted. Goalrail disables Daytona's 15-minute
   idle auto-stop at provision time (a session host must survive gaps
   between turns); the sandbox is deleted when its session is deleted,
   and the dead-sandbox relaunch path replaces one that crashed or was

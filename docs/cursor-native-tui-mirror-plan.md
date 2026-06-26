@@ -22,7 +22,7 @@
 
 ## Goal / behavior
 
-Surface an Omnigent **elicitation card whenever cursor's native TUI shows an approval
+Surface an Goalrail **elicitation card whenever cursor's native TUI shows an approval
 prompt**, answerable either from the web (→ a tmux keystroke into the pane) **or** from the
 embedded TUI directly (→ the card auto-resolves). Cursor's own native gate remains the source
 of truth — **no `--force`, no JS-bundle modification**.

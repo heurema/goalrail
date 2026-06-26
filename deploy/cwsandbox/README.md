@@ -1,7 +1,7 @@
 # CoreWeave Sandbox provider
 
 [CoreWeave Sandbox](https://docs.coreweave.com/products/sandboxes) gives you
-disposable cloud machines for running Omnigent hosts, two ways:
+disposable cloud machines for running Goalrail hosts, two ways:
 
 - **CLI-launched**: `omnigent sandbox create` / `connect` provisions a sandbox
   from your terminal, ships your local checkout into it, and registers it as a
@@ -45,7 +45,7 @@ export CWSANDBOX_BASE_URL=https://api.cwsandbox.com   # optional (this is the de
 
 Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI
 from the `host` target of [`deploy/docker/Dockerfile`](../docker/Dockerfile)
-with Omnigent and its dependencies preinstalled — including the coding-harness
+with Goalrail and its dependencies preinstalled — including the coding-harness
 CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an
 in-sandbox install.
 
@@ -59,7 +59,7 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnigent-host:latest
 ```
 
-Then point Omnigent at it — `OMNIGENT_CWSANDBOX_HOST_IMAGE` for the CLI flow, or
+Then point Goalrail at it — `OMNIGENT_CWSANDBOX_HOST_IMAGE` for the CLI flow, or
 `sandbox.cwsandbox.image` in the server config for the managed flow.
 
 > [!NOTE]
@@ -288,7 +288,7 @@ guide](../modal/README.md#git-credentials-private-repositories).
 
 ## Smoke test
 
-Validate the API primitives directly (no Omnigent or SDK install needed — stdlib
+Validate the API primitives directly (no Goalrail or SDK install needed — stdlib
 + curl only):
 
 ```bash

@@ -1,6 +1,7 @@
-# Releasing omnigent
+# Releasing Goalrail packages
 
-omnigent ships **three PyPI packages that version-lock together**:
+Goalrail currently ships through the legacy **three PyPI packages that
+version-lock together**:
 
 | Package | What it is |
 | --- | --- |
@@ -15,14 +16,14 @@ one identical version**.
 
 ## Where things run
 
-- **Source of truth** (versions, tags, GitHub Releases): **`omnigent-ai/omnigent`**
+- **Source of truth** (versions, tags, GitHub Releases): **`heurema/goalrail`**
   — use the **OSS GitHub account** (the personal account with push/release rights
   on the public repo).
 - **Publishing to PyPI**: the central **secure-release repo**
   **`databricks/secure-public-registry-releases-eng`**, `omnigent` workflow —
   use the **Databricks EMU account**. Publishing runs on hardened runner
   groups with **OIDC Trusted Publishing (no stored secrets)** and a **mandatory
-  dependency scan**. This is why we don't publish from `omnigent-ai/omnigent`.
+  dependency scan**. This is why we don't publish from `heurema/goalrail`.
 
 > The exact account handles — and how to request publish access — live in the
 > internal release wiki; this public runbook refers to them only by role.
@@ -50,7 +51,7 @@ never double-publishes. Use the secure repo for real releases.
 
 ## Release steps (example: `v0.2.0`)
 
-### 1. Cut the release branch + tag — `omnigent-ai/omnigent` (OSS account)
+### 1. Cut the release branch + tag — `heurema/goalrail` (OSS account)
 
 Only tag a commit that already has **green CI** — verify `main` is green before
 branching:
@@ -58,7 +59,7 @@ branching:
 ```bash
 gh auth switch --user <oss-account>
 git fetch origin
-gh run list --repo omnigent-ai/omnigent --branch main --status success --limit 1
+gh run list --repo heurema/goalrail --branch main --status success --limit 1
 git checkout -b branch-0.2 origin/main
 ```
 
@@ -161,13 +162,13 @@ uv tool install omnigent==0.2.0        # final sanity from real PyPI
 > distinct from `gh workflow run --ref`, which selects the branch the *workflow
 > definition* runs from (the secure repo's default).
 
-### 5. Publish the GitHub Release — `omnigent-ai/omnigent` (OSS account)
+### 5. Publish the GitHub Release — `heurema/goalrail` (OSS account)
 
 Pushing the `v0.2.0` tag (step 1) triggered `.github/workflows/github-release.yml`,
 which created a **draft** release with auto-generated notes (PRs since the
 previous tag). Now:
 
-1. Open <https://github.com/omnigent-ai/omnigent/releases> and find the `v0.2.0`
+1. Open <https://github.com/heurema/goalrail/releases> and find the `v0.2.0`
    draft.
 2. **Verify and edit the notes** — lead with user-facing highlights, call out
    breaking changes and any upgrade steps, and trim noise from the auto-generated
@@ -179,7 +180,7 @@ If the draft wasn't created (e.g. the workflow was disabled), do it manually:
 
 ```bash
 gh auth switch --user <oss-account>
-gh release create v0.2.0 --repo omnigent-ai/omnigent \
+gh release create v0.2.0 --repo heurema/goalrail \
   --draft --verify-tag --generate-notes --title "v0.2.0"
 # review/edit, then publish from the Releases page (or `gh release edit v0.2.0 --draft=false`)
 ```
@@ -191,7 +192,7 @@ gh release create v0.2.0 --repo omnigent-ai/omnigent \
 Cherry-pick the fix onto the existing `branch-0.2`, then:
 
 1. Confirm CI is green on `branch-0.2` after the cherry-pick
-   (`gh run list --repo omnigent-ai/omnigent --branch branch-0.2 --status success --limit 1`).
+   (`gh run list --repo heurema/goalrail --branch branch-0.2 --status success --limit 1`).
 2. Bump the three versions/pins + `uv.lock` to `0.2.1` (same hand-edit rules as above).
 3. Stage explicitly, commit, and tag **on `branch-0.2`**:
    `git add <version files> && git commit -m "release: v0.2.1" && git tag v0.2.1 && git push origin branch-0.2 v0.2.1`.
@@ -215,7 +216,7 @@ can never be reused. So:
   next patch with the fix. Don't try to overwrite — Trusted Publishing / `twine`
   rejects re-uploading an existing version.
 - **GitHub Release** for a version you abandoned:
-  `gh release delete vX.Y.Z --repo omnigent-ai/omnigent`, and drop the tag if it
+  `gh release delete vX.Y.Z --repo heurema/goalrail`, and drop the tag if it
   shouldn't exist (`git push origin :refs/tags/vX.Y.Z`); re-tag only the corrected
   commit.
 - Publishing uses **OIDC Trusted Publishing (no stored secrets)**, so a failed run

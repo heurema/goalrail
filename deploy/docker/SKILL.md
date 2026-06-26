@@ -1,9 +1,9 @@
 ---
 name: deploy-docker-compose
-description: Run the Omnigent server as a Docker compose stack (server + Postgres) on any Docker host — your laptop, a VPS, EC2 by hand, or as the base layer of any container-platform deploy. Invoke when the user wants to build the image, bring up the compose stack, debug the stack on a host they already have, or extend the stack for a new platform.
+description: Run the Goalrail server as a Docker compose stack (server + Postgres) on any Docker host — your laptop, a VPS, EC2 by hand, or as the base layer of any container-platform deploy. Invoke when the user wants to build the image, bring up the compose stack, debug the stack on a host they already have, or extend the stack for a new platform.
 ---
 
-# Run Omnigent as a Docker compose stack
+# Run Goalrail as a Docker compose stack
 
 The `Dockerfile` here is the single image used by every non-Databricks
 deploy path. It bundles the FastAPI server + a pre-built ap-web SPA
@@ -17,7 +17,7 @@ WebSocket tunnel. This keeps the image small (~250 MB), the security
 boundary clean (server doesn't execute user code), and the deploy
 shape consistent across hosts.
 
-The same Dockerfile also has a `host` target — the prebaked Omnigent
+The same Dockerfile also has a `host` target — the prebaked Goalrail
 HOST image (`omnigent-host`) that remote sandboxes boot from
 (`omnigent sandbox create --provider modal`, server-launched managed
 hosts). It is the inverse profile: full omnigent install plus git +

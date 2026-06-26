@@ -4,9 +4,9 @@
 
 **Goal:** Rework the antigravity-native harness runtime onto agy's connect-RPC surface — structured trajectory-step reads, interaction bridging (questions + approvals), and real interrupt — replacing the JSONL transcript-tail + send-keys-interaction core.
 
-**Architecture:** agy keeps running in a runner-owned tmux terminal (terminal-first UX). A new RPC client (extending `antigravity_native_rpc.py`) drives: read via `GetCascadeTrajectorySteps`/`StreamAgentStateUpdates`, interactions via `HandleCascadeUserInteraction` (surfaced as omnigent elicitations), and interrupt via `CancelCascadeSteps`. A pure step→item mapper replaces `step_to_events`. Turn-send stays on tmux send-keys (pending a confirmed user-turn RPC). The transcript forwarder + durable cursor are retired.
+**Architecture:** agy keeps running in a runner-owned tmux terminal (terminal-first UX). A new RPC client (extending `antigravity_native_rpc.py`) drives: read via `GetCascadeTrajectorySteps`/`StreamAgentStateUpdates`, interactions via `HandleCascadeUserInteraction` (surfaced as Goalrail elicitations), and interrupt via `CancelCascadeSteps`. A pure step→item mapper replaces `step_to_events`. Turn-send stays on tmux send-keys (pending a confirmed user-turn RPC). The transcript forwarder + durable cursor are retired.
 
-**Tech Stack:** Python 3.13+ (uv), httpx (connect-RPC over HTTP/2, JSON), pytest, existing omnigent server elicitation registry + SSE, agy 1.0.10.
+**Tech Stack:** Python 3.13+ (uv), httpx (connect-RPC over HTTP/2, JSON), pytest, existing Goalrail server elicitation registry + SSE, agy 1.0.10.
 
 **Design spec:** `docs/antigravity-native-rpc-core-design.md`. **Verified wire shapes:** memory `agy-rpc-interaction-bridge.md`.
 
@@ -44,7 +44,7 @@
 **Interfaces:**
 - Produces: the recorded step fixtures (one per agy step type) consumed by Tasks 4–5; decisions for Tasks 2 (turn-send), 6 (poll-vs-stream).
 
-- [ ] **Step 1:** Stand up a live agy on the running omnigent (`:6767`, HOST_ID `host_1b3116a52bf74d668d3179652c54cdc7`, `HOME=/Users/bryanli`) per memory `agy-rpc-interaction-bridge.md`; discover the RPC port via `discover_language_server_port`.
+- [ ] **Step 1:** Stand up a live agy on the running Goalrail (`:6767`, HOST_ID `host_1b3116a52bf74d668d3179652c54cdc7`, `HOME=/Users/bryanli`) per memory `agy-rpc-interaction-bridge.md`; discover the RPC port via `discover_language_server_port`.
 - [ ] **Step 2:** Drive turns/tools/questions to exercise each step type; save each distinct `GetCascadeTrajectorySteps` step (USER_INPUT, PLANNER_RESPONSE w/ text, PLANNER_RESPONSE w/ tool_calls incl. `ask_question`, RUN_COMMAND WAITING + DONE, other MODEL/result steps, status edges) as a fixture JSON.
 - [ ] **Step 3:** Determine turn-send: check for a user-turn RPC (e.g. a queued-user-input / `SendAllQueuedMessages` path) that records as `USER_INPUT` (not `SYSTEM_MESSAGE`). Record verdict: RPC turn-send viable, or keep tmux send-keys.
 - [ ] **Step 4:** Determine read-mode: exercise `StreamAgentStateUpdates {conversationId}` (connect server-stream framing) vs `GetCascadeTrajectorySteps` polling; record latency + reliability; pick the default (likely stream + poll fallback).

@@ -8,7 +8,7 @@
 
 ## Goal / behavior
 
-Surface an Omnigent **elicitation card whenever the `cursor-agent` TUI gates a tool call or
+Surface an Goalrail **elicitation card whenever the `cursor-agent` TUI gates a tool call or
 asks a question**, answerable from the web **or** the embedded TUI. Cursor's own native gate
 stays the source of truth — **no `--force`, no JS-bundle modification**. The failure mode is
 benign: if detection ever breaks, the embedded TUI prompt still works and the user answers

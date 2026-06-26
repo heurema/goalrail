@@ -10,7 +10,7 @@ Goalrail is an open-source **AI agent framework** and meta-harness that gives yo
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](#1-install)
 
-[goalrail.dev](https://goalrail.dev) · Downloads coming soon
+[golrail.dev](https://golrail.dev) · Downloads coming soon
 
 </div>
 
@@ -173,7 +173,7 @@ mirrors work out of the box; override with `OMNIGENT_INDEX_URL` if needed.
 also launches a local web UI at `http://localhost:6767` that shows the same
 session in the browser, or on a phone on your network (step 4). Desktop and
 mobile downloads are not published yet; they will live on
-[goalrail.dev](https://goalrail.dev).
+[golrail.dev](https://golrail.dev).
 
 > [!NOTE]
 > The install puts two names for the same CLI on your PATH: `omnigent` and

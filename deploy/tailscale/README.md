@@ -1,4 +1,4 @@
-# Omnigent on Tailscale
+# Goalrail on Tailscale
 
 [Tailscale](https://tailscale.com) gives every device on your network a
 stable private hostname (`<machine>.ts.net`) and connects them peer-to-peer
@@ -17,7 +17,7 @@ other device you own.
 
 - Tailscale installed on your server machine and every client device.
   All signed in to the same Tailscale account.
-- Omnigent server running locally (e.g. `omnigent server` or
+- Goalrail server running locally (e.g. `omnigent server` or
   `docker compose up -d` from `deploy/docker/`).
 
 ## Tailnet-only access (phone / tablet / remote laptop)
@@ -71,7 +71,7 @@ Open `https://<machine>.ts.net` on any device on your tailnet.
 
 ## Cloud sandbox hosts and Tailscale Funnel
 
-Cloud sandbox providers (Modal, Daytona, E2B, …) run the Omnigent host
+Cloud sandbox providers (Modal, Daytona, E2B, …) run the Goalrail host
 process *inside* a remote container. That host dials **out** to
 `server_url` over WebSocket to receive work — so it needs to reach the
 server from the sandbox provider's cloud network, not just from your

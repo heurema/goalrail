@@ -1,7 +1,7 @@
-# Omnigent on E2B
+# Goalrail on E2B
 
 [E2B](https://e2b.dev) sandboxes give you disposable cloud machines for
-running Omnigent hosts, two ways:
+running Goalrail hosts, two ways:
 
 - **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
@@ -15,7 +15,7 @@ running Omnigent hosts, two ways:
 > the Modal / Daytona / CoreWeave launchers — which pull
 > `ghcr.io/omnigent-ai/omnigent-host` directly — E2B cannot start an
 > arbitrary registry image at create time. You must first build the
-> Omnigent host image into an E2B template (a one-time step, below); the
+> Goalrail host image into an E2B template (a one-time step, below); the
 > launcher's `template` field then names *that template*, not a
 > `ghcr.io/...` reference. This is the one real difference from the other
 > sandbox providers. This directory is **not** a server deploy target.
@@ -39,7 +39,7 @@ e2b auth login                # one-time, authenticates the E2B CLI too
 > [!NOTE]
 > **Lifetime is capped and cannot be disabled.** An E2B sandbox carries a
 > single timeout (default 5 minutes; account maximum **24 h on Pro, 1 h on
-> Hobby**) with no "never expire" option. Omnigent requests the 24 h
+> Hobby**) with no "never expire" option. Goalrail requests the 24 h
 > maximum at creation, but E2B **rejects** (does not clamp) a request above
 > the account cap, so `provision` automatically **retries clamped to the
 > account's maximum** (e.g. 1 h on Hobby) — verified live. Set
@@ -51,7 +51,7 @@ e2b auth login                # one-time, authenticates the E2B CLI too
 ## Build the host template (one time)
 
 E2B builds a template from a Dockerfile whose base image must be
-**Debian-based** and **single-stage**. The Omnigent host image
+**Debian-based** and **single-stage**. The Goalrail host image
 (`python:slim`, Debian) satisfies both — so the template Dockerfile is a
 one-liner that layers nothing on top of the published image:
 
@@ -216,7 +216,7 @@ Modal guide.
   Modal's secret store — a stronger posture; same trade-off as the
   Daytona provider.)
 - **All managed sandboxes share one E2B account + API key.** Cross-user
-  isolation between Omnigent users rides on E2B's sandbox boundaries, and
+  isolation between Goalrail users rides on E2B's sandbox boundaries, and
   the shared key can enumerate and kill any user's sandbox. Scope the
   account to this workload.
 - **The launch token's lifetime is ~25 h, derived from the *requested*
@@ -232,7 +232,7 @@ Modal guide.
   on a directly-constructed `ManagedSandboxConfig`). A relaunch mints a
   fresh token.
 - **Sandbox URLs are public by default.** E2B exposes sandbox ports via
-  public `*.e2b.app` URLs; Omnigent never opens one (the host dials *out*
+  public `*.e2b.app` URLs; Goalrail never opens one (the host dials *out*
   to your server), but be aware nothing in a sandbox should bind a
   service expecting it to be private without E2B's access-token gating.
 

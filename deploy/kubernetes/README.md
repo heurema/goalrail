@@ -1,6 +1,6 @@
-# Omnigent on Kubernetes
+# Goalrail on Kubernetes
 
-Deploy Omnigent to any Kubernetes cluster using Kustomize. The manifests pull
+Deploy Goalrail to any Kubernetes cluster using Kustomize. The manifests pull
 the prebuilt image and set up a persistent volume and health checks. They also
 include an Ingress so you can serve the app over HTTPS at a public web address,
 but that part is optional — it only matters when people need to reach the server

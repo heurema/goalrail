@@ -1,23 +1,23 @@
-# Omnigent on NVIDIA OpenShell
+# Goalrail on NVIDIA OpenShell
 
 [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) is a self-hosted sandbox
-provider. Omnigent connects to an OpenShell **gateway** with the official
+provider. Goalrail connects to an OpenShell **gateway** with the official
 [`openshell`](https://pypi.org/project/openshell/) Python SDK and asks that
 gateway to create, execute in, and delete sandboxes on the gateway's configured
 compute driver.
 
-This guide covers the Omnigent-specific OpenShell setup:
+This guide covers the Goalrail-specific OpenShell setup:
 
 - install the `openshell` extra;
 - select a working OpenShell gateway;
-- use an OpenShell-compatible Omnigent host image;
+- use an OpenShell-compatible Goalrail host image;
 - configure CLI-launched or server-managed sandboxes.
 
 ```bash
 pip install 'omnigent[openshell]'
 ```
 
-Omnigent uses OpenShell two ways:
+Goalrail uses OpenShell two ways:
 
 - **CLI-launched**: `omnigent sandbox create` / `connect` provisions a sandbox
   from your terminal, ships your local checkout into it, and registers it as a
@@ -30,11 +30,11 @@ This is a sandbox-provider guide, not a server deploy target.
 
 Two traits shape the rest of this guide:
 
-- **gRPC, and a gateway you select — not an API key.** Omnigent connects through
+- **gRPC, and a gateway you select — not an API key.** Goalrail connects through
   the OpenShell gateway you've made active with `openshell gateway select`. The
   SDK's `from_active_cluster()` resolves that gateway's endpoint, TLS material,
   and OIDC token from `$OPENSHELL_GATEWAY` / `~/.config/openshell/active_gateway`.
-  There is no base-URL or token knob in Omnigent — gateway setup and auth are an
+  There is no base-URL or token knob in Goalrail — gateway setup and auth are an
   OpenShell concern.
 - **No local port forward.** OpenShell has no sandbox→laptop callback path, so
   the interactive in-sandbox `omnigent login` / App OAuth step is skipped
@@ -91,7 +91,7 @@ gateway logs at `~/.openshell-local/gateway.log`.
 For a real deployment, run the gateway behind TLS with OIDC or mTLS (see the
 OpenShell docs), then `openshell gateway add <https-url>` and `openshell gateway
 login`; the SDK picks up the TLS/OIDC material from the gateway metadata
-automatically — Omnigent needs no extra configuration.
+automatically — Goalrail needs no extra configuration.
 
 > [!WARNING]
 > `allow_unauthenticated_users = true` and `--disable-tls` are local-development
@@ -101,7 +101,7 @@ automatically — Omnigent needs no extra configuration.
 
 Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI
 from the `host` target of [`deploy/docker/Dockerfile`](../docker/Dockerfile) with
-Omnigent and its dependencies preinstalled — including the coding-harness CLIs
+Goalrail and its dependencies preinstalled — including the coding-harness CLIs
 (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
 install. OpenShell injects its own supervisor as the container entrypoint.
 
@@ -122,7 +122,7 @@ docker run --rm --entrypoint sh ghcr.io/omnigent-ai/omnigent-host:latest \
 ```
 
 To use a different image (a fork, or extra tooling baked in), run the build from
-an Omnigent repository checkout on an amd64 Docker-capable machine, then push it
+an Goalrail repository checkout on an amd64 Docker-capable machine, then push it
 where the gateway's driver can pull from:
 
 ```bash
@@ -132,7 +132,7 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnigent-host:latest
 ```
 
-Then point Omnigent at it with `OMNIGENT_OPENSHELL_HOST_IMAGE`.
+Then point Goalrail at it with `OMNIGENT_OPENSHELL_HOST_IMAGE`.
 
 > [!NOTE]
 > **Air-gapped?** Pre-load the host image (and OpenShell's supervisor image) into
@@ -300,7 +300,7 @@ standard set, inject `OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 > [!TIP]
 > OpenShell can also enforce credential and egress policy at the sandbox boundary
 > via its declarative YAML policy (a gateway-side feature, independent of
-> Omnigent). See the [OpenShell policy docs](https://docs.nvidia.com/openshell).
+> Goalrail). See the [OpenShell policy docs](https://docs.nvidia.com/openshell).
 
 ## Git credentials (private repositories)
 
@@ -321,7 +321,7 @@ match the [Modal git guide](../modal/README.md#git-credentials-private-repositor
   approach NVIDIA's own LangChain backend uses). Wheels are shipped this way, then
   installed with the shared host-image overlay command.
 - **Sandbox identity.** OpenShell assigns each sandbox a petname (e.g.
-  `touched-urial`); that name is the handle Omnigent prints and reuses. The
+  `touched-urial`); that name is the handle Goalrail prints and reuses. The
   requested `--name` is advisory.
 - **Non-root execution.** OpenShell runs the agent as the `sandbox` user, so the
   launcher pins every exec's cwd and `$HOME` to `/home/sandbox` (the image keeps

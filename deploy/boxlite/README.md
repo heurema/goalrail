@@ -1,7 +1,7 @@
-# Omnigent on BoxLite
+# Goalrail on BoxLite
 
 [BoxLite](https://github.com/boxlite-ai/boxlite) is an embeddable
-micro-VM + OCI runtime ("SQLite for sandboxing"). It runs each Omnigent
+micro-VM + OCI runtime ("SQLite for sandboxing"). It runs each Goalrail
 host inside its own lightweight VM (its own kernel — KVM on Linux,
 Hypervisor.framework on macOS) booted from a standard OCI image.
 
@@ -15,7 +15,7 @@ A single `boxlite` provider spans **both** runtime targets, chosen by
 config:
 
 - **Local** (default — no `cloud:` block): BoxLite is embedded in the
-  Omnigent server process. **No daemon, no `boxlite serve`, no root.**
+  Goalrail server process. **No daemon, no `boxlite serve`, no root.**
   Boxes are micro-VMs on the server host itself, so that host needs
   hardware virtualization. The first local, hardware-isolated,
   persistent runner — no cloud account required.
@@ -138,7 +138,7 @@ values never live in the config file.
 3. The server runs `omnigent host` inside the box (over `box.exec`) with
    a one-time launch token in its environment; the host dials back over
    a WebSocket tunnel and registers. From there the session rides the
-   same host/runner machinery every Omnigent host uses — the agent's
+   same host/runner machinery every Goalrail host uses — the agent's
    runner, tools, and shell all execute inside the box.
 4. On sandbox death (a crash, or you `boxlite rm` it), the durable host
    identity survives and the next message relaunches a fresh box

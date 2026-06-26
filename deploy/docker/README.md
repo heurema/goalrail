@@ -1,4 +1,4 @@
-# Omnigent — docker-compose stack
+# Goalrail — docker-compose stack
 
 Run the server as a self-contained Docker stack on any host: your
 laptop, a VPS, an EC2 instance, a home server, anywhere `docker
@@ -235,7 +235,7 @@ injected into the container.
 
 ## Host image (`--target host`)
 
-The same Dockerfile publishes a second image: the official Omnigent
+The same Dockerfile publishes a second image: the official Goalrail
 **host** image, which remote sandboxes boot from so they start in
 seconds instead of paying an in-sandbox dependency install. It bakes
 the full omnigent install (all three packages + deps, `python` and

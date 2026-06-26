@@ -1,6 +1,6 @@
-# Deploying Omnigent on Databricks Apps
+# Deploying Goalrail on Databricks Apps
 
-This directory deploys the Omnigent server to
+This directory deploys the Goalrail server to
 [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/)
 via [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/):
 
@@ -130,7 +130,7 @@ The script builds wheels, classifies them by size, copies wheels into
 `databricks bundle run omnigent --target prod`, and polls `/health`
 with backoff until 200.
 
-All Omnigent wheels must fit under the Databricks Apps source
+All Goalrail wheels must fit under the Databricks Apps source
 snapshot limit (10 MB). If a wheel exceeds it, rebuild with
 `--skip-web-ui` or reduce the wheel size; uv lockfiles cannot point at
 UC Volume wheel paths because `uv lock` validates path sources locally.

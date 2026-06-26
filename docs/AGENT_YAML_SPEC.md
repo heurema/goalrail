@@ -1,6 +1,6 @@
 # Agent YAML spec
 
-Omnigent can run an agent from a single YAML file:
+Goalrail can run an agent from a single YAML file:
 
 ```bash
 omnigent run path/to/agent.yaml
@@ -69,7 +69,7 @@ id (e.g. `auto`, `gpt-5`) rather than a `databricks-*` id.
 The `kiro-native` harness is the native Kiro CLI terminal path used by
 `omnigent kiro`. It requires `kiro-cli` on `PATH` and Kiro's own login/auth; it
 does not use Databricks, OpenAI, or Anthropic provider credentials. Plain
-`harness: kiro` is not a generic Omnigent harness id.
+`harness: kiro` is not a generic Goalrail harness id.
 
 ### Antigravity (Gemini)
 
@@ -133,11 +133,11 @@ executor:
   model: kimi-k2-turbo
 ```
 
-By default Kimi authenticates against Moonshot AI's backend — Omnigent
+By default Kimi authenticates against Moonshot AI's backend — Goalrail
 declares no `executor.auth` block. To route through a gateway, either set
 `HARNESS_KIMI_GATEWAY_BASE_URL` + `HARNESS_KIMI_GATEWAY_API_KEY` in the
 shell, declare a key/gateway provider in `~/.omnigent/config.yaml`, or use
-`executor.auth: {type: databricks, profile: …}` and let Omnigent resolve
+`executor.auth: {type: databricks, profile: …}` and let Goalrail resolve
 the workspace.
 
 CLI flags such as `--harness` and `--model` can override or supply missing
@@ -188,7 +188,7 @@ os_env:
 Prefer the narrowest filesystem and network access that supports the task. Do
 not pass secrets through the environment unless the tool genuinely needs them.
 
-You usually don't need to choose a `sandbox.type` — omit it and Omnigent picks
+You usually don't need to choose a `sandbox.type` — omit it and Goalrail picks
 the platform default (`linux_bwrap` on Linux, `darwin_seatbelt` on macOS), so the
 same YAML works across platforms. For the full set of sandbox options, how to
 share one policy across `sys_os_*` and terminals, and how to set up network

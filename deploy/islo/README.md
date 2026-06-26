@@ -1,7 +1,7 @@
-# Omnigent on Islo
+# Goalrail on Islo
 
 [Islo](https://islo.dev) sandboxes give you disposable cloud machines for
-running Omnigent hosts, two ways:
+running Goalrail hosts, two ways:
 
 - **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
@@ -12,7 +12,7 @@ running Omnigent hosts, two ways:
 
 Sandboxes boot from the official prebaked host image, so startup is
 seconds. Unlike Modal and Daytona, the Islo launcher talks to the Islo
-HTTP API directly through `httpx` (already an Omnigent dependency), so
+HTTP API directly through `httpx` (already a Goalrail dependency), so
 there is **no provider SDK extra to install** — just an API key.
 
 What makes Islo different from the other providers, and shapes the rest
@@ -61,7 +61,7 @@ key is the only required credential — no SDK, no `~/.config` file.
 
 Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published
 by CI from the `host` target of
-[`deploy/docker/Dockerfile`](../docker/Dockerfile) with Omnigent and its
+[`deploy/docker/Dockerfile`](../docker/Dockerfile) with Goalrail and its
 dependencies preinstalled — including the coding-harness CLIs (`claude`,
 `codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
 install.
@@ -76,10 +76,10 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnigent-host:latest
 ```
 
-Then point Omnigent at it — `OMNIGENT_ISLO_HOST_IMAGE` for the CLI flow,
+Then point Goalrail at it — `OMNIGENT_ISLO_HOST_IMAGE` for the CLI flow,
 or `sandbox.islo.image` in the server config for the managed flow. For a
 private registry, configure the pull credentials on the Islo side (Islo
-pulls the image, not Omnigent).
+pulls the image, not Goalrail).
 
 > [!IMPORTANT]
 > **Native terminals need `bubblewrap`.** The `claude-native` /
@@ -282,7 +282,7 @@ plan/subscription auth — `--tool claude` gives an Anthropic API key, not a
 Claude Pro/Max subscription; `--tool openai` gives an OpenAI API key, not
 a ChatGPT plan. To use a subscription or plan token on any harness (a
 Claude Pro/Max token, a Codex access token), use
-[Option B](#option-b--omnigent-env-injection-your-own-key-or-a-subscription).
+[Option B](#option-b--goalrail-env-injection-your-own-key-or-a-subscription).
 
 > [!IMPORTANT]
 > If `islo status` shows **"No integrations connected"** for a provider,
@@ -293,7 +293,7 @@ Claude Pro/Max token, a Codex access token), use
 #### Path A under managed hosts
 
 This is where the gateway shines: when the **server** launches sandboxes,
-you configure **no model credential on the Omnigent side at all**. The
+you configure **no model credential on the Goalrail side at all**. The
 flow:
 
 ```
@@ -306,11 +306,11 @@ server ──ISLO_API_KEY──▶ Islo API "create sandbox" ──▶ sandbox u
    agent's claude → api.anthropic.com (phantom key) ──▶ Islo gateway swaps in the real key
 ```
 
-The Omnigent server only ever holds `ISLO_API_KEY` — the credential it
+The Goalrail server only ever holds `ISLO_API_KEY` — the credential it
 uses to *create* sandboxes. Because every managed sandbox is created under
 that Islo account, and integrations are connected at the **account/team**
 level, each one inherits the connected Claude credential through the
-gateway automatically. The only Omnigent-side knob is which gateway a
+gateway automatically. The only Goalrail-side knob is which gateway a
 managed sandbox uses:
 
 ```yaml
@@ -323,9 +323,9 @@ sandbox:
 
 Two consequences worth internalizing:
 
-- **No model secret lives in the Omnigent server's config or
+- **No model secret lives in the Goalrail server's config or
   environment** — nothing to leak there. Contrast [Option B under managed
-  hosts](#option-b--omnigent-env-injection-your-own-key-or-a-subscription),
+  hosts](#option-b--goalrail-env-injection-your-own-key-or-a-subscription),
   where the key sits in `sandbox.islo.env` (copied from the server's env
   into each sandbox).
 - **The integration must be connected on the same Islo account the
@@ -333,7 +333,7 @@ Two consequences worth internalizing:
   dedicated service/CI Islo account, run `islo login --tool claude` while
   authenticated as *that* account — not a personal laptop login.
 
-### Option B — Omnigent env injection (your own key or a subscription)
+### Option B — Goalrail env injection (your own key or a subscription)
 
 Bring your own credential by naming it in `OMNIGENT_ISLO_SANDBOX_ENV`
 (CLI) or `sandbox.islo.env` (managed); the launcher copies the value from

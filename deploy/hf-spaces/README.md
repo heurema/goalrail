@@ -1,4 +1,4 @@
-# Omnigent on Hugging Face Spaces
+# Goalrail on Hugging Face Spaces
 
 > **Demo-grade target.** On the free tier, Space storage is **ephemeral** —
 > data (and the SQLite DB) reset on restart. Good for kicking the tires, not for
@@ -18,7 +18,7 @@ files plus two secrets.
    - a `README.md` starting with this front-matter (HF reads it):
      ```yaml
      ---
-     title: Omnigent
+     title: Goalrail
      emoji: 🤖
      colorFrom: indigo
      colorTo: blue

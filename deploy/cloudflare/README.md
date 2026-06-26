@@ -1,6 +1,6 @@
-# Omnigent on Cloudflare (Containers + D1 + R2)
+# Goalrail on Cloudflare (Containers + D1 + R2)
 
-Run the Omnigent server on **Cloudflare Containers**, with **D1** as the
+Run the Goalrail server on **Cloudflare Containers**, with **D1** as the
 database and **R2** as the durable artifact store. This is the serverless,
 scale-to-zero option: no VM or Postgres to manage, a public `*.workers.dev`
 URL (or your domain), and the container sleeps when idle.
@@ -12,7 +12,7 @@ URL (or your domain), and the container sleeps when idle.
 
 > [!NOTE]
 > This path uses a small SQLAlchemy dialect shim (`sitecustomize.py`) because
-> Cloudflare D1 isn't yet first-class in Omnigent. It works end to end — it's how
+> Cloudflare D1 isn't yet first-class in Goalrail. It works end to end — it's how
 > this directory was validated — and the normal on-boot migrations run unmodified.
 > The R2 artifact store, by contrast, already uses a first-class backend
 > (`S3ArtifactStore`) added alongside this directory.
@@ -37,7 +37,7 @@ browser ───────────────►  Worker (src/index.js)
 ```
 
 - **Worker** — a thin front that proxies every request to **one** container
-  instance (Omnigent keeps an in-memory runner registry, so it's single-replica).
+  instance (Goalrail keeps an in-memory runner registry, so it's single-replica).
 - **Container** — the official `ghcr.io/omnigent-ai/omnigent-server` image plus
   the D1 SQLAlchemy dialect, a shim that re-registers it as a proper SQLite
   dialect, and `boto3` (this directory's `Dockerfile`).
@@ -46,7 +46,7 @@ browser ───────────────►  Worker (src/index.js)
   `DATABASE_URL` is `cloudflare_d1://<account>:<api-token>@<database-id>`.
 - **R2** is the artifact store. Cloudflare container disk is **ephemeral**, so
   artifacts (agent bundles, user files) go to R2 over its **S3 API** via
-  Omnigent's native `S3ArtifactStore`, selected with
+  Goalrail's native `S3ArtifactStore`, selected with
   `OMNIGENT_ARTIFACT_URI=s3://<bucket>`. No FUSE mount, no sidecar.
 
 ## What's in here

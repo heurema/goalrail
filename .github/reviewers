@@ -15,7 +15,7 @@
 # Last matching line wins per file. Owners must be maintainers in
 # .github/MAINTAINER. Per-area owners are the top maintainers by COMBINED commit
 # count across both repos (databricks-eng/agent-framework full history +
-# omnigent-ai/omnigent), up to ~4 per area, excluding tree-wide mechanical
+# heurema/goalrail), up to ~4 per area, excluding tree-wide mechanical
 # sweeps (>100 files) and non-maintainer contributors. Worth a periodic
 # sanity-check.
 
