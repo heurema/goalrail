@@ -7,6 +7,7 @@ by ``omnigent login``.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 
@@ -15,8 +16,8 @@ import pytest
 def token_dir(tmp_path, monkeypatch):
     """Redirect the token file to a temp directory.
 
-    Patches ``state_dir`` to return ``tmp_path`` so tests don't
-    touch ``~/.omnigent``.
+    Patches ``_token_file_path`` so tests don't touch the real
+    runtime data home.
 
     :param tmp_path: Pytest temp directory.
     :param monkeypatch: Pytest monkeypatch fixture.
@@ -47,6 +48,32 @@ def test_store_and_load_token(token_dir) -> None:
     result = load_token("http://localhost:8000")
     # Token must be the exact value stored.
     assert result == "jwt-abc", f"Expected 'jwt-abc', got {result!r}."
+
+
+def test_store_token_uses_goalrail_data_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Auth token storage writes under the effective runtime data home."""
+    from omnigent.cli_auth import load_token, store_token
+
+    data_home = tmp_path / "goalrail-data"
+    legacy_home = tmp_path / "home"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+
+    store_token(
+        server_url="http://localhost:8000",
+        token="jwt-abc",
+        user_id="alice@example.com",
+        expires_at=time.time() + 3600,
+    )
+
+    token_file = data_home / "auth_tokens.json"
+    assert token_file.is_file()
+    assert load_token("http://localhost:8000") == "jwt-abc"
+    assert not (legacy_home / ".omnigent" / "auth_tokens.json").exists()
 
 
 def test_load_returns_none_when_no_file(token_dir) -> None:

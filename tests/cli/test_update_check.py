@@ -180,6 +180,61 @@ def test_write_then_read_cache_roundtrip(tmp_path: Path, monkeypatch: pytest.Mon
     assert result.head_sha == "abc123"
 
 
+def test_write_cache_uses_goalrail_data_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Update-check cache writes under the effective runtime data home."""
+    data_home = tmp_path / "goalrail-data"
+    legacy_home = tmp_path / "home"
+    legacy_cache_dir = legacy_home / ".omnigent"
+    legacy_cache_file = legacy_cache_dir / ".update_check.json"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+    monkeypatch.setattr("omnigent.update_check._CACHE_DIR", legacy_cache_dir)
+    monkeypatch.setattr("omnigent.update_check._CACHE_FILE", legacy_cache_file)
+
+    entry = _CacheEntry(last_check_epoch=1716100000.0, commits_behind=5, head_sha="abc123")
+    _write_cache(entry)
+
+    cache_file = data_home / ".update_check.json"
+    assert cache_file.is_file()
+    assert not legacy_cache_file.exists()
+
+
+def test_read_cache_uses_goalrail_data_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Update-check cache reads from the effective runtime data home."""
+    data_home = tmp_path / "goalrail-data"
+    legacy_home = tmp_path / "home"
+    legacy_cache_dir = legacy_home / ".omnigent"
+    legacy_cache_file = legacy_cache_dir / ".update_check.json"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+    monkeypatch.setattr("omnigent.update_check._CACHE_DIR", legacy_cache_dir)
+    monkeypatch.setattr("omnigent.update_check._CACHE_FILE", legacy_cache_file)
+
+    data_home.mkdir(parents=True)
+    (data_home / ".update_check.json").write_text(
+        json.dumps(
+            {
+                "last_check_epoch": 1716100000.0,
+                "commits_behind": 5,
+                "head_sha": "abc123",
+            }
+        )
+    )
+
+    result = _read_cache()
+
+    assert result is not None
+    assert result.head_sha == "abc123"
+
+
 # ------------------------------------------------------------------
 # _is_stale
 # ------------------------------------------------------------------

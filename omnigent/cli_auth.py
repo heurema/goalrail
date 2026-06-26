@@ -1,6 +1,6 @@
 """CLI-side auth storage for ``omnigent login``.
 
-Persists per-server auth state in ``~/.omnigent/auth_tokens.json``
+Persists per-server auth state in the effective runtime data home,
 keyed by server URL. Two record shapes live side by side:
 
 - **Session JWTs** from the browser-based OIDC / accounts login flow
@@ -25,6 +25,8 @@ import stat
 import time
 from pathlib import Path
 
+from omnigent._env_compat import data_home_path
+
 _logger = logging.getLogger(__name__)
 _TOKEN_FILE_NAME = "auth_tokens.json"
 
@@ -32,13 +34,11 @@ _TOKEN_FILE_NAME = "auth_tokens.json"
 def _token_file_path() -> Path:
     """Return the path to the auth token storage file.
 
-    Uses the shared ``~/.omnigent`` state directory.
+    Uses the shared runtime data directory.
 
-    :returns: Path to ``~/.omnigent/auth_tokens.json``.
+    :returns: Path to ``<data-home>/auth_tokens.json``.
     """
-    from omnigent_ui_sdk.terminal._config import state_dir
-
-    return state_dir() / _TOKEN_FILE_NAME
+    return data_home_path() / _TOKEN_FILE_NAME
 
 
 def _normalize_server_url(server_url: str) -> str:
@@ -56,7 +56,7 @@ def _normalize_server_url(server_url: str) -> str:
 def _store_entry(server_url: str, entry: dict[str, str | float]) -> None:
     """Create or update a server's record in the auth-tokens file.
 
-    Writes ``~/.omnigent/auth_tokens.json`` with user-only
+    Writes ``<data-home>/auth_tokens.json`` with user-only
     read/write permissions (``0o600``) — the file may hold session
     JWTs, which are sensitive.
 

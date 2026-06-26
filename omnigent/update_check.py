@@ -6,7 +6,7 @@ Two install shapes are supported:
   walk up from this module to find a ``.git/`` directory, then run
   ``git fetch`` and ``rev-list`` to count how many commits ``HEAD`` is
   behind ``origin/main`` (or ``origin/master``). The result is cached
-  to ``~/.omnigent/.update_check.json`` so the (potentially slow)
+  under the effective runtime data home so the (potentially slow)
   ``git fetch`` only runs once per staleness window. The notice points
   the user at ``git pull``.
 
@@ -47,6 +47,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from omnigent._env_compat import data_home_path
+
 if TYPE_CHECKING:
     # Imported only for type hints; the heavy/optional imports remain lazy
     # at runtime so importing this module stays cheap.
@@ -59,6 +61,8 @@ if TYPE_CHECKING:
 _ENV_SKIP = "OMNIGENT_NO_UPDATE_CHECK"
 _CACHE_DIR = Path.home() / ".omnigent"
 _CACHE_FILE = _CACHE_DIR / ".update_check.json"
+_DEFAULT_CACHE_DIR = _CACHE_DIR
+_DEFAULT_CACHE_FILE = _CACHE_FILE
 _STALENESS_SECONDS = 4 * 60 * 60  # 4 hours
 _GIT_TIMEOUT_SECONDS = 5
 _DIST_NAME = "omnigent"
@@ -126,6 +130,34 @@ class _CacheEntry:
     kind: str = "clone"
     latest_version: str = ""
     last_notified_version: str = ""
+
+
+def _effective_cache_dir() -> Path:
+    """Return the effective update-check cache directory."""
+    current_default_cache_dir = Path.home() / ".omnigent"
+    if (
+        os.environ.get("GOALRAIL_DATA_DIR")
+        or os.environ.get("OMNIGENT_DATA_DIR")
+        or _CACHE_DIR == _DEFAULT_CACHE_DIR
+        or current_default_cache_dir == _CACHE_DIR
+    ):
+        return data_home_path()
+    return _CACHE_DIR
+
+
+def _effective_cache_file() -> Path:
+    """Return the effective update-check cache file path."""
+    current_default_cache_dir = Path.home() / ".omnigent"
+    current_default_cache_file = current_default_cache_dir / ".update_check.json"
+    if (
+        os.environ.get("GOALRAIL_DATA_DIR")
+        or os.environ.get("OMNIGENT_DATA_DIR")
+        or _CACHE_FILE == _DEFAULT_CACHE_FILE
+        or current_default_cache_file == _CACHE_FILE
+        or _CACHE_FILE == _CACHE_DIR / ".update_check.json"
+    ):
+        return _effective_cache_dir() / ".update_check.json"
+    return _CACHE_FILE
 
 
 @dataclass
@@ -697,7 +729,7 @@ def _read_cache() -> _CacheEntry | None:
         JSON, otherwise ``None``.
     """
     try:
-        raw = _CACHE_FILE.read_text()
+        raw = _effective_cache_file().read_text()
         data = json.loads(raw)
         return _CacheEntry(
             last_check_epoch=float(data["last_check_epoch"]),
@@ -730,7 +762,9 @@ def _write_cache(entry: _CacheEntry) -> None:
 
     :param entry: The check result to persist.
     """
-    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_dir = _effective_cache_dir()
+    cache_file = _effective_cache_file()
+    cache_dir.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
         {
             "last_check_epoch": entry.last_check_epoch,
@@ -742,13 +776,13 @@ def _write_cache(entry: _CacheEntry) -> None:
         }
     )
     # ``dir=`` on the same filesystem guarantees atomic replace.
-    fd, tmp_path = tempfile.mkstemp(dir=_CACHE_DIR, suffix=".tmp")
+    fd, tmp_path = tempfile.mkstemp(dir=cache_dir, suffix=".tmp")
     closed = False
     try:
         os.write(fd, payload.encode())
         os.close(fd)
         closed = True
-        Path(tmp_path).replace(_CACHE_FILE)
+        Path(tmp_path).replace(cache_file)
     except OSError:
         if not closed:
             with contextlib.suppress(OSError):
