@@ -541,7 +541,7 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Ordinary Claude resumes do not create Omnigent forks.
+    Ordinary Claude resumes do not create Goalrail forks.
 
     This fails if every ``SessionStart source=resume`` starts forking
     Goalrail sessions, which would break normal Claude resume flows.
@@ -628,7 +628,7 @@ def test_non_session_start_hook_does_not_emit_conversation_url_context(
 
     This fails if Stop/UserPromptSubmit hooks start producing stdout,
     which Claude could interpret as hook output for events that are only
-    supposed to update Omnigent bridge state.
+    supposed to update Goalrail bridge state.
     """
     bridge_dir = tmp_path / "bridge"
     payload = {"hook_event_name": "Stop"}
@@ -1412,7 +1412,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
     and owns the elicitation.  The ``ask-user-question`` PreToolUse hook must
     return empty output (no opinion) so the form is not shown twice.
 
-    This fails if the handler forwards the payload to Omnigent in non-bypass mode —
+    This fails if the handler forwards the payload to Goalrail in non-bypass mode —
     which would cause a duplicate elicitation card in the web UI and race for
     the same answer.
     """
@@ -1488,7 +1488,7 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    In bypassPermissions mode the hook posts to Omnigent and returns PreToolUse output.
+    In bypassPermissions mode the hook posts to Goalrail and returns PreToolUse output.
 
     In bypass mode ``PermissionRequest`` never fires, so this PreToolUse hook
     is the only opportunity to surface ``AskUserQuestion`` in the web UI.  It

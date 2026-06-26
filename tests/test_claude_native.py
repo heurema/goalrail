@@ -852,7 +852,7 @@ def test_remote_daemon_run_attaches_without_cli_forwarder(
     forwarder. The CLI should only attach to tmux/WebSocket. If this
     call site omits ``run_transcript_forwarder=False``, the CLI starts a
     second forwarder on the same bridge and every transcript item is
-    posted to Omnigent twice.
+    posted to Goalrail twice.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory for the generated spec and bridge.
@@ -1213,7 +1213,7 @@ async def test_attach_marks_terminal_stopped_on_exit_when_launched(
         """
         Record cleanup args without issuing a real DELETE.
 
-        :param base_url: Omnigent base URL passed to the cleanup helper.
+        :param base_url: Goalrail base URL passed to the cleanup helper.
         :param headers: Auth headers passed to the cleanup helper.
         :param session_id: Session id being cleaned up.
         :param terminal_id: Terminal resource id being closed.
@@ -1301,7 +1301,7 @@ async def test_attach_runs_cleanup_even_when_forwarder_raises(
         """
         Record that cleanup ran despite the forwarder fault.
 
-        :param base_url: Omnigent base URL.
+        :param base_url: Goalrail base URL.
         :param headers: Auth headers.
         :param session_id: Session id being cleaned up.
         :param terminal_id: Terminal resource id being closed.
@@ -1624,7 +1624,7 @@ async def test_find_running_claude_terminal_miss_statuses_relaunch(
     """
     Missing or unavailable prior runners cause a deterministic relaunch.
 
-    :param status_code: HTTP status returned by the Omnigent resource lookup.
+    :param status_code: HTTP status returned by the Goalrail resource lookup.
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -2150,7 +2150,7 @@ async def test_attach_with_reconnect_passes_terminal_gone_probe_to_attach(
         """
         Capture probe arguments and report the terminal gone.
 
-        :param base_url: Omnigent base URL.
+        :param base_url: Goalrail base URL.
         :param headers: HTTP headers.
         :param session_id: Session id.
         :param terminal_id: Terminal resource id.
@@ -2698,7 +2698,7 @@ async def test_attach_with_reconnect_exits_when_probe_says_terminal_is_gone(
     attach = _ScriptedAttach(script=[False, False])
 
     async def _gone_probe(**kwargs: Any) -> bool:
-        """Pretend the Omnigent reports the terminal stopped."""
+        """Pretend the Goalrail server reports the terminal stopped."""
         del kwargs
         return True
 
@@ -2741,7 +2741,7 @@ async def test_attach_with_reconnect_reconnects_when_probe_says_terminal_alive(
     attach = _ScriptedAttach(script=[False, True])
 
     async def _alive_probe(**kwargs: Any) -> bool:
-        """Pretend the Omnigent reports the terminal still running."""
+        """Pretend the Goalrail server reports the terminal still running."""
         del kwargs
         return False
 
@@ -2899,7 +2899,7 @@ async def test_is_terminal_resource_gone_treats_transport_errors_as_not_gone(
 @dataclass
 class _FakeTerminalServer:
     """
-    Minimal echo WebSocket server stand-in for the Omnigent terminal-attach
+    Minimal echo WebSocket server stand-in for the Goalrail terminal-attach
     route. Tracks accept counts and supports a coordinated "bounce".
 
     :param accept_count: Number of WS connections accepted so far.
@@ -3566,7 +3566,7 @@ def test_strip_resume_from_claude_args_removes_recognized_forms(
     a user could route past Click. Names that merely contain the
     word ``resume`` (e.g. ``--no-resume-here``) MUST survive so we
     don't break unrelated upstream Claude flags. If this parametrize
-    case fails, upstream Claude will see the Omnigent conv id and
+    case fails, upstream Claude will see the Goalrail conv id and
     open its own picker against its native session-id namespace
     (the misroute's root cause).
     """
@@ -3582,7 +3582,7 @@ def _conversation_response_body(
     external_session_id: str | None,
 ) -> dict[str, Any]:
     """
-    Build a minimal Omnigent ``GET /v1/sessions/{id}`` response body.
+    Build a minimal Goalrail ``GET /v1/sessions/{id}`` response body.
 
     The route returns the full ``SessionResponse`` shape; the
     cold-resume helper only reads two fields — ``labels`` and
@@ -3690,7 +3690,7 @@ async def test_resolve_cold_resume_args_injects_external_session_id(
     ``("--resume", "<sid>")`` so the spawned terminal launches
     ``claude --resume <sid>`` and reattaches to the prior transcript.
     Without this, cold resume would launch fresh claude — the user
-    would keep the Omnigent conv id but lose claude-side context.
+    would keep the Goalrail conv id but lose claude-side context.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory used to isolate Claude
@@ -3891,7 +3891,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
     Cold resume treats Goalrail history as source of truth over local JSONL.
 
     Claude can leave a local ``~/.claude/projects/<cwd>/<sid>.jsonl``
-    that diverges from the Omnigent transcript we have persisted. The resume
+    that diverges from the Goalrail transcript we have persisted. The resume
     path must still fetch Goalrail items and overwrite that stale file before
     returning ``--resume <sid>``. If the helper reintroduces an early
     return when the local target exists, this test keeps the stale line
@@ -3923,7 +3923,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         "type": "message",
         "status": "completed",
         "role": "user",
-        "content": [{"type": "input_text", "text": "fresh Omnigent text"}],
+        "content": [{"type": "input_text", "text": "fresh Goalrail text"}],
     }
     item_requests = 0
 
@@ -3961,7 +3961,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         for line in transcript_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    assert [record["message"]["content"] for record in records] == ["fresh Omnigent text"]
+    assert [record["message"]["content"] for record in records] == ["fresh Goalrail text"]
 
 
 @pytest.mark.asyncio
@@ -3971,7 +3971,7 @@ async def test_resolve_cold_resume_args_warns_when_external_session_id_missing(
     """
     Claude-native conv with no captured external_session_id (crashed
     before first hook, etc.) returns ``()`` and prints a warning.
-    The Omnigent conv id still survives — the new terminal binds
+    The Goalrail conv id still survives — the new terminal binds
     to the same row — but Claude starts fresh. Critical: this
     branch MUST NOT raise so the user can recover the conv even
     when the prior claude side is unrecoverable.
@@ -4091,12 +4091,12 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
     Cold-resume threads ``--resume <claude_sid>`` into the args
     passed to ``_launch_claude_terminal``.
 
-    Load-bearing assertion: the conv id stays the SAME Omnigent
+    Load-bearing assertion: the conv id stays the SAME Goalrail
     id end-to-end (no new id minted), AND the spawned terminal
     receives Claude's prior session id as the first two args. A
     regression that dropped the cold-resume args at the launch
     seam would silently lose Claude-side context — the user keeps
-    the Omnigent conv id but Claude starts fresh. Tests
+    the Goalrail conv id but Claude starts fresh. Tests
     ``_resolve_cold_resume_args`` in isolation cannot catch this.
     """
     captured_terminal_args: dict[str, Any] = {}
@@ -4220,7 +4220,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
         )
         del http_client  # context-managed by the with block
 
-    # Omnigent conv id survives end-to-end. If this assertion
+    # Goalrail conv id survives end-to-end. If this assertion
     # fails, the wrapper minted a new session id on cold resume —
     # exactly what the user told us NOT to do.
     assert prepared.session_id == "conv_abc"
@@ -4415,7 +4415,7 @@ async def test_attach_passes_start_at_end_true_on_cold_resume(
         f"cold_resumed=True must force start_at_end=True; got "
         f"start_at_end={captured.get('start_at_end')!r}. Without this, "
         f"every prior turn in the reopened claude transcript is "
-        f"re-POSTed to Omnigent on resume and broadcast to live clients."
+        f"re-POSTed to Goalrail on resume and broadcast to live clients."
     )
 
 
@@ -5233,7 +5233,7 @@ def test_align_working_directory_redirect_moves_transcript_and_updates_state(
     real ``~/.claude`` state: find the old transcript by external
     session id, write it into the current cwd's Claude project dir,
     rewrite top-level ``cwd`` values, remove the original transcript,
-    and update Omnigent launch state so future resumes treat the
+    and update Goalrail launch state so future resumes treat the
     current cwd as the session home.
     """
     from omnigent.claude_native_state import read_launch_state, write_launch_state

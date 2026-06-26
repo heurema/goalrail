@@ -1014,7 +1014,7 @@ def test_inject_user_message_via_tui_rejects_empty_content(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# Omnigent MCP relay wiring (sys_* tools) — #1194
+# Goalrail MCP relay wiring (sys_* tools) — #1194
 # ---------------------------------------------------------------------------
 
 

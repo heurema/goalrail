@@ -1,7 +1,7 @@
 """E2E test: session-discovery tools in claude-native mode.
 
 Verifies that ``sys_session_get_history`` and ``sys_session_list`` are visible
-to Claude Code when running in an Omnigent claude-native session.
+to Claude Code when running in a Goalrail claude-native session.
 These tools are advertised via the MCP tool relay
 (``tool_relay.json``) that the runner writes before Claude Code
 starts. The test launches Claude Code in a headless tmux window,
@@ -112,7 +112,7 @@ def _claude_code_session(
     launch_env: dict[str, str],
 ) -> Iterator[Path]:
     """
-    Start Claude Code in a private tmux window with the Omnigent MCP bridge.
+    Start Claude Code in a private tmux window with the Goalrail MCP bridge.
 
     Mirrors the ``_claude_code_session`` context manager in
     ``test_comment_tools_claude_native.py``. Sets up the bridge
@@ -260,7 +260,7 @@ def test_claude_native_session_tools_visible(
     Session-discovery tools are visible in a claude-native MCP session.
 
     Verifies that ``sys_session_get_history`` and ``sys_session_list`` appear
-    in Claude Code's MCP tool list when running in an Omnigent
+    in Claude Code's MCP tool list when running in a Goalrail
     claude-native session. These tools are advertised via the runner's
     ``tool_relay.json`` and relayed through the MCP bridge.
 

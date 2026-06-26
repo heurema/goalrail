@@ -1,7 +1,7 @@
 """E2E test: list_comments and update_comment tools in claude-native mode.
 
 Verifies the full round-trip for native Claude Code sessions: the test
-starts Claude Code in a private tmux window with the Omnigent MCP
+starts Claude Code in a private tmux window with the Goalrail MCP
 bridge, adds review comments via the REST API, sends a message
 (which triggers the runner to write ``tool_relay.json`` so the bridge
 exposes ``list_comments`` / ``update_comment`` to Claude), and then
@@ -142,7 +142,7 @@ def _claude_code_session(
     launch_env: dict[str, str],
 ) -> Iterator[None]:
     """
-    Start Claude Code in a private tmux window with the Omnigent MCP bridge.
+    Start Claude Code in a private tmux window with the Goalrail MCP bridge.
 
     Sets up the bridge directory for *session_id*, launches ``claude``
     with the MCP config and hook settings injected via
@@ -175,7 +175,7 @@ def _claude_code_session(
     tmux_session = f"cne-{session_id[:8]}"
     tmux_target = f"{tmux_session}:0.0"
 
-    # Build Claude Code args with Omnigent MCP bridge and hooks injected.
+    # Build Claude Code args with Goalrail MCP bridge and hooks injected.
     # --allowedTools pre-authorizes the omnigent relay tools so Claude does
     # not show an interactive permission dialog when it calls list_comments or
     # update_comment.  The MCP server is always named "omnigent" (_MCP_SERVER_NAME),
@@ -327,7 +327,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     1. Skip unless opted in via ``OMNIGENT_E2E_CLAUDE_NATIVE_COMMENTS`` and
        the ``claude`` / ``tmux`` binaries are available.
     2. Create a runner-bound session with the ``claude-native-ui`` agent.
-    3. Start Claude Code in a private tmux window with the Omnigent
+    3. Start Claude Code in a private tmux window with the Goalrail
        MCP bridge (same as ``omnigent claude`` does).
     4. POST two draft comments on ``app.py`` via the REST API.
     5. Pre-configure the mock LLM with tool-call responses that call
