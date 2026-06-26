@@ -360,8 +360,8 @@ hand-add its origin to `settings.json`:
 { "localhost_allowed_origins": ["https://login.example.com"] }
 ```
 
-(`settings.json` currently lives in Electron's legacy per-user `userData` dir — on macOS,
-`~/Library/Application Support/Omnigent/settings.json`.)
+(`settings.json` currently lives in Electron's per-user `userData` dir — on macOS,
+`~/Library/Application Support/Goalrail/settings.json`.)
 
 ## Multiple servers
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "omnigent-ui-sdk"
 version = "0.3.0.dev0"
-description = "Terminal UI components (Rich + prompt_toolkit) for building omnigent frontends"
+description = "Terminal UI components (Rich + prompt_toolkit) for building Goalrail frontends"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
