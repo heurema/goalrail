@@ -527,7 +527,7 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
         try:
             if sub == 0:
                 console.print()
-                console.print("  [bold]How will omnigent authenticate with the LLM?[/bold]")
+                console.print("  [bold]How will Goalrail authenticate with the LLM?[/bold]")
                 console.print()
 
                 # Menu label only (display text, not a credential). Named to

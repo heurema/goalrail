@@ -2,7 +2,7 @@
 
 Under the daemon model every ``run`` / ``claude`` invocation
 ensures the host daemon and targets either the given ``--server`` URL or
-a daemon-started local Omnigent server. Covers ``_ensure_host_daemon`` (local vs
+a daemon-started local Goalrail server. Covers ``_ensure_host_daemon`` (local vs
 remote spawn + reuse), ``_ensure_backend`` (the single resolver), and
 ``_discover_local_server_url`` (the CLI-side handshake), plus the command
 wiring that routes ``--server`` through them.
@@ -186,7 +186,7 @@ def test_ensure_host_daemon_local_inherits_data_dir_and_db_uri(
 ) -> None:
     """The local daemon inherits the runtime data-dir + DB URI vars.
 
-    In local mode the daemon owns the local Omnigent server, so it must resolve the
+    In local mode the daemon owns the local Goalrail server, so it must resolve the
     same config home, data dir, and DB URI the CLI assumes — otherwise the CLI
     reads the local-server pidfile from one dir while the daemon writes it to
     another and discovery times out.
@@ -575,6 +575,30 @@ def test_daemon_host_online_false_when_no_host_id(
         resolved_server_url="http://127.0.0.1:8123",
     )
     assert cli._daemon_host_online(record) is False
+
+
+def test_daemon_local_server_unreachable_errors_use_goalrail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Daemon status/session errors should use the public Goalrail product name."""
+    monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
+    record = cli._HostDaemonRecord(
+        pid=4242,
+        target="local",
+        mode="local",
+        server_url=None,
+        log_path="/tmp/daemon.log",
+        started_at=1_000_000,
+        host_id="host_abc",
+        resolved_server_url=None,
+    )
+
+    sessions_result = cli._sessions_for_daemon(record)
+    assert sessions_result.error == "local Goalrail server is not reachable"
+
+    payload: cli._HostPayload = {"server_url": None, "host_id": "host_abc"}
+    cli._add_daemon_host_status(payload)
+    assert payload["error"] == "local Goalrail server is not reachable"
 
 
 def test_daemon_tunnel_recovers_returns_true_on_immediate_online(
@@ -1174,6 +1198,20 @@ def test_host_stop_session_stops_only_named_sessions(
     assert stopped == ["conv_a", "conv_b"]
 
 
+def test_host_stop_session_without_server_uses_goalrail_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Missing local fallback should mention the public Goalrail server name."""
+    monkeypatch.setattr(cli, "_resolve_host_server", lambda server: None)
+    monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
+
+    result = CliRunner().invoke(cli_group, ["host", "stop-session", "conv_a"])
+
+    assert result.exit_code != 0
+    assert "local Goalrail server is reachable" in result.output
+    assert "local Omnigent server" not in result.output
+
+
 def test_ensure_backend_remote_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
     """A remote URL ensures a daemon for it and returns the normalized URL."""
     calls: list[str | None] = []
@@ -1239,8 +1277,21 @@ def test_discover_local_server_url_raises_when_daemon_dead(
     """If the daemon exits before its server is ready, fail loud (not hang)."""
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(cli, "_host_daemon_alive", lambda: False)
-    with pytest.raises(click.ClickException, match="exited before"):
+    with pytest.raises(click.ClickException, match="Goalrail server") as excinfo:
         _discover_local_server_url(timeout=5.0)
+    assert "Omnigent server" not in str(excinfo.value)
+
+
+def test_discover_local_server_url_timeout_uses_goalrail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Timeout text should use the public Goalrail product name."""
+    monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
+    monkeypatch.setattr(cli, "_host_daemon_alive", lambda: True)
+
+    with pytest.raises(click.ClickException, match="local Goalrail server") as excinfo:
+        _discover_local_server_url(timeout=0.0)
+    assert "local Omnigent server" not in str(excinfo.value)
 
 
 def _fake_run_claude_native_capture(captured: dict[str, object]) -> Any:

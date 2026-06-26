@@ -7,7 +7,7 @@ Spawned by ``_ensure_host_daemon`` in ``cli.py`` when ``run`` /
 Two modes:
 
 - ``--server <url>``: connect to an existing (remote or local) Omnigent server.
-- ``--local``: this daemon owns a local Omnigent server — start (or reuse) a
+- ``--local``: this daemon owns a local Goalrail server — start (or reuse) a
   persistent background ``omnigent server`` on loopback and connect to
   it. The CLI discovers the resulting URL via the local-server pidfile.
 """
@@ -40,7 +40,7 @@ def main() -> None:
     parser.add_argument(
         "--local",
         action="store_true",
-        help="Start (or reuse) a local Omnigent server and connect to it.",
+        help="Start (or reuse) a local Goalrail server and connect to it.",
     )
     args = parser.parse_args()
 

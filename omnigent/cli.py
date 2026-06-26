@@ -1461,7 +1461,7 @@ _HOST_PID_PATH = Path.home() / ".omnigent" / "host.pid"
 
 # host.pid records the daemon PID + the "target" it serves: a normalized
 # server URL for remote/explicit targets, or the literal marker ``"local"``
-# for a daemon that owns a local Omnigent server. Daemon reuse is keyed on this
+# for a daemon that owns a local Goalrail server. Daemon reuse is keyed on this
 # target (real URLs never collide with the marker).
 _LOCAL_DAEMON_MARKER = "local"
 
@@ -2272,7 +2272,7 @@ def _build_host_daemon_env(
 
     Remote daemons connect to an already-running Omnigent server, so they only
     need process essentials, TLS trust, and Databricks auth. Local daemons
-    also start the local Omnigent server; that server is the user's local runtime
+    also start the local Goalrail server; that server is the user's local runtime
     and must inherit Omnigent config plus provider credentials such as
     ``OPENAI_API_KEY`` and ``OPENAI_BASE_URL``. Both modes are allowlisted:
     local mode carries the runtime/provider vars needed by the local server,
@@ -2408,7 +2408,7 @@ def _ensure_backend(server: str | None) -> str:
     :param server: ``--server`` value after config fallback. A non-empty
         value targets that (remote or explicit-local) server. ``None`` or
         ``""`` selects local mode: the daemon starts (or reuses) a
-        persistent local Omnigent server and this returns its discovered loopback
+        persistent local Goalrail server and this returns its discovered loopback
         URL.
     :returns: A concrete base URL, e.g. ``"http://127.0.0.1:8123"`` or the
         remote URL passed in.
@@ -2436,7 +2436,7 @@ def _ensure_backend(server: str | None) -> str:
         with runner_startup_progress(initial_message=STARTUP_PHASE_CONNECTING_REMOTE):
             _ensure_host_daemon(server)
         return server
-    # Local mode: the daemon spawns (or reuses) a persistent local Omnigent server.
+    # Local mode: the daemon spawns (or reuses) a persistent local Goalrail server.
     # On a cold start this is the longest silent gap between the user pressing
     # Enter and any output, so render a spinner whose label tracks the step.
     # It clears on context exit — before any auth-mode-change echo below and
@@ -2455,7 +2455,7 @@ def _ensure_backend(server: str | None) -> str:
 def _exit_for_auth_mode_change(base_url: str) -> None:
     """Tell the user the server was restarted in a new mode, then exit clean.
 
-    The local Omnigent server bakes its auth posture (header vs accounts, cookie
+    The local Goalrail server bakes its auth posture (header vs accounts, cookie
     secret) at boot, so an ``OMNIGENT_AUTH_ENABLED`` flip restarts it
     via :func:`_ensure_host_daemon`. Continuing the *same* command across
     that restart is brittle — the in-flight session/credential/terminal
@@ -2494,7 +2494,7 @@ def _exit_for_auth_mode_change(base_url: str) -> None:
 def _discover_local_server_url(
     timeout: float = _LOCAL_SERVER_DISCOVER_TIMEOUT_S,
 ) -> str:
-    """Poll until the daemon-started local Omnigent server is reachable.
+    """Poll until the daemon-started local Goalrail server is reachable.
 
     In local mode the daemon owns the Omnigent server; the CLI discovers its URL
     via the local-server pidfile + ``/health`` rather than starting it
@@ -2514,13 +2514,13 @@ def _discover_local_server_url(
             return url
         if not _host_daemon_alive():
             raise click.ClickException(
-                "The local daemon exited before its Omnigent server became ready. "
+                "The local daemon exited before its Goalrail server became ready. "
                 "See logs under ~/.omnigent/logs/host-daemon/ and "
                 "~/.omnigent/logs/server/."
             )
         time.sleep(0.2)
     raise click.ClickException(
-        f"Timed out after {timeout:.0f}s waiting for the local Omnigent server to "
+        f"Timed out after {timeout:.0f}s waiting for the local Goalrail server to "
         "start. See ~/.omnigent/logs/server/ for details."
     )
 
@@ -6178,7 +6178,7 @@ def _resolve_attach_server(server: str | None, configured_server: str | None) ->
     Resolve the Omnigent server URL ``attach`` should join.
 
     Resolution order: an explicit ``--server`` value, then the configured
-    ``server`` default, then a local Omnigent server already running in the
+    ``server`` default, then a local Goalrail server already running in the
     background. ``attach`` never starts a server, so this returns ``None``
     when none of those is available and the caller fails loud.
 
@@ -6589,7 +6589,7 @@ class _HostGroup(click.Group):
 
 
 def _prompt_stop_local_server() -> None:
-    """Ask whether to also stop the detached local Omnigent server after exit.
+    """Ask whether to also stop the detached local Goalrail server after exit.
 
     The local-mode host daemon spawns a detached, persistent local AP
     server (:func:`ensure_local_omnigent_server`) that survives the daemon's exit
@@ -6659,7 +6659,7 @@ def host(ctx: click.Context, server: str | None) -> None:
     from omnigent.host.connect import run_host_process
 
     # ``host`` IS the daemon (foreground). With no server URL, start (or
-    # reuse) the local Omnigent server here and connect to it; otherwise connect to
+    # reuse) the local Goalrail server here and connect to it; otherwise connect to
     # the given remote/local URL. Unlike the background commands, we do not
     # spawn a second daemon via ``_ensure_host_daemon``.
     target = _normalize_daemon_target(server)
@@ -6968,7 +6968,7 @@ def _sessions_for_daemon(
         return _DaemonSessionsResult(
             base_url=None,
             sessions=[],
-            error="local Omnigent server is not reachable",
+            error="local Goalrail server is not reachable",
         )
     host_id = record.host_id or _load_existing_host_id()
     if not host_id:
@@ -7081,7 +7081,7 @@ def _add_daemon_host_status(
     base_url = payload.get("server_url")
     host_id = payload.get("host_id")
     if not isinstance(base_url, str):
-        payload["error"] = "local Omnigent server is not reachable"
+        payload["error"] = "local Goalrail server is not reachable"
         return
     if not isinstance(host_id, str) or not host_id:
         payload["error"] = "host id is not available in local config"
@@ -7650,7 +7650,7 @@ def host_stop_session(
         resolved_server = local_server_url_if_healthy()
         if resolved_server is None:
             raise click.ClickException(
-                "No server was supplied and no local Omnigent server is reachable."
+                "No server was supplied and no local Goalrail server is reachable."
             )
     for session_id in session_ids:
         try:
