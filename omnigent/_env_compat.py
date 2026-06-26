@@ -1,12 +1,18 @@
-"""Backward-compatibility shim for the env-var prefix renames -> ``OMNIGENT_*``.
+"""Backward-compatibility shim for env-var prefix renames.
 
 The project's env-var prefix has changed twice as the name evolved:
-``OMNIAGENTS_`` (original) -> ``OMNIGENTS_`` -> ``OMNIGENT_`` (current). All
-current code reads the new ``OMNIGENT_`` names. To keep existing deployments,
-CI configs, and shell profiles that still export either older prefix working,
-this shim mirrors every legacy variable onto its ``OMNIGENT_`` equivalent at
-process startup -- but only when the new name is unset, so an explicitly-set
-``OMNIGENT_`` value always wins.
+``OMNIAGENTS_`` (original) -> ``OMNIGENTS_`` -> ``OMNIGENT_`` -> ``GOALRAIL_``.
+Most runtime code still reads the compatibility ``OMNIGENT_`` names. To keep
+existing deployments, CI configs, and shell profiles working while introducing
+the Goalrail prefix, this shim mirrors every known prefix onto both
+``GOALRAIL_*`` and ``OMNIGENT_*`` equivalents at process startup.
+
+Precedence is:
+
+1. ``GOALRAIL_*``
+2. ``OMNIGENT_*``
+3. ``OMNIGENTS_*``
+4. ``OMNIAGENTS_*``
 
 The mirror is installed once, as early as possible, from
 ``omnigent/__init__.py`` so it runs before any submodule reads the
@@ -19,40 +25,48 @@ from __future__ import annotations
 
 import os
 
-# The current prefix, and every legacy prefix that maps onto it. Ordered
-# newest-first so that when more than one legacy prefix is set for the same
-# variable, the newer one wins (``setdefault`` keeps the first mirrored value).
-# A variable named ``OMNIGENTS_FOO`` or ``OMNIAGENTS_FOO`` is mirrored to
-# ``OMNIGENT_FOO``.
-_NEW_PREFIX = "OMNIGENT_"
-_LEGACY_PREFIXES = ("OMNIGENTS_", "OMNIAGENTS_")
+# The canonical public prefix and the compatibility prefix most existing
+# runtime readers still consume.
+_CANONICAL_PREFIX = "GOALRAIL_"
+_COMPAT_PREFIX = "OMNIGENT_"
 
-# Module-level guard so repeated imports/calls don't rescan the environment.
-_mirrored = False
+# Legacy prefixes are ordered newest-first so that when more than one legacy
+# prefix is set for the same variable, the newer one wins.
+_LEGACY_PREFIXES = ("OMNIGENTS_", "OMNIAGENTS_")
 
 
 def mirror_legacy_env() -> None:
     """
-    Mirror legacy ``OMNIGENTS_*`` / ``OMNIAGENTS_*`` env vars onto ``OMNIGENT_*``.
+    Mirror Goalrail and legacy env-var prefixes onto compatibility names.
 
-    For every environment variable whose name starts with one of the legacy
-    prefixes in :data:`_LEGACY_PREFIXES`, set the corresponding ``OMNIGENT_``
-    variable if (and only if) it is not already present -- so an explicitly-set
-    new-name variable always takes precedence over a legacy one, and a newer
-    legacy prefix takes precedence over an older one. Idempotent and cheap:
-    calls after the first are no-ops.
+    For every supported prefix, populate the corresponding ``GOALRAIL_*`` and
+    ``OMNIGENT_*`` variables according to the precedence documented above.
+    Existing runtime code can keep reading ``OMNIGENT_*`` during the migration,
+    while new callers can use ``GOALRAIL_*``.
 
-    Example: with ``OMNIAGENTS_SKIP_WEB_UI=1`` in the environment and no
-    ``OMNIGENT_SKIP_WEB_UI`` set, this leaves ``OMNIGENT_SKIP_WEB_UI=1``.
+    Example: with ``GOALRAIL_SKIP_WEB_UI=1`` and
+    ``OMNIGENT_SKIP_WEB_UI=0``, this leaves both names set to ``1`` because the
+    canonical Goalrail prefix wins. With only ``OMNIAGENTS_SKIP_WEB_UI=1`` set,
+    both ``GOALRAIL_SKIP_WEB_UI`` and ``OMNIGENT_SKIP_WEB_UI`` become ``1``.
 
     :returns: ``None``. Mutates :data:`os.environ` in place.
     """
-    global _mirrored
-    if _mirrored:
-        return
-    for legacy_prefix in _LEGACY_PREFIXES:
+    for name, value in list(os.environ.items()):
+        if name.startswith(_CANONICAL_PREFIX):
+            suffix = name[len(_CANONICAL_PREFIX) :]
+            os.environ[_COMPAT_PREFIX + suffix] = value
+
+    for name, value in list(os.environ.items()):
+        if name.startswith(_COMPAT_PREFIX):
+            suffix = name[len(_COMPAT_PREFIX) :]
+            os.environ.setdefault(_CANONICAL_PREFIX + suffix, value)
+
+    for prefix in _LEGACY_PREFIXES:
         for name, value in list(os.environ.items()):
-            if name.startswith(legacy_prefix):
-                new_name = _NEW_PREFIX + name[len(legacy_prefix) :]
-                os.environ.setdefault(new_name, value)
-    _mirrored = True
+            if not name.startswith(prefix):
+                continue
+            suffix = name[len(prefix) :]
+            canonical_name = _CANONICAL_PREFIX + suffix
+            compat_name = _COMPAT_PREFIX + suffix
+            os.environ.setdefault(canonical_name, value)
+            os.environ.setdefault(compat_name, os.environ[canonical_name])
