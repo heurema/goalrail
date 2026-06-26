@@ -8,6 +8,8 @@ import pytest
 
 from omnigent.codex_native_bridge import (
     CodexNativeBridgeState,
+    bridge_dir_for_bridge_id,
+    bridge_root,
     clear_active_turn_id_if_matches,
     clear_bridge_state,
     codex_home_for_bridge_dir,
@@ -20,6 +22,19 @@ from omnigent.codex_native_bridge import (
     write_bridge_state,
     write_policy_hook_config,
 )
+
+
+def test_bridge_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default codex-native bridge root."""
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    assert bridge_root() == data_dir / "codex-native"
+    assert bridge_dir_for_bridge_id("bridge_goalrail_data").parent == data_dir / "codex-native"
 
 
 def _seed_active_turn(bridge_dir: Path, active_turn_id: str | None) -> None:

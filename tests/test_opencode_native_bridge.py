@@ -33,6 +33,19 @@ def bridge_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return prepare_bridge_dir("bridge_test")
 
 
+def test_bridge_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default opencode-native bridge root."""
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    assert bridge.bridge_root() == data_dir / "opencode-native"
+    assert bridge_dir_for_bridge_id("bridge_goalrail_data").parent == data_dir / "opencode-native"
+
+
 def _state(bridge_dir: Path, **overrides: object) -> OpenCodeNativeBridgeState:
     base = {
         "session_id": "conv_abc",

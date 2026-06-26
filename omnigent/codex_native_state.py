@@ -8,7 +8,7 @@ on the shared Goalrail server.
 
 Layout (per conversation):
 
-    ~/.omnigent/codex-native/<sha256(conv_id)[:32]>/launch.json
+    <data-home>/codex-native/<sha256(conv_id)[:32]>/launch.json
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from omnigent._env_compat import data_home_path
 
 _STATE_ROOT_ENV_VAR = "OMNIGENT_CODEX_NATIVE_STATE_DIR"
 _logger = logging.getLogger(__name__)
@@ -44,14 +46,14 @@ def _codex_native_state_root() -> Path:
     Return the root directory for persistent codex-native state.
 
     Honors :data:`_STATE_ROOT_ENV_VAR` for tests and advanced local
-    setups. Production defaults to ``~/.omnigent/codex-native``.
+    setups. Production defaults to ``<data-home>/codex-native``.
 
     :returns: Absolute path to the state root.
     """
     override = os.environ.get(_STATE_ROOT_ENV_VAR)
     if override:
         return Path(override)
-    return Path.home() / ".omnigent" / "codex-native"
+    return data_home_path() / "codex-native"
 
 
 def _state_dir_for_conversation_id(conversation_id: str) -> Path:

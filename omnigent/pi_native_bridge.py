@@ -14,6 +14,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from omnigent._env_compat import data_home_path
+
 # Per-process tiebreaker for inbox ordering. The extension delivers inbox
 # files in lexicographic filename order, so a high-resolution timestamp alone
 # can still tie when two payloads are queued within the same nanosecond; the
@@ -24,7 +26,7 @@ PI_NATIVE_BRIDGE_DIR_ENV_VAR = "HARNESS_PI_NATIVE_BRIDGE_DIR"
 PI_NATIVE_REQUEST_SESSION_ID_ENV_VAR = "HARNESS_PI_NATIVE_REQUEST_SESSION_ID"
 PI_NATIVE_CONFIG_ENV_VAR = "OMNIGENT_PI_NATIVE_CONFIG"
 
-_BRIDGE_ROOT = Path.home() / ".omnigent" / "pi-native"
+_BRIDGE_ROOT: Path | None = None
 _CONFIG_FILE = "config.json"
 _EXTENSION_FILE = "omnigent_pi_native_extension.js"
 _EXTENSION_PACKAGE = "omnigent.resources.pi_native"
@@ -32,15 +34,22 @@ _INBOX_DIR = "inbox"
 _SESSIONS_DIR = "sessions"
 
 
+def bridge_root() -> Path:
+    """Return the configured Pi-native bridge root."""
+    if _BRIDGE_ROOT is not None:
+        return _BRIDGE_ROOT
+    return data_home_path() / "pi-native"
+
+
 def bridge_dir_for_session_id(session_id: str) -> Path:
     """
     Return the bridge directory for a native Pi session.
 
     :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
-    :returns: Absolute bridge directory under ``~/.omnigent/pi-native``.
+    :returns: Absolute bridge directory under ``<data-home>/pi-native``.
     """
     digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:32]
-    return _BRIDGE_ROOT / digest
+    return bridge_root() / digest
 
 
 def prepare_bridge_dir(session_id: str) -> Path:

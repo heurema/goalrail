@@ -51,6 +51,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib import error, request
 
+from omnigent._env_compat import data_home_path
 from omnigent._platform import stable_user_id
 from omnigent.claude_native_message_display_hook import MESSAGE_DELTAS_FILE
 
@@ -175,7 +176,7 @@ def _absolute_syntactic_path(path: Path) -> Path:
     that inspection, so this helper only expands ``~`` and normalizes
     ``.`` / ``..`` components.
 
-    :param path: Path to normalize, e.g. ``Path("~/.omnigent/x")``.
+    :param path: Path to normalize, e.g. ``Path("<data-home>/x")``.
     :returns: Absolute path with syntactic normalization applied.
     """
     return Path(os.path.abspath(os.fspath(path.expanduser())))
@@ -204,12 +205,7 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
 
     codex_root = _absolute_syntactic_path(bridge_root())
     if target.is_relative_to(codex_root):
-        # In production, trust $HOME and validate/chmod the two bridge-owned
-        # directories below it: .omnigent and codex-native. In tests, the
-        # monkeypatched root may not use that shape, so trust the direct parent.
-        trusted_parent = codex_root.parent
-        if codex_root.name == "codex-native" and codex_root.parent.name == ".omnigent":
-            trusted_parent = codex_root.parent.parent
+        trusted_parent = _trusted_parent_for_data_home_bridge_root(codex_root, "codex-native")
         return _absolute_syntactic_path(trusted_parent)
 
     from omnigent.cursor_native_bridge import bridge_root as cursor_bridge_root
@@ -220,19 +216,15 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
 
     from omnigent.antigravity_native_bridge import bridge_root as antigravity_bridge_root
 
-    # antigravity-native keeps its bridge files below ``~/.omnigent/antigravity-native``,
-    # the same ``$HOME/.omnigent/<harness>-native`` shape codex uses, so apply the
-    # identical anchor logic: in production trust ``$HOME`` and validate/chmod the
-    # two bridge-owned dirs below it (``.omnigent`` and ``antigravity-native``); in
-    # tests the monkeypatched root may differ, so trust the direct parent.
+    # antigravity-native keeps its bridge files below the Goalrail data home,
+    # the same ``<data-home>/<harness>-native`` shape codex uses, so apply the
+    # identical anchor logic.
     antigravity_root = _absolute_syntactic_path(antigravity_bridge_root())
     if target.is_relative_to(antigravity_root):
-        trusted_parent = antigravity_root.parent
-        if (
-            antigravity_root.name == "antigravity-native"
-            and antigravity_root.parent.name == ".omnigent"
-        ):
-            trusted_parent = antigravity_root.parent.parent
+        trusted_parent = _trusted_parent_for_data_home_bridge_root(
+            antigravity_root,
+            "antigravity-native",
+        )
         return _absolute_syntactic_path(trusted_parent)
 
     from omnigent.qwen_native_bridge import bridge_root as qwen_bridge_root
@@ -258,6 +250,29 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
         f"({claude_root!s}, {codex_root!s}, {cursor_root!s}, "
         f"{antigravity_root!s}, {qwen_root!s}, {hermes_root!s})"
     )
+
+
+def _trusted_parent_for_data_home_bridge_root(root: Path, leaf_name: str) -> Path:
+    """
+    Return the trusted anchor for bridge roots below Goalrail's data home.
+
+    Production data-home roots should validate the data-home directory itself
+    (``<data-home>/<leaf>/<hash>`` trusts ``<data-home>.parent``). Tests often
+    monkeypatch ``_BRIDGE_ROOT`` to an arbitrary temp path; those keep the
+    previous direct-parent behavior so existing isolated roots are not forced
+    into the production shape.
+    """
+    data_home = _absolute_syntactic_path(data_home_path())
+    if root == data_home / leaf_name:
+        return data_home.parent
+    if root.name == leaf_name and root.parent.name in {
+        ".goalrail",
+        ".omnigent",
+        ".omnigents",
+        ".omniagents",
+    }:
+        return root.parent.parent
+    return root.parent
 
 
 @dataclass(frozen=True)

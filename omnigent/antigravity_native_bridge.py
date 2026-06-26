@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from omnigent._env_compat import data_home_path
+
 _logger = logging.getLogger(__name__)
 
 ANTIGRAVITY_NATIVE_BRIDGE_ID_LABEL_KEY = "omnigent.antigravity_native.bridge_id"
@@ -28,7 +30,7 @@ _STATE_FILE = "state.json"
 # the tmux/TUI section at the end of this module). Written by the runner after
 # the agy terminal launches; read by the executor's first-turn bootstrap.
 _TMUX_FILE = "tmux.json"
-_BRIDGE_ROOT = Path.home() / ".omnigent" / "antigravity-native"
+_BRIDGE_ROOT: Path | None = None
 
 # Prefix of the launcher-minted placeholder conversation id (see
 # ``antigravity_native._mint_agy_conversation_id``). agy mints its own real
@@ -146,9 +148,11 @@ def bridge_root() -> Path:
     Tests may monkeypatch :data:`_BRIDGE_ROOT` to isolate bridge files.
 
     :returns: Absolute root for Antigravity-native bridge directories, e.g.
-        ``Path("~/.omnigent/antigravity-native")``.
+        ``Path("<data-home>/antigravity-native")``.
     """
-    return _BRIDGE_ROOT
+    if _BRIDGE_ROOT is not None:
+        return _BRIDGE_ROOT
+    return data_home_path() / "antigravity-native"
 
 
 @dataclass(frozen=True)
@@ -202,10 +206,10 @@ def bridge_dir_for_bridge_id(bridge_id: str) -> Path:
 
     :param bridge_id: Opaque bridge id, e.g. ``"bridge_abc123"``.
     :returns: Absolute bridge directory under
-        ``~/.omnigent/antigravity-native``.
+        ``<data-home>/antigravity-native``.
     """
     digest = hashlib.sha256(bridge_id.encode("utf-8")).hexdigest()[:32]
-    return _BRIDGE_ROOT / digest
+    return bridge_root() / digest
 
 
 def build_antigravity_native_spawn_env(

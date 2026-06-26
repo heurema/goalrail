@@ -15,6 +15,8 @@ from omnigent.antigravity_native_bridge import (
     ANTIGRAVITY_NATIVE_REQUEST_SESSION_ID_ENV_VAR,
     AntigravityNativeBridgeState,
     agy_home_dir,
+    bridge_dir_for_bridge_id,
+    bridge_root,
     build_antigravity_native_spawn_env,
     build_mcp_config,
     clear_bridge_state,
@@ -35,6 +37,21 @@ from omnigent.antigravity_native_bridge import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def test_bridge_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default antigravity-native bridge root."""
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    assert bridge_root() == data_dir / "antigravity-native"
+    assert (
+        bridge_dir_for_bridge_id("bridge_goalrail_data").parent == data_dir / "antigravity-native"
+    )
 
 
 def _seed_active_turn(bridge_dir: Path, active_turn_id: str | None) -> None:

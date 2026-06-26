@@ -8,7 +8,7 @@ the shared Goalrail server. Mirrors :mod:`omnigent.codex_native_state`.
 
 Layout (per conversation):
 
-    ~/.omnigent/opencode-native/<sha256(conv_id)[:32]>/launch.json
+    <data-home>/opencode-native/<sha256(conv_id)[:32]>/launch.json
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from omnigent._env_compat import data_home_path
 
 _STATE_ROOT_ENV_VAR = "OMNIGENT_OPENCODE_NATIVE_STATE_DIR"
 _logger = logging.getLogger(__name__)
@@ -43,14 +45,14 @@ def _opencode_native_state_root() -> Path:
     Return the root directory for persistent opencode-native state.
 
     Honors :data:`_STATE_ROOT_ENV_VAR` for tests and advanced local setups.
-    Production defaults to ``~/.omnigent/opencode-native``.
+    Production defaults to ``<data-home>/opencode-native``.
 
     :returns: Absolute path to the state root.
     """
     override = os.environ.get(_STATE_ROOT_ENV_VAR)
     if override:
         return Path(override)
-    return Path.home() / ".omnigent" / "opencode-native"
+    return data_home_path() / "opencode-native"
 
 
 def _state_dir_for_conversation_id(conversation_id: str) -> Path:

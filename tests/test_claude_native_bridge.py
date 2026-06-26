@@ -73,7 +73,8 @@ def subprocess_bridge_root() -> Iterator[Path]:
         ``python -m omnigent.claude_native_bridge`` accepts bridge
         writes without inheriting pytest monkeypatches.
     """
-    production_root = Path("/tmp") / f"omnigent-{os.getuid()}" / "claude-native"
+    production_parent = Path(tempfile.gettempdir())
+    production_root = production_parent / f"omnigent-{os.getuid()}" / "claude-native"
     production_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(production_root.parent, 0o700)
     os.chmod(production_root, 0o700)
@@ -367,6 +368,33 @@ def test_trusted_parent_accepts_qwen_native_bridge_dir(
 
     # Same anchor as cursor-native: the uid-scoped temp dir's parent.
     assert trusted == claude_native_bridge._absolute_syntactic_path(qwen_root.parent.parent)
+
+
+def test_trusted_parent_validates_goalrail_data_dir_for_codex_native(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Custom Goalrail data dirs are validated as bridge-owned ancestors.
+
+    ``GOALRAIL_DATA_DIR=/tmp/goalrail-data`` should trust ``/tmp`` and validate
+    ``goalrail-data/codex-native/<hash>`` as owner-only directories. Trusting the
+    data dir itself would skip validation of a user-supplied shared ancestor.
+    """
+    from omnigent import codex_native_bridge
+
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", None)
+
+    target = claude_native_bridge._absolute_syntactic_path(
+        codex_native_bridge.bridge_dir_for_bridge_id("bridge_goalrail_data")
+    )
+    trusted = claude_native_bridge._trusted_parent_for_bridge_dir(target)
+
+    assert trusted == claude_native_bridge._absolute_syntactic_path(data_dir.parent)
 
 
 def test_trusted_parent_rejects_path_outside_all_roots_and_names_qwen(
@@ -2208,7 +2236,10 @@ def test_mcp_server_initialize_omits_blocked_channel_capability(
     Code would refuse to start with that capability advertised under
     org policy, breaking the native wrapper.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", Path("/tmp"))
+    monkeypatch.setattr(
+        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        Path(tempfile.gettempdir()),
+    )
     monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_abc", workspace=tmp_path)
     proc = subprocess.Popen(
@@ -3134,7 +3165,10 @@ async def test_channel_server_relays_active_omnigent_tools(
     This fails if Claude Code can receive web-channel inputs but cannot
     call the Omnigent tools made available to the server-side agent.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", Path("/tmp"))
+    monkeypatch.setattr(
+        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        Path(tempfile.gettempdir()),
+    )
     monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_tools", workspace=tmp_path)
     proc = subprocess.Popen(
@@ -3316,7 +3350,7 @@ def test_call_relay_tool_returns_mcp_error_on_read_timeout(
     # The result is a well-formed MCP error result, NOT a raised exception.
     assert result["isError"] is True
     error_text = json.loads(result["content"][0]["text"])["error"]
-    assert "failed to call Omnigent tool relay" in error_text
+    assert "failed to call Goalrail tool relay" in error_text
 
 
 @pytest.mark.asyncio
@@ -3341,7 +3375,10 @@ async def test_serve_mcp_survives_handler_exception_and_keeps_serving(
     ``-32000: Connection closed``). Without the guard, the decode error kills
     ``_serve_mcp`` and the ``tools/list`` read below times out.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", Path("/tmp"))
+    monkeypatch.setattr(
+        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        Path(tempfile.gettempdir()),
+    )
     monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_crash", workspace=tmp_path)
 
@@ -3476,7 +3513,7 @@ async def test_start_tool_relay_accepts_codex_native_bridge_root(
     Relay startup accepts Codex-native's persistent bridge root.
 
     Codex-native reuses the Claude MCP relay but stores bridge files in
-    ``~/.omnigent/codex-native`` instead of Claude's ``/tmp`` bridge
+    ``<data-home>/codex-native`` instead of Claude's ``/tmp`` bridge
     root. A regression here logs "Failed to start comment relay" and
     leaves Codex without comment/session tools.
 
@@ -3537,8 +3574,8 @@ async def test_start_tool_relay_accepts_antigravity_native_bridge_root(
     Relay startup accepts Antigravity-native's persistent bridge root (#1194).
 
     Antigravity-native reuses the Claude MCP relay but stores bridge files in
-    ``~/.omnigent/antigravity-native`` (the same ``$HOME/.omnigent/<harness>``
-    shape codex uses). A regression in :func:`_trusted_parent_for_bridge_dir`
+    ``<data-home>/antigravity-native`` (the same data-home shape codex uses).
+    A regression in :func:`_trusted_parent_for_bridge_dir`
     would reject the bridge dir, the relay would fail to write
     ``tool_relay.json``, and the wrapped agy would get no ``sys_*`` tools.
 
@@ -3607,7 +3644,10 @@ async def test_relay_close_keeps_advertisement_owned_by_newer_relay(
     and leave it in place. Unconditional unlinking here would erase the
     still-active newer session's ``list_comments`` / ``update_comment``.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", Path("/tmp"))
+    monkeypatch.setattr(
+        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        Path(tempfile.gettempdir()),
+    )
     monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_shared_bridge", workspace=tmp_path)
     relay_file = bridge_dir / claude_native_bridge._TOOL_RELAY_FILE

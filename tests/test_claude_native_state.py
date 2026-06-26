@@ -2,7 +2,7 @@
 
 The state module persists per-conversation launch metadata (today
 just the cwd a session was created in) under
-``~/.omnigent/claude-native/<hash>/launch.json`` so the resume
+``<data-home>/claude-native/<hash>/launch.json`` so the resume
 path can detect cwd mismatches that would otherwise make
 ``claude --resume`` exit immediately on launch.
 
@@ -28,6 +28,21 @@ from omnigent.claude_native_state import (
 )
 
 # ── Roundtrip and idempotence ─────────────────────────────────────
+
+
+def test_default_state_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default claude-native state root."""
+    monkeypatch.delenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", raising=False)
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    state_dir = _state_dir_for_conversation_id("conv_goalrail_data")
+
+    assert state_dir.parent == data_dir / "claude-native"
 
 
 def test_write_then_read_returns_recorded_path() -> None:

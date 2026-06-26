@@ -9,9 +9,25 @@ from pathlib import Path
 import pytest
 
 from omnigent.codex_native_state import (
+    _state_dir_for_conversation_id,
     read_launch_state,
     write_launch_state,
 )
+
+
+def test_default_state_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default codex-native state root."""
+    monkeypatch.delenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", raising=False)
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    state_dir = _state_dir_for_conversation_id("conv_goalrail_data")
+
+    assert state_dir.parent == data_dir / "codex-native"
 
 
 def test_write_and_read_launch_state_round_trips(

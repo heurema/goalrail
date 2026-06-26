@@ -6,7 +6,23 @@ import json
 import stat
 from pathlib import Path
 
+import pytest
+
 from omnigent import pi_native_bridge
+
+
+def test_bridge_root_honors_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Goalrail data-dir override moves the default pi-native bridge root."""
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    data_dir = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
+
+    assert pi_native_bridge.bridge_dir_for_session_id("conv_goalrail_data").parent == (
+        data_dir / "pi-native"
+    )
 
 
 def _inbox_files(bridge_dir: Path) -> list[str]:
@@ -88,7 +104,7 @@ def test_prepare_bridge_dir_is_owner_only(tmp_path: Path, monkeypatch) -> None:
     """The bridge dir and its inbox are created 0o700 (per-session isolation).
 
     The bearer token written alongside the inbox makes owner-only perms the
-    isolation boundary between sessions sharing ``~/.omnigent/pi-native``.
+    isolation boundary between sessions sharing ``<data-home>/pi-native``.
     """
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-native")
 
