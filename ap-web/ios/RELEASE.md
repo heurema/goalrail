@@ -1,4 +1,4 @@
-# Releasing Omnigent iOS
+# Releasing Goalrail iOS
 
 Releases are built locally with [fastlane](https://fastlane.tools). The `beta`
 lane archives a signed Release build and uploads it to TestFlight; the `release`
@@ -48,7 +48,7 @@ Apple finishes processing.
   number with no version churn in git. Don't bump it by hand.
 - **Marketing version** (`CFBundleShortVersionString`, currently `0.1.0`) is set
   manually. Bump `MARKETING_VERSION` for both the Debug and Release
-  configurations of the **Omnigent** target in Xcode (or via `fastlane
+  configurations of the legacy **Omnigent** target in Xcode (or via `fastlane
 increment_version_number`) when shipping a new user-facing version.
 
 ## App Store submission (later)

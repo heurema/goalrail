@@ -1,6 +1,6 @@
 # Platform Assets
 
-Shared native-platform assets for wrappers around the Omnigent web UI.
+Shared native-platform assets for wrappers around the Goalrail web UI.
 
 - `AppIcon.icon` is the Apple Icon Composer source of truth for the app icon.
   The iOS project references it directly. Electron consumes generated

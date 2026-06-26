@@ -30,7 +30,7 @@ struct ConnectView: View {
           .frame(height: 80)
           .padding(.bottom, 12)
 
-        Text("Enter the URL of the Omnigents server. The iOS app loads its web UI directly.")
+        Text("Enter the URL of the Goalrail server. The iOS app loads its web UI directly.")
           .font(.system(size: 14))
           .lineSpacing(2)
           .multilineTextAlignment(.center)
