@@ -160,7 +160,7 @@ def _migrate_legacy_state_dir() -> None:
         if legacy_pid is not None and _pid_alive(legacy_pid):
             click.echo(
                 f"Note: found pre-rename state at {legacy_src} but a host daemon "
-                "is still running from it; skipping migration. Run `omnigent stop` "
+                "is still running from it; skipping migration. Run `goalrail stop` "
                 "and re-run to migrate, or move it manually to ~/.omnigent.",
                 err=True,
             )
@@ -182,7 +182,7 @@ def _migrate_legacy_state_dir() -> None:
 # Resolved at call time so tests can control cwd.
 _LOCAL_CONFIG_RELPATH: Path = Path(".omnigent") / "config.yaml"
 
-# Keys that ``omnigent config`` accepts.  Mirrors the option names in
+# Keys that ``goalrail config`` accepts.  Mirrors the option names in
 # the ``run`` command so the mapping is explicit and auditable.
 _AUTO_OPEN_CONVERSATION_CONFIG_KEY = "auto_open_conversation"
 _GLOBAL_CONFIG_KEYS: frozenset[str] = frozenset(
@@ -340,7 +340,7 @@ def _display_config_path(path: Path) -> str:
 
 def _load_global_config() -> dict[str, Any]:  # type: ignore[explicit-any]
     """
-    Load the global omnigent config from ``~/.omnigent/config.yaml``.
+    Load the global goalrail config from ``~/.omnigent/config.yaml``.
 
     Returns an empty dict when the file does not exist or is empty.
     Top-level default keys (``default_agent``, ``server``,
@@ -349,7 +349,7 @@ def _load_global_config() -> dict[str, Any]:  # type: ignore[explicit-any]
     ``auth:`` key holds a nested mapping —
     ``{"type": "databricks", "profile": "oss"}`` or
     ``{"type": "api_key", "api_key": "…"}`` — written by
-    ``omnigent setup`` and used by the runtime to supply executor
+    ``goalrail setup`` and used by the runtime to supply executor
     credentials when an agent spec does not declare ``executor.auth``.
 
     :returns: Parsed YAML as a dict, e.g.
@@ -500,7 +500,7 @@ def _pick_first_run_harness() -> _FirstRunPlan | None:
 
 
 def _resolve_first_run_plan() -> _FirstRunPlan | None:
-    """Resolve the harness + default agent for a bare ``omnigent run``.
+    """Resolve the harness + default agent for a bare ``goalrail run``.
 
     Adopts ambient-detected credentials, then picks a harness from what's
     configured (Claude→polly / Codex / Pi). When nothing is configured,
@@ -581,7 +581,7 @@ def _resolve_default_agent_target(
 
 def _parse_config_bool(key: str, value: _ConfigValue) -> bool:
     """
-    Parse a boolean value from YAML or ``omnigent config KEY=VALUE``.
+    Parse a boolean value from YAML or ``goalrail config KEY=VALUE``.
 
     :param key: Config key being parsed, e.g.
         ``"auto_open_conversation"``.
@@ -608,7 +608,7 @@ def _resolve_auto_open_conversation_setting(cfg: dict[str, Any]) -> bool | None:
 
     Tri-state on purpose so callers can distinguish "the user has not
     expressed a preference" (``None``) from an explicit opt-in/opt-out.
-    ``omnigent run`` uses this to default the browser-open ON for
+    ``goalrail run`` uses this to default the browser-open ON for
     interactive launches while still honoring an explicit
     ``auto_open_conversation: false``; see :func:`run`.
 
@@ -630,7 +630,7 @@ def _resolve_auto_open_conversation_from_config(cfg: dict[str, Any]) -> bool:  #
     Resolve whether CLI launches should open conversation URLs.
 
     Defaults to ``False`` when the user has not configured the key.
-    ``omnigent run`` does not use this resolver — it defaults the
+    ``goalrail run`` does not use this resolver — it defaults the
     browser-open ON for interactive launches via
     :func:`_resolve_auto_open_conversation_setting`.
 
@@ -662,8 +662,8 @@ def _save_global_config(  # type: ignore[explicit-any]
 
     Creates the ``~/.omnigent/`` directory if it does not exist.
     Values may be plain strings, booleans, or nested mappings (the
-    ``auth:`` block written by ``omnigent setup``, or a ``providers:``
-    block written by ``omnigent setup --no-internal-beta``).
+    ``auth:`` block written by ``goalrail setup``, or a ``providers:``
+    block written by ``goalrail setup --no-internal-beta``).
 
     By default every key in *settings* **replaces** the existing value
     wholesale (a shallow ``dict.update``). For keys listed in
@@ -777,10 +777,10 @@ def _save_local_config(
 
 
 def _default_db_uri() -> str:
-    """Default DB URI for ``omnigent server`` — the machine-global
+    """Default DB URI for ``goalrail server`` — the machine-global
     ``<data_dir>/chat.db``.
 
-    Resolves to the same path the ``omnigent run`` daemon spawns its
+    Resolves to the same path the ``goalrail run`` daemon spawns its
     local server against (``_local_data_dir()``, honoring
     ``OMNIGENT_DATA_DIR`` → else ``~/.omnigent``). Pinning ``server``
     to the same DB as ``run`` means there is **one local DB — and so one
@@ -796,10 +796,10 @@ def _default_db_uri() -> str:
 
 
 def _default_artifact_location() -> str:
-    """Default artifact dir for ``omnigent server`` — ``<data_dir>/artifacts``.
+    """Default artifact dir for ``goalrail server`` — ``<data_dir>/artifacts``.
 
     Kept in lock-step with :func:`_default_db_uri` so a default-config
-    ``omnigent server`` and ``omnigent run`` share one coherent
+    ``goalrail server`` and ``goalrail run`` share one coherent
     machine-global instance (same DB *and* same artifacts) — otherwise a
     conversation created by one would reference files the other can't
     resolve. ``--artifact-location`` / the config file still override.
@@ -821,7 +821,7 @@ def _ensure_sqlite_parent_dir(db_uri: str) -> None:
     so a first-ever run — or any run after the data dir was cleared — must
     create that dir before the stores connect. The daemon-spawned server
     handles this in ``ensure_local_omnigent_server``; this is the equivalent for
-    the foreground ``omnigent server`` command.
+    the foreground ``goalrail server`` command.
 
     No-op for non-SQLite URIs (Postgres etc.) and for in-memory SQLite.
 
@@ -866,7 +866,7 @@ def _maybe_prompt_first_admin(account_store: Any, auth_provider: Any, *, auto_op
       available).
 
     On success, creates the admin and mints the loopback CLI token so a
-    subsequent ``omnigent run`` against this server is signed in.
+    subsequent ``goalrail run`` against this server is signed in.
 
     :param account_store: The accounts store, or ``None`` in
         header/OIDC mode (then this is a no-op).
@@ -920,7 +920,7 @@ def _maybe_prompt_first_admin(account_store: Any, auth_provider: Any, *, auto_op
         click.echo("  An admin was just created elsewhere — skipping.", err=True)
         return
 
-    # Mint the loopback CLI token so `omnigent run` is signed in.
+    # Mint the loopback CLI token so `goalrail run` is signed in.
     # (Reuses cfg/base_url resolved above.)
     if (
         cfg is not None
@@ -1137,7 +1137,7 @@ class _OmnigentCLI(click.Group):
     TTY-gated by :func:`omnigent.inner.ui.show_banner`, so ``omnigent
     --help`` shows the banner interactively while piped/CI help stays
     clean. Only the top-level group overrides help; subcommand help
-    (``omnigent run --help``) is untouched.
+    (``goalrail run --help``) is untouched.
     """
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
@@ -1150,7 +1150,7 @@ class _OmnigentCLI(click.Group):
                 version = importlib.metadata.version("omnigent")
             except importlib.metadata.PackageNotFoundError:  # pragma: no cover
                 version = ""
-            epilogue = [("Get started", "omnigent setup")]
+            epilogue = [("Get started", "goalrail setup")]
             if version:
                 epilogue.insert(0, ("Version", version))
             ui.print_landing(tagline="all your agents, one cli", epilogue=epilogue)
@@ -1167,7 +1167,7 @@ class _OmnigentCLI(click.Group):
     help="Show the version and exit.",
 )
 def cli() -> None:
-    """Omnigent CLI."""
+    """Goalrail CLI."""
 
 
 # Names of every subcommand the click group owns. Used by
@@ -1268,7 +1268,7 @@ def main() -> None:
 
     argv = sys.argv[1:]
 
-    # Bare ``omnigent`` with no args behaves like ``omnigent run`` on an
+    # Bare ``omnigent`` with no args behaves like ``goalrail run`` on an
     # interactive terminal: ``run`` resolves the configured default agent /
     # first-run plan and drops into ``setup`` when nothing is configured. In
     # a non-interactive context (pipe, CI, no TTY) fall back to ``--help`` so
@@ -1285,7 +1285,7 @@ def main() -> None:
         argv = ["run", *argv]
 
     # Shorthand: ``omnigent myagent.yaml [opts]`` → ``run myagent.yaml [opts]``.
-    # Allows ``omnigent`` to act as a transparent alias for ``omnigent run``
+    # Allows ``omnigent`` to act as a transparent alias for ``goalrail run``
     # when the first positional argument is an agent path.
     if _is_run_shorthand(argv):
         argv = ["run", *argv]
@@ -1293,7 +1293,7 @@ def main() -> None:
     if argv and _is_server_url(argv[0]):
         click.echo(
             "Error: server URLs must be passed with --server. "
-            f"Use `omnigent run --server {argv[0]}`.",
+            f"Use `goalrail run --server {argv[0]}`.",
             err=True,
         )
         raise SystemExit(2)
@@ -1301,8 +1301,8 @@ def main() -> None:
     if _is_removed_ad_hoc_invocation(argv):
         click.echo(
             "Error: top-level ad-hoc chat was removed. Use "
-            "`omnigent run <agent.yaml>` or "
-            "`omnigent run --harness <harness>`.",
+            "`goalrail run <agent.yaml>` or "
+            "`goalrail run --harness <harness>`.",
             err=True,
         )
         raise SystemExit(2)
@@ -1325,8 +1325,8 @@ def main() -> None:
 
     setup_cli_logging(argv)
 
-    # ``omnigent setup`` IS the setup wizard — if it fails, telling the
-    # user to "run omnigent setup" would be circular. ``upgrade`` (and its
+    # ``goalrail setup`` IS the setup wizard — if it fails, telling the
+    # user to "run goalrail setup" would be circular. ``upgrade`` (and its
     # ``update`` alias) is excluded too: its failures (unreachable index,
     # dev checkout, install error) are never about a missing model
     # credential, so the setup hint would only mislead.
@@ -1367,7 +1367,7 @@ def _is_run_shorthand(argv: list[str]) -> bool:
 
     Used by :func:`main` to transparently redirect
     ``omnigent myagent.yaml --model m`` to
-    ``omnigent run myagent.yaml --model m``.
+    ``goalrail run myagent.yaml --model m``.
 
     :param argv: CLI arguments without the program name, e.g.
         ``["myagent.yaml", "--model", "m"]``.
@@ -1410,7 +1410,7 @@ def _is_removed_ad_hoc_invocation(argv: list[str]) -> bool:
       the removed top-level ad-hoc chat accepted.
 
     False when the first non-flag token matches a known
-    subcommand (``omnigent run ...``, ``omnigent attach ...``),
+    subcommand (``goalrail run ...``, ``omnigent attach ...``),
     when the user asks for top-level help/version
     (``omnigent --help``, ``omnigent --version``), or when the
     token is a single command-shaped word (e.g. ``omnigent blah``)
@@ -2174,8 +2174,8 @@ def _claim_foreground_daemon_record(
         raise click.ClickException(
             "A host daemon is already running for this server "
             f"(pid={conflict.pid}, target={conflict.target}). "
-            "Run `omnigent host status` to inspect it or "
-            "`omnigent host stop --server ...` to stop it first."
+            "Run `goalrail host status` to inspect it or "
+            "`goalrail host stop --server ...` to stop it first."
         )
     previous = _find_daemon_record(record.target)
     if previous is not None and not _pid_alive(previous.pid):
@@ -2356,7 +2356,7 @@ def _ensure_databricks_server_auth(server: str) -> None:
     (302 to the workspace OAuth page, or a DatabricksRealm 401) means
     the run would otherwise die much later with an opaque "non-JSON
     response (status=302)" traceback from the session-create call. On a
-    TTY we run the same flow ``omnigent login`` would and continue;
+    TTY we run the same flow ``goalrail login`` would and continue;
     headless invocations get the exact command to run instead.
 
     Non-Databricks postures are deliberately left alone: local accounts
@@ -2388,7 +2388,7 @@ def _ensure_databricks_server_auth(server: str) -> None:
     workspace_host = _databricks_workspace_login_target(server, probe)
     if workspace_host is None:
         return
-    login_cmd = f"omnigent login {server}"
+    login_cmd = f"goalrail login {server}"
     if not sys.stdin.isatty():
         raise click.ClickException(
             f"Not signed in to {server} (Databricks-fronted; /v1/me answered "
@@ -2460,7 +2460,7 @@ def _exit_for_auth_mode_change(base_url: str) -> None:
     via :func:`_ensure_host_daemon`. Continuing the *same* command across
     that restart is brittle — the in-flight session/credential/terminal
     bring-up straddles two server identities. Instead we stop here with a
-    clear, actionable message and exit 0, so the next ``omnigent run`` is
+    clear, actionable message and exit 0, so the next ``goalrail run`` is
     a clean single-mode start. When the new mode is accounts and no admin
     exists yet, point the user at the one-time setup URL.
 
@@ -2484,9 +2484,9 @@ def _exit_for_auth_mode_change(base_url: str) -> None:
             "(it may have opened automatically),",
             err=True,
         )
-        click.echo("  then re-run `omnigent run` to start.", err=True)
+        click.echo("  then re-run `goalrail run` to start.", err=True)
     else:
-        click.echo("  Re-run `omnigent run` to start.", err=True)
+        click.echo("  Re-run `goalrail run` to start.", err=True)
     click.echo("", err=True)
     raise SystemExit(0)
 
@@ -2527,7 +2527,7 @@ def _discover_local_server_url(
 
 @dataclass
 class _CliRunnerProcess:
-    """Runner subprocess metadata for the ``omnigent server`` command.
+    """Runner subprocess metadata for the ``goalrail server`` command.
 
     :param proc: Runner subprocess handle.
     :param runner_id: Runner id used for the WS tunnel, e.g.
@@ -2557,11 +2557,11 @@ def _start_cli_runner_process(
     """Start the out-of-process runner used by CLI server flows.
 
     The runner always connects back over the WebSocket tunnel. Local
-    ``omnigent server`` passes its loopback URL; ``run --server``
-    passes the remote Omnigent server URL.
+    ``goalrail server`` passes its loopback URL; ``run --server``
+    passes the remote Goalrail server URL.
 
     For remote Databricks-fronted servers, the runner subprocess
-    authenticates via the stored ``omnigent login`` record (or
+    authenticates via the stored ``goalrail login`` record (or
     ambient Databricks SDK credentials). Tokens are refreshed
     transparently on each WebSocket reconnect and HTTP callback —
     no static token is passed via environment variable.
@@ -2836,9 +2836,9 @@ def server(
     auto_open: bool,
     admin_password: str | None,
 ) -> None:
-    """Start the Omnigent server in the foreground, or manage the background server.
+    """Start the Goalrail server in the foreground, or manage the background server.
 
-    Bare ``omnigent server`` runs the server in the FOREGROUND (Ctrl-C to
+    Bare ``goalrail server`` runs the server in the FOREGROUND (Ctrl-C to
     stop) — for deploys / Docker. Subcommands manage the detached background
     server that ``run`` / ``claude`` / ``codex`` use: ``start`` (ensure it's
     up), ``stop`` (stop it and the local host daemon), ``status`` (is it up?).
@@ -2888,12 +2888,12 @@ def server(
     # Translate --no-open into the env var the lifespan hook reads.
     # We use an env var rather than threading the flag through
     # create_app so the same toggle works for callers (Docker
-    # entrypoint, future `omnigent run`) that build the app
+    # entrypoint, future `goalrail run`) that build the app
     # outside this CLI command.
     os.environ["OMNIGENT_ACCOUNTS_AUTO_OPEN"] = "1" if auto_open else "0"
 
     # Unified local-server lifecycle — applies ONLY to a *bare* loopback
-    # `omnigent server` (default port + default DB + artifacts), i.e.
+    # `goalrail server` (default port + default DB + artifacts), i.e.
     # THE canonical machine-global local server recorded in
     # ~/.omnigent/local_server.pid:
     #   - If a healthy one is already running (started here OR spawned by
@@ -2917,13 +2917,13 @@ def server(
         and not port_was_explicit
     )
 
-    # Single-user marker: ANY loopback-bound `omnigent server` running
+    # Single-user marker: ANY loopback-bound `goalrail server` running
     # the env-unset header default IS a local single-user runtime — the
     # user's own machine, no proxy to inject identity — so it keeps the
     # no-login header-mode "local" fallback (same posture as the daemon
-    # / `omnigent run` spawn paths, which set this var themselves). The
+    # / `goalrail run` spawn paths, which set this var themselves). The
     # bind address is the discriminator, NOT the port/db-uri: a
-    # dedicated `omnigent server --port 9001 --database-uri …` on
+    # dedicated `goalrail server --port 9001 --database-uri …` on
     # loopback (manual local runs, the e2e harness) is still single
     # user, so it must not 401 its own headerless traffic. What stays
     # fail-closed: a non-loopback bind (`--host 0.0.0.0`,
@@ -3161,7 +3161,7 @@ def server(
         sandbox_config=sandbox_config,
     )
 
-    click.echo(f"Starting omnigent server on {host}:{port}")
+    click.echo(f"Starting goalrail server on {host}:{port}")
     click.echo(f"  database:  {db_uri}")
     click.echo(f"  artifacts: {art_loc}")
     # A foreground server streams uvicorn logs to this terminal, but the
@@ -3179,7 +3179,7 @@ def server(
     # First-run terminal setup: the FALLBACK entry point. Fires only on
     # an interactive TTY when no admin exists AND the browser isn't about
     # to open the web Create-admin form (i.e. --no-open, or a non-loopback
-    # base URL). The default `omnigent server` on loopback opens the
+    # base URL). The default `goalrail server` on loopback opens the
     # browser to the form instead, so this no-ops there. (The other entry
     # points are --admin-password and the web form.)
     _maybe_prompt_first_admin(account_store, auth_provider, auto_open=auto_open)
@@ -3261,7 +3261,7 @@ def server_start() -> None:
     Reuses a healthy background server if one is already up (started here or
     by a prior ``run`` / ``host``); otherwise spawns a detached one on a
     free loopback port and prints its URL. The background counterpart to the
-    foreground bare ``omnigent server``.
+    foreground bare ``goalrail server``.
 
     :returns: None.
     """
@@ -3275,7 +3275,7 @@ def server_start() -> None:
     # Surface the exact log file so a detached server isn't a black box —
     # `server start` is otherwise the only signal it ever emits. Known for a
     # spawned server and (via the log-path sidecar) for a reused one too;
-    # absent only for a foreground `omnigent server` whose logs stream to
+    # absent only for a foreground `goalrail server` whose logs stream to
     # its own terminal.
     if startup.log_path is not None:
         click.echo(f"  log: {_display_path(startup.log_path)}")
@@ -3293,7 +3293,7 @@ def server_stop(force: bool) -> None:
     Stops the local host daemon first, then the detached server recorded
     in ``~/.omnigent/local_server.pid`` — its web UI and sessions become
     unreachable. To stop hosting but KEEP the server up, use
-    ``omnigent host stop``; to stop everything, use ``omnigent stop``.
+    ``goalrail host stop``; to stop everything, use ``goalrail stop``.
 
     :param force: SIGKILL the local host daemon after the grace period if it
         does not exit on SIGTERM.
@@ -3360,12 +3360,12 @@ def server_status(json_output: bool) -> None:
     help="Continue past failures and SIGKILL daemons that do not exit on SIGTERM.",
 )
 def stop(force: bool) -> None:
-    """Stop everything Omnigent is running on this machine.
+    """Stop everything Goalrail is running on this machine.
 
     The off switch: stops every host daemon (local and remote-targeted)
     and the detached background server. Runners are reaped when their daemon
     exits. To stop only hosting while keeping the local server (web UI /
-    history) up, use ``omnigent host stop`` instead.
+    history) up, use ``goalrail host stop`` instead.
 
     :param force: Continue past individual failures and SIGKILL daemons that
         do not exit on SIGTERM.
@@ -3609,9 +3609,9 @@ def _upgrade_vcs_install(
     "installer's allow-pre-releases flag. Useful for validating a TestPyPI rc.",
 )
 def upgrade(check_only: bool, force: bool, pre: bool) -> None:
-    """Upgrade the omnigent CLI to the latest release on PyPI.
+    """Upgrade the Goalrail CLI to the latest release on PyPI.
 
-    Detects how omnigent was installed (uv / pip / pipx / poetry), checks
+    Detects how Goalrail was installed (uv / pip / pipx / poetry), checks
     the configured index for a newer release and — unless ``--check`` —
     drains and stops the local background server and host daemon, then runs
     the matching upgrade command. The next ``omni`` invocation starts a
@@ -4071,7 +4071,7 @@ _RESUME_PICKER_SENTINEL = "__resume_picker__"
 def _reject_native_on_windows(harness: str) -> None:
     """Fail a native (tmux/PTY) harness command with an actionable message.
 
-    The ``omnigent claude`` / ``codex`` / ``cursor`` native wrappers drive a
+    The ``goalrail claude`` / ``codex`` / ``cursor`` native wrappers drive a
     private tmux server and PTY, which don't exist on Windows. Point users at
     the SDK harnesses / web UI instead of letting them hit a tmux crash.
 
@@ -4081,7 +4081,7 @@ def _reject_native_on_windows(harness: str) -> None:
     if IS_WINDOWS:
         raise click.ClickException(
             f"`omnigent {harness}` (native tmux/PTY terminal) is not supported on "
-            "Windows. Use an SDK-based harness via `omnigent run <agent.yaml>` "
+            "Windows. Use an SDK-based harness via `goalrail run <agent.yaml>` "
             "or the web UI."
         )
 
@@ -4096,7 +4096,7 @@ def _reject_native_on_windows(harness: str) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Starts a local runner, binds the session, "
+        "Remote Goalrail server URL. Starts a local runner, binds the session, "
         "launches Claude in a terminal resource, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4110,7 +4110,7 @@ def _reject_native_on_windows(harness: str) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to claude-native sessions."
     ),
@@ -4129,7 +4129,7 @@ def _reject_native_on_windows(harness: str) -> None:
     is_flag=True,
     default=False,
     help=(
-        "Register this machine as a host (inline equivalent of `omnigent host`). "
+        "Register this machine as a host (inline equivalent of `goalrail host`). "
         "Requires --server."
     ),
 )
@@ -4178,25 +4178,25 @@ def claude(
     claude_args: tuple[str, ...],
 ) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
-    # :param server: Remote Omnigent server URL, or None for local.
+    # :param server: Remote Goalrail server URL, or None for local.
     # :param resume: None, picker sentinel, or a conversation id.
     # :param session_id: Legacy ``--session`` id; mutually exclusive with ``--resume``.
     # :param use_claude_config: When True, skip ucode/Databricks auth and use
     #     existing Claude config.
     # :param profile_startup: When True, print startup timing marks.
     # :param claude_args: Pass-through args for ``claude``.
-    """Launch Claude Code in an Omnigent terminal.
+    """Launch Claude Code in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent claude
-      omnigent claude --resume conv_abc123
-      omnigent claude --resume                  # interactive picker
-      omnigent claude --server https://<app>.databricksapps.com
+      goalrail claude
+      goalrail claude --resume conv_abc123
+      goalrail claude --resume                  # interactive picker
+      goalrail claude --server https://<app>.databricksapps.com
     """
     _reject_native_on_windows("claude")
     startup_profiler = StartupProfiler.from_env(
-        name="omnigent claude",
+        name="goalrail claude",
         env_var=_CLAUDE_STARTUP_PROFILE_ENV_VAR,
         explicit=profile_startup,
     )
@@ -4262,7 +4262,7 @@ def claude(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch Codex, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4276,7 +4276,7 @@ def claude(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to codex-native sessions."
     ),
@@ -4306,20 +4306,20 @@ def codex(
     codex_args: tuple[str, ...],
 ) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
-    # :param server: Remote Omnigent server URL, or None for local.
+    # :param server: Remote Goalrail server URL, or None for local.
     # :param resume: None, picker sentinel, or a conversation id.
     # :param session_id: Legacy ``--session`` id; mutually exclusive with ``--resume``.
     # :param model: Codex model id.
     # :param prompt: Optional first prompt.
     # :param codex_args: Pass-through args for ``codex`` before ``resume``.
-    """Launch Codex TUI in an Omnigent terminal.
+    """Launch Codex TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent codex
-      omnigent codex --resume conv_abc123
-      omnigent codex --resume                  # interactive picker
-      omnigent codex --server https://<app>.databricksapps.com
+      goalrail codex
+      goalrail codex --resume conv_abc123
+      goalrail codex --resume                  # interactive picker
+      goalrail codex --server https://<app>.databricksapps.com
     """
     _reject_native_on_windows("codex")
     choice = _split_resume_value(resume)
@@ -4381,7 +4381,7 @@ def codex(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch OpenCode, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4395,7 +4395,7 @@ def codex(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to opencode-native sessions."
     ),
@@ -4417,19 +4417,19 @@ def opencode(
     model: str | None,
     opencode_args: tuple[str, ...],
 ) -> None:
-    # :param server: Remote Omnigent server URL, or None for local.
+    # :param server: Remote Goalrail server URL, or None for local.
     # :param resume: None, picker sentinel, or a conversation id.
     # :param session_id: Legacy ``--session`` id; mutually exclusive with ``--resume``.
     # :param model: OpenCode model id pinned on the wrapper spec.
     # :param opencode_args: Pass-through args persisted for the ``opencode attach`` TUI.
-    """Launch OpenCode TUI in an Omnigent terminal.
+    """Launch OpenCode TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent opencode
-      omnigent opencode --resume conv_abc123
-      omnigent opencode --resume                  # interactive picker
-      omnigent opencode --server https://<app>.databricksapps.com
+      goalrail opencode
+      goalrail opencode --resume conv_abc123
+      goalrail opencode --resume                  # interactive picker
+      goalrail opencode --server https://<app>.databricksapps.com
     """
     from omnigent.opencode_native import run_opencode_native
 
@@ -4480,7 +4480,7 @@ def opencode(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch Pi, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4494,7 +4494,7 @@ def opencode(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to pi-native sessions."
     ),
@@ -4514,14 +4514,14 @@ def pi(
     session_id: str | None,
     pi_args: tuple[str, ...],
 ) -> None:
-    """Launch Pi TUI in an Omnigent terminal.
+    """Launch Pi TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent pi
-      omnigent pi --resume conv_abc123
-      omnigent pi --resume                    # interactive picker
-      omnigent pi --model local-deepseek/deepseek-v4-flash
+      goalrail pi
+      goalrail pi --resume conv_abc123
+      goalrail pi --resume                    # interactive picker
+      goalrail pi --model local-deepseek/deepseek-v4-flash
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -4668,7 +4668,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the Cursor TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4682,7 +4682,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to cursor-native sessions."
     ),
@@ -4722,16 +4722,16 @@ def cursor(
 ) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param model: Cursor model id passed to cursor-agent as ``--model``.
-    """Launch the Cursor TUI in an Omnigent terminal.
+    """Launch the Cursor TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent cursor
-      omnigent cursor --model gpt-5.2
-      omnigent cursor --resume conv_abc123
-      omnigent cursor --resume                 # interactive picker
-      omnigent cursor --mode plan              # start in plan (read-only) mode
-      omnigent cursor --mode ask               # start in ask (Q&A) mode
+      goalrail cursor
+      goalrail cursor --model gpt-5.2
+      goalrail cursor --resume conv_abc123
+      goalrail cursor --resume                 # interactive picker
+      goalrail cursor --mode plan              # start in plan (read-only) mode
+      goalrail cursor --mode ask               # start in ask (Q&A) mode
     """
     _reject_native_on_windows("cursor")
     choice = _split_resume_value(resume)
@@ -4778,7 +4778,7 @@ def cursor(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the Kiro TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4792,7 +4792,7 @@ def cursor(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to kiro-native sessions."
     ),
@@ -4840,14 +4840,14 @@ def kiro(
     prompt: str | None,
     kiro_args: tuple[str, ...],
 ) -> None:
-    """Launch the Kiro TUI in an Omnigent terminal.
+    """Launch the Kiro TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent kiro
-      omnigent kiro --resume conv_abc123
-      omnigent kiro --resume                  # interactive picker
-      omnigent kiro --model auto -p "review this repo"
+      goalrail kiro
+      goalrail kiro --resume conv_abc123
+      goalrail kiro --resume                  # interactive picker
+      goalrail kiro --model auto -p "review this repo"
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -4894,8 +4894,8 @@ def _reject_reserved_kiro_resume_args(kiro_args: tuple[str, ...]) -> None:
     reserved = {"--resume", "--resume-id", "--resume-picker"}
     if any(arg == flag or arg.startswith(f"{flag}=") for arg in kiro_args for flag in reserved):
         raise click.UsageError(
-            "Kiro resume flags are reserved for Omnigent resume handling; use "
-            "`omnigent kiro --resume [CONVERSATION]` instead."
+            "Kiro resume flags are reserved for Goalrail resume handling; use "
+            "`goalrail kiro --resume [CONVERSATION]` instead."
         )
 
 
@@ -4931,7 +4931,7 @@ def _build_kiro_launch_args(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the Goose TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -4945,7 +4945,7 @@ def _build_kiro_launch_args(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to goose-native sessions."
     ),
@@ -4965,13 +4965,13 @@ def goose(
     session_id: str | None,
     goose_args: tuple[str, ...],
 ) -> None:
-    """Launch the Goose TUI in an Omnigent terminal.
+    """Launch the Goose TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent goose
-      omnigent goose --resume conv_abc123
-      omnigent goose --resume                 # interactive picker
+      goalrail goose
+      goalrail goose --resume conv_abc123
+      goalrail goose --resume                 # interactive picker
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -5011,7 +5011,7 @@ def goose(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the Hermes TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -5025,7 +5025,7 @@ def goose(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to hermes-native sessions."
     ),
@@ -5045,13 +5045,13 @@ def hermes(
     session_id: str | None,
     hermes_args: tuple[str, ...],
 ) -> None:
-    """Launch the Hermes TUI in an Omnigent terminal.
+    """Launch the Hermes TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent hermes
-      omnigent hermes --resume conv_abc123
-      omnigent hermes --resume                 # interactive picker
+      goalrail hermes
+      goalrail hermes --resume conv_abc123
+      goalrail hermes --resume                 # interactive picker
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -5091,7 +5091,7 @@ def hermes(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, binds a runner, "
+        "Remote Goalrail server URL. Ensures the host daemon, binds a runner, "
         "launches Antigravity (agy) in a terminal resource, and attaches "
         'this TTY. Pass --server "" to auto-spawn a persistent local '
         "server in the background and use that instead of a remote one."
@@ -5105,7 +5105,7 @@ def hermes(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to antigravity-native sessions."
     ),
@@ -5127,14 +5127,14 @@ def antigravity(
     model: str | None,
     antigravity_args: tuple[str, ...],
 ) -> None:
-    """Launch the Antigravity (agy) TUI in an Omnigent terminal.
+    """Launch the Antigravity (agy) TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent antigravity
-      omnigent antigravity --resume conv_abc123
-      omnigent antigravity --resume                  # interactive picker
-      omnigent antigravity --server https://<app>.databricksapps.com
+      goalrail antigravity
+      goalrail antigravity --resume conv_abc123
+      goalrail antigravity --resume                  # interactive picker
+      goalrail antigravity --server https://<app>.databricksapps.com
     """
     # Validate option combinations BEFORE any side effects (daemon spawn,
     # server discovery) -- see the same comment in the claude command.
@@ -5185,7 +5185,7 @@ def antigravity(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the qwen TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -5199,7 +5199,7 @@ def antigravity(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to qwen-native sessions."
     ),
@@ -5219,13 +5219,13 @@ def qwen(
     session_id: str | None,
     qwen_args: tuple[str, ...],
 ) -> None:
-    """Launch the qwen (Qwen Code) TUI in an Omnigent terminal.
+    """Launch the qwen (Qwen Code) TUI in a Goalrail terminal.
 
     \b
     Examples:
-      omnigent qwen
-      omnigent qwen --resume conv_abc123
-      omnigent qwen --resume                  # interactive picker
+      goalrail qwen
+      goalrail qwen --resume conv_abc123
+      goalrail qwen --resume                  # interactive picker
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -5258,16 +5258,15 @@ def qwen(
 def _run_bundled_agent(name: str, run_args: tuple[str, ...]) -> None:
     """Forward a bundled-agent subcommand to ``run`` on its packaged path.
 
-    Implements ``omnigent polly`` / ``omnigent debby``: resolves the bundled
+    Implements ``goalrail polly`` / ``goalrail debby``: resolves the bundled
     example directory and re-dispatches through the ``run`` command's own
     parser, so every ``run`` flag (``--server``, ``-p``, ``--resume``, ...)
     works unchanged on the agent shorthands without duplicating ``run``'s
     option declarations.
 
-    ``prog_name`` is pinned to ``"omnigent run"`` so context-derived output —
-    usage errors and the :func:`_build_resume_parts` replay prefix — renders
-    as the canonical ``omnigent run <path>`` form, which stays valid when
-    replayed.
+    ``prog_name`` stays pinned to ``"omnigent run"`` so context-derived output,
+    especially the :func:`_build_resume_parts` replay prefix, stays compatible
+    with existing installed entrypoints while the public help text migrates.
 
     :param name: Bundled example directory name, e.g. ``"polly"``.
     :param run_args: Unparsed pass-through CLI args for ``run``,
@@ -5298,15 +5297,15 @@ def polly(run_args: tuple[str, ...]) -> None:
     # :param run_args: Pass-through args for ``run``.
     """Launch polly, the bundled multi-agent coding orchestrator.
 
-    Shorthand for ``omnigent run`` on the packaged polly agent — the same
-    agent a bare ``omnigent`` launches when a Claude credential is
+    Shorthand for ``goalrail run`` on the packaged polly agent — the same
+    agent a bare ``goalrail`` launches when a Claude credential is
     configured. All ``run`` options are accepted and forwarded.
 
     \b
     Examples:
-      omnigent polly
-      omnigent polly -p "review the last commit"
-      omnigent polly --server https://<app>.databricksapps.com
+      goalrail polly
+      goalrail polly -p "review the last commit"
+      goalrail polly --server https://<app>.databricksapps.com
     """
     _run_bundled_agent("polly", run_args)
 
@@ -5323,15 +5322,15 @@ def debby(run_args: tuple[str, ...]) -> None:
     # :param run_args: Pass-through args for ``run``.
     """Launch debby, the bundled two-headed brainstorming agent.
 
-    Shorthand for ``omnigent run`` on the packaged debby agent. Debby fans
+    Shorthand for ``goalrail run`` on the packaged debby agent. Debby fans
     every question out to both a Claude and a GPT sub-agent, so a Claude
     and an OpenAI provider must both be configured. All ``run`` options are
     accepted and forwarded.
 
     \b
     Examples:
-      omnigent debby
-      omnigent debby -p "name ideas for a CLI that runs agents"
+      goalrail debby
+      goalrail debby -p "name ideas for a CLI that runs agents"
     """
     _run_bundled_agent("debby", run_args)
 
@@ -5346,7 +5345,7 @@ def debby(run_args: tuple[str, ...]) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Ensures the host daemon, asks the "
+        "Remote Goalrail server URL. Ensures the host daemon, asks the "
         "daemon-spawned runner to launch the Kimi TUI, and attaches this TTY. "
         'Pass --server "" to auto-spawn a persistent local server in the '
         "background and use that instead of a remote one."
@@ -5360,7 +5359,7 @@ def debby(run_args: tuple[str, ...]) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior Omnigent conversation. With a conversation id "
+        "Resume a prior Goalrail conversation. With a conversation id "
         "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
         "opens an interactive picker scoped to kimi-native sessions."
     ),
@@ -5380,22 +5379,22 @@ def kimi(
     session_id: str | None,
     kimi_args: tuple[str, ...],
 ) -> None:
-    """Launch the Kimi Code TUI in an Omnigent terminal.
+    """Launch the Kimi Code TUI in a Goalrail terminal.
 
     Boots Moonshot AI's interactive ``kimi`` TUI
     (https://github.com/MoonshotAI/Kimi-Code) in a runner-owned terminal and
-    attaches your TTY — the native experience, embedded in the Omnigent web
-    UI. No Omnigent provider config is needed: kimi authenticates against its
+    attaches your TTY — the native experience, embedded in the Goalrail web
+    UI. No Goalrail provider config is needed: kimi authenticates against its
     own backend (``kimi login`` for OAuth, or a Moonshot API key).
 
-    For the headless SDK harness (per-turn ``kimi -p`` behind the Omnigent
-    REPL) use ``omnigent run --harness kimi`` instead.
+    For the headless SDK harness (per-turn ``kimi -p`` behind the Goalrail
+    REPL) use ``goalrail run --harness kimi`` instead.
 
     \b
     Examples:
-      omnigent kimi
-      omnigent kimi --resume conv_abc123
-      omnigent kimi --resume                   # interactive picker
+      goalrail kimi
+      goalrail kimi --resume conv_abc123
+      goalrail kimi --resume                   # interactive picker
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
@@ -5431,9 +5430,9 @@ def kimi(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. When set, the picker / lookup queries "
+        "Remote Goalrail server URL. When set, the picker / lookup queries "
         "this server instead of starting a local one. Required when "
-        "running ``omnigent resume`` without a conversation id."
+        "running ``goalrail resume`` without a conversation id."
     ),
 )
 def resume(
@@ -5445,15 +5444,15 @@ def resume(
     #
     # :param target: Optional Omnigent conversation id, e.g.
     #     ``"conv_abc123"``. None falls through to the picker.
-    # :param server: Remote Omnigent server URL (optional in id mode;
+    # :param server: Remote Goalrail server URL (optional in id mode;
     #     required in picker mode).
-    """Resume an Omnigent conversation, auto-dispatching by runtime.
+    """Resume a Goalrail conversation, auto-dispatching by runtime.
 
     \b
     With CONV_ID: looks up the conversation and dispatches to the
     matching wrapper. claude-native sessions land in
-    ``omnigent claude``; everything else surfaces a clear hint to
-    use ``omnigent run --resume <id> <agent.yaml>``.
+    ``goalrail claude``; everything else surfaces a clear hint to
+    use ``goalrail run --resume <id> <agent.yaml>``.
 
     \b
     Without CONV_ID: opens a cross-agent picker over your prior
@@ -5462,9 +5461,9 @@ def resume(
 
     \b
     Examples:
-      omnigent resume conv_abc123
-      omnigent resume conv_abc123 --server https://<app>.databricksapps.com
-      omnigent resume --server https://<app>.databricksapps.com
+      goalrail resume conv_abc123
+      goalrail resume conv_abc123 --server https://<app>.databricksapps.com
+      goalrail resume --server https://<app>.databricksapps.com
     """
     from omnigent.resume_dispatch import run_resume
 
@@ -5579,7 +5578,7 @@ def _materialize_harness_launcher_file(
     The generated file uses the single-file Omnigent YAML shape
     (``name`` / ``prompt`` / ``executor``), not native AP
     ``config.yaml``. Passing this file to ``run_chat`` exercises the
-    same compat adapter as ``omnigent run examples/foo.yaml``.
+    same compat adapter as ``goalrail run examples/foo.yaml``.
 
     Harnesses listed in :data:`_OS_ENV_HARNESSES` get an ``os_env``
     block so the workflow injects ``sys_os_*`` tools into the
@@ -5622,10 +5621,10 @@ def _missing_run_agent_message() -> str:
         "Provide an AGENT path, pass --server to connect to a server, "
         "or pass --harness to launch a built-in "
         "harness directly:\n"
-        "  omnigent run examples/hello_world.yaml\n"
-        "  omnigent run --server http://localhost:6767\n"
-        "  omnigent run --harness claude-sdk\n"
-        "  omnigent run --harness codex"
+        "  goalrail run examples/hello_world.yaml\n"
+        "  goalrail run --server http://localhost:6767\n"
+        "  goalrail run --harness claude-sdk\n"
+        "  goalrail run --harness codex"
     )
 
 
@@ -5753,8 +5752,8 @@ def _dispatch_native_terminal_harness(
     the harness forwarder mirrors the same message back from the TUI's
     transcript, recording every user message twice. These harnesses are
     terminal-mirror sessions whose turns originate in the TUI, so dispatch
-    straight to the native wrapper (the same code ``omnigent cursor`` /
-    ``omnigent claude`` / etc. run), keeping the TUI the single source of
+    straight to the native wrapper (the same code ``goalrail cursor`` /
+    ``goalrail claude`` / etc. run), keeping the TUI the single source of
     turns. A top-level ``--model`` is forwarded as a passthrough CLI flag.
 
     ``--continue`` is honored (not rejected): it resolves to this harness's
@@ -5907,7 +5906,7 @@ def _dispatch_run(
     server_from_cli: bool = False,
 ) -> None:
     """
-    Route ``omnigent run`` to the right impl.
+    Route ``goalrail run`` to the right impl.
 
     The click path always drives the Omnigent server-backed REPL. With
     ``--server <url>``, use that server URL instead of starting a
@@ -5951,7 +5950,7 @@ def _dispatch_run(
     if target is not None and _is_server_url(target):
         raise click.ClickException(
             "Server URLs are no longer accepted as the AGENT argument. "
-            f"Use `omnigent run --server {target}` instead."
+            f"Use `goalrail run --server {target}` instead."
         )
 
     if target is None:
@@ -6227,13 +6226,13 @@ def _require_live_conversation(
         raise click.ClickException(
             f"Couldn't reach a server at {base_url}: {_host_error_text(result.body)}. "
             "`attach` never starts a server — check the URL, or start one with "
-            "`omnigent run`."
+            "`goalrail run`."
         )
     if result.status_code != 200:
         raise click.ClickException(
             f"No live session '{conversation_id}' on {base_url} "
-            f"(server returned {result.status_code}). Run `omnigent host status` "
-            "to list live sessions, or `omnigent run <agent.yaml>` to start one."
+            f"(server returned {result.status_code}). Run `goalrail host status` "
+            "to list live sessions, or `goalrail run <agent.yaml>` to start one."
         )
 
 
@@ -6275,8 +6274,8 @@ def attach(
     on a server and streams its I/O. It never spawns a server, runner, or
     harness, applies no model/harness defaults, and errors loudly when
     there is nothing live to attach to. To START a session use
-    ``omnigent run``; to reopen/restart a stored one use
-    ``omnigent resume``.
+    ``goalrail run``; to reopen/restart a stored one use
+    ``goalrail resume``.
 
     \b
     Examples:
@@ -6288,14 +6287,14 @@ def attach(
     if base_url is None:
         raise click.ClickException(
             "No server to attach to. `attach` joins a LIVE session on a running "
-            "server — start one with `omnigent run`, or point at one with "
+            "server — start one with `goalrail run`, or point at one with "
             "`--server <url>`."
         )
     if conversation is None:
         raise click.ClickException(
             "Nothing to attach to: `attach` joins a LIVE session by id. "
-            f"Run `omnigent host status` to list sessions on {base_url}, or "
-            "`omnigent run <agent.yaml>` to start a new one."
+            f"Run `goalrail host status` to list sessions on {base_url}, or "
+            "`goalrail run <agent.yaml>` to start a new one."
         )
     _require_live_conversation(base_url=base_url, conversation_id=conversation)
     auto_open_conversation = _resolve_auto_open_conversation_from_config(cfg)
@@ -6315,7 +6314,7 @@ def attach(
     )
 
 
-# `run` absorbs the legacy ``omnigent run`` subcommand. With an AGENT
+# `run` absorbs the legacy ``goalrail run`` subcommand. With an AGENT
 # argument it opens the interactive REPL on a freshly started session;
 # without AGENT it can launch a built-in harness directly via ``--harness``.
 # Both paths route through the same Omnigent server+REPL dispatcher.
@@ -6349,7 +6348,7 @@ def attach(
     "--server",
     default=None,
     help=(
-        "Remote omnigent URL. Uploads the local YAML as an ephemeral "
+        "Remote Goalrail server URL. Uploads the local YAML as an ephemeral "
         "agent, spawns a LOCAL runner that tunnels to this server (so "
         "terminals/MCPs run on your laptop), and connects the REPL to it. "
         'Pass --server "" to auto-spawn a persistent local server in the '
@@ -6374,7 +6373,7 @@ def attach(
     default=False,
     help=(
         "Register this machine as a host with the remote server "
-        "(inline equivalent of `omnigent host`). Requires --server."
+        "(inline equivalent of `goalrail host`). Requires --server."
     ),
 )
 def run(
@@ -6393,13 +6392,13 @@ def run(
     debug_events: bool,
     register_host: bool,
 ) -> None:
-    """Start a session with an Omnigent agent.
+    """Start a session with a Goalrail agent.
 
     AGENT may be an agent YAML file or an agent directory. Without AGENT,
     pass ``--server`` to connect directly to a server, or pass
     ``--harness`` to launch a built-in harness directly.
 
-    Default: omnigent server+REPL architecture (spawns a local
+    Default: Goalrail server+REPL architecture (spawns a local
     server, REPL connects as an HTTP client). With ``--server <url>`` and
     no AGENT, connect directly to that server; with AGENT, use local
     runner + remote server topology (RUNNER.md §6 Flow 1) - laptop hosts
@@ -6407,12 +6406,12 @@ def run(
 
     \b
     Examples:
-      omnigent run --harness claude-sdk
-      omnigent run --harness codex -p "review the last commit"
-      omnigent run examples/hello_world.yaml
-      omnigent run examples/hello_world.yaml --harness codex --model gpt-5.4-mini
-      omnigent run --server http://localhost:6767
-      omnigent run examples/databricks_coding_agent.yaml --server https://<app>.databricksapps.com
+      goalrail run --harness claude-sdk
+      goalrail run --harness codex -p "review the last commit"
+      goalrail run examples/hello_world.yaml
+      goalrail run examples/hello_world.yaml --harness codex --model gpt-5.4-mini
+      goalrail run --server http://localhost:6767
+      goalrail run examples/databricks_coding_agent.yaml --server https://<app>.databricksapps.com
     """
     # Apply config defaults for any value the user did not pass explicitly.
     # Explicit CLI args always take precedence; project-local config overrides
@@ -6452,7 +6451,7 @@ def run(
         harness = plan.harness
         target = plan.agent  # polly path for Claude; None (bare harness) for codex/pi
 
-    # Interactive ``omnigent run`` opens the live conversation in the
+    # Interactive ``goalrail run`` opens the live conversation in the
     # browser by default so users discover the web UI once the server is up
     # (the accounts-mode magic-redeem auto-open used to surface this, but
     # accounts is no longer the default auth). An explicit
@@ -6496,7 +6495,7 @@ class _HostGroup(click.Group):
     """
     ``host`` group that accepts a server URL as a positional argument.
 
-    ``omnigent host <url>`` is shorthand for ``omnigent host
+    ``goalrail host <url>`` is shorthand for ``goalrail host
     --server <url>`` when ``<url>`` is URL-like or the empty local-mode
     marker. A leading positional token that matches a registered
     management subcommand (``status``, ``stop``, ``stop-session``)
@@ -6625,7 +6624,7 @@ def _prompt_stop_local_server() -> None:
 
 
 @cli.group("host", cls=_HostGroup, invoke_without_command=True)
-@click.option("--server", default=None, help="Remote omnigent server URL.")
+@click.option("--server", default=None, help="Remote Goalrail server URL.")
 @click.pass_context
 def host(ctx: click.Context, server: str | None) -> None:
     """
@@ -6633,17 +6632,17 @@ def host(ctx: click.Context, server: str | None) -> None:
 
     \b
     Examples:
-      omnigent host https://omnigent-app.databricksapps.com
-      omnigent host --server https://omnigent-app.databricksapps.com
-      omnigent host ""   # spawn + connect to a local server
+      goalrail host https://goalrail-app.databricksapps.com
+      goalrail host --server https://goalrail-app.databricksapps.com
+      goalrail host ""   # spawn + connect to a local server
 
-    The server URL may be given positionally (``omnigent host
+    The server URL may be given positionally (``goalrail host
     <url>``) or via ``--server <url>``. A leading ``status``, ``stop``,
     or ``stop-session`` token still runs that management subcommand.
 
     :param ctx: Click invocation context. ``ctx.invoked_subcommand`` is
         set when a management subcommand such as ``"status"`` is running.
-    :param server: Remote Omnigent server URL, e.g.
+    :param server: Remote Goalrail server URL, e.g.
         ``"https://example.databricksapps.com"``. ``None`` falls back
         to config; empty string selects local mode.
     """
@@ -6665,7 +6664,7 @@ def host(ctx: click.Context, server: str | None) -> None:
     # spawn a second daemon via ``_ensure_host_daemon``.
     target = _normalize_daemon_target(server)
     # Only true when THIS invocation started the local server (vs reusing one
-    # already started by `omnigent server` or a prior host/run daemon) —
+    # already started by `goalrail server` or a prior host/run daemon) —
     # gates the Ctrl-C stop-server prompt so we never offer to stop a server
     # we didn't bring up.
     spawned_local_server = False
@@ -6694,7 +6693,7 @@ def host(ctx: click.Context, server: str | None) -> None:
         _restore_replaced_daemon_record(record, previous)
         # Offer to stop the local server only when WE spawned it this run.
         # Not in --server mode (someone else's server), and not when we reused
-        # a server started by `omnigent server` or another daemon — killing
+        # a server started by `goalrail server` or another daemon — killing
         # that would surprise the user who brought it up independently. Users
         # expect Ctrl-C to stop "everything" they started, so the server we
         # spawned is fair game.
@@ -6704,7 +6703,7 @@ def host(ctx: click.Context, server: str | None) -> None:
 
 def _host_group_option(ctx: click.Context, key: str) -> str | None:
     """
-    Read a group-level ``omnigent host`` option for a subcommand.
+    Read a group-level ``goalrail host`` option for a subcommand.
 
     :param ctx: Click context passed to a host subcommand.
     :param key: Group option key, e.g. ``"server"``.
@@ -7669,7 +7668,7 @@ def host_stop_session(
 
 @cli.command(hidden=True)
 def version() -> None:
-    """Print the installed Omnigent version."""
+    """Print the installed Goalrail version."""
     print(_format_version())
 
 
@@ -7697,7 +7696,7 @@ def _parse_config_settings(
         if "=" not in item:
             raise click.ClickException(
                 f"Expected KEY=VALUE, got: {item!r}. "
-                "Example: omnigent config set --global default_agent=myagent.yaml"
+                "Example: goalrail config set --global default_agent=myagent.yaml"
             )
         key, _, value = item.partition("=")
         if key not in _GLOBAL_CONFIG_KEYS:
@@ -7746,7 +7745,7 @@ def _print_config_defaults() -> None:
 
     The ``KEY=VALUE`` defaults from ``~/.omnigent/config.yaml`` (user) and
     ``.omnigent/config.yaml`` in the cwd (project, takes precedence).
-    Used by ``omnigent config list``.
+    Used by ``goalrail config list``.
 
     :returns: None. Side effect: writes to stdout.
     """
@@ -7757,8 +7756,8 @@ def _print_config_defaults() -> None:
     local_cfg = {k: v for k, v in _load_local_config().items() if k in _GLOBAL_CONFIG_KEYS}
     if not global_cfg and not local_cfg:
         click.echo(
-            "  (none set — `omnigent config set key=value` for project,\n"
-            "   or `omnigent config set --global key=value` for user-level)"
+            "  (none set — `goalrail config set key=value` for project,\n"
+            "   or `goalrail config set --global key=value` for user-level)"
         )
         return
     global_path = _effective_global_config_path()
@@ -7799,17 +7798,17 @@ class _ConfigGroup(click.Group):
         :returns: A hint string for a recognized legacy form, else ``None``.
         """
         if first == "--list":
-            return "`config --list` is now `omnigent config list`."
+            return "`config --list` is now `goalrail config list`."
         if first == "--unset":
-            return "`config --unset KEY` is now `omnigent config unset KEY`."
+            return "`config --unset KEY` is now `goalrail config unset KEY`."
         if first == "--global":
             return (
                 "`--global` now goes on the subcommand — "
-                "`omnigent config set --global KEY=VALUE` or "
-                "`omnigent config unset --global KEY`."
+                "`goalrail config set --global KEY=VALUE` or "
+                "`goalrail config unset --global KEY`."
             )
         if "=" in first and not first.startswith("-"):
-            return f"setting defaults is now `omnigent config set {first}`."
+            return f"setting defaults is now `goalrail config set {first}`."
         return None
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
@@ -7833,10 +7832,10 @@ class _ConfigGroup(click.Group):
 
 @cli.group("config", cls=_ConfigGroup)
 def config_grp() -> None:
-    """Get, set, and view Omnigent defaults and credentials.
+    """Get, set, and view Goalrail defaults and credentials.
 
     Defaults (auto_open_conversation, default_agent, harness, model,
-    server) are used by ``omnigent run``. Project-level config
+    server) are used by ``goalrail run``. Project-level config
     (``.omnigent/config.yaml`` in the cwd, like ``.git/config``) overrides
     user-level config (``~/.omnigent/config.yaml``, like ``~/.gitconfig``).
 
@@ -7854,7 +7853,7 @@ def config_list() -> None:
 
     Prints the defaults (user + project), then the configured model
     credentials grouped by harness with each harness's default marked — the
-    merged view of everything ``omnigent run`` will use (including
+    merged view of everything ``goalrail run`` will use (including
     ambient-detected credentials).
 
     :returns: None.
@@ -7875,7 +7874,7 @@ def config_list() -> None:
 )
 @click.argument("settings", nargs=-1, required=True, metavar="KEY=VALUE...")
 def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
-    """Set one or more Omnigent defaults.
+    """Set one or more Goalrail defaults.
 
     Without ``--global``, pairs are written to ``.omnigent/config.yaml``
     in the current directory (project-level, like ``.git/config``); with
@@ -7892,8 +7891,8 @@ def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
 
     \b
     Examples:
-      omnigent config set default_agent=examples/hello_world.yaml
-      omnigent config set --global server=https://<app>.databricksapps.com
+      goalrail config set default_agent=examples/hello_world.yaml
+      goalrail config set --global server=https://<app>.databricksapps.com
     """
     if is_global:
         parsed = _parse_config_settings(settings, resolve_paths=True)
@@ -7916,7 +7915,7 @@ def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
 )
 @click.argument("keys", nargs=-1, required=True, metavar="KEY...")
 def config_unset(is_global: bool, keys: tuple[str, ...]) -> None:
-    """Remove one or more Omnigent defaults.
+    """Remove one or more Goalrail defaults.
 
     :param is_global: When ``True``, remove from ``~/.omnigent/config.yaml``;
         when ``False``, from ``.omnigent/config.yaml`` in cwd.
@@ -8169,7 +8168,7 @@ def _warn_missing_harness_dependencies() -> None:
     wrapper needs it (Node when a harness CLI runs, tmux when ``omnigent
     claude`` launches). This *warns* rather than aborts on purpose: the
     pure-Python ``openai-agents`` harness runs without either tool, so a
-    hard failure would block a valid flow — but ``omnigent claude`` /
+    hard failure would block a valid flow — but ``goalrail claude`` /
     ``codex`` do need both, hence the prominent notice.
 
     :returns: None. Side effect: writes a yellow warning block to stderr
@@ -8182,7 +8181,7 @@ def _warn_missing_harness_dependencies() -> None:
         problems.append(node_problem)
     if shutil.which("tmux") is None:
         problems.append(
-            "tmux not found on PATH — `omnigent claude` and `omnigent codex` launch "
+            "tmux not found on PATH — `goalrail claude` and `goalrail codex` launch "
             "the agent through a local tmux terminal and refuse to start without it "
             "(macOS: `brew install tmux`)."
         )
@@ -8194,8 +8193,8 @@ def _warn_missing_harness_dependencies() -> None:
         ui.err_console.print(f"  • {problem}", style="omni.warning", markup=False)
     ui.err_console.print(
         "You can still configure credentials — the pure-Python openai-agents harness "
-        "runs without these — but install them before `omnigent claude` / "
-        "`omnigent codex` or the Pi harness.\n",
+        "runs without these — but install them before `goalrail claude` / "
+        "`goalrail codex` or the Pi harness.\n",
         style="omni.warning",
         markup=False,
     )
@@ -8959,13 +8958,13 @@ def _adopt_detected_providers() -> list[str]:
 def _promote_global_auth_to_provider() -> str | None:
     """Backfill a databricks providers entry from an existing global ``auth:`` block.
 
-    Older ``omnigent setup`` runs configured Databricks only via the top-level
+    Older ``goalrail setup`` runs configured Databricks only via the top-level
     ``auth: {type: databricks}`` block — which ``configure harnesses`` does not
     read — so the readout showed no Databricks provider (and an ambient CLI
     login as the default) even though routing used Databricks. This promotes
     that block into a first-class ``kind: databricks`` providers entry the next
     time ``configure harnesses`` opens, so existing configs self-heal without
-    re-running ``omnigent setup``.
+    re-running ``goalrail setup``.
 
     Becomes the default only for families with no existing **provider** default —
     mirroring routing precedence (explicit provider default > ``auth:`` block),
@@ -9053,7 +9052,7 @@ def _announce_auto_configured_credentials(adopted: list[str]) -> None:
     single compact, dimmed line naming them inline (e.g. ``Anthropic API Key,
     Claude Subscription, ChatGPT Subscription``) — so a user who never ran an
     explicit setup sees, the first time we auto-configure, exactly which
-    credentials omnigent picked up (rather than silently inheriting them).
+    credentials goalrail picked up (rather than silently inheriting them).
     Styled ``dim`` rather than the onboarding accent so it reads as a quiet
     notice, not a prominent header.
 
@@ -9082,7 +9081,7 @@ def _announce_auto_configured_credentials(adopted: list[str]) -> None:
 def _adopt_ambient_credentials(progress: RunnerStartupProgress | None = None) -> list[str]:
     """Self-heal config, adopt ambient credentials, and announce what was added.
 
-    The shared front half of both a bare ``omnigent run``'s first-run path
+    The shared front half of both a bare ``goalrail run``'s first-run path
     (:func:`_resolve_first_run_plan`) and the ``configure harnesses`` picker
     (:func:`_run_configure_harnesses_interactive`): it (1) backfills a legacy
     databricks ``auth:`` block into a real provider, (2) adopts any
@@ -10883,7 +10882,7 @@ def _manage_opencode_harness() -> None:
 def _run_configure_harnesses_interactive() -> None:
     """Run the interactive model/credential three-level picker.
 
-    Invoked by ``omnigent setup --no-internal-beta`` and the bare-``run``
+    Invoked by ``goalrail setup --no-internal-beta`` and the bare-``run``
     first-run path, so both drive the identical flow.
     Opening it backfills a legacy databricks ``auth:`` block into a real
     provider and adopts any ambient-detected credential — announcing the
@@ -11322,12 +11321,12 @@ def _run_configure_harnesses_interactive() -> None:
 )
 def setup(internal_beta: bool) -> None:
     """
-    Launch the Omnigent first-time setup flow.
+    Launch the Goalrail first-time setup flow.
 
     By default this runs the standard model/credential picker — choose a
     provider for each harness and set your defaults, then start a session
-    with ``omnigent run``. (List configured credentials with
-    ``omnigent config list``.) Pass ``--internal-beta`` to configure
+    with ``goalrail run``. (List configured credentials with
+    ``goalrail config list``.) Pass ``--internal-beta`` to configure
     Databricks internal-beta defaults and authentication instead.
     """
     from omnigent.inner import ui
@@ -11344,7 +11343,7 @@ def setup(internal_beta: bool) -> None:
         except ImportError:
             raise click.ClickException(
                 "Databricks internal-beta setup is not available in this build. "
-                "Run `omnigent setup` for the standard model/credential setup."
+                "Run `goalrail setup` for the standard model/credential setup."
             ) from None
         # Internal-beta routing mints workspace OAuth tokens via
         # databricks-sdk at runtime, and the SDK ships in the `databricks`
@@ -11390,12 +11389,12 @@ def setup(internal_beta: bool) -> None:
             }
         )
         click.echo(f"Set default_agent={agent_path} in {_GLOBAL_CONFIG_PATH}")
-        click.echo("Type `omnigent claude` to get started with Claude Code on omnigent.")
+        click.echo("Type `goalrail claude` to get started with Claude Code on Goalrail.")
         return
 
     # --no-internal-beta: the standard model/credential picker. It warns
     # about missing Node/tmux itself, configures providers/defaults, and
-    # returns; the user then starts a session with ``omnigent run``.
+    # returns; the user then starts a session with ``goalrail run``.
     _run_configure_harnesses_interactive()
 
 
@@ -11403,7 +11402,7 @@ def setup(internal_beta: bool) -> None:
 # The provider-agnostic sandbox CLI lives in omnigent/cli_sandbox.py.
 # Provider launcher modules are optional and may be absent from a given
 # distribution; hide the group when none are available.
-# `omnigent lakebox` is kept as an alias for `omnigent sandbox …
+# `goalrail lakebox` is kept as an alias for `goalrail sandbox …
 # --provider lakebox`, registered only when the lakebox provider ships.
 if _sandbox_providers():
     cli.add_command(_sandbox_group)
@@ -11717,7 +11716,7 @@ def _workspace_api_server_url(server: str) -> str:
         probe = _httpx.get(f"{server}/v1/me", timeout=10.0)
     except _httpx.HTTPError:
         return server
-    # Already something we understand at the root: an omnigent server
+    # Already something we understand at the root: a Goalrail server
     # (200 / 401-with-login_url JSON) or a Databricks Apps edge /
     # API proxy (the login-target detector recognizes both).
     if probe.status_code == 200:
@@ -11733,7 +11732,7 @@ def _workspace_api_server_url(server: str) -> str:
     except _httpx.HTTPError:
         return server
     if _workspace_mount_probe_matches(candidate, api_probe):
-        click.echo(f"Using {candidate} (Databricks workspace-hosted omnigent).")
+        click.echo(f"Using {candidate} (Databricks workspace-hosted Goalrail).")
         return candidate
     # The anonymous probe came back inconclusive (404 on Azure even
     # when the mount exists). Retry it with a cached workspace bearer;
@@ -11751,13 +11750,13 @@ def _workspace_api_server_url(server: str) -> str:
         except _httpx.HTTPError:
             authed_probe = None
         if authed_probe is not None and _workspace_mount_probe_matches(candidate, authed_probe):
-            click.echo(f"Using {candidate} (Databricks workspace-hosted omnigent).")
+            click.echo(f"Using {candidate} (Databricks workspace-hosted Goalrail).")
             return candidate
         click.echo(
             f"Note: {server} answers like a Databricks workspace, but "
-            f"{candidate} did not answer as an omnigent server even with "
+            f"{candidate} did not answer as a Goalrail server even with "
             f"the cached workspace credentials. Connecting to {server} as "
-            "given; if omnigent is hosted on this workspace, refresh the "
+            "given; if Goalrail is hosted on this workspace, refresh the "
             f"login with `databricks auth login --host {server}` or pass "
             "the full mount URL."
         )
@@ -11766,7 +11765,7 @@ def _workspace_api_server_url(server: str) -> str:
         f"Note: {server} answers like a Databricks workspace, but "
         f"{candidate} did not answer the anonymous probe "
         f"(HTTP {api_probe.status_code}). Some edges hide the mount from "
-        "unauthenticated requests — if omnigent is hosted on this "
+        "unauthenticated requests — if Goalrail is hosted on this "
         f"workspace, run `databricks auth login --host {server}` and "
         "retry, or pass the full mount URL."
     )
@@ -11839,7 +11838,7 @@ def _databricks_workspace_login_target(server: str, probe: httpx.Response) -> st
 
 
 def _databricks_login(server: str, workspace_host: str) -> None:
-    """Log in to a Databricks-fronted Omnigent server.
+    """Log in to a Databricks-fronted Goalrail server.
 
     Covers both Databricks Apps deployments and workspace-hosted
     omnigent (``https://<workspace>/api/2.0/omnigent``). Reuses an
@@ -11871,7 +11870,7 @@ def _databricks_login(server: str, workspace_host: str) -> None:
     if not databricks_sdk_installed():
         raise click.ClickException(
             "Logging in to a Databricks-fronted server (a Databricks App or "
-            "workspace-hosted omnigent) requires the `databricks` extra "
+            "workspace-hosted Goalrail) requires the `databricks` extra "
             f"(databricks-sdk is not installed). Reinstall with:\n  "
             f"{DATABRICKS_EXTRA_INSTALL_HINT}"
         )
@@ -12018,10 +12017,10 @@ def _remember_default_server(server: str) -> None:
     """
     Persist *server* as the user-level default after a successful login.
 
-    A bare ``omnigent`` (and ``omnigent host``) fall back to the
+    A bare ``goalrail`` (and ``goalrail host``) fall back to the
     configured ``server`` key when no ``--server`` is passed (see
     :func:`run` and :func:`host`). Without this, a user who runs
-    ``omnigent login <server>`` and then bare ``omnigent`` is still routed
+    ``goalrail login <server>`` and then bare ``goalrail`` is still routed
     at whatever default ``setup`` baked in — the confusing "I just logged
     in, yet I'm asked to log in again to a different server" path.
     Recording the just-logged-in server as the default closes that gap.
@@ -12040,7 +12039,7 @@ def _remember_default_server(server: str) -> None:
 @cli.command("login")
 @click.argument("server_url")
 def login(server_url: str) -> None:
-    """Authenticate with a remote Omnigent server.
+    """Authenticate with a remote Goalrail server.
 
     Probes the server's auth mode and runs the matching flow:
 
@@ -12052,25 +12051,25 @@ def login(server_url: str) -> None:
       stores the session JWT when the browser flow completes.
     - header mode: no login needed (proxy injects identity); we
       print a hint and exit successfully.
-    - Databricks-fronted (a Databricks App, or omnigent hosted on
+    - Databricks-fronted (a Databricks App, or Goalrail hosted on
       a workspace API path): detected from the probe response — we
       log in to the workspace via ``databricks auth login --host
       <workspace>`` (browser) and store a pointer record so later
       commands mint fresh workspace tokens automatically. Requires
       the ``databricks`` extra.
 
-    Subsequent ``omnigent run --server <url>`` commands then
+    Subsequent ``goalrail run --server <url>`` commands then
     use the stored token via the runner / host-tunnel auth chain. A
     successful login also records the server as the user-level default
     (the ``server`` key in ``~/.omnigent/config.yaml``), so a bare
-    ``omnigent`` afterwards targets it instead of whatever default
+    ``goalrail`` afterwards targets it instead of whatever default
     ``setup`` baked in.
 
     \b
     Example:
-      omnigent login http://localhost:6767
-      omnigent login example.cloud.databricks.com/omnigent  # https:// assumed
-      omnigent          # connects to the server just logged in to
+      goalrail login http://localhost:6767
+      goalrail login example.cloud.databricks.com/omnigent  # https:// assumed
+      goalrail          # connects to the server just logged in to
 
     :param server_url: The remote server URL, e.g.
         ``"http://localhost:6767"``. A missing scheme defaults to
@@ -12212,7 +12211,7 @@ def _accounts_login(server: str) -> None:
     On success, the session JWT goes to
     ``~/.omnigent/auth_tokens.json`` via the existing
     :func:`omnigent.cli_auth.store_token`. From there both
-    ``omnigent run`` and ``omnigent host`` pick it up
+    ``goalrail run`` and ``goalrail host`` pick it up
     automatically when they call ``--server <url>``.
     """
     import httpx as _httpx
@@ -12290,11 +12289,11 @@ def pane_split(direction: str | None, parent_pane: str) -> None:
 
     Internal subcommand invoked by the tmux key-binding wrappers
     installed by ``omnigent.repl._tmux_pane``. The wrapper fires
-    ``run-shell 'omnigent pane-split -<v|h|w> -p #{pane_id}'`` when
+    ``run-shell 'goalrail pane-split -<v|h|w> -p #{pane_id}'`` when
     the user presses their split key while focused on an omnigent
     pane; tmux substitutes ``#{pane_id}`` to the focused pane's id
     and we exec the right ``tmux split-window`` / ``new-window``
-    invocation pointing at ``omnigent pane-picker``.
+    invocation pointing at ``goalrail pane-picker``.
 
     :param direction: One of ``v`` / ``h`` / ``w``. Required.
     :param parent_pane: The omnigent pane id, e.g. ``%0``. Required.
@@ -12305,7 +12304,7 @@ def pane_split(direction: str | None, parent_pane: str) -> None:
 
     if direction not in _PANE_SPLIT_DIRECTIONS:
         raise click.ClickException("pane-split requires exactly one of -v, -h, or -w")
-    # The new pane runs ``omnigent pane-picker`` which reads the
+    # The new pane runs ``goalrail pane-picker`` which reads the
     # parent's pane options and exec's into the chosen agent run.
     # We pass the parent pane id explicitly because the new pane's
     # ``$TMUX_PANE`` will be the new pane, not the parent.
@@ -12363,7 +12362,7 @@ def pane_picker(parent_pane: str) -> None:
     Launch a fresh REPL conversation in the current new pane.
 
     Internal subcommand. The new tmux pane (created by
-    ``omnigent pane-split``) execs this command, which:
+    ``goalrail pane-split``) execs this command, which:
 
     1. Reads the parent omnigent pane's ``@omnigent-launch-argv``
        and friends.

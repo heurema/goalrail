@@ -140,6 +140,37 @@ def test_goalrail_console_script_aliases_unified_cli_entrypoint() -> None:
     assert scripts["goalrail"] == scripts["omnigent"]
 
 
+def test_goalrail_top_level_help_uses_goalrail_product_name() -> None:
+    """
+    The renamed public command should expose Goalrail wording in top-level help.
+    """
+    result = CliRunner().invoke(cli, ["--help"], prog_name="goalrail")
+
+    assert result.exit_code == 0, result.output
+    assert "Goalrail CLI." in result.output
+    assert "Goalrail terminal" in result.output
+    assert "Goalrail defaults and credentials" in result.output
+    assert "remote Goalrail server" in result.output
+    assert "Omnigent" not in result.output
+    assert "omnigent CLI" not in result.output
+
+
+def test_goalrail_native_command_help_uses_goalrail_product_name() -> None:
+    """
+    Native command help should use the public Goalrail name and alias examples.
+    """
+    result = CliRunner().invoke(cli, ["codex", "--help"], prog_name="goalrail")
+
+    assert result.exit_code == 0, result.output
+    assert "Launch Codex TUI in a Goalrail terminal." in result.output
+    assert "Remote Goalrail server URL." in result.output
+    assert "Resume a prior Goalrail conversation." in result.output
+    assert "goalrail codex --resume conv_abc123" in result.output
+    assert "Omnigent" not in result.output
+    assert "Remote omnigent URL" not in result.output
+    assert "omnigent codex" not in result.output
+
+
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [
@@ -1398,7 +1429,7 @@ def test_server_with_explicit_port_does_not_check_canonical_server(
     assert result.exit_code == 0, result.output
     assert "already running" not in result.output
     assert captured["uvicorn_kwargs"]["port"] == 44770
-    assert "Starting omnigent server on 127.0.0.1:44770" in result.output
+    assert "Starting goalrail server on 127.0.0.1:44770" in result.output
 
 
 def test_server_command_explicit_occupied_port_fails() -> None:
@@ -1434,7 +1465,7 @@ def test_server_command_explicit_occupied_port_fails() -> None:
     assert f"Cannot start server on 127.0.0.1:{port}" in result.output
     assert "port is unavailable" in result.output
     assert "using" not in result.output
-    assert "Starting omnigent server" not in result.output
+    assert "Starting goalrail server" not in result.output
 
 
 def test_server_command_explicit_port_uses_bind_probe_not_connect_probe(
@@ -1500,7 +1531,7 @@ def test_server_command_explicit_port_uses_bind_probe_not_connect_probe(
 
     assert result.exit_code == 0, result.output
     assert captured["uvicorn_kwargs"]["port"] == port
-    assert f"Starting omnigent server on 127.0.0.1:{port}" in result.output
+    assert f"Starting goalrail server on 127.0.0.1:{port}" in result.output
     assert "port is unavailable" not in result.output
 
 
@@ -4006,7 +4037,7 @@ def test_bare_omnigent_rejects_positional_server_url(
     assert exc_info.value.code == 2
     terminal = capsys.readouterr()
     assert "server URLs must be passed with --server" in terminal.err
-    assert "omnigent run --server http://localhost:8000" in terminal.err
+    assert "goalrail run --server http://localhost:8000" in terminal.err
 
 
 def test_unknown_command_reports_no_such_command(

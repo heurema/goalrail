@@ -1,8 +1,8 @@
-"""Sandbox CLI commands: run an Omnigent host in a remote sandbox.
+"""Sandbox CLI commands: run a Goalrail host in a remote sandbox.
 
-``omnigent sandbox …`` bootstraps an Omnigent host inside a sandbox
+``goalrail sandbox …`` bootstraps a Goalrail host inside a sandbox
 from one of the registered providers (``--provider``) so that sessions
-on it are reachable from the server-hosted UI, TUI, and ``omnigent
+on it are reachable from the server-hosted UI, TUI, and ``goalrail
 resume``. Provider availability is build-dependent — the Databricks
 Lakebox launcher ships only internally — so cli.py registers this group
 only when at least one provider is available.
@@ -34,7 +34,7 @@ def _omnigent_repo_root() -> Path:
 
     1. Walk up from the current working directory looking for a parent
        that contains both ``sdks/python-client`` and ``omnigent``.
-       This succeeds when the user runs ``omnigent sandbox …`` from
+       This succeeds when the user runs ``goalrail sandbox …`` from
        inside a checkout.
     2. Fall back to ``Path(__file__).resolve().parents[1]`` so an
        editable install (``pip install -e .``) still works when the
@@ -113,7 +113,7 @@ def _normalize_server_url(server_url: str) -> str:
     BEFORE any sandbox work — without it, a scheme-less value (e.g.
     ``//myapp.databricksapps.com``, a paste artifact) sails through
     provisioning, wheel build, and ship, and only explodes at the
-    final in-sandbox ``omnigent login`` step.
+    final in-sandbox ``goalrail login`` step.
 
     :param server_url: Raw ``--server`` value, e.g.
         ``"https://myapp-123.aws.databricksapps.com/"``.
@@ -148,7 +148,7 @@ def _print_ready_banner(provider: str, sandbox_id: str, server_url: str) -> None
     ui.console.print()
     click.echo("To register the sandbox as a host with your server:")
     click.echo(
-        f"  omnigent sandbox connect --provider {provider} --sandbox-id {sandbox_id} "
+        f"  goalrail sandbox connect --provider {provider} --sandbox-id {sandbox_id} "
         f"--server {server_url}\n"
     )
 
@@ -156,13 +156,13 @@ def _print_ready_banner(provider: str, sandbox_id: str, server_url: str) -> None
 @click.group("sandbox")
 def sandbox() -> None:
     """
-    Run an Omnigent host inside a remote sandbox.
+    Run a Goalrail host inside a remote sandbox.
 
     \b
     Subcommands:
-      create   Provision a sandbox + bootstrap Omnigent into it.
+      create   Provision a sandbox + bootstrap Goalrail into it.
       connect  Register the sandbox as a host with your server (runs
-               `omnigent host` in the sandbox).
+               `goalrail host` in the sandbox).
 
     \b
     Provider notes:
@@ -213,8 +213,8 @@ def sandbox() -> None:
     help=(
         "Server URL the sandbox will register with. Determines the "
         "Databricks workspace the sandbox is created in (same "
-        "inference as `omnigent login`), and the bootstrap finishes "
-        "by logging the sandbox in to it (`omnigent login` inside the "
+        "inference as `goalrail login`), and the bootstrap finishes "
+        "by logging the sandbox in to it (`goalrail login` inside the "
         "sandbox — one browser step)."
     ),
 )
@@ -246,19 +246,19 @@ def sandbox_create(
     skip_auth: bool,
 ) -> None:
     """
-    Provision a sandbox and ship Omnigent into it.
+    Provision a sandbox and ship Goalrail into it.
 
     The server's workspace is derived from ``--server`` (the same
-    unauthenticated probe ``omnigent login`` uses), and for lakebox
+    unauthenticated probe ``goalrail login`` uses), and for lakebox
     the sandbox is created IN that workspace — so the sandbox always
     lives where the server lives, regardless of the local default
-    profile. Builds the Omnigent wheels from your local checkout,
+    profile. Builds the local wheels from your local checkout,
     installs them into the fresh sandbox, and finishes by logging the
-    sandbox in to the server (``omnigent login`` runs inside the
+    sandbox in to the server (``goalrail login`` runs inside the
     sandbox; the browser step is driven from this machine). Sandboxes
     are disposable — when your code changes, just create a new one.
 
-    After this finishes, run ``omnigent sandbox connect`` to register
+    After this finishes, run ``goalrail sandbox connect`` to register
     the sandbox as a host with your server.
     """
     from omnigent.onboarding.sandboxes import (
@@ -308,7 +308,7 @@ def sandbox_create(
     required=True,
     help=(
         "Server URL to log the sandbox in to. The in-sandbox "
-        "`omnigent login` infers the fronting Databricks workspace "
+        "`goalrail login` infers the fronting Databricks workspace "
         "from it automatically."
     ),
 )
@@ -318,11 +318,11 @@ def sandbox_auth(
     server_url: str,
 ) -> None:
     """
-    Run the server login inside the sandbox (``omnigent login``).
+    Run the server login inside the sandbox (``goalrail login``).
 
     Use this when the runner inside the sandbox starts failing because
     its cached OAuth grant expired (~90 days). Strictly faster than
-    ``omnigent sandbox create --sandbox-id`` because it skips wheel
+    ``goalrail sandbox create --sandbox-id`` because it skips wheel
     build / ship / pip install — it only re-authenticates.
     """
     from omnigent.onboarding.sandboxes import derive_workspace, login_app_oauth_in_sandbox
@@ -377,8 +377,8 @@ def sandbox_connect(
     """
     Register the sandbox as a host with your server.
 
-    Runs ``omnigent host --server <url>`` inside the sandbox — the
-    host resolves its own credentials (a stored ``omnigent login``
+    Runs ``goalrail host --server <url>`` inside the sandbox — the
+    host resolves its own credentials (a stored ``goalrail login``
     token, or the sandbox's ambient Databricks credentials such as the
     Lakebox image's baked workspace PAT). The remote command holds a
     WebSocket open until interrupted — Ctrl-C tears down the
@@ -413,15 +413,15 @@ def sandbox_connect(
 @click.pass_context
 def lakebox(ctx: click.Context) -> None:
     """
-    Alias for ``omnigent sandbox … --provider lakebox``.
+    Alias for ``goalrail sandbox … --provider lakebox``.
 
     Kept so existing muscle memory and scripts keep working. The
     subcommands (``create`` / ``auth`` / ``connect``) are the exact
-    ``omnigent sandbox`` commands with ``--provider lakebox``
+    ``goalrail sandbox`` commands with ``--provider lakebox``
     pre-filled.
     """
     # Pre-fill --provider for the shared sandbox subcommands so
-    # `omnigent lakebox <sub>` ≡ `omnigent sandbox <sub> --provider
+    # `goalrail lakebox <sub>` ≡ `goalrail sandbox <sub> --provider
     # lakebox`. default_map values satisfy the (required) --provider
     # option without redeclaring it on these aliased commands.
     ctx.default_map = {
