@@ -207,7 +207,7 @@ def test_ensure_host_daemon_local_inherits_data_dir_and_db_uri(
 def test_build_host_daemon_env_local_preserves_server_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Local daemon env carries credentials needed by its Omnigent server.
+    """Local daemon env carries credentials needed by its Goalrail server.
 
     The daemon's local server is the process that performs LLM calls, so
     stripping ``OPENAI_*`` here makes default persistent ``omnigent run``
@@ -1090,7 +1090,7 @@ def test_host_stop_stops_sessions_before_daemon(
     events: list[tuple[str, str]] = []
 
     def _fake_http_json(**kwargs: object) -> cli._HostHttpResult:
-        """Record lifecycle requests and return minimal Omnigent responses."""
+        """Record lifecycle requests and return minimal Goalrail responses."""
         method = str(kwargs["method"])
         path = str(kwargs["path"])
         events.append((method, path))

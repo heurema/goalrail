@@ -35,7 +35,7 @@ class _HostRun:
     """
     One captured call to the (patched) foreground daemon loop.
 
-    :param server_url: Omnigent server URL the daemon was told to connect
+    :param server_url: Goalrail server URL the daemon was told to connect
         to, e.g. ``"https://from-arg.example.com"``.
     """
 
@@ -63,10 +63,10 @@ def test_host_no_server_starts_local_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Verify that ``host`` with no --server starts a local Omnigent server.
+    Verify that ``host`` with no --server starts a local Goalrail server.
 
     Under the daemon model, ``omnigent host`` (no URL, no config) is
-    valid: it starts (or reuses) a persistent local Omnigent server and connects
+    valid: it starts (or reuses) a persistent local Goalrail server and connects
     the foreground daemon to it — it no longer errors. We mock the local
     server spawn and the (blocking) daemon loop so the command returns.
     """
@@ -165,7 +165,7 @@ def test_host_accepts_empty_positional_as_local_marker(
 
     The empty string is the only non-URL positional token allowed by the
     shorthand. It must bind as an explicit empty ``server`` value so it
-    overrides configured remote defaults and starts the local Omnigent server.
+    overrides configured remote defaults and starts the local Goalrail server.
     """
     (tmp_path / "config.yaml").write_text("server: https://from-config.example.com\n")
     monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))

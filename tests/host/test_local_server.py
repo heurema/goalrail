@@ -1,4 +1,4 @@
-"""Tests for the persistent background local Omnigent server helpers.
+"""Tests for the persistent background local Goalrail server helpers.
 
 Covers ``omnigent.host.local_server``: reuse-vs-respawn detection
 (:func:`local_server_url_if_healthy`) and the spawn wiring
@@ -745,7 +745,7 @@ def _fake_subprocess(stdout: str | None = None, raises: BaseException | None = N
 def test_stop_untracked_local_server_kills_orphan_on_default_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A live Omnigent server on :8000 with no pidfile entry is found and stopped.
+    """A live Goalrail server on :8000 with no pidfile entry is found and stopped.
 
     This is the reported bug: the pidfile was lost while the server lived, so
     ``stop_local_omnigent_server`` (pidfile-scoped) couldn't see it. The sweep must
@@ -773,7 +773,7 @@ def test_stop_untracked_local_server_noop_when_nothing_listening(
     """No ``/health`` responder → nothing killed, and lsof is never consulted.
 
     Guards against the off-switch killing whatever happens to hold the port:
-    if there's no Omnigent server answering, we must not even look up a PID.
+    if there's no Goalrail server answering, we must not even look up a PID.
     """
     import httpx
 
@@ -784,7 +784,7 @@ def test_stop_untracked_local_server_noop_when_nothing_listening(
     monkeypatch.setattr(
         local_server,
         "subprocess",
-        _fake_subprocess(raises=AssertionError("lsof consulted despite no Omnigent server")),
+        _fake_subprocess(raises=AssertionError("lsof consulted despite no Goalrail server")),
     )
     monkeypatch.setattr(local_server, "_terminate_pid", _raise_if_called)
 
@@ -806,7 +806,7 @@ def test_stop_untracked_local_server_noop_on_non_omnigent_listener(
 def test_stop_untracked_local_server_noop_when_lsof_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A live Omnigent server but no resolvable PID (lsof missing) → degrade, no kill.
+    """A live Goalrail server but no resolvable PID (lsof missing) → degrade, no kill.
 
     Without a PID we can't terminate, so the sweep returns ``None`` rather
     than crashing — the off-switch then leaves a manual hint to the user.

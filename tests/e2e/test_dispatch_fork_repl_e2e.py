@@ -6,7 +6,7 @@ Why this test exists: it covers the interactive CLI path that
 server integration tests miss — the CLI's spec-bundling pipeline
 (turning ``--harness <harness>`` into an ``executor.harness:
 <harness>`` YAML, packaging it, posting to ``/api/agents``) and
-the REPL's SSE rendering (event consumption from the Omnigent server
+the REPL's SSE rendering (event consumption from the Goalrail server
 back into the terminal). CLAUDE.md mandates a real REPL run
 before declaring an executor change done; this test pins it for
 every wrapped harness.
@@ -189,9 +189,9 @@ def test_repl_run_routes_harness_through_new_harness_contract(
 
     1. The CLI's ``run_chat`` packs ``--harness <harness>`` +
        ``--model`` into the temporary spec.
-    2. It spawns a local Omnigent server subprocess.
+    2. It spawns a local Goalrail server subprocess.
     3. It uploads the spec via ``/api/agents``.
-    4. The Omnigent server's ``_create_executor`` sees an
+    4. The Goalrail server's ``_create_executor`` sees an
        ``executor.type == "omnigent"`` +
        ``config.harness == <harness>`` spec (after the
        omnigent-YAML translator runs) and dispatches to
