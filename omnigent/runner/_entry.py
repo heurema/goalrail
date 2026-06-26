@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, cast
 import httpx
 from fastapi import FastAPI
 
+from omnigent._env_compat import config_home_path
 from omnigent._platform import IS_WINDOWS
 from omnigent.inner import _proc
 from omnigent.runner.transports.ws_tunnel.serve import RUNNER_TUNNEL_REJECTION_PREFIX
@@ -56,17 +57,15 @@ def _server_url_from_env() -> str:
 
 
 def _runner_config_path() -> Path:
-    """Return the global Omnigent config path visible to the runner.
+    """Return the global config path visible to the runner.
 
-    Respects :envvar:`OMNIGENT_CONFIG_HOME` for test isolation and
-    subprocess consistency with the CLI/onboarding layer.
+    Respects :envvar:`GOALRAIL_CONFIG_HOME` and
+    :envvar:`OMNIGENT_CONFIG_HOME` for test isolation and subprocess
+    consistency with the CLI/onboarding layer.
 
-    :returns: Config path, e.g. ``Path("~/.omnigent/config.yaml")``.
+    :returns: Config path.
     """
-    config_home = os.environ.get(_RUNNER_CONFIG_HOME_ENV_VAR)
-    if config_home:
-        return Path(config_home).expanduser() / "config.yaml"
-    return Path.home() / ".omnigent" / "config.yaml"
+    return config_home_path() / "config.yaml"
 
 
 def _load_runner_idle_timeout_s_from_config() -> float:

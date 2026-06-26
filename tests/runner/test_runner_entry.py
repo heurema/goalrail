@@ -600,6 +600,26 @@ def test_load_runner_idle_timeout_reads_nested_runner_config(
     assert _load_runner_idle_timeout_s_from_config() == 12.5
 
 
+def test_load_runner_idle_timeout_reads_goalrail_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``GOALRAIL_CONFIG_HOME`` is accepted by the runner config reader.
+
+    :param monkeypatch: Pytest environment patch fixture.
+    :param tmp_path: Isolated config home.
+    :returns: None.
+    """
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+    (tmp_path / "config.yaml").write_text(
+        "runner:\n  idle_timeout_s: 8.5\n",
+        encoding="utf-8",
+    )
+
+    assert _load_runner_idle_timeout_s_from_config() == 8.5
+
+
 def test_load_runner_idle_timeout_zero_disables_watchdog(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -830,7 +850,11 @@ async def test_runner_shutdown_closes_terminal_registry(
     startup/shutdown hooks directly and verifies shutdown includes the
     TerminalRegistry, not just harness subprocesses and MCPs.
     """
+    import importlib
+
     import omnigent.runner._entry as entry_mod
+
+    importlib.import_module("omnigent.runner.app")
 
     process_managers: list[_FakeProcessManager] = []
     terminal_registries: list[_TrackingTerminalRegistry] = []

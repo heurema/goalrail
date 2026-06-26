@@ -3174,6 +3174,65 @@ def test_load_global_config_uses_env_override(
     assert result == {"server": "https://isolated.example.com"}
 
 
+def test_load_global_config_uses_goalrail_env_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    ``GOALRAIL_CONFIG_HOME`` redirects the user config path during rebrand.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Temporary directory used as a fake config home.
+    """
+    config_home = tmp_path / "goalrail"
+    config_home.mkdir()
+    (config_home / "config.yaml").write_text(
+        "server: https://goalrail.example.com\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+
+    result = _load_global_config()
+
+    assert result == {"server": "https://goalrail.example.com"}
+
+
+def test_load_global_config_reads_existing_goalrail_home_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    Existing ``~/.goalrail`` is used before ``~/.omnigent`` without env.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Temporary directory used as a fake HOME.
+    """
+    goalrail_home = tmp_path / ".goalrail"
+    omnigent_home = tmp_path / ".omnigent"
+    goalrail_home.mkdir()
+    omnigent_home.mkdir()
+    (goalrail_home / "config.yaml").write_text(
+        "server: https://goalrail-home.example.com\n",
+        encoding="utf-8",
+    )
+    (omnigent_home / "config.yaml").write_text(
+        "server: https://omnigent-home.example.com\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("GOALRAIL_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+    monkeypatch.setattr(
+        "omnigent.cli._GLOBAL_CONFIG_PATH",
+        tmp_path / ".omnigent" / "config.yaml",
+    )
+
+    result = _load_global_config()
+
+    assert result == {"server": "https://goalrail-home.example.com"}
+
+
 def test_load_global_config_returns_empty_when_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

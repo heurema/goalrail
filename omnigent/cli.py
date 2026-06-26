@@ -29,6 +29,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
+from omnigent._env_compat import config_home_path
 from omnigent._platform import IS_WINDOWS, resolve_repo_symlink
 from omnigent._startup_profile import StartupProfiler
 from omnigent.cli_sandbox import lakebox as _lakebox_alias_group
@@ -93,10 +94,12 @@ def _server_uvicorn_log_config() -> dict[str, Any]:  # type: ignore[explicit-any
 
 
 # Path to the user-level global config file, analogous to ~/.gitconfig.
-# Tests may set ``OMNIGENT_CONFIG_HOME`` to isolate subprocesses from a
-# developer's real ``~/.omnigent/config.yaml``.
+# Tests may set ``GOALRAIL_CONFIG_HOME`` / ``OMNIGENT_CONFIG_HOME`` to isolate
+# subprocesses from a developer's real config.
+_GOALRAIL_CONFIG_HOME_ENV_VAR = "GOALRAIL_CONFIG_HOME"
 _CONFIG_HOME_ENV_VAR = "OMNIGENT_CONFIG_HOME"
 _GLOBAL_CONFIG_PATH: Path = Path.home() / ".omnigent" / "config.yaml"
+_DEFAULT_GLOBAL_CONFIG_PATH: Path = _GLOBAL_CONFIG_PATH
 
 # Per-user state directories before / after the omniagents -> omnigent rename.
 # All per-user state (config, registered agents, auth tokens, the host daemon
@@ -127,7 +130,7 @@ def _migrate_legacy_state_dir() -> None:
 
     - the new ``~/.omnigent`` does not yet exist (never clobber new state),
     - at least one directory in :data:`_LEGACY_STATE_DIRS` exists,
-    - neither :data:`_CONFIG_HOME_ENV_VAR` nor :data:`_DATA_DIR_ENV_VAR` is set
+    - no config/data dir override env var is set
       (an operator who redirects state elsewhere manages it themselves), and
     - no live host daemon is running out of that legacy directory -- moving its
       pidfile / socket dir out from under a running daemon would wedge it.
@@ -141,7 +144,11 @@ def _migrate_legacy_state_dir() -> None:
     """
     if _STATE_DIR.exists():
         return
-    if os.environ.get(_CONFIG_HOME_ENV_VAR) or os.environ.get(_DATA_DIR_ENV_VAR):
+    if (
+        os.environ.get(_GOALRAIL_CONFIG_HOME_ENV_VAR)
+        or os.environ.get(_CONFIG_HOME_ENV_VAR)
+        or os.environ.get(_DATA_DIR_ENV_VAR)
+    ):
         return
     legacy_src = next((d for d in _LEGACY_STATE_DIRS if d.exists()), None)
     if legacy_src is None:
@@ -292,11 +299,16 @@ def _effective_global_config_path() -> Path:
     """
     Return the path to the user-level Goalrail config.
 
-    :returns: ``$OMNIGENT_CONFIG_HOME/config.yaml`` when the env
-        override is set, otherwise :data:`_GLOBAL_CONFIG_PATH`.
+    :returns: The effective config file path.
     """
-    if config_home := os.environ.get(_CONFIG_HOME_ENV_VAR):
-        return Path(config_home) / "config.yaml"
+    current_default_config_path = Path.home() / ".omnigent" / "config.yaml"
+    if (
+        os.environ.get(_GOALRAIL_CONFIG_HOME_ENV_VAR)
+        or os.environ.get(_CONFIG_HOME_ENV_VAR)
+        or _GLOBAL_CONFIG_PATH == _DEFAULT_GLOBAL_CONFIG_PATH
+        or current_default_config_path == _GLOBAL_CONFIG_PATH
+    ):
+        return config_home_path() / "config.yaml"
     return _GLOBAL_CONFIG_PATH
 
 

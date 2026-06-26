@@ -24,15 +24,21 @@ environment. Out-of-package entry points that read env *before* importing the
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # The canonical public prefix and the compatibility prefix most existing
 # runtime readers still consume.
 _CANONICAL_PREFIX = "GOALRAIL_"
 _COMPAT_PREFIX = "OMNIGENT_"
+_CANONICAL_CONFIG_HOME_ENV = "GOALRAIL_CONFIG_HOME"
+_COMPAT_CONFIG_HOME_ENV = "OMNIGENT_CONFIG_HOME"
+_CANONICAL_CONFIG_HOME_DIR = ".goalrail"
+_COMPAT_CONFIG_HOME_DIR = ".omnigent"
 
 # Legacy prefixes are ordered newest-first so that when more than one legacy
 # prefix is set for the same variable, the newer one wins.
 _LEGACY_PREFIXES = ("OMNIGENTS_", "OMNIAGENTS_")
+_LEGACY_CONFIG_HOME_DIRS = (".omnigents", ".omniagents")
 
 
 def mirror_legacy_env() -> None:
@@ -70,3 +76,33 @@ def mirror_legacy_env() -> None:
             compat_name = _COMPAT_PREFIX + suffix
             os.environ.setdefault(canonical_name, value)
             os.environ.setdefault(compat_name, os.environ[canonical_name])
+
+
+def config_home_path() -> Path:
+    """
+    Resolve the per-user config home during the Goalrail rename.
+
+    Explicit env overrides win first, with ``GOALRAIL_CONFIG_HOME`` taking
+    precedence over ``OMNIGENT_CONFIG_HOME``. Without an override, existing
+    directories are honored newest-first so users can opt into
+    ``~/.goalrail`` while existing ``~/.omnigent`` installs keep working.
+    Fresh installs still default to ``~/.omnigent`` until the broader state
+    migration is handled separately.
+
+    :returns: The effective config home path.
+    """
+    if config_home := os.environ.get(_CANONICAL_CONFIG_HOME_ENV):
+        return Path(config_home).expanduser()
+    if config_home := os.environ.get(_COMPAT_CONFIG_HOME_ENV):
+        return Path(config_home).expanduser()
+
+    home = Path.home()
+    candidates = (
+        home / _CANONICAL_CONFIG_HOME_DIR,
+        home / _COMPAT_CONFIG_HOME_DIR,
+        *(home / directory for directory in _LEGACY_CONFIG_HOME_DIRS),
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return home / _COMPAT_CONFIG_HOME_DIR

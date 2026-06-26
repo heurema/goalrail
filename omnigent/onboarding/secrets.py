@@ -39,6 +39,8 @@ import os
 import keyring
 import keyring.errors
 
+from omnigent._env_compat import config_home_path
+
 # The subset of keyring exceptions that mean "this backend can't serve the
 # request" (locked / headless / no backend) — we fall back to the file
 # backend rather than crash.
@@ -102,18 +104,14 @@ def active_backend() -> str:
 
 
 def _config_home() -> str:
-    """Return the omnigent config home directory.
+    """Return the Goalrail/Omnigent config home directory.
 
-    Respects ``$OMNIGENT_CONFIG_HOME`` for test isolation, matching the
-    convention in :func:`omnigent.onboarding.provider_config._config_path`.
+    Respects ``$GOALRAIL_CONFIG_HOME`` and ``$OMNIGENT_CONFIG_HOME`` for test
+    isolation and migration compatibility.
 
-    :returns: The config home path, e.g. ``"/home/u/.omnigent"`` or the
-        value of ``$OMNIGENT_CONFIG_HOME`` when set.
+    :returns: The effective config home path.
     """
-    config_home = os.environ.get("OMNIGENT_CONFIG_HOME")
-    if config_home:
-        return config_home
-    return os.path.join(os.path.expanduser("~"), ".omnigent")
+    return str(config_home_path())
 
 
 def _secrets_path() -> str:

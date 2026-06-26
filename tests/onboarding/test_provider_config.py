@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from omnigent.errors import OmnigentError
@@ -10,6 +12,7 @@ from omnigent.onboarding.provider_config import (
     GEMINI_FAMILY,
     OPENAI_FAMILY,
     PI_SURFACE,
+    _config_path,
     default_provider_for_harness,
     harness_family,
     load_providers,
@@ -19,6 +22,17 @@ from omnigent.onboarding.provider_config import (
     surface_default_model,
     surface_default_provider,
 )
+
+
+def test_config_path_uses_goalrail_config_home_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``GOALRAIL_CONFIG_HOME`` redirects provider config reads."""
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+
+    assert _config_path() == str(tmp_path / "config.yaml")
 
 
 @pytest.mark.parametrize(
