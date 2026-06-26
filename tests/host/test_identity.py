@@ -8,7 +8,39 @@ from pathlib import Path
 import pytest
 import yaml
 
+from omnigent.host import identity as identity_mod
 from omnigent.host.identity import load_or_create_host_identity
+
+
+def test_default_config_path_honors_goalrail_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Host identity default config path follows the Goalrail config home."""
+    config_home = tmp_path / "goalrail-config"
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+
+    assert identity_mod.default_config_path() == config_home / "config.yaml"
+
+
+def test_default_load_or_create_writes_goalrail_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Default host identity creation writes to the effective config home."""
+    config_home = tmp_path / "goalrail-config"
+    legacy_home = tmp_path / "home"
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+
+    identity = load_or_create_host_identity()
+
+    config_path = config_home / "config.yaml"
+    assert identity.host_id.startswith("host_")
+    assert config_path.is_file()
+    assert not (legacy_home / ".omnigent" / "config.yaml").exists()
 
 
 def test_create_identity_when_no_config(tmp_path: Path) -> None:

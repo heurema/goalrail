@@ -1546,9 +1546,9 @@ def run_host_process(
         (auth / authorization / outdated server). The
         actionable cause is printed to stderr first.
     """
-    from omnigent.host.identity import CONFIG_PATH
+    from omnigent.host.identity import default_config_path
 
-    path = config_path or CONFIG_PATH
+    path = config_path or default_config_path()
     identity = load_or_create_host_identity(path)
     if not path.exists():
         print(f"Auto-generated {path} ({identity.host_id}, name: {identity.name})")

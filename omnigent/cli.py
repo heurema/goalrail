@@ -214,6 +214,7 @@ _ConfigValue: TypeAlias = (
 )
 
 _GLOBAL_AGENTS_DIR: Path = Path.home() / ".omnigent" / "agents"
+_DEFAULT_GLOBAL_AGENTS_DIR: Path = _GLOBAL_AGENTS_DIR
 _INTERNAL_BETA_DEFAULT_AGENT_NAME: str = "databricks_coding_agent.yaml"
 _INTERNAL_BETA_BUNDLED_AGENTS: tuple[str, ...] = (
     "databricks_coding_agent.yaml",
@@ -295,6 +296,25 @@ _HostJsonValue: TypeAlias = (
 _HostJsonObject: TypeAlias = dict[str, _HostJsonValue]
 _HostSessionRow: TypeAlias = dict[str, _HostJsonValue]
 _HostPayload: TypeAlias = dict[str, _HostJsonValue]
+
+
+def _effective_global_agents_dir() -> Path:
+    """
+    Return the user-level agent registry directory.
+
+    Bundled examples and user-created agents are config assets, so they live
+    beside the effective user config file. Tests that monkeypatch
+    :data:`_GLOBAL_AGENTS_DIR` keep that explicit override.
+    """
+    current_default_agents_dir = Path.home() / ".omnigent" / "agents"
+    if (
+        os.environ.get(_GOALRAIL_CONFIG_HOME_ENV_VAR)
+        or os.environ.get(_CONFIG_HOME_ENV_VAR)
+        or _GLOBAL_AGENTS_DIR == _DEFAULT_GLOBAL_AGENTS_DIR
+        or current_default_agents_dir == _GLOBAL_AGENTS_DIR
+    ):
+        return config_home_path() / "agents"
+    return _GLOBAL_AGENTS_DIR
 
 
 def _effective_global_config_path() -> Path:
@@ -730,7 +750,7 @@ def _materialize_bundled_example(name: str) -> Path:
         ``"databricks_coding_agent.yaml"``).
     :returns: Absolute path to the materialized agent YAML.
     """
-    agent_path = _GLOBAL_AGENTS_DIR / name
+    agent_path = _effective_global_agents_dir() / name
     if agent_path.exists():
         return agent_path
 
@@ -1870,8 +1890,11 @@ def _load_existing_host_id() -> str | None:
     :returns: Host id from config, e.g. ``"host_abc123"``, or ``None``.
     """
     candidate_paths = [_effective_global_config_path()]
-    from omnigent.host.identity import CONFIG_PATH
+    from omnigent.host.identity import CONFIG_PATH, default_config_path
 
+    effective_host_config_path = default_config_path()
+    if effective_host_config_path not in candidate_paths:
+        candidate_paths.append(effective_host_config_path)
     if CONFIG_PATH not in candidate_paths:
         candidate_paths.append(CONFIG_PATH)
     for path in candidate_paths:
@@ -2235,10 +2258,10 @@ def _load_or_create_host_id() -> str | None:
     host_id = _load_existing_host_id()
     if host_id is not None:
         return host_id
-    from omnigent.host.identity import CONFIG_PATH, load_or_create_host_identity
+    from omnigent.host.identity import load_or_create_host_identity
 
     try:
-        return load_or_create_host_identity(CONFIG_PATH).host_id
+        return load_or_create_host_identity().host_id
     except OSError:
         return None
 
@@ -11403,7 +11426,7 @@ def setup(internal_beta: bool) -> None:
                 "auth": {"type": "databricks", "profile": "oss"},
             }
         )
-        click.echo(f"Set default_agent={agent_path} in {_GLOBAL_CONFIG_PATH}")
+        click.echo(f"Set default_agent={agent_path} in {_effective_global_config_path()}")
         click.echo("Type `goalrail claude` to get started with Claude Code on Goalrail.")
         return
 

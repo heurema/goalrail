@@ -26,6 +26,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from omnigent._env_compat import config_home_path
+
 console = Console()
 
 # ANSI helpers - used in arrow-menu labels (rendered via sys.stdout.write,
@@ -421,6 +423,26 @@ def _detect_api_harnesses() -> dict[str, bool]:
 
 
 _AGENTS_DIR = Path.home() / ".omnigent" / "agents"
+_DEFAULT_AGENTS_DIR = _AGENTS_DIR
+
+
+def _agents_dir() -> Path:
+    """
+    Return the user-level wizard agent registry directory.
+
+    Wizard-generated YAML files are config assets. During the Goalrail rename
+    they should follow the effective config home, while tests that monkeypatch
+    :data:`_AGENTS_DIR` keep their isolated path.
+    """
+    current_default_agents_dir = Path.home() / ".omnigent" / "agents"
+    if (
+        os.environ.get("GOALRAIL_CONFIG_HOME")
+        or os.environ.get("OMNIGENT_CONFIG_HOME")
+        or _AGENTS_DIR == _DEFAULT_AGENTS_DIR
+        or current_default_agents_dir == _AGENTS_DIR
+    ):
+        return config_home_path() / "agents"
+    return _AGENTS_DIR
 
 
 @dataclass
@@ -647,11 +669,12 @@ def _section() -> None:
 
 
 def _find_existing_configs() -> list[Path]:
-    """Return YAML files in ~/.omnigent/agents/, newest first."""
-    if not _AGENTS_DIR.is_dir():
+    """Return YAML files in the effective agent registry, newest first."""
+    agents_dir = _agents_dir()
+    if not agents_dir.is_dir():
         return []
     return sorted(
-        _AGENTS_DIR.glob("*.yaml"),
+        agents_dir.glob("*.yaml"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -808,11 +831,12 @@ def _default_agent_name(use_case: int) -> str:
     import random
 
     base = "my_coding_agent" if use_case == 1 else "my_coding_team"
-    if not (_AGENTS_DIR / f"{base}.yaml").exists():
+    agents_dir = _agents_dir()
+    if not (agents_dir / f"{base}.yaml").exists():
         return base
     for _ in range(100):
         candidate = f"{base}_{random.randint(1, 999)}"
-        if not (_AGENTS_DIR / f"{candidate}.yaml").exists():
+        if not (agents_dir / f"{candidate}.yaml").exists():
             return candidate
     return f"{base}_{random.randint(1000, 9999)}"
 
@@ -835,7 +859,7 @@ def _prompt_agent_name(use_case: int) -> str:
         sanitized = _sanitize_agent_name(raw)
         if sanitized != raw.strip():
             console.print(f"  [dim](sanitized to: {sanitized})[/dim]")
-        existing_path = _AGENTS_DIR / f"{sanitized}.yaml"
+        existing_path = _agents_dir() / f"{sanitized}.yaml"
         if existing_path.exists():
             console.print(f"  [red]{sanitized}.yaml already exists. Pick a different name.[/red]")
             continue
@@ -1298,9 +1322,10 @@ def _generate_multi_agent_yaml(
 
 
 def _save_yaml(content: str, filename: str) -> Path:
-    """Write YAML content to ~/.omnigent/agents/<filename>."""
-    _AGENTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = _AGENTS_DIR / filename
+    """Write YAML content to the effective agent registry."""
+    agents_dir = _agents_dir()
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    path = agents_dir / filename
     path.write_text(content)
     return path
 
@@ -1323,7 +1348,7 @@ def _store_default_config(yaml_path: Path, supervisor: _SupervisorConfig | None 
         When provided and it carries ``profile`` or ``api_key``,
         the matching ``auth:`` block is written to the global config.
     """
-    from omnigent.cli import _GLOBAL_CONFIG_PATH, _save_global_config
+    from omnigent.cli import _effective_global_config_path, _save_global_config
 
     settings: dict[str, str | dict[str, str]] = {"default_agent": str(yaml_path)}  # type: ignore[assignment]  # str | dict union: starts as dict[str, str], may later hold dict[str, str] values
     if supervisor is not None:
@@ -1332,7 +1357,7 @@ def _store_default_config(yaml_path: Path, supervisor: _SupervisorConfig | None 
         elif supervisor.api_key:
             settings["auth"] = {"type": "api_key", "api_key": "$OPENAI_API_KEY"}
     _save_global_config(settings)
-    console.print(f"  [green]✓ stored default_agent in {_GLOBAL_CONFIG_PATH}[/green]")
+    console.print(f"  [green]✓ stored default_agent in {_effective_global_config_path()}[/green]")
     console.print("  [dim]Type `goalrail` to start a new session.[/dim]\n")
 
 
@@ -1402,7 +1427,11 @@ def run_wizard_and_launch() -> None:
     user can re-run ``goalrail setup --no-internal-beta`` at any time
     to update the values.
     """
-    from omnigent.cli import _GLOBAL_CONFIG_PATH, _load_global_config, _save_global_config
+    from omnigent.cli import (
+        _effective_global_config_path,
+        _load_global_config,
+        _save_global_config,
+    )
 
     _show_welcome()
 
@@ -1474,7 +1503,7 @@ def run_wizard_and_launch() -> None:
     console.print()
     if save_settings:
         _save_global_config(save_settings)
-        console.print(f"  [green]✓ Config saved to {_GLOBAL_CONFIG_PATH}[/green]")
+        console.print(f"  [green]✓ Config saved to {_effective_global_config_path()}[/green]")
     else:
         console.print("  [dim]No changes — config unchanged.[/dim]")
     console.print()

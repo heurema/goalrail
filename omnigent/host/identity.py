@@ -15,7 +15,10 @@ from pathlib import Path
 
 import yaml
 
+from omnigent._env_compat import config_home_path
+
 CONFIG_PATH = Path.home() / ".omnigent" / "config.yaml"
+_DEFAULT_CONFIG_PATH = CONFIG_PATH
 
 # Env vars a server-managed sandbox host is launched with. The server
 # provisions the sandbox, generates the identity + launch token, and
@@ -51,8 +54,28 @@ class HostIdentity:
     name: str
 
 
+def default_config_path() -> Path:
+    """
+    Return the effective host identity config path.
+
+    The host identity lives in the user config file. During the Goalrail rename,
+    explicit config-home overrides and existing ``~/.goalrail`` homes should be
+    honored, while tests that monkeypatch :data:`CONFIG_PATH` keep their isolated
+    path.
+    """
+    current_default_config_path = Path.home() / ".omnigent" / "config.yaml"
+    if (
+        os.environ.get("GOALRAIL_CONFIG_HOME")
+        or os.environ.get("OMNIGENT_CONFIG_HOME")
+        or CONFIG_PATH == _DEFAULT_CONFIG_PATH
+        or current_default_config_path == CONFIG_PATH
+    ):
+        return config_home_path() / "config.yaml"
+    return CONFIG_PATH
+
+
 def load_or_create_host_identity(
-    path: Path = CONFIG_PATH,
+    path: Path | None = None,
 ) -> HostIdentity:
     """Load host identity from config.yaml, or create it if absent.
 
@@ -69,8 +92,8 @@ def load_or_create_host_identity(
     launcher bug and fails loud.
 
     :param path: Path to the config YAML file, e.g.
-        ``Path("~/.omnigent/config.yaml")``. Defaults to
-        :data:`CONFIG_PATH`.
+        ``Path("<config-home>/config.yaml")``. Defaults to the effective
+        host identity config path.
     :returns: The loaded or newly created :class:`HostIdentity`.
     :raises ValueError: If exactly one of the identity env vars is set.
     """
@@ -83,6 +106,9 @@ def load_or_create_host_identity(
         )
     if env_host_id is not None and env_name is not None:
         return HostIdentity(host_id=env_host_id, name=env_name)
+
+    if path is None:
+        path = default_config_path()
 
     cfg: dict[str, object] = {}
     if path.exists():

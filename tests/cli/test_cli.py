@@ -3261,6 +3261,40 @@ def test_load_global_config_reads_existing_goalrail_home_by_default(
     assert result == {"server": "https://goalrail-home.example.com"}
 
 
+def test_global_agents_dir_uses_goalrail_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Bundled/user agent configs live beside the effective user config."""
+    import omnigent.cli as cli_mod
+
+    config_home = tmp_path / "goalrail-config"
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+
+    assert cli_mod._effective_global_agents_dir() == config_home / "agents"
+
+
+def test_materialize_bundled_example_uses_goalrail_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Bundled agent materialization writes under the effective config home."""
+    import omnigent.cli as cli_mod
+
+    config_home = tmp_path / "goalrail-config"
+    legacy_home = tmp_path / "home"
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+
+    agent_path = cli_mod._materialize_bundled_example("debby/config.yaml")
+
+    assert agent_path == config_home / "agents" / "debby" / "config.yaml"
+    assert agent_path.is_file()
+    assert not (legacy_home / ".omnigent" / "agents").exists()
+
+
 def test_load_global_config_returns_empty_when_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
