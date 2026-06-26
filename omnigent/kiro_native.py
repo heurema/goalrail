@@ -1,4 +1,4 @@
-"""Native Kiro TUI wrapper for the Omnigent CLI."""
+"""Native Kiro TUI wrapper for the Goalrail CLI."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ class NativeKiroLaunch:
 
 @dataclass(frozen=True)
 class LaunchedKiroTerminal:
-    """Terminal resource returned by the Omnigent runner launch path."""
+    """Terminal resource returned by the Goalrail runner launch path."""
 
     terminal_id: str
     tmux_socket: Path | None
@@ -150,11 +150,11 @@ def run_kiro_native(
     prompt: str | None = None,
     auto_open_conversation: bool = False,
 ) -> None:
-    """Launch the Kiro TUI in an Omnigent terminal."""
+    """Launch the Kiro TUI in a Goalrail terminal."""
     _preflight_local_tools()
     if server is None:
         raise click.ClickException(
-            "Kiro requires a resolved Omnigent server URL. The CLI should call "
+            "Kiro requires a resolved Goalrail server URL. The CLI should call "
             "_ensure_backend before run_kiro_native."
         )
     with TemporaryDirectory(prefix="omnigent-kiro-native-") as tmpdir:
@@ -216,7 +216,7 @@ def _run_with_remote_server(
     prompt: str | None = None,
     auto_open_conversation: bool = False,
 ) -> None:
-    """Launch Kiro on an Omnigent server via a daemon-spawned runner."""
+    """Launch Kiro on a Goalrail server via a daemon-spawned runner."""
     from omnigent.chat import _bundle_agent, _remote_headers
     from omnigent.cli import _ensure_host_daemon
     from omnigent.host.identity import load_or_create_host_identity
@@ -405,7 +405,7 @@ async def _create_kiro_session(
 
 
 async def _fetch_kiro_session(client: httpx.AsyncClient, session_id: str) -> dict[str, Any]:
-    """Fetch an existing Omnigent session."""
+    """Fetch an existing Goalrail session."""
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
     if resp.status_code == 404:
         raise click.ClickException(f"Conversation {session_id!r} not found on the server.")

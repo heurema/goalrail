@@ -3,7 +3,7 @@
 The ``omnigent hermes`` wrapper launches the real ``hermes`` TUI in a runner-owned
 tmux pane, and :mod:`omnigent.hermes_native_bridge` injects web-UI messages into
 it. That covers the web→TUI direction, but the *embedded terminal* is then the
-only surface that reflects the agent's work — the Omnigent conversation view (chat
+only surface that reflects the agent's work — the Goalrail conversation view (chat
 bubbles, title) stays empty because nothing mirrors the TUI's transcript back into
 the session.
 
@@ -564,9 +564,9 @@ async def forward_hermes_store_to_session(
     ``external_conversation_item``. The high-water ``id`` is persisted to
     ``bridge_dir`` so a supervisor restart resumes without re-posting.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: Static HTTP headers (auth normally via ``auth``).
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: The hermes-native bridge dir (holds the persisted cursor).
     :param agent_name: Agent label stamped on mirrored assistant items.
     :param workspace: The session's working directory (Hermes' ``sessions.cwd``).

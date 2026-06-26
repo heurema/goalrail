@@ -2,7 +2,7 @@
 
 The ``cursor-agent`` TUI gates its own tool calls (shell, file write/delete, MCP,
 …) with an in-terminal approval prompt, and asks structured questions via its
-``AskQuestion`` tool. To surface both in the Omnigent web UI (so a user can
+``AskQuestion`` tool. To surface both in the Goalrail web UI (so a user can
 answer from the chat view, not just inside the embedded terminal), the runner
 tails cursor's chat ``store.db`` — the SAME store the forwarder mirrors — for
 *pending tool calls* and drives the TUI to deliver the web verdict:
@@ -329,7 +329,7 @@ class CursorPendingToolCall:
 
 
 def cursor_tool_call_elicitation_id(session_id: str, tool_call_id: str) -> str:
-    """Return the deterministic Omnigent elicitation id for a gated tool call.
+    """Return the deterministic Goalrail elicitation id for a gated tool call.
 
     Keyed by ``toolCallId`` (hashed for a clean, fixed-width id) so the same
     pending call maps to the same elicitation across polls and supervisor
@@ -655,7 +655,7 @@ async def supervise_cursor_transcript_elicitations(
 
     :param base_url: Server base URL.
     :param headers: Auth/routing headers for the runner's requests.
-    :param session_id: Omnigent conversation id.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: The cursor-native bridge dir holding ``tmux.json``.
     :param workspace: The session's working directory (cursor's chat-dir key).
     :param launch_epoch_ms: Wall-clock ms when this terminal launched.

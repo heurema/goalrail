@@ -2,7 +2,7 @@
 
 The native ``hermes`` TUI gates commands it flags as dangerous with an
 in-terminal approval prompt (its own ``tools/approval.py`` gate). That prompt
-lives only in the TUI; to also surface it in the Omnigent web UI (so a user can
+lives only in the TUI; to also surface it in the Goalrail web UI (so a user can
 approve from the chat view, not only the embedded terminal), the runner watches
 the Hermes pane:
 
@@ -86,7 +86,7 @@ class HermesApprovalPrompt:
 
 
 def hermes_permission_elicitation_id(session_id: str, token: str) -> str:
-    """Return the deterministic Omnigent elicitation id for a Hermes prompt.
+    """Return the deterministic Goalrail elicitation id for a Hermes prompt.
 
     *token* identifies one approval episode (a per-session counter), not the
     scraped content, so a re-render never spawns a duplicate card.
@@ -164,7 +164,7 @@ async def supervise_hermes_approval_mirror(
 
     :param base_url: Server base URL.
     :param headers: Auth/routing headers for the runner's requests.
-    :param session_id: Omnigent conversation id.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: The hermes-native bridge dir holding ``tmux.json``.
     :param auth: Optional httpx auth for the runner's requests.
     :param poll_interval_s: Pane poll cadence in seconds.

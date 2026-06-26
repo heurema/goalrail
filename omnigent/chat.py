@@ -146,7 +146,7 @@ def _default_cli_model() -> str:
     spec is self-contained and independent of any later env state.
 
     Mirrors :func:`omnigent.inner.cli._default_cli_model` so
-    legacy and Omnigent paths agree on the env-var contract.
+    legacy and Goalrail paths agree on the env-var contract.
 
     :returns: The default model identifier, e.g.
         ``"databricks-gpt-5-4"`` or whatever the user pinned in
@@ -329,7 +329,7 @@ def run_chat(
         conversation to ``~/.omnigent/logs/`` on REPL exit.
         Maps to ``--log`` on the CLI (default-on for the legacy
         path, default-off here so it stays explicit on
-        Omnigent mode). See ``omnigent.repl._session_log`` for the
+        Goalrail mode). See ``omnigent.repl._session_log`` for the
         schema. Local-mode only — passing this with a remote
         URL target raises :class:`click.ClickException`
         (no client-side conversation hand-off to dump).
@@ -1011,7 +1011,7 @@ def _redirect_native_resume_if_needed(
     progress: RunnerStartupProgress | None = None,
 ) -> bool:
     """
-    Redirect a terminal-native resume before Omnigent attach liveness runs.
+    Redirect a terminal-native resume before Goalrail attach liveness runs.
 
     :param base_url: Goalrail server base URL, e.g. ``"https://example.com"``.
     :param conversation_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
@@ -1084,7 +1084,7 @@ def _finish_native_redirect_progress(
     native_command: str,
 ) -> None:
     """
-    Finish any Omnigent startup progress and print the native redirect notice.
+    Finish any Goalrail startup progress and print the native redirect notice.
 
     :param progress: Optional startup spinner to finish before writing.
     :param conversation_id: Goalrail conversation id, e.g.
@@ -1119,7 +1119,7 @@ def _run_claude_native_resume_redirect(
     :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param auto_open_conversation: Browser-open preference for the wrapper.
-    :param progress: Optional Omnigent startup spinner to finish before redirect.
+    :param progress: Optional Goalrail startup spinner to finish before redirect.
     :returns: None.
     """
     _finish_native_redirect_progress(
@@ -1153,7 +1153,7 @@ def _run_codex_native_resume_redirect(
     :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param auto_open_conversation: Browser-open preference for the wrapper.
-    :param progress: Optional Omnigent startup spinner to finish before redirect.
+    :param progress: Optional Goalrail startup spinner to finish before redirect.
     :returns: None.
     """
     _finish_native_redirect_progress(
@@ -1185,7 +1185,7 @@ def _run_pi_native_resume_redirect(
     :param base_url: Goalrail server base URL.
     :param conversation_id: Goalrail conversation id.
     :param auto_open_conversation: Browser-open preference for the wrapper.
-    :param progress: Optional Omnigent startup spinner to finish before redirect.
+    :param progress: Optional Goalrail startup spinner to finish before redirect.
     :returns: None.
     """
     _finish_native_redirect_progress(
@@ -1240,8 +1240,8 @@ def _run_cursor_native_resume_redirect(
 
     The cursor-native session is driven by the ``cursor-agent`` TUI in a
     runner-owned tmux pane, and the forwarder mirrors that transcript back
-    into the conversation. Resuming through the Omnigent REPL would instead
-    run an Omnigent turn per message (which persists its own user item) *and*
+    into the conversation. Resuming through the Goalrail REPL would instead
+    run a Goalrail turn per message (which persists its own user item) *and*
     leave the forwarder mirroring the same message from the cursor store —
     recording each user message twice. Redirecting to ``omnigent cursor``'s
     direct tmux attach keeps the TUI the single source of turns.
@@ -1249,7 +1249,7 @@ def _run_cursor_native_resume_redirect(
     :param base_url: Goalrail server base URL.
     :param conversation_id: Goalrail conversation id.
     :param auto_open_conversation: Browser-open preference for the wrapper.
-    :param progress: Optional Omnigent startup spinner to finish before redirect.
+    :param progress: Optional Goalrail startup spinner to finish before redirect.
     :returns: None.
     """
     _finish_native_redirect_progress(
@@ -1279,7 +1279,7 @@ def _run_kimi_native_resume_redirect(
     Hand a kimi-native conversation back to ``omnigent kimi``.
 
     The kimi-native session is driven by the ``kimi`` TUI in a runner-owned
-    tmux pane. Resuming through the Omnigent REPL would run an Omnigent turn
+    tmux pane. Resuming through the Goalrail REPL would run a Goalrail turn
     per message instead of attaching to the live TUI; redirecting to
     ``omnigent kimi``'s direct tmux attach keeps the TUI the single source of
     turns. Mirrors :func:`_run_cursor_native_resume_redirect`.
@@ -1287,7 +1287,7 @@ def _run_kimi_native_resume_redirect(
     :param base_url: Goalrail server base URL.
     :param conversation_id: Goalrail conversation id.
     :param auto_open_conversation: Browser-open preference for the wrapper.
-    :param progress: Optional Omnigent startup spinner to finish before redirect.
+    :param progress: Optional Goalrail startup spinner to finish before redirect.
     :returns: None.
     """
     _finish_native_redirect_progress(
@@ -1317,7 +1317,7 @@ def _wrapper_label_for_conversation(
     Single-shot ``GET /v1/sessions/{id}`` against *base_url*, inspecting
     the response's ``labels.omnigent.wrapper`` field. ``None`` on any
     transport / parse error so a flaky server doesn't silently misroute
-    the resume — the caller falls back to the normal Omnigent REPL path and
+    the resume — the caller falls back to the normal Goalrail REPL path and
     surfaces a clear failure there.
 
     :param base_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:6767"``.
@@ -2501,7 +2501,7 @@ _ResponseOutput: TypeAlias = list[dict[str, Any]]  # type: ignore[explicit-any]
 
 
 def _response_output_text(output: _ResponseOutput) -> str | None:
-    """Extract assistant text from an Omnigent response ``output`` list."""
+    """Extract assistant text from a Goalrail response ``output`` list."""
     parts: list[str] = []
     for item in output:
         if not isinstance(item, dict) or item.get("type") != "message":
@@ -3211,7 +3211,7 @@ def _apply_overrides_to_raw(raw: _YamlMapping, overrides: ChatOverrides) -> None
     # ``_DEFAULT_AD_HOC_MODEL`` directly so ``OMNIGENT_MODEL=foo``
     # is honored on the ``omnigent/cli.py`` → ``run_chat`` direct
     # path. Without this, that env var was silently dropped on the
-    # Omnigent path invoked through the ``omnigent`` console
+    # Goalrail path invoked through the ``omnigent`` console
     # script (see ``designs/RUN_OMNIGENT_REPL_PARITY.md``).
     if not _spec_declares_harness_or_model(raw):
         executor_block["model"] = _default_cli_model()
@@ -3389,7 +3389,7 @@ def _find_free_port() -> int:
 
 def _omnigent_log_dir() -> Path:
     """
-    Resolve the shared Omnigent process log directory.
+    Resolve the shared Goalrail process log directory.
 
     Server and captured runner stdout/stderr logs live under the
     same per-user state root as session transcripts and CLI

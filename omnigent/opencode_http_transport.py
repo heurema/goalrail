@@ -70,7 +70,7 @@ def build_prompt_payload(prompt: NativePrompt) -> dict[str, Any]:
 
 def _attachment_to_part(attachment: Mapping[str, Any]) -> dict[str, Any] | None:
     """
-    Convert an Omnigent attachment block into an OpenCode file part.
+    Convert a Goalrail attachment block into an OpenCode file part.
 
     :param attachment: An ``input_image`` / ``input_file`` content block.
     :returns: A ``FilePartInput`` dict, or ``None`` when unconvertible.

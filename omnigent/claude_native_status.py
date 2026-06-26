@@ -89,7 +89,7 @@ def _write_context_atomic(bridge_dir: Path, payload: dict[str, object]) -> None:
     # Claude Code's statusLine stdin carries a top-level ``cost`` block with
     # its own cumulative session billing. Capture ``total_cost_usd`` so the
     # forwarder can report it (claude-native produces no ``response.completed``
-    # event, so the Omnigent relay's cost accumulation never runs for it).
+    # event, so the Goalrail relay's cost accumulation never runs for it).
     cost = payload.get("cost")
     if isinstance(cost, dict):
         total_cost = cost.get("total_cost_usd")

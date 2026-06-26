@@ -1,4 +1,4 @@
-"""Native Claude Code terminal wrapper for the Omnigent CLI.
+"""Native Claude Code terminal wrapper for the Goalrail CLI.
 
 The wrapper deliberately treats Claude Code as a terminal-first
 program. It creates or binds a Goalrail session, launches ``claude``
@@ -130,7 +130,7 @@ _CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS_ENV = "CLAUDE_CODE_DISABLE_EXPERIMENTAL_
 _CLAUDE_CODE_ENABLE_TOOL_SEARCH_ENV = "ENABLE_TOOL_SEARCH"
 # Claude Code's agent view (the session list opened by `claude agents`, the
 # left-arrow shortcut on an empty prompt, or /background) lets the user hop to
-# other sessions inside the TUI.  Omnigent owns session switching in its own
+# other sessions inside the TUI.  Goalrail owns session switching in its own
 # UI, so a wrapped terminal must stay pinned to the one session the UI thinks
 # it is showing.
 _CLAUDE_CODE_DISABLE_AGENT_VIEW_ENV = "CLAUDE_CODE_DISABLE_AGENT_VIEW"
@@ -293,7 +293,7 @@ def build_native_claude_terminal_env(
 
     Forces MCP Tool Search on so Claude defers MCP tool schemas and
     loads them on demand, and disables Claude Code's agent view so the
-    terminal stays pinned to the session the Omnigent UI is showing.
+    terminal stays pinned to the session the Goalrail UI is showing.
 
     :param claude_config: Optional provider/ucode launch config, e.g.
         one carrying ``{"ANTHROPIC_BASE_URL": "https://example.com"}``.
@@ -359,7 +359,7 @@ def run_claude_native(
         session.
     :param claude_args: Args after ``claude``, e.g.
         ``("--dangerously-skip-permissions",)``. Stray ``--resume`` /
-        ``-r`` is stripped defensively (Omnigent owns resume).
+        ``-r`` is stripped defensively (Goalrail owns resume).
     :param resume_picker: ``True`` runs the claude-native picker
         once the server is reachable; ``False`` keeps the existing
         ``session_id``-or-fresh-session behavior.
@@ -2083,7 +2083,7 @@ async def _attach_with_transcript_forwarder(
         attempts. ``None`` disables reconnect (local-server flow).
     :param auth: Optional httpx Auth that mints a fresh bearer token
         per request, e.g. ``_server_auth(profile)``. Forwarded to the
-        transcript forwarder's HTTP client so Omnigent posts continue to
+        transcript forwarder's HTTP client so Goalrail posts continue to
         authenticate after Databricks OAuth token expiry (~1h).
     :param run_transcript_forwarder: Whether this attach process owns
         Claude transcript forwarding. ``False`` for daemon/runner-owned
@@ -2099,7 +2099,7 @@ async def _attach_with_transcript_forwarder(
     # ``start_at_end`` covers both reattach (terminal still live,
     # transcript JSONL still growing) and cold resume (new terminal
     # but ``claude --resume <sid>`` reopens the prior transcript so
-    # offset 0 contains turns Omnigent already has from the previous run).
+    # offset 0 contains turns Goalrail already has from the previous run).
     # See ``PreparedClaudeTerminal.cold_resumed`` for the duplicate-
     # broadcast hazard this avoids.
     skip_existing_transcript = prepared.reattached or prepared.cold_resumed
@@ -3043,10 +3043,10 @@ async def _prepare_claude_terminal(
         # Cold resume = session existed but no live terminal. Even when
         # ``_resolve_cold_resume_args`` returns ``()`` (no captured
         # external_session_id, so Claude starts a fresh transcript),
-        # Omnigent already holds the prior conversation history from the
+        # Goalrail already holds the prior conversation history from the
         # earlier run. The forwarder must not re-read whatever the new
         # transcript file contains at startup and republish it as new
-        # Omnigent events. Both subcases — injected ``--resume <claude_sid>``
+        # Goalrail events. Both subcases — injected ``--resume <claude_sid>``
         # and the warn-and-fallback path — share this hazard, so a
         # single ``cold_resumed`` flag covers both.
         cold_resumed = False
@@ -3279,7 +3279,7 @@ async def _resolve_cold_resume_args(
         )
     external_session_id = payload.get("external_session_id")
     if not isinstance(external_session_id, str) or not external_session_id:
-        # Omnigent conv survives; claude side starts fresh. Warn on
+        # Goalrail conv survives; claude side starts fresh. Warn on
         # both channels: ``click.echo`` for the foreground user,
         # ``_logger.warning`` for log aggregation (Sentry).
         message = (
@@ -3298,7 +3298,7 @@ async def _resolve_cold_resume_args(
     if transcript is None:
         # No resumable records: ``claude --resume`` against an empty (or
         # absent) transcript exits with "No conversation found" instead of
-        # starting. Launch fresh — the Omnigent conv survives.
+        # starting. Launch fresh — the Goalrail conv survives.
         message = (
             f"no resumable claude history for {session_id!r}; "
             f"resuming with no prior claude context."
@@ -3323,8 +3323,8 @@ async def _ensure_local_claude_resume_transcript(
     session id on the server, but not Claude Code's local
     ``~/.claude/projects/<cwd>/<sid>.jsonl`` file. Claude's
     ``--resume <sid>`` consults that local project transcript. The
-    wrapper always rewrites it from committed Omnigent items before launch so
-    Omnigent remains the source of truth when a previous local Claude JSONL
+    wrapper always rewrites it from committed Goalrail items before launch so
+    Goalrail remains the source of truth when a previous local Claude JSONL
     has diverged.
 
     :param client: HTTP client pointed at the Goalrail server.
@@ -3344,7 +3344,7 @@ async def _ensure_local_claude_resume_transcript(
         history yields no resumable records (an empty transcript would make
         ``claude --resume`` exit instead of start, so the caller must launch
         fresh).
-    :raises click.ClickException: If Omnigent history cannot be fetched or
+    :raises click.ClickException: If Goalrail history cannot be fetched or
         the transcript cannot be written.
     """
     if not _CLAUDE_SESSION_ID_RE.fullmatch(external_session_id):
@@ -3446,7 +3446,7 @@ def _claude_transcript_records_from_session_items(
     """
     Convert Goalrail session items into Claude Code transcript records.
 
-    :param items: Flat Omnigent item dicts in chronological order, e.g.
+    :param items: Flat Goalrail item dicts in chronological order, e.g.
         ``{"type": "message", "role": "user", "content": [...]}``.
     :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``. Used as part of deterministic synthetic
@@ -3494,9 +3494,9 @@ def _claude_transcript_record_from_session_item(
     cwd: Path,
 ) -> dict[str, Any] | None:
     """
-    Convert one Omnigent item into one Claude transcript record.
+    Convert one Goalrail item into one Claude transcript record.
 
-    :param item: Flat Omnigent item dict, e.g.
+    :param item: Flat Goalrail item dict, e.g.
         ``{"type": "function_call", "name": "Read", ...}``.
     :param session_id: Claude-native session id for the transcript,
         e.g. ``"02857840-6362-408f-b41f-309e396ed7c6"``.
@@ -3507,7 +3507,7 @@ def _claude_transcript_record_from_session_item(
     :param cwd: Current working directory to record, e.g.
         ``Path("/home/me/repo")``.
     :returns: Claude transcript record, or ``None`` for unsupported or
-        empty Omnigent items.
+        empty Goalrail items.
     """
     item_type = item.get("type")
     message: dict[str, Any] | None = None
@@ -3603,7 +3603,7 @@ def _synthetic_claude_transcript_uuid(
         ``"conv_abc123"``.
     :param external_session_id: Claude-native session id, e.g.
         ``"02857840-6362-408f-b41f-309e396ed7c6"``.
-    :param item: Omnigent item dict. ``id`` is used when present.
+    :param item: Goalrail item dict. ``id`` is used when present.
     :param index: Zero-based fallback index.
     :returns: UUID string, e.g.
         ``"d4ffea8e-87dc-5c7b-8f86-3dece5760a22"``.
@@ -3620,9 +3620,9 @@ def _synthetic_claude_transcript_uuid(
 
 def _claude_user_content_from_api_blocks(content: object) -> str | list[dict[str, Any]] | None:
     """
-    Convert Omnigent user message blocks into Claude message content.
+    Convert Goalrail user message blocks into Claude message content.
 
-    :param content: Omnigent ``content`` value, e.g.
+    :param content: Goalrail ``content`` value, e.g.
         ``[{"type": "input_text", "text": "hello"}]``.
     :returns: A string for simple text prompts, a Claude content block
         list for multi-block prompts, or ``None`` when no text exists.
@@ -3637,9 +3637,9 @@ def _claude_user_content_from_api_blocks(content: object) -> str | list[dict[str
 
 def _claude_assistant_content_from_api_blocks(content: object) -> list[dict[str, Any]] | None:
     """
-    Convert Omnigent assistant message blocks into Claude text blocks.
+    Convert Goalrail assistant message blocks into Claude text blocks.
 
-    :param content: Omnigent ``content`` value, e.g.
+    :param content: Goalrail ``content`` value, e.g.
         ``[{"type": "output_text", "text": "hello"}]``.
     :returns: Claude ``text`` content blocks, or ``None`` when no
         assistant text exists.
@@ -3654,11 +3654,11 @@ def _claude_text_blocks_from_api_content(
     api_type: str,
 ) -> list[dict[str, Any]]:
     """
-    Extract text blocks from an Omnigent content array.
+    Extract text blocks from a Goalrail content array.
 
-    :param content: Omnigent content array, e.g.
+    :param content: Goalrail content array, e.g.
         ``[{"type": "input_text", "text": "hello"}]``.
-    :param api_type: Omnigent block type to include, e.g.
+    :param api_type: Goalrail block type to include, e.g.
         ``"input_text"`` or ``"output_text"``.
     :returns: Claude ``{"type": "text", "text": ...}`` blocks.
     """
@@ -3678,7 +3678,7 @@ def _json_object_from_string(value: object) -> dict[str, Any]:
     """
     Parse a JSON object string, returning ``{}`` on non-object input.
 
-    :param value: JSON string from an Omnigent function-call item, e.g.
+    :param value: JSON string from a Goalrail function-call item, e.g.
         ``"{\"file_path\":\"README.md\"}"``.
     :returns: Parsed object suitable for a Claude ``tool_use.input``
         field.
@@ -3789,7 +3789,7 @@ async def _launch_claude_terminal(
 
     :param client: HTTP client pointed at the Goalrail server. Its
         ``base_url`` and ``headers`` are reused as the
-        ``PermissionRequest`` command hook's Omnigent URL and auth. The hook
+        ``PermissionRequest`` command hook's Goalrail URL and auth. The hook
         subprocess posts back to the same server with the same auth the
         wrapper already negotiated.
     :param session_id: Session/conversation id.

@@ -2,7 +2,7 @@
 
 The runner launches the ``goose session`` TUI in a private tmux pane and records
 that pane's socket + target here via :func:`write_tmux_target`. The harness
-executor then delivers Omnigent web-UI messages into the *same* pane via
+executor then delivers Goalrail web-UI messages into the *same* pane via
 :func:`inject_user_message` (tmux bracketed paste + a single Enter) — the goose
 analog of the cursor-native tmux bridge. This is what wires the web-UI chat box
 to the running Goose TUI (and, since the web UI embeds that pane, the message
@@ -10,7 +10,7 @@ shows in both surfaces).
 
 Unlike cursor-native, this bridge does NOT write any vendor MCP config: Goose's
 MCP "extensions" live in ``~/.config/goose/config.yaml`` (owned by the user via
-``goose configure``), and Omnigent does not mutate user config in v1.
+``goose configure``), and Goalrail does not mutate user config in v1.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def build_goose_native_spawn_env(
     caller resolved them. A pasted/keyring credential the user already configured
     via ``goose configure`` is left untouched.
 
-    :param session_id: The Omnigent session id (keys the bridge dir).
+    :param session_id: The Goalrail session id (keys the bridge dir).
     :param provider: Optional ``GOOSE_PROVIDER`` override.
     :param model: Optional ``GOOSE_MODEL`` override.
     :returns: Env-var overrides for the terminal spawn.

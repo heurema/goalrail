@@ -1,5 +1,5 @@
 """
-Fast ``MessageDisplay`` hook for the native Omnigent Claude wrapper.
+Fast ``MessageDisplay`` hook for the native Goalrail Claude wrapper.
 
 Claude Code fires the ``MessageDisplay`` hook once per streamed text
 chunk while an assistant message is rendered in the TUI. Claude

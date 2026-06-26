@@ -1,4 +1,4 @@
-"""Forward Codex app-server notifications into Omnigent sessions."""
+"""Forward Codex app-server notifications into Goalrail sessions."""
 
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ _CODEX_COLLAB_AGENT_ITEM_TYPE = "collabAgentToolCall"
 _CODEX_COLLAB_SPAWN_TOOL = "spawnAgent"
 _CODEX_COLLAB_RUNNING_STATUSES = frozenset({"pendingInit", "running"})
 _CODEX_COLLAB_FAILED_STATUSES = frozenset({"errored", "notFound"})
-# Omnigent control event type sent when a Codex child thread is discovered.
+# Goalrail control event type sent when a Codex child thread is discovered.
 _EXTERNAL_CODEX_SUBAGENT_START_TYPE = "external_codex_subagent_start"
 _PLAN_IMPLEMENTATION_QUESTION_ID = "plan_implementation"
 _PLAN_IMPLEMENTATION_TITLE = "Implement this plan?"
@@ -126,7 +126,7 @@ class _ForwarderTarget:
     """
     Mutable AP/Codex target currently owned by the forwarder.
 
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param thread_id: Codex app-server thread id, e.g.
         ``"0196..."``.
     :param delta_coalescer: Text-delta coalescer posting to
@@ -149,9 +149,9 @@ class _CodexToolCall:
     """
     Normalized view of one completed Codex built-in tool call.
 
-    :param call_id: Codex item id reused as the Omnigent call id, e.g.
+    :param call_id: Codex item id reused as the Goalrail call id, e.g.
         ``"call_abc"``.
-    :param name: Omnigent function-call name, e.g. ``"shell"``.
+    :param name: Goalrail function-call name, e.g. ``"shell"``.
     :param arguments: Tool arguments dict, e.g. ``{"command": "pwd"}``.
     :param output: Tool result text rendered as the
         ``function_call_output``, e.g. ``"/repo\n"``.
@@ -203,14 +203,14 @@ class _CodexForwarderState:
 
     :param model: Latest known Codex model for this thread, e.g.
         ``"gpt-5.2-codex"``.
-    :param posted_model: Last model already mirrored to Omnigent via an
+    :param posted_model: Last model already mirrored to Goalrail via an
         ``external_model_change`` post (the dedupe baseline). Seeded from
         the resume/startup model so the spawn default is not echoed back as
         a change; only a later in-TUI ``/model`` switch is mirrored. ``None``
         until seeded.
     :param effort: Latest known Codex reasoning effort for this thread, e.g.
         ``"medium"``. ``None`` means Codex is using its model/default effort.
-    :param posted_effort: Last reasoning effort already mirrored to Omnigent
+    :param posted_effort: Last reasoning effort already mirrored to Goalrail
         via ``external_reasoning_effort_change``. ``None`` is a valid mirrored
         value, so ``posted_effort_known`` tracks whether the baseline has been
         seeded.
@@ -220,16 +220,16 @@ class _CodexForwarderState:
     :param collaboration_mode: Latest known Codex collaboration mode kind, e.g.
         ``"plan"`` or ``"default"``.
     :param posted_collaboration_mode: Last collaboration mode kind already
-        mirrored to Omnigent via
+        mirrored to Goalrail via
         ``external_codex_collaboration_mode_change``.
-    :param parent_session_id: Omnigent parent session id, e.g.
+    :param parent_session_id: Goalrail parent session id, e.g.
         ``"conv_parent"``. Set by ``supervise_forwarder`` so collab-agent
         helpers can register child sessions without extra parameter
         threading.
     :param codex_client: Connected Codex app-server client. Set by
         ``supervise_forwarder`` so child backfill can issue
         ``thread/resume`` requests.
-    :param subagents_by_thread: Maps Codex child thread ids to Omnigent child
+    :param subagents_by_thread: Maps Codex child thread ids to Goalrail child
         session ids, e.g. ``{"thread_child": "conv_child"}``.
     :param pending_child_threads: Codex child thread ids announced by
         ``thread/started`` but not yet mapped to AP child sessions,
@@ -238,11 +238,11 @@ class _CodexForwarderState:
     :param subscribed_child_threads: Codex child thread ids whose backlog
         has been replayed for this connection (guards against re-replay
         if the same collab item is observed multiple times).
-    :param synced_item_keys: Stable item keys already posted to Omnigent this
+    :param synced_item_keys: Stable item keys already posted to Goalrail this
         connection, e.g. ``{"thread_c:turn_c:item-1"}``. In-memory only;
         guards replay-vs-live overlap within one forwarder lifetime.
     :param posted_user_turns: Turn ids whose ``userMessage`` has been
-        posted to Omnigent this connection, e.g. ``{"turn_123"}``. Used to
+        posted to Goalrail this connection, e.g. ``{"turn_123"}``. Used to
         enforce user-before-assistant ordering: before posting a turn's
         assistant reply, the forwarder recovers and posts the turn's user
         message if the live stream missed it (see
@@ -259,7 +259,7 @@ class _CodexForwarderState:
         keyed by turn id.
     :param plan_thread_by_turn: Codex thread id keyed by plan turn id.
     :param prompted_plan_turns: Turn ids that already exposed the
-        implementation prompt, either natively or through the Omnigent bridge.
+        implementation prompt, either natively or through the Goalrail bridge.
     """
 
     model: str | None = None
@@ -300,7 +300,7 @@ class _CodexForwarderState:
         if not isinstance(result, dict):
             return
         self._note_model_fields(result)
-        # Do NOT seed ``posted_model`` here. Omnigent must learn the session's
+        # Do NOT seed ``posted_model`` here. Goalrail must learn the session's
         # ACTUAL model — including the spawn default — because the cost-budget
         # gate resolves the model as ``conv.model_override or spec.llm.model``,
         # and for codex the spawn model (read from ``config.toml`` / the
@@ -376,20 +376,20 @@ class _CodexForwarderState:
 
     def session_for_child_thread(self, thread_id: str) -> str | None:
         """
-        Return the Omnigent child session id for a known Codex child thread.
+        Return the Goalrail child session id for a known Codex child thread.
 
         :param thread_id: Codex child thread id, e.g. ``"thread_child"``.
-        :returns: Omnigent child session id, e.g. ``"conv_child"``, or ``None``
+        :returns: Goalrail child session id, e.g. ``"conv_child"``, or ``None``
             when the thread is unknown.
         """
         return self.subagents_by_thread.get(thread_id)
 
     def note_child_thread(self, thread_id: str, session_id: str) -> None:
         """
-        Record the Omnigent child session id for a Codex child thread.
+        Record the Goalrail child session id for a Codex child thread.
 
         :param thread_id: Codex child thread id, e.g. ``"thread_child"``.
-        :param session_id: Omnigent child session id, e.g. ``"conv_child"``.
+        :param session_id: Goalrail child session id, e.g. ``"conv_child"``.
         :returns: None.
         """
         self.subagents_by_thread[thread_id] = session_id
@@ -547,7 +547,7 @@ class _CodexForwarderState:
 
     def claim_item_key(self, item_key: str) -> bool:
         """
-        Claim a transcript item key for Omnigent posting.
+        Claim a transcript item key for Goalrail posting.
 
         Returns ``True`` when the caller should post the item. Returns
         ``False`` when the key was already posted this connection, so the
@@ -650,9 +650,9 @@ class _CodexForwarderState:
 @dataclass(frozen=True)
 class _CodexTurnStatusEdge:
     """
-    Omnigent session-status edge derived from Codex turn lifecycle state.
+    Goalrail session-status edge derived from Codex turn lifecycle state.
 
-    :param status: Omnigent session status, e.g. ``"running"`` or ``"idle"``.
+    :param status: Goalrail session status, e.g. ``"running"`` or ``"idle"``.
     :param turn_id: Codex turn id that caused the edge, e.g.
         ``"turn_abc123"``.
     :param source: Lifecycle source that produced the edge, e.g.
@@ -714,13 +714,13 @@ class _OutputTextDeltaCoalescer:
     Coalesce high-frequency Codex text deltas before posting to AP.
 
     Codex can emit many tiny ``item/agentMessage/delta`` notifications.
-    Posting each one through Omnigent as an awaited HTTP request makes the
+    Posting each one through Goalrail as an awaited HTTP request makes the
     forwarder drain behind Codex. This worker keeps event ingestion
     cheap while preserving the order of flushed text relative to
     explicit flush barriers.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param flush_interval_seconds: Maximum time to hold the first
         buffered delta before posting it.
     :param flush_char_threshold: Maximum buffered character count before
@@ -738,8 +738,8 @@ class _OutputTextDeltaCoalescer:
         """
         Initialize the coalescer.
 
-        :param client: HTTP client for Omnigent event posts.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param client: HTTP client for Goalrail event posts.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param flush_interval_seconds: Maximum buffering delay in
             seconds, e.g. ``0.05``.
         :param flush_char_threshold: Character threshold that triggers
@@ -906,8 +906,8 @@ class _SessionUsageCoalescer:
     live mid-turn) and again at turn/session boundaries (a no-op when
     nothing changed).
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     """
 
     def __init__(
@@ -919,8 +919,8 @@ class _SessionUsageCoalescer:
         """
         Initialize the usage coalescer.
 
-        :param client: HTTP client for Omnigent event posts.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param client: HTTP client for Goalrail event posts.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param model: Model name to attach to token posts, e.g. ``"gpt-5.5"``.
             Needed for child coalescers, created where ``forwarder_state`` is
             ``None`` and ``record()`` receives no model — without it the server
@@ -1001,7 +1001,7 @@ class _SessionUsageCoalescer:
 @dataclass(frozen=True)
 class _PendingCodexElicitation:
     """
-    Background Omnigent hook wait for one Codex server-to-client request.
+    Background Goalrail hook wait for one Codex server-to-client request.
 
     :param thread_id: Codex thread id from the request params, e.g.
         ``"thread_abc123"``. ``None`` when the request did not carry
@@ -1010,7 +1010,7 @@ class _PendingCodexElicitation:
         ``"turn_abc123"``. ``None`` when the request did not carry turn
         scope.
     :param request_id: Codex JSON-RPC request id, e.g. ``12``.
-    :param elicitation_id: Omnigent elicitation id, e.g.
+    :param elicitation_id: Goalrail elicitation id, e.g.
         ``"elicit_codex_abc123"``.
     """
 
@@ -1025,7 +1025,7 @@ class _CodexElicitationTaskTracker:
     Run Codex elicitation hook waits off the event-drain path.
 
     A real Codex TUI can answer a server-to-client request before the
-    Omnigent web/REPL hook does. If the forwarder awaits the Omnigent hook inline,
+    Goalrail web/REPL hook does. If the forwarder awaits the Goalrail hook inline,
     it stops draining app-server events and the web UI sees a stuck
     approval card until the hook timeout. This tracker lets the hook
     wait in the background and resolves it once the app-server emits the
@@ -1050,12 +1050,12 @@ class _CodexElicitationTaskTracker:
         event: CodexMessage,
     ) -> None:
         """
-        Start one Omnigent hook bridge in the background.
+        Start one Goalrail hook bridge in the background.
 
-        :param client: HTTP client for Omnigent hook posts.
+        :param client: HTTP client for Goalrail hook posts.
         :param codex_client: Connected Codex app-server client used
             to send JSON-RPC results.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param event: Codex JSON-RPC request envelope.
         :returns: None.
         """
@@ -1097,8 +1097,8 @@ class _CodexElicitationTaskTracker:
         """
         Mark the hook wait resolved by Codex's explicit notification.
 
-        :param client: HTTP client for Omnigent event posts.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param client: HTTP client for Goalrail event posts.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param params: ``serverRequest/resolved`` params, e.g.
             ``{"threadId": "thread_abc", "requestId": 12}``.
         :returns: None.
@@ -1131,8 +1131,8 @@ class _CodexElicitationTaskTracker:
         app-server no longer has live server-to-client requests for that
         turn.
 
-        :param client: HTTP client for Omnigent event posts.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param client: HTTP client for Goalrail event posts.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param params: Codex ``turn/completed`` params, e.g.
             ``{"threadId": "thread_abc", "turn": {"id": "turn_abc"}}``.
         :returns: None.
@@ -1184,9 +1184,9 @@ class _CodexElicitationTaskTracker:
         """
         Run one hook bridge and log non-cancellation failures.
 
-        :param client: HTTP client for Omnigent hook posts.
+        :param client: HTTP client for Goalrail hook posts.
         :param codex_client: Connected Codex app-server client.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param event: Codex JSON-RPC request envelope.
         :returns: None.
         """
@@ -1229,10 +1229,10 @@ class _CodexElicitationTaskTracker:
         pending: _PendingCodexElicitation,
     ) -> None:
         """
-        Post one Omnigent resolution signal, suppressing duplicates.
+        Post one Goalrail resolution signal, suppressing duplicates.
 
-        :param client: HTTP client for Omnigent event posts.
-        :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+        :param client: HTTP client for Goalrail event posts.
+        :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         :param pending: Pending hook wait metadata to resolve.
         :returns: None.
         """
@@ -1321,12 +1321,12 @@ async def supervise_forwarder(
     ap_transport: httpx.AsyncBaseTransport | None = None,
 ) -> None:
     """
-    Mirror Codex app-server notifications into an Omnigent session.
+    Mirror Codex app-server notifications into a Goalrail session.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"http://127.0.0.1:6767"``.
-    :param headers: Static HTTP headers for Omnigent requests.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param headers: Static HTTP headers for Goalrail requests.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param app_server_url: Codex app-server transport, e.g.
         ``"ws://127.0.0.1:9876"``. Used to (re)connect a fallback
@@ -1339,7 +1339,7 @@ async def supervise_forwarder(
         the forwarder still calls ``thread/resume`` once the id is
         known so that connection receives turn/item notifications.
     :param auth: Optional HTTP auth for long-lived remote sessions.
-    :param ap_transport: Optional HTTP transport for the Omnigent client,
+    :param ap_transport: Optional HTTP transport for the Goalrail client,
         e.g. ``httpx.MockTransport(...)`` for tests.
     :returns: None. Runs until cancelled or the app-server connection
         closes.
@@ -1457,15 +1457,15 @@ async def _maybe_rotate_session_on_thread_started(
     event: CodexMessage,
 ) -> bool:
     """
-    Rotate Omnigent ownership when Codex starts a new native thread.
+    Rotate Goalrail ownership when Codex starts a new native thread.
 
     Native Codex ``/clear`` starts a fresh app-server thread in the
-    existing terminal. The forwarder must move the Omnigent session binding
+    existing terminal. The forwarder must move the Goalrail session binding
     to a fresh conversation and then subscribe this same app-server
     connection to the new thread; otherwise web messages keep targeting
     the old thread and streaming appears to end.
 
-    :param ap_client: Omnigent HTTP client used for session rotation.
+    :param ap_client: Goalrail HTTP client used for session rotation.
     :param target: Mutable current AP/Codex target.
     :param bridge_dir: Native Codex bridge directory.
     :param app_server_url: Codex app-server transport, e.g.
@@ -1478,9 +1478,9 @@ async def _maybe_rotate_session_on_thread_started(
     if new_thread_id is None or new_thread_id == target.thread_id:
         return False
     # A Codex AgentControl child thread emits ``thread/started`` when it
-    # begins. That event must not rotate the parent Omnigent session — the child
+    # begins. That event must not rotate the parent Goalrail session — the child
     # is discovered later via a ``collabAgentToolCall`` item and routed to
-    # its own Omnigent child session by ``_handle_event``.
+    # its own Goalrail child session by ``_handle_event``.
     if _thread_started_is_subagent(event):
         return False
     old_delta_coalescer = target.delta_coalescer
@@ -1505,7 +1505,7 @@ async def _maybe_rotate_session_on_thread_started(
     await old_usage_coalescer.close()
     await old_elicitation_tracker.close()
     _logger.info(
-        "Codex forwarder rotated Omnigent session after native thread switch: "
+        "Codex forwarder rotated Goalrail session after native thread switch: "
         "old_session=%s new_session=%s new_thread=%s",
         old_session_id,
         new_session_id,
@@ -1523,9 +1523,9 @@ async def _create_thread_replacement_session(
     new_thread_id: str,
 ) -> str:
     """
-    Create and activate the Omnigent session for a new native Codex thread.
+    Create and activate the Goalrail session for a new native Codex thread.
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param old_session_id: Session being rotated away from, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Codex bridge directory.
@@ -1535,8 +1535,8 @@ async def _create_thread_replacement_session(
         rotation (a unix path here would clobber the ws:// URL).
     :param new_thread_id: Newly started Codex thread id, e.g.
         ``"thread_new"``.
-    :returns: New Omnigent session id, e.g. ``"conv_new"``.
-    :raises httpx.HTTPStatusError: If Omnigent rejects the create, bind,
+    :returns: New Goalrail session id, e.g. ``"conv_new"``.
+    :raises httpx.HTTPStatusError: If Goalrail rejects the create, bind,
         external-session update, or terminal transfer calls.
     :raises RuntimeError: If the old session snapshot or create
         response is malformed.
@@ -1620,12 +1620,12 @@ async def _create_thread_replacement_session(
 
 async def _fetch_session_snapshot(client: httpx.AsyncClient, session_id: str) -> dict[str, Any]:
     """
-    Fetch an Omnigent session snapshot for Codex session rotation.
+    Fetch a Goalrail session snapshot for Codex session rotation.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Decoded JSON session snapshot.
-    :raises httpx.HTTPStatusError: If Omnigent rejects the request.
+    :raises httpx.HTTPStatusError: If Goalrail rejects the request.
     :raises RuntimeError: If the response is not a JSON object.
     """
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
@@ -1668,8 +1668,8 @@ async def _subscribe_until_ready(
     brief window between "thread active" and the rollout being flushed.
 
     :param client: Codex app-server client.
-    :param ap_client: Omnigent HTTP client used for replayed items.
-    :param session_id: Omnigent conversation id.
+    :param ap_client: Goalrail HTTP client used for replayed items.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: Native Codex bridge directory.
     :param thread_id: Codex thread id.
     :param usage_coalescer: Token-usage coalescer for replayed
@@ -1802,8 +1802,8 @@ async def _replay_resume_response(
     in ``_handle_completed_item`` can skip items that the live stream
     already delivered.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: Native Codex bridge directory.
     :param response: Codex ``thread/resume`` response envelope.
     :param usage_coalescer: Token-usage coalescer for replayed
@@ -1874,12 +1874,12 @@ async def _post_resume_terminal_status(
     A reconnect can miss the live ``turn/started`` and
     ``turn/completed`` / ``turn/failed`` notifications. When the resume
     payload explicitly says the latest turn on the current thread is
-    terminal, the forwarder can close the Omnigent session status even though no
+    terminal, the forwarder can close the Goalrail session status even though no
     live terminal boundary was observed. It deliberately does not infer
     terminal state from transcript items alone.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param thread_id: Codex thread id from the resume payload, e.g.
         ``"thread_123"``.
@@ -1898,7 +1898,7 @@ def _resume_terminal_status_edge_for_latest_turn(
     turns: list[Any],
 ) -> _CodexTurnStatusEdge | None:
     """
-    Return the Omnigent terminal status represented by the latest resume turn.
+    Return the Goalrail terminal status represented by the latest resume turn.
 
     :param bridge_dir: Native Codex bridge directory.
     :param thread_id: Codex thread id from the resume payload, e.g.
@@ -1932,11 +1932,11 @@ def _resume_terminal_status_edge_for_latest_turn(
 
 def _omnigent_status_from_resume_turn(turn: dict[str, Any]) -> str | None:
     """
-    Convert an explicit Codex resume turn status to Omnigent session status.
+    Convert an explicit Codex resume turn status to Goalrail session status.
 
     :param turn: Codex resume turn object, e.g.
         ``{"id": "turn_123", "status": "completed"}``.
-    :returns: Omnigent status literal for terminal turns, or ``None`` for active
+    :returns: Goalrail status literal for terminal turns, or ``None`` for active
         or unrecognized statuses.
     """
     status = turn.get("status")
@@ -1965,8 +1965,8 @@ async def _handle_event(
     """
     Forward one Codex app-server notification.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param event: Codex notification envelope.
     :param usage_coalescer: Coalescer for high-frequency usage
@@ -2100,7 +2100,7 @@ def _resolve_event_session(
     fallback_session_id: str,
 ) -> tuple[str | None, bool]:
     """
-    Resolve which Omnigent session should receive a Codex event.
+    Resolve which Goalrail session should receive a Codex event.
 
     Returns ``(session_id, is_child)`` where ``session_id`` is ``None``
     when the event should be silently dropped (stale or unrecognized
@@ -2204,8 +2204,8 @@ async def _maybe_handle_codex_request(
     """
     Handle Codex server-to-client requests if this event is one.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param event: Codex notification/request envelope.
     :param method: Codex method value, e.g.
         ``"item/tool/requestUserInput"``.
@@ -2252,7 +2252,7 @@ def _refresh_model_from_config(bridge_dir: Path, forwarder_state: _CodexForwarde
     ``model`` key an in-TUI ``/model`` writes — see that function for why
     config.toml is the source of truth and its caveats) and stores it on
     ``forwarder_state.model`` so a following ``_sync_model_change`` mirrors
-    it to Omnigent as ``model_override``. This mirror is a fallback to the codex
+    it to Goalrail as ``model_override``. This mirror is a fallback to the codex
     hook, which stamps the live model onto the evaluation request at gate
     time; the gate prefers the hook's value. No-op when the model can't be
     determined, leaving the prior value.
@@ -2274,7 +2274,7 @@ async def _sync_model_change(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Mirror a Codex TUI ``/model`` switch to Omnigent (web picker + cost gate).
+    Mirror a Codex TUI ``/model`` switch to Goalrail (web picker + cost gate).
 
     The active model is recorded on ``forwarder_state.model`` by
     ``_refresh_model_from_config`` (read from ``config.toml``, the source of
@@ -2282,15 +2282,15 @@ async def _sync_model_change(
     each ``turn/started``, and also by ``thread/settings/updated`` when Codex
     emits one. When that differs from the last-mirrored ``posted_model``
     baseline, POST an
-    ``external_model_change`` event so the Omnigent server persists
+    ``external_model_change`` event so the Goalrail server persists
     ``conv.model_override`` — which keeps the web model dropdown in sync and
     lets the cost-budget policy re-evaluate against the new model. Codex
     model ids are stable per model (unlike Claude's per-turn concrete id),
     so the raw id is posted as-is. Best-effort: a failed post leaves the
     baseline unchanged so the next settings update retries.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param forwarder_state: Mutable forwarder state carrying the current
         model and the last-mirrored baseline.
     :returns: None.
@@ -2316,10 +2316,10 @@ async def _sync_reasoning_effort_change(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Mirror Codex's active reasoning effort to Omnigent session metadata.
+    Mirror Codex's active reasoning effort to Goalrail session metadata.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param forwarder_state: Mutable forwarder state carrying the current
         Codex effort and last-mirrored baseline.
     :returns: None.
@@ -2346,10 +2346,10 @@ async def _sync_codex_collaboration_mode_change(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Mirror Codex's active collaboration mode kind to Omnigent labels.
+    Mirror Codex's active collaboration mode kind to Goalrail labels.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param forwarder_state: Mutable forwarder state carrying the current
         Codex collaboration mode and last-mirrored baseline.
     :returns: None.
@@ -2384,8 +2384,8 @@ async def _maybe_handle_turn_event(
     """
     Handle turn/thread-level Codex events.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param method: Codex method value, e.g. ``"turn/started"``.
     :param params: Codex notification params.
@@ -2407,7 +2407,7 @@ async def _maybe_handle_turn_event(
             # An in-TUI ``/model`` switch writes config.toml (the cost-policy
             # source of truth) but emits no notification. Re-read it at turn
             # start so a switch made since the last turn lands ``model_override``
-            # on Omnigent before this turn's first tool call reaches the cost gate.
+            # on Goalrail before this turn's first tool call reaches the cost gate.
             _refresh_model_from_config(bridge_dir, forwarder_state)
             await _sync_model_change(
                 client, session_id=session_id, forwarder_state=forwarder_state
@@ -2468,8 +2468,8 @@ async def _maybe_handle_delta_event(
     """
     Handle Codex streaming text/plan delta events.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param method: Codex method value, e.g.
         ``"item/agentMessage/delta"``.
@@ -2527,8 +2527,8 @@ async def _handle_completed_event(
     """
     Flush pending text and mirror one completed Codex item.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``item/completed`` params.
     :param delta_coalescer: Optional text-delta coalescer to flush
         before the completed item.
@@ -2559,8 +2559,8 @@ async def _handle_terminal_turn_boundary(
     """
     Handle a Codex terminal turn completion/failure boundary.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param method: Codex method, e.g. ``"turn/completed"``.
     :param params: Codex notification params.
@@ -2634,12 +2634,12 @@ async def _handle_turn_plan_updated(
     Mirror a Codex plan update as a visible assistant message.
 
     Codex emits plan changes as app-server notifications rather than
-    ordinary assistant text. Omnigent web currently renders persisted message
+    ordinary assistant text. Goalrail web currently renders persisted message
     items, not a dedicated plan item type, so the native bridge converts
     the structured plan into a compact assistant message.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``turn/plan/updated`` params.
     :returns: None.
     """
@@ -2682,19 +2682,19 @@ async def _handle_codex_elicitation_request(
     event: CodexMessage,
 ) -> None:
     """
-    Forward one Codex input request to Omnigent and reply to app-server.
+    Forward one Codex input request to Goalrail and reply to app-server.
 
-    The Omnigent hook publishes the web elicitation and blocks until the
+    The Goalrail hook publishes the web elicitation and blocks until the
     user answers or the wait budget expires. Non-empty 2xx responses
     are Codex JSON-RPC ``result`` payloads and are sent back to the
     app-server with the original request id. Empty 2xx responses mean
-    Omnigent timed out or saw the upstream disconnect, so the forwarder
+    Goalrail timed out or saw the upstream disconnect, so the forwarder
     leaves the request unanswered for the native Codex UI path.
 
-    :param client: HTTP client for Omnigent hook posts.
+    :param client: HTTP client for Goalrail hook posts.
     :param codex_client: Connected Codex app-server client used to
         send JSON-RPC results.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param event: Codex JSON-RPC request envelope.
     :returns: None.
     """
@@ -2718,12 +2718,12 @@ async def _codex_elicitation_hook_result(
     """
     POST a Codex-shaped elicitation request and parse its result body.
 
-    Empty 2xx responses mean Omnigent timed out or saw the upstream
+    Empty 2xx responses mean Goalrail timed out or saw the upstream
     disconnect, so the caller should leave the native Codex request
     unanswered or drop a synthetic prompt.
 
-    :param client: HTTP client for Omnigent hook posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail hook posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param event: Codex JSON-RPC request envelope.
     :returns: Parsed JSON-RPC result payload, or ``None``.
     """
@@ -2790,7 +2790,7 @@ async def _post_codex_elicitation_request(
     event: CodexMessage,
 ) -> httpx.Response | None:
     """
-    POST a Codex server-to-client request to the Omnigent hook endpoint,
+    POST a Codex server-to-client request to the Goalrail hook endpoint,
     re-POSTing across severed long-polls.
 
     This is deliberately separate from ``_post_session_event``:
@@ -2806,8 +2806,8 @@ async def _post_codex_elicitation_request(
     ``_CODEX_ELICITATION_REQUEST_TIMEOUT_SECONDS`` budget; 2xx and 4xx
     responses are final.
 
-    :param client: HTTP client for Omnigent hook posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail hook posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param event: Codex JSON-RPC request envelope.
     :returns: The final hook response, or ``None`` when the retry budget
         ran out — the caller leaves the native request unanswered, as
@@ -2860,7 +2860,7 @@ def _note_native_plan_implementation_prompt(
 
     The current Codex TUI owns the final Plan-mode picker locally, but
     if a future app-server starts emitting it as ``requestUserInput``,
-    the Omnigent bridge should relay that native request and skip its
+    the Goalrail bridge should relay that native request and skip its
     synthetic fallback for the same turn.
 
     :param forwarder_state: Mutable forwarder state.
@@ -2909,7 +2909,7 @@ async def _maybe_handle_plan_implementation_prompt(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Publish and resolve the Plan-mode implementation prompt in Omnigent Web.
+    Publish and resolve the Plan-mode implementation prompt in Goalrail Web.
 
     Codex's terminal UI asks ``Implement this plan?`` after a completed
     Plan-mode turn, but that picker is local to the TUI. The app-server
@@ -2917,9 +2917,9 @@ async def _maybe_handle_plan_implementation_prompt(
     the same user-facing question through the existing Codex
     ``requestUserInput`` hook and starts the selected follow-up turn.
 
-    :param client: HTTP client for Omnigent hook posts.
+    :param client: HTTP client for Goalrail hook posts.
     :param codex_client: Connected Codex app-server client.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param params: Codex ``turn/completed`` params.
     :param forwarder_state: Mutable forwarder state.
@@ -3133,8 +3133,8 @@ async def _handle_turn_started(
     """
     Forward a Codex terminal turn start event.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param params: Codex ``turn/started`` params.
     :returns: None.
@@ -3148,7 +3148,7 @@ def _turn_started_status_edge(
     params: dict[str, Any],
 ) -> _CodexTurnStatusEdge:
     """
-    Record a Codex turn start and return the Omnigent running edge.
+    Record a Codex turn start and return the Goalrail running edge.
 
     :param bridge_dir: Native Codex bridge directory.
     :param params: Codex ``turn/started`` params.
@@ -3174,8 +3174,8 @@ async def _handle_terminal_turn_event(
     """
     Forward a terminal-observed Codex turn completion/failure event.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param method: Codex method, e.g. ``"turn/completed"``.
     :param params: Codex turn event params.
@@ -3201,7 +3201,7 @@ def _terminal_turn_status_edge(
     params: dict[str, Any],
 ) -> _CodexTurnStatusEdge | None:
     """
-    Return the terminal Omnigent edge for a Codex terminal turn event.
+    Return the terminal Goalrail edge for a Codex terminal turn event.
 
     The edge is produced when the event clears the recorded active turn, or
     when it safely recovers a missed ``turn/started`` for the bridge's current
@@ -3272,7 +3272,7 @@ def _claim_completed_item(
     forwarder_state: _CodexForwarderState | None,
 ) -> bool:
     """
-    Claim one completed Codex transcript item for Omnigent posting.
+    Claim one completed Codex transcript item for Goalrail posting.
 
     Returns ``True`` when the caller should post the item; ``False`` when
     it was already posted this connection (dedup gate). Also advances the
@@ -3310,13 +3310,13 @@ async def _handle_completed_item(
     forwarder_state: _CodexForwarderState | None = None,
 ) -> None:
     """
-    Forward one Codex completed item event when it maps to Omnigent history.
+    Forward one Codex completed item event when it maps to Goalrail history.
 
     Deduplicates via ``_claim_completed_item`` so replay and live deliveries
     of the same item only write once. Collab items are dispatched separately.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``item/completed`` params.
     :param forwarder_state: Optional mutable state for dedup tracking.
     :returns: None.
@@ -3359,7 +3359,7 @@ async def _handle_completed_item(
         # turn starts, so the early ``userMessage`` event can stream past
         # before the subscription lands — it is then recovered only via a
         # later resume backfill, which can post it AFTER this reply. Since
-        # Omnigent assigns each mirrored item a position by POST arrival order
+        # Goalrail assigns each mirrored item a position by POST arrival order
         # and the web UI renders strictly by position, that inverts the
         # bubbles. Recover and post the turn's user message first so it
         # always takes the earlier position.
@@ -3391,8 +3391,8 @@ async def _maybe_persist_interrupted_partial_text(
     persist the visible partial answer as a real assistant message before
     the session goes idle.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param method: Codex terminal method, e.g. ``"turn/completed"``.
     :param params: Codex terminal notification params.
     :param forwarder_state: Mutable forwarder state carrying partial text.
@@ -3453,8 +3453,8 @@ async def _post_interrupted_partial_agent_message(
     """
     Persist an interrupted Codex turn's visible partial assistant text.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex turn params including ``turnId``.
     :param text: Partial assistant text, e.g. ``"The answer is"``.
     :returns: None.
@@ -3482,12 +3482,12 @@ async def _handle_collab_item(
     """
     Handle a Codex ``collabAgentToolCall`` completed item.
 
-    Registers newly discovered child threads and posts Omnigent status updates
+    Registers newly discovered child threads and posts Goalrail status updates
     from the collab-agent state snapshot in the item. Does not write
     durable transcript records — the transcript for each child arrives
     via that child's own ``item/completed`` stream.
 
-    :param client: HTTP client for Omnigent event posts.
+    :param client: HTTP client for Goalrail event posts.
     :param params: Codex ``item/completed`` params.
     :param item: Codex ``collabAgentToolCall`` item.
     :param forwarder_state: Mutable state for child-thread mappings.
@@ -3515,7 +3515,7 @@ def _parent_session_id_from_forwarder_state(
     forwarder_state: _CodexForwarderState,
 ) -> str | None:
     """
-    Return the parent Omnigent session id stored on the forwarder state.
+    Return the parent Goalrail session id stored on the forwarder state.
 
     Set by ``supervise_forwarder`` when the loop starts. Returns ``None``
     when called from a context that did not set a parent session (e.g.
@@ -3537,13 +3537,13 @@ async def _ensure_child_session(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Ensure a Codex child thread has an Omnigent child session row.
+    Ensure a Codex child thread has a Goalrail child session row.
 
     Registers the child via ``_register_child_session`` when unknown,
     then backfills its history at most once per connection.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param parent_session_id: Parent Omnigent session id, e.g. ``"conv_parent"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param parent_session_id: Parent Goalrail session id, e.g. ``"conv_parent"``.
     :param parent_thread_id: Parent Codex thread id, or ``None``.
     :param child_thread_id: Codex child thread id, e.g. ``"thread_child"``.
     :param item: Codex ``collabAgentToolCall`` item with spawn metadata.
@@ -3586,12 +3586,12 @@ async def _register_child_session(
     """
     POST ``external_codex_subagent_start`` and return the child session id.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param parent_session_id: Parent Omnigent session id, e.g. ``"conv_parent"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param parent_session_id: Parent Goalrail session id, e.g. ``"conv_parent"``.
     :param parent_thread_id: Parent Codex thread id, or ``None``.
     :param child_thread_id: Codex child thread id, e.g. ``"thread_child"``.
     :param item: Codex ``collabAgentToolCall`` item.
-    :returns: Omnigent child session id, or ``None`` on failure.
+    :returns: Goalrail child session id, or ``None`` on failure.
     """
     data: dict[str, Any] = {"thread_id": child_thread_id}
     if parent_thread_id is not None:
@@ -3618,9 +3618,9 @@ def _extract_child_session_id(
     """
     Extract the child session id from an ``external_codex_subagent_start`` response.
 
-    :param response: Omnigent HTTP response.
+    :param response: Goalrail HTTP response.
     :param child_thread_id: Codex child thread id for error logging.
-    :returns: Omnigent child session id, or ``None`` when absent or malformed.
+    :returns: Goalrail child session id, or ``None`` when absent or malformed.
     """
     child_session_id = response.json().get("child_session_id")
     if not isinstance(child_session_id, str) or not child_session_id:
@@ -3651,11 +3651,11 @@ async def _backfill_child_thread(
     flow through the normal routing path; the dedup key prevents
     overlap.
 
-    :param client: HTTP client for Omnigent event posts.
+    :param client: HTTP client for Goalrail event posts.
     :param codex_client: Connected Codex app-server client.
-    :param parent_session_id: Parent Omnigent session id, e.g.
+    :param parent_session_id: Parent Goalrail session id, e.g.
         ``"conv_parent"``.
-    :param child_session_id: Omnigent child session id, e.g.
+    :param child_session_id: Goalrail child session id, e.g.
         ``"conv_child"``.
     :param child_thread_id: Codex child thread id, e.g.
         ``"thread_child"``.
@@ -3687,9 +3687,9 @@ async def _resume_child_thread_or_log(
     """
     Request ``thread/resume`` for a child thread, logging errors.
 
-    :param client: HTTP client for Omnigent status posts on failure.
+    :param client: HTTP client for Goalrail status posts on failure.
     :param codex_client: Connected Codex app-server client.
-    :param child_session_id: Omnigent child session id, e.g. ``"conv_child"``.
+    :param child_session_id: Goalrail child session id, e.g. ``"conv_child"``.
     :param child_thread_id: Codex child thread id, e.g.
         ``"thread_child"``.
     :returns: JSON-RPC response on success, or ``None`` on error.
@@ -3721,9 +3721,9 @@ async def _apply_child_resume(
     """
     Upsert child name labels and replay its backlogged transcript.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param parent_session_id: Parent Omnigent session id, e.g. ``"conv_parent"``.
-    :param child_session_id: Omnigent child session id, e.g. ``"conv_child"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param parent_session_id: Parent Goalrail session id, e.g. ``"conv_parent"``.
+    :param child_session_id: Goalrail child session id, e.g. ``"conv_child"``.
     :param child_thread_id: Codex child thread id, e.g. ``"thread_child"``.
     :param response: Validated ``thread/resume`` response envelope.
     :param forwarder_state: Mutable state for sub-agent mappings.
@@ -3799,8 +3799,8 @@ async def _upsert_child_name_from_resume(
     Idempotent — the server merges labels. No-ops when the resume carries
     no name fields beyond the thread id.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param parent_session_id: Parent Omnigent session id, e.g. ``"conv_parent"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param parent_session_id: Parent Goalrail session id, e.g. ``"conv_parent"``.
     :param child_thread_id: Codex child thread id, e.g. ``"thread_child"``.
     :param response: Codex ``thread/resume`` response envelope.
     :returns: None.
@@ -3845,9 +3845,9 @@ async def _post_collab_agent_statuses(
     forwarder_state: _CodexForwarderState,
 ) -> None:
     """
-    Publish Omnigent status updates from a Codex collab-agent state snapshot.
+    Publish Goalrail status updates from a Codex collab-agent state snapshot.
 
-    :param client: HTTP client for Omnigent event posts.
+    :param client: HTTP client for Goalrail event posts.
     :param item: Codex ``collabAgentToolCall`` item carrying
         ``agentsStates``.
     :param forwarder_state: Mutable state for child-thread mappings.
@@ -3869,11 +3869,11 @@ async def _post_collab_agent_statuses(
 
 def _omnigent_status_from_collab_state(state: dict[str, Any]) -> str | None:
     """
-    Convert a Codex collab-agent state dict to an Omnigent session status.
+    Convert a Codex collab-agent state dict to a Goalrail session status.
 
     :param state: Codex ``CollabAgentState`` dict, e.g.
         ``{"status": "running"}``.
-    :returns: Omnigent status literal, e.g. ``"running"``, or ``None`` when
+    :returns: Goalrail status literal, e.g. ``"running"``, or ``None`` when
         the Codex status is unrecognized.
     """
     status = state.get("status")
@@ -3934,15 +3934,15 @@ async def _handle_agent_message_delta(
     Forward one live Codex assistant text delta to AP.
 
     Codex app-server emits ``item/agentMessage/delta`` while a turn is
-    running. Omnigent normally persists only the completed ``agentMessage`` item,
+    running. Goalrail normally persists only the completed ``agentMessage`` item,
     so this path publishes a transient text-delta SSE event and relies on
     the later ``item/completed`` notification for durable completed-turn
     history. The same text is also buffered in memory so an interrupted turn
     that never emits a completed item can still persist the visible partial
     answer.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param params: Codex ``item/agentMessage/delta`` params, e.g.
         ``{"turnId": "turn_123", "itemId": "item_123",
@@ -4003,13 +4003,13 @@ async def _handle_plan_delta(
 
     Plan mode streams visible plan prose through
     ``item/plan/delta`` rather than ``item/agentMessage/delta``.
-    Omnigent uses the same transient output-text delta channel for both,
+    Goalrail uses the same transient output-text delta channel for both,
     and the later completed ``plan`` item or structured plan update
     provides the durable completed-turn transcript state. Interrupted turns
     consume the buffered deltas so the visible partial plan is still durable.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Codex bridge directory.
     :param params: Codex ``item/plan/delta`` params, e.g.
         ``{"turnId": "turn_123", "itemId": "item_plan",
@@ -4070,7 +4070,7 @@ async def _ensure_user_message_posted(
     ``agentMessage`` for a turn, so this is a no-op. But on a fresh thread
     the subscription can miss the early ``userMessage`` event; this
     recovers it via a targeted ``thread/resume`` and posts it through the
-    normal claim/post path so it takes an earlier Omnigent position than the
+    normal claim/post path so it takes an earlier Goalrail position than the
     reply. The recovered item carries Codex's resume id (e.g. ``item-1``),
     matching the id the resume backfill would later use — so the dedup
     gate drops the backfill's duplicate.
@@ -4079,8 +4079,8 @@ async def _ensure_user_message_posted(
     ``supervise_forwarder``), when no Codex client is wired, or when the
     turn's user message was already posted this connection.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``item/completed`` params for the assistant
         message whose turn's user message must already be posted.
     :param forwarder_state: Mutable forwarder state tracking posted user
@@ -4162,8 +4162,8 @@ async def _post_user_message(
     """
     Persist a Codex user message observed from the TUI.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex notification params.
     :param item: Codex ``userMessage`` item.
     :returns: None.
@@ -4211,8 +4211,8 @@ async def _post_agent_message(
     """
     Persist a Codex assistant message observed from the TUI/app-server.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex notification params.
     :param item: Codex ``agentMessage`` item.
     :returns: None.
@@ -4240,7 +4240,7 @@ async def _post_tool_item(
     item: dict[str, Any],
 ) -> None:
     """
-    Mirror one completed Codex built-in tool call into Omnigent history.
+    Mirror one completed Codex built-in tool call into Goalrail history.
 
     A native Codex session runs Codex's own tools (shell commands, file
     edits, web search) rather than client-tunneled dynamic tools, so a
@@ -4248,8 +4248,8 @@ async def _post_tool_item(
     and its result. This translates that one item into the AP
     ``function_call`` / ``function_call_output`` pair the web UI renders.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``item/completed`` params.
     :param item: Codex tool item, e.g.
         ``{"type": "commandExecution", "id": "call_abc",
@@ -4298,8 +4298,8 @@ async def _post_plan_item(
     """
     Persist one completed Codex plan item as assistant text.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex ``item/completed`` params.
     :param item: Codex ``plan`` thread item.
     :returns: None.
@@ -4350,7 +4350,7 @@ def _codex_tool_call_from_item(item: dict[str, Any]) -> _CodexToolCall | None:
 # access" preset's ``danger-full-access`` (or a config ``sandbox_mode``) does.
 _CODEX_SANDBOX_NAMESPACE_ERROR_MARKER = "No permissions to create new namespace"
 _CODEX_SANDBOX_BYPASS_GUIDANCE = (
-    "Omnigent: Codex's command sandbox could not start because this container "
+    "Goalrail: Codex's command sandbox could not start because this container "
     "disallows unprivileged user namespaces, so the command did not run. To run "
     'shell commands here, start a new Codex session with the "Full access" '
     "approval preset (New chat → Advanced settings), or set "
@@ -4474,7 +4474,7 @@ def _web_search_tool_call(call_id: str, item: dict[str, Any]) -> _CodexToolCall 
     )
 
 
-# Codex built-in tool item types this forwarder mirrors into Omnigent history.
+# Codex built-in tool item types this forwarder mirrors into Goalrail history.
 # ``mcpToolCall`` is intentionally absent: its event shape has not been
 # verified, so it is logged-but-skipped rather than mirrored with guessed
 # fields. Add it here once its real shape is captured.
@@ -4501,8 +4501,8 @@ async def _post_external_item(
     persisted with a random primary key. Avoiding re-posts on resume is
     the producer's own responsibility.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param item_type: Conversation item type, e.g. ``"message"``.
     :param item_data: Conversation item payload.
     :param response_id: Response id for the mirrored Codex turn.
@@ -4539,8 +4539,8 @@ async def _post_status(
     """
     Publish a native Codex status edge.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param status: Session status, e.g. ``"running"``.
     :param response_id: Optional response id for this status edge,
         e.g. ``"codex_turn_abc123"``.
@@ -4566,8 +4566,8 @@ async def _post_turn_status_edge(
     """
     Publish one Codex turn lifecycle edge if a valid edge was derived.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param edge: Derived lifecycle edge, or ``None`` when no status should
         be published.
     :returns: None.
@@ -4593,11 +4593,11 @@ async def _post_external_elicitation_resolved(
     """
     Post a native-side elicitation resolution signal to AP.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
-    :param elicitation_id: Omnigent elicitation id, e.g.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
+    :param elicitation_id: Goalrail elicitation id, e.g.
         ``"elicit_codex_abc123"``.
-    :returns: ``True`` when Omnigent accepted the event.
+    :returns: ``True`` when Goalrail accepted the event.
     """
     response = await _post_session_event(
         client,
@@ -4621,8 +4621,8 @@ async def _post_output_text_delta(
     """
     Publish a transient Codex assistant text delta.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param delta: Assistant text fragment, e.g. ``"hello"``.
     :param message_id: Optional stable native message stream id,
         e.g. ``"codex:thread_123:turn_123:agentMessage:item_agent"``.
@@ -4658,7 +4658,7 @@ async def _handle_reasoning_delta(
     Forward one live Codex reasoning (chain-of-thought) delta to AP.
 
     Codex emits ``item/reasoning/textDelta`` and
-    ``item/reasoning/summaryTextDelta`` while it thinks. Omnigent has no
+    ``item/reasoning/summaryTextDelta`` while it thinks. Goalrail has no
     completed reasoning conversation item — the reasoning block is
     transient and is finalized when the turn's assistant message arrives —
     so this only publishes a transient ``external_output_reasoning_delta``
@@ -4666,8 +4666,8 @@ async def _handle_reasoning_delta(
     executor's wire shape (#1254). The first delta of a reasoning item
     opens the block (``started=True`` → ``response.reasoning.started``).
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param params: Codex reasoning delta params, e.g.
         ``{"turnId": "turn_123", "itemId": "item_r", "delta": "Let me"}``.
     :param forwarder_state: Optional forwarder state tracking which
@@ -4710,8 +4710,8 @@ async def _post_output_reasoning_delta(
     """
     Publish a transient Codex reasoning delta.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param delta: Reasoning text fragment, e.g. ``"Let me think"``.
     :param started: Whether this opens a new reasoning block; when
         ``True`` the server precedes the delta with a single
@@ -4736,8 +4736,8 @@ async def _post_session_interrupted(
     """
     Publish a Codex-observed interrupted-turn signal into AP.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param response_id: Optional interrupted response id, e.g.
         ``"codex_turn_abc123"``.
     :returns: None.
@@ -4756,7 +4756,7 @@ async def _post_session_interrupted(
 
 def _session_usage_data_from_params(params: dict[str, Any]) -> dict[str, int] | None:
     """
-    Extract Omnigent session-usage fields from a Codex usage notification.
+    Extract Goalrail session-usage fields from a Codex usage notification.
 
     :param params: Codex ``thread/tokenUsage/updated`` params.
     :returns: A dict with any of ``context_tokens`` / ``context_window``
@@ -4783,7 +4783,7 @@ def _session_usage_data_from_params(params: dict[str, Any]) -> dict[str, int] | 
         # ``total.inputTokens`` / ``outputTokens`` are the session's cumulative
         # token counts. Forward them as the cumulative fields the server prices
         # into ``total_cost_usd`` (SET semantics) — codex-native produces no
-        # ``response.completed``, so the Omnigent relay never accounts its cost.
+        # ``response.completed``, so the Goalrail relay never accounts its cost.
         data["cumulative_input_tokens"] = cumulative_input_tokens
         # Codex's ``inputTokens`` is INCLUSIVE of cached tokens
         # (``non_cached_input = input_tokens - cached_input_tokens`` in
@@ -4822,10 +4822,10 @@ async def _post_session_event(
     data: dict[str, Any],
 ) -> httpx.Response | None:
     """
-    Post one Omnigent session event with bounded transient retries.
+    Post one Goalrail session event with bounded transient retries.
 
-    :param client: HTTP client for Omnigent event posts.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for Goalrail event posts.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param event_type: Session event type, e.g.
         ``"external_conversation_item"``.
     :param data: Event data payload, e.g.
@@ -4884,7 +4884,7 @@ def _post_response_is_final(response: httpx.Response, attempt: int) -> bool:
 
 def _is_final_post_attempt(attempt: int) -> bool:
     """
-    Return whether an Omnigent event POST attempt is the final try.
+    Return whether a Goalrail event POST attempt is the final try.
 
     :param attempt: One-based attempt number, e.g. ``3``.
     :returns: ``True`` when no further retry is allowed.
@@ -4894,7 +4894,7 @@ def _is_final_post_attempt(attempt: int) -> bool:
 
 def _log_post_transport_failure(event_type: str, exc: httpx.HTTPError) -> None:
     """
-    Log an exhausted Omnigent session-event transport failure.
+    Log an exhausted Goalrail session-event transport failure.
 
     :param event_type: Session event type, e.g.
         ``"external_conversation_item"``.
@@ -4918,7 +4918,7 @@ def _log_failed_session_event_post(
 
     :param event_type: Session event type, e.g.
         ``"external_session_status"``.
-    :param response: Final Omnigent response, or ``None`` after transport
+    :param response: Final Goalrail response, or ``None`` after transport
         errors exhausted all retries.
     :returns: None.
     """
@@ -4936,7 +4936,7 @@ def _log_failed_session_event_post(
 
 def _should_retry_post_status(status_code: int) -> bool:
     """
-    Return whether an Omnigent event POST status is transient.
+    Return whether a Goalrail event POST status is transient.
 
     :param status_code: HTTP status code, e.g. ``503``.
     :returns: ``True`` when the forwarder should retry.
@@ -4946,7 +4946,7 @@ def _should_retry_post_status(status_code: int) -> bool:
 
 def _post_retry_delay(attempt: int) -> float:
     """
-    Return the retry delay for a failed Omnigent event POST attempt.
+    Return the retry delay for a failed Goalrail event POST attempt.
 
     :param attempt: One-based failed attempt number, e.g. ``1``.
     :returns: Delay in seconds before the next attempt.
@@ -4999,7 +4999,7 @@ def _turn_status_is_interrupted(status: str | None) -> bool:
 
 def _params_with_turn_id(params: dict[str, Any], turn_id: str) -> dict[str, Any]:
     """
-    Return params with a top-level ``turnId`` for Omnigent response ids.
+    Return params with a top-level ``turnId`` for Goalrail response ids.
 
     :param params: Codex notification params.
     :param turn_id: Codex turn id, e.g. ``"turn_123"``.
@@ -5159,9 +5159,9 @@ def _item_id_from_delta_params(params: dict[str, Any]) -> str | None:
 
 def _streaming_message_id(params: dict[str, Any], item_type: str) -> str | None:
     """
-    Build a stable Omnigent live-delta stream id for a Codex item.
+    Build a stable Goalrail live-delta stream id for a Codex item.
 
-    Omnigent Web uses this id to keep terminal-observed live text in a
+    Goalrail Web uses this id to keep terminal-observed live text in a
     provisional native block, then replace that block when the durable
     completed item arrives. Returning ``None`` preserves the generic
     Responses-style text stream for malformed deltas that carry no
@@ -5387,7 +5387,7 @@ def _plan_status_marker(status: Any) -> str:
 
 def _response_id(params: dict[str, Any]) -> str:
     """
-    Build a stable Omnigent response id for a Codex notification.
+    Build a stable Goalrail response id for a Codex notification.
 
     :param params: Codex notification params.
     :returns: Response id, e.g. ``"codex_turn_abc123"``.

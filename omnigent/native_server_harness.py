@@ -122,7 +122,7 @@ class NativeServerHarness(Executor):
 
         :param messages: Conversation history; the latest user message is
             delivered.
-        :param tools: Omnigent tool schemas (ignored — native owns tools).
+        :param tools: Goalrail tool schemas (ignored — native owns tools).
         :param system_prompt: Agent system prompt (ignored — set at
             session creation).
         :param config: Per-turn config (model override applied if present).

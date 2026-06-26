@@ -23,10 +23,10 @@ _STARTUP_ERROR_FILE = "startup_error.json"
 # ``serve-mcp`` reads this filename for the token.
 _MCP_CONFIG_FILE = "bridge.json"
 # Config the codex-native PreToolUse/PostToolUse policy hook subprocess
-# reads to reach the Omnigent server. Mirrors Claude-native's
+# reads to reach the Goalrail server. Mirrors Claude-native's
 # ``permission_hook.json`` (see ``claude_native_bridge``). Kept in a
 # separate file from ``state.json`` because it is written once at bridge
-# prep time (the Omnigent URL + auth do not change across thread rotations),
+# prep time (the Goalrail URL + auth do not change across thread rotations),
 # whereas ``state.json`` mutates on every turn/thread change.
 _POLICY_HOOK_FILE = "policy_hook.json"
 _BRIDGE_ROOT = Path.home() / ".omnigent" / "codex-native"
@@ -49,7 +49,7 @@ class CodexNativeBridgeState:
     """
     Runtime state shared by the native Codex wrapper and harness.
 
-    :param session_id: Omnigent conversation id, e.g.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param socket_path: Unix socket path for the Codex app-server,
         e.g. ``"/home/user/.omnigent/codex-native/x/app-server.sock"``.
@@ -88,7 +88,7 @@ def build_codex_native_spawn_env(
     """
     Build spawn env for the ``codex-native`` harness process.
 
-    :param conversation_id: Omnigent conversation id, e.g.
+    :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param bridge_id: Opaque bridge id from
         :data:`CODEX_NATIVE_BRIDGE_ID_LABEL_KEY`, e.g.
@@ -153,7 +153,7 @@ def codex_mcp_config_overrides(
     python_executable: str | None = None,
 ) -> list[str]:
     """
-    Return ``-c`` config overrides that register the Omnigent MCP server.
+    Return ``-c`` config overrides that register the Goalrail MCP server.
 
     The overrides configure codex to launch ``serve-mcp`` from
     :mod:`omnigent.claude_native_bridge` as a stdio MCP server.
@@ -185,19 +185,19 @@ def write_policy_hook_config(
     ap_auth_headers: dict[str, str],
 ) -> None:
     """
-    Write the Omnigent coordinates the codex-native policy hook needs.
+    Write the Goalrail coordinates the codex-native policy hook needs.
 
     The ``PreToolUse`` / ``PostToolUse`` command hook runs as a short
     subprocess that must POST to ``/v1/sessions/{id}/policies/evaluate``
-    on the Omnigent server. It cannot inherit the long-lived forwarder's
-    in-memory client, so the Omnigent base URL and auth headers are persisted
+    on the Goalrail server. It cannot inherit the long-lived forwarder's
+    in-memory client, so the Goalrail base URL and auth headers are persisted
     here and read by :func:`read_policy_hook_config` at hook time.
 
     :param bridge_dir: Native Codex bridge directory, e.g.
         ``Path("~/.omnigent/codex-native/<hash>")``.
-    :param ap_server_url: Omnigent server base URL the hook POSTs to, e.g.
+    :param ap_server_url: Goalrail server base URL the hook POSTs to, e.g.
         ``"http://127.0.0.1:8787"``.
-    :param ap_auth_headers: Outbound auth headers for Omnigent requests, e.g.
+    :param ap_auth_headers: Outbound auth headers for Goalrail requests, e.g.
         ``{"Authorization": "Bearer <token>"}``. Empty dict for
         local-server mode with no auth provider.
     :returns: None.
@@ -218,13 +218,13 @@ def write_policy_hook_config(
 
 def read_policy_hook_config(bridge_dir: Path) -> dict[str, object] | None:
     """
-    Read the Omnigent coordinates for the codex-native policy hook.
+    Read the Goalrail coordinates for the codex-native policy hook.
 
     :param bridge_dir: Native Codex bridge directory.
     :returns: Parsed config, e.g.
         ``{"ap_server_url": "http://127.0.0.1:8787",
         "ap_auth_headers": {"Authorization": "Bearer <token>"}}``, or
-        ``None`` when no config has been written (no Omnigent server
+        ``None`` when no config has been written (no Goalrail server
         configured for this session).
     """
     path = bridge_dir / _POLICY_HOOK_FILE
@@ -457,7 +457,7 @@ def update_thread_id(bridge_dir: Path, thread_id: str, active_turn_id: str | Non
     Update the Codex thread id in bridge state.
 
     Used when a native Codex action creates a fresh thread while the
-    Omnigent session stays the same.
+    Goalrail session stays the same.
 
     :param bridge_dir: Native Codex bridge directory.
     :param thread_id: New Codex thread id, e.g. ``"thread_abc123"``.

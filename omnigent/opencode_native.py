@@ -123,7 +123,7 @@ _SESSION_LABELS = {
 
 @dataclass(frozen=True)
 class LaunchedOpenCodeTerminal:
-    """Terminal resource returned by the Omnigent runner launch path."""
+    """Terminal resource returned by the Goalrail runner launch path."""
 
     terminal_id: str
     tmux_socket: Path | None
@@ -165,16 +165,16 @@ def run_opencode_native(  # pragma: no cover
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch the OpenCode TUI in an Omnigent terminal (the ``omnigent opencode`` path).
+    Launch the OpenCode TUI in a Goalrail terminal (the ``omnigent opencode`` path).
 
     Mirrors ``omnigent codex`` / ``omnigent pi``: ensure a local daemon + runner,
     create-or-resume the ``opencode-native-ui`` session (the runner auto-creates
     the ``opencode serve`` + ``opencode attach`` terminal), then attach this TTY
     to that runner-owned tmux pane.
 
-    :param server: Resolved Omnigent server URL. ``None`` is an error (the CLI
+    :param server: Resolved Goalrail server URL. ``None`` is an error (the CLI
         must resolve a backend first).
-    :param session_id: Optional existing Omnigent conversation id to resume.
+    :param session_id: Optional existing Goalrail conversation id to resume.
     :param opencode_args: Raw ``opencode`` CLI args to persist for the TUI.
     :param resume_picker: When ``True``, run the opencode-native resume picker.
     :param model: Optional model id pinned on the materialized wrapper spec.
@@ -184,7 +184,7 @@ def run_opencode_native(  # pragma: no cover
     _preflight_local_tools()
     if server is None:
         raise click.ClickException(
-            "OpenCode requires a resolved Omnigent server URL. The CLI should resolve "
+            "OpenCode requires a resolved Goalrail server URL. The CLI should resolve "
             "a backend before run_opencode_native."
         )
     with TemporaryDirectory(prefix="omnigent-opencode-native-") as tmpdir:
@@ -208,7 +208,7 @@ def _run_with_remote_server(  # pragma: no cover
     opencode_args: tuple[str, ...],
     auto_open_conversation: bool = False,
 ) -> None:
-    """Launch OpenCode on an Omnigent server via a daemon-spawned runner."""
+    """Launch OpenCode on a Goalrail server via a daemon-spawned runner."""
     from omnigent.chat import _bundle_agent, _remote_headers
     from omnigent.cli import _ensure_host_daemon
     from omnigent.host.identity import load_or_create_host_identity
@@ -381,7 +381,7 @@ async def _create_opencode_session(
 
 
 async def _fetch_opencode_session(client: httpx.AsyncClient, session_id: str) -> dict[str, Any]:
-    """Fetch an existing Omnigent session."""
+    """Fetch an existing Goalrail session."""
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
     if resp.status_code == 404:
         raise click.ClickException(f"Conversation {session_id!r} not found on the server.")

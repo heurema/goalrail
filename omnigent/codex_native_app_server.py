@@ -57,7 +57,7 @@ _DATABRICKS_CODEX_DEFAULT_MODEL = "databricks-gpt-5-5"
 _UDS_WEBSOCKET_HANDSHAKE_URI = "ws://localhost/rpc"
 _MAX_WEBSOCKET_MESSAGE_SIZE_BYTES = 128 << 20
 # hooks.json filename written into the private CODEX_HOME registering the
-# Omnigent policy hook. Codex discovers it as a ``user``-layer hook
+# Goalrail policy hook. Codex discovers it as a ``user``-layer hook
 # source on every config load (see codex hooks ``discover_handlers``).
 _CODEX_HOOKS_FILE = "hooks.json"
 # Module the codex policy command hook runs. Also the marker used to
@@ -134,7 +134,7 @@ def _remove_toml_table(text: str, table_name: str) -> str:
     Remove one TOML table and its subtables from a config document.
 
     Used for generated private Codex config before appending the
-    Omnigent MCP server table. This avoids accumulating duplicate
+    Goalrail MCP server table. This avoids accumulating duplicate
     ``[mcp_servers.omnigent]`` sections across terminal relaunches.
 
     :param text: TOML document text.
@@ -228,7 +228,7 @@ def _inject_mcp_server_config(
     python_executable: str | None = None,
 ) -> None:
     """
-    Upsert Omnigent MCP server config into ``config.toml``.
+    Upsert Goalrail MCP server config into ``config.toml``.
 
     Writes a ``[mcp_servers.omnigent]`` section that points Codex
     at the ``serve-mcp`` subprocess. This supplements the ``-c``
@@ -404,7 +404,7 @@ class CodexAppServerClient:
 
         Codex app-server can send server-to-client requests on the
         same websocket, such as ``mcpServer/elicitation/request``.
-        The forwarder handles those requests through Omnigent and replies
+        The forwarder handles those requests through Goalrail and replies
         with this method using Codex's original request id.
 
         :param request_id: JSON-RPC id from the Codex request, e.g.
@@ -466,13 +466,13 @@ class CodexNativeAppServer:
     :param bridge_dir: Native Codex bridge directory, e.g.
         ``Path("~/.omnigent/codex-native/<hash>")``. The policy hook
         subprocess is pointed at it via ``--bridge-dir`` and reads the
-        session id + Omnigent coordinates from it.
-    :param ap_server_url: Omnigent server base URL the policy hook POSTs tool
+        session id + Goalrail coordinates from it.
+    :param ap_server_url: Goalrail server base URL the policy hook POSTs tool
         calls to, e.g. ``"http://127.0.0.1:8787"``. ``None`` registers
-        and trusts the hook but writes no Omnigent coordinates, so the hook
+        and trusts the hook but writes no Goalrail coordinates, so the hook
         no-ops (no enforcement) until coordinates exist.
     :param ap_auth_headers: Outbound auth headers for the policy hook's
-        Omnigent requests, e.g. ``{"Authorization": "Bearer <token>"}``.
+        Goalrail requests, e.g. ``{"Authorization": "Bearer <token>"}``.
     :param python_executable: Python executable the policy hook command
         runs, e.g. ``"/path/to/.venv/bin/python"``. ``None`` uses
         :data:`sys.executable`.
@@ -490,7 +490,7 @@ class CodexNativeAppServer:
         read) consistent with what the session was launched to run.
     :param policy_notice_pending: One-shot flag: ``True`` once a degrade
         reason is recorded, until the runner's terminal-ensure handler
-        surfaces it to Omnigent (which posts a single durable banner). Prevents
+        surfaces it to Goalrail (which posts a single durable banner). Prevents
         re-posting the same notice on every subsequent ensure. Not a
         constructor input.
     """
@@ -553,9 +553,9 @@ class CodexNativeAppServer:
                 "codex to enforce tool-call policies."
             )
         else:
-            # Register the Omnigent policy hook in this private CODEX_HOME
+            # Register the Goalrail policy hook in this private CODEX_HOME
             # *before* launching the app-server so codex discovers it at
-            # config load. The Omnigent coordinates the hook subprocess
+            # config load. The Goalrail coordinates the hook subprocess
             # needs go in the bridge dir's policy_hook.json; without
             # ap_server_url the hook is still registered + trusted but
             # no-ops.
@@ -632,7 +632,7 @@ class CodexNativeAppServer:
 
     async def _trust_policy_hooks(self) -> None:
         """
-        Mark the registered Omnigent policy hook as trusted.
+        Mark the registered Goalrail policy hook as trusted.
 
         A freshly-written non-managed hook is ``untrusted`` and codex
         silently skips untrusted hooks — for a policy gate that is a
@@ -718,7 +718,7 @@ class CodexNativeAppServer:
         Called by :meth:`start` when it degrades the session to "no
         enforcement" — either codex is too old to trust the hook, or the
         trust handshake failed. The reason is in
-        :attr:`policy_hook_disabled_reason`. When Omnigent coordinates are
+        :attr:`policy_hook_disabled_reason`. When Goalrail coordinates are
         present (``ap_server_url`` set) enforcement was intended, so this
         is a loud ``warning``; otherwise nothing would have been enforced
         anyway and it is an ``info``.
@@ -904,7 +904,7 @@ def _our_policy_hooks_from_list(listed: dict[str, Any], cwd: str) -> list[dict[s
         ``result.data`` a list of ``{cwd, hooks: [...]}`` entries.
     :param cwd: The cwd whose hook set to read, e.g.
         ``"/home/user/repo"``.
-    :returns: The matching Omnigent hook metadata dicts (possibly
+    :returns: The matching Goalrail hook metadata dicts (possibly
         empty), each with ``key``, ``currentHash``, ``trustStatus``.
     """
     result = listed.get("result", listed)
@@ -975,7 +975,7 @@ def _untrusted_hook_detail(hooks: list[dict[str, Any]]) -> str:
     requirement rejecting a user hook, or an old codex that omits
     ``trustStatus`` entirely.
 
-    :param hooks: Untrusted Omnigent hook metadata dicts from
+    :param hooks: Untrusted Goalrail hook metadata dicts from
         ``hooks/list``.
     :returns: A semicolon-joined per-hook detail string.
     """
@@ -988,19 +988,19 @@ def _untrusted_hook_detail(hooks: list[dict[str, Any]]) -> str:
 
 async def trust_native_policy_hooks(client: CodexAppServerClient, *, cwd: str) -> None:
     """
-    Trust the Omnigent policy hook so codex actually runs it.
+    Trust the Goalrail policy hook so codex actually runs it.
 
     Runs the same flow codex's TUI uses for hook trust: ``hooks/list``
     to read each hook's content hash, then ``config/batchWrite`` (with
     ``reloadUserConfig`` so loaded threads hot-reload) writing
     ``hooks.state.<key>.trusted_hash = currentHash``. Re-lists and
-    verifies every Omnigent hook ended ``trusted``/``managed``.
+    verifies every Goalrail hook ended ``trusted``/``managed``.
 
     :param client: A connected Codex app-server client.
     :param cwd: The session cwd the hooks are scoped to, e.g.
         ``"/home/user/repo"``.
     :returns: None.
-    :raises RuntimeError: If no Omnigent hook is discovered (it was
+    :raises RuntimeError: If no Goalrail hook is discovered (it was
         not registered or not loaded) or if a hook remains untrusted
         after the trust write. Either is a silent fail-open for a policy
         gate, so it must fail loud.
@@ -1009,7 +1009,7 @@ async def trust_native_policy_hooks(client: CodexAppServerClient, *, cwd: str) -
     ours = _our_policy_hooks_from_list(listed, cwd)
     if not ours:
         raise RuntimeError(
-            f"Omnigent policy hook was not discovered for cwd {cwd!r}; "
+            f"Goalrail policy hook was not discovered for cwd {cwd!r}; "
             "tool-call policy enforcement would silently not run. "
             f"{_hooks_list_diagnostics(listed, cwd)}."
         )
@@ -1052,7 +1052,7 @@ async def trust_native_policy_hooks(client: CodexAppServerClient, *, cwd: str) -
             else ""
         )
         raise RuntimeError(
-            "Omnigent policy hook still untrusted after config/batchWrite; "
+            "Goalrail policy hook still untrusted after config/batchWrite; "
             "tool-call policy enforcement would not run. Untrusted hooks: "
             f"{_untrusted_hook_detail(still_untrusted)}.{hint}"
         )
@@ -1082,19 +1082,19 @@ def build_codex_native_server(
     :param profile: Optional Databricks CLI profile, e.g.
         ``"<your-profile>"``.
     :param bridge_dir: Native Codex bridge directory; the policy hook is
-        pointed at it and reads the session id + Omnigent coordinates from it.
-    :param ap_server_url: Omnigent server base URL the policy hook POSTs tool
+        pointed at it and reads the session id + Goalrail coordinates from it.
+    :param ap_server_url: Goalrail server base URL the policy hook POSTs tool
         calls to, e.g. ``"http://127.0.0.1:8787"``. ``None`` registers
-        the hook but writes no Omnigent coordinates (hook no-ops).
+        the hook but writes no Goalrail coordinates (hook no-ops).
     :param ap_auth_headers: Outbound auth headers for the policy hook's
-        Omnigent requests, e.g. ``{"Authorization": "Bearer <token>"}``.
+        Goalrail requests, e.g. ``{"Authorization": "Bearer <token>"}``.
     :param python_executable: Python executable the policy hook command
         runs. ``None`` uses :data:`sys.executable`.
     :param codex_path: Optional executable override. ``None`` searches
         ``PATH``.
     :param extra_config_overrides: Additional ``-c`` config overrides
         appended after Databricks routing overrides, e.g. MCP server
-        registration for the Omnigent tool relay.
+        registration for the Goalrail tool relay.
     :returns: Configured app-server process wrapper.
     :raises ImportError: If no Codex CLI is available.
     :raises OSError: If Databricks routing was requested but no
@@ -1574,7 +1574,7 @@ def build_codex_remote_args(
     (web-UI-driven) session there is nobody at the terminal to dismiss
     that screen, so ``wait_for_thread_started`` times out and the session
     hangs in ``running`` with no response. Passing the provider overrides
-    through makes the TUI resolve the Omnigent provider
+    through makes the TUI resolve the Goalrail provider
     (``requires_openai_auth = false``), skip onboarding, and start the
     thread immediately. Codex global ``-c`` flags must precede the
     ``resume`` subcommand, so they are emitted first.

@@ -1,4 +1,4 @@
-"""Per-session ``KIMI_CODE_HOME`` builder that injects Omnigent hooks.
+"""Per-session ``KIMI_CODE_HOME`` builder that injects Goalrail hooks.
 
 Kimi Code reads a single ``config.toml`` at ``$KIMI_CODE_HOME/config.toml``
 (default ``~/.kimi-code``) and stores its auth (``oauth/`` + ``credentials/``)
@@ -8,7 +8,7 @@ runner points the launched ``kimi`` process at a session-scoped home that:
 
 - symlinks every entry of the user's global home (oauth, credentials,
   sessions, …) so login / providers / history keep working, and
-- carries a ``config.toml`` that is the user's config text with two Omnigent
+- carries a ``config.toml`` that is the user's config text with two Goalrail
   ``[[hooks]]`` appended — a ``PreToolUse`` deny-gate and a ``PermissionRequest``
   read-only surface, both dispatched to :mod:`omnigent.kimi_native_hook`.
 
@@ -45,7 +45,7 @@ def resolve_user_kimi_home() -> Path:
 
 
 def render_kimi_hooks_toml(*, bridge_dir: Path, python_executable: str | None = None) -> str:
-    """Render the two Omnigent ``[[hooks]]`` entries as TOML text.
+    """Render the two Goalrail ``[[hooks]]`` entries as TOML text.
 
     Both hooks dispatch to :mod:`omnigent.kimi_native_hook` with the bridge
     dir baked into the command (no secrets on the command line — the hook reads
@@ -80,7 +80,7 @@ def render_kimi_hooks_toml(*, bridge_dir: Path, python_executable: str | None = 
     # to answer the card — after which kimi's own TUI prompt stands.
     return (
         "\n"
-        "# --- Omnigent native hooks (auto-generated; do not edit) ---\n"
+        "# --- Goalrail native hooks (auto-generated; do not edit) ---\n"
         "[[hooks]]\n"
         'event = "PreToolUse"\n'
         f'command = "{pre}"\n'
@@ -99,11 +99,11 @@ def build_kimi_session_home(
     bridge_dir: Path,
     python_executable: str | None = None,
 ) -> dict[str, str]:
-    """Materialize a session-scoped ``KIMI_CODE_HOME`` with Omnigent hooks.
+    """Materialize a session-scoped ``KIMI_CODE_HOME`` with Goalrail hooks.
 
     Symlinks every entry of the user's global kimi home (except
     ``config.toml``) into *session_home*, then writes a ``config.toml`` that is
-    the user's config plus the Omnigent hooks. Best-effort and idempotent:
+    the user's config plus the Goalrail hooks. Best-effort and idempotent:
     re-running rewrites ``config.toml`` and leaves existing symlinks in place.
 
     :param session_home: Directory to use as the session's ``KIMI_CODE_HOME``.

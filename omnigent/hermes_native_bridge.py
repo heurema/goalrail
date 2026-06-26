@@ -2,15 +2,15 @@
 
 The runner launches the ``hermes`` TUI in a private tmux pane and records that
 pane's socket + target here via :func:`write_tmux_target`. The harness executor
-then delivers Omnigent web-UI messages into the *same* pane via
+then delivers Goalrail web-UI messages into the *same* pane via
 :func:`inject_user_message` (tmux bracketed paste + a single Enter) — the Hermes
 analog of the goose-native tmux bridge. This is what wires the web-UI chat box to
 the running Hermes TUI (and, since the web UI embeds that pane, the message shows
 in both surfaces).
 
-When Omnigent policies are configured the runner writes a per-session
+When Goalrail policies are configured the runner writes a per-session
 ``HERMES_HOME`` with a ``pre_tool_call`` hook (via :func:`write_policy_hook_config`)
-that evaluates tool calls against the Omnigent policy engine — the same hook used
+that evaluates tool calls against the Goalrail policy engine — the same hook used
 by the headless ``hermes`` harness (:mod:`omnigent.inner.hermes_executor`). The
 ``HERMES_HOME`` env var in :func:`build_hermes_native_spawn_env` points the TUI at
 this per-session dir so the hook fires alongside Hermes' own approval prompt.
@@ -86,7 +86,7 @@ def build_hermes_native_spawn_env(session_id: str) -> dict[str, str]:
     was written by :func:`write_policy_hook_config`, the env includes
     ``HERMES_HOME`` so the TUI picks up the policy hook.
 
-    :param session_id: The Omnigent session id (keys the bridge dir).
+    :param session_id: The Goalrail session id (keys the bridge dir).
     :returns: Env-var overrides for the harness executor spawn.
     """
     bridge_dir = bridge_dir_for_session_id(session_id)
@@ -135,14 +135,14 @@ def write_policy_hook_config(
     server_url: str,
     session_id: str,
 ) -> Path:
-    """Write per-session ``HERMES_HOME`` with Omnigent policy hook and MCP server.
+    """Write per-session ``HERMES_HOME`` with Goalrail policy hook and MCP server.
 
     Creates a ``config.yaml`` registering:
 
     1. A ``pre_tool_call`` shell hook that evaluates tool calls against the
-       Omnigent policy engine (same hook the headless ``hermes`` harness uses).
-    2. An ``mcp_servers.omnigent`` entry that launches the Omnigent MCP stdio
-       server (``serve-mcp``), exposing Omnigent builtin tools
+       Goalrail policy engine (same hook the headless ``hermes`` harness uses).
+    2. An ``mcp_servers.omnigent`` entry that launches the Goalrail MCP stdio
+       server (``serve-mcp``), exposing Goalrail builtin tools
        (``sys_session_*``, ``sys_agent_*``, ``load_skill``, ``web_fetch``, etc.)
        to the Hermes model.
 
@@ -151,8 +151,8 @@ def write_policy_hook_config(
     :func:`omnigent.inner.hermes_executor._populate_hermes_home`.
 
     :param bridge_dir: Per-session bridge dir (parent of the HERMES_HOME).
-    :param server_url: Omnigent server base URL.
-    :param session_id: Omnigent session / conversation ID.
+    :param server_url: Goalrail server base URL.
+    :param session_id: Goalrail session / conversation ID.
     :returns: The HERMES_HOME path.
     """
     hermes_home = bridge_dir / _HERMES_HOME_SUBDIR
@@ -188,8 +188,8 @@ def write_policy_hook_config(
         ],
     }
 
-    # Register the Omnigent MCP stdio server so Hermes can call
-    # Omnigent builtin tools (sys_session_*, sys_agent_*, load_skill, etc.).
+    # Register the Goalrail MCP stdio server so Hermes can call
+    # Goalrail builtin tools (sys_session_*, sys_agent_*, load_skill, etc.).
     config["mcp_servers"] = {
         **config.get("mcp_servers", {}),
         "omnigent": {

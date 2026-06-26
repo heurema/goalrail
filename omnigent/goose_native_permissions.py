@@ -2,7 +2,7 @@
 
 In ``approve`` / ``smart_approve`` mode the native ``goose session`` TUI gates
 tool calls with an in-terminal ``cliclack`` selector (its
-``prompt_tool_confirmation``). To also surface those approvals in the Omnigent
+``prompt_tool_confirmation``). To also surface those approvals in the Goalrail
 web UI (so a user can answer from the chat view, not only the embedded terminal),
 the runner watches the Goose pane:
 
@@ -75,7 +75,7 @@ class GooseApprovalPrompt:
 
 
 def goose_permission_elicitation_id(session_id: str, token: str) -> str:
-    """Return the deterministic Omnigent elicitation id for a Goose prompt.
+    """Return the deterministic Goalrail elicitation id for a Goose prompt.
 
     *token* identifies one approval episode (a per-session counter), not the
     scraped content — the rendered tool context above the cliclack widget jitters
@@ -155,7 +155,7 @@ async def supervise_goose_approval_mirror(
 
     :param base_url: Server base URL.
     :param headers: Auth/routing headers for the runner's requests.
-    :param session_id: Omnigent conversation id.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: The goose-native bridge dir holding ``tmux.json``.
     :param auth: Optional httpx auth for the runner's requests.
     :param poll_interval_s: Pane poll cadence in seconds.

@@ -2,7 +2,7 @@
 
 The runner launches the ``kimi`` TUI in a private tmux pane and records
 that pane's socket + target here via :func:`write_tmux_target`. The harness
-executor then delivers Omnigent web-UI messages into the *same* pane via
+executor then delivers Goalrail web-UI messages into the *same* pane via
 :func:`inject_user_message` (tmux bracketed paste + Enter) — the kimi analog
 of claude-native's tmux send-keys bridge. This is what wires the web-UI chat box
 to the running Kimi TUI (and, since the web UI embeds that pane, the message
@@ -26,9 +26,9 @@ BRIDGE_DIR_ENV_VAR = "HARNESS_KIMI_NATIVE_BRIDGE_DIR"
 
 _BRIDGE_ROOT = Path(os.environ.get("TMPDIR", "/tmp")) / f"omnigent-{os.getuid()}" / "kimi-native"
 _TMUX_FILE = "tmux.json"
-# Omnigent routing details the kimi hook subprocess reads to reach the server.
+# Goalrail routing details the kimi hook subprocess reads to reach the server.
 # Mirrors claude-native's ``permission_hook.json`` (server URL + auth headers +
-# the active Omnigent session). Written by the runner at terminal-create time;
+# the active Goalrail session). Written by the runner at terminal-create time;
 # read by :mod:`omnigent.kimi_native_hook` (PreToolUse deny-gate + the
 # PermissionRequest read-only surface).
 _HOOK_CONFIG_FILE = "hook_config.json"
@@ -88,7 +88,7 @@ def write_hook_config(
     headers: dict[str, str],
     session_id: str,
 ) -> None:
-    """Record the Omnigent routing details the kimi hook subprocess reads.
+    """Record the Goalrail routing details the kimi hook subprocess reads.
 
     The PreToolUse / PermissionRequest hook commands receive only
     ``--bridge-dir`` on their command line (no secrets); they read the
@@ -96,9 +96,9 @@ def write_hook_config(
     :func:`omnigent.claude_native_bridge` ``permission_hook.json`` plumbing.
 
     :param bridge_dir: The kimi-native bridge dir.
-    :param server_url: Omnigent server base URL, e.g. ``"http://127.0.0.1:8787"``.
+    :param server_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:8787"``.
     :param headers: Auth headers to replay on the hook's POSTs (may be empty).
-    :param session_id: The Omnigent session the hook events belong to.
+    :param session_id: The Goalrail session the hook events belong to.
     """
     _ensure_dir(bridge_dir)
     payload = {
@@ -115,7 +115,7 @@ def write_hook_config(
 
 
 def read_hook_config(bridge_dir: Path) -> dict[str, Any]:
-    """Read Omnigent routing details for the kimi hook subprocess.
+    """Read Goalrail routing details for the kimi hook subprocess.
 
     :param bridge_dir: The kimi-native bridge dir.
     :returns: ``{"ap_server_url", "ap_auth_headers", "session_id"}`` (or an
@@ -133,7 +133,7 @@ def read_hook_config(bridge_dir: Path) -> dict[str, Any]:
 
 
 def read_active_session_id(bridge_dir: Path) -> str | None:
-    """Return the Omnigent session id recorded for the hook subprocess.
+    """Return the Goalrail session id recorded for the hook subprocess.
 
     :param bridge_dir: The kimi-native bridge dir.
     :returns: The session id, or ``None`` when unset / malformed.
@@ -385,7 +385,7 @@ _PERMISSION_PROMPT_MARKER = "Approve once"
 
 #: Web-UI approve/deny → option digit in kimi's fixed numbered menu
 #: (1=Approve once, 2=Approve for session, 3=Reject, 4=Reject with feedback).
-#: "Approve once" re-prompts each call so Omnigent governs every one.
+#: "Approve once" re-prompts each call so Goalrail governs every one.
 APPROVE_KEY = "1"
 DENY_KEY = "3"
 

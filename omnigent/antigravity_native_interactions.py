@@ -2,14 +2,14 @@
 
 This is the correctness-sensitive piece of the RPC core rework: it surfaces an
 agy WAITING interaction (``ask_question`` / command ``permission``) as an
-Omnigent elicitation, waits for the human's verdict, and delivers it back to agy
+Goalrail elicitation, waits for the human's verdict, and delivers it back to agy
 via ``HandleCascadeUserInteraction`` — handling agy's **WAITING-interaction
 timeout gotcha** end-to-end.
 
 The gotcha (design ``docs/antigravity-native-rpc-core-design.md`` §2.1, memory
 ``agy-rpc-interaction-bridge``): a WAITING interaction **times out** server-side
 (→ ``CORTEX_STEP_STATUS_ERROR``), after which agy **auto-retries with a fresh
-WAITING step at a HIGHER ``stepIndex``**. Omnigent elicitations wait on a human
+WAITING step at a HIGHER ``stepIndex``**. Goalrail elicitations wait on a human
 (potentially slow), so by the time a verdict arrives the captured
 ``trajectoryId`` / ``stepIndex`` may be STALE. Consequences this module handles:
 
@@ -169,7 +169,7 @@ async def _inject_via_tui(keys: list[str]) -> None:
 
 def agy_elicitation_id(cascade_id: str, trajectory_id: str, step_index: int) -> str:
     """
-    Build the Omnigent elicitation id for one agy WAITING interaction.
+    Build the Goalrail elicitation id for one agy WAITING interaction.
 
     Deterministic over ``(cascade_id, trajectory_id, step_index)`` so a
     timeout-retry step (which agy issues at a HIGHER ``step_index``) maps to a

@@ -3,7 +3,7 @@
 Kiro CLI persists chat turns under ``~/.kiro/sessions/cli`` as session metadata
 plus JSONL message records. The native Kiro terminal path injects web prompts
 into the TUI; this forwarder mirrors Kiro's persisted assistant messages back
-into the Omnigent conversation with ``external_conversation_item`` events.
+into the Goalrail conversation with ``external_conversation_item`` events.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def _discover_kiro_session_jsonl(
     launch_epoch_ms: int,
     sessions_dir: Path | None = None,
 ) -> tuple[str, Path] | None:
-    """Find this Omnigent session's Kiro JSONL file."""
+    """Find this Goalrail session's Kiro JSONL file."""
     root = sessions_dir or _kiro_cli_sessions_dir()
     if not root.is_dir():
         return None
@@ -294,7 +294,7 @@ async def _patch_external_session_id(
     session_id: str,
     external_session_id: str,
 ) -> None:
-    """Persist Kiro's native CLI session id onto the Omnigent session."""
+    """Persist Kiro's native CLI session id onto the Goalrail session."""
     resp = await client.patch(
         f"/v1/sessions/{session_id}",
         json={"external_session_id": external_session_id},

@@ -1,4 +1,4 @@
-"""Native Antigravity (agy) TUI wrapper for the Omnigent CLI.
+"""Native Antigravity (agy) TUI wrapper for the Goalrail CLI.
 
 ``omnigent antigravity`` treats the Antigravity ``agy`` CLI as a
 terminal-first program, mirroring ``omnigent codex`` / ``omnigent claude``.
@@ -18,7 +18,7 @@ Differences from the Codex / Claude wrappers (Phase 1 scope):
   there is no app-server process to start, no ``--remote`` transport, and no
   thread-init handshake.
 * **RPC mirroring (read path) and RPC web-turn delivery (write path).** agy's
-  conversation mirrors into the Omnigent chat view via the RPC read driver
+  conversation mirrors into the Goalrail chat view via the RPC read driver
   (:mod:`omnigent.antigravity_native_reader`), which polls/streams agy's
   connect-RPC trajectory steps. Web-UI turns are delivered into the native agy
   conversation (the write path) by the native executor
@@ -151,7 +151,7 @@ _SESSION_LABELS = {
 @dataclass(frozen=True)
 class LaunchedAntigravityTerminal:
     """
-    Terminal resource returned by the Omnigent runner launch path.
+    Terminal resource returned by the Goalrail runner launch path.
 
     :param terminal_id: Terminal resource id, e.g.
         ``"terminal_antigravity_main"``.
@@ -222,7 +222,7 @@ def run_antigravity_native(
         tests can supply a fake executable.
     :param model: Optional model label passed to agy via ``--model``,
         e.g. ``"gemini-2.5-pro"``. ``None`` lets agy use its default.
-    :param permission_mode: Optional Omnigent permission mode, e.g.
+    :param permission_mode: Optional Goalrail permission mode, e.g.
         ``"bypassPermissions"``. ``"bypassPermissions"`` maps to agy's
         ``--dangerously-skip-permissions`` (its only pre-emptive control);
         any other value (or ``None``) leaves agy's default ``request-review``
@@ -293,7 +293,7 @@ def _materialize_antigravity_agent_spec(tmpdir: Path) -> Path:
         "executor": {"harness": "antigravity-native"},
         # Opt the native session into the child-session spawn writes so the
         # wrapped agy can author agent configs and launch them as sub-agent
-        # sessions. The Omnigent MCP relay (wired in #1194 — see
+        # sessions. The Goalrail MCP relay (wired in #1194 — see
         # ``antigravity_native_bridge.write_mcp_config`` and the runner's
         # ``_ensure_comment_relay_started``) derives its advertised
         # ``sys_session_*`` write surface from this ``spawn: true`` gate.
@@ -308,7 +308,7 @@ def _materialize_antigravity_agent_spec(tmpdir: Path) -> Path:
             "cwd": ".",
             "sandbox": {"type": "none"},
         },
-        # Declare a default shell terminal so the Omnigent MCP relay advertises
+        # Declare a default shell terminal so the Goalrail MCP relay advertises
         # the ``sys_terminal_*`` family to the wrapped agy (the relay's gate is
         # a non-empty ``terminals:`` block on this spec). This also feeds the
         # web-UI new-terminal affordance (``server/routes/sessions.py``), so it
@@ -351,7 +351,7 @@ def _run_with_local_server(
     :param antigravity_args: Raw pass-through agy args.
     :param command: agy executable to run.
     :param model: Optional agy model id.
-    :param permission_mode: Optional Omnigent permission mode (e.g.
+    :param permission_mode: Optional Goalrail permission mode (e.g.
         ``"bypassPermissions"``) threaded into the agy argv assembly.
     :param headless: ``True`` when no interactive client will attach (forces
         the agy permission-bypass flag so an unattended turn does not hang).
@@ -457,7 +457,7 @@ def _run_with_remote_server(
     :param antigravity_args: Raw pass-through agy args.
     :param command: agy executable to run.
     :param model: Optional agy model id.
-    :param permission_mode: Optional Omnigent permission mode (e.g.
+    :param permission_mode: Optional Goalrail permission mode (e.g.
         ``"bypassPermissions"``) threaded into the agy argv assembly.
     :param headless: ``True`` when no interactive client will attach (forces
         the agy permission-bypass flag so an unattended turn does not hang).
@@ -571,7 +571,7 @@ async def _prepare_antigravity_terminal(
     :param antigravity_args: Raw pass-through agy args.
     :param command: agy executable to run.
     :param model: Optional agy model id.
-    :param permission_mode: Optional Omnigent permission mode threaded into the
+    :param permission_mode: Optional Goalrail permission mode threaded into the
         agy argv assembly.
     :param headless: ``True`` when no interactive client will attach (forces
         the agy permission-bypass flag).
@@ -761,7 +761,7 @@ async def _prepare_antigravity_terminal_via_daemon(
     :param antigravity_args: Raw pass-through agy args.
     :param command: agy executable to run.
     :param model: Optional agy model id.
-    :param permission_mode: Optional Omnigent permission mode threaded into the
+    :param permission_mode: Optional Goalrail permission mode threaded into the
         agy argv assembly.
     :param headless: ``True`` when no interactive client will attach (forces
         the agy permission-bypass flag).
@@ -950,7 +950,7 @@ async def _launch_and_record(
     :param antigravity_args: Raw pass-through agy args.
     :param command: agy executable to run.
     :param model: Optional agy model id.
-    :param permission_mode: Optional Omnigent permission mode threaded into the
+    :param permission_mode: Optional Goalrail permission mode threaded into the
         agy argv assembly (maps ``"bypassPermissions"`` to the bypass flag).
     :param headless: ``True`` when no interactive client will attach (forces
         the agy permission-bypass flag so an unattended turn does not hang).
@@ -1030,7 +1030,7 @@ async def _attach_terminal(
     terminal and the CLI launched its own (``prepared.reattached is False``), this
     spawns — for the attach's lifetime, cancelled in ``finally`` — the RPC read
     driver (:func:`omnigent.antigravity_native_reader.run_reader_with_bridge`,
-    which mirrors agy's conversation into the Omnigent chat view and surfaces
+    which mirrors agy's conversation into the Goalrail chat view and surfaces
     WAITING interactions as real-time elicitations) and a one-shot cold-start
     (:func:`_cold_start_agy_conversation`) that mints agy's real cascade id so the
     reader can bind it. These run CONCURRENTLY with the attach because the CLI

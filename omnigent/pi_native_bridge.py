@@ -36,7 +36,7 @@ def bridge_dir_for_session_id(session_id: str) -> Path:
     """
     Return the bridge directory for a native Pi session.
 
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Absolute bridge directory under ``~/.omnigent/pi-native``.
     """
     digest = hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:32]
@@ -47,7 +47,7 @@ def prepare_bridge_dir(session_id: str) -> Path:
     """
     Create the bridge directory and inbox for *session_id*.
 
-    :param session_id: Omnigent conversation id.
+    :param session_id: Goalrail conversation id.
     :returns: Prepared bridge directory.
     """
     bridge_dir = bridge_dir_for_session_id(session_id)
@@ -83,7 +83,7 @@ def build_pi_native_spawn_env(conversation_id: str) -> dict[str, str]:
     """
     Build spawn env for the ``pi-native`` harness process.
 
-    :param conversation_id: Omnigent conversation id.
+    :param conversation_id: Goalrail conversation id.
     :returns: Environment variables needed by the Pi-native harness executor.
     """
     return {
@@ -195,11 +195,11 @@ def write_extension_files(
     Write the Pi extension and config used by a native Pi terminal.
 
     :param bridge_dir: Prepared bridge directory.
-    :param session_id: Omnigent conversation id.
-    :param server_url: Omnigent server base URL.
+    :param session_id: Goalrail conversation id.
+    :param server_url: Goalrail server base URL.
     :param conversation_url: Human-facing web conversation URL.
     :param auth_headers: HTTP headers the extension should use when posting
-        terminal-originated events back to Omnigent.
+        terminal-originated events back to Goalrail.
     :returns: ``(extension_path, config_path)``.
     """
     bridge_dir.mkdir(mode=0o700, parents=True, exist_ok=True)

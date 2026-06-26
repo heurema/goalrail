@@ -3,7 +3,7 @@
 The ``omnigent cursor`` wrapper launches the real ``cursor-agent`` TUI in a
 runner-owned tmux pane, and :mod:`omnigent.cursor_native_bridge` injects web-UI
 messages into it. That covers the web→TUI direction, but the *embedded terminal*
-is then the only surface that reflects the agent's work — the Omnigent
+is then the only surface that reflects the agent's work — the Goalrail
 conversation view (chat bubbles, title, working spinner) stays empty because
 nothing mirrors the TUI's transcript back into the session.
 
@@ -106,7 +106,7 @@ _ATTACHMENT_MARKER_RE = re.compile(r"\[Attached:[^\]]*\]")
 # first user message, fenced in <omnigent_fork_history>…</omnigent_fork_history>
 # (cursor_native_bridge.wrap_fork_preamble). cursor stores it inside the
 # user_query; strip the whole block so the mirrored bubble shows only the user's
-# real text — the copied history already lives in the Omnigent timeline, so
+# real text — the copied history already lives in the Goalrail timeline, so
 # echoing it here would duplicate it.
 #
 # The match is non-greedy so it stops at the FIRST close tag: that is always the
@@ -587,8 +587,8 @@ async def _post_model_change_if_new(
     Best-effort: a failed POST leaves ``posted`` behind ``observed`` so the next
     poll retries.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param state: Per-session dedupe state, mutated in place.
     :param model: Model id observed this poll, or ``None`` when the meta row
         carried no usable id (does not clear a previously-observed value).
@@ -697,7 +697,7 @@ def _blob_to_item(rowid: int, blob_id: str, data: object, agent_name: str) -> _M
 async def _patch_external_session_id(
     client: httpx.AsyncClient, *, session_id: str, chat_id: str
 ) -> None:
-    """PATCH the Omnigent session with the cursor chat id for cold-resume.
+    """PATCH the Goalrail session with the cursor chat id for cold-resume.
 
     Best-effort: logs on failure but does not raise so the forwarder loop
     continues mirroring even if the PATCH can't be delivered.
@@ -752,10 +752,10 @@ async def _post_external_compaction_status(
     progress instead of firing the instant the command was submitted. Mirrors
     :func:`omnigent.claude_native_forwarder._post_external_compaction_status`.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param status: Compaction status value, e.g. ``"completed"``.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -797,9 +797,9 @@ async def forward_cursor_store_to_session(
     (server unreachable) is retried indefinitely so an outage never drops the
     conversation.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: Static HTTP headers (auth normally via ``auth``).
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: The cursor-native bridge dir (holds the persisted cursor).
     :param agent_name: Agent label stamped on mirrored assistant items.
     :param workspace: The session's working directory (cursor's chat-dir key).
@@ -1086,9 +1086,9 @@ async def supervise_cursor_forwarder(
     propagates so teardown is clean. The persisted rowid cursor means restarts
     resume exactly where they left off.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: Static HTTP headers for Omnigent requests.
-    :param session_id: Omnigent session/conversation id.
+    :param base_url: Goalrail server base URL.
+    :param headers: Static HTTP headers for Goalrail requests.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: The cursor-native bridge dir.
     :param agent_name: Agent label stamped on mirrored assistant items.
     :param workspace: The session's working directory.

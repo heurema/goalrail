@@ -1,4 +1,4 @@
-"""Shared conversion between native-harness hooks and Omnigent policy events.
+"""Shared conversion between native-harness hooks and Goalrail policy events.
 
 Both Claude Code and Codex expose a command-hook system whose
 ``PreToolUse`` / ``PostToolUse`` payloads use the same field names
@@ -55,7 +55,7 @@ _USER_PROMPT_SUBMIT = "UserPromptSubmit"
 # body). Mirrors the runner-side fail-closed default in
 # ``omnigent.runner.app._evaluate_policy_via_omnigent`` (PR #163).
 _EVAL_UNAVAILABLE_REASON = (
-    "Omnigent policy evaluation unavailable; failing closed for this tool call."
+    "Goalrail policy evaluation unavailable; failing closed for this tool call."
 )
 
 
@@ -69,9 +69,9 @@ def hook_payload_to_evaluation_request(
     Maps ``PreToolUse`` to a ``PHASE_TOOL_CALL`` event, ``PostToolUse``
     to a ``PHASE_TOOL_RESULT`` event, and ``UserPromptSubmit`` to a
     ``PHASE_REQUEST`` event (the prompt text from the payload's
-    ``prompt`` field becomes the request content). Omnigent MCP tools
+    ``prompt`` field becomes the request content). Goalrail MCP tools
     (``mcp__omnigent__*``) are skipped because they are already
-    policy-checked by the relay path (``ProxyMcpManager`` → Omnigent
+    policy-checked by the relay path (``ProxyMcpManager`` → Goalrail
     ``/mcp`` endpoint → ``_evaluate_tool_call_policy``); evaluating
     them here would double-count. Connector-native MCP tools
     (for example ``mcp__github__*``) still need this pre-call gate.
@@ -101,8 +101,8 @@ def hook_payload_to_evaluation_request(
             },
         }
     tool_name = payload.get("tool_name", "")
-    # Omnigent MCP tools are already policy-checked by the relay path
-    # (ProxyMcpManager → Omnigent /mcp endpoint → _evaluate_tool_call_policy).
+    # Goalrail MCP tools are already policy-checked by the relay path
+    # (ProxyMcpManager → Goalrail /mcp endpoint → _evaluate_tool_call_policy).
     # Skip only those here to avoid double evaluation; connector-native MCP
     # tools such as mcp__github__* must still go through this hook.
     if isinstance(tool_name, str) and tool_name.startswith("mcp__omnigent__"):
@@ -295,7 +295,7 @@ def post_evaluate_with_retry(
     hook_label: str,
 ) -> httpx.Response | None:
     """
-    POST to the Omnigent policy evaluate endpoint, retrying on transient errors.
+    POST to the Goalrail policy evaluate endpoint, retrying on transient errors.
 
     Retries on 5xx HTTP responses and connection-level errors
     (:class:`httpx.ConnectError`, :class:`httpx.ConnectTimeout`) within
@@ -320,7 +320,7 @@ def post_evaluate_with_retry(
     responsible for fail-closed handling on ``None``.
 
     :param url: Absolute URL of the evaluate endpoint.
-    :param headers: Auth headers for the Omnigent server.
+    :param headers: Auth headers for the Goalrail server.
     :param eval_request: ``EvaluationRequest`` JSON body to POST.
     :param read_timeout: Per-attempt read timeout in seconds. Should be
         large (e.g. one day) to accommodate long-polling ASK gates.
@@ -348,18 +348,18 @@ def post_evaluate_with_retry(
             if exc.response.status_code < 500:
                 body_preview = exc.response.text[:200] if exc.response.content else ""
                 print(
-                    f"omnigent {hook_label}: Omnigent returned {exc.response.status_code}"
+                    f"omnigent {hook_label}: Goalrail returned {exc.response.status_code}"
                     + (f": {body_preview}" if body_preview else ""),
                     file=sys.stderr,
                 )
                 return None
             print(
-                f"omnigent {hook_label}: Omnigent returned {exc.response.status_code}; retrying",
+                f"omnigent {hook_label}: Goalrail returned {exc.response.status_code}; retrying",
                 file=sys.stderr,
             )
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             print(
-                f"omnigent {hook_label}: Omnigent request failed; retrying: {exc}",
+                f"omnigent {hook_label}: Goalrail request failed; retrying: {exc}",
                 file=sys.stderr,
             )
         except httpx.HTTPError as exc:
@@ -367,7 +367,7 @@ def post_evaluate_with_retry(
             # etc.) are not retried — retrying a severed ASK would open a new
             # elicitation and prompt the human twice.
             print(
-                f"omnigent {hook_label}: Omnigent request failed: {exc}",
+                f"omnigent {hook_label}: Goalrail request failed: {exc}",
                 file=sys.stderr,
             )
             return None

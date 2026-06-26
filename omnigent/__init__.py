@@ -1,4 +1,4 @@
-"""Omnigent: A declarative agent authoring and runtime framework."""
+"""Goalrail: A declarative agent authoring and runtime framework."""
 
 # Some libraries we transitively depend on call ``hashlib.md5()``
 # without ``usedforsecurity=False`` for non-security content hashes.

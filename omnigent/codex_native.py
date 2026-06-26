@@ -1,4 +1,4 @@
-"""Native Codex TUI wrapper for the Omnigent CLI."""
+"""Native Codex TUI wrapper for the Goalrail CLI."""
 
 from __future__ import annotations
 
@@ -142,7 +142,7 @@ class _ResumeWorkspaceActionOption:
 @dataclass
 class LaunchedCodexTerminal:
     """
-    Terminal resource returned by the Omnigent runner launch path.
+    Terminal resource returned by the Goalrail runner launch path.
 
     :param terminal_id: Terminal resource id, e.g.
         ``"terminal_codex_main"``.
@@ -828,7 +828,7 @@ async def _post_initial_prompt(
     auth: httpx.Auth | None,
 ) -> None:
     """
-    Send the first Codex prompt through Omnigent instead of the app-server.
+    Send the first Codex prompt through Goalrail instead of the app-server.
 
     :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers for Goalrail requests.
@@ -837,7 +837,7 @@ async def _post_initial_prompt(
     :param auth: Optional refresh-capable HTTP auth for long-lived
         Databricks-backed sessions.
     :returns: None.
-    :raises click.ClickException: If Omnigent rejects the prompt.
+    :raises click.ClickException: If Goalrail rejects the prompt.
     """
     async with httpx.AsyncClient(
         base_url=base_url,
@@ -1021,7 +1021,7 @@ async def _prepare_codex_terminal(
                 remote_url=codex_ws_url,
                 env=codex_terminal_env(app_server),
                 # Give the --remote TUI the same provider overrides as
-                # the app-server so it resolves the Omnigent provider
+                # the app-server so it resolves the Goalrail provider
                 # and skips the OpenAI-login onboarding screen.
                 config_overrides=tuple(app_server.config_overrides),
             )
@@ -1407,7 +1407,7 @@ def _mint_codex_thread_id() -> str:
     Codex thread ids are UUIDv7 (time-ordered), e.g.
     ``"019e96aa-0be2-7343-8d3b-6f914d60936b"``. A fork writes the cloned
     rollout under a freshly minted id (rather than reusing the source's)
-    so the clone gets its own Omnigent ``external_session_id`` — mirroring how
+    so the clone gets its own Goalrail ``external_session_id`` — mirroring how
     claude-native assigns the clone a new transcript uuid. The stdlib has
     no UUIDv7 generator before Python 3.14, so we assemble one per
     RFC 9562 §5.7 (48-bit millisecond timestamp + version + variant +
@@ -1606,7 +1606,7 @@ async def _ensure_local_codex_resume_rollout(
     known-thread terminal we synthesize the rollout from committed AP
     items when the local rollout is missing. Existing local rollout files
     are left untouched because Codex treats them as append-only runtime
-    state, not a cache that Omnigent should rewrite.
+    state, not a cache that Goalrail should rewrite.
 
     :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
@@ -1629,7 +1629,7 @@ async def _ensure_local_codex_resume_rollout(
         rollout, but treats the value as informational, so a flaky probe
         must not cost the carried history.
     :returns: Path to the existing or written rollout.
-    :raises click.ClickException: If Omnigent history cannot be fetched or the
+    :raises click.ClickException: If Goalrail history cannot be fetched or the
         rollout cannot be written, or if the persisted Codex thread id is
         unsafe for use in a rollout filename.
     """
@@ -1766,7 +1766,7 @@ def _codex_rollout_records_from_session_items(
     Convert Goalrail session items into Codex rollout JSONL records.
 
     The generated records follow Codex's rollout shape: one
-    ``session_meta`` record, a ``turn_context`` before each Omnigent response
+    ``session_meta`` record, a ``turn_context`` before each Goalrail response
     group, Responses-style ``response_item`` payloads for user, assistant,
     and tool history, and an ``event_msg`` mirror after each user/assistant
     message. All three session_meta extras and the event_msg mirrors are
@@ -1778,7 +1778,7 @@ def _codex_rollout_records_from_session_items(
     records codex reconstructs zero visible turns — the resume "succeeds"
     but the thread opens empty.
 
-    :param items: Flat Omnigent item dicts in chronological order, e.g.
+    :param items: Flat Goalrail item dicts in chronological order, e.g.
         ``{"type": "message", "role": "user", "content": [...]}``.
     :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         Used for deterministic synthetic turn ids.
@@ -1900,14 +1900,14 @@ def _codex_event_msg_record_for_message(
 
 def _interrupted_response_ids_from_session_items(items: list[dict[str, Any]]) -> set[str]:
     """
-    Return response ids for Omnigent turns that ended interrupted.
+    Return response ids for Goalrail turns that ended interrupted.
 
-    A Codex interrupted turn is persisted in Omnigent as visible transcript text
+    A Codex interrupted turn is persisted in Goalrail as visible transcript text
     plus an ``interrupted`` assistant marker. For native resume, the whole
     response group must be skipped so Codex does not restore the cancelled
     user request, partial assistant answer, or any partial tool history.
 
-    :param items: Flat Omnigent item dicts in chronological order, e.g.
+    :param items: Flat Goalrail item dicts in chronological order, e.g.
         ``[{"response_id": "codex_turn_123", "interrupted": True}]``.
     :returns: Response ids to exclude from synthesized Codex rollout
         history, e.g. ``{"codex_turn_123"}``.
@@ -1924,9 +1924,9 @@ def _interrupted_response_ids_from_session_items(items: list[dict[str, Any]]) ->
 
 def _session_item_response_id(item: dict[str, Any]) -> str | None:
     """
-    Extract a non-empty Omnigent response id from a flat item.
+    Extract a non-empty Goalrail response id from a flat item.
 
-    :param item: Flat Omnigent item dict, e.g.
+    :param item: Flat Goalrail item dict, e.g.
         ``{"response_id": "codex_turn_123"}``.
     :returns: Response id, e.g. ``"codex_turn_123"``, or ``None``.
     """
@@ -1936,12 +1936,12 @@ def _session_item_response_id(item: dict[str, Any]) -> str | None:
 
 def _codex_response_item_from_session_item(item: dict[str, Any]) -> dict[str, Any] | None:
     """
-    Convert one Omnigent item into one Codex ``response_item`` payload.
+    Convert one Goalrail item into one Codex ``response_item`` payload.
 
-    :param item: Flat Omnigent item dict, e.g.
+    :param item: Flat Goalrail item dict, e.g.
         ``{"type": "function_call", "name": "shell", ...}``.
     :returns: Responses-style item payload, or ``None`` for unsupported
-        or empty Omnigent items.
+        or empty Goalrail items.
     """
     payload = _codex_response_item_payload(item)
     if payload is None:
@@ -1954,14 +1954,14 @@ def _codex_response_item_from_session_item(item: dict[str, Any]) -> dict[str, An
 
 def _is_interrupted_assistant_session_item(item: dict[str, Any]) -> bool:
     """
-    Return whether an Omnigent item is an interrupted assistant partial.
+    Return whether a Goalrail item is an interrupted assistant partial.
 
-    Omnigent persists these messages so the web transcript can show the text and
+    Goalrail persists these messages so the web transcript can show the text and
     the interrupted label after refresh. They must not be synthesized back
     into Codex's native rollout during resume, or Codex may treat a partial
     answer as completed history and continue from a cancelled turn.
 
-    :param item: Flat Omnigent item dict, e.g.
+    :param item: Flat Goalrail item dict, e.g.
         ``{"type": "message", "role": "assistant", "interrupted": True}``.
     :returns: ``True`` for interrupted assistant messages.
     """
@@ -1974,11 +1974,11 @@ def _is_interrupted_assistant_session_item(item: dict[str, Any]) -> bool:
 
 def _codex_response_item_payload(item: dict[str, Any]) -> dict[str, Any] | None:
     """
-    Convert one supported Omnigent item into a Codex response payload body.
+    Convert one supported Goalrail item into a Codex response payload body.
 
-    :param item: Flat Omnigent item dict.
+    :param item: Flat Goalrail item dict.
     :returns: Payload without the optional item id, or ``None`` for
-        unsupported / empty Omnigent items.
+        unsupported / empty Goalrail items.
     """
     item_type = item.get("type")
     if item_type == "message":
@@ -1992,9 +1992,9 @@ def _codex_response_item_payload(item: dict[str, Any]) -> dict[str, Any] | None:
 
 def _codex_message_payload_from_session_item(item: dict[str, Any]) -> dict[str, Any] | None:
     """
-    Convert an Omnigent message item into a Codex message payload.
+    Convert a Goalrail message item into a Codex message payload.
 
-    :param item: Omnigent message item.
+    :param item: Goalrail message item.
     :returns: Codex message payload, or ``None`` for unsupported roles
         or empty text content.
     """
@@ -2015,12 +2015,12 @@ def _codex_function_call_payload_from_session_item(
     item: dict[str, Any],
 ) -> dict[str, Any] | None:
     """
-    Convert an Omnigent function call item into a Codex function call payload.
+    Convert a Goalrail function call item into a Codex function call payload.
 
-    :param item: Omnigent function call item.
+    :param item: Goalrail function call item.
     :returns: Codex function call payload, or ``None`` when optional
         routing fields are absent.
-    :raises click.ClickException: If the Omnigent item violates required tool
+    :raises click.ClickException: If the Goalrail item violates required tool
         history fields.
     """
     name = item.get("name")
@@ -2033,7 +2033,7 @@ def _codex_function_call_payload_from_session_item(
     if not isinstance(arguments, str):
         item_id = item.get("id")
         raise click.ClickException(
-            "Cannot synthesize Codex resume rollout: Omnigent function_call "
+            "Cannot synthesize Codex resume rollout: Goalrail function_call "
             f"{item_id!r} has non-string arguments."
         )
     return {
@@ -2048,12 +2048,12 @@ def _codex_function_call_output_payload_from_session_item(
     item: dict[str, Any],
 ) -> dict[str, Any] | None:
     """
-    Convert an Omnigent function output item into a Codex function output payload.
+    Convert a Goalrail function output item into a Codex function output payload.
 
-    :param item: Omnigent function output item.
+    :param item: Goalrail function output item.
     :returns: Codex function output payload, or ``None`` when optional
         routing fields are absent.
-    :raises click.ClickException: If the Omnigent item violates required tool
+    :raises click.ClickException: If the Goalrail item violates required tool
         output fields.
     """
     call_id = item.get("call_id")
@@ -2063,7 +2063,7 @@ def _codex_function_call_output_payload_from_session_item(
     if not isinstance(output, str):
         item_id = item.get("id")
         raise click.ClickException(
-            "Cannot synthesize Codex resume rollout: Omnigent function_call_output "
+            "Cannot synthesize Codex resume rollout: Goalrail function_call_output "
             f"{item_id!r} has non-string output."
         )
     return {
@@ -2079,11 +2079,11 @@ def _codex_content_blocks_from_api_content(
     api_type: str,
 ) -> list[dict[str, Any]]:
     """
-    Extract text blocks from an Omnigent content array for Codex rollout items.
+    Extract text blocks from a Goalrail content array for Codex rollout items.
 
-    :param content: Omnigent content array, e.g.
+    :param content: Goalrail content array, e.g.
         ``[{"type": "input_text", "text": "hello"}]``.
-    :param api_type: Omnigent block type to include, e.g.
+    :param api_type: Goalrail block type to include, e.g.
         ``"input_text"`` or ``"output_text"``.
     :returns: Codex/OpenAI content blocks preserving *api_type*.
     """
@@ -2107,16 +2107,16 @@ def _codex_turn_id_for_session_item(
     index: int,
 ) -> str:
     """
-    Return a Codex turn id for an Omnigent item.
+    Return a Codex turn id for a Goalrail item.
 
-    Codex-native forwarder stores Omnigent ``response_id`` as
+    Codex-native forwarder stores Goalrail ``response_id`` as
     ``"codex_<turn_id>"`` for mirrored items. When that prefix is not
     present, build a deterministic synthetic turn id from stable inputs.
 
     :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param external_session_id: Codex thread id, e.g.
         ``"019e96aa-0be2-7343-8d3b-6f914d60936b"``.
-    :param item: Flat Omnigent item dict.
+    :param item: Flat Goalrail item dict.
     :param index: Zero-based fallback item index.
     :returns: Codex turn id, e.g. ``"turn_abc123"``.
     """
@@ -2383,7 +2383,7 @@ def _codex_terminal_lookup_is_reattach_miss(resp: httpx.Response) -> bool:
 
 def _response_error_code(resp: httpx.Response) -> str | None:
     """
-    Extract a structured Omnigent error code from *resp* if present.
+    Extract a structured Goalrail error code from *resp* if present.
 
     :param resp: HTTP response from AP.
     :returns: ``error.code`` when the JSON body has one, otherwise
@@ -2404,7 +2404,7 @@ def _response_error_code(resp: httpx.Response) -> str | None:
 
 def _runner_offline_message(message: str) -> bool:
     """
-    Return whether *message* is the Omnigent stale-runner error shape.
+    Return whether *message* is the Goalrail stale-runner error shape.
 
     :param message: Error text extracted from AP, e.g.
         ``"runner 'runner_abc' is offline for conversation 'conv_123'"``.

@@ -3,7 +3,7 @@
 .. note::
     **Currently dormant.** This module's only consumer was the transcript
     forwarder, retired in the Task 12 cutover. The RPC read path that superseded
-    it surfaces agy's ``request-review`` prompts as real-time Omnigent
+    it surfaces agy's ``request-review`` prompts as real-time Goalrail
     elicitations (:mod:`omnigent.antigravity_native_interactions`) instead of a
     post-hoc audit, so nothing wires these helpers today. They are kept (with
     their unit tests) as the building blocks for a future post-hoc audit pass; the
@@ -15,7 +15,7 @@ pre-execution signal), and its ``hooks.json`` ``PreToolUse`` hook does **not**
 fire on tool execution in agy 1.0.8 (verified — see
 ``docs/claude/antigravity-native-governance-design.md`` §2.3). So unlike
 claude-native's ``PreToolUse`` / codex-native's trusted hook, this harness
-**cannot intercept a tool before it runs**. The only honest Omnigent policy
+**cannot intercept a tool before it runs**. The only honest Goalrail policy
 enforcement here is to *observe* each tool call as it appears in the transcript,
 evaluate it against the session's policies, and — on a DENY/ASK — surface a
 warning conversation item (and, optionally, best-effort interrupt the in-flight
@@ -37,7 +37,7 @@ This module owns the pure, unit-testable pieces of that flow:
   one-time audit-only degrade notice).
 
 In the forwarder-era flow the async POST + the OFF-by-default interrupt lived in
-the (now-deleted) transcript forwarder, which needed the live Omnigent client and
+the (now-deleted) transcript forwarder, which needed the live Goalrail client and
 the connect-RPC port and delegated the classification/rendering here.
 
 **Phase used: ``PHASE_TOOL_CALL``.** Tool-name / cost / CEL deny policies fire on

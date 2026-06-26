@@ -2,7 +2,7 @@
 
 The runner launches the ``cursor-agent`` TUI in a private tmux pane and records
 that pane's socket + target here via :func:`write_tmux_target`. The harness
-executor then delivers Omnigent web-UI messages into the *same* pane via
+executor then delivers Goalrail web-UI messages into the *same* pane via
 :func:`inject_user_message` (tmux bracketed paste + Enter) — the cursor analog
 of claude-native's tmux send-keys bridge. This is what wires the web-UI chat box
 to the running Cursor TUI (and, since the web UI embeds that pane, the message
@@ -126,7 +126,7 @@ def _ensure_dir(path: Path) -> None:
 _FORK_PREAMBLE_FILE = "fork_preamble.txt"
 #: Sentinel framing the replayed history inside the first injected message. The
 #: cursor agent reads the wrapped context, but the forwarder strips this block
-#: when mirroring the user turn back to Omnigent so the copied history isn't
+#: when mirroring the user turn back to Goalrail so the copied history isn't
 #: duplicated in the timeline (see cursor_native_forwarder._unwrap_user_query).
 FORK_HISTORY_OPEN_TAG = "<omnigent_fork_history>"
 FORK_HISTORY_CLOSE_TAG = "</omnigent_fork_history>"
@@ -211,7 +211,7 @@ def wrap_fork_preamble(preamble: str, user_text: str) -> str:
     server-backed), so this is the closest single-message analog: the agent
     reads the framed transcript as context, and the forwarder strips the whole
     sentinel block from the mirrored user turn so the copied history isn't
-    duplicated in the Omnigent timeline.
+    duplicated in the Goalrail timeline.
 
     Any literal sentinel tags inside *preamble* are defanged
     (:func:`_neutralize_fork_sentinels`) so the framed block holds exactly one
@@ -248,14 +248,14 @@ def build_mcp_config(
     *,
     python_executable: str | None = None,
 ) -> dict[str, Any]:
-    """Build Cursor's ``.cursor/mcp.json`` for the Omnigent relay server.
+    """Build Cursor's ``.cursor/mcp.json`` for the Goalrail relay server.
 
     Cursor prompts for MCP tool approval before it sends ``tools/call`` to the
-    server. Omnigent tools already route through the Omnigent ``/mcp`` proxy,
+    server. Goalrail tools already route through the Goalrail ``/mcp`` proxy,
     where TOOL_CALL policies publish ``response.elicitation_request`` events
     that the web UI can render. Auto-approving the Cursor-side MCP gate avoids a
-    hidden in-terminal approval prompt blocking the call before Omnigent ever
-    sees it, while preserving Omnigent's own policy/elicitation gate.
+    hidden in-terminal approval prompt blocking the call before Goalrail ever
+    sees it, while preserving Goalrail's own policy/elicitation gate.
     """
     python = python_executable or sys.executable
     return {
@@ -280,7 +280,7 @@ def build_mcp_config(
 
 
 def write_mcp_bridge_config(bridge_dir: Path) -> None:
-    """Write the token config required by the shared Omnigent MCP bridge."""
+    """Write the token config required by the shared Goalrail MCP bridge."""
     _ensure_dir(bridge_dir)
     config_path = bridge_dir / _BRIDGE_CONFIG_FILE
     if config_path.exists():
@@ -297,7 +297,7 @@ def write_mcp_config(
     *,
     python_executable: str | None = None,
 ) -> Path:
-    """Write the workspace-scoped Cursor MCP config for Omnigent tools."""
+    """Write the workspace-scoped Cursor MCP config for Goalrail tools."""
     write_mcp_bridge_config(bridge_dir)
     cursor_dir = workspace / ".cursor"
     cursor_dir.mkdir(parents=True, exist_ok=True)
@@ -365,7 +365,7 @@ def write_hooks_config(
 
 
 def approve_mcp_server_for_workspace(workspace: Path) -> None:
-    """Approve the workspace-scoped Omnigent MCP server in Cursor's state.
+    """Approve the workspace-scoped Goalrail MCP server in Cursor's state.
 
     Cursor stores per-workspace MCP approvals using a private hash of the
     concrete server config. Rather than duplicate that implementation here,
@@ -397,7 +397,7 @@ def cursor_project_key(workspace: Path) -> str:
 
 
 def enable_mcp_for_workspace(workspace: Path) -> None:
-    """Ensure Cursor does not keep the Omnigent MCP disabled for this workspace."""
+    """Ensure Cursor does not keep the Goalrail MCP disabled for this workspace."""
     disabled_path = (
         Path.home() / ".cursor" / "projects" / cursor_project_key(workspace) / "mcp-disabled.json"
     )
@@ -414,7 +414,7 @@ def enable_mcp_for_workspace(workspace: Path) -> None:
 
 
 def allow_mcp_tools_in_cli_config() -> None:
-    """Allow Omnigent MCP tool calls in Cursor's CLI permission config."""
+    """Allow Goalrail MCP tool calls in Cursor's CLI permission config."""
     path = Path.home() / ".cursor" / "cli-config.json"
     try:
         config = json.loads(path.read_text(encoding="utf-8"))

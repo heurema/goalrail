@@ -9,7 +9,7 @@ tool needs approval it emits a ``control_request`` / ``can_use_tool`` event on
 ``confirmation_response`` on ``--input-file`` (whichever side answers first
 wins, the loser is harmlessly dropped). See qwen's ``dual-output.md``.
 
-So to surface those approvals in the Omnigent web UI (so a user on the Chat tab
+So to surface those approvals in the Goalrail web UI (so a user on the Chat tab
 can answer from the chat view, not just inside the embedded terminal), the runner
 tails the same event stream the transcript forwarder uses:
 
@@ -93,7 +93,7 @@ class _ControlEvent:
 
 
 def qwen_permission_elicitation_id(session_id: str, request_id: str) -> str:
-    """Return the deterministic Omnigent elicitation id for a qwen control request.
+    """Return the deterministic Goalrail elicitation id for a qwen control request.
 
     qwen's ``request_id`` is already unique per pending tool call, so it keys the
     elicitation directly — stable across polls and recomputable for the
@@ -236,7 +236,7 @@ async def supervise_qwen_approval_mirror(
 
     :param base_url: Server base URL.
     :param headers: Auth/routing headers for the runner's requests.
-    :param session_id: Omnigent conversation id.
+    :param session_id: Goalrail conversation id.
     :param bridge_dir: The qwen-native bridge dir holding the event/input files.
     :param auth: Optional httpx auth for the runner's requests.
     :param poll_interval_s: Event-file poll cadence in seconds.

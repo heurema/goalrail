@@ -77,7 +77,7 @@ def _server_uvicorn_log_config() -> dict[str, Any]:  # type: ignore[explicit-any
     """
     Return Uvicorn logging config with request-duration access logs.
 
-    Uvicorn emits the FastAPI access line itself, so Omnigent swaps
+    Uvicorn emits the FastAPI access line itself, so Goalrail swaps
     only the access formatter while preserving Uvicorn's default
     handlers, levels, and server-log formatting.
 
@@ -290,7 +290,7 @@ _HostPayload: TypeAlias = dict[str, _HostJsonValue]
 
 def _effective_global_config_path() -> Path:
     """
-    Return the path to the user-level Omnigent config.
+    Return the path to the user-level Goalrail config.
 
     :returns: ``$OMNIGENT_CONFIG_HOME/config.yaml`` when the env
         override is set, otherwise :data:`_GLOBAL_CONFIG_PATH`.
@@ -1509,7 +1509,7 @@ class _HostDaemonRecord:
 @dataclass(frozen=True)
 class _HostHttpResult:
     """
-    Decoded Omnigent management HTTP response.
+    Decoded Goalrail management HTTP response.
 
     :param status_code: HTTP status code, e.g. ``200``. ``0`` means no
         HTTP response was received because the request failed locally.
@@ -2273,7 +2273,7 @@ def _build_host_daemon_env(
     Remote daemons connect to an already-running Goalrail server, so they only
     need process essentials, TLS trust, and Databricks auth. Local daemons
     also start the local Goalrail server; that server is the user's local runtime
-    and must inherit Omnigent config plus provider credentials such as
+    and must inherit Goalrail config plus provider credentials such as
     ``OPENAI_API_KEY`` and ``OPENAI_BASE_URL``. Both modes are allowlisted:
     local mode carries the runtime/provider vars needed by the local server,
     but unrelated shell secrets are not inherited merely because the daemon
@@ -3747,7 +3747,7 @@ cli.add_command(upgrade, name="update")
 def _bundle(source: Path) -> bytes:
     """
     Produce a tar.gz bundle from a directory or standalone
-    Omnigent YAML file, or pass through an existing tarball.
+    Goalrail YAML file, or pass through an existing tarball.
 
     Environment variable references (``${VAR}``) in
     ``config.yaml`` and ``tools/mcp/*.yaml`` are expanded
@@ -3757,7 +3757,7 @@ def _bundle(source: Path) -> bytes:
     resolve.
 
     :param source: Path to an agent image directory,
-        standalone Omnigent YAML file, or an existing
+        standalone Goalrail YAML file, or an existing
         ``.tar.gz`` bundle file.
     :returns: The gzipped tarball bytes.
     :raises OmnigentError: If a required env var is
@@ -5532,7 +5532,7 @@ _DEFAULT_HARNESS_PROMPT = "You are a helpful coding agent running through Goalra
 # Harnesses whose auto-generated launcher YAML should include an
 # ``os_env`` block.  This triggers the workflow's ``ToolManager``
 # to inject ``sys_os_*`` tools into the request so file/shell
-# operations route through the Omnigent dispatch path (runner
+# operations route through the Goalrail dispatch path (runner
 # visibility, timeouts, error recovery) instead of the harness's
 # internal built-in tools.
 _OS_ENV_HARNESSES: frozenset[str] = frozenset(
@@ -5542,7 +5542,7 @@ _OS_ENV_HARNESSES: frozenset[str] = frozenset(
 
 def _validate_harness(harness: str) -> None:
     """
-    Fail fast when *harness* is not a supported Omnigent harness.
+    Fail fast when *harness* is not a supported Goalrail harness.
 
     :param harness: Harness id from ``--harness``, e.g.
         ``"claude-sdk"``.
@@ -5561,7 +5561,7 @@ def _default_harness_prompt(harness: str) -> str:
     Return the lightweight generated-agent instructions for *harness*.
 
     :param harness: Supported harness id.
-    :returns: Prompt text for the generated Omnigent YAML.
+    :returns: Prompt text for the generated Goalrail YAML.
     """
     return _DEFAULT_HARNESS_PROMPTS.get(harness, _DEFAULT_HARNESS_PROMPT)
 
@@ -5573,16 +5573,16 @@ def _materialize_harness_launcher_file(
     system_prompt: str | None,
 ) -> Path:
     """
-    Create a temporary standalone Omnigent YAML for no-AGENT ``run``.
+    Create a temporary standalone Goalrail YAML for no-AGENT ``run``.
 
-    The generated file uses the single-file Omnigent YAML shape
+    The generated file uses the single-file Goalrail YAML shape
     (``name`` / ``prompt`` / ``executor``), not native AP
     ``config.yaml``. Passing this file to ``run_chat`` exercises the
     same compat adapter as ``goalrail run examples/foo.yaml``.
 
     Harnesses listed in :data:`_OS_ENV_HARNESSES` get an ``os_env``
     block so the workflow injects ``sys_os_*`` tools into the
-    request — routing file/shell operations through the Omnigent
+    request — routing file/shell operations through the Goalrail
     dispatch path rather than the harness's internal built-ins.
 
     :param harness: Supported harness id to launch, e.g.
@@ -5748,7 +5748,7 @@ def _dispatch_native_terminal_harness(
 
     ``run --harness cursor-native`` (and the claude/codex/pi equivalents)
     must NOT go through the materialized-launcher REPL: that drives an
-    Omnigent turn per message — which persists its own user item — *while*
+    Goalrail turn per message — which persists its own user item — *while*
     the harness forwarder mirrors the same message back from the TUI's
     transcript, recording every user message twice. These harnesses are
     terminal-mirror sessions whose turns originate in the TUI, so dispatch
@@ -5866,7 +5866,7 @@ def _reject_agent_with_native_terminal_harness(harness: str) -> None:
 
     A ``*-native`` harness mirrors an external CLI's own TUI; the agent spec's
     prompt/tools are never consulted, and driving it through the REPL would
-    double-record every message (Omnigent turn + forwarder mirror). So an
+    double-record every message (Goalrail turn + forwarder mirror). So an
     explicit AGENT path combined with a native terminal harness has no coherent
     meaning — fail loud and point at the dedicated subcommand.
 
@@ -6030,7 +6030,7 @@ def _dispatch_run(
             raise click.ClickException(_missing_run_agent_message())
         # ``*-native`` terminal harnesses launch their own TUI wrapper instead of
         # the materialized-launcher REPL — the REPL would double-record every
-        # user message (Omnigent turn + forwarder mirror). Returns False for
+        # user message (Goalrail turn + forwarder mirror). Returns False for
         # non-native harnesses, which fall through to the launcher below.
         if _dispatch_native_terminal_harness(
             harness=harness,
@@ -6068,7 +6068,7 @@ def _dispatch_run(
         _validate_harness(harness)
         # A ``*-native`` harness IS its own TUI agent — pairing it with an AGENT
         # spec is meaningless, and routing it through the REPL would double-record
-        # every message (Omnigent turn + forwarder mirror, same as the no-AGENT
+        # every message (Goalrail turn + forwarder mirror, same as the no-AGENT
         # path above). Reject rather than silently launch the broken surface.
         _reject_agent_with_native_terminal_harness(harness)
 
@@ -6823,7 +6823,7 @@ def _host_http_json(
 
 def _host_error_text(body: _HostJsonObject | str) -> str:
     """
-    Extract a concise error string from an Omnigent response body.
+    Extract a concise error string from a Goalrail response body.
 
     :param body: Response body decoded by :func:`_host_http_json`.
     :returns: Human-readable error text.
@@ -7222,7 +7222,7 @@ def _host_truncate(text: _HostJsonValue, *, max_chars: int) -> str:
     """
     Truncate long text from the right for compact terminal display.
 
-    :param text: Value to truncate, e.g. an Omnigent error message.
+    :param text: Value to truncate, e.g. a Goalrail error message.
     :param max_chars: Maximum display width, e.g. ``96``.
     :returns: The original text if it fits, otherwise a right-truncated
         string ending in an ellipsis.
@@ -8821,7 +8821,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # Ask only for the workspace URL — never a profile name. The flow
         # below authenticates that one workspace and runs `ucode configure`
         # against it, scoped to the harness the user drilled into. This is
-        # the one place Omnigent triggers a Databricks CLI / ucode login;
+        # the one place Goalrail triggers a Databricks CLI / ucode login;
         # it never happens on a bare `run`, so a user who only wants their
         # own provider is never routed through Databricks unexpectedly.
         from omnigent.onboarding.configure_models import family_label
@@ -9794,7 +9794,7 @@ def _manage_qwen_harness() -> None:
     to launch ``qwen`` for ``/auth`` — it does **not** pretend to run a ``qwen
     login``
     (there isn't one). Storing/injecting an OpenAI-compatible key *through
-    Omnigent* is deferred (see docs/QWEN_FOLLOWUPS.md, Provider Injection).
+    Goalrail* is deferred (see docs/QWEN_FOLLOWUPS.md, Provider Injection).
 
     Like the CLI-backed harnesses, a missing CLI gates the drill-in — there's
     nothing to configure for a harness you can't run.
@@ -9921,10 +9921,10 @@ def _launch_goose_configure() -> str | None:
 def _manage_goose_harness() -> None:
     """Run the level-2 loop for Goose: ensure the CLI, then guide ``goose configure``.
 
-    Goose owns its own auth (keyring / ``~/.config/goose/config.yaml``) — Omnigent
+    Goose owns its own auth (keyring / ``~/.config/goose/config.yaml``) — Goalrail
     stores no Goose credential — so, like the Qwen drill-in, this reports
     best-effort configuration status and offers to launch ``goose configure``; it
-    does not store a key through Omnigent. A missing CLI gates the drill-in
+    does not store a key through Goalrail. A missing CLI gates the drill-in
     (nothing to configure for a harness you can't run); Goose ships out-of-band
     (brew / curl, no npm package), so we show its install hint rather than
     auto-installing. Serves both ``goose-native`` (TUI) and the headless
@@ -9982,7 +9982,7 @@ def _manage_hermes_harness() -> None:
     """Run the level-2 loop for Hermes: ensure the CLI is installed.
 
     Hermes owns its own auth via ``hermes model`` (interactive provider/model
-    picker) and is installed via a curl script from Nous Research — Omnigent
+    picker) and is installed via a curl script from Nous Research — Goalrail
     stores no Hermes credential. A missing CLI gates the drill-in; when
     installed, the drill-in offers to launch ``hermes model`` for provider
     configuration.
@@ -10785,7 +10785,7 @@ def _manage_opencode_harness() -> None:
     ``~/.local/share/opencode/auth.json``) or ambient provider env vars — so,
     like the Goose / Qwen drill-ins, this reports which providers OpenCode can
     reach and offers to launch its native login; it never stores a key through
-    Omnigent. (For the Databricks-gateway path the agent's ``profile`` is
+    Goalrail. (For the Databricks-gateway path the agent's ``profile`` is
     synthesized into opencode's per-session config instead — set under
     Claude / Codex.)
 
@@ -10966,16 +10966,16 @@ def _run_configure_harnesses_interactive() -> None:
     _ANTIGRAVITY = "\x00antigravity"
     # Sentinel marking the Qwen Code row — like Antigravity/Cursor it is not a
     # provider family (its v1 auth is the CLI's own env vars / ``/auth`` flow,
-    # not an Omnigent credential), so it dispatches to its own drill-in.
+    # not a Goalrail credential), so it dispatches to its own drill-in.
     _QWEN = "\x00qwen"
-    # Sentinel marking the OpenCode row — native-server harness with no Omnigent
+    # Sentinel marking the OpenCode row — native-server harness with no Goalrail
     # credential of its own (it routes through the bound agent's Databricks
     # gateway profile or ambient provider env), so it dispatches to its own
     # binary-install/info drill-in.
     _OPENCODE = "\x00opencode"
     # Sentinel marking the Goose row — like Qwen/Antigravity/Cursor it is not a
     # provider family (Goose owns its own auth via ``goose configure``, not an
-    # Omnigent credential), so it dispatches to its own drill-in.
+    # Goalrail credential), so it dispatches to its own drill-in.
     _GOOSE = "\x00goose"
     # Sentinel marking the Hermes row — like Goose it owns its own auth via
     # ``hermes model`` and is installed via a curl installer.
@@ -11120,7 +11120,7 @@ def _run_configure_harnesses_interactive() -> None:
         selectable.append(False)
         row_target.append(None)
         # OpenCode (native-server harness): readiness is just whether the
-        # ``opencode`` CLI is installed — it has no Omnigent-stored credential,
+        # ``opencode`` CLI is installed — it has no Goalrail-stored credential,
         # routing through the bound agent's Databricks gateway profile or
         # ambient provider env. Its drill-in installs the CLI and explains that.
         # OpenCode: ready = CLI installed AND a provider reachable (a stored
@@ -11209,7 +11209,7 @@ def _run_configure_harnesses_interactive() -> None:
             selectable.append(False)
             row_target.append(None)
         # Hermes Agent (its own provider config via ``hermes model``, installed
-        # via a curl installer from Nous Research — no npm package or Omnigent
+        # via a curl installer from Nous Research — no npm package or Goalrail
         # credential).
         hermes_installed = harness_cli_installed(HERMES_KEY)
         options.append(f"{'  ' if hermes_installed else '[red]✗[/] '}Hermes")
@@ -11231,7 +11231,7 @@ def _run_configure_harnesses_interactive() -> None:
         selectable.append(False)
         row_target.append(None)
         # Kiro — native kiro-cli TUI (own auth via `kiro-cli login`, installed via
-        # Kiro's curl installer — no npm package or Omnigent credential).
+        # Kiro's curl installer — no npm package or Goalrail credential).
         kiro_installed = harness_cli_installed(KIRO_KEY)
         options.append(f"{'  ' if kiro_installed else '[red]✗[/] '}Kiro")
         selectable.append(True)
@@ -11774,7 +11774,7 @@ def _workspace_api_server_url(server: str) -> str:
 
 def _resolve_server_url(server: str) -> str:
     """
-    Normalize a user-supplied ``--server`` value to the Omnigent API base.
+    Normalize a user-supplied ``--server`` value to the Goalrail API base.
 
     Every ``--server`` entry point (and ``login``) needs the same
     normalization, so they all route through here: strip a trailing slash,

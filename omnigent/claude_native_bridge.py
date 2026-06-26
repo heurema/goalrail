@@ -3,16 +3,16 @@
 The native wrapper has two live processes that need to rendezvous:
 
 - Claude Code, running in the user's terminal resource.
-- The Omnigent harness turn, running when the web UI submits a
+- The Goalrail harness turn, running when the web UI submits a
   message to the session agent.
 
 This module owns the small filesystem rendezvous directory plus two
 helper surfaces:
 
 - An MCP stdio server (``serve-mcp`` subcommand) that Claude Code
-  launches as a child process. It advertises Omnigent tools to
+  launches as a child process. It advertises Goalrail tools to
   Claude (workspace ``sys_os_*`` tools outside an active turn,
-  active-turn Omnigent tools via a per-turn relay).
+  active-turn Goalrail tools via a per-turn relay).
 - A tmux send-keys path. Web UI messages are delivered to Claude by
   typing them into the same tmux pane the user is attached to;
   Claude treats them as ordinary user input. The runner advertises
@@ -104,7 +104,7 @@ _TOOL_CALL_TIMEOUT_S = 300.0
 # Timeout for the bridge's POST to the active-turn relay server
 # (``_call_relay_tool``). This is the OUTER hop: it waits for the relay
 # handler's entire ``_TOOL_CALL_TIMEOUT_S`` dispatch, which itself fans out
-# to the Omnigent policy server and back. It MUST exceed ``_TOOL_CALL_TIMEOUT_S``
+# to the Goalrail policy server and back. It MUST exceed ``_TOOL_CALL_TIMEOUT_S``
 # so the inner handler times out first and returns a clean MCP error over
 # HTTP 200 — rather than the outer ``urlopen`` raising and tearing down the
 # stdio MCP server (see ``_stdio_jsonrpc_loop``). The previous flat 10s sat
@@ -263,12 +263,12 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
 @dataclass(frozen=True)
 class ClaudeTranscriptItem:
     """
-    One Omnigent conversation item parsed from Claude's JSONL log.
+    One Goalrail conversation item parsed from Claude's JSONL log.
 
     :param source_id: Stable idempotency key derived from the Claude
         transcript record UUID and content block position, e.g.
         ``"747e:0:function_call"``.
-    :param item_type: Omnigent conversation item type, e.g.
+    :param item_type: Goalrail conversation item type, e.g.
         ``"message"`` or ``"function_call"``.
     :param data: Item payload shaped like ``SessionEventInput.data``.
     :param response_id: Synthetic response id used to group the
@@ -293,7 +293,7 @@ class TranscriptReadResult:
         line is not included.
     :param current_response_id: Response id for a Claude assistant
         turn that remains active across polls.
-    :param items: Parsed Omnigent conversation items from the
+    :param items: Parsed Goalrail conversation items from the
         complete records after the caller's cursor.
     :param latest_usage: Token-usage from the most recent assistant
         entry with a ``message.usage`` block. Keys: ``context_tokens``,
@@ -343,7 +343,7 @@ class ClaudeHookRecord:
         session id had already been observed before this hook was
         recorded. ``None`` means the hook did not capture that
         context.
-    :param clear_rotated_to: Omnigent session id created synchronously by the
+    :param clear_rotated_to: Goalrail session id created synchronously by the
         hook for ``SessionStart source=clear``, e.g. ``"conv_new"``,
         or ``None`` when the background forwarder should rotate.
     :param fork_detected: Whether the hook identified this record as a
@@ -351,7 +351,7 @@ class ClaudeHookRecord:
         background forwarder uses this annotation because state.json
         already points at the new Claude session by the time it reads
         hooks.jsonl.
-    :param fork_rotated_to: Omnigent session id created synchronously by the
+    :param fork_rotated_to: Goalrail session id created synchronously by the
         hook for a Claude branch/fork transition, e.g. ``"conv_fork"``,
         or ``None`` when the background forwarder should fork.
     :param todos: Updated todo list from a ``PostToolUse``/``TodoWrite``
@@ -560,9 +560,9 @@ class ClaudeNativeToolRelay:
     HTTP relay for Claude MCP tool calls, scoped to its caller's lifetime.
 
     Claude's MCP helper process calls the relay synchronously when Claude
-    Code invokes a relayed Omnigent tool; the relay forwards the call
+    Code invokes a relayed Goalrail tool; the relay forwards the call
     into the ``tool_executor`` callback supplied at start, which dispatches
-    it on the runner event loop (e.g. through the Omnigent REST API).
+    it on the runner event loop (e.g. through the Goalrail REST API).
 
     Callers choose the lifetime and call :meth:`close` when it ends. The
     comment-tool relay (``list_comments`` / ``update_comment``) is
@@ -685,7 +685,7 @@ def bridge_dir_for_conversation_id(conversation_id: str) -> Path:
     """
     Return the bridge directory for a legacy session id.
 
-    :param conversation_id: Omnigent conversation id used as bridge id, e.g.
+    :param conversation_id: Goalrail conversation id used as bridge id, e.g.
         ``"conv_abc123"``.
     :returns: Absolute bridge directory under
         ``/tmp/omnigent-<UID>/claude-native``.
@@ -701,7 +701,7 @@ def build_claude_native_spawn_env(
     """
     Build spawn env for the ``claude-native`` harness process.
 
-    :param conversation_id: Omnigent conversation id, e.g.
+    :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param bridge_id: Opaque bridge id from
         :data:`BRIDGE_ID_LABEL_KEY`, e.g. ``"bridge_abc123"``. ``None``
@@ -726,7 +726,7 @@ def prepare_bridge_dir(
     """
     Create or refresh the bridge directory for a native Claude session.
 
-    :param conversation_id: Omnigent conversation id, e.g.
+    :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param bridge_id: Opaque bridge id, e.g. ``"bridge_abc123"``.
         ``None`` normalizes old sessions by using *conversation_id*.
@@ -757,7 +757,7 @@ def prepare_bridge_dir(
         payload["launch_model"] = launch_model
     _write_json_file(bridge_dir / _CONFIG_FILE, payload)
     # Keep ``_PERMISSION_HOOK_FILE`` — the PermissionRequest command hook
-    # reads the Omnigent server URL from it at runtime, so wiping it on re-prep
+    # reads the Goalrail server URL from it at runtime, so wiping it on re-prep
     # breaks approval routing on reattach/rebind. ``build_hook_settings``
     # rewrites it on cold launch.
     for filename in (
@@ -894,10 +894,10 @@ def _atomic_write_user_json(path: Path, payload: dict[str, Any]) -> None:
 
 def read_active_session_id(bridge_dir: Path) -> str | None:
     """
-    Read the Omnigent session currently receiving bridge-originated events.
+    Read the Goalrail session currently receiving bridge-originated events.
 
     :param bridge_dir: Bridge directory path.
-    :returns: Active Omnigent session id, e.g. ``"conv_abc123"``, or
+    :returns: Active Goalrail session id, e.g. ``"conv_abc123"``, or
         ``None`` when the bridge config is absent or malformed.
     """
     config = _read_json_file(bridge_dir / _CONFIG_FILE)
@@ -943,10 +943,10 @@ def read_bridge_id(bridge_dir: Path) -> str | None:
 
 def write_active_session_id(bridge_dir: Path, session_id: str) -> None:
     """
-    Atomically update the bridge's active Omnigent session.
+    Atomically update the bridge's active Goalrail session.
 
     :param bridge_dir: Bridge directory path.
-    :param session_id: New active Omnigent session id, e.g.
+    :param session_id: New active Goalrail session id, e.g.
         ``"conv_abc123"``.
     :returns: None.
     :raises RuntimeError: If the bridge config does not exist.
@@ -962,7 +962,7 @@ def write_active_session_id(bridge_dir: Path, session_id: str) -> None:
 
 def read_permission_hook_config(bridge_dir: Path) -> dict[str, Any]:
     """
-    Read Omnigent routing details for the permission command hook.
+    Read Goalrail routing details for the permission command hook.
 
     :param bridge_dir: Bridge directory path.
     :returns: Permission hook config, e.g.
@@ -976,7 +976,7 @@ def read_permission_hook_config(bridge_dir: Path) -> dict[str, Any]:
 
 def build_mcp_config(bridge_dir: Path, *, python_executable: str | None = None) -> dict[str, Any]:
     """
-    Build the Claude Code MCP config for the Omnigent bridge server.
+    Build the Claude Code MCP config for the Goalrail bridge server.
 
     :param bridge_dir: Bridge directory path.
     :param python_executable: Python executable to run, e.g.
@@ -1020,7 +1020,7 @@ def build_hook_settings(
     :param python_executable: Python executable to run, e.g.
         ``"/path/to/.venv/bin/python"``. ``None`` uses
         :data:`sys.executable`.
-    :param ap_server_url: Omnigent server base URL the ``PermissionRequest``
+    :param ap_server_url: Goalrail server base URL the ``PermissionRequest``
         command hook should POST to, e.g. ``"http://127.0.0.1:8787"``.
         When ``None``, no ``PermissionRequest`` hook is registered and
         Claude falls back to its built-in TUI permission prompt.
@@ -1273,14 +1273,14 @@ def augment_claude_args(
     skills_filter: str | list[str] = "all",
 ) -> list[str]:
     """
-    Return Claude CLI args with Omnigent MCP/hook/skill injection.
+    Return Claude CLI args with Goalrail MCP/hook/skill injection.
 
     :param claude_args: User-provided Claude Code args, e.g.
         ``("--resume", "abc")``.
     :param bridge_dir: Bridge directory path.
     :param python_executable: Python executable to run helper
         modules. ``None`` uses :data:`sys.executable`.
-    :param ap_server_url: Omnigent server base URL passed through to
+    :param ap_server_url: Goalrail server base URL passed through to
         :func:`build_hook_settings` so the ``PermissionRequest``
         command hook is registered. ``None`` omits the hook and
         Claude falls back to its built-in TUI prompt.
@@ -1341,7 +1341,7 @@ def _merge_disallowed_tools(args: list[str], extra: tuple[str, ...]) -> list[str
     overridden; otherwise appends a new flag.
 
     :param args: Claude CLI argument list to mutate-and-return.
-    :param extra: Tool names Omnigent wants disabled.
+    :param extra: Tool names Goalrail wants disabled.
     :returns: ``args`` with the merged flag.
     """
     if not extra:
@@ -1662,14 +1662,14 @@ def read_transcript_items_since(
     current_response_id: str | None = None,
 ) -> tuple[int, str | None, list[ClaudeTranscriptItem]]:
     """
-    Read Claude transcript records as Omnigent conversation items.
+    Read Claude transcript records as Goalrail conversation items.
 
     Claude Code writes append-only JSONL records whose ``message``
     payloads include user prompts, assistant text, native tool calls,
     and native tool results. This parser intentionally ignores
     metadata records (title, file-history, permission mode, system
     bookkeeping) and raw ``thinking`` blocks, while translating the
-    user-visible semantic records into Omnigent item types the web UI
+    user-visible semantic records into Goalrail item types the web UI
     already understands.
 
     :param transcript_path: Claude transcript path, e.g.
@@ -1789,7 +1789,7 @@ def read_transcript_items_from_offset(
     :param include_sidechains: Pass ``True`` when reading a
         sub-agent's own ``agent-<id>.jsonl`` — every record there is
         a sidechain by Claude's definition, and dropping them would
-        leave the sub-agent's child Omnigent conversation empty. The
+        leave the sub-agent's child Goalrail conversation empty. The
         default ``False`` keeps the parent-transcript path
         unchanged.
     :returns: Parsed items plus updated line and byte cursors.
@@ -1980,7 +1980,7 @@ def read_hook_events_since(
     Read hook event names appended after a hook cursor.
 
     The transcript forwarder uses this to publish ``session.status``
-    events to Omnigent when Claude Code's ``Stop`` / ``StopFailure`` hooks
+    events to Goalrail when Claude Code's ``Stop`` / ``StopFailure`` hooks
     fire — those are the only edges the wrapper can observe between
     Claude becoming idle and the JSONL transcript reflecting it.
 
@@ -2365,7 +2365,7 @@ def inject_user_message(
     message never submits.
 
     :param bridge_dir: Bridge directory path.
-    :param content: User text from the Omnigent web UI. Must be non-empty.
+    :param content: User text from the Goalrail web UI. Must be non-empty.
     :param timeout_s: Seconds to wait for each readiness gate
         (``tmux.json`` advertised, then prompt rendered), e.g. ``30.0``.
     :returns: None.
@@ -2507,7 +2507,7 @@ def kill_session(
     :class:`omnigent.inner.terminal.TerminalInstance`). The only way
     a user can end such a session today is to re-attach to the tmux in
     their terminal and exit from inside it. This helper is the analog
-    of that manual exit for the Omnigent web UI's "Stop session" affordance:
+    of that manual exit for the Goalrail web UI's "Stop session" affordance:
     it kills the tmux session outright, which terminates ``claude`` and
     everything in the pane.
 
@@ -2613,7 +2613,7 @@ def display_cost_approval_popup(
     Claude-native resolver for the harness-agnostic
     :func:`omnigent.native_cost_popup.launch_cost_popup`: it reads the
     pane's tmux socket/target from this bridge's ``tmux.json`` and points
-    the popup at this bridge's ``permission_hook.json`` for Omnigent routing
+    the popup at this bridge's ``permission_hook.json`` for Goalrail routing
     (base URL + auth headers, so no token lands on the command line), then
     delegates. The launcher pops the modal on every attached client and
     skips silently when none is attached (e.g. the Terminal tab is closed)
@@ -2623,7 +2623,7 @@ def display_cost_approval_popup(
         ``/tmp/omnigent/claude-native/<digest>``. Supplies both the
         tmux target (``tmux.json``) and the AP-routing config
         (``permission_hook.json``).
-    :param session_id: Omnigent session id that owns the elicitation, e.g.
+    :param session_id: Goalrail session id that owns the elicitation, e.g.
         ``"conv_abc123"``. Used in the resolve URL the popup POSTs to.
     :param elicitation_id: Outstanding elicitation correlation id, e.g.
         ``"elicit_deadbeef"``.
@@ -2979,7 +2979,7 @@ def start_tool_relay(
     loop: asyncio.AbstractEventLoop,
 ) -> ClaudeNativeToolRelay:
     """
-    Start a relay for Omnigent tool calls from Claude.
+    Start a relay for Goalrail tool calls from Claude.
 
     Writes ``tool_relay.json`` and starts the localhost HTTP server that
     backs it. The caller owns the relay's lifetime (a single turn or a
@@ -2987,7 +2987,7 @@ def start_tool_relay(
     that scope ends.
 
     :param bridge_dir: Bridge directory path.
-    :param tools: Omnigent tool schemas to advertise, e.g.
+    :param tools: Goalrail tool schemas to advertise, e.g.
         ``[{"name": "sys_os_read", "parameters": {...}}]``.
     :param tool_executor: Callback used to dispatch one tool call through
         AP/runner.
@@ -3210,7 +3210,7 @@ def _tool_relay_handler_factory(
     """
 
     class _ToolRelayHandler(BaseHTTPRequestHandler):
-        """HTTP handler for active Omnigent tool relay calls."""
+        """HTTP handler for active Goalrail tool relay calls."""
 
         def log_message(self, format: str, *args: Any) -> None:
             """
@@ -3303,7 +3303,7 @@ def _run_relay_tool(
     try:
         result = future.result(timeout=_TOOL_CALL_TIMEOUT_S)
     except Exception as exc:  # noqa: BLE001 - relay converts callback failures to MCP errors.
-        return _mcp_error(f"Omnigent tool dispatch failed: {exc}")
+        return _mcp_error(f"Goalrail tool dispatch failed: {exc}")
     return _mcp_response_from_tool_result(result)
 
 
@@ -3351,7 +3351,7 @@ def _stdio_jsonrpc_loop(
     """
     Run the minimal MCP JSON-RPC stdio loop.
 
-    :param tools: Omnigent tools exposed over MCP.
+    :param tools: Goalrail tools exposed over MCP.
     :param stdout_lock: Lock protecting JSON-RPC writes to stdout.
     :param bridge_dir: Bridge directory path used to read the
         active tool relay.
@@ -3428,7 +3428,7 @@ def _handle_mcp_request(
 
     :param method: JSON-RPC method name, e.g. ``"initialize"``.
     :param params: Request params object.
-    :param tools: Omnigent tools exposed over MCP.
+    :param tools: Goalrail tools exposed over MCP.
     :param bridge_dir: Bridge directory path used to read the
         active tool relay.
     :returns: MCP result object.
@@ -3444,8 +3444,8 @@ def _handle_mcp_request(
                 "version": "0.1.0",
             },
             "instructions": (
-                "Omnigent tools are available as MCP tools when the "
-                "active Omnigent turn advertises them; local sys_os_* "
+                "Goalrail tools are available as MCP tools when the "
+                "active Goalrail turn advertises them; local sys_os_* "
                 "tools are available outside an active turn for "
                 "workspace file and shell access."
             ),
@@ -3461,7 +3461,7 @@ def _handle_mcp_request(
 
 def _mcp_tool_schema(tool: Tool) -> dict[str, Any]:
     """
-    Convert an Omnigent tool schema into MCP tool-list shape.
+    Convert a Goalrail tool schema into MCP tool-list shape.
 
     :param tool: Tool instance, e.g. ``SysOsReadTool``.
     :returns: MCP tool descriptor.
@@ -3486,8 +3486,8 @@ def _combined_mcp_tool_schemas(
     :param bridge_dir: Bridge directory path used to read
         ``tool_relay.json``.
     :returns: MCP tool descriptors. Active relay tools override
-        local tools with the same name so calls flow through Omnigent and
-        appear in the Omnigent event stream during web turns.
+        local tools with the same name so calls flow through Goalrail and
+        appear in the Goalrail event stream during web turns.
     """
     schemas = {name: _mcp_tool_schema(tool) for name, tool in local_tools.items()}
     for tool_spec in _read_relay_tool_specs(bridge_dir):
@@ -3500,7 +3500,7 @@ def _combined_mcp_tool_schemas(
 
 def _mcp_tool_schema_from_spec(tool_spec: dict[str, Any]) -> dict[str, Any]:
     """
-    Convert an Omnigent tool schema dict into MCP tool-list shape.
+    Convert a Goalrail tool schema dict into MCP tool-list shape.
 
     :param tool_spec: Tool schema from an active harness turn, e.g.
         ``{"name": "sys_os_shell", "parameters": {...}}``.
@@ -3526,7 +3526,7 @@ def _call_mcp_tool(
 
     :param params: MCP tool-call params, e.g.
         ``{"name": "sys_os_read", "arguments": {"path": "README.md"}}``.
-    :param tools: Omnigent tools exposed over MCP.
+    :param tools: Goalrail tools exposed over MCP.
     :param bridge_dir: Bridge directory path used to read the
         active tool relay.
     :returns: MCP tool-call result.
@@ -3606,7 +3606,7 @@ def _call_relay_tool(
     token = relay.get("token")
     url = relay.get("url")
     if not isinstance(token, str) or not isinstance(url, str):
-        return _mcp_error("active Omnigent tool relay is missing url/token")
+        return _mcp_error("active Goalrail tool relay is missing url/token")
     payload = json.dumps({"name": name, "arguments": arguments}).encode("utf-8")
     req = request.Request(
         f"{url}/tool",
@@ -3630,13 +3630,13 @@ def _call_relay_tool(
     # through ``_call_mcp_tool`` → ``_stdio_jsonrpc_loop`` and kill the MCP
     # server.
     except OSError as exc:
-        return _mcp_error(f"failed to call Omnigent tool relay: {exc}")
+        return _mcp_error(f"failed to call Goalrail tool relay: {exc}")
     try:
         decoded = json.loads(raw)
     except json.JSONDecodeError:
-        return _mcp_error("Omnigent tool relay returned malformed JSON")
+        return _mcp_error("Goalrail tool relay returned malformed JSON")
     if not isinstance(decoded, dict):
-        return _mcp_error("Omnigent tool relay returned non-object JSON")
+        return _mcp_error("Goalrail tool relay returned non-object JSON")
     return decoded
 
 
@@ -3688,7 +3688,7 @@ def _empty_object_schema() -> dict[str, Any]:
 
 def _build_tools(config: dict[str, Any]) -> tuple[dict[str, Tool], Callable[[], None]]:
     """
-    Build Omnigent MCP tools served by the bridge.
+    Build Goalrail MCP tools served by the bridge.
 
     :param config: Bridge config JSON object.
     :returns: ``(tools, close_tools)`` where ``close_tools``
@@ -3963,7 +3963,7 @@ def _transcript_items_from_entry(
     include_sidechains: bool = False,
 ) -> tuple[str | None, list[ClaudeTranscriptItem]]:
     """
-    Convert one Claude transcript entry into Omnigent conversation items.
+    Convert one Claude transcript entry into Goalrail conversation items.
 
     :param entry: Decoded JSON object from one transcript line.
     :param line_number: One-based transcript line number.
@@ -3977,7 +3977,7 @@ def _transcript_items_from_entry(
         with ``isSidechain: true`` is dropped — that's the right
         behavior when reading the parent's main transcript, where
         sub-agent records are inlined as sidechains and must not
-        appear in the parent's Omnigent conversation. When ``True`` the
+        appear in the parent's Goalrail conversation. When ``True`` the
         flag is ignored — required when reading a sub-agent's own
         ``agent-<id>.jsonl`` (every record there is a sidechain by
         definition) so the sub-agent's items reach the child AP
@@ -4038,7 +4038,7 @@ def _attachment_transcript_items_from_entry(
     ``attachment.type == "queued_command"`` rather than a normal
     ``role=user`` message. Treat prompt-mode queued commands as user
     messages so interruption inputs such as ``"STOP"`` appear in the
-    Omnigent transcript and reset the active assistant response.
+    Goalrail transcript and reset the active assistant response.
 
     :param entry: Decoded Claude transcript record.
     :param line_number: One-based transcript line number.
@@ -4677,7 +4677,7 @@ def _parent_or_record_source_key(
 
 def _response_id_from_source(source: str) -> str:
     """
-    Derive a deterministic Omnigent response id from a Claude source key.
+    Derive a deterministic Goalrail response id from a Claude source key.
 
     :param source: Claude UUID/request id/line key.
     :returns: String id with the standard ``resp_`` prefix.
@@ -4692,7 +4692,7 @@ def _source_id(source_key: str, item_index: int, item_type: str) -> str:
 
     :param source_key: Base Claude record key.
     :param item_index: Content block index inside the record.
-    :param item_type: Omnigent item type.
+    :param item_type: Goalrail item type.
     :returns: Stable source id string.
     """
     return f"{source_key}:{item_index}:{item_type}"

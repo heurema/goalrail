@@ -4,7 +4,7 @@ The ``omnigent qwen`` wrapper launches the real ``qwen`` TUI in a runner-owned
 tmux pane with ``--json-file`` pointed at the bridge dir, and
 :mod:`omnigent.qwen_native_bridge` appends web-UI messages to its ``--input-file``.
 That covers the web→TUI direction, but the *embedded terminal* is then the only
-surface that reflects the agent's work — the Omnigent conversation view stays
+surface that reflects the agent's work — the Goalrail conversation view stays
 empty because nothing mirrors the transcript back into the session.
 
 This module is that missing mirror — the qwen analog of
@@ -274,9 +274,9 @@ async def forward_qwen_events_to_session(
     dedup set are persisted to ``bridge_dir`` so a supervisor restart resumes
     without re-posting.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: Static HTTP headers (auth normally via ``auth``).
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: The qwen-native bridge dir (holds the persisted cursor).
     :param agent_name: Agent label stamped on mirrored assistant items.
     :param events_file: qwen ``--json-file`` path; defaults to the bridge dir's.

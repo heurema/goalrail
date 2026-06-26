@@ -4,7 +4,7 @@ The native OpenCode wrapper records the cwd used to create a session so a
 later ``omnigent opencode --resume <conv_id>`` can launch OpenCode from
 the same workspace. This state is intentionally client-side: local
 filesystem paths belong to the user's machine and should not be stored on
-the shared Omnigent server. Mirrors :mod:`omnigent.codex_native_state`.
+the shared Goalrail server. Mirrors :mod:`omnigent.codex_native_state`.
 
 Layout (per conversation):
 
@@ -60,7 +60,7 @@ def _state_dir_for_conversation_id(conversation_id: str) -> Path:
     Hashing the conversation id prevents path traversal if a server ever
     returned an attacker-controlled id such as ``"../etc"``.
 
-    :param conversation_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param conversation_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Absolute directory path; not guaranteed to exist.
     """
     digest = hashlib.sha256(conversation_id.encode("utf-8")).hexdigest()[:_ID_HASH_CHARS]
@@ -75,7 +75,7 @@ def write_launch_state(conversation_id: str, working_directory: str) -> None:
     and logged because changing the recorded cwd for an existing session
     would make future resume checks incorrect.
 
-    :param conversation_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param conversation_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param working_directory: Absolute launch cwd, e.g. ``"/home/me/repo"``.
     :returns: None.
     :raises ValueError: If *working_directory* is empty or relative.
@@ -113,7 +113,7 @@ def read_launch_state(conversation_id: str) -> OpenCodeNativeLaunchState | None:
     Missing, unreadable, or malformed state is treated as absent so legacy
     and cross-machine resumes continue to behave as before.
 
-    :param conversation_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param conversation_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Parsed state, or ``None`` if missing / malformed.
     """
     target = _state_dir_for_conversation_id(conversation_id) / _LAUNCH_FILE

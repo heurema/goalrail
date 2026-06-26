@@ -87,7 +87,7 @@ async def post_session_event_with_retry(
     duplicate the item. Other event types are idempotent/transient and
     are retried.
 
-    :param client: HTTP client for Omnigent event posts.
+    :param client: HTTP client for Goalrail event posts.
     :param url: Full request URL, e.g. ``"/v1/sessions/conv_x/events"``.
     :param payload: JSON payload to POST, e.g. ``{"type": ..., "data": ...}``.
     :param event_type: Session event type, e.g.

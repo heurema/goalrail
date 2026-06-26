@@ -1,7 +1,7 @@
-"""Native Kimi TUI wrapper for the Omnigent CLI.
+"""Native Kimi TUI wrapper for the Goalrail CLI.
 
 ``omnigent kimi`` launches the Kimi CLI's interactive TUI (``kimi``
-with no args) inside an Omnigent-runner-owned tmux terminal and attaches the
+with no args) inside a Goalrail-runner-owned tmux terminal and attaches the
 local TTY — the kimi analog of ``omnigent codex`` / ``omnigent pi``. The runner
 spawns the process (see :func:`omnigent.runner.app._auto_create_kimi_terminal`);
 this module owns the CLI-side orchestration: session create/resume, daemon
@@ -73,7 +73,7 @@ class NativeKimiLaunch:
 
 @dataclass(frozen=True)
 class LaunchedKimiTerminal:
-    """Terminal resource returned by the Omnigent runner launch path."""
+    """Terminal resource returned by the Goalrail runner launch path."""
 
     terminal_id: str
     tmux_socket: Path | None
@@ -87,7 +87,7 @@ class PreparedKimiTerminal:
     :param reattached: ``True`` when an existing, still-running session
         terminal was reused (the live-reattach path: prior chat is
         intact).
-    :param cold_resumed: ``True`` when resuming an existing Omnigent
+    :param cold_resumed: ``True`` when resuming an existing Goalrail
         session whose terminal had already exited, so a *fresh*
         ``kimi`` TUI was launched with none of the prior turns.
         Kimi records no resumable chat id, so this is genuinely a new
@@ -161,10 +161,10 @@ def run_kimi_native(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch the Kimi TUI in an Omnigent terminal.
+    Launch the Kimi TUI in a Goalrail terminal.
 
-    :param server: Resolved Omnigent server URL.
-    :param session_id: Optional existing Omnigent conversation id.
+    :param server: Resolved Goalrail server URL.
+    :param session_id: Optional existing Goalrail conversation id.
     :param kimi_args: Raw kimi CLI args to persist for the runner-owned TUI.
     :param resume_picker: ``True`` runs the kimi-native picker.
     :param auto_open_conversation: When ``True``, open the browser
@@ -174,7 +174,7 @@ def run_kimi_native(
     _preflight_local_tools()
     if server is None:
         raise click.ClickException(
-            "Kimi requires a resolved Omnigent server URL. The CLI should call "
+            "Kimi requires a resolved Goalrail server URL. The CLI should call "
             "_ensure_backend before run_kimi_native."
         )
     with TemporaryDirectory(prefix="omnigent-kimi-native-") as tmpdir:
@@ -235,11 +235,11 @@ def _run_with_remote_server(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch Kimi on an Omnigent server via a daemon-spawned runner.
+    Launch Kimi on a Goalrail server via a daemon-spawned runner.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param spec_path: Generated Kimi wrapper agent spec.
-    :param session_id: Optional existing Omnigent session id.
+    :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True``, run the kimi-native picker.
     :param kimi_args: Raw kimi CLI args.
     :param auto_open_conversation: Whether to open the web conversation URL.
@@ -439,7 +439,7 @@ async def _create_kimi_session(
 
 
 async def _fetch_kimi_session(client: httpx.AsyncClient, session_id: str) -> dict[str, Any]:
-    """Fetch an existing Omnigent session."""
+    """Fetch an existing Goalrail session."""
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
     if resp.status_code == 404:
         raise click.ClickException(f"Conversation {session_id!r} not found on the server.")

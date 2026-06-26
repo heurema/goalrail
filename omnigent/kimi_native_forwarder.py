@@ -1,9 +1,9 @@
-"""Mirror a kimi-native TUI session's transcript into the Omnigent web chat.
+"""Mirror a kimi-native TUI session's transcript into the Goalrail web chat.
 
 The kimi-native harness launches the interactive ``kimi`` TUI in a tmux pane and
 injects web-UI turns into it (see :mod:`omnigent.kimi_native_bridge`). The TUI's
 reply renders live in the embedded terminal, but — unlike the SDK ``KimiExecutor``
-— nothing flows the assistant's response back into Omnigent's conversation
+— nothing flows the assistant's response back into Goalrail's conversation
 transcript (the chat bubbles). This module closes that gap, the kimi analog of
 :mod:`omnigent.cursor_native_forwarder`.
 

@@ -1,4 +1,4 @@
-"""Single source of truth for Omnigent wrapper-session labels.
+"""Single source of truth for Goalrail wrapper-session labels.
 
 Wrapper-style sessions (``omnigent claude`` today; future
 ``codex`` / ``pi`` wrappers tomorrow) stamp an ``omnigent.wrapper``

@@ -228,7 +228,7 @@ _SUPERVISOR_INITIAL_BACKOFF_S = 1.0
 _SUPERVISOR_MAX_BACKOFF_S = 30.0
 _SUPERVISOR_HEALTHY_UPTIME_S = 60.0
 
-# Claude Code hook event names → Omnigent session-status values
+# Claude Code hook event names → Goalrail session-status values
 # published on the per-conversation SSE stream. Unmapped events emit
 # no status.
 #
@@ -276,7 +276,7 @@ class SubagentEntry:
     """
     Per-sub-agent forwarder cursor.
 
-    One of these per Claude-side sub-agent. Tracks the Omnigent child
+    One of these per Claude-side sub-agent. Tracks the Goalrail child
     Conversation id we minted (so subsequent items POST to the
     right session), the transcript file byte offset already
     forwarded, and the wall-clock timestamp of the last item we
@@ -284,7 +284,7 @@ class SubagentEntry:
 
     :param subagent_id: Stable Claude-side identifier, also the
         ``agent-<id>`` filename stem, e.g. ``"a5c7effac5a9a35ab"``.
-    :param child_conversation_id: Omnigent child Conversation id minted
+    :param child_conversation_id: Goalrail child Conversation id minted
         by the server's ``external_subagent_start`` handler,
         e.g. ``"conv_child456"``.
     :param byte_offset: Bytes already forwarded from the sub-agent's
@@ -327,7 +327,7 @@ class SubagentForwardState:
 
     :param subagents: Map from Claude-side ``subagent_id`` to the
         per-sub-agent entry. New sub-agents discovered on disk are
-        inserted here after the Omnigent server returns a child
+        inserted here after the Goalrail server returns a child
         Conversation id.
     """
 
@@ -375,9 +375,9 @@ class DeltaForwardState:
     ``<bridge_dir>/message_deltas.jsonl``. Unlike the transcript cursor
     this is NOT tied to a transcript path and is NOT reset on
     ``/clear`` / ``/fork``: the deltas file belongs to the long-lived
-    Claude process and keeps growing across Omnigent session rotations, so the
+    Claude process and keeps growing across Goalrail session rotations, so the
     offset stays monotonic and each new chunk is forwarded to whatever
-    Omnigent session is active when it is read.
+    Goalrail session is active when it is read.
 
     :param byte_offset: Byte offset after the last forwarded chunk.
         ``0`` means nothing has been forwarded yet.
@@ -459,7 +459,7 @@ class _TranscriptCostCacheEntry:
 @dataclass
 class _PostRetryEntry:
     """
-    In-memory retry state for one outbound Omnigent event.
+    In-memory retry state for one outbound Goalrail event.
 
     :param attempts: Number of failed post attempts observed.
     :param next_attempt_at: Monotonic timestamp before which the
@@ -473,7 +473,7 @@ class _PostRetryEntry:
 @dataclass(frozen=True)
 class _PostRetryDecision:
     """
-    Result of recording one outbound Omnigent post failure.
+    Result of recording one outbound Goalrail post failure.
 
     :param attempts: Number of failed attempts for this event after
         the current failure.
@@ -492,12 +492,12 @@ class _PostRetryDecision:
 
 class _PostRetryTracker:
     """
-    Track bounded retries and backoff for Omnigent event posts.
+    Track bounded retries and backoff for Goalrail event posts.
 
     Permanent 4xx-style HTTP rejections are retried a small number of
     times before the forwarder marks the item failed and advances the
     cursor. Transient HTTP/network failures keep retrying with
-    backoff so Omnigent outages do not silently drop transcript data.
+    backoff so Goalrail outages do not silently drop transcript data.
 
     This is not a :mod:`tenacity` wrapper because retry attempts must
     be interleaved with durable cursor writes and the forwarder's poll
@@ -607,12 +607,12 @@ async def forward_claude_transcript_to_session(
     assistant text, tool calls, and tool results as external AP
     conversation items.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: Static HTTP headers for Omnigent requests. Authorization
+    :param base_url: Goalrail server base URL.
+    :param headers: Static HTTP headers for Goalrail requests. Authorization
         is normally supplied via ``auth`` instead so OAuth tokens are
         refreshed per request; any ``Authorization`` value here is
         overridden by ``auth`` when both are set.
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param agent_name: Agent/model name to stamp on mirrored output.
     :param start_at_end: When ``True`` and no prior forward cursor
@@ -976,7 +976,7 @@ async def _write_subagent_forward_state_async(
 
 def _parse_json_response(resp: httpx.Response, *, context: str) -> Any:
     """
-    Parse an Omnigent JSON response, failing loudly on a non-JSON body.
+    Parse a Goalrail JSON response, failing loudly on a non-JSON body.
 
     The forwarder calls ``resp.json()`` on Sessions API responses after
     ``resp.raise_for_status()``. That guards non-2xx statuses but not a
@@ -1018,10 +1018,10 @@ async def _post_external_subagent_start(
     tool_use_id: str,
 ) -> str:
     """
-    POST ``external_subagent_start`` to the Omnigent server and return the
+    POST ``external_subagent_start`` to the Goalrail server and return the
     minted child Conversation id.
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param parent_session_id: Parent (claude-native) conversation id,
         e.g. ``"conv_parent987"``.
     :param subagent_id: Stable Claude-side identifier read from
@@ -1033,8 +1033,8 @@ async def _post_external_subagent_start(
         e.g. ``"Investigate web UI session data flow"``.
     :param tool_use_id: Parent transcript's ``Task`` tool-use block
         id this sub-agent was spawned from, e.g. ``"toolu_..."``.
-    :returns: The Omnigent child conversation id, e.g. ``"conv_child456"``.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :returns: The Goalrail child conversation id, e.g. ``"conv_child456"``.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     :raises KeyError: If the server response is missing
         ``child_session_id`` — indicates a server/forwarder version
         mismatch and is unrecoverable for this sub-agent.
@@ -1106,18 +1106,18 @@ async def _forward_available_subagents(
     status_retry_tracker: _PostRetryTracker,
 ) -> SubagentForwardState:
     """
-    Discover new Claude Task-tool sub-agents on disk, mint Omnigent child
+    Discover new Claude Task-tool sub-agents on disk, mint Goalrail child
     conversations for them, tail their transcripts, and publish
     quiescence-based status.
 
     Idempotent across forwarder restarts: ``state`` (persisted to
-    ``subagent_forwarder.json``) holds the Omnigent child id and byte
+    ``subagent_forwarder.json``) holds the Goalrail child id and byte
     offset for every sub-agent already seen. Sub-agents whose
     ``.meta.json`` appears for the first time are registered with AP
     via ``external_subagent_start``; sub-agents already in ``state``
     just have their ``.jsonl`` tailed forward.
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param parent_session_id: Parent (claude-native) conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param transcript_path: Parent's transcript JSONL — used to
@@ -1591,7 +1591,7 @@ async def _forward_session_cost(
     Best-effort, like the other forwarder posts: a failed POST is retried
     on the next poll (the ``dedupe`` baselines advance only on success).
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param session_id: Parent (claude-native) conversation id the cost is
         attributed to, e.g. ``"conv_abc123"``.
     :param bridge_dir: Native Claude bridge directory (holds the
@@ -1738,12 +1738,12 @@ async def supervise_forwarder(
     run left off — ``start_at_end`` is only consulted on a cold
     bridge with no persisted cursor.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"http://localhost:6767"``.
-    :param headers: Static HTTP headers for Omnigent requests. Authorization
+    :param headers: Static HTTP headers for Goalrail requests. Authorization
         is normally supplied via ``auth`` instead so OAuth tokens are
         refreshed per request.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``.
     :param bridge_dir: Native Claude bridge directory.
     :param agent_name: Agent/model name to stamp on mirrored output.
@@ -1811,16 +1811,16 @@ async def _maybe_rotate_session_on_clear(
     state: HookForwardState,
 ) -> str | None:
     """
-    Rotate the active Omnigent session when Claude reports ``/clear``.
+    Rotate the active Goalrail session when Claude reports ``/clear``.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Currently active Omnigent session id, e.g.
+    :param client: Goalrail HTTP client.
+    :param session_id: Currently active Goalrail session id, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
     :param state: Current hook cursor state.
     :returns: New active session id when rotation occurred, otherwise
         ``None``.
-    :raises httpx.HTTPError: If Omnigent rejects the create, bind, transfer,
+    :raises httpx.HTTPError: If Goalrail rejects the create, bind, transfer,
         or old-session clear calls.
     """
     result = await asyncio.to_thread(_read_hook_events_for_state, bridge_dir, state)
@@ -1862,10 +1862,10 @@ async def _seed_fork_transcript_forward_state(
     transcript_path: Path | None,
 ) -> None:
     """
-    Seed transcript forwarding after Omnigent has forked history.
+    Seed transcript forwarding after Goalrail has forked history.
 
     Claude fork transcripts start with copied source-session records.
-    The Omnigent fork endpoint has already copied those conversation items,
+    The Goalrail fork endpoint has already copied those conversation items,
     so forwarding must begin at the current end of the new Claude
     transcript rather than replaying the copied prefix.
 
@@ -1896,14 +1896,14 @@ async def _create_clear_replacement_session(
     bridge_dir: Path,
 ) -> str:
     """
-    Create the fresh Omnigent session for a Claude ``/clear`` event.
+    Create the fresh Goalrail session for a Claude ``/clear`` event.
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param old_session_id: Session being rotated away from, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_new"``.
-    :raises httpx.HTTPError: If Omnigent rejects session creation, new-session
+    :returns: New Goalrail session id, e.g. ``"conv_new"``.
+    :raises httpx.HTTPError: If Goalrail rejects session creation, new-session
         binding, or terminal transfer. Clearing the old runner binding is
         best-effort after the bridge has rotated.
     :raises RuntimeError: If the old session snapshot is malformed.
@@ -1972,21 +1972,21 @@ async def _maybe_rotate_session_on_fork(
     state: HookForwardState,
 ) -> str | None:
     """
-    Fork the active Omnigent session when Claude reports ``/fork``/``/branch``.
+    Fork the active Goalrail session when Claude reports ``/fork``/``/branch``.
 
     The hook annotates branch-created ``SessionStart source=resume``
     records before recording them. The forwarder consumes that
     annotation so it does not have to infer branch state after
     ``state.json`` already points at the new Claude session id.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Currently active Omnigent session id, e.g.
+    :param client: Goalrail HTTP client.
+    :param session_id: Currently active Goalrail session id, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
     :param state: Current hook cursor state.
     :returns: New active session id when fork rotation occurred,
         otherwise ``None``.
-    :raises httpx.HTTPError: If Omnigent rejects the fork, bind, transfer,
+    :raises httpx.HTTPError: If Goalrail rejects the fork, bind, transfer,
         or old-session clear calls.
     """
     result = await asyncio.to_thread(_read_hook_events_for_state, bridge_dir, state)
@@ -2025,17 +2025,17 @@ async def _create_fork_replacement_session(
     bridge_dir: Path,
 ) -> str:
     """
-    Create the forked Omnigent session for a Claude ``/fork``/``/branch``.
+    Create the forked Goalrail session for a Claude ``/fork``/``/branch``.
 
-    :param client: Omnigent HTTP client.
+    :param client: Goalrail HTTP client.
     :param old_session_id: Session being forked away from, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_fork"``.
-    :raises httpx.HTTPError: If Omnigent rejects session fetch, fork,
+    :returns: New Goalrail session id, e.g. ``"conv_fork"``.
+    :raises httpx.HTTPError: If Goalrail rejects session fetch, fork,
         new-session binding, or terminal transfer. Clearing the old
         runner binding is best-effort after the bridge has rotated.
-    :raises RuntimeError: If the Omnigent fork response is malformed.
+    :raises RuntimeError: If the Goalrail fork response is malformed.
     """
     old = await _fetch_session_snapshot(client, old_session_id)
     runner_id = old.get("runner_id")
@@ -2115,10 +2115,10 @@ def _is_fork_hook_record(record: ClaudeHookRecord) -> bool:
     transcript metadata or a recent local-command record, not from the
     human-facing session title. Hook-side annotations are still
     honored for idempotency when the synchronous hook has already
-    completed the Omnigent fork.
+    completed the Goalrail fork.
 
     :param record: Claude hook record read from hooks.jsonl.
-    :returns: ``True`` when the active Omnigent session should be forked.
+    :returns: ``True`` when the active Goalrail session should be forked.
     """
     if record.fork_detected or record.fork_rotated_to:
         return True
@@ -2149,12 +2149,12 @@ async def _fetch_session_snapshot(
     session_id: str,
 ) -> dict[str, Any]:
     """
-    Fetch one Omnigent session snapshot.
+    Fetch one Goalrail session snapshot.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Parsed JSON snapshot.
-    :raises httpx.HTTPError: If Omnigent returns a non-2xx status.
+    :raises httpx.HTTPError: If Goalrail returns a non-2xx status.
     :raises RuntimeError: If the response body is not a JSON object.
     """
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
@@ -2172,11 +2172,11 @@ async def _maybe_mirror_external_session_id(
     bridge_dir: Path,
 ) -> bool:
     """
-    Mirror Claude's native session id onto the Omnigent conversation row.
+    Mirror Claude's native session id onto the Goalrail conversation row.
 
     Reads the latest captured Claude-native session id from the
     bridge state file and, if present, PATCHes
-    ``external_session_id`` on the Omnigent conversation. Best-effort: a
+    ``external_session_id`` on the Goalrail conversation. Best-effort: a
     transient HTTP failure logs a warning and returns ``False`` so
     the caller retries on the next poll. Once the PATCH succeeds we
     return ``True`` and the caller latches off — the value is
@@ -2186,8 +2186,8 @@ async def _maybe_mirror_external_session_id(
     already-set different value) also latches off — the divergence
     is logged loudly but retrying would just hammer the server.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory; the source of
         the captured Claude session id.
     :returns: ``True`` once mirroring is finished (or has been
@@ -2216,7 +2216,7 @@ async def _maybe_mirror_external_session_id(
             )
             return True
         _logger.warning(
-            "Transient Omnigent error PATCHing external_session_id (%s); session=%s — will retry",
+            "Transient Goalrail error PATCHing external_session_id (%s); session=%s — will retry",
             exc.response.status_code,
             session_id,
         )
@@ -2267,7 +2267,7 @@ async def _ensure_hook_state(
         (e.g. an earlier ``Stop`` from a stale session) are not
         re-published on reattach while a partial trailing record can
         still complete and be read.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``. Used for stale-cursor diagnostics.
     :returns: The cursor state to use for the next hook poll.
     """
@@ -2342,8 +2342,8 @@ async def _forward_available_status_events(
     ``task_statuses``, and ``task_order`` dicts are mutated in-place
     to accumulate per-session task state across polls.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param state: Current hook cursor state.
     :param retry_tracker: In-memory retry/backoff tracker for hook
@@ -2585,7 +2585,7 @@ async def _ensure_state_for_transcript(
     :param transcript_path: Current transcript path from hooks.
     :param start_at_end: Whether a missing cursor should skip the
         transcript's existing lines.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``. Used for stale-cursor diagnostics.
     :returns: Cursor state for ``transcript_path``.
     """
@@ -2636,8 +2636,8 @@ async def _forward_available_items(
     """
     Forward currently available transcript items after ``state``.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param agent_name: Agent/model name to stamp on mirrored output.
     :param state: Current transcript cursor state.
@@ -2890,7 +2890,7 @@ def _validated_hook_state(
 
     :param bridge_dir: Native Claude bridge directory.
     :param state: Hook cursor loaded from memory or disk.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``. Used for diagnostics.
     :returns: ``state`` when its byte cursor still matches the file,
         otherwise a fresh cursor at the beginning of ``hooks.jsonl``.
@@ -2971,7 +2971,7 @@ def _validated_transcript_state(
 
     :param state: Transcript cursor loaded from memory or disk.
     :param bridge_dir: Native Claude bridge directory.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``. Used for diagnostics.
     :returns: ``state`` unchanged when its byte cursor still matches
         the file; ``state`` with an adopted fingerprint (no reset)
@@ -3046,11 +3046,11 @@ async def _post_external_conversation_item(
     """
     Post one mirrored transcript item to the Sessions API.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param item: Transcript-derived conversation item.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3081,11 +3081,11 @@ async def _post_external_output_text_delta(
     the live stream for a message ends; the authoritative final text
     still arrives separately via ``external_conversation_item``.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param delta: Parsed streamed chunk.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3121,8 +3121,8 @@ async def _forward_available_deltas(
     final message still arrives via ``external_conversation_item``)
     rather than retried, so a transient blip can never wedge the tail.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id deltas are forwarded
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id deltas are forwarded
         to — the currently active session, so chunks streamed after a
         ``/clear`` land on the rotated session.
     :param bridge_dir: Native Claude bridge directory.
@@ -3197,14 +3197,14 @@ async def _post_external_session_usage(
     At least one of ``usage`` / ``context_window`` must be set; a
     payload with neither is a no-op (the server would 400 it).
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param usage: ``message.usage`` snapshot, or ``None`` to skip. Values are
         numeric counters/costs, plus an optional ``model`` string tagging the
         cost with the active model for per-model attribution.
     :param context_window: Resolved window in tokens, or ``None`` to
         leave the server's persisted value untouched.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     payload: dict[str, Any] = {}
     if usage is not None:
@@ -3259,11 +3259,11 @@ async def _post_external_model_change(
     Lets the web model picker reflect a model switch made inside the
     Claude Code terminal (a ``/model`` command or the in-TUI picker).
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``.
     :param model: Tier alias the session is now on, e.g. ``"opus"``.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3292,8 +3292,8 @@ async def _post_model_change_if_new(
     posts it and the other no-ops. Best-effort: a failed POST leaves
     ``posted_model`` behind ``observed_model`` so the next poll retries.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param dedupe: Shared per-session dedupe state; mutated in place.
     :param alias: Tier alias just observed (``"opus"`` / ``"sonnet"`` /
         …), or ``None`` when this source carried no recognizable model on
@@ -3321,7 +3321,7 @@ async def _post_model_change_if_new(
     except httpx.HTTPError:
         # Leave posted_model behind observed_model so the next poll retries.
         _logger.warning(
-            "Failed to mirror model change to Omnigent session=%s; model pill / "
+            "Failed to mirror model change to Goalrail session=%s; model pill / "
             "cost-budget gate may lag until the next poll",
             session_id,
             exc_info=True,
@@ -3351,8 +3351,8 @@ async def _forward_model_from_status(
     Best-effort and idempotent: shares ``dedupe`` with the transcript path,
     so a no-op when the model is unchanged.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param dedupe: Shared per-session model dedupe state.
     """
@@ -3378,12 +3378,12 @@ async def _post_external_session_status(
     """
     Post one ``external_session_status`` event to the Sessions API.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param status: Session status value, e.g. ``"idle"`` or
         ``"failed"``.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3408,17 +3408,17 @@ async def _post_external_compaction_status(
     "Compacting conversation…" spinner while Claude runs the real
     compaction in the terminal. ``"in_progress"`` is sent from the
     ``PreCompact`` hook and ``"completed"`` from the post-compaction
-    ``SessionStart`` (``source == "compact"``) hook. The Omnigent server maps
+    ``SessionStart`` (``source == "compact"``) hook. The Goalrail server maps
     these to the ``response.compaction.in_progress`` /
     ``response.compaction.completed`` SSE events the web client already
     renders.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param status: Compaction status value, ``"in_progress"`` or
         ``"completed"``.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3451,8 +3451,8 @@ async def _persist_native_compaction_item(
     so session resume in ephemeral environments can reconstruct context
     without the CLI's local transcript files.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Bridge directory path used to look up the
         Claude-native session id.
     """
@@ -3511,21 +3511,21 @@ async def _patch_external_session_id(
     external_session_id: str,
 ) -> None:
     """
-    PATCH the Omnigent conversation row with the Claude-native session id.
+    PATCH the Goalrail conversation row with the Claude-native session id.
 
     The server's ``set_external_session_id`` store call is idempotent
     on same-value writes and rejects overwrite of an already-set
     different value with ``400 invalid_input``. Wrapper bridges should
     PATCH the value once when they first observe it from Claude.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id, e.g.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id, e.g.
         ``"conv_abc123"``.
     :param external_session_id: Runtime-native session id captured
         from a Claude hook event,
         e.g. ``"a1b2c3d4-1234-5678-9abc-def012345678"``.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.patch(
         f"/v1/sessions/{session_id}",
@@ -3541,14 +3541,14 @@ async def _maybe_sync_effort_from_slash_command(
     item: ClaudeTranscriptItem,
 ) -> None:
     """
-    Mirror an in-pane ``/effort`` change onto the Omnigent session row.
+    Mirror an in-pane ``/effort`` change onto the Goalrail session row.
 
     The pane changes the binary but doesn't touch AP; PATCH
     ``reasoning_effort`` (``silent=True`` to avoid re-injecting ``/effort``
     into the pane) so the pill tracks it. Best-effort — logged, not raised.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id, e.g. ``"conv_abc123"``.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id, e.g. ``"conv_abc123"``.
     :param item: A just-forwarded item; only a ``slash_command`` named
         ``"effort"`` triggers a PATCH.
     :returns: None.
@@ -3570,7 +3570,7 @@ async def _maybe_sync_effort_from_slash_command(
         resp.raise_for_status()
     except httpx.HTTPError:
         _logger.warning(
-            "Failed to mirror in-pane /effort=%s to Omnigent session=%s; "
+            "Failed to mirror in-pane /effort=%s to Goalrail session=%s; "
             "effort pill may lag until the next change",
             level,
             session_id,
@@ -3588,8 +3588,8 @@ async def _post_forwarder_failed_status(
     """
     Best-effort publish a failed status after dropping a poison event.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id.
     :param bridge_dir: Native Claude bridge directory.
     :param reason: Diagnostic reason for the failure event, e.g.
         ``"transcript item item-1 rejected"``.
@@ -3617,13 +3617,13 @@ async def _post_external_session_todos(
     """
     Post one ``external_session_todos`` event to the Sessions API.
 
-    :param client: Omnigent HTTP client.
-    :param session_id: Omnigent session/conversation id, e.g. ``"conv_abc123"``.
+    :param client: Goalrail HTTP client.
+    :param session_id: Goalrail session/conversation id, e.g. ``"conv_abc123"``.
     :param todos: Current Claude todo list, e.g.
         ``[{"content": "Write tests", "status": "in_progress",
         "activeForm": "Writing tests"}]``.
     :returns: None.
-    :raises httpx.HTTPError: If the Omnigent request fails or is rejected.
+    :raises httpx.HTTPError: If the Goalrail request fails or is rejected.
     """
     resp = await client.post(
         f"/v1/sessions/{session_id}/events",
@@ -3634,9 +3634,9 @@ async def _post_external_session_todos(
 
 def _is_permanent_http_error(exc: httpx.HTTPError) -> bool:
     """
-    Return whether ``exc`` is a permanent Omnigent rejection.
+    Return whether ``exc`` is a permanent Goalrail rejection.
 
-    :param exc: HTTP exception raised while posting an Omnigent event.
+    :param exc: HTTP exception raised while posting a Goalrail event.
     :returns: ``True`` for non-transient 4xx status responses,
         otherwise ``False``.
     """
@@ -3650,7 +3650,7 @@ def _http_status_for_log(exc: httpx.HTTPError) -> int | None:
     """
     Extract an HTTP status code from ``exc`` when present.
 
-    :param exc: HTTP exception raised while posting an Omnigent event.
+    :param exc: HTTP exception raised while posting a Goalrail event.
     :returns: Numeric HTTP status code, or ``None`` for transport
         failures that did not receive a response.
     """
@@ -3721,7 +3721,7 @@ async def _write_hook_state_async(bridge_dir: Path, state: HookForwardState) -> 
 
 def _usage_from_status_state(state: dict[str, Any]) -> dict[str, float] | None:
     """
-    Convert statusLine ``current_usage`` (+ cost) into the Omnigent usage shape.
+    Convert statusLine ``current_usage`` (+ cost) into the Goalrail usage shape.
 
     Sums input + cache_creation + cache_read for ``context_tokens``
     (matches claude-hud's ``getTotalTokens``: only input-side tokens

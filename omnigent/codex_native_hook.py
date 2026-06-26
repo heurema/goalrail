@@ -1,11 +1,11 @@
-"""Codex Code hook entrypoint for native Omnigent policy enforcement.
+"""Codex Code hook entrypoint for native Goalrail policy enforcement.
 
 Registered as the ``PreToolUse`` / ``PostToolUse`` command hook in the
 per-session private ``CODEX_HOME`` (see
 :mod:`omnigent.codex_native_app_server`). Codex spawns this module as
 a short subprocess before/after each built-in tool call, piping the hook
 payload on stdin and reading a verdict on stdout. The conversion to/from
-the Omnigent policy schema is shared with the Claude-native hook via
+the Goalrail policy schema is shared with the Claude-native hook via
 :mod:`omnigent.native_policy_hook`.
 """
 
@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
 def _main_evaluate_policy(argv: list[str]) -> int:
     """
     Evaluate a Codex ``PreToolUse`` / ``PostToolUse`` /
-    ``UserPromptSubmit`` hook against Omnigent policies.
+    ``UserPromptSubmit`` hook against Goalrail policies.
 
     Reads the hook JSON payload from stdin, converts it into the
     proto-compatible ``EvaluationRequest`` schema via
@@ -85,7 +85,7 @@ def _main_evaluate_policy(argv: list[str]) -> int:
     OPEN. Conditions that mean the session simply is not governed — no
     bridge state, no ``ap_server_url``, an unparseable payload, or an
     ``mcp__omnigent__*`` tool already gated on the relay path — still
-    return exit 0 with no output ("no opinion") so non-Omnigent tool calls
+    return exit 0 with no output ("no opinion") so non-Goalrail tool calls
     are never blocked. The complementary fail-loud guard — asserting the
     hook is actually registered and trusted — lives at session startup in
     :mod:`omnigent.codex_native_app_server`, not here, because a
@@ -114,7 +114,7 @@ def _main_evaluate_policy(argv: list[str]) -> int:
 
     config = read_policy_hook_config(bridge_dir)
     if config is None:
-        # No Omnigent server configured for this session — nothing to enforce.
+        # No Goalrail server configured for this session — nothing to enforce.
         return 0
     ap_server_url = config.get("ap_server_url")
     if not isinstance(ap_server_url, str) or not ap_server_url:
@@ -165,14 +165,14 @@ def _main_evaluate_policy(argv: list[str]) -> int:
     if resp is None:
         return _fail_closed()
     if not resp.content:
-        print("omnigent codex evaluate-policy hook: empty Omnigent response", file=sys.stderr)
+        print("omnigent codex evaluate-policy hook: empty Goalrail response", file=sys.stderr)
         return _fail_closed()
 
     try:
         eval_response = resp.json()
     except json.JSONDecodeError:
         print(
-            "omnigent codex evaluate-policy hook: malformed Omnigent response",
+            "omnigent codex evaluate-policy hook: malformed Goalrail response",
             file=sys.stderr,
         )
         return _fail_closed()

@@ -1,4 +1,4 @@
-"""Claude Code hook recorder for the native Omnigent wrapper."""
+"""Claude Code hook recorder for the native Goalrail wrapper."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ _PERMISSION_CONNECT_TIMEOUT_S = 30.0
 # rotations that run inside the SessionStart hook to gate Claude's
 # welcome banner. Unlike the permission long-poll these are quick
 # request/reply calls, so they must NOT inherit the day-long permission
-# budget — an unresponsive Omnigent server would otherwise hang the banner.
+# budget — an unresponsive Goalrail server would otherwise hang the banner.
 # On timeout the rotation returns ``None`` and the background forwarder
 # performs it from the recorded hook event instead.
 _SESSION_ROTATION_TIMEOUT_S = 70.0
@@ -163,7 +163,7 @@ def _is_claude_branch_session_start(payload: dict[str, object]) -> bool:
 
     :param payload: Hook payload read from Claude Code stdin, e.g.
         ``{"hook_event_name": "SessionStart", "source": "resume"}``.
-    :returns: ``True`` when the event should fork the active Omnigent session.
+    :returns: ``True`` when the event should fork the active Goalrail session.
     """
     if payload.get("hook_event_name") != "SessionStart" or payload.get("source") != "resume":
         return False
@@ -237,15 +237,15 @@ def _payload_transcript_has_recent_branch_command(
 
 def _rotate_session_on_clear(bridge_dir: Path) -> str | None:
     """
-    Rotate Omnigent sessions synchronously for a Claude ``/clear`` SessionStart.
+    Rotate Goalrail sessions synchronously for a Claude ``/clear`` SessionStart.
 
     The SessionStart hook output is what Claude renders as the welcome
-    banner. Rotating here lets the banner point at the new Omnigent session
+    banner. Rotating here lets the banner point at the new Goalrail session
     before Claude prints it. Failures return ``None`` so the background
     forwarder can still perform the rotation from the recorded hook event.
 
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_new"``, or ``None`` when
+    :returns: New Goalrail session id, e.g. ``"conv_new"``, or ``None`` when
         rotation could not be completed from the hook.
     """
     old_session_id = read_active_session_id(bridge_dir)
@@ -272,7 +272,7 @@ def _rotate_session_on_clear(bridge_dir: Path) -> str | None:
                 bridge_dir,
             )
     except httpx.HTTPError as exc:
-        print(f"omnigent claude clear hook: Omnigent rotation failed: {exc}", file=sys.stderr)
+        print(f"omnigent claude clear hook: Goalrail rotation failed: {exc}", file=sys.stderr)
         return None
     except RuntimeError as exc:
         print(f"omnigent claude clear hook: rotation failed: {exc}", file=sys.stderr)
@@ -282,16 +282,16 @@ def _rotate_session_on_clear(bridge_dir: Path) -> str | None:
 
 def _rotate_session_on_fork(bridge_dir: Path) -> str | None:
     """
-    Fork Omnigent sessions synchronously for a Claude ``/fork``/``/branch``.
+    Fork Goalrail sessions synchronously for a Claude ``/fork``/``/branch``.
 
     Claude renders ``SessionStart`` hook output as the welcome banner
     for the new branch. Forking here lets that banner point at the
-    forked Omnigent session before Claude prints it. Failures return
+    forked Goalrail session before Claude prints it. Failures return
     ``None`` so the background forwarder can perform the fork from the
     annotated hook record.
 
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_fork"``, or ``None``
+    :returns: New Goalrail session id, e.g. ``"conv_fork"``, or ``None``
         when rotation could not be completed from the hook.
     """
     old_session_id = read_active_session_id(bridge_dir)
@@ -318,7 +318,7 @@ def _rotate_session_on_fork(bridge_dir: Path) -> str | None:
                 bridge_dir,
             )
     except httpx.HTTPError as exc:
-        print(f"omnigent claude fork hook: Omnigent fork failed: {exc}", file=sys.stderr)
+        print(f"omnigent claude fork hook: Goalrail fork failed: {exc}", file=sys.stderr)
         return None
     except RuntimeError as exc:
         print(f"omnigent claude fork hook: fork failed: {exc}", file=sys.stderr)
@@ -333,18 +333,18 @@ def _create_clear_replacement_session(
     bridge_dir: Path,
 ) -> str:
     """
-    Create and activate the fresh Omnigent session for ``/clear``.
+    Create and activate the fresh Goalrail session for ``/clear``.
 
-    :param client: Sync Omnigent HTTP client.
-    :param ap_server_url: Omnigent server base URL without a trailing slash,
+    :param client: Sync Goalrail HTTP client.
+    :param ap_server_url: Goalrail server base URL without a trailing slash,
         e.g. ``"http://127.0.0.1:8787"``.
     :param old_session_id: Session being rotated away from, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_new"``.
-    :raises httpx.HTTPError: If Omnigent rejects session creation,
+    :returns: New Goalrail session id, e.g. ``"conv_new"``.
+    :raises httpx.HTTPError: If Goalrail rejects session creation,
         new-session binding, or terminal transfer.
-    :raises RuntimeError: If Omnigent returns malformed session data.
+    :raises RuntimeError: If Goalrail returns malformed session data.
     """
     old_resp = client.get(f"{ap_server_url}/v1/sessions/{url_component(old_session_id)}")
     old_resp.raise_for_status()
@@ -414,18 +414,18 @@ def _create_fork_replacement_session(
     bridge_dir: Path,
 ) -> str:
     """
-    Create and activate the forked Omnigent session for Claude ``/fork``.
+    Create and activate the forked Goalrail session for Claude ``/fork``.
 
-    :param client: Sync Omnigent HTTP client.
-    :param ap_server_url: Omnigent server base URL without a trailing slash,
+    :param client: Sync Goalrail HTTP client.
+    :param ap_server_url: Goalrail server base URL without a trailing slash,
         e.g. ``"http://127.0.0.1:8787"``.
     :param old_session_id: Session being forked away from, e.g.
         ``"conv_old"``.
     :param bridge_dir: Native Claude bridge directory.
-    :returns: New Omnigent session id, e.g. ``"conv_fork"``.
-    :raises httpx.HTTPError: If Omnigent rejects session fetch, fork,
+    :returns: New Goalrail session id, e.g. ``"conv_fork"``.
+    :raises httpx.HTTPError: If Goalrail rejects session fetch, fork,
         new-session binding, or terminal transfer.
-    :raises RuntimeError: If Omnigent returns malformed session data.
+    :raises RuntimeError: If Goalrail returns malformed session data.
     """
     old_resp = client.get(f"{ap_server_url}/v1/sessions/{url_component(old_session_id)}")
     old_resp.raise_for_status()
@@ -484,7 +484,7 @@ def _conversation_url_for_active_session(
     fallback_url: str | None,
 ) -> str | None:
     """
-    Build the web URL for the bridge's current active Omnigent session.
+    Build the web URL for the bridge's current active Goalrail session.
 
     :param bridge_dir: Native Claude bridge directory.
     :param fallback_url: Legacy URL supplied by old hook settings, e.g.
@@ -525,7 +525,7 @@ def _post_hook_with_reattach(
 
     :param url: Absolute hook endpoint URL, e.g.
         ``"http://127.0.0.1:8787/v1/sessions/conv_x/hooks/permission-request"``.
-    :param headers: Outbound auth headers for the Omnigent server.
+    :param headers: Outbound auth headers for the Goalrail server.
     :param payload: Hook payload to POST. Not mutated; the re-attach id
         rides on a copy.
     :param hook_label: Diagnostic prefix for stderr lines, e.g.
@@ -549,17 +549,17 @@ def _post_hook_with_reattach(
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code < 500:
                 print(
-                    f"omnigent {hook_label} hook: Omnigent request rejected: {exc}",
+                    f"omnigent {hook_label} hook: Goalrail request rejected: {exc}",
                     file=sys.stderr,
                 )
                 return None
             print(
-                f"omnigent {hook_label} hook: Omnigent request failed; retrying: {exc}",
+                f"omnigent {hook_label} hook: Goalrail request failed; retrying: {exc}",
                 file=sys.stderr,
             )
         except httpx.HTTPError as exc:
             print(
-                f"omnigent {hook_label} hook: Omnigent request failed; retrying: {exc}",
+                f"omnigent {hook_label} hook: Goalrail request failed; retrying: {exc}",
                 file=sys.stderr,
             )
         if time.monotonic() + backoff_s >= deadline:
@@ -575,7 +575,7 @@ def _post_hook_with_reattach(
 
 def _main_permission_request(argv: list[str]) -> int:
     """
-    Forward one Claude ``PermissionRequest`` hook to the active Omnigent session.
+    Forward one Claude ``PermissionRequest`` hook to the active Goalrail session.
 
     :param argv: CLI argv after the ``permission-request`` subcommand,
         e.g. ``["--bridge-dir", "/tmp/x", "--omnigent-server-url",
@@ -601,7 +601,7 @@ def _main_permission_request(argv: list[str]) -> int:
     config = read_permission_hook_config(bridge_dir)
     ap_server_url = args.omnigent_server_url or config.get("ap_server_url")
     if not isinstance(ap_server_url, str) or not ap_server_url:
-        print("omnigent claude permission hook: Omnigent server URL missing", file=sys.stderr)
+        print("omnigent claude permission hook: Goalrail server URL missing", file=sys.stderr)
         return 0
     headers = _parse_headers(args.omnigent_auth_headers_json)
     if not headers:
@@ -627,7 +627,7 @@ def _main_ask_user_question(argv: list[str]) -> int:
     In ``bypassPermissions`` mode the ``PermissionRequest`` hook never fires,
     so ``AskUserQuestion`` questions are silently swallowed — the web UI never
     sees them. This handler intercepts the tool via ``PreToolUse`` (which fires
-    in all permission modes), POSTs the same payload to the Omnigent server's
+    in all permission modes), POSTs the same payload to the Goalrail server's
     ``/hooks/permission-request`` endpoint, waits for the user's web-UI answer,
     and converts the ``PermissionRequest``-format response into a
     ``PreToolUse``-format output (``updatedInput``) so Claude receives the
@@ -667,7 +667,7 @@ def _main_ask_user_question(argv: list[str]) -> int:
     config = read_permission_hook_config(bridge_dir)
     ap_server_url = args.omnigent_server_url or config.get("ap_server_url")
     if not isinstance(ap_server_url, str) or not ap_server_url:
-        print("omnigent ask-user-question hook: Omnigent server URL missing", file=sys.stderr)
+        print("omnigent ask-user-question hook: Goalrail server URL missing", file=sys.stderr)
         return 0
     headers = _parse_headers(args.omnigent_auth_headers_json)
     if not headers:
@@ -681,7 +681,7 @@ def _main_ask_user_question(argv: list[str]) -> int:
     resp = _post_hook_with_reattach(url, headers, payload, "ask-user-question")
     if resp is None or not resp.content:
         return 0
-    # The Omnigent server returns a PermissionRequest-shaped response:
+    # The Goalrail server returns a PermissionRequest-shaped response:
     #   {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
     #                           "decision": {"behavior": "allow",
     #                                        "updatedInput": {...}}}}
@@ -717,7 +717,7 @@ def _main_ask_user_question(argv: list[str]) -> int:
 def _main_evaluate_policy(argv: list[str]) -> int:
     """
     Evaluate a Claude Code ``PreToolUse`` / ``PostToolUse`` /
-    ``UserPromptSubmit`` hook against Omnigent policies.
+    ``UserPromptSubmit`` hook against Goalrail policies.
 
     Reads the hook JSON payload from stdin, converts it into the
     proto-compatible ``EvaluationRequest`` schema (``PHASE_TOOL_CALL``
@@ -757,7 +757,7 @@ def _main_evaluate_policy(argv: list[str]) -> int:
     conditions that mean the session simply is not governed — no active
     session, no ``ap_server_url``, an unparseable hook payload, or an
     ``mcp__omnigent__*`` tool already gated on the relay path — still
-    return exit 0 with no output ("no opinion") so non-Omnigent tool
+    return exit 0 with no output ("no opinion") so non-Goalrail tool
     calls are never blocked.
 
     :param argv: CLI argv after the ``evaluate-policy`` subcommand,
@@ -829,13 +829,13 @@ def _main_evaluate_policy(argv: list[str]) -> int:
     if resp is None:
         return _fail_closed()
     if not resp.content:
-        print("omnigent evaluate-policy hook: empty Omnigent response", file=sys.stderr)
+        print("omnigent evaluate-policy hook: empty Goalrail response", file=sys.stderr)
         return _fail_closed()
 
     try:
         eval_response = resp.json()
     except json.JSONDecodeError:
-        print("omnigent evaluate-policy hook: malformed Omnigent response", file=sys.stderr)
+        print("omnigent evaluate-policy hook: malformed Goalrail response", file=sys.stderr)
         return _fail_closed()
 
     hook_output = evaluation_response_to_hook_output(hook_event, eval_response)
@@ -888,7 +888,7 @@ def _parse_permission_args(argv: list[str]) -> argparse.Namespace:
 
 def _parse_headers(raw: str | None) -> dict[str, str]:
     """
-    Parse serialized Omnigent auth headers for the permission hook.
+    Parse serialized Goalrail auth headers for the permission hook.
 
     :param raw: JSON object string, e.g.
         ``"{\"Authorization\": \"Bearer token\"}"``. ``None`` means no

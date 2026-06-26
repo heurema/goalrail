@@ -1,14 +1,14 @@
-"""SSE consumer that mirrors OpenCode events into an Omnigent session.
+"""SSE consumer that mirrors OpenCode events into a Goalrail session.
 
 The runner owns this forwarder (parallel to the codex-native forwarder).
 It connects to the per-session ``opencode serve`` SSE stream (``GET
 /event``), filters to the session's OpenCode session id, and translates
-OpenCode events into Omnigent session-stream events posted to
+OpenCode events into Goalrail session-stream events posted to
 ``/v1/sessions/{id}/events`` — the same envelope the codex forwarder uses
 (``external_conversation_item`` / ``external_session_status`` /
 ``external_output_text_delta``).
 
-Design references: the SSE-event → Omnigent-event translation table in
+Design references: the SSE-event → Goalrail-event translation table in
 ``designs/opencode-harness-and-unified-interface.md`` §A.9. The forwarder
 is tolerant of unknown events (logged, never fatal) and dedupes by stable
 OpenCode message / part / tool-call ids so web and TUI driving the same
@@ -43,7 +43,7 @@ from omnigent.opencode_native_permissions import (
 _logger = logging.getLogger(__name__)
 
 _AGENT_NAME = "opencode"
-# Omnigent session-event types (must match the server's ingestion route;
+# Goalrail session-event types (must match the server's ingestion route;
 # shared with the codex-native forwarder).
 _EXTERNAL_ITEM = "external_conversation_item"
 _EXTERNAL_STATUS = "external_session_status"
@@ -88,13 +88,13 @@ class OpenCodeForwarderState:
 
 class OpenCodeNativeForwarder:
     """
-    Translate one OpenCode session's SSE stream into Omnigent events.
+    Translate one OpenCode session's SSE stream into Goalrail events.
 
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param opencode_session_id: OpenCode session id to filter on.
     :param opencode_client: Client connected to the ``opencode serve``
         server (for SSE + permission replies).
-    :param server_client: HTTP client for the Omnigent server (event posts).
+    :param server_client: HTTP client for the Goalrail server (event posts).
     :param bridge_dir: Native OpenCode bridge directory (status/active-id
         persistence). ``None`` disables bridge writes (tests).
     :param workspace: Session workspace, used for permission normalization.
@@ -221,7 +221,7 @@ class OpenCodeNativeForwarder:
 
     async def handle_event(self, event: OpenCodeEvent) -> None:
         """
-        Translate one OpenCode event into Omnigent session events.
+        Translate one OpenCode event into Goalrail session events.
 
         :param event: A decoded OpenCode SSE event.
         """
@@ -275,9 +275,9 @@ class OpenCodeNativeForwarder:
 
     async def _post_event(self, event_type: str, data: dict[str, Any]) -> httpx.Response | None:
         """
-        POST one Omnigent session event with a single retry.
+        POST one Goalrail session event with a single retry.
 
-        :param event_type: Omnigent event type, e.g.
+        :param event_type: Goalrail event type, e.g.
             ``"external_session_status"``.
         :param data: Event data payload.
         :returns: The HTTP response, or ``None`` on transport failure.

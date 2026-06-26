@@ -22,7 +22,7 @@ class NativeLaunchConfig:
     """
     Inputs needed to start/resume a native server for one conversation.
 
-    :param omnigent_session_id: Omnigent conversation id, e.g.
+    :param omnigent_session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param workspace: Working directory the server runs in.
     :param model_override: Persisted model override, or ``None``.

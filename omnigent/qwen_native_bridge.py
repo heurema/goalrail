@@ -40,7 +40,7 @@ from typing import Any
 #: Env var carrying the bridge dir into the harness executor process.
 BRIDGE_DIR_ENV_VAR = "HARNESS_QWEN_NATIVE_BRIDGE_DIR"
 
-#: Fixed namespace for deriving a stable qwen ``--session-id`` from an Omnigent
+#: Fixed namespace for deriving a stable qwen ``--session-id`` from a Goalrail
 #: conversation id (UUIDv5). Never change it — it would orphan every existing
 #: qwen recording (resume would mint a new id and lose history).
 _QWEN_SESSION_NAMESPACE = uuid.UUID("6b6f3d2e-9a1c-5e84-bf0a-1d7c5a2e9f43")
@@ -68,14 +68,14 @@ def bridge_root() -> Path:
 
 
 def qwen_session_id_for_conversation(conversation_id: str) -> str:
-    """Return the deterministic qwen ``--session-id`` for an Omnigent conversation.
+    """Return the deterministic qwen ``--session-id`` for a Goalrail conversation.
 
     UUIDv5 of the conversation id: stable across resumes (recomputable, never
     stored) and a valid UUID (qwen requires one). The runner launches a fresh
     session with ``--session-id <this>`` and later restores it with
     ``--resume <this>`` so the qwen TUI shows the prior conversation on resume.
 
-    :param conversation_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param conversation_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: A stable UUID string usable as qwen's session id.
     """
     return str(uuid.uuid5(_QWEN_SESSION_NAMESPACE, conversation_id))
@@ -165,7 +165,7 @@ def build_qwen_native_spawn_env(session_id: str) -> dict[str, str]:
     to). qwen's model / auth / dual-output flags are set by the runner when it
     launches the TUI (``_auto_create_qwen_terminal``), not here.
 
-    :param session_id: The Omnigent session id (keys the bridge dir).
+    :param session_id: The Goalrail session id (keys the bridge dir).
     :returns: Env-var overrides for the harness spawn.
     """
     bridge_dir = bridge_dir_for_session_id(session_id)

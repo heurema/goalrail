@@ -1,4 +1,4 @@
-"""Helpers for opening Omnigent conversation URLs from CLI frontends."""
+"""Helpers for opening Goalrail conversation URLs from CLI frontends."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ WORKSPACE_UI_PATH = "/omnigent"
 
 def conversation_url(base_url: str, conversation_id: str) -> str:
     """
-    Build the browser URL for an Omnigent conversation.
+    Build the browser URL for a Goalrail conversation.
 
     For Databricks workspace-hosted servers
     (``https://<ws>/api/2.0/omnigent``) the web UI lives on the
@@ -27,7 +27,7 @@ def conversation_url(base_url: str, conversation_id: str) -> str:
     workspace selector appended when ``omnigent login`` recorded the
     org id.
 
-    :param base_url: Omnigent server base URL, e.g. ``"http://127.0.0.1:6767"``.
+    :param base_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:6767"``.
     :param conversation_id: Conversation id, e.g. ``"conv_abc123"``.
     :returns: Browser URL, e.g. ``"http://127.0.0.1:6767/c/conv_abc123"``.
     """
@@ -85,7 +85,7 @@ def open_conversation_link_if_enabled(
     """
     Open a conversation link when the CLI config enables it.
 
-    :param base_url: Omnigent server base URL, e.g. ``"http://127.0.0.1:6767"``.
+    :param base_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:6767"``.
     :param conversation_id: Conversation id, e.g. ``"conv_abc123"``.
     :param enabled: ``True`` when the user opted into automatic browser opens.
     :param warn: Optional warning sink. Receives a complete warning

@@ -28,7 +28,7 @@ def terminal_attach_url(base_url: str, session_id: str, terminal_id: str) -> str
     """
     Build the terminal attach WebSocket URL.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param session_id: Session/conversation id, e.g.
         ``"conv_abc123"``.
@@ -54,7 +54,7 @@ async def bind_session_runner(
     """
     Bind a native terminal session to the runner that will host it.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session/conversation id, e.g.
         ``"conv_abc123"``.
     :param runner_id: Registered runner id, e.g.
