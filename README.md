@@ -1,28 +1,28 @@
 <div align="center">
 
-# <img src="https://raw.githubusercontent.com/omnigent-ai/omnigent/main/docs/images/omnigent-logo.svg" alt="" height="38" valign="middle" /> Omnigent
+# <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/omnigent-logo.svg" alt="" height="38" valign="middle" /> Goalrail
 
 ### The open-source AI agent framework and meta-harness for all your AI agents.
 
-Omnigent is an open-source **AI agent framework** and meta-harness that gives you a common orchestration layer over Claude Code, Codex, Cursor, Kimi Code, Pi, and the agents you write yourself: swap or combine harnesses without rewriting, enforce policies and sandboxing, and collaborate in real time from any device.
+Goalrail is an open-source **AI agent framework** and meta-harness that gives you a common orchestration layer over Claude Code, Codex, Cursor, Kimi Code, Pi, and the agents you write yourself: swap or combine harnesses without rewriting, enforce policies and sandboxing, and collaborate in real time from any device.
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/omnigent-ai/omnigent/blob/main/LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](#1-install)
 
-[omnigent.ai](https://omnigent.ai) · **[⬇️ Download the macOS desktop app](https://omnigent.ai/download/mac)**
+[goalrail.dev](https://goalrail.dev) · Downloads coming soon
 
 </div>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/omnigent-ai/omnigent/main/docs/images/omnigent-hero.png" alt="An Omnigent orchestrator and its sub-agents in one shared session" width="520" />
+  <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/omnigent-hero.png" alt="A Goalrail orchestrator and its sub-agents in one shared session" width="520" />
 </p>
 
 ---
 
-## Why Omnigent?
+## Why Goalrail?
 
-Omnigent lets you:
+Goalrail lets you:
 
 - **📱 Work with agents from any device, including your phone.** Sessions
   follow you: start in your terminal, continue in the browser, pick it up on
@@ -59,22 +59,22 @@ Omnigent lets you:
 
 ### 1. Install
 
-One command installs Omnigent and everything it needs:
+One command installs the current Goalrail build and everything it needs:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omnigent-ai/omnigent/main/scripts/install_oss.sh | sh
+curl -fsSL https://raw.githubusercontent.com/heurema/goalrail/main/scripts/install_oss.sh | sh
 ```
 
 <details>
 <summary>Prefer to install manually?</summary>
 
-Omnigent needs **Python 3.12+**. Install the `omnigent` package:
+Goalrail currently uses the `omnigent` Python package and needs **Python 3.12+**:
 
 ```bash
 uv tool install omnigent        # or: pip install "omnigent"
 ```
 
-Or with [Homebrew](https://github.com/omnigent-ai/homebrew-tap):
+Or with the current legacy [Homebrew tap](https://github.com/omnigent-ai/homebrew-tap):
 
 ```bash
 brew install omnigent-ai/tap/omnigent
@@ -83,7 +83,7 @@ brew install omnigent-ai/tap/omnigent
 Or install straight from the repo:
 
 ```bash
-uv tool install -q --python 3.12 git+https://github.com/omnigent-ai/omnigent.git
+uv tool install -q --python 3.12 git+https://github.com/heurema/goalrail.git
 ```
 
 </details>
@@ -110,7 +110,7 @@ uv tool install -q --python 3.12 git+https://github.com/omnigent-ai/omnigent.git
   (`apt install bubblewrap`; the installer offers to install it for you). macOS
   uses the built-in `seatbelt` sandbox and needs nothing extra.
 - **Databricks** (optional). To use a Databricks workspace as your model
-  provider, install Omnigent with the `databricks` extra:
+  provider, install the current package with the `databricks` extra:
   `uv tool install "omnigent[databricks]"` — or pass it to the bootstrap
   installer with `... | sh -s -- --extra databricks`. Signing in to the
   workspace also uses the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install).
@@ -120,13 +120,13 @@ uv tool install -q --python 3.12 git+https://github.com/omnigent-ai/omnigent.git
 <details>
 <summary>Windows (native)</summary>
 
-Omnigent runs natively on Windows in a degraded mode. The `install_oss.sh`
+The current Goalrail build runs natively on Windows in a degraded mode. The `install_oss.sh`
 bootstrap is POSIX-only, so install with `uv` directly:
 
 ```powershell
 uv tool install --python 3.12 omnigent
 # or from the repo:
-uv tool install --python 3.12 git+https://github.com/omnigent-ai/omnigent.git
+uv tool install --python 3.12 git+https://github.com/heurema/goalrail.git
 ```
 
 What works on Windows: `omnigent server`, the web UI, and the SDK-based
@@ -147,7 +147,7 @@ What is **not** available on Windows (use Linux/macOS, or WSL, for these):
 <details>
 <summary>Updating to a new release</summary>
 
-When a newer release is on PyPI, Omnigent shows a one-line notice (once per
+When a newer release is on PyPI, the CLI shows a one-line notice (once per
 release) pointing here. To update:
 
 ```bash
@@ -171,17 +171,16 @@ mirrors work out of the box; override with `OMNIGENT_INDEX_URL` if needed.
 
 `omnigent` picks a model with you and starts a session in your terminal. It
 also launches a local web UI at `http://localhost:6767` that shows the same
-session in the browser, or on a phone on your network (step 4). The
-[desktop app](https://omnigent.ai/docs/interact/desktop) wraps that same UI
-in a native window and adds OS notifications and a dock badge —
-[download it for macOS](https://omnigent.ai/download/mac).
+session in the browser, or on a phone on your network (step 4). Desktop and
+mobile downloads are not published yet; they will live on
+[goalrail.dev](https://goalrail.dev).
 
 > [!NOTE]
 > The install puts two names for the same CLI on your PATH: `omnigent` and
 > the shorter `omni`. They're interchangeable.
 
 > [!TIP]
-> On first run, Omnigent picks up model credentials already in your
+> On first run, Goalrail picks up model credentials already in your
 > environment (an `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, or a `claude` /
 > `codex` CLI you're logged into) and offers one as the default.
 
@@ -249,7 +248,7 @@ In the web UI, hit **New Chat**, pick your machine, and go. Check status with
 omnigent setup
 ```
 
-Add a credential, set a default, or remove one, grouped by agent. Omnigent
+Add a credential, set a default, or remove one, grouped by agent. Goalrail
 works with four kinds of credentials:
 
 | | Kind | What it is |
@@ -282,8 +281,8 @@ the OpenAI-compatible `…/api/v1`.
 
 ### 4. Deploy a server (and use it from your phone📱)
 
-Run Omnigent on a server with a stable URL
-([`deploy/README.md`](https://github.com/omnigent-ai/omnigent/blob/main/deploy/README.md) is the full guide) and your sessions
+Run Goalrail on a server with a stable URL
+([`deploy/README.md`](https://github.com/heurema/goalrail/blob/main/deploy/README.md) is the full guide) and your sessions
 become reachable from anywhere, including your phone. The web UI is built for
 mobile, so you get the same chat, sub-agents, terminals, and files, in sync
 with your laptop.
@@ -293,7 +292,7 @@ server); Render deploys with one click; Fly.io, Railway, Hugging Face Spaces,
 and Modal are covered too. The server can also provision a cloud sandbox per
 session (*managed hosts*), so no laptop has to stay online. The full menu of
 targets, the database options, and the sandbox setup live in
-[`deploy/README.md`](https://github.com/omnigent-ai/omnigent/blob/main/deploy/README.md).
+[`deploy/README.md`](https://github.com/heurema/goalrail/blob/main/deploy/README.md).
 
 Once the server is up, sign in and register your laptop as a host:
 
@@ -308,7 +307,7 @@ omnigent host  https://your-host    # new sessions can now run on this machine
 
 ### 5. Collaborate with your team
 
-Omnigent supports **multi-user accounts**, controlled by one environment
+Goalrail supports **multi-user accounts**, controlled by one environment
 variable:
 
 ```bash
@@ -357,7 +356,7 @@ and they're in. Signup is invite-only.
 > GitHub, Okta, Microsoft**)? Set `OMNIGENT_OIDC_ISSUER` plus a client ID
 > and secret on your deployed server and restart. The full walkthrough,
 > domain allowlists, and the proxy-only `header` auth mode are covered in
-> [`deploy/README.md#auth`](https://github.com/omnigent-ai/omnigent/blob/main/deploy/README.md#auth).
+> [`deploy/README.md#auth`](https://github.com/heurema/goalrail/blob/main/deploy/README.md#auth).
 
 ### 6. Govern your agents with policies
 
@@ -395,7 +394,7 @@ Policies stack across three levels, **server-wide** (admin), **per-agent**
 (developer), and **per-session** (you), with the stricter session rules
 checked first. Spend caps and access limits ship as builtins.
 
-See the [policy guide](https://github.com/omnigent-ai/omnigent/blob/main/docs/POLICIES.md) for the full catalog and trust model.
+See the [policy guide](https://github.com/heurema/goalrail/blob/main/docs/POLICIES.md) for the full catalog and trust model.
 
 ---
 
@@ -403,7 +402,7 @@ See the [policy guide](https://github.com/omnigent-ai/omnigent/blob/main/docs/PO
 
 An agent is a short YAML file: your prompt, your tools, and optional helper
 sub-agents a supervisor can delegate to. You don't have to write it by hand:
-agents can build agents, so describe the agent you want in any Omnigent chat
+agents can build agents, so describe the agent you want in any Goalrail chat
 and it authors the file for you.
 
 ```yaml
@@ -434,20 +433,5 @@ omnigent run path/to/my_agent.yaml
 ```
 
 The same file can declare sub-agents and reviewers. For a fuller example, see
-Polly at [`examples/polly/`](https://github.com/omnigent-ai/omnigent/tree/main/examples/polly/), and the
-[Agent YAML spec](https://github.com/omnigent-ai/omnigent/blob/main/docs/AGENT_YAML_SPEC.md) for the full schema.
-
----
-
-## Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](https://github.com/omnigent-ai/omnigent/blob/main/CONTRIBUTING.md) for how to set up your environment, run the checks, and open a pull request.
-
-
-### Contributors
-
-Thanks to all of our amazing contributors!
-
-<a href="https://github.com/omnigent-ai/omnigent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=omnigent-ai/omnigent" />
-</a>
+Polly at [`examples/polly/`](https://github.com/heurema/goalrail/tree/main/examples/polly/), and the
+[Agent YAML spec](https://github.com/heurema/goalrail/blob/main/docs/AGENT_YAML_SPEC.md) for the full schema.
