@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "omnigent"
 version = "0.3.0.dev0"
-description = "Omnigent: declarative agent authoring and runtime framework"
+description = "Goalrail: contract-first agent runtime and CLI"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -27,7 +27,7 @@ dependencies = [
     # release tag). Local/editable installs still resolve via tool.uv.sources.
     "omnigent-client==0.3.0.dev0",
     "omnigent-ui-sdk==0.3.0.dev0",
-    # Merged from omnigent + omnigent.
+    # Legacy package merge.
     "pyyaml>=6.0,<7",
     "openai>=1.0,<3",
     # >=14: the `e2b` extra's SDK (>=2.26) needs rich>=14 (was >=13,<14).
@@ -62,7 +62,7 @@ dependencies = [
     # <8.2: click 8.2 made Context.protected_args a read-only property,
     # which breaks _HostGroup.parse_args's `ctx.protected_args = []`
     # (omnigents/cli.py) with "property 'protected_args' of 'Context'
-    # object has no setter" on any `omni host ...` invocation.
+    # object has no setter" on any `goalrail host ...` invocation.
     "click>=8.0,<8.2",
     "fastapi>=0.100,<1",
     # pexpect/pyte back the POSIX tmux/PTY terminal stack, which is disabled
@@ -85,7 +85,7 @@ dependencies = [
     "openai-agents>=0.0.17",
     "PyJWT[crypto]>=2.8,<3",
     "argon2-cffi>=23.1,<24",
-    # PEP 440 version comparison for the update check / `omni upgrade`
+    # PEP 440 version comparison for the update check / `goalrail upgrade`
     # (omnigent/update_check.py, omnigent/cli.py): compares the installed
     # version against the latest PyPI release. Previously only a
     # transitive dep; pinned here now that we import it directly.
@@ -102,18 +102,18 @@ openai-agents = []
 # CI / dev installs use `--extra all` and the test suite, deploy tooling,
 # and databricks_mcps servers import it.
 all = ["databricks-sdk>=0.56.0,<1"]
-# From omnigent.
+# Legacy provider extras.
 bedrock = ["boto3>=1.30,<2", "botocore>=1.30,<2"]
 # S3-compatible artifact store (AWS S3, Cloudflare R2, MinIO, …). Selected
 # with ``OMNIGENT_ARTIFACT_URI=s3://bucket/prefix``; the store imports boto3
 # lazily, so only users of this backend need the extra.
 s3 = ["boto3>=1.30,<2", "botocore>=1.30,<2"]
 vertex = ["google-auth>=2.0,<3"]
-# Modal sandbox launcher (`omnigent sandbox --provider modal`). The
+# Modal sandbox launcher (`goalrail sandbox --provider modal`). The
 # launcher module ships in the base package and imports the SDK lazily,
 # so only users of the provider need this extra.
 modal = ["modal>=1.0,<2"]
-# Daytona sandbox launcher (`omnigent sandbox --provider daytona` and
+# Daytona sandbox launcher (`goalrail sandbox --provider daytona` and
 # server-managed `sandbox.provider: daytona`).
 # Same lazy-import posture as the modal extra. Pre-1.0 SDK: pin minor.
 daytona = ["daytona>=0.180,<1"]
@@ -122,15 +122,15 @@ daytona = ["daytona>=0.180,<1"]
 # pool. Same lazy-import posture as the modal/daytona extras. Pre-1.0 SDK: pin
 # minor.
 boxlite = ["boxlite>=0.9.5,<1"]
-# CoreWeave Sandbox launcher (`omnigent sandbox --provider cwsandbox` and
+# CoreWeave Sandbox launcher (`goalrail sandbox --provider cwsandbox` and
 # server-managed `sandbox.provider: cwsandbox`).
 # Same lazy-import posture as above. Pre-1.0 SDK: pin minor.
 cwsandbox = ["cwsandbox>=0.24,<1"]
-# E2B sandbox launcher (`omnigent sandbox --provider e2b` and
+# E2B sandbox launcher (`goalrail sandbox --provider e2b` and
 # server-managed `sandbox.provider: e2b`).
 # Same lazy-import posture as above.
 e2b = ["e2b>=2.26,<3"]
-# NVIDIA OpenShell launcher (`omnigent sandbox --provider openshell`).
+# NVIDIA OpenShell launcher (`goalrail sandbox --provider openshell`).
 # Self-hosted gRPC gateway; the SDK pulls grpcio + protobuf. Same
 # lazy-import posture as above. Pre-1.0 SDK: pin minor.
 openshell = ["openshell>=0.0.7,<1"]
@@ -169,7 +169,7 @@ databricks = [
     "databricks-sdk>=0.56.0,<1",
     "opentelemetry-distro>=0,<1",
     "psycopg[binary]>=3.1,<4",
-    # Databricks-specific MCP servers. Not imported by core Omnigent
+    # Databricks-specific MCP servers. Not imported by core Goalrail
     # code, so it is opt-in here rather than a default dependency — this
     # also keeps its heavy transitive `mlflow` out of bare OSS installs.
     "databricks-mcp>=0.1.0",
@@ -242,11 +242,9 @@ dev = [
 ]
 
 [project.scripts]
-# Unified entry point. `omnigent` is the click-based CLI that absorbs
-# the legacy argparse commands from `omnigent/inner/cli.py` plus the
-# omnigent `ap` subcommands. See designs/UNIFICATION.md § CLI
-# absorption. `goalrail` is the public rename alias and `omni` remains
-# installed as a short alias — all resolve to the same entry point.
+# Unified entry point. `goalrail` is the public CLI. `omnigent` and
+# `omni` remain installed as legacy compatibility aliases; all resolve
+# to the same entry point while the Python package name stays `omnigent`.
 goalrail = "omnigent.cli:main"
 omnigent = "omnigent.cli:main"
 omni = "omnigent.cli:main"

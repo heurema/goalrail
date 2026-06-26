@@ -1,6 +1,6 @@
 # SDKs
 
-Python packages for integrating with omnigent.
+Python packages for integrating with Goalrail.
 
 ## Structure
 
@@ -17,7 +17,7 @@ sdks/
 
 Claude Code skills for SDK development live under `.claude/skills/`.
 
-## `omnigent_client` — the headless client
+## `omnigent_client` — the headless Goalrail client
 
 Pure HTTP/SSE client. No Rich, no prompt_toolkit, no terminal
 dependencies. Use this for:
@@ -84,7 +84,7 @@ async def handle(websocket, session, text):
 
 ## `omnigent_ui_sdk` — the terminal frontend
 
-Thin layer on top of `omnigent_client` for building terminal REPLs.
+Thin layer on top of `omnigent_client` for building Goalrail terminal REPLs.
 Provides:
 
 - **RichBlockFormatter** — converts `StreamBlock` values to Rich
@@ -162,6 +162,6 @@ stream = pipe(
 
 ## Reference Implementation
 
-The built-in REPL at `omnigent/repl/` demonstrates all features:
+The built-in Goalrail REPL at `omnigent/repl/` demonstrates all features:
 streaming, tool calls, reasoning, slash commands, conversation
 switching, elapsed timer. See `omnigent/repl/_repl.py`.
