@@ -103,11 +103,11 @@ The bot applies labels but does NOT post comments (except for duplicate flagging
 
 **Why:** LangChain's Dosu bot received significant community backlash ([discussion #25153](https://github.com/langchain-ai/langchain/discussions/25153)) for "polluting reported issues" with verbose, often unhelpful AI-generated responses. Claude Code's labels-only approach handles 2K+ issues/week without this problem. Labels are machine-readable, filterable, and silent - comments are noisy and set expectations of a conversation the bot can't sustain.
 
-### Decision: Omnigent triage agent over `claude-code-action`
+### Decision: Goalrail triage agent over `claude-code-action`
 
 Use `omnigent run .github/triage/` as the triage engine — a tool-less Claude SDK harness that outputs structured JSON, with all GitHub mutations in trusted workflow steps.
 
-**Why:** `claude-code-action` requires a direct Anthropic API key (`ANTHROPIC_API_KEY`), which we don't have — our LLM access routes through the Databricks gateway. More critically, `claude-code-action` gives the LLM shell access and a GitHub token, creating a prompt injection → secret exfiltration attack surface (a crafted issue body could trick the agent into running `printenv` → `gh issue comment`). The Omnigent approach eliminates this structurally: the LLM has no tools, no shell, and no `GH_TOKEN` — it only outputs JSON that is validated against allowlists before any GitHub mutation occurs.
+**Why:** `claude-code-action` requires a direct Anthropic API key (`ANTHROPIC_API_KEY`), which we don't have — our LLM access routes through the Databricks gateway. More critically, `claude-code-action` gives the LLM shell access and a GitHub token, creating a prompt injection → secret exfiltration attack surface (a crafted issue body could trick the agent into running `printenv` → `gh issue comment`). The Goalrail approach eliminates this structurally: the LLM has no tools, no shell, and no `GH_TOKEN` — it only outputs JSON that is validated against allowlists before any GitHub mutation occurs.
 
 **Alternatives considered:**
 

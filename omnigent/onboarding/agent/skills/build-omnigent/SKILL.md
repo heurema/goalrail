@@ -1,6 +1,6 @@
 ---
 name: build-omnigent
-description: Patterns and templates for generating valid Omnigent agent directories. Load when ready to create files.
+description: Patterns and templates for generating valid Goalrail agent directories. Load when ready to create files.
 ---
 
 # Agent Generation

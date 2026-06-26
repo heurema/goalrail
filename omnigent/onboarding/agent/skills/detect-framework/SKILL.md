@@ -1,12 +1,12 @@
 ---
 name: detect-framework
-description: Detect Python agent frameworks from code imports and map them to Omnigent executor types. Load when the user has existing agent code to integrate.
+description: Detect Python agent frameworks from code imports and map them to Goalrail executor types. Load when the user has existing agent code to integrate.
 ---
 
 # Framework Detection
 
 When the user has existing Python code they want to integrate into
-Omnigent, detect the framework from import statements and recommend
+Goalrail, detect the framework from import statements and recommend
 the appropriate executor type.
 
 ## Detection Procedure
@@ -59,7 +59,7 @@ executor:
 ## Asking about unsupported frameworks
 
 If the user's framework is not natively supported, let them know:
-- Explain that Omnigent does not currently have a supported executor for that framework.
+- Explain that Goalrail does not currently have a supported executor for that framework.
 - Offer to show them a pre-filled GitHub issue URL requesting first-class
   support for their framework.
 - If they want to start fresh instead, recommend generating a standard `llm` agent.

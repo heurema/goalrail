@@ -1,4 +1,4 @@
-# Omnigent Server API
+# Goalrail Server API
 
 Four namespaces: agent management (`/api/agents`), conversations
 (`/v1/conversations`), sessions (`/v1/sessions`), and session
@@ -8,10 +8,10 @@ resources (`/v1/sessions/{session_id}/resources`).
 
 | Namespace | Compatible with | Reference implementation |
 |---|---|---|
-| Agent Management (`/api/agents`) | Omnigent (ours) | No external reference — this is our own API. |
-| Conversations (`/v1/conversations`) | Omnigent (ours) | No external reference. |
-| Sessions (`/v1/sessions`) | Omnigent (ours) | No external reference. Session-first API for long-running agent interactions. See "Sessions API" section below. |
-| Session file resources (`/v1/sessions/{session_id}/resources/files`) | Omnigent (ours) | No external reference. Files are scoped to their owning session. |
+| Agent Management (`/api/agents`) | Goalrail (ours) | No external reference — this is our own API. |
+| Conversations (`/v1/conversations`) | Goalrail (ours) | No external reference. |
+| Sessions (`/v1/sessions`) | Goalrail (ours) | No external reference. Session-first API for long-running agent interactions. See "Sessions API" section below. |
+| Session file resources (`/v1/sessions/{session_id}/resources/files`) | Goalrail (ours) | No external reference. Files are scoped to their owning session. |
 
 ---
 
@@ -375,7 +375,7 @@ session-scoped events on the wire (see "Stream Events" below).
 
 | Namespace | Compatible with | Notes |
 |---|---|---|
-| Sessions (`/v1/sessions`) | Omnigent (ours) | No external reference. Purpose-built for agent-native workflows: live tail, queued input, interrupt. |
+| Sessions (`/v1/sessions`) | Goalrail (ours) | No external reference. Purpose-built for agent-native workflows: live tail, queued input, interrupt. |
 
 ### Session Lifecycle States
 
@@ -505,7 +505,7 @@ Fields:
     (claude-native / codex-native) sessions at snapshot build time,
     each `{pending_id, content}`. Native sessions don't persist a web
     message at POST time (the transcript forwarder is the single
-    writer), so the Omnigent server holds these in-memory and replays them
+    writer), so the Goalrail server holds these in-memory and replays them
     here — the client re-hydrates the optimistic "queued message"
     bubble so it survives navigation / an SSE rebind. Drained when the
     message round-trips back (the matching `session.input.consumed`
@@ -527,7 +527,7 @@ Fields:
     shows a spinner on the Terminal pill instead of a silent greyed-out
     button. Cleared to `false` once the terminal lands or auto-create
     fails; from then on the client relies purely on whether a terminal
-    resource exists. Set by two paths: (1) directly by the Omnigent server at
+    resource exists. Set by two paths: (1) directly by the Goalrail server at
     session creation for host-launched terminal-first sessions, so the
     spinner appears immediately before the runner even starts; (2) by the
     relay when the runner's `session.terminal_pending` events arrive,
@@ -645,7 +645,7 @@ already uploaded or registered an agent. The response is the full
     runner has them on the session row before it auto-launches the
     terminal. The flat-list shape is the security
     boundary — no key for a caller to smuggle launch wiring (bridge
-    dir, Omnigent URL, auth), which stay runner-owned. Bounds (count /
+    dir, Goalrail URL, auth), which stay runner-owned. Bounds (count /
     length) are validated server-side; a malformed list returns 400.
     `null` for non-native sessions. Settable later via
     `PATCH /v1/sessions/{id}` (last-write-wins). See
@@ -872,10 +872,10 @@ Request body matches `SessionEventInput`:
                                   to the bound runner; for claude-native
                                   sessions the runner injects `/compact`
                                   into the terminal (Claude Code compacts
-                                  its own context) and the Omnigent server
+                                  its own context) and the Goalrail server
                                   skips its own compaction. For in-process
                                   harnesses the runner 204 no-ops and the
-                                  Omnigent server runs the compaction itself
+                                  Goalrail server runs the compaction itself
                                   (summarises history, persists a
                                   `compaction` item). Payload: `{}`.
       - "stop_session"          — terminate the live session without

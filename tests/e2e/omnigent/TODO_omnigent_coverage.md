@@ -54,7 +54,7 @@ Covered by the unit tests `test_harness_auto_picks_from_model_prefix`
 (parametrized over claude/gpt variants) and the e2e cases
 `simple_chat` and `agent_with_subagent_session`.
 
-### Fixed — Gap 7: Stock omnigent policy callables don't work under Omnigent
+### Fixed — Gap 7: Stock omnigent policy callables don't work under Goalrail
 
 `resolve_function_policy` now detects legacy `(content, phase)` callables at
 load time and wraps them in `_omnigent_legacy_shim` — a one-argument adapter
@@ -125,7 +125,7 @@ the actual error is unclear. Needs investigation.
 If your omnigent YAML declares a sub-agent tool named
 `worker` and you want a policy that denies calls to it, the
 natural thing to write is `match_tools: [worker]`. That doesn't
-work under Omnigent. Sub-agents are invoked through a generic
+work under Goalrail. Sub-agents are invoked through a generic
 `sys_session_send` tool, not by their name directly, so the
 policy engine sees `sys_session_send` as the tool name and the
 `worker` filter never matches.
@@ -151,7 +151,7 @@ intentionally skips entries where `language != "python"` (it
 only loads tools that live on disk as `tools/python/*.py`), so
 these tools were **advertised** to the inner harness via
 `_build_omnigent_tool_schemas` but never **registered** on
-Omnigent' `ToolManager`. When the harness's LLM invoked one,
+Goalrail's `ToolManager`. When the harness's LLM invoked one,
 the `_tool_executor` bridge called `context.call_tool`, which
 fell through to `await_tool_output` (the client-side tunneling
 path) and parked forever waiting for a client that doesn't exist.
@@ -169,7 +169,7 @@ path) and parked forever waiting for a client that doesn't exist.
 
 TOOL_CALL policy enforcement is preserved: the bridge now calls
 `context.enforce_tool_call_policy(tool_name, args)` **before**
-dispatching, so the same guardrails Omnigent' native tool
+dispatching, so the same guardrails Goalrail's native tool
 loop applies also apply here. On DENY, the sentinel returns as
 the tool output instead of invoking the real callable. The
 workflow wires the enforcement hook to `_enforce_tool_call_policy`

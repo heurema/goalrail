@@ -1,12 +1,12 @@
 # Codex Server API
 
 Codex-specific routes and behavior layered on top of the main
-[Omnigent Server API](API.md).
+[Goalrail Server API](API.md).
 
 ## Codex Goal
 
 Codex-native sessions expose Codex app-server's persisted thread goal as
-a live subresource. Goal state is not mirrored into Omnigent labels or
+a live subresource. Goal state is not mirrored into Goalrail labels or
 conversation rows; the server validates session access and forwards a
 generic goal control event to the bound runner, which calls Codex
 app-server (`thread/goal/get`, `thread/goal/set`, or
@@ -46,7 +46,7 @@ required for that wake-up side effect.
 
 `goal` is `null` when Codex reports no persisted goal. `created_at`
 and `updated_at` may be `null` if the app-server response omits them.
-`status` is forwarded exactly as Codex reports it; Omnigent does not
+`status` is forwarded exactly as Codex reports it; Goalrail does not
 rename or normalize lifecycle states.
 
 ```

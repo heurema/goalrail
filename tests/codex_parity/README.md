@@ -1,15 +1,15 @@
 # Codex Parity Tests
 
-This suite verifies Omnigent's Codex integration by running the real boundary
+This suite verifies Goalrail's Codex integration by running the real boundary
 we care about:
 
 ```text
-Omnigent CodexExecutor
+Goalrail CodexExecutor
   -> real codex app-server process
   -> mock OpenAI Responses API
 ```
 
-The important choice is that the tests do not mock the Omnigent-to-Codex API.
+The important choice is that the tests do not mock the Goalrail-to-Codex API.
 They start a real Codex CLI and only replace the upstream model endpoint. That
 means the test covers Codex app-server JSON-RPC behavior, Codex request
 serialization, retry notifications, streaming notifications, and dynamic tool
@@ -34,7 +34,7 @@ real codex app-server
   ^
   | JSON-RPC app-server protocol
   |
-Omnigent CodexExecutor
+Goalrail CodexExecutor
 ```
 
 The Rust sidecar exists because Codex's mock Responses API helpers are Rust
@@ -74,7 +74,7 @@ sidecar = codex_responses_sidecar(
 Each inner list becomes one SSE response body. Codex consumes one body per
 `POST /v1/responses` request. Multi-turn scenarios enqueue multiple inner
 lists, for example a dynamic tool call followed by the assistant's final
-answer after Omnigent returns the tool result.
+answer after Goalrail returns the tool result.
 
 The sidecar prints one JSON `ready` line with a `base_url`. The pytest fixture
 passes that URL into `CodexExecutor` using the existing gateway override path,
@@ -106,7 +106,7 @@ request path, selected headers, and JSON body.
 - selected request-routing behavior from `codex-rs/core/tests/suite/*`
   - dynamic tool call/result round trip through real Codex app-server
 
-`test_codex_goal.py` covers the Codex goal contract Omnigent relies on:
+`test_codex_goal.py` covers the Codex goal contract Goalrail relies on:
 
 - upstream app-server goal operations
   - `thread/goal/set` + `thread/goal/get` + `thread/goal/clear` round trip
@@ -115,24 +115,24 @@ request path, selected headers, and JSON body.
   - idempotent `thread/goal/clear`
   - `budgetLimited` preservation when setting the same objective
   - persisted `blocked` and `usageLimited` goal statuses
-- Omnigent AP goal routes
+- Goalrail AP goal routes
   - `PUT /v1/sessions/{id}/codex_goal` forwards objective, budget, and mode
   - `PATCH /v1/sessions/{id}/codex_goal/status` forwards pause/resume
   - Codex-owned terminal statuses are rejected as user-writeable inputs
   - Codex-owned terminal statuses returned by the runner are preserved
   - API-shaped misses return JSON 404s instead of the SPA shell
 
-That is comprehensive for the goal surface Omnigent owns because it exercises
+That is comprehensive for the goal surface Goalrail owns because it exercises
 both sides of the integration: real Codex app-server JSON-RPC for every
-goal state transition we depend on, and Omnigent's public HTTP route mapping
+goal state transition we depend on, and Goalrail's public HTTP route mapping
 for every browser control we expose. It intentionally does not copy Codex TUI
-slash-menu/status rendering tests; Omnigent does not embed that TUI path. It
+slash-menu/status rendering tests; Goalrail does not embed that TUI path. It
 also does not duplicate Codex's internal goal-extension accounting tests except
-where the app-server result is part of Omnigent's public contract.
+where the app-server result is part of Goalrail's public contract.
 
 Not yet represented here: upstream SDK-only app-server tests for lifecycle,
 login, approvals, steer/interrupt, local/remote image input, and skill input.
-Those APIs do not have a direct Omnigent `CodexExecutor` surface yet, so they
+Those APIs do not have a direct Goalrail `CodexExecutor` surface yet, so they
 need either executor-facing analogs or a separate SDK compatibility harness
 before they can be one-for-one parity tests.
 
@@ -162,7 +162,7 @@ To refresh the harness:
    - `codex-rs/prompts/src/goals_tests.rs`
 5. Port new app-server public-contract goal cases into
    `tests/codex_parity/test_codex_goal.py`. Keep TUI-only cases classified as
-   intentionally excluded unless Omnigent starts exposing that path.
+   intentionally excluded unless Goalrail starts exposing that path.
 6. Run the focused goal file, then the full parity suite:
 
 ```bash
@@ -215,8 +215,8 @@ uv --no-config run --frozen \
 
 ## Why This Shape
 
-Mocking the Omnigent-to-Codex API would test our assumptions about Codex's
+Mocking the Goalrail-to-Codex API would test our assumptions about Codex's
 app-server protocol. This suite instead lets Codex define that contract by
 running the actual CLI/app-server implementation. Only the final network hop is
 mocked, which gives us stable, deterministic tests while still catching
-protocol drift between Omnigent and Codex.
+protocol drift between Goalrail and Codex.
