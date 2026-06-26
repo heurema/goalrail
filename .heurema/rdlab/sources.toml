@@ -1,5 +1,5 @@
 [[sources]]
-id = "goalrail-readme"
+id = "omnigent-readme"
 type = "local_file"
 path = "README.md"
 watch = true
@@ -7,43 +7,35 @@ mode = "internal_doc"
 trust = "A"
 
 [[sources]]
-id = "goalrail-product-concept"
+id = "omnigent-installer"
 type = "local_file"
-path = "docs/product/GOALRAIL_PRODUCT_CONCEPT.md"
+path = "scripts/install_oss.sh"
 watch = true
-mode = "product_canon"
+mode = "installer"
 trust = "A"
 
 [[sources]]
-id = "goalrail-mvp-blueprint"
+id = "omnigent-package-config"
 type = "local_file"
-path = "docs/product/GOALRAIL_MVP_BLUEPRINT.md"
+path = "pyproject.toml"
 watch = true
-mode = "architecture_canon"
+mode = "package_config"
 trust = "A"
 
 [[sources]]
-id = "goalrail-build-roadmap"
+id = "omnigent-cli"
 type = "local_file"
-path = "docs/product/GOALRAIL_BUILD_ROADMAP.md"
+path = "omnigent/cli.py"
 watch = true
-mode = "ops_plan"
+mode = "runtime_code"
 trust = "A"
 
 [[sources]]
-id = "goalrail-status"
+id = "omnigent-sandbox-base"
 type = "local_file"
-path = "docs/ops/STATUS.md"
+path = "omnigent/onboarding/sandboxes/base.py"
 watch = true
-mode = "ops_status"
-trust = "A"
-
-[[sources]]
-id = "goalrail-repo-structure"
-type = "local_file"
-path = "docs/ops/REPO_STRUCTURE.md"
-watch = true
-mode = "ops_reference"
+mode = "remote_host_image_boundary"
 trust = "A"
 
 [[sources]]

@@ -1,8 +1,0 @@
-{
-  "id": "ctr_invalid_1",
-  "business_context": "Missing required execution fields.",
-  "out_of_scope": ["production rollout"],
-  "constraints": ["demo only"],
-  "expected_checks": ["manual review"],
-  "state": "approved"
-}

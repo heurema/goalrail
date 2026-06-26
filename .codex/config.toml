@@ -1,3 +1,0 @@
-[mcp_servers.mantine]
-command = "npx"
-args = ["-y", "@mantine/mcp-server"]

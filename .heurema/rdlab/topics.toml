@@ -13,6 +13,13 @@ freshness = "weekly"
 status = "active"
 
 [[topics]]
+id = "codebase-memory-integration"
+title = "codebase-memory-mcp companion integration and setup safety"
+priority = "high"
+freshness = "weekly"
+status = "active"
+
+[[topics]]
 id = "execution-control-plane"
 title = "Execution control plane, proof, and verification semantics"
 priority = "medium"

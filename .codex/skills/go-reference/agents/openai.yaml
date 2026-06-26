@@ -1,4 +1,0 @@
-interface:
-  display_name: "Go Reference"
-  short_description: "Reference-guided Go decisions"
-  default_prompt: "Use $go-reference when changing Goalrail Go code: check repo context, consult Go references for meaningful decisions, and choose the smallest suitable implementation."

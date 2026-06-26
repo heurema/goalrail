@@ -1,186 +1,136 @@
-# Contributing to Goalrail
+# Contributing to Omnigent
 
-Thanks for your interest in contributing.
+Thanks for your interest in improving Omnigent. Issues and pull requests are
+welcome. For larger changes, open an issue first so we can discuss the approach.
 
-Goalrail is currently a **docs-first** repository with an evolving implementation
-baseline. That means contribution quality depends on keeping the product canon,
-operating model, and implementation reality aligned.
+Please don't include secrets, internal URLs, customer data, or private
+configuration in issues, tests, examples, or logs.
 
-**Language:** English is preferred for public artifacts because this repository
-is open to a broad contributor base. Russian is also acceptable when that makes
-a contribution clearer or faster.
+## Development setup
 
-## Read this first
+This is a Python package with an optional frontend under `ap-web/`. Use
+[`uv`](https://docs.astral.sh/uv/) for local development:
 
-Before opening a non-trivial issue or pull request, read these files in order:
+Install local prerequisites first:
 
-1. `docs/INDEX.md`
-2. `docs/product/GOALRAIL_PRODUCT_BRIEF.md`
-3. `docs/product/GOALRAIL_MVP_BLUEPRINT.md`
-4. `docs/ops/STATUS.md`
-5. `docs/ops/NEXT.md`
-6. `docs/ops/DECISIONS.md`
-7. `docs/ops/COMPONENTS.yaml`
-8. `AGENTS.md`
-9. `README.md`
-
-## What is especially useful right now
-
-At the current stage, the most helpful contributions are:
-
-- corrections and clarifications to product / architecture canon;
-- improvements to repo hygiene, contributor experience, and docs tooling;
-- bounded implementation slices that clearly map to documented MVP scope;
-- contradiction fixes across product docs, ops docs, and repository structure;
-- better validation, proof, and guardrail mechanisms for future PRs.
-
-## Ground rules
-
-### 1) Respect the source-of-truth order
-
-When documents disagree, prefer:
-
-1. `docs/product/*`
-2. `docs/ops/*`
-3. chat or ad-hoc discussion
-
-### 2) Do not silently expand MVP scope
-
-Do not turn Goalrail into a broad generic AI platform.
-Keep changes aligned with the documented MVP and current operating frame.
-
-### 3) Do not present unimplemented capabilities as existing
-
-If something is still conceptual, draft, prototype, or not wired end-to-end, say
-so clearly in docs, code comments, commit messages, and PR descriptions.
-
-### 4) Keep docs and implementation synchronized
-
-If a change affects any of the following, update the relevant docs in the same PR
-unless maintainers explicitly ask for a different sequence:
-
-- user-visible behavior;
-- product boundaries;
-- architecture or layer model;
-- component ownership / status;
-- validation or proof expectations.
-
-### 5) Keep PRs small and reviewable
-
-Prefer narrow PRs with one clear purpose.
-Large cross-cutting refactors are much harder to review in a docs-first repo.
-
-### 6) Map implementation to documented components
-
-If you add or change implementation, identify the affected area in
-`docs/ops/COMPONENTS.yaml` and reflect status changes where needed.
-
-### 7) Bring proof
-
-Every meaningful PR should include some form of evidence:
-
-- a doc rationale;
-- command output;
-- screenshots;
-- tests;
-- schema validation output;
-- before/after examples;
-- or a clear explanation of why proof is not yet applicable.
-
-## Contribution flow
-
-1. Open or find an issue for non-trivial work.
-2. Make sure the idea fits current MVP boundaries.
-3. Fork the repository and create a focused branch.
-4. Make the smallest useful change that solves one problem well.
-5. Run the relevant checks.
-6. Sign off every commit using the DCO.
-7. Open a PR and complete the project PR template honestly.
-
-## Commit sign-off (DCO)
-
-This repository uses the **Developer Certificate of Origin (DCO)** instead of a
-Contributor License Agreement.
-
-Add a sign-off line to every commit:
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python
+  environments and dependency management.
+- `tmux`, required for native Claude/Codex terminals launched by the local host
+  (`brew install tmux` on macOS, or `apt install tmux` on Debian/Ubuntu).
+- `bubblewrap` (`bwrap`), **Linux only**, used to OS-sandbox those native
+  Claude/Codex/Pi terminals (`apt install bubblewrap` on Debian/Ubuntu). macOS
+  uses the built-in `seatbelt` sandbox and needs nothing extra.
+- Node.js 22 LTS or newer with `npm` when working on `ap-web/`.
 
 ```bash
-git commit -s -m "Your message"
+git clone https://github.com/omnigent-ai/omnigent.git
+cd omnigent
+
+uv python install
+uv venv --python "$(cat .python-version)"
+uv sync --extra all --extra dev
+source .venv/bin/activate    # or prefix commands with `uv run`
 ```
 
-That adds a line like:
+Common checks:
 
-```text
-Signed-off-by: Your Name <you@example.com>
+```bash
+uv run pytest                      # Python tests (e2e/live skipped by default)
+uv run ruff check . && uv run ruff format --check .
+uv run pre-commit run --all-files
 ```
 
-By doing so, you certify the terms in `DCO.md`.
+When touching `ap-web/`:
 
-## Pull request expectations
+```bash
+cd ap-web && npm install && npm run lint && npm run build
+```
 
-Please use the PR template and make sure it includes:
+## Running locally
 
-- the goal / intent of the change;
-- the no-code alternative and why code or repository automation is needed;
-- explicit scope boundaries;
-- component impact;
-- documentation impact;
-- validation / proof;
-- anything reviewers should be careful about.
+To try your changes, start a local server, register your machine as a host,
+and run the frontend dev server. Use three separate terminals:
 
-A PR may be asked to change shape, split into smaller pieces, or add docs before
-merge if it moves faster than the documented product and architecture canon.
+```bash
+# Terminal 1: local server on :6767
+omnigent server
 
-## PR Intake Gate
+# Terminal 2: register your machine as a host
+omnigent host --server http://localhost:6767
 
-Goalrail uses a deterministic PR Intake Gate before ordinary code review.
+# Terminal 3: frontend dev server
+cd ap-web
+npm run dev
+```
 
-The gate is conservative for external contributors and low-friction for trusted repository authors:
+Open the Vite URL from the frontend dev server, usually
+`http://localhost:5173/`. The host registration is what lets the web UI browse
+your filesystem and start new sessions on your machine — without it, the web UI
+is read/continue-only.
 
-- it runs from trusted base-branch code through `pull_request_target`;
-- it reads PR metadata, changed-file metadata, and author repository permission through the GitHub API;
-- it does not checkout, import, install, or execute PR head code;
-- trusted authors with `admin`, `maintain`, or `write` repository permission pass intake automatically;
-- if permission lookup is unavailable, `OWNER`, `MEMBER`, and `COLLABORATOR` author associations pass as a fallback;
-- external PRs are labeled with `intake/pass`, `intake/needs-linked-intent`, `intake/needs-more-context`, `intake/no-code-alternative`, or `intake/high-risk`;
-- first-time external contributors also receive `intake/first-time-contributor`;
-- label and bot-comment updates are best-effort visibility aids; the check verdict comes from deterministic PR metadata evaluation;
-- maintainers can accept a non-high-risk external PR with `intake/accepted-for-pr`;
-- maintainers can bypass intake with `maintainer/override-intake` when they explicitly accept responsibility.
+`omni` is an alias for `omnigent`, so `omni host --server ...` works too.
+The host URL can also be passed positionally (`omnigent host
+http://localhost:6767`). See the [README](README.md) for more on hosts,
+harnesses, and credentials.
 
-Direct external PRs are intended only for small, low-risk edits. Non-trivial external PRs should link an Issue, Discussion, decision, ADR, research note, or Goalrail work artifact and fill the PR template sections for `Goal / intent`, `ComponentImpact`, `DocImpact`, `Rule Stack checklist`, `Validation / proof`, `No-code alternative`, and `Why code is needed`.
+## Tests
 
-External PRs touching high-risk surfaces such as `.github/**`, `apps/**`, `scripts/**`, `tools/**`, `docs/product/**`, `docs/ops/**`, `docs/adr/**`, `docs/research/**`, `.goalrail/**`, `.punk/**`, dependency files, deployments, migrations, auth, security, crypto, or runtime behavior require maintainer attention before ordinary code review.
+A change that alters behaviour under `omnigent/` should ship with a test, and a
+bug fix should add a test that fails before the fix. Pure refactors, renames,
+type-only changes, dependency bumps, and edits with no observable behaviour
+change don't need a new test.
 
-Shared gate engine:
+Prefer the smallest test that covers the change. A fast, focused **unit test**
+in the area suite is the default and what most changes need. Reach for
+`tests/integration/` only when behaviour genuinely spans components, and for
+`tests/e2e/` only for full-stack flows that a unit test can't capture — these
+are slower and (for e2e) gateway-bound, so don't use them where a unit test
+would do.
 
-- runtime action: `heurema/repo-governance/actions/pr-intake-gate@v0.1.0`;
-- local policy: `.github/pr-intake-gate.yml`;
-- workflow wrapper: `.github/workflows/pr-intake-gate.yml`.
+Put the test in the suite that matches the area you changed — most backend
+areas mirror their source directory under `tests/`:
 
-For policy changes, use a PR and verify the `pr-intake-gate` check.
+| Area changed (`omnigent/…`) | Test suite (`tests/…`) |
+| --- | --- |
+| `server/` | `server/` |
+| `runner/` | `runner/` |
+| `runtime/` | `runtime/` |
+| `tools/` | `tools/` |
+| `inner/` | `inner/` |
+| `llms/` | `llms/` |
+| `db/` | `db/` (a schema migration especially warrants one) |
+| `policies/` | `policies/` |
+| `repl/` | `repl/` |
+| `entities/` | `entities/` |
+| `stores/` | `stores/` |
+| `host/` | `host/` |
+| `spec/` | `spec/` |
 
-## Reporting bugs
+Two cross-cutting suites sit on top of these:
 
-Use the issue templates when possible and include:
+- `tests/integration/` — behaviour that spans several components (e.g. server +
+  runtime) and isn't captured by any single area's unit test.
+- `tests/e2e/` — full-stack flows driven against a live LLM (sessions, the
+  runtime, sub-agent dispatch, client-tool tunneling, transports, native
+  harness bridges, steering/cancellation). These are slow and gateway-bound, so
+  reserve them for genuine end-to-end behaviour — but a PR that adds new
+  user-facing functionality **must** include at least one e2e happy-path test
+  (see `.github/copilot-instructions.md`).
 
-- what happened;
-- what you expected;
-- how to reproduce;
-- what area is affected;
-- screenshots / logs / commands if relevant.
+### Frontend (`ap-web/`)
 
-## Proposing features
+Frontend changes follow the same expectation with a different toolchain:
 
-Feature requests are welcome, but they must stay grounded in Goalrail's current
-positioning and MVP boundaries. Requests that imply a large product expansion may
-be deferred even if they seem technically possible.
+- Add or update a **colocated Vitest test** — a `*.test.ts`/`*.test.tsx` file
+  next to the component or module you changed — and run it with `npm test`.
+- A change to **user-facing UI behaviour** also needs a Playwright test under
+  `tests/e2e_ui/`. This one is enforced mechanically by the `E2E UI Required`
+  check, so a UI PR won't merge without a covering test (or a maintainer
+  waiver) — see `.github/workflows/e2e-ui-required.yml`.
+- Styling/formatting-only changes, copy tweaks with no flow change, and
+  refactors with no behaviour change are exempt, same as the backend.
 
-## Security
+## Pull requests
 
-Please do **not** report vulnerabilities in public issues.
-See `SECURITY.md` for the private reporting process.
-
-## Code of conduct
-
-By participating in this project, you agree to follow `CODE_OF_CONDUCT.md`.
+- Branch from `main`, keep changes focused, and include tests or docs when relevant.
+- Sign off your commits with `git commit -s` (Developer Certificate of Origin).

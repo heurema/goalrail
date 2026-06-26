@@ -1,71 +1,42 @@
-name: Bug report
-description: Report a defect, inconsistency, or broken behavior
-title: "[Bug]: "
-labels:
-  - bug
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
 body:
-  - type: markdown
+  - type: textarea
+    id: description
     attributes:
-      value: |
-        Thanks for filing a bug report.
+      label: Description
+      description: What happened? What did you expect to happen?
+    validations:
+      required: true
 
-        Please keep the report bounded and concrete. English is preferred; Russian is also fine.
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: false
 
   - type: input
-    id: summary
+    id: version
     attributes:
-      label: Summary
-      description: What is broken?
-      placeholder: A short one-line summary
+      label: Version
+      description: Output of `omnigent --version` or the commit/tag you're running.
+      placeholder: e.g. 0.5.2 or abc1234
     validations:
-      required: true
+      required: false
 
-  - type: dropdown
-    id: area
+  - type: input
+    id: os
     attributes:
-      label: Affected area
-      options:
-        - docs
-        - repo governance / contribution flow
-        - tooling / scripts
-        - apps/web/demo-change-packet
-        - schemas / docs-check
-        - other
+      label: OS
+      description: Operating system and version.
+      placeholder: e.g. Ubuntu 24.04, macOS 15.1
     validations:
-      required: true
-
-  - type: textarea
-    id: current
-    attributes:
-      label: Current behavior
-      description: What happened?
-      placeholder: Describe the observed behavior
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-      description: What should have happened instead?
-      placeholder: Describe the expected behavior
-    validations:
-      required: true
-
-  - type: textarea
-    id: repro
-    attributes:
-      label: Reproduction
-      description: Steps, commands, links, commits, screenshots, or other proof
-      placeholder: |
-        1. Go to ...
-        2. Run ...
-        3. See ...
-    validations:
-      required: true
-
-  - type: textarea
-    id: context
-    attributes:
-      label: Extra context
-      description: Logs, screenshots, relevant docs, branch, OS, shell, etc.
+      required: false
