@@ -352,7 +352,7 @@ _EXTERNAL_ELICITATION_RESOLVED_TYPE: str = "external_elicitation_resolved"
 
 # Internal input used by terminal-backed integrations to publish a
 # session.status event observed outside the Omnigent task runtime
-# (e.g. ``omnigent claude`` mirroring Claude Code's Stop hook into
+# (e.g. ``goalrail claude`` mirroring Claude Code's Stop hook into
 # the session stream so the web UI's idle/running indicator updates).
 # Payload shape: ``{"status": "idle" | "running" | "waiting" | "failed"}``.
 # ``launching`` is runner-local sub-agent bookkeeping (it rides in a child's
@@ -493,8 +493,8 @@ _LAST_TASK_ERROR_MESSAGE_LABEL_KEY: str = "omnigent.last_task_error_message"
 # shape: ``{"todos": [{"content": "...", "status": "...", "activeForm": ...}]}``.
 _EXTERNAL_SESSION_TODOS_TYPE: str = "external_session_todos"
 
-# Session labels stamped by ``omnigent claude``. A matching session
-# is terminal-owned: Omnigent web-chat input must be forwarded to the local
+# Session labels stamped by ``goalrail claude``. A matching session
+# is terminal-owned: Goalrail web-chat input must be forwarded to the local
 # runner for tmux injection, and rendered transcript items must come
 # back through ``external_conversation_item`` only.
 _CLAUDE_NATIVE_WRAPPER_LABEL_KEY = "omnigent.wrapper"
@@ -693,7 +693,7 @@ def _claude_native_remember_host(tool_name: str, tool_input: Any) -> str | None:
 
 
 # Server-side wait budget for Codex app-server requests forwarded by
-# ``omnigent codex``. Held at one day like the Claude permission hook:
+# ``goalrail codex``. Held at one day like the Claude permission hook:
 # a terminal-side answer ends the wait early via the app-server's
 # explicit ``serverRequest/resolved`` notification, so the long park
 # never blocks the TUI path — while the old 300s cap silently abandoned
@@ -1301,7 +1301,7 @@ async def _publish_and_wait_for_harness_elicitation(
     """
     Publish one harness-originated elicitation and wait for web verdict.
 
-    Mirrors the ``omnigent claude`` permission hook contract: the
+    Mirrors the ``goalrail claude`` permission hook contract: the
     hook parks a server-side Future, publishes the standard
     ``response.elicitation_request`` event, waits until the session
     ``approval`` event resolves the Future, and always publishes
@@ -4310,7 +4310,7 @@ async def _persist_external_subagent_start(
         )
     if parent_conv.agent_id is None:
         # claude-native parents are always created with an agent_id
-        # by ``omnigent claude`` (the synthetic Claude bundle).
+        # by ``goalrail claude`` (the synthetic Claude bundle).
         # A null agent_id here means we're being called against a
         # legacy / corrupt row — fail loud rather than silently
         # mint a child without a parent agent.
@@ -14862,7 +14862,7 @@ def create_sessions_router(
 
         :param request: FastAPI request — body is Claude Code's
             PermissionRequest payload as JSON.
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: Claude PermissionRequest hookSpecificOutput JSON,
             or ``200`` with empty body on timeout (fail-ask).
         :raises OmnigentError: 404 if the session doesn't exist,
@@ -15189,7 +15189,7 @@ def create_sessions_router(
 
         :param request: FastAPI request — body is the
             ``EvaluationRequest`` JSON envelope.
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: ``EvaluationResponse`` JSON with ``result``,
             ``reason``, and optional ``data``.
         :raises OmnigentError: 404 if the session doesn't exist,
@@ -15407,7 +15407,7 @@ def create_sessions_router(
         Codex app-server elicitation request endpoint.
 
         Receives server-to-client JSON-RPC request envelopes forwarded
-        by ``omnigent codex`` (for example
+        by ``goalrail codex`` (for example
         ``mcpServer/elicitation/request`` and
         ``item/tool/requestUserInput``), publishes the standard
         ``response.elicitation_request`` session event for the web UI,
@@ -15418,7 +15418,7 @@ def create_sessions_router(
 
         :param request: FastAPI request carrying the Codex JSON-RPC
             request envelope.
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: Codex JSON-RPC ``result`` payload for the forwarded
             request, or ``200`` with empty body on timeout/disconnect.
         :raises OmnigentError: 404 if the session does not exist,
@@ -15497,7 +15497,7 @@ def create_sessions_router(
         :class:`~omnigent.server.schemas.ElicitationRequestParams` dict.
 
         :param request: FastAPI request carrying the agy elicitation body.
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: ``ElicitationResult`` JSON on user verdict; ``200`` with
             empty body on timeout/disconnect (bridge interprets as ``None``).
         :raises OmnigentError: 404 if the session does not exist, 400 if
@@ -15585,7 +15585,7 @@ def create_sessions_router(
         :param request: FastAPI request carrying the detected prompt
             (``elicitation_id`` plus the ``message`` / ``content_preview`` /
             ``operation_type`` to render).
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: An ``ElicitationResult`` (``{"action": …}``) on a web
             verdict, or ``200`` with empty body on TUI-resolution / timeout /
             disconnect.
@@ -15693,7 +15693,7 @@ def create_sessions_router(
         :param request: FastAPI request carrying the detected prompt
             (``elicitation_id``, ``message``, ``content_preview``,
             ``operation_type``, optional ``agent`` / ``policy_name``).
-        :param session_id: Omnigent conversation id from the URL path.
+        :param session_id: Goalrail conversation id from the URL path.
         :returns: An ``ElicitationResult`` (``{"action": …}``) on a web verdict,
             or ``200`` with empty body on TUI-resolution / timeout / disconnect.
         :raises OmnigentError: 404 if the session does not exist, 400 if the
@@ -16314,7 +16314,7 @@ def create_sessions_router(
         access: the requested ``terminal`` must be one of the names
         declared in the agent spec's ``terminals:`` block. Native
         harness bootstrap requests (marked ``ensure_native_terminal``
-        or ``bridge_inject_dir`` — the ``omnigent claude`` / ``codex``
+        or ``bridge_inject_dir`` — the ``goalrail claude`` / ``goalrail codex``
         wrappers launching the session's own CLI terminal) are exempt:
         they launch undeclared names via the runner's
         synthesize-from-body path and predate the gate. The markers
@@ -17392,7 +17392,7 @@ def create_sessions_router(
           it writes no persistent marker, so the next message
           auto-relaunches the session on its (still-online) host via
           the normal message-dispatch relaunch path.
-        - ``"message"`` on an ``omnigent claude`` terminal session
+        - ``"message"`` on a ``goalrail claude`` terminal session
           is forwarded to the bound runner for tmux injection only;
           the accepted prompt is persisted later when Claude records
           it in the terminal transcript.

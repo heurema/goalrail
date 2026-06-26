@@ -1003,7 +1003,7 @@ class ElicitationResult(BaseModel):
     Consumer reply to an outstanding elicitation.
 
     Field names + semantics mirror MCP's ``ElicitResult`` verbatim.
-    Omnigent clients deliver this shape inside the session-scoped
+    Goalrail clients deliver this shape inside the session-scoped
     ``approval`` event body, alongside the ``elicitation_id``
     correlation key.
 
@@ -1576,7 +1576,7 @@ class SessionResponse(BaseModel):
         ``None`` in all other cases.
     :param external_session_id: Runtime-native session id this
         conversation wraps, e.g. a Claude Code session uuid for
-        ``omnigent claude`` sessions. ``None`` for regular
+        ``goalrail claude`` sessions. ``None`` for regular
         AP-only conversations. Populated by the wrapper bridge.
     :param terminal_launch_args: Pass-through CLI args the native
         terminal wrapper (claude / codex) was launched with, e.g.
@@ -1590,7 +1590,7 @@ class SessionResponse(BaseModel):
         the live SSE stream has no replay and a prompt emitted
         before the user opened the chat would otherwise vanish.
         Empty list when no prompts are outstanding. Sourced from
-        the Omnigent server's in-memory
+        the Goalrail server's in-memory
         :mod:`omnigent.runtime.pending_elicitations` index.
     :param pending_inputs: Un-consumed web-composer user messages on
         native-terminal (claude-native / codex-native) sessions at
@@ -1619,11 +1619,11 @@ class SessionResponse(BaseModel):
         surface only behind the "Show archived" toggle. ``False``
         for normal sessions. Toggled via ``PATCH /v1/sessions/{id}``.
     :param todos: Current Claude Code todo list items for
-        ``omnigent claude`` sessions, as raw dicts from Claude's
+        ``goalrail claude`` sessions, as raw dicts from Claude's
         todo JSON file. Each dict has ``content``, ``status``,
         and ``activeForm`` keys. Empty list for non-claude-native
         sessions or when no todos have been reported yet. Sourced
-        from the Omnigent server's in-memory ``_session_todos_cache``.
+        from the Goalrail server's in-memory ``_session_todos_cache``.
     :param skills: Skills the bound agent has access to — the
         merged result of the agent spec's bundled ``skills``
         and the host-scope skills discovered along the agent
@@ -1642,14 +1642,14 @@ class SessionResponse(BaseModel):
         pill instead of a silent greyed-out button. Cleared to
         ``False`` once the terminal lands or auto-create fails; from
         then on the client relies purely on whether a terminal resource
-        exists. Sourced from the Omnigent server's in-memory
+        exists. Sourced from the Goalrail server's in-memory
         ``_session_terminal_pending_cache`` at snapshot build time, so a
         client connecting mid-spin-up still sees the spinner.
     :param sandbox_status: Managed-sandbox launch progress while the
         session's background sandbox launch is in flight or has
         failed — see :class:`SandboxStatus`. ``None`` for sessions
         without a managed launch and once the launch succeeds.
-        Sourced from the Omnigent server's in-memory
+        Sourced from the Goalrail server's in-memory
         ``_session_sandbox_status_cache`` at snapshot build time, so
         a client opening the session mid-launch sees the current
         stage.
@@ -1746,7 +1746,7 @@ class UpdateSessionRequest(BaseModel):
         alias — is the clear signal, unlike ``model_override``).
     :param external_session_id: Runtime-native session id captured
         by a wrapper bridge (e.g. Claude Code's session uuid for
-        ``omnigent claude`` sessions). Idempotent on same-value
+        ``goalrail claude`` sessions). Idempotent on same-value
         writes; the server rejects attempts to overwrite an
         already-set different value with ``invalid_input`` to
         surface programmer errors. ``None`` leaves unchanged.
@@ -1860,7 +1860,7 @@ class UpdateCodexGoalStatusRequest(BaseModel):
     Request body for ``PATCH /v1/sessions/{id}/codex_goal/status``.
 
     Codex app-server represents pause/resume as ``thread/goal/set`` status
-    updates. Omnigent exposes the two user-driven transitions explicitly:
+    updates. Goalrail exposes the two user-driven transitions explicitly:
     ``"paused"`` pauses an active goal, and ``"active"`` resumes a paused,
     blocked, or usage-limited goal.
 
@@ -1973,14 +1973,14 @@ class SessionListItem(BaseModel):
         can display the owner without a separate API call.
     :param external_session_id: Runtime-native session id this
         conversation wraps, e.g. a Claude Code session uuid for
-        ``omnigent claude`` sessions. ``None`` for regular
+        ``goalrail claude`` sessions. ``None`` for regular
         AP-only conversations. Lets the sidebar / picker render
         a runtime badge without a follow-up GET.
     :param pending_elicitations_count: Number of approval prompts
         currently waiting on this session. Powers the sidebar's
         "needs attention" badge so a user with several sessions
         running can tell which ones are blocked on them without
-        opening each chat. Sourced from the Omnigent server's in-memory
+        opening each chat. Sourced from the Goalrail server's in-memory
         :mod:`omnigent.runtime.pending_elicitations` index,
         which mirrors every ``response.elicitation_request`` event
         passing through ``session_stream`` and decrements when a
@@ -2248,7 +2248,7 @@ class SessionUsageEvent(_SSEEventBase):
     Token-usage update from a terminal-backed integration.
 
     Emitted after an ``external_session_usage`` POST from an
-    out-of-AP runtime (e.g. the ``omnigent claude`` transcript
+    out-of-AP runtime (e.g. the ``goalrail claude`` transcript
     forwarder). Either field may be absent; clients should leave
     cached values untouched for missing fields.
 
@@ -2293,7 +2293,7 @@ class SessionModelEvent(_SSEEventBase):
     Active-model update from a terminal-backed integration.
 
     Emitted after an ``external_model_change`` POST from the
-    ``omnigent claude`` transcript forwarder when the model is
+    ``goalrail claude`` transcript forwarder when the model is
     switched inside the Claude Code terminal (a ``/model`` command or
     the in-TUI picker). Lets the web model picker reflect a TUI-side
     switch without a reload.
@@ -2400,9 +2400,9 @@ class SessionTodosEvent(_SSEEventBase):
     Todo-list update from a Claude Code terminal-backed session.
 
     Emitted after an ``external_session_todos`` POST from the
-    ``omnigent claude`` transcript forwarder, which captures todo
+    ``goalrail claude`` transcript forwarder, which captures todo
     updates via ``PostToolUse``/``TodoWrite`` hook events from Claude
-    Code and forwards them to the Omnigent server. Lets ap-web render a
+    Code and forwards them to the Goalrail server. Lets ap-web render a
     live todo panel in the right column without polling.
 
     :param type: Always ``"session.todos"``.
@@ -2431,11 +2431,11 @@ class SessionTerminalPendingEvent(_SSEEventBase):
 
     Two sources emit this event:
 
-    1. The Omnigent server at ``POST /v1/sessions`` for host-launched
+    1. The Goalrail server at ``POST /v1/sessions`` for host-launched
        terminal-first sessions — the earliest possible point, before
        the runner even starts, so the spinner appears immediately on
        session create rather than after the runner boots.
-    2. The Omnigent relay when the runner's ``session.terminal_pending`` frame
+    2. The Goalrail relay when the runner's ``session.terminal_pending`` frame
        arrives — covers non-host-launched sessions (e.g. server-dispatched
        sub-agents) and carries the authoritative ``pending=False`` clear
        emitted by the runner's ``finally`` block.
@@ -3038,9 +3038,9 @@ class ElicitationRequestParams(BaseModel):
         {"type": "boolean"}}}``.
     :param url: External URL for url mode (or ``None`` for form
         mode), e.g. ``"https://oauth.example.com/authorize?..."``.
-    :param phase: Omnigent policy-engine phase the elicitation
+    :param phase: Goalrail policy-engine phase the elicitation
         belongs to, e.g. ``"pre_tool_use"``.
-    :param policy_name: Omnigent policy that triggered the
+    :param policy_name: Goalrail policy that triggered the
         elicitation, e.g. ``"approve_shell_commands"``.
     :param content_preview: Truncated preview of the underlying
         request payload (≤1024 chars in current AP), for the
@@ -3065,7 +3065,7 @@ class ElicitationRequestParams(BaseModel):
 
     # MCP's ElicitRequestParams uses ``extra="allow"``; mirror
     # that here so MCP-shaped passthrough (an MCP server's
-    # ``elicitation/create`` traversing harness → Omnigent → client)
+    # ``elicitation/create`` traversing harness → Goalrail → client)
     # preserves any fields the MCP server added.
     model_config = ConfigDict(extra="allow")
 
@@ -3074,7 +3074,7 @@ class ElicitationRequestEvent(_SSEEventBase):
     """
     Synchronous request for a decision from upstream.
 
-    Emitted by Omnigent (or, under the new contract, by a harness)
+    Emitted by Goalrail (or, under the new contract, by a harness)
     when the LLM / a tool / a policy needs a verdict before
     proceeding. The consumer replies via
     ``POST /v1/sessions/{session_id}/events`` with
@@ -3122,7 +3122,7 @@ class ElicitationResolvedEvent(_SSEEventBase):
     server has no way to learn that the prompt is dead and the
     badge stays stuck.
 
-    Idempotent on the consumer side: the Omnigent server's index
+    Idempotent on the consumer side: the Goalrail server's index
     decrement is a no-op when the id isn't tracked, so the
     runner can fire-and-forget on every Future cleanup.
 
@@ -3709,8 +3709,8 @@ class PolicyEvaluationRequestEvent(_SSEEventBase):
 
     Emitted by the executor adapter before or after an LLM call so
     the runner can evaluate ``LLM_REQUEST`` / ``LLM_RESPONSE``
-    policies on the Omnigent server. The runner intercepts this event in
-    ``proxy_stream``, calls the Omnigent server's
+    policies on the Goalrail server. The runner intercepts this event in
+    ``proxy_stream``, calls the Goalrail server's
     ``POST /sessions/{id}/policies/evaluate`` endpoint, and posts
     the verdict back to the harness as a ``policy_verdict`` inbound
     event. This event is **never** relayed to external clients —
@@ -3723,7 +3723,7 @@ class PolicyEvaluationRequestEvent(_SSEEventBase):
         scaffold can resolve the correct parked Future.
     :param phase: Proto-style phase string, e.g.
         ``"PHASE_LLM_REQUEST"`` or ``"PHASE_LLM_RESPONSE"``.
-    :param data: Event data dict passed to the Omnigent server's
+    :param data: Event data dict passed to the Goalrail server's
         policy evaluate endpoint, e.g.
         ``{"model": "gpt-4o", "messages_count": 42}``.
     """

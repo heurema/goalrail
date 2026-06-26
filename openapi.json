@@ -1092,7 +1092,7 @@
         "type": "object"
       },
       "ElicitationRequestEvent": {
-        "description": "Synchronous request for a decision from upstream.\n\nEmitted by Omnigent (or, under the new contract, by a harness)\nwhen the LLM / a tool / a policy needs a verdict before\nproceeding. The consumer replies via\n`POST /v1/sessions/{session_id}/events` with\n`type == \"approval\"` and\n`omnigent.server.schemas.ElicitationResult` fields in\n`data`. This preserves MCP request/reply correlation by id\nwithout threading elicitations through PATCH.\n\nWire shape matches the existing emit at\n`omnigent/runtime/policies/approval.py:175`.",
+        "description": "Synchronous request for a decision from upstream.\n\nEmitted by Goalrail (or, under the new contract, by a harness)\nwhen the LLM / a tool / a policy needs a verdict before\nproceeding. The consumer replies via\n`POST /v1/sessions/{session_id}/events` with\n`type == \"approval\"` and\n`omnigent.server.schemas.ElicitationResult` fields in\n`data`. This preserves MCP request/reply correlation by id\nwithout threading elicitations through PATCH.\n\nWire shape matches the existing emit at\n`omnigent/runtime/policies/approval.py:175`.",
         "properties": {
           "elicitation_id": {
             "description": "Unique correlation id for this request \u2014 appears in the consumer's approval event payload, e.g. `\"elicit_abc123\"`.",
@@ -1179,7 +1179,7 @@
               }
             ],
             "default": null,
-            "description": "Omnigent policy-engine phase the elicitation belongs to, e.g. `\"pre_tool_use\"`.",
+            "description": "Goalrail policy-engine phase the elicitation belongs to, e.g. `\"pre_tool_use\"`.",
             "title": "Phase"
           },
           "policy_name": {
@@ -1192,7 +1192,7 @@
               }
             ],
             "default": null,
-            "description": "Omnigent policy that triggered the elicitation, e.g. `\"approve_shell_commands\"`.",
+            "description": "Goalrail policy that triggered the elicitation, e.g. `\"approve_shell_commands\"`.",
             "title": "Policy Name"
           },
           "requestedSchema": {
@@ -1243,7 +1243,7 @@
         "type": "object"
       },
       "ElicitationResolvedEvent": {
-        "description": "Signal that a previously-published elicitation is no longer\noutstanding, even though no UI `approval` verdict was\ndelivered through `POST /v1/sessions/{id}/events`.\n\nEmitted by the runner when its own `_pending_approvals`\nFuture is popped without a verdict (the runner's wait timed\nout, the turn was cancelled, the harness exited) so the AP\nserver's `omnigent.runtime.pending_elicitations`\nindex can decrement the sidebar badge in lockstep with the\nunderlying awaiter's lifecycle. Without this signal, the AP\nserver has no way to learn that the prompt is dead and the\nbadge stays stuck.\n\nIdempotent on the consumer side: the Omnigent server's index\ndecrement is a no-op when the id isn't tracked, so the\nrunner can fire-and-forget on every Future cleanup.",
+        "description": "Signal that a previously-published elicitation is no longer\noutstanding, even though no UI `approval` verdict was\ndelivered through `POST /v1/sessions/{id}/events`.\n\nEmitted by the runner when its own `_pending_approvals`\nFuture is popped without a verdict (the runner's wait timed\nout, the turn was cancelled, the harness exited) so the AP\nserver's `omnigent.runtime.pending_elicitations`\nindex can decrement the sidebar badge in lockstep with the\nunderlying awaiter's lifecycle. Without this signal, the AP\nserver has no way to learn that the prompt is dead and the\nbadge stays stuck.\n\nIdempotent on the consumer side: the Goalrail server's index\ndecrement is a no-op when the id isn't tracked, so the\nrunner can fire-and-forget on every Future cleanup.",
         "properties": {
           "elicitation_id": {
             "description": "Correlation id of the elicitation being cleared, e.g. `\"elicit_abc123\"`. Must match the id of a prior `ElicitationRequestEvent`.",
@@ -3624,7 +3624,7 @@
                 "type": "null"
               }
             ],
-            "description": "Runtime-native session id this conversation wraps, e.g. a Claude Code session uuid for `omnigent claude` sessions. `None` for regular AP-only conversations. Lets the sidebar / picker render a runtime badge without a follow-up GET.",
+            "description": "Runtime-native session id this conversation wraps, e.g. a Claude Code session uuid for `goalrail claude` sessions. `None` for regular AP-only conversations. Lets the sidebar / picker render a runtime badge without a follow-up GET.",
             "title": "External Session Id"
           },
           "git_branch": {
@@ -3690,7 +3690,7 @@
           },
           "pending_elicitations_count": {
             "default": 0,
-            "description": "Number of approval prompts currently waiting on this session. Powers the sidebar's \"needs attention\" badge so a user with several sessions running can tell which ones are blocked on them without opening each chat. Sourced from the Omnigent server's in-memory `omnigent.runtime.pending_elicitations` index, which mirrors every `response.elicitation_request` event passing through `session_stream` and decrements when a verdict is dispatched. `0` when the session has no outstanding elicitations.",
+            "description": "Number of approval prompts currently waiting on this session. Powers the sidebar's \"needs attention\" badge so a user with several sessions running can tell which ones are blocked on them without opening each chat. Sourced from the Goalrail server's in-memory `omnigent.runtime.pending_elicitations` index, which mirrors every `response.elicitation_request` event passing through `session_stream` and decrements when a verdict is dispatched. `0` when the session has no outstanding elicitations.",
             "title": "Pending Elicitations Count",
             "type": "integer"
           },
@@ -3793,7 +3793,7 @@
         "type": "object"
       },
       "SessionModelEvent": {
-        "description": "Active-model update from a terminal-backed integration.\n\nEmitted after an `external_model_change` POST from the\n`omnigent claude` transcript forwarder when the model is\nswitched inside the Claude Code terminal (a `/model` command or\nthe in-TUI picker). Lets the web model picker reflect a TUI-side\nswitch without a reload.",
+        "description": "Active-model update from a terminal-backed integration.\n\nEmitted after an `external_model_change` POST from the\n`goalrail claude` transcript forwarder when the model is\nswitched inside the Claude Code terminal (a `/model` command or\nthe in-TUI picker). Lets the web model picker reflect a TUI-side\nswitch without a reload.",
         "properties": {
           "conversation_id": {
             "description": "Session identifier, e.g. `\"conv_abc123\"`.",
@@ -4212,7 +4212,7 @@
                 "type": "null"
               }
             ],
-            "description": "Runtime-native session id this conversation wraps, e.g. a Claude Code session uuid for `omnigent claude` sessions. `None` for regular AP-only conversations. Populated by the wrapper bridge.",
+            "description": "Runtime-native session id this conversation wraps, e.g. a Claude Code session uuid for `goalrail claude` sessions. `None` for regular AP-only conversations. Populated by the wrapper bridge.",
             "title": "External Session Id"
           },
           "git_branch": {
@@ -4363,7 +4363,7 @@
             "title": "Parent Session Id"
           },
           "pending_elicitations": {
-            "description": "Outstanding approval prompts on this session at the moment the snapshot was built \u2014 the original `response.elicitation_request` event dicts. Lets the UI render the ApprovalCard on cold load, since the live SSE stream has no replay and a prompt emitted before the user opened the chat would otherwise vanish. Empty list when no prompts are outstanding. Sourced from the Omnigent server's in-memory `omnigent.runtime.pending_elicitations` index.",
+            "description": "Outstanding approval prompts on this session at the moment the snapshot was built \u2014 the original `response.elicitation_request` event dicts. Lets the UI render the ApprovalCard on cold load, since the live SSE stream has no replay and a prompt emitted before the user opened the chat would otherwise vanish. Empty list when no prompts are outstanding. Sourced from the Goalrail server's in-memory `omnigent.runtime.pending_elicitations` index.",
             "items": {
               "additionalProperties": true,
               "type": "object"
@@ -4449,7 +4449,7 @@
                 "type": "null"
               }
             ],
-            "description": "Managed-sandbox launch progress while the session's background sandbox launch is in flight or has failed \u2014 see `SandboxStatus`. `None` for sessions without a managed launch and once the launch succeeds. Sourced from the Omnigent server's in-memory `_session_sandbox_status_cache` at snapshot build time, so a client opening the session mid-launch sees the current stage."
+            "description": "Managed-sandbox launch progress while the session's background sandbox launch is in flight or has failed \u2014 see `SandboxStatus`. `None` for sessions without a managed launch and once the launch succeeds. Sourced from the Goalrail server's in-memory `_session_sandbox_status_cache` at snapshot build time, so a client opening the session mid-launch sees the current stage."
           },
           "skills": {
             "description": "Skills the bound agent has access to \u2014 the merged result of the agent spec's bundled `skills` and the host-scope skills discovered along the agent workdir / `~/.claude/skills/` (subject to the spec's `skills_filter`). Mirrors what the TUI passes to the runner at startup. Empty list when the agent spec cannot be loaded, or when bundled + host discovery yields nothing.",
@@ -4498,7 +4498,7 @@
           },
           "terminal_pending": {
             "default": false,
-            "description": "`True` while the runner is auto-creating a terminal-first session's terminal (claude-native / codex-native), so the Web UI shows a spinner on the Terminal pill instead of a silent greyed-out button. Cleared to `False` once the terminal lands or auto-create fails; from then on the client relies purely on whether a terminal resource exists. Sourced from the Omnigent server's in-memory `_session_terminal_pending_cache` at snapshot build time, so a client connecting mid-spin-up still sees the spinner.",
+            "description": "`True` while the runner is auto-creating a terminal-first session's terminal (claude-native / codex-native), so the Web UI shows a spinner on the Terminal pill instead of a silent greyed-out button. Cleared to `False` once the terminal lands or auto-create fails; from then on the client relies purely on whether a terminal resource exists. Sourced from the Goalrail server's in-memory `_session_terminal_pending_cache` at snapshot build time, so a client connecting mid-spin-up still sees the spinner.",
             "title": "Terminal Pending",
             "type": "boolean"
           },
@@ -4515,7 +4515,7 @@
             "title": "Title"
           },
           "todos": {
-            "description": "Current Claude Code todo list items for `omnigent claude` sessions, as raw dicts from Claude's todo JSON file. Each dict has `content`, `status`, and `activeForm` keys. Empty list for non-claude-native sessions or when no todos have been reported yet. Sourced from the Omnigent server's in-memory `_session_todos_cache`.",
+            "description": "Current Claude Code todo list items for `goalrail claude` sessions, as raw dicts from Claude's todo JSON file. Each dict has `content`, `status`, and `activeForm` keys. Empty list for non-claude-native sessions or when no todos have been reported yet. Sourced from the Goalrail server's in-memory `_session_todos_cache`.",
             "items": {
               "additionalProperties": true,
               "type": "object"
@@ -4796,7 +4796,7 @@
         "type": "object"
       },
       "SessionTerminalPendingEvent": {
-        "description": "Terminal spin-up status for a terminal-first session.\n\nTwo sources emit this event:\n\n1. The Omnigent server at `POST /v1/sessions` for host-launched\n   terminal-first sessions \u2014 the earliest possible point, before\n   the runner even starts, so the spinner appears immediately on\n   session create rather than after the runner boots.\n2. The Omnigent relay when the runner's `session.terminal_pending` frame\n   arrives \u2014 covers non-host-launched sessions (e.g. server-dispatched\n   sub-agents) and carries the authoritative `pending=False` clear\n   emitted by the runner's `finally` block.\n\nTogether they allow ap-web to show a spinner on the Terminal pill\nwhile the backend boots the terminal instead of a silent greyed-out\nbutton, and to distinguish \"still starting up\" from \"no terminal\"\n(killed or never created).",
+        "description": "Terminal spin-up status for a terminal-first session.\n\nTwo sources emit this event:\n\n1. The Goalrail server at `POST /v1/sessions` for host-launched\n   terminal-first sessions \u2014 the earliest possible point, before\n   the runner even starts, so the spinner appears immediately on\n   session create rather than after the runner boots.\n2. The Goalrail relay when the runner's `session.terminal_pending` frame\n   arrives \u2014 covers non-host-launched sessions (e.g. server-dispatched\n   sub-agents) and carries the authoritative `pending=False` clear\n   emitted by the runner's `finally` block.\n\nTogether they allow ap-web to show a spinner on the Terminal pill\nwhile the backend boots the terminal instead of a silent greyed-out\nbutton, and to distinguish \"still starting up\" from \"no terminal\"\n(killed or never created).",
         "properties": {
           "conversation_id": {
             "description": "Session identifier, e.g. `\"conv_abc123\"`.",
@@ -4836,7 +4836,7 @@
         "type": "object"
       },
       "SessionTodosEvent": {
-        "description": "Todo-list update from a Claude Code terminal-backed session.\n\nEmitted after an `external_session_todos` POST from the\n`omnigent claude` transcript forwarder, which captures todo\nupdates via `PostToolUse`/`TodoWrite` hook events from Claude\nCode and forwards them to the Omnigent server. Lets ap-web render a\nlive todo panel in the right column without polling.",
+        "description": "Todo-list update from a Claude Code terminal-backed session.\n\nEmitted after an `external_session_todos` POST from the\n`goalrail claude` transcript forwarder, which captures todo\nupdates via `PostToolUse`/`TodoWrite` hook events from Claude\nCode and forwards them to the Goalrail server. Lets ap-web render a\nlive todo panel in the right column without polling.",
         "properties": {
           "conversation_id": {
             "description": "Session identifier, e.g. `\"conv_abc123\"`.",
@@ -4880,7 +4880,7 @@
         "type": "object"
       },
       "SessionUsageEvent": {
-        "description": "Token-usage update from a terminal-backed integration.\n\nEmitted after an `external_session_usage` POST from an\nout-of-AP runtime (e.g. the `omnigent claude` transcript\nforwarder). Either field may be absent; clients should leave\ncached values untouched for missing fields.",
+        "description": "Token-usage update from a terminal-backed integration.\n\nEmitted after an `external_session_usage` POST from an\nout-of-AP runtime (e.g. the `goalrail claude` transcript\nforwarder). Either field may be absent; clients should leave\ncached values untouched for missing fields.",
         "properties": {
           "context_tokens": {
             "anyOf": [
@@ -5283,7 +5283,7 @@
       },
       "UpdateCodexGoalStatusRequest": {
         "additionalProperties": false,
-        "description": "Request body for `PATCH /v1/sessions/{id}/codex_goal/status`.\n\nCodex app-server represents pause/resume as `thread/goal/set` status\nupdates. Omnigent exposes the two user-driven transitions explicitly:\n`\"paused\"` pauses an active goal, and `\"active\"` resumes a paused,\nblocked, or usage-limited goal.",
+        "description": "Request body for `PATCH /v1/sessions/{id}/codex_goal/status`.\n\nCodex app-server represents pause/resume as `thread/goal/set` status\nupdates. Goalrail exposes the two user-driven transitions explicitly:\n`\"paused\"` pauses an active goal, and `\"active\"` resumes a paused,\nblocked, or usage-limited goal.",
         "properties": {
           "status": {
             "description": "Target Codex goal status, either `\"paused\"` or `\"active\"`.",
@@ -5469,7 +5469,7 @@
                 "type": "null"
               }
             ],
-            "description": "Runtime-native session id captured by a wrapper bridge (e.g. Claude Code's session uuid for `omnigent claude` sessions). Idempotent on same-value writes; the server rejects attempts to overwrite an already-set different value with `invalid_input` to surface programmer errors. `None` leaves unchanged.",
+            "description": "Runtime-native session id captured by a wrapper bridge (e.g. Claude Code's session uuid for `goalrail claude` sessions). Idempotent on same-value writes; the server rejects attempts to overwrite an already-set different value with `invalid_input` to surface programmer errors. `None` leaves unchanged.",
             "title": "External Session Id"
           },
           "labels": {
@@ -5765,8 +5765,8 @@
     }
   },
   "info": {
-    "description": "Omnigent is an open-source meta-harness for building and running AI agents. This is the REST API exposed by the Omnigent server: use it to create and drive **sessions**, manage **agents**, **hosts**, and **runners**, attach **contextual policies**, post **comments**, and work with session **resources** \u2014 files, terminals, and sandboxed environments.\n\n## Base URL\n\nOmnigent is self-hosted. The server binds `http://127.0.0.1:6767` by default (`omnigent server`); point the base URL at your own deployment.\n\n## Authentication\n\nThere is no API-key or bearer-token scheme. Identity is supplied by the deployment's configured auth provider (`OMNIGENT_AUTH_PROVIDER`):\n\n- **Trusted proxy header** (default) \u2014 an upstream proxy injects an identity header (`X-Forwarded-Email`, configurable). Single-user local runtimes fall back to a reserved `local` user.\n- **Session cookie** \u2014 a signed session cookie minted after an interactive OIDC or accounts login. It is named `ap_session` over HTTP (the advertised local default) and `__Host-ap_session` under HTTPS, where the `__Host-` prefix guards against subdomain cookie-tossing.\n\nAuth is configured server-side; clients send the cookie or proxy header according to your deployment.\n\n## Streaming\n\n`GET /v1/sessions/{session_id}/stream` streams Server-Sent Events (`text/event-stream`). Each event conforms to the `ServerStreamEvent` schema documented below.\n",
-    "title": "Omnigent Server",
+    "description": "Goalrail is an open-source meta-harness for building and running AI agents. This is the REST API exposed by the Goalrail server: use it to create and drive **sessions**, manage **agents**, **hosts**, and **runners**, attach **contextual policies**, post **comments**, and work with session **resources** \u2014 files, terminals, and sandboxed environments.\n\n## Base URL\n\nGoalrail is self-hosted. The server binds `http://127.0.0.1:6767` by default (`goalrail server`); point the base URL at your own deployment.\n\n## Authentication\n\nThere is no API-key or bearer-token scheme. Identity is supplied by the deployment's configured auth provider (`OMNIGENT_AUTH_PROVIDER`):\n\n- **Trusted proxy header** (default) \u2014 an upstream proxy injects an identity header (`X-Forwarded-Email`, configurable). Single-user local runtimes fall back to a reserved `local` user.\n- **Session cookie** \u2014 a signed session cookie minted after an interactive OIDC or accounts login. It is named `ap_session` over HTTP (the advertised local default) and `__Host-ap_session` under HTTPS, where the `__Host-` prefix guards against subdomain cookie-tossing.\n\nAuth is configured server-side; clients send the cookie or proxy header according to your deployment.\n\n## Streaming\n\n`GET /v1/sessions/{session_id}/stream` streams Server-Sent Events (`text/event-stream`). Each event conforms to the `ServerStreamEvent` schema documented below.\n",
+    "title": "Goalrail Server",
     "version": "0.1.0"
   },
   "openapi": "3.2.0",
@@ -7681,7 +7681,7 @@
     },
     "/v1/sessions/{session_id}/codex_goal/status": {
       "patch": {
-        "description": "Pause or resume the current Codex app-server goal.\n\nCodex exposes this through `thread/goal/set` with only a status\nfield. The Omnigent API keeps that distinct from objective/budget\nedits so callers can implement Pause/Resume controls without\nresending the goal text.\n\n**Parameters**\n\n- `body` \u2014 Target status. `\"paused\"` pauses the goal and `\"active\"` resumes it.\n\n**Returns:** Current Codex goal state after the status update.\n\n**Raises**\n\n- `OmnigentError` \u2014 400 for non-Codex sessions, 404 for missing sessions, or 503 when no live Codex runner can update the goal.",
+        "description": "Pause or resume the current Codex app-server goal.\n\nCodex exposes this through `thread/goal/set` with only a status\nfield. The Goalrail API keeps that distinct from objective/budget\nedits so callers can implement Pause/Resume controls without\nresending the goal text.\n\n**Parameters**\n\n- `body` \u2014 Target status. `\"paused\"` pauses the goal and `\"active\"` resumes it.\n\n**Returns:** Current Codex goal state after the status update.\n\n**Raises**\n\n- `OmnigentError` \u2014 400 for non-Codex sessions, 404 for missing sessions, or 503 when no live Codex runner can update the goal.",
         "operationId": "update_codex_goal_status_v1_sessions__session_id__codex_goal_status_patch",
         "parameters": [
           {
@@ -8471,7 +8471,7 @@
         "operationId": "evaluate_policy_v1_sessions__session_id__policies_evaluate_post",
         "parameters": [
           {
-            "description": "Omnigent conversation id from the URL path.",
+            "description": "Goalrail conversation id from the URL path.",
             "in": "path",
             "name": "session_id",
             "required": true,
@@ -9810,7 +9810,7 @@
         ]
       },
       "post": {
-        "description": "Launch or return an existing terminal resource.\n\nPreserves `sys_terminal_launch` idempotency: an\nalready-running `(terminal, session_key)` returns the\nexisting resource.\n\nUser-initiated creates are gated on the agent's terminal\naccess: the requested `terminal` must be one of the names\ndeclared in the agent spec's `terminals:` block. Native\nharness bootstrap requests (marked `ensure_native_terminal`\nor `bridge_inject_dir` \u2014 the `omnigent claude` / `codex`\nwrappers launching the session's own CLI terminal) are exempt:\nthey launch undeclared names via the runner's\nsynthesize-from-body path and predate the gate. The markers\nare client-controlled, so the exemption is narrowed to the\nexact shape those wrappers send \u2014 a registered native terminal\nname with `session_key` `\"main\"` \u2014 anything else carrying a\nmarker still goes through the declared-name gate (it would\notherwise be an arbitrary-terminal bypass).\n\n**Returns:** The terminal resource object.\n\n**Raises**\n\n- `OmnigentError` \u2014 400 when the requested terminal is not declared by the agent spec (or the agent has no `terminals:` block at all).",
+        "description": "Launch or return an existing terminal resource.\n\nPreserves `sys_terminal_launch` idempotency: an\nalready-running `(terminal, session_key)` returns the\nexisting resource.\n\nUser-initiated creates are gated on the agent's terminal\naccess: the requested `terminal` must be one of the names\ndeclared in the agent spec's `terminals:` block. Native\nharness bootstrap requests (marked `ensure_native_terminal`\nor `bridge_inject_dir` \u2014 the `goalrail claude` / `goalrail codex`\nwrappers launching the session's own CLI terminal) are exempt:\nthey launch undeclared names via the runner's\nsynthesize-from-body path and predate the gate. The markers\nare client-controlled, so the exemption is narrowed to the\nexact shape those wrappers send \u2014 a registered native terminal\nname with `session_key` `\"main\"` \u2014 anything else carrying a\nmarker still goes through the declared-name gate (it would\notherwise be an arbitrary-terminal bypass).\n\n**Returns:** The terminal resource object.\n\n**Raises**\n\n- `OmnigentError` \u2014 400 when the requested terminal is not declared by the agent spec (or the agent has no `terminals:` block at all).",
         "operationId": "create_session_terminal_v1_sessions__session_id__resources_terminals_post",
         "parameters": [
           {
@@ -10173,7 +10173,7 @@
   },
   "servers": [
     {
-      "description": "Self-hosted Omnigent server (default local port).",
+      "description": "Self-hosted Goalrail server (default local port).",
       "url": "http://127.0.0.1:6767"
     }
   ],

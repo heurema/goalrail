@@ -83,7 +83,7 @@ def _require_codex_goal_runner_payload(
     Return the JSON payload from a required Codex goal runner forward.
 
     Codex goal state lives in Codex app-server, so AP goal routes cannot fall
-    back to persisted Omnigent labels. A missing runner, rejected control
+    back to persisted Goalrail labels. A missing runner, rejected control
     event, or malformed runner body means the UI must keep its prior goal view
     and surface an error.
 
@@ -612,7 +612,7 @@ def register_codex_session_routes(
         Pause or resume the current Codex app-server goal.
 
         Codex exposes this through ``thread/goal/set`` with only a status
-        field. The Omnigent API keeps that distinct from objective/budget
+        field. The Goalrail API keeps that distinct from objective/budget
         edits so callers can implement Pause/Resume controls without
         resending the goal text.
 
