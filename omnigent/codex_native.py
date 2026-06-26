@@ -162,7 +162,7 @@ class PreparedCodexTerminal:
     """
     Prepared native Codex terminal attachment details.
 
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param terminal_id: Terminal resource id to attach.
     :param tmux_socket: Local tmux socket path when the runner exposed
         one and it is reachable from this CLI process.
@@ -207,11 +207,11 @@ def run_codex_native(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch Codex TUI in an Omnigent terminal.
+    Launch Codex TUI in a Goalrail terminal.
 
-    :param server: Resolved Omnigent server URL, e.g.
+    :param server: Resolved Goalrail server URL, e.g.
         ``"http://127.0.0.1:8123"``.
-    :param session_id: Optional existing Omnigent conversation id,
+    :param session_id: Optional existing Goalrail conversation id,
         e.g. ``"conv_abc123"``.
     :param codex_args: Raw Codex CLI args to pass before ``resume``.
     :param resume_picker: ``True`` runs the Codex-native picker.
@@ -229,7 +229,7 @@ def run_codex_native(
     _preflight_local_tools()
     if server is None:
         raise click.ClickException(
-            "Codex requires a resolved Omnigent server URL. The CLI should call "
+            "Codex requires a resolved Goalrail server URL. The CLI should call "
             "_ensure_backend before run_codex_native."
         )
     with TemporaryDirectory(prefix="omnigent-codex-native-") as tmpdir:
@@ -250,7 +250,7 @@ def _record_launch_for_fresh_session(session_id: str) -> None:
     """
     Persist the wrapper's current cwd as the Codex session launch state.
 
-    :param session_id: Newly created Omnigent conversation id, e.g.
+    :param session_id: Newly created Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :returns: None.
     """
@@ -274,7 +274,7 @@ def _align_working_directory_with_session(session_id: str) -> None:
     present and points at a different existing directory, ask whether
     to switch there before the runner and app-server sample cwd.
 
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: None. Side-effect-only; may change process cwd.
     :raises click.ClickException: If recorded state exists but no
         viable resume directory exists, or if the user cancels.
@@ -430,10 +430,10 @@ def _run_with_local_server(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Start a local Omnigent server, launch Codex, and attach to it.
+    Start a local Goalrail server, launch Codex, and attach to it.
 
     :param spec_path: Generated Codex wrapper agent spec.
-    :param session_id: Optional existing Omnigent session id.
+    :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True``, run the Codex-native picker.
     :param codex_args: Raw Codex CLI args.
     :param command: Codex executable to run.
@@ -524,12 +524,12 @@ def _run_with_remote_server(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch Codex on an Omnigent server via a daemon-spawned runner.
+    Launch Codex on a Goalrail server via a daemon-spawned runner.
 
-    :param base_url: Remote Omnigent server base URL, e.g.
+    :param base_url: Remote Goalrail server base URL, e.g.
         ``"https://example.databricks.com"``.
     :param spec_path: Generated Codex wrapper agent spec.
-    :param session_id: Optional existing Omnigent session id.
+    :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True``, run the Codex-native picker.
     :param codex_args: Raw Codex CLI args.
     :param model: Optional Codex model id.
@@ -647,9 +647,9 @@ async def _prepare_codex_terminal_via_daemon(
     terminal. The CLI only persists launch intent, waits for the terminal
     resource, and attaches to it.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricks.com"``.
-    :param headers: HTTP auth headers for Omnigent requests.
+    :param headers: HTTP auth headers for Goalrail requests.
     :param session_id: Existing session id to resume, or ``None`` for a
         fresh session.
     :param session_bundle: Gzipped Codex wrapper bundle. Required when
@@ -775,7 +775,7 @@ async def _ensure_codex_terminal_on_runner(
     """
     Ask the bound runner to ensure the Codex app-server and terminal exist.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :returns: None.
     :raises click.ClickException: If the runner rejects the ensure request.
@@ -800,7 +800,7 @@ async def _wait_for_codex_terminal_ready(
     """
     Wait until the runner exposes the Codex terminal resource.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :param timeout_s: Max seconds to wait, e.g. ``60.0``.
     :returns: Terminal details including direct tmux attach metadata when
@@ -830,8 +830,8 @@ async def _post_initial_prompt(
     """
     Send the first Codex prompt through Omnigent instead of the app-server.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: HTTP auth headers for Omnigent requests.
+    :param base_url: Goalrail server base URL.
+    :param headers: HTTP auth headers for Goalrail requests.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :param prompt: User prompt text.
     :param auth: Optional refresh-capable HTTP auth for long-lived
@@ -876,7 +876,7 @@ async def _prepare_codex_terminal(
     """
     Create/bind a session, start app-server, and launch Codex TUI.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param session_id: Optional existing session id.
     :param runner_id: Runner id to bind.
@@ -1067,7 +1067,7 @@ async def _attach_with_forwarder(
     """
     Attach to the Codex terminal while forwarding app-server events.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param prepared: Prepared terminal details.
     :param prompt: Optional first prompt to send.
@@ -1159,7 +1159,7 @@ def _start_codex_forwarder(
     """
     Start the transcript forwarder for a prepared Codex terminal.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param prepared: Prepared terminal details with a known thread id.
     :param auth: Optional long-lived HTTP auth for remote sessions.
@@ -1197,7 +1197,7 @@ async def _initialize_fresh_terminal_thread(
     terminal sharing while letting Codex query the real attached
     terminal during startup.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param prepared: Prepared terminal details whose ``thread_id`` is
         still ``None``.
@@ -1233,9 +1233,9 @@ async def _attach_terminal_resource(
     recover: Any | None,
 ) -> None:
     """
-    Attach the current terminal to the prepared Omnigent terminal resource.
+    Attach the current terminal to the prepared Goalrail terminal resource.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param prepared: Prepared terminal details.
     :param recover: Optional reconnect recovery callback.
@@ -1265,10 +1265,10 @@ async def _attach_terminal_resource(
 
 def _active_codex_session_id(bridge_dir: Path) -> str | None:
     """
-    Return the active Omnigent session id for a native Codex bridge.
+    Return the active Goalrail session id for a native Codex bridge.
 
     :param bridge_dir: Native Codex bridge directory.
-    :returns: Omnigent session id, e.g. ``"conv_abc123"``, or ``None`` when
+    :returns: Goalrail session id, e.g. ``"conv_abc123"``, or ``None`` when
         bridge state has not been written yet.
     """
     state = read_bridge_state(bridge_dir)
@@ -1312,7 +1312,7 @@ async def _attach_direct_tmux(socket_path: Path, tmux_target: str) -> None:
     This avoids the local WebSocket + PTY relay used for browser and
     non-local runner attaches. ``TMUX`` is removed from the child
     environment so users who run ``omnigent codex`` inside their own
-    tmux session can still attach to Omnigent' private tmux server.
+    tmux session can still attach to the runner's private tmux server.
 
     :param socket_path: Runner tmux socket path.
     :param tmux_target: Tmux target to attach, e.g. ``"main"``.
@@ -1352,7 +1352,7 @@ async def _create_codex_session(
     :param terminal_launch_args: Pass-through Codex CLI args to persist
         for runner-owned terminal launch, e.g.
         ``["--config", "approval_policy=on-request"]``.
-    :returns: New Omnigent session id.
+    :returns: New Goalrail session id.
     """
     labels = dict(_SESSION_LABELS)
     if bridge_id is not None:
@@ -1381,10 +1381,10 @@ async def _create_codex_session(
 
 async def _fetch_codex_session(client: httpx.AsyncClient, session_id: str) -> dict[str, Any]:
     """
-    Fetch an existing Omnigent session.
+    Fetch an existing Goalrail session.
 
     :param client: HTTP client pointed at AP.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Decoded session payload.
     """
     resp = await client.get(f"/v1/sessions/{url_component(session_id)}")
@@ -1599,7 +1599,7 @@ async def _ensure_local_codex_resume_rollout(
     """
     Ensure Codex has a local rollout JSONL for cold resume.
 
-    Cross-machine resume has the Omnigent conversation and Codex thread id on
+    Cross-machine resume has the Goalrail conversation and Codex thread id on
     the server, but not necessarily the app-server's local
     ``$CODEX_HOME/sessions/.../rollout-*-<thread>.jsonl`` file. Codex
     ``resume <thread>`` reads that local rollout, so before launching a
@@ -1608,8 +1608,8 @@ async def _ensure_local_codex_resume_rollout(
     are left untouched because Codex treats them as append-only runtime
     state, not a cache that Omnigent should rewrite.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param external_session_id: Codex thread id, e.g.
         ``"019e96aa-0be2-7343-8d3b-6f914d60936b"``.
     :param codex_home: Per-session private ``CODEX_HOME`` whose
@@ -1705,10 +1705,10 @@ async def _fetch_all_session_items_for_codex_resume(
     session_id: str,
 ) -> list[dict[str, Any]]:
     """
-    Fetch committed Omnigent session items in chronological order.
+    Fetch committed Goalrail session items in chronological order.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Flat API item dicts from
         ``GET /v1/sessions/{id}/items``.
     :raises click.ClickException: If an item page cannot be fetched or
@@ -1763,7 +1763,7 @@ def _codex_rollout_records_from_session_items(
     cli_version: str,
 ) -> list[dict[str, Any]]:
     """
-    Convert Omnigent session items into Codex rollout JSONL records.
+    Convert Goalrail session items into Codex rollout JSONL records.
 
     The generated records follow Codex's rollout shape: one
     ``session_meta`` record, a ``turn_context`` before each Omnigent response
@@ -1780,7 +1780,7 @@ def _codex_rollout_records_from_session_items(
 
     :param items: Flat Omnigent item dicts in chronological order, e.g.
         ``{"type": "message", "role": "user", "content": [...]}``.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
         Used for deterministic synthetic turn ids.
     :param external_session_id: Codex thread id, e.g.
         ``"019e96aa-0be2-7343-8d3b-6f914d60936b"``.
@@ -2113,7 +2113,7 @@ def _codex_turn_id_for_session_item(
     ``"codex_<turn_id>"`` for mirrored items. When that prefix is not
     present, build a deterministic synthetic turn id from stable inputs.
 
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param external_session_id: Codex thread id, e.g.
         ``"019e96aa-0be2-7343-8d3b-6f914d60936b"``.
     :param item: Flat Omnigent item dict.
@@ -2151,10 +2151,10 @@ async def _patch_external_session_id(
     thread_id: str,
 ) -> None:
     """
-    Persist the native Codex thread id on the Omnigent session.
+    Persist the native Codex thread id on the Goalrail session.
 
     :param client: HTTP client pointed at AP.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param thread_id: Codex thread id.
     :returns: None.
     """
@@ -2234,7 +2234,7 @@ async def _launch_codex_terminal(
     Launch the server-backed Codex terminal resource.
 
     :param client: HTTP client pointed at AP.
-    :param session_id: Omnigent session id.
+    :param session_id: Goalrail session id.
     :param codex_args: Raw Codex CLI args.
     :param command: Codex executable.
     :param thread_id: Codex thread id to resume. ``None`` starts a
@@ -2329,7 +2329,7 @@ async def _find_running_codex_terminal(
     and cold-resume the Codex thread.
 
     :param client: HTTP client pointed at AP.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Terminal details, or ``None`` when absent.
     :raises click.ClickException: If the server rejects the lookup for
         a reason other than "not currently attachable".
@@ -2424,9 +2424,9 @@ async def _close_codex_terminal(
     """
     Best-effort close of the AP-side Codex terminal resource.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
-    :param session_id: Omnigent session id.
+    :param session_id: Goalrail session id.
     :param terminal_id: Terminal resource id.
     :returns: None.
     """
@@ -2452,7 +2452,7 @@ def _resolve_session_id_for_resume(
     """
     Translate resume inputs into a concrete Codex-native session id.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
     :param session_id: Explicit session id, e.g. ``"conv_abc123"``.
     :param resume_picker: ``True`` for bare ``--resume``.
@@ -2471,7 +2471,7 @@ def _resolve_session_id_for_resume(
         """
         Run the async Codex-native picker.
 
-        :returns: Selected Omnigent session id, or ``None``.
+        :returns: Selected Goalrail session id, or ``None``.
         """
         async with OmnigentClient(
             base_url=base_url,

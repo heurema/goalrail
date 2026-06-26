@@ -2,7 +2,7 @@
 
 ``omnigent antigravity`` treats the Antigravity ``agy`` CLI as a
 terminal-first program, mirroring ``omnigent codex`` / ``omnigent claude``.
-It creates or binds an Omnigent session, launches ``agy`` in a runner-owned
+It creates or binds a Goalrail session, launches ``agy`` in a runner-owned
 tmux terminal resource, then attaches the local TTY (directly to the
 runner's tmux when same-machine, else over the WebSocket PTY bridge).
 
@@ -171,7 +171,7 @@ class PreparedAntigravityTerminal:
     """
     Prepared native Antigravity terminal attachment details.
 
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param terminal_id: Terminal resource id to attach.
     :param bridge_dir: Native Antigravity bridge directory shared with the
         ``antigravity-native`` harness.
@@ -204,12 +204,12 @@ def run_antigravity_native(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch the Antigravity (agy) TUI in an Omnigent terminal and attach.
+    Launch the Antigravity (agy) TUI in a Goalrail terminal and attach.
 
-    :param server: Resolved Omnigent server URL, e.g.
-        ``"http://127.0.0.1:8123"``. ``None`` starts a local Omnigent
+    :param server: Resolved Goalrail server URL, e.g.
+        ``"http://127.0.0.1:8123"``. ``None`` starts a local Goalrail
         server using the existing chat-server machinery.
-    :param session_id: Optional existing Omnigent conversation id to
+    :param session_id: Optional existing Goalrail conversation id to
         resume, e.g. ``"conv_abc123"``. ``None`` creates a new bundled
         session.
     :param antigravity_args: Raw pass-through args appended to the ``agy``
@@ -342,10 +342,10 @@ def _run_with_local_server(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Start a local Omnigent server, launch agy, and attach to it.
+    Start a local Goalrail server, launch agy, and attach to it.
 
     :param spec_path: Generated Antigravity wrapper agent spec.
-    :param session_id: Optional existing Omnigent session id.
+    :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True`` and ``session_id is None``, run the
         picker.
     :param antigravity_args: Raw pass-through agy args.
@@ -441,17 +441,17 @@ def _run_with_remote_server(
     auto_open_conversation: bool = False,
 ) -> None:
     """
-    Launch agy on a remote Omnigent server via a daemon-spawned runner.
+    Launch agy on a remote Goalrail server via a daemon-spawned runner.
 
     The CLI binds a daemon runner to the session, then launches the agy
     terminal itself (the runner has no agy auto-create branch). Attach
     prefers the runner's tmux when it is local, else the WebSocket PTY
     bridge.
 
-    :param base_url: Remote Omnigent server base URL, e.g.
+    :param base_url: Remote Goalrail server base URL, e.g.
         ``"https://example.databricks.com"``.
     :param spec_path: Generated Antigravity wrapper agent spec.
-    :param session_id: Optional existing Omnigent session id.
+    :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True`` and ``session_id is None``, run the
         picker.
     :param antigravity_args: Raw pass-through agy args.
@@ -562,7 +562,7 @@ async def _prepare_antigravity_terminal(
     """
     Create/bind a session and launch its agy terminal resource.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers; ``{}`` for the local server.
     :param session_id: Optional existing session id.
     :param runner_id: Runner id to bind to the session, or ``None``.
@@ -712,8 +712,8 @@ async def _await_runner_antigravity_terminal(
     ``clear_bridge_state`` would wipe the bridge state the runner wrote, breaking
     web-turn injection). Uses ``time.monotonic`` for the deadline.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param timeout_s: Max seconds to wait for the runner-owned terminal.
     :returns: The runner-owned terminal details, or ``None`` if none appeared
         within *timeout_s* (the caller then launches one itself).
@@ -752,8 +752,8 @@ async def _prepare_antigravity_terminal_via_daemon(
     itself (:func:`_launch_and_record`) as a fallback when the runner produced
     none within :data:`_RUNNER_TERMINAL_AUTOCREATE_TIMEOUT_S`.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: HTTP auth headers for Omnigent requests.
+    :param base_url: Goalrail server base URL.
+    :param headers: HTTP auth headers for Goalrail requests.
     :param session_id: Existing session id to resume, or ``None`` for a
         fresh session.
     :param session_bundle: Gzipped agent bundle. Required when
@@ -939,8 +939,8 @@ async def _launch_and_record(
     conversation (:mod:`omnigent.antigravity_native_reader`) keeps an in-memory
     seen-set only.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param bridge_id: Opaque bridge id keying the bridge directory.
     :param conversation_id: On resume, agy's real (discovered) conversation id
         to pass as ``--conversation``. On a fresh launch, the minted
@@ -1055,7 +1055,7 @@ async def _attach_terminal(
         but not the reader's client). There is no pre-tool policy audit on this
         path; real-time elicitation is the enforcement surface now.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers (mutated in place by ``recover``).
     :param prepared: Prepared terminal details.
     :param recover: Optional async reconnect-recovery callback. ``None``
@@ -1192,7 +1192,7 @@ async def _cold_start_agy_conversation(
     lsof-attributable. This polls that resolver until a port binds, then
     ``StartCascade``s a generated ``uuid4``.
 
-    The cold-started id is also PATCHed onto the Omnigent session as
+    The cold-started id is also PATCHed onto the Goalrail session as
     ``external_session_id`` (best-effort, mirroring the runner cold-start and
     codex/pi) so a later ``omnigent antigravity --resume`` reads it back and passes
     ``--conversation <id>`` to continue agy's actual conversation — the read-path
@@ -1214,7 +1214,7 @@ async def _cold_start_agy_conversation(
         the real cold-started id is written into.
     :param session_id: Owning session/conversation id (for log correlation and
         the ``external_session_id`` PATCH target).
-    :param base_url: Omnigent server base URL for the ``external_session_id``
+    :param base_url: Goalrail server base URL for the ``external_session_id``
         PATCH.
     :param headers: HTTP auth headers for the PATCH (the local server has none; a
         remote server's bearer is used as-is).
@@ -1322,7 +1322,7 @@ async def _attach_direct_tmux(socket_path: Path, tmux_target: str) -> _AttachOut
     Lower latency than the WebSocket PTY relay because there is no server
     round-trip. ``TMUX`` is dropped from the child environment so a user
     who runs ``omnigent antigravity`` from inside their own tmux can still
-    attach to Omnigent's private tmux server. After the attach child
+    attach to the runner's private tmux server. After the attach child
     exits, a ``has-session`` probe distinguishes a user *detach* (session
     still alive) from agy *exiting* (session gone).
 
@@ -1370,10 +1370,10 @@ async def _create_antigravity_session(
     read-path replacement for the retired forwarder's id capture, so a later
     ``--resume`` continues agy's actual conversation.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param bundle: Gzipped Antigravity wrapper agent bundle.
     :param bridge_id: Opaque bridge id to write on the session labels.
-    :returns: New Omnigent session id, e.g. ``"conv_abc123"``.
+    :returns: New Goalrail session id, e.g. ``"conv_abc123"``.
     :raises click.ClickException: If creation fails.
     """
     labels = dict(_SESSION_LABELS)
@@ -1402,10 +1402,10 @@ async def _fetch_antigravity_session(
     client: httpx.AsyncClient, session_id: str
 ) -> dict[str, object]:
     """
-    Fetch an existing Omnigent session snapshot.
+    Fetch an existing Goalrail session snapshot.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Decoded session payload.
     :raises click.ClickException: If the lookup fails or returns non-object JSON.
     """
@@ -1433,8 +1433,8 @@ async def _launch_antigravity_terminal(
     """
     Launch the server-backed agy terminal resource.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent session id.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail session id.
     :param argv: Full agy command list from :func:`build_agy_launch`. The
         first element is the agy binary; the rest are its args.
     :param env: Environment overrides for the terminal process from
@@ -1535,8 +1535,8 @@ async def _find_running_antigravity_terminal(
     """
     Return the existing running agy terminal id if present.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :returns: Terminal details, or ``None`` when the wrapper should launch
         a new terminal (missing, stopped, or runner unavailable).
     :raises click.ClickException: If the server rejects the lookup for a
@@ -1570,9 +1570,9 @@ async def _close_antigravity_terminal(
     """
     Best-effort close of the AP-side agy terminal resource.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers.
-    :param session_id: Omnigent session id.
+    :param session_id: Goalrail session id.
     :param terminal_id: Terminal resource id.
     :returns: None.
     """
@@ -1615,7 +1615,7 @@ def _resolve_session_id_for_resume(
     """
     Translate resume inputs into a concrete antigravity-native session id.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers; ``{}`` for the local server.
     :param session_id: Explicit session id, e.g. ``"conv_abc123"``.
     :param resume_picker: ``True`` for bare ``--resume``.
@@ -1633,7 +1633,7 @@ def _resolve_session_id_for_resume(
         """
         Run the async antigravity-native picker.
 
-        :returns: Selected Omnigent session id, or ``None``.
+        :returns: Selected Goalrail session id, or ``None``.
         """
         async with OmnigentClient(
             base_url=base_url,

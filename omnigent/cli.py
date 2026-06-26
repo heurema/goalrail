@@ -1482,7 +1482,7 @@ class _HostDaemonRecord:
         ``"/Users/me/.omnigent/logs/host-daemon/daemon-abc.log"``.
     :param started_at: Unix epoch seconds when the daemon was spawned,
         e.g. ``1710000000``.
-    :param host_id: Local host id advertised to Omnigent servers, e.g.
+    :param host_id: Local host id advertised to Goalrail servers, e.g.
         ``"host_abc123"``. ``None`` for legacy records.
     :param resolved_server_url: Concrete local server URL discovered for
         local mode, e.g. ``"http://127.0.0.1:8123"``. ``None`` until
@@ -1544,7 +1544,7 @@ class _DaemonSessionsResult:
     """
     Sessions fetched for one daemon target.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``. ``None`` when a
         local daemon's server cannot be discovered.
     :param sessions: Session rows owned by the daemon host id.
@@ -1604,7 +1604,7 @@ def _normalize_daemon_target(server_url: str | None) -> str:
     """
     Normalize a daemon target key.
 
-    :param server_url: Requested Omnigent server URL, e.g.
+    :param server_url: Requested Goalrail server URL, e.g.
         ``"https://example.databricksapps.com/"``. ``None`` or empty
         string selects local mode.
     :returns: ``"local"`` for local mode, otherwise the URL without a
@@ -1618,7 +1618,7 @@ def _daemon_host_online(record: _HostDaemonRecord, *, timeout_s: float = 2.0) ->
     Probe whether a daemon's host is currently online on its server.
 
     A daemon process being alive (PID check) does not mean its WebSocket
-    tunnel to the Omnigent server is up: the server only reports the host
+    tunnel to the Goalrail server is up: the server only reports the host
     ``online`` while a daemon holds an authenticated tunnel and has
     heartbeated within ``HOST_LIVENESS_TTL_S``. After a server restart,
     an ungraceful daemon death, or a flapping tunnel, the daemon can be a
@@ -1829,7 +1829,7 @@ def _find_daemon_record(target: str) -> _HostDaemonRecord | None:
 
 def _update_daemon_resolved_server_url(target: str, server_url: str) -> None:
     """
-    Record the concrete Omnigent server URL served by a daemon target.
+    Record the concrete Goalrail server URL served by a daemon target.
 
     :param target: Normalized target, e.g. ``"local"``.
     :param server_url: Concrete server URL, e.g.
@@ -1920,9 +1920,9 @@ def _daemon_host_identity_changed(record: _HostDaemonRecord) -> bool:
 
 def _terminate_host_unit(record: _HostDaemonRecord, *, reason: str) -> None:
     """
-    Tear down a daemon and, in local mode, the Omnigent server it owns.
+    Tear down a daemon and, in local mode, the Goalrail server it owns.
 
-    The ``--local`` daemon spawns its Omnigent server once and never respawns
+    The ``--local`` daemon spawns its Goalrail server once and never respawns
     it, so a stale daemon and its server must be replaced as a unit:
     killing only the daemon would strand the server (and vice versa). This
     stops both so the caller can spawn a fresh, correctly-configured pair.
@@ -2116,7 +2116,7 @@ def _foreground_daemon_record(
 
     :param target: Normalized daemon target, e.g.
         ``"https://example.databricksapps.com"`` or ``"local"``.
-    :param server_url: Concrete Omnigent server URL being connected to, e.g.
+    :param server_url: Concrete Goalrail server URL being connected to, e.g.
         ``"http://127.0.0.1:8123"``.
     :param host_id: Local host id, e.g. ``"host_abc123"``.
     :returns: Daemon registry record for ``os.getpid()``.
@@ -2231,9 +2231,9 @@ def _load_or_create_host_id() -> str | None:
 def _ensure_host_daemon(server_url: str | None) -> bool:
     """Start or reuse a host daemon for one target.
 
-    :param server_url: Omnigent server URL the daemon connects to, or ``None``
+    :param server_url: Goalrail server URL the daemon connects to, or ``None``
         for local mode — the daemon starts (or reuses) a persistent local
-        Omnigent server and connects to that.
+        Goalrail server and connects to that.
     :returns: ``True`` when an existing daemon was torn down and respawned
         because its config (auth source) changed — the caller
         should ask the user to re-run against the freshly-restarted server
@@ -2270,7 +2270,7 @@ def _build_host_daemon_env(
     """
     Build the environment for the background host daemon.
 
-    Remote daemons connect to an already-running Omnigent server, so they only
+    Remote daemons connect to an already-running Goalrail server, so they only
     need process essentials, TLS trust, and Databricks auth. Local daemons
     also start the local Goalrail server; that server is the user's local runtime
     and must inherit Omnigent config plus provider credentials such as
@@ -2281,7 +2281,7 @@ def _build_host_daemon_env(
     through :func:`omnigent.host.connect._build_runner_env`, so these
     local-server credentials do not leak into runner subprocesses.
 
-    :param server_url: Omnigent server URL for remote mode, e.g.
+    :param server_url: Goalrail server URL for remote mode, e.g.
         ``"https://example.databricksapps.com"``, or a falsey value
         such as ``None`` / ``""`` for local daemon mode.
     :returns: Environment dict for ``subprocess.Popen``.
@@ -2399,10 +2399,10 @@ def _ensure_databricks_server_auth(server: str) -> None:
 
 
 def _ensure_backend(server: str | None) -> str:
-    """Ensure the host daemon is running and return the Omnigent server URL.
+    """Ensure the host daemon is running and return the Goalrail server URL.
 
     The daemon is the single backend for ``attach`` / ``run`` / ``claude`` /
-    ``codex``: it spawns the runner and, in local mode, the Omnigent server too.
+    ``codex``: it spawns the runner and, in local mode, the Goalrail server too.
     The CLI is a pure client of the returned URL.
 
     :param server: ``--server`` value after config fallback. A non-empty
@@ -2464,7 +2464,7 @@ def _exit_for_auth_mode_change(base_url: str) -> None:
     a clean single-mode start. When the new mode is accounts and no admin
     exists yet, point the user at the one-time setup URL.
 
-    :param base_url: The freshly-restarted Omnigent server URL, e.g.
+    :param base_url: The freshly-restarted Goalrail server URL, e.g.
         ``"http://127.0.0.1:6767"``.
     :returns: Never returns — raises ``SystemExit(0)``.
     :raises SystemExit: Always, with code 0 (a clean, expected stop).
@@ -2496,7 +2496,7 @@ def _discover_local_server_url(
 ) -> str:
     """Poll until the daemon-started local Goalrail server is reachable.
 
-    In local mode the daemon owns the Omnigent server; the CLI discovers its URL
+    In local mode the daemon owns the Goalrail server; the CLI discovers its URL
     via the local-server pidfile + ``/health`` rather than starting it
     itself.
 
@@ -4225,7 +4225,7 @@ def claude(
     startup_profiler.mark("arguments validated")
 
     # Ensure the host daemon (local when ``--server`` is omitted/empty,
-    # remote otherwise) and resolve the concrete Omnigent server URL. The daemon
+    # remote otherwise) and resolve the concrete Goalrail server URL. The daemon
     # owns the runner; the CLI only connects. ``--host`` is now redundant
     # (the daemon is always ensured) and kept only as a no-op for scripts.
     startup_profiler.mark("ensuring backend")
@@ -4351,7 +4351,7 @@ def codex(
         )
 
     # Ensure the host daemon (local when ``--server`` is omitted/empty,
-    # remote otherwise) and resolve the concrete Omnigent server URL. Codex follows
+    # remote otherwise) and resolve the concrete Goalrail server URL. Codex follows
     # the same ownership model as attach/run/claude: the daemon-spawned runner
     # owns the app-server and TUI; the CLI attaches to the tmux terminal.
     server = _ensure_backend(server)
@@ -5442,7 +5442,7 @@ def resume(
     # Click uses the docstring as --help text — keep param docs in
     # comments so they don't leak into CLI output.
     #
-    # :param target: Optional Omnigent conversation id, e.g.
+    # :param target: Optional Goalrail conversation id, e.g.
     #     ``"conv_abc123"``. None falls through to the picker.
     # :param server: Remote Goalrail server URL (optional in id mode;
     #     required in picker mode).
@@ -5908,7 +5908,7 @@ def _dispatch_run(
     """
     Route ``goalrail run`` to the right impl.
 
-    The click path always drives the Omnigent server-backed REPL. With
+    The click path always drives the Goalrail server-backed REPL. With
     ``--server <url>``, use that server URL instead of starting a
     local server. (``goalrail attach`` is a separate attach-only
     client and does NOT route through here.)
@@ -5922,7 +5922,7 @@ def _dispatch_run(
     :param prompt: ``-p`` / ``--prompt`` value.
     :param system_prompt: ``--system-prompt`` value.
     :param server: Server URL from ``--server`` or config. With a local
-        target, this is the Omnigent server used for upload/session setup; with
+        target, this is the Goalrail server used for upload/session setup; with
         no target and explicit ``--server``, this is the direct server.
     :param resume_picker: True when ``--resume`` / ``-r`` is set with
         no value (interactive picker).
@@ -6175,7 +6175,7 @@ def _dispatch_run(
 
 def _resolve_attach_server(server: str | None, configured_server: str | None) -> str | None:
     """
-    Resolve the Omnigent server URL ``attach`` should join.
+    Resolve the Goalrail server URL ``attach`` should join.
 
     Resolution order: an explicit ``--server`` value, then the configured
     ``server`` default, then a local Goalrail server already running in the
@@ -6209,7 +6209,7 @@ def _require_live_conversation(
     ``GET /v1/sessions/{id}`` and raises on a transport failure or any
     non-200 status.
 
-    :param base_url: Omnigent server base URL, e.g. ``"http://127.0.0.1:6767"``.
+    :param base_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:6767"``.
     :param conversation_id: Conversation id to attach to, e.g.
         ``"conv_abc123"``.
     :raises click.ClickException: When the server is unreachable or the
@@ -6317,7 +6317,7 @@ def attach(
 # `run` absorbs the legacy ``goalrail run`` subcommand. With an AGENT
 # argument it opens the interactive REPL on a freshly started session;
 # without AGENT it can launch a built-in harness directly via ``--harness``.
-# Both paths route through the same Omnigent server+REPL dispatcher.
+# Both paths route through the same Goalrail server+REPL dispatcher.
 @cli.command()
 @click.argument("target", required=False, metavar="[AGENT]")
 @click.option(
@@ -6461,7 +6461,7 @@ def run(
     auto_open_setting = _resolve_auto_open_conversation_setting(_global_cfg)
     auto_open_conversation = auto_open_setting if auto_open_setting is not None else prompt is None
 
-    # NOTE: the host daemon + Omnigent server are ensured inside ``run_chat``'s
+    # NOTE: the host daemon + Goalrail server are ensured inside ``run_chat``'s
     # non-URL branch (a URL ``target`` connects directly). ``--host`` is now
     # redundant (the daemon is always ensured) and kept only as a no-op.
     del register_host
@@ -6731,10 +6731,10 @@ def _resolve_host_server(server: str | None) -> str | None:
 
 def _daemon_base_url(record: _HostDaemonRecord) -> str | None:
     """
-    Resolve the Omnigent server URL for a daemon record.
+    Resolve the Goalrail server URL for a daemon record.
 
     :param record: Daemon registry record to inspect.
-    :returns: Omnigent server URL, e.g. ``"http://127.0.0.1:8123"``, or
+    :returns: Goalrail server URL, e.g. ``"http://127.0.0.1:8123"``, or
         ``None`` when a local daemon's server cannot be discovered.
     """
     if record.mode == "local":
@@ -6781,9 +6781,9 @@ def _host_http_json(
     timeout_s: float = 10.0,
 ) -> _HostHttpResult:
     """
-    Send one management request to an Omnigent server.
+    Send one management request to a Goalrail server.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param method: HTTP method, e.g. ``"GET"`` or ``"POST"``.
     :param path: Request path beginning with ``/``, e.g.
@@ -6923,7 +6923,7 @@ def _fetch_session_pages(
     """
     Fetch every available session page from a server.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param connected_only: When ``True``, ask the server for connected
         sessions only.
@@ -6995,7 +6995,7 @@ def _runner_online_map(
     """
     Resolve live runner connectivity for sessions.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param sessions: Session rows containing ``runner_id`` values.
     :returns: Map of ``runner_id`` to ``True`` / ``False``. ``None``
@@ -7033,7 +7033,7 @@ def _annotate_sessions_with_runner_online(
     """
     Add ``runner_online`` to session rows.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param sessions: Session rows returned by ``GET /v1/sessions``.
     :returns: Copies of the session rows with ``runner_online`` added.
@@ -7480,9 +7480,9 @@ def _stop_session_on_server(
     session_id: str,
 ) -> None:
     """
-    Stop one Omnigent session via the server lifecycle event API.
+    Stop one Goalrail session via the server lifecycle event API.
 
-    :param base_url: Omnigent server base URL, e.g.
+    :param base_url: Goalrail server base URL, e.g.
         ``"https://example.databricksapps.com"``.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :raises click.ClickException: If the server rejects the stop event.
@@ -7638,7 +7638,7 @@ def host_stop_session(
     :param ctx: Click context carrying group-level options.
     :param session_ids: Session ids to stop, e.g.
         ``["conv_abc123", "conv_def456"]``.
-    :param server: Omnigent server URL that owns the sessions, e.g.
+    :param server: Goalrail server URL that owns the sessions, e.g.
         ``"https://example.databricksapps.com"``. ``None`` falls back
         to config/local discovery.
     :param force: Continue after individual stop failures.
@@ -12105,7 +12105,7 @@ def login(server_url: str) -> None:
     if probe.status_code == 401:
         import contextlib as _contextlib
 
-        # 401 with non-JSON body — probably not an Omnigent server.
+        # 401 with non-JSON body — probably not a Goalrail server.
         # Suppress: we fall through to the OIDC path below which has
         # its own clearer error message.
         with _contextlib.suppress(ValueError):

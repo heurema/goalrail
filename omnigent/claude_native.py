@@ -1,7 +1,7 @@
 """Native Claude Code terminal wrapper for the Omnigent CLI.
 
 The wrapper deliberately treats Claude Code as a terminal-first
-program. It creates or binds an Omnigent session, launches ``claude``
+program. It creates or binds a Goalrail session, launches ``claude``
 through the existing runner terminal resource API, then attaches the
 local TTY to the existing terminal WebSocket protocol.
 """
@@ -219,7 +219,7 @@ class PreparedClaudeTerminal:
     """
     Prepared native Claude terminal attachment details.
 
-    :param session_id: Omnigent session/conversation id.
+    :param session_id: Goalrail session/conversation id.
     :param terminal_id: Terminal resource id to attach.
     :param bridge_dir: Filesystem bridge directory shared with
         Claude hooks/MCP helpers.
@@ -229,7 +229,7 @@ class PreparedClaudeTerminal:
         the terminal on exit, because the launcher that originally
         created it owns its lifecycle.
     :param cold_resumed: ``True`` when we launched a fresh terminal
-        against an existing Omnigent session (i.e. ``--resume <conv>`` with
+        against an existing Goalrail session (i.e. ``--resume <conv>`` with
         no live terminal). The forwarder must seek to the current
         transcript end in this case — when ``--resume <claude_sid>``
         is injected into the launch args, Claude reopens the prior
@@ -350,10 +350,10 @@ def run_claude_native(
     startup_profiler: StartupProfiler | None = None,
 ) -> None:
     """
-    Launch Claude Code in an Omnigent terminal and attach locally.
+    Launch Claude Code in a Goalrail terminal and attach locally.
 
-    :param server: Optional remote Omnigent server URL. ``None`` starts a
-        local Omnigent server using the existing chat server machinery.
+    :param server: Optional remote Goalrail server URL. ``None`` starts a
+        local Goalrail server using the existing chat server machinery.
     :param session_id: Optional existing session to bind and reuse,
         e.g. ``"conv_abc123"``. ``None`` creates a new bundled
         session.
@@ -443,7 +443,7 @@ def _resolve_session_id_for_resume(
 
     The picker is scoped to claude-native conversations.
 
-    :param base_url: Omnigent server base URL.
+    :param base_url: Goalrail server base URL.
     :param headers: HTTP auth headers; ``{}`` for local server.
     :param session_id: Explicit ``--resume <id>``; wins over the picker.
     :param resume_picker: ``True`` for bare ``--resume`` (no value).
@@ -517,9 +517,9 @@ def _align_working_directory_with_session(
       ``move`` when the Claude transcript can still be found;
       otherwise fail loud with a :class:`click.ClickException`.
 
-    :param session_id: Resolved Omnigent conversation id, e.g.
+    :param session_id: Resolved Goalrail conversation id, e.g.
         ``"conv_abc123"``.
-    :param base_url: Omnigent server base URL used to look up Claude's
+    :param base_url: Goalrail server base URL used to look up Claude's
         external session id for redirect, e.g. ``"http://127.0.0.1:6767"``.
         ``None`` means redirect is unavailable.
     :param headers: HTTP auth headers for *base_url*, e.g.
@@ -1058,9 +1058,9 @@ def _fetch_external_session_id_for_redirect(
     regular switch / leave behavior available; the later cold resume
     path still performs the authoritative server validation.
 
-    :param base_url: Omnigent server base URL, or ``None`` when unavailable.
-    :param headers: HTTP headers for the Omnigent request.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param base_url: Goalrail server base URL, or ``None`` when unavailable.
+    :param headers: HTTP headers for the Goalrail request.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Claude session id, e.g.
         ``"02857840-6362-408f-b41f-309e396ed7c6"``, or ``None``.
     """
@@ -1112,7 +1112,7 @@ def _redirect_claude_transcript_to_current_project(
     new file is safely in place; a Claude session id has exactly one
     local project owner.
 
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :param external_session_id: Claude session id / transcript stem,
         e.g. ``"02857840-6362-408f-b41f-309e396ed7c6"``.
     :param current: Current cwd, already resolved.
@@ -1324,7 +1324,7 @@ def _record_launch_for_fresh_session(session_id: str) -> None:
     missing record is just "no chdir prompt on resume", which is
     the same as a legacy session.
 
-    :param session_id: Newly created Omnigent conversation id, e.g.
+    :param session_id: Newly created Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :returns: None.
     """
@@ -1800,7 +1800,7 @@ def _run_with_local_server(
     startup_profiler: StartupProfiler | None = None,
 ) -> None:
     """
-    Start a local Omnigent server, launch Claude, and attach to it.
+    Start a local Goalrail server, launch Claude, and attach to it.
 
     :param spec_path: Generated Claude wrapper agent spec.
     :param session_id: Optional existing session id.
@@ -1959,7 +1959,7 @@ class _AttachOutcome(Enum):
 
     :cvar EXITED: The user quit (stdin EOF / Ctrl-D), the terminal is
         gone, or the WS closed for a reason that ends the session. The
-        launcher tears down the runner and Omnigent terminal resource.
+        launcher tears down the runner and Goalrail terminal resource.
     :cvar DETACHED: The user detached from tmux (close code 4405). The
         tmux session — and therefore Claude — is still running; the
         launcher adopts the runner so it outlives the local CLI and the
@@ -2007,9 +2007,9 @@ async def _attach_direct_tmux(
     server round-trip — the local TTY drives the runner's private tmux
     server over its Unix socket. ``TMUX`` is dropped from the child
     environment so a user who runs ``omnigent claude`` from inside
-    their own tmux can still attach to Omnigent' server. After the
+    their own tmux can still attach to the runner's private tmux server. After the
     ``tmux attach`` child exits, a ``has-session`` probe distinguishes a
-    user *detach* (session still alive → keep the Omnigent terminal resource
+    user *detach* (session still alive → keep the Goalrail terminal resource
     live) from Claude *exiting* (session gone → caller closes the
     resource), matching the WebSocket path's 4405-vs-4404 semantics.
 
@@ -2069,8 +2069,8 @@ async def _attach_with_transcript_forwarder(
     AP-side terminal resource is best-effort marked stopped (skipped
     on reattach — the launcher owns teardown).
 
-    :param base_url: Omnigent server base URL.
-    :param headers: Static HTTP auth headers for Omnigent requests. For
+    :param base_url: Goalrail server base URL.
+    :param headers: Static HTTP auth headers for Goalrail requests. For
         long-lived remote sessions, ``auth`` (not ``headers``) is the
         authoritative source of the bearer token so OAuth tokens
         refresh transparently per request.
@@ -2165,7 +2165,7 @@ async def _attach_with_transcript_forwarder(
             except Exception:  # noqa: BLE001 — cleanup must run regardless
                 # The forwarder is best-effort mirroring. A bug there
                 # (corrupt transcript JSONL, file-system error, anything
-                # uncaught in the parser) must not skip the Omnigent terminal
+                # uncaught in the parser) must not skip the Goalrail terminal
                 # stop call below — otherwise the web UI shows a phantom
                 # live terminal after the wrapper exits.
                 _logger.warning(
@@ -2173,7 +2173,7 @@ async def _attach_with_transcript_forwarder(
                     exc_info=True,
                 )
         # On detach the tmux session — and Claude — is still running, so
-        # the Omnigent terminal resource must stay live (the web UI keeps
+        # the Goalrail terminal resource must stay live (the web UI keeps
         # rendering it). Only mark it stopped on a real exit.
         if not prepared.reattached and outcome is not _AttachOutcome.DETACHED:
             active_session_id = read_active_session_id(prepared.bridge_dir) or prepared.session_id
@@ -2222,7 +2222,7 @@ async def _attach_with_reconnect(
         (not before the first). ``None`` disables reconnect; the
         loop returns after one ``attach`` call. Callback exceptions
         are logged and the loop still retries.
-    :param base_url: Omnigent server URL for the post-close terminal probe;
+    :param base_url: Goalrail server URL for the post-close terminal probe;
         ``None`` disables the probe.
     :param session_id: Session/conversation id for the probe path.
     :param terminal_id: Terminal resource id for the probe path.
@@ -2230,7 +2230,7 @@ async def _attach_with_reconnect(
         each reconnect reads the active session id so attaches follow
         ``/clear`` terminal transfers.
     :param active_session_id_reader: Optional callback that returns
-        the latest active Omnigent session id, e.g. ``"conv_new"``. This is
+        the latest active Goalrail session id, e.g. ``"conv_new"``. This is
         used by other terminal-first wrappers that share the reconnect
         loop but store active session state outside Claude's bridge.
     :param close_attach_on_terminal_gone: When ``True``, pass a
@@ -2281,7 +2281,7 @@ async def _attach_with_reconnect(
 
                     :param probe_session_id: Session id captured for
                         this attach attempt, e.g. ``"conv_abc123"``.
-                    :returns: ``True`` when the Omnigent terminal resource
+                    :returns: ``True`` when the Goalrail terminal resource
                         is definitively stopped.
                     """
                     return await _is_terminal_resource_gone(
@@ -2373,8 +2373,8 @@ async def _is_terminal_resource_gone(
     remains the authoritative kill signal handled in
     :func:`_attach_with_reconnect`.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: HTTP auth headers for the Omnigent server. Mutated in
+    :param base_url: Goalrail server base URL.
+    :param headers: HTTP auth headers for the Goalrail server. Mutated in
         place by the recover callback in remote mode; passing the
         same dict reference picks up the current bearer.
     :param session_id: Session/conversation id, e.g. ``"conv_abc123"``.
@@ -2525,7 +2525,7 @@ async def _wait_for_claude_terminal_ready(
     session, so the CLI waits for the resource to appear rather than
     creating it.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :param timeout_s: Max seconds to wait, e.g. ``60.0``.
     :returns: The terminal resource id, e.g. ``"terminal_claude_main"``.
@@ -2564,7 +2564,7 @@ async def _ensure_claude_terminal_on_runner(
     :func:`_wait_for_claude_terminal_ready` poll surfaces the clear error
     if the terminal still never appears.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :returns: None.
     """
@@ -2605,8 +2605,8 @@ async def _prepare_claude_terminal_via_daemon(
     runner's auto-create convention. See
     designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: Static HTTP auth headers for Omnigent requests.
+    :param base_url: Goalrail server base URL.
+    :param headers: Static HTTP auth headers for Goalrail requests.
     :param session_id: Existing session id to resume, or ``None`` to
         create a fresh session from *session_bundle*.
     :param session_bundle: Gzipped agent bundle, required when
@@ -2781,7 +2781,7 @@ def _run_with_remote_server(
     startup_profiler: StartupProfiler | None = None,
 ) -> None:
     """
-    Launch Claude on a remote Omnigent server via the connect daemon.
+    Launch Claude on a remote Goalrail server via the connect daemon.
 
     Ensures the connect daemon is running for *base_url*, then routes
     the runner launch through it (HOST_BY_DEFAULT): the daemon — not
@@ -2793,7 +2793,7 @@ def _run_with_remote_server(
     attaches (directly to the runner's tmux when it is local, else over
     the WebSocket PTY bridge). See designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
 
-    :param base_url: Remote Omnigent server base URL without a trailing
+    :param base_url: Remote Goalrail server base URL without a trailing
         slash, e.g. ``"https://example.databricks.com"``.
     :param spec_path: Generated Claude wrapper agent spec.
     :param session_id: Optional existing session id.
@@ -2924,7 +2924,7 @@ def _run_with_remote_server(
                 )
             except httpx.ConnectError as exc:
                 # The first server contact (session create) could not open a
-                # TCP connection — the Omnigent server at this URL isn't reachable.
+                # TCP connection — the Goalrail server at this URL isn't reachable.
                 # Fail loud with the URL instead of a raw httpx traceback.
                 raise click.ClickException(
                     f"Could not reach the Goalrail server at {base_url}. "
@@ -3019,8 +3019,8 @@ async def _prepare_claude_terminal(
     """
     Create/bind a session and launch its Claude terminal resource.
 
-    :param base_url: Omnigent server base URL.
-    :param headers: Static HTTP auth headers for the Omnigent server.
+    :param base_url: Goalrail server base URL.
+    :param headers: Static HTTP auth headers for the Goalrail server.
     :param session_id: Optional existing session id.
     :param runner_id: Runner id to bind to the session.
     :param session_bundle: Gzipped agent bundle for new sessions.
@@ -3200,10 +3200,10 @@ async def _fetch_claude_session_labels(
     session_id: str,
 ) -> dict[str, str]:
     """
-    Fetch labels for an existing Claude-native Omnigent session.
+    Fetch labels for an existing Claude-native Goalrail session.
 
-    :param client: HTTP client for the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: Session labels as a string dictionary. Empty when the
         session has no labels.
     :raises click.ClickException: If the session lookup fails.
@@ -3246,8 +3246,8 @@ async def _resolve_cold_resume_args(
     local transcript yields no resumable records (an empty transcript
     would make ``claude --resume`` exit instead of start).
 
-    :param client: HTTP client for the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g. ``"conv_abc123"``.
+    :param client: HTTP client for the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g. ``"conv_abc123"``.
     :returns: ``("--resume", "<claude_sid>")`` or ``()`` when no id is
         mapped or there is no resumable history.
     :raises click.ClickException: Conversation missing or not claude-native.
@@ -3319,7 +3319,7 @@ async def _ensure_local_claude_resume_transcript(
     """
     Refresh Claude Code's local JSONL transcript for cold resume.
 
-    Cross-machine resume has the Omnigent conversation and Claude external
+    Cross-machine resume has the Goalrail conversation and Claude external
     session id on the server, but not Claude Code's local
     ``~/.claude/projects/<cwd>/<sid>.jsonl`` file. Claude's
     ``--resume <sid>`` consults that local project transcript. The
@@ -3327,8 +3327,8 @@ async def _ensure_local_claude_resume_transcript(
     Omnigent remains the source of truth when a previous local Claude JSONL
     has diverged.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param external_session_id: Claude-native session id, e.g.
         ``"02857840-6362-408f-b41f-309e396ed7c6"``.
@@ -3389,8 +3389,8 @@ async def _fetch_all_session_items_for_claude_resume(
     """
     Fetch committed session items in chronological order.
 
-    :param client: HTTP client pointed at the Omnigent server.
-    :param session_id: Omnigent conversation id, e.g.
+    :param client: HTTP client pointed at the Goalrail server.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :returns: Flat API item dicts from
         ``GET /v1/sessions/{id}/items``.
@@ -3444,11 +3444,11 @@ def _claude_transcript_records_from_session_items(
     cwd: Path,
 ) -> list[dict[str, Any]]:
     """
-    Convert Omnigent session items into Claude Code transcript records.
+    Convert Goalrail session items into Claude Code transcript records.
 
     :param items: Flat Omnigent item dicts in chronological order, e.g.
         ``{"type": "message", "role": "user", "content": [...]}``.
-    :param session_id: Omnigent conversation id, e.g.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``. Used as part of deterministic synthetic
         UUID generation.
     :param external_session_id: Claude-native session id, e.g.
@@ -3599,7 +3599,7 @@ def _synthetic_claude_transcript_uuid(
     """
     Build a stable UUID for one synthesized transcript record.
 
-    :param session_id: Omnigent conversation id, e.g.
+    :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param external_session_id: Claude-native session id, e.g.
         ``"02857840-6362-408f-b41f-309e396ed7c6"``.
@@ -3731,7 +3731,7 @@ async def _create_claude_session(
     ``omnigent.wrapper = claude-code-native-ui`` label until the
     real title lands, so no server-side placeholder is needed.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param bundle: Gzipped Claude wrapper agent bundle.
     :param bridge_id: Opaque bridge id to write on the session labels,
         e.g. ``"bridge_abc123"``. ``None`` omits the label so every
@@ -3787,7 +3787,7 @@ async def _launch_claude_terminal(
     """
     Launch the server-backed Claude terminal resource.
 
-    :param client: HTTP client pointed at the Omnigent server. Its
+    :param client: HTTP client pointed at the Goalrail server. Its
         ``base_url`` and ``headers`` are reused as the
         ``PermissionRequest`` command hook's Omnigent URL and auth. The hook
         subprocess posts back to the same server with the same auth the
@@ -3839,7 +3839,7 @@ async def _find_running_claude_terminal(
     callers deterministically bind the current local runner and launch
     a fresh terminal.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session/conversation id, e.g.
         ``"conv_abc123"``.
     :returns: The deterministic Claude terminal id, or ``None`` when
@@ -3904,7 +3904,7 @@ async def _read_claude_terminal_tmux(
     missing metadata yields ``(None, None)``, which callers treat as
     "not locally attachable" and fall back to the WebSocket path.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Session/conversation id, e.g. ``"conv_abc123"``.
     :returns: The tmux coordinates, or ``_ClaudeTerminalTmux(None,
         None)`` when unavailable.
@@ -3946,10 +3946,10 @@ def _claude_terminal_request(
     :param command: Executable to run in the terminal resource.
     :param bridge_dir: Bridge directory shared with Claude's MCP
         server and the web-chat harness.
-    :param ap_server_url: Omnigent server base URL passed through to
+    :param ap_server_url: Goalrail server base URL passed through to
         :func:`augment_claude_args` so Claude's
         ``PermissionRequest`` command hook is registered against the
-        live Omnigent server.
+        live Goalrail server.
     :param ap_auth_headers: Auth headers for the
         ``PermissionRequest`` command hook.
     :param claude_config: Optional ucode-derived Claude Code config.
@@ -4041,7 +4041,7 @@ async def attach_local_terminal(
     terminal_gone_watch_interval_s: float = _CLAUDE_TERMINAL_GONE_WATCH_INTERVAL_S,
 ) -> bool:
     """
-    Attach the local TTY to an Omnigent terminal WebSocket.
+    Attach the local TTY to a Goalrail terminal WebSocket.
 
     :param attach_url: Fully-qualified ``ws://`` or ``wss://`` attach
         URL.
@@ -4052,7 +4052,7 @@ async def attach_local_terminal(
     :param stdout_fd: File descriptor to write terminal output to.
         ``None`` uses ``sys.stdout``.
     :param terminal_gone_probe: Optional async callback returning
-        ``True`` once the Omnigent terminal resource is stopped. When set,
+        ``True`` once the Goalrail terminal resource is stopped. When set,
         the client closes its WebSocket locally instead of waiting for
         the server close frame to propagate.
     :param terminal_gone_watch_interval_s: Poll interval for
@@ -4117,7 +4117,7 @@ async def _close_ws_when_terminal_gone(
     poll_interval_s: float,
 ) -> None:
     """
-    Close the client WebSocket when the Omnigent terminal resource stops.
+    Close the client WebSocket when the Goalrail terminal resource stops.
 
     This is a client-side fast-exit path for native Claude shutdown:
     the runner can mark the terminal stopped before the attach
