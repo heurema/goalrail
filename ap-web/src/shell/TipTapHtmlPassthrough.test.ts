@@ -136,7 +136,7 @@ describe("serializer escaping patch", () => {
 
 describe("image attribute preservation", () => {
   it('keeps alt="", height, and valign on raw <img> tags byte-for-byte', () => {
-    const md = '# <img src="docs/images/logo.svg" alt="" height="38" valign="middle" /> Omnigent';
+    const md = '# <img src="docs/images/logo.svg" alt="" height="38" valign="middle" /> Goalrail';
     expect(roundTrip(md)).toBe(md);
   });
 });

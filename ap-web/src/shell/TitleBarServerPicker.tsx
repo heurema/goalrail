@@ -38,12 +38,12 @@ function originOf(url: string): string | null {
  *
  * The shell hides the native title bar (titleBarStyle "hiddenInset"), so the
  * strip at the top of the window — normally the OS title — is blank canvas
- * owned by the web layer. This fills its center with "Omnigent — <host>" and
+ * owned by the web layer. This fills its center with "Goalrail — <host>" and
  * a chevron; clicking opens a menu of recently-connected servers (switching
  * re-points the whole window via the shell) plus "Connect to new server…",
  * which returns the window to the shell's setup page.
  *
- * When a thread is open, its title replaces the "Omnigent" brand label
+ * When a thread is open, its title replaces the "Goalrail" brand label
  * (becoming "<title> — <host>") so the window title tracks what the user
  * is looking at, like a document window.
  *
@@ -55,7 +55,7 @@ export function TitleBarServerPicker({
   threadTitle,
 }: {
   /** Title of the currently open thread, or null/undefined when no thread
-      is selected or it has no title yet (falls back to "Omnigent"). */
+      is selected or it has no title yet (falls back to "Goalrail"). */
   threadTitle?: string | null;
 }) {
   const [info, setInfo] = useState<ServerPickerInfo | null>(null);
@@ -90,7 +90,7 @@ export function TitleBarServerPicker({
           title="Switch server"
         >
           <span className="truncate font-medium">
-            {threadTitle || "Omnigent"} — {hostOf(info.currentOrigin)}
+            {threadTitle || "Goalrail"} — {hostOf(info.currentOrigin)}
           </span>
           <ChevronDownIcon className="size-3 shrink-0" />
         </DropdownMenuTrigger>

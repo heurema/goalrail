@@ -88,7 +88,7 @@ export function useSettingsRoute(): { inSettings: boolean; section: SettingsSect
 /**
  * Settings nav rendered INSIDE the sidebar card (replacing the conversation
  * list on /settings). Keeps the card chrome — a top row with "Back to
- * Omnigent" and the same collapse control the conversations view uses.
+ * Goalrail" and the same collapse control the conversations view uses.
  */
 export function SettingsSidebarBody({
   onNavClick,
@@ -114,7 +114,7 @@ export function SettingsSidebarBody({
           card), so dropping it changes nothing there. */}
           <Link to="/">
             <ArrowLeftIcon className="size-4" />
-            Back to Omnigent
+            Back to Goalrail
           </Link>
         </Button>
         <Tooltip>

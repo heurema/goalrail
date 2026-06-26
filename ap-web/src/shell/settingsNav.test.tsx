@@ -1,7 +1,7 @@
 // Tests for the Settings nav model + sidebar body (settingsNav).
 //
 // Covers the mobile-specific behavior: keyboard shortcuts is hidden on mobile
-// (max-md:hidden), and "Back to Omnigent" does NOT close the sidebar overlay
+// (max-md:hidden), and "Back to Goalrail" does NOT close the sidebar overlay
 // on a plain tap (no onNavClick) so mobile lands back on the conversation list
 // instead of the homepage. Section links still close it.
 
@@ -70,12 +70,12 @@ describe("SettingsSidebarBody", () => {
     expect(screen.getByTestId("settings-nav-archived").className).not.toContain("max-md:hidden");
   });
 
-  it("does NOT close the sidebar when 'Back to Omnigent' is tapped", () => {
+  it("does NOT close the sidebar when 'Back to Goalrail' is tapped", () => {
     // No onNavClick on the back link: on mobile the overlay stays open so the
     // sidebar swaps back to the conversation list rather than closing onto the
     // homepage behind it.
     const { onNavClick } = renderBody();
-    fireEvent.click(screen.getByRole("link", { name: /Back to Omnigent/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Back to Goalrail/ }));
     expect(onNavClick).not.toHaveBeenCalled();
   });
 

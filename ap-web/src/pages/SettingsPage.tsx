@@ -4,7 +4,7 @@
  * Renders into the AppShell chat outlet (see App.tsx) so the conversations
  * sidebar stays put when you enter settings — only the main area swaps to
  * this view. Inside, a section nav (left) drives a content panel (right),
- * modeled on a desktop-app settings window; a "← Back to Omnigent" link
+ * modeled on a desktop-app settings window; a "← Back to Goalrail" link
  * returns to the composer.
  *
  * Sections:
@@ -114,7 +114,7 @@ function AppearanceSection() {
   const mode = normalizeThemeMode(theme);
 
   return (
-    <Section title="Appearance" description="Choose how Omnigent looks on this device.">
+    <Section title="Appearance" description="Choose how Goalrail looks on this device.">
       {isEmbedded ? (
         <p className="text-sm text-muted-foreground">
           Appearance is controlled by the host application.

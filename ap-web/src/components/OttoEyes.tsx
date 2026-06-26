@@ -24,7 +24,7 @@ const EYE_CENTERS = [
 ];
 
 /**
- * The Omnigent starfish mascot (Otto) with eyes that track the cursor: each
+ * The Goalrail starfish mascot (Otto) with eyes that track the cursor: each
  * black pupil slides to the inner edge of its white eye on the side nearest
  * the pointer.
  *
@@ -101,7 +101,7 @@ export function OttoEyes({ className }: { className?: string }) {
       // The hero mascot is meaningful (not decorative), so OttoIcon's
       // decorative aria-hidden default is overridden with image semantics.
       role="img"
-      aria-label="Omnigent"
+      aria-label="Goalrail"
       aria-hidden={false}
     />
   );

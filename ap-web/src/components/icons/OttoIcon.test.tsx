@@ -50,11 +50,11 @@ describe("OttoIcon", () => {
   });
 
   it("lets callers override aria-hidden for the new-chat hero render", () => {
-    const { container } = render(<OttoIcon role="img" aria-label="Omnigent" aria-hidden={false} />);
+    const { container } = render(<OttoIcon role="img" aria-label="Goalrail" aria-hidden={false} />);
     const svg = container.querySelector("svg");
     // NewChatDialog renders the mascot as a meaningful image; the override
     // only works while the spread stays after the aria-hidden default.
     expect(svg).toHaveAttribute("aria-hidden", "false");
-    expect(svg).toHaveAttribute("aria-label", "Omnigent");
+    expect(svg).toHaveAttribute("aria-label", "Goalrail");
   });
 });
