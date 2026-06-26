@@ -29,7 +29,7 @@ from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from omnigent._env_compat import config_home_path
+from omnigent._env_compat import config_home_path, data_home_path
 from omnigent._platform import IS_WINDOWS, resolve_repo_symlink
 from omnigent._startup_profile import StartupProfiler
 from omnigent.cli_sandbox import lakebox as _lakebox_alias_group
@@ -1492,6 +1492,27 @@ def _runner_loopback_host(host: str) -> str:
 
 
 _HOST_PID_PATH = Path.home() / ".omnigent" / "host.pid"
+_DEFAULT_HOST_PID_PATH = _HOST_PID_PATH
+
+
+def _effective_host_pid_path() -> Path:
+    """
+    Return the runtime host daemon pidfile path.
+
+    Host daemon pid/log/registry files are runtime state. During the Goalrail
+    rename, explicit data-home overrides and existing ``~/.goalrail`` homes
+    should be honored, while tests that monkeypatch :data:`_HOST_PID_PATH`
+    keep their isolated path when no data-home override is present.
+    """
+    current_default_host_pid_path = Path.home() / ".omnigent" / "host.pid"
+    if (
+        os.environ.get("GOALRAIL_DATA_DIR")
+        or os.environ.get("OMNIGENT_DATA_DIR")
+        or _HOST_PID_PATH == _DEFAULT_HOST_PID_PATH
+        or current_default_host_pid_path == _HOST_PID_PATH
+    ):
+        return data_home_path() / "host.pid"
+    return _HOST_PID_PATH
 
 
 # host.pid records the daemon PID + the "target" it serves: a normalized
@@ -1690,12 +1711,13 @@ def _daemon_registry_dir() -> Path:
     Return the directory containing per-target daemon registry records.
 
     Tests patch :data:`_HOST_PID_PATH`, so derive the registry root from
-    the pidfile's parent instead of capturing ``Path.home()`` separately.
+    the effective pidfile's parent instead of capturing ``Path.home()``
+    separately.
 
     :returns: Registry directory path, e.g.
-        ``Path("~/.omnigent/daemons")``.
+        ``Path("<data-home>/daemons")``.
     """
-    return _HOST_PID_PATH.parent / "daemons"
+    return _effective_host_pid_path().parent / "daemons"
 
 
 def _daemon_record_path(target: str) -> Path:
@@ -1801,7 +1823,7 @@ def _delete_daemon_record(record: _HostDaemonRecord) -> None:
     legacy = _read_host_pid_file()
     if legacy is not None and legacy[1] == record.target:
         with contextlib.suppress(OSError):
-            _HOST_PID_PATH.unlink()
+            _effective_host_pid_path().unlink()
 
 
 def _legacy_daemon_record() -> _HostDaemonRecord | None:
@@ -2094,7 +2116,7 @@ def _spawn_host_daemon_process(
     :param env: Allowlisted daemon environment.
     :returns: Spawned process metadata, or ``None`` if spawn fails.
     """
-    log_dir = _HOST_PID_PATH.parent / "logs" / "host-daemon"
+    log_dir = _effective_host_pid_path().parent / "logs" / "host-daemon"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_fd, log_path = tempfile.mkstemp(prefix="daemon-", suffix=".log", dir=log_dir)
     log_fh = os.fdopen(log_fd, "wb")
@@ -2120,7 +2142,7 @@ def _persist_spawned_daemon(
     config_sig: str,
 ) -> None:
     """
-    Persist registry and legacy pidfile entries for a spawned daemon.
+    Persist registry and single-target pidfile entries for a spawned daemon.
 
     :param target: Normalized daemon target, e.g. ``"local"``.
     :param spawned: Spawned process metadata.
@@ -2140,7 +2162,7 @@ def _persist_spawned_daemon(
             config_sig=config_sig,
         )
     )
-    _HOST_PID_PATH.write_text(f"{spawned.pid}\n{target}\n")
+    _effective_host_pid_path().write_text(f"{spawned.pid}\n{target}\n")
 
 
 def _foreground_daemon_record(
@@ -2285,7 +2307,7 @@ def _ensure_host_daemon(server_url: str | None) -> bool:
     if not decision.config_changed and _local_daemon_serves_target(target, server_url):
         return False
 
-    _HOST_PID_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _effective_host_pid_path().parent.mkdir(parents=True, exist_ok=True)
     mode_args = ["--local"] if not server_url else ["--server", server_url]
     args = [sys.executable, "-m", "omnigent.host._daemon_entry", *mode_args]
     spawned = _spawn_host_daemon_process(
@@ -2357,10 +2379,11 @@ def _read_host_pid_file() -> tuple[int, str] | None:
 
     :returns: ``(pid, server_url)`` if well-formed, ``None`` otherwise.
     """
-    if not _HOST_PID_PATH.exists():
+    path = _effective_host_pid_path()
+    if not path.exists():
         return None
     try:
-        lines = _HOST_PID_PATH.read_text().strip().splitlines()
+        lines = path.read_text().strip().splitlines()
         if len(lines) < 2:
             return None
         return int(lines[0]), lines[1]

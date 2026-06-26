@@ -5,15 +5,50 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
+from omnigent.runner import identity as identity_mod
 from omnigent.runner.identity import (
     RUNNER_AUTH_SECRET_ENV_VARS,
+    RUNNER_ID_ENV_VAR,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
+    get_stable_runner_id,
     strip_runner_auth_secrets,
     token_bound_runner_id,
 )
+
+
+def test_default_runner_id_path_uses_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The default runner id cache follows the effective runtime data home."""
+    data_home = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+
+    assert identity_mod._default_runner_id_path() == data_home / "runners" / "runner_id"
+
+
+def test_get_stable_runner_id_writes_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Runner id creation writes under the effective runtime data home."""
+    data_home = tmp_path / "goalrail-data"
+    legacy_home = tmp_path / "home"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv(RUNNER_ID_ENV_VAR, raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+
+    runner_id = get_stable_runner_id()
+
+    assert runner_id.startswith("runner_")
+    assert (data_home / "runners" / "runner_id").read_text() == runner_id
+    assert not (legacy_home / ".omnigent" / "runners" / "runner_id").exists()
 
 
 def test_token_bound_runner_id_is_stable_and_token_scoped() -> None:

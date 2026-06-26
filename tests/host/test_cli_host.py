@@ -330,6 +330,45 @@ def test_host_daemon_alive_returns_false_for_dead_pid(
         assert _host_daemon_alive() is False
 
 
+def test_ensure_host_daemon_uses_goalrail_data_dir_for_runtime_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host daemon pid, registry, and log files follow the runtime data home."""
+    import omnigent.cli as cli_mod
+
+    data_home = tmp_path / "goalrail-data"
+    legacy_home = tmp_path / "home"
+    legacy_pid_path = legacy_home / ".omnigent" / "host.pid"
+
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(legacy_home))
+    monkeypatch.setattr(cli_mod, "_HOST_PID_PATH", legacy_pid_path)
+    monkeypatch.setattr(cli_mod, "_load_existing_host_id", lambda: "host_abc")
+
+    def _fake_popen(args: list[str], **kwargs: object) -> _SpawnedDaemon:
+        """Return a fake daemon process."""
+        del args, kwargs
+        return _SpawnedDaemon(pid=4242)
+
+    monkeypatch.setattr(cli_mod.subprocess, "Popen", _fake_popen)
+
+    cli_mod._ensure_host_daemon("http://localhost:8000")
+
+    pid_path = data_home / "host.pid"
+    assert pid_path.read_text().splitlines() == ["4242", "http://localhost:8000"]
+
+    registry_files = list((data_home / "daemons").glob("*.json"))
+    assert len(registry_files) == 1
+    record = json.loads(registry_files[0].read_text())
+    assert record["target"] == "http://localhost:8000"
+
+    log_name = str(record["log_path"])
+    assert log_name.startswith(str(data_home / "logs" / "host-daemon"))
+    assert not (legacy_home / ".omnigent").exists()
+
+
 def test_ensure_host_daemon_writes_pid_file(
     tmp_path: Path,
 ) -> None:

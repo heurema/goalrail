@@ -9,6 +9,8 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
+from omnigent._env_compat import data_home_path
+
 RUNNER_ID_ENV_VAR = "OMNIGENT_RUNNER_ID"
 RUNNER_PARENT_PID_ENV_VAR = "OMNIGENT_RUNNER_PARENT_PID"
 # Signal the CLI sends to "adopt" a runner: stop watching the parent
@@ -78,8 +80,8 @@ def get_stable_runner_id() -> str:
     Parent processes may set :data:`RUNNER_ID_ENV_VAR` when they
     need child server and runner processes to agree on one id before
     either process touches the on-disk cache. Without that override,
-    the id is loaded from ``~/.omnigent/runners/runner_id`` or
-    created there on first use.
+    the id is loaded from the effective runtime data home or created
+    there on first use.
 
     :returns: A stable runner id, e.g.
         ``"runner_0123456789abcdef"``.
@@ -119,7 +121,7 @@ def load_or_create_runner_id(path: Path) -> str:
     """Load a runner id from *path*, creating one if needed.
 
     :param path: Path to the runner id cache file, e.g.
-        ``Path.home() / ".omnigent" / "runners" / "runner_id"``.
+        ``Path("<data-home>") / "runners" / "runner_id"``.
     :returns: The cached or newly-created runner id.
     :raises RuntimeError: If the cache file exists but is empty.
     """
@@ -137,6 +139,6 @@ def load_or_create_runner_id(path: Path) -> str:
 def _default_runner_id_path() -> Path:
     """Return the default runner id cache path.
 
-    :returns: ``~/.omnigent/runners/runner_id``.
+    :returns: ``<data-home>/runners/runner_id``.
     """
-    return Path.home() / ".omnigent" / "runners" / "runner_id"
+    return data_home_path() / "runners" / "runner_id"
