@@ -170,13 +170,15 @@ Team Pilot Readiness addendum:
 105. `docs/reference/start-assistant/`
 106. `.goalrail/work/`
 107. `.goalrail/knowledge/`
-108. `.goalrail/public-kb/manifest.yaml`
-109. `.punk/publishing.toml`
-110. `.goalrail/flows/`
-111. `.goalrail/evals/`
-112. `docs/ops/PUBLISHING_MIGRATION.md`
-113. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
-114. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
+108. `.heurema/rdlab/`
+109. `.heurema/debate/`
+110. `.goalrail/public-kb/manifest.yaml`
+111. `.punk/publishing.toml`
+112. `.goalrail/flows/`
+113. `.goalrail/evals/`
+114. `docs/ops/PUBLISHING_MIGRATION.md`
+115. `docs/ops/PUBLISHING_RESOLVER_CONTRACT.md`
+116. `docs/ops/PUBLISHING_CONTENT_OPERATING_LAYER.md`
 
 
 ## Roles of the main docs

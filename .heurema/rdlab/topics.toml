@@ -1,0 +1,20 @@
+[[topics]]
+id = "omnigent-rewrite"
+title = "Omnigent-based Goalrail rewrite"
+priority = "high"
+freshness = "daily"
+status = "active"
+
+[[topics]]
+id = "goalrail-product-canon"
+title = "Goalrail product canon and rewrite boundary checks"
+priority = "high"
+freshness = "weekly"
+status = "active"
+
+[[topics]]
+id = "execution-control-plane"
+title = "Execution control plane, proof, and verification semantics"
+priority = "medium"
+freshness = "weekly"
+status = "active"

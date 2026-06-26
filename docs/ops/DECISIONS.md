@@ -2681,3 +2681,34 @@ Rationale:
 What this prevents:
 - scope creep into source upload, clone/provider behavior, arbitrary execution,
   proof, or fake "repo understood" claims
+
+## D-0098 — Heurema research and debate tooling use .heurema overlay
+Date: 2026-06-26
+Status: accepted
+Review after: 2026-08-26
+
+Decision:
+- Goalrail may keep project-local Heurema research and debate support under
+  `.heurema/`.
+- `.heurema/rdlab/` is the R&D Lab OS project-local layer for research sources,
+  topics, provider routing, run artifacts, decisions, ideas, experiments, and
+  promoted memory candidates.
+- `.heurema/debate/` is the Debate project-local layer for panel configuration
+  and personas used to evaluate bounded Goalrail / Omnigent rewrite decisions.
+- These overlays are support tooling only. They do not create Goalrail runtime,
+  server API, runner, gate, proof, provider integration, analytics, CRM, or
+  public product behavior.
+- `.goalrail/` remains the Goalrail product working overlay, and `.punk/`
+  remains the publishing binding overlay.
+
+Rationale:
+- The Omnigent-based rewrite needs evidence-first research and structured
+  architecture debate without scattering multiple hidden tool directories at
+  repository root.
+- Keeping both tools under `.heurema/` makes their scope explicit and keeps
+  product truth in `docs/product/` and operating truth in `docs/ops/`.
+
+What this prevents:
+- treating research runs or debate outputs as product canon by default
+- adding hidden `.rdlab/` or `.debate/` root directories
+- confusing support-tool configuration with implemented Goalrail runtime

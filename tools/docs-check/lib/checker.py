@@ -64,6 +64,7 @@ ALLOWED_TOP_LEVEL_PATHS = {
     ".github",
     ".gitignore",
     ".goalrail",
+    ".heurema",
     ".mcp.json",
     ".punk",
     "AGENTS.md",

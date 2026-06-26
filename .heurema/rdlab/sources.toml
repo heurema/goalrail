@@ -1,0 +1,71 @@
+[[sources]]
+id = "goalrail-readme"
+type = "local_file"
+path = "README.md"
+watch = true
+mode = "internal_doc"
+trust = "A"
+
+[[sources]]
+id = "goalrail-product-concept"
+type = "local_file"
+path = "docs/product/GOALRAIL_PRODUCT_CONCEPT.md"
+watch = true
+mode = "product_canon"
+trust = "A"
+
+[[sources]]
+id = "goalrail-mvp-blueprint"
+type = "local_file"
+path = "docs/product/GOALRAIL_MVP_BLUEPRINT.md"
+watch = true
+mode = "architecture_canon"
+trust = "A"
+
+[[sources]]
+id = "goalrail-build-roadmap"
+type = "local_file"
+path = "docs/product/GOALRAIL_BUILD_ROADMAP.md"
+watch = true
+mode = "ops_plan"
+trust = "A"
+
+[[sources]]
+id = "goalrail-status"
+type = "local_file"
+path = "docs/ops/STATUS.md"
+watch = true
+mode = "ops_status"
+trust = "A"
+
+[[sources]]
+id = "goalrail-repo-structure"
+type = "local_file"
+path = "docs/ops/REPO_STRUCTURE.md"
+watch = true
+mode = "ops_reference"
+trust = "A"
+
+[[sources]]
+id = "omnigent-upstream"
+type = "github_repo"
+url = "https://github.com/omnigent-ai/omnigent"
+watch = false
+mode = "upstream_code_repo"
+trust = "B"
+
+[[sources]]
+id = "rd-lab-os"
+type = "github_repo"
+url = "https://github.com/heurema/rd-lab-os"
+watch = false
+mode = "tooling_repo"
+trust = "B"
+
+[[sources]]
+id = "debate"
+type = "github_repo"
+url = "https://github.com/heurema/debate"
+watch = false
+mode = "tooling_repo"
+trust = "B"

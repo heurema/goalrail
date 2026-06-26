@@ -1,0 +1,20 @@
+[project]
+name = "goalrail"
+type = "product-rewrite-incubator"
+description = "Goalrail research layer for the Omnigent-based rewrite, product canon checks, and implementation decision support."
+lab_root = ".heurema/rdlab"
+
+[workflow]
+default_run_profile = "project_lab"
+memory_policy = "promote_verified_only"
+external_source_policy = "required_before_synthesis"
+critic_policy = "independent_provider_or_explicit_single_agent_limit"
+provider_router = "subscription_only"
+idea_generation = true
+change_tracking = true
+
+[quality]
+require_evidence_ledger = true
+require_source_modes = true
+require_external_source_pass = true
+require_critic_review = true

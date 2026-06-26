@@ -1,0 +1,77 @@
+[router]
+mode = "subscription_only"
+default_task = "synthesis"
+require_subscription_only = true
+
+[routing]
+research = ["agy-default", "claude-sonnet", "vibe-default", "codex-default", "gemini-auto"]
+synthesis = ["agy-default", "claude-sonnet", "vibe-default", "codex-default"]
+critic = ["agy-default", "vibe-default", "claude-sonnet", "codex-default", "gemini-auto"]
+implementation = ["codex-default", "agy-default", "claude-sonnet", "vibe-default"]
+fast = ["agy-default", "vibe-default", "claude-haiku"]
+
+[[providers]]
+id = "claude-sonnet"
+provider = "anthropic"
+adapter = "claude"
+command = "claude"
+model = "sonnet"
+enabled = true
+subscription_only = true
+roles = ["research", "synthesis", "critic", "implementation"]
+notes = "Claude Code subscription CLI. API-key environment is unset by the adapter."
+
+[[providers]]
+id = "claude-haiku"
+provider = "anthropic"
+adapter = "claude"
+command = "claude"
+model = "haiku"
+enabled = true
+subscription_only = true
+roles = ["fast", "critic"]
+notes = "Lower-cost Claude Code subscription route for quick checks."
+
+[[providers]]
+id = "vibe-default"
+provider = "mistral"
+adapter = "vibe"
+command = "vibe"
+model = ""
+enabled = true
+subscription_only = true
+roles = ["research", "synthesis", "critic", "fast"]
+notes = "Mistral Vibe subscription CLI using the user's active Vibe model."
+
+[[providers]]
+id = "agy-default"
+provider = "agy"
+adapter = "agy"
+command = "agy"
+model = ""
+enabled = true
+subscription_only = true
+roles = ["research", "synthesis", "critic", "fast"]
+notes = "Agy subscription CLI using the user's configured default model."
+
+[[providers]]
+id = "codex-default"
+provider = "openai"
+adapter = "codex"
+command = "codex"
+model = ""
+enabled = false
+subscription_only = true
+roles = ["research", "synthesis", "critic", "implementation"]
+notes = "Codex CLI subscription route. Disabled by default to avoid recursive Codex runs unless explicitly enabled."
+
+[[providers]]
+id = "gemini-auto"
+provider = "google"
+adapter = "gemini"
+command = "gemini"
+model = "auto-gemini-3"
+enabled = false
+subscription_only = true
+roles = ["research", "critic"]
+notes = "Gemini CLI subscription route. Enable only after provider_router.py doctor --probe passes in this location/account."

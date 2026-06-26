@@ -39,6 +39,7 @@ Use it together with:
 | `.punk/` | Punk-owned overlay | You add the committed publishing binding manifest here; runtime workspace is external |
 | `.github/` | GitHub workflows and repository templates | You add CI or GitHub-native repository process files |
 | `.codex/` | Agent routing references | You adjust thin local agent routing, not project truth |
+| `.heurema/` | Heurema project-local tooling overlay | You add R&D Lab OS or Debate project-local configuration, personas, sources, topics, and run state |
 | root files | Public/legal/community entry points and minimal repo config | You update existing root policy or entry files only |
 
 ## Placement rules
@@ -81,6 +82,8 @@ Use it together with:
 | Brand system docs | `docs/brand/` |
 | Design screenshots or visual references | `docs/reference/design/` |
 | Research that is not canon yet | `docs/research/` or `.goalrail/knowledge/`, depending on durability |
+| R&D Lab OS project-local configuration and run state | `.heurema/rdlab/` |
+| Debate project-local personas and panel configuration | `.heurema/debate/` |
 | Docs-check fixtures and schemas | `tools/docs-check/fixtures/` and `tools/docs-check/schemas/` |
 | Repository hygiene commands | `scripts/` |
 | Start assistant public KB helper scripts | `scripts/start-assistant/` |
@@ -116,6 +119,9 @@ Forbidden root locations by default:
 - `node_modules/`, `dist/`, `output/`
 - `design/`, `evals/`, `schemas/`
 - `knowledge/`, `work/`, `flows/`, `publishing/`
+
+Heurema project-local tooling lives under `.heurema/`, not separate tool-owned
+root directories such as `.rdlab/` or `.debate/`.
 
 ## Local staged-files check
 
