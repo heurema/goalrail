@@ -16,6 +16,7 @@ from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
+import tomllib
 import yaml
 from click import ClickException
 from click.testing import CliRunner, Result
@@ -121,6 +122,22 @@ def test_python_module_entrypoint_uses_unified_click_cli() -> None:
     assert "Commands:" in result.stdout
     assert "run" in result.stdout and "Attach the REPL to a LIVE session" in result.stdout
     assert "Omnigent quick chat" not in result.stdout
+
+
+def test_goalrail_console_script_aliases_unified_cli_entrypoint() -> None:
+    """
+    The Goalrail CLI name should be additive, not a replacement.
+
+    ``omnigent`` and ``omni`` must remain installed while the new public
+    ``goalrail`` command points at the same click entrypoint.
+    """
+    pyproject_path = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    scripts = pyproject["project"]["scripts"]
+
+    assert scripts["omnigent"] == "omnigent.cli:main"
+    assert scripts["omni"] == scripts["omnigent"]
+    assert scripts["goalrail"] == scripts["omnigent"]
 
 
 @pytest.mark.parametrize(

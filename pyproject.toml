@@ -245,9 +245,9 @@ dev = [
 # Unified entry point. `omnigent` is the click-based CLI that absorbs
 # the legacy argparse commands from `omnigent/inner/cli.py` plus the
 # omnigent `ap` subcommands. See designs/UNIFICATION.md § CLI
-# absorption. `omni` is installed as a short alias — both resolve to
-# the same entry point. (No former-name aliases: only `omnigent` and
-# `omni` ship, internal and OSS alike.)
+# absorption. `goalrail` is the public rename alias and `omni` remains
+# installed as a short alias — all resolve to the same entry point.
+goalrail = "omnigent.cli:main"
 omnigent = "omnigent.cli:main"
 omni = "omnigent.cli:main"
 
