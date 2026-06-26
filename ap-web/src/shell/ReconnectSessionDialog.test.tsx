@@ -4,13 +4,13 @@
 // Clone (the shared ForkSessionForm).
 //
 // What we lock:
-//   1. host_offline owner → `omnigent host` (no --resume / YAML),
+//   1. host_offline owner → `goalrail host` (no --resume / YAML),
 //      Reconnect tab is the default.
 //   2. host_offline non-owner → no command at all (only the owner can
 //      reach the host machine), Clone tab is the default.
 //   3. local_stranded → wrapper-specific resume command, with the conv
 //      id + server URL substituted.
-//   4. claude-native local_stranded → `omnigent claude --resume`.
+//   4. claude-native local_stranded → `goalrail claude --resume`.
 //   5. The Clone tab embeds ForkSessionForm with the source props, and
 //      its onClose closes the dialog.
 //   6. open={false} renders nothing.
@@ -54,13 +54,13 @@ afterEach(() => {
 });
 
 describe("buildReconnectCommand", () => {
-  it("emits `omnigent host` for host_offline (no --resume, no YAML)", () => {
+  it("emits `goalrail host` for host_offline (no --resume, no YAML)", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_host1",
       serverUrl: "https://example.databricksapps.com",
       state: "host_offline",
     });
-    expect(cmd).toContain("omnigent host");
+    expect(cmd).toContain("goalrail host");
     expect(cmd).toContain("--server https://example.databricksapps.com");
     // The --profile flag was removed from the CLI; emitting it here would
     // hand users a command that errors with "No such option".
@@ -71,7 +71,7 @@ describe("buildReconnectCommand", () => {
     expect(cmd).not.toContain("path/to/agent.yaml");
   });
 
-  it("prefers `omnigent host` for a host_offline claude-native session", () => {
+  it("prefers `goalrail host` for a host_offline claude-native session", () => {
     // A claude-native session can still be host-bound; while the host is
     // down the host relaunches whatever runtime it needs, so host wins.
     const cmd = buildReconnectCommand({
@@ -80,8 +80,8 @@ describe("buildReconnectCommand", () => {
       wrapper: "claude-code-native-ui",
       state: "host_offline",
     });
-    expect(cmd).toContain("omnigent host");
-    expect(cmd).not.toContain("omnigent claude");
+    expect(cmd).toContain("goalrail host");
+    expect(cmd).not.toContain("goalrail claude");
   });
 
   it("emits the generic run form for a local_stranded session", () => {
@@ -90,24 +90,24 @@ describe("buildReconnectCommand", () => {
       serverUrl: "https://example.databricksapps.com",
       state: "local_stranded",
     });
-    expect(cmd).toContain("omnigent run path/to/agent.yaml");
+    expect(cmd).toContain("goalrail run path/to/agent.yaml");
     expect(cmd).toContain("--resume conv_abc123");
     expect(cmd).toContain("--server https://example.databricksapps.com");
     expect(cmd).not.toContain("--profile");
   });
 
-  it("emits `omnigent claude --resume` for a claude-native local_stranded session", () => {
+  it("emits `goalrail claude --resume` for a claude-native local_stranded session", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_claude1",
       serverUrl: "https://x.databricksapps.com",
       wrapper: "claude-code-native-ui",
       state: "local_stranded",
     });
-    expect(cmd).toContain("omnigent claude");
+    expect(cmd).toContain("goalrail claude");
     expect(cmd).toContain("--resume conv_claude1");
     // No agent YAML for claude-native — the wrapper has none.
     expect(cmd).not.toContain("path/to/agent.yaml");
-    expect(cmd).not.toContain("omnigent run");
+    expect(cmd).not.toContain("goalrail run");
   });
 
   it("falls back to the run form for an unknown wrapper (local_stranded)", () => {
@@ -117,8 +117,8 @@ describe("buildReconnectCommand", () => {
       wrapper: "some-future-wrapper",
       state: "local_stranded",
     });
-    expect(cmd).toContain("omnigent run path/to/agent.yaml");
-    expect(cmd).not.toContain("omnigent claude");
+    expect(cmd).toContain("goalrail run path/to/agent.yaml");
+    expect(cmd).not.toContain("goalrail claude");
   });
 });
 
@@ -161,7 +161,7 @@ describe("<ReconnectSessionDialog />", () => {
     renderDialog({ state: "host_offline", isOwner: true });
     expect(screen.getByText("Host is offline")).toBeInTheDocument();
     const block = screen.getByTestId("reconnect-session-command");
-    expect(block.textContent).toContain("omnigent host");
+    expect(block.textContent).toContain("goalrail host");
     // The clone form stays mounted (forceMount) but its panel is the
     // inactive one while the Reconnect tab is the default.
     expect(clonePanelState()).toBe("inactive");
@@ -195,7 +195,7 @@ describe("<ReconnectSessionDialog />", () => {
     // local_stranded isn't about a host machine — whoever started it can
     // relaunch, so the command shows regardless of ownership.
     const block = screen.getByTestId("reconnect-session-command");
-    expect(block.textContent).toContain("omnigent run path/to/agent.yaml");
+    expect(block.textContent).toContain("goalrail run path/to/agent.yaml");
     expect(block.textContent).toContain("--resume conv_abc123");
     expect(screen.getByText("Agent disconnected")).toBeInTheDocument();
     // The description testid pins the visible tab copy (the same string
@@ -211,7 +211,7 @@ describe("<ReconnectSessionDialog />", () => {
       wrapper: "claude-code-native-ui",
     });
     const block = screen.getByTestId("reconnect-session-command");
-    expect(block.textContent).toContain("omnigent claude");
+    expect(block.textContent).toContain("goalrail claude");
     expect(block.textContent).not.toContain("path/to/agent.yaml");
   });
 

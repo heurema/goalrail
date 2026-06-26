@@ -1,8 +1,8 @@
-// Omnigent desktop shell — Electron edition.
+// Goalrail desktop shell — Electron edition.
 //
 // A deliberately thin Electron wrapper around the existing web UI. It bundles
 // ONLY a tiny "connect to server" setup page; the real application UI is the
-// SPA served by the Omnigent server itself. At startup we read a persisted
+// SPA served by the Goalrail server itself. At startup we read a persisted
 // server URL and, if present, load it directly so the user lands in the same
 // UI they'd see in a browser — now with OS-native notifications and a
 // dock/taskbar badge (wired up on the web side via `src/lib/nativeBridge.ts`,
@@ -599,14 +599,14 @@ function rememberRecentServer(settings, url) {
 
 /**
  * CSS that hides the Databricks workspace navigation chrome around a
- * workspace-hosted Omnigent SPA.
+ * workspace-hosted Goalrail SPA.
  *
  * On a workspace the SPA is mounted as a workspace *page*, so Databricks wraps
  * it in its top-nav shell (the dark bar with the workspace switcher). In a
- * dedicated desktop window that chrome is just noise. We promote Omnigent's
+ * dedicated desktop window that chrome is just noise. We promote Goalrail's
  * own root — ``.omnigent-app``, the wrapper ap-web's embed entry sets
  * (``ap-web/src/embed.tsx``) — to a full-viewport overlay so it paints over
- * the workspace bar. Keying on Omnigent's wrapper (defined in THIS repo)
+ * the workspace bar. Keying on Goalrail's wrapper (defined in THIS repo)
  * rather than the monolith-owned, unstable workspace nav markup keeps this
  * from silently breaking when Databricks reshuffles its chrome; on a
  * standalone (non-embed) build there is no ``.omnigent-app``, so the rule is
@@ -754,7 +754,7 @@ function createWindow(targetUrl, opts = {}) {
     ...(savedBounds ? { x: savedBounds.x, y: savedBounds.y } : {}),
     minWidth: 720,
     minHeight: 480,
-    title: "Omnigent",
+    title: "Goalrail",
     backgroundColor: "#0b0b0c",
     // macOS: hide the native title bar but keep the traffic lights, inset
     // into the content. The web layer provides the drag surface + clearance
@@ -855,9 +855,9 @@ function createWindow(targetUrl, opts = {}) {
     },
   );
 
-  // Databricks workspace-hosted Omnigent renders inside the workspace's
+  // Databricks workspace-hosted Goalrail renders inside the workspace's
   // top-nav chrome (the SPA is a workspace page). On a dedicated desktop
-  // window, hide it by overlaying Omnigent's own root — see
+  // window, hide it by overlaying Goalrail's own root — see
   // WORKSPACE_CHROME_HIDE_CSS. Re-applied on every full load (a server switch
   // is a fresh document); the SPA's own client-side routing keeps the same
   // document, so the injected stylesheet persists across in-app navigation.
@@ -1225,7 +1225,7 @@ function buildMenu() {
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [];
 
-  // macOS app menu (About/Services/Hide/Quit), named "Omnigent" via the
+  // macOS app menu (About/Services/Hide/Quit), named "Goalrail" via the
   // app name set below. Non-mac platforms have no app menu.
   if (isMac) {
     template.push({ role: "appMenu" });
@@ -1381,7 +1381,7 @@ function registerIpc() {
     }
     const normalized = normalizeUrl(url); // throws → rejects → setup page shows error
     // Bare Databricks workspace URLs serve a 404 at the root; expand them to
-    // the Omnigent UI mount so the user can paste just the workspace host.
+    // the Goalrail UI mount so the user can paste just the workspace host.
     const target = await expandDatabricksWorkspaceUrl(normalized);
     const win = BrowserWindow.fromWebContents(event.sender) ?? activeWindow();
     // Multi-server windows connect without touching the saved server —
@@ -1618,7 +1618,7 @@ function registerIpc() {
 // ---------------------------------------------------------------------------
 
 // Name drives the macOS app menu title and the notification source name.
-app.setName("Omnigent");
+app.setName("Goalrail");
 
 // Single-instance: focus the existing window instead of opening a second.
 const gotLock = app.requestSingleInstanceLock();

@@ -120,7 +120,7 @@ export function AddAgentDialog({
             {agentList.length === 0 ? (
               <p data-testid="add-agent-empty" className="text-xs text-muted-foreground">
                 No agents available on this server. Register one with{" "}
-                <code className="font-mono">omnigent server --agent</code>.
+                <code className="font-mono">goalrail server --agent</code>.
               </p>
             ) : (
               agentList.map((agent) => (

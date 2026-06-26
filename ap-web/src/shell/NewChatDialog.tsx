@@ -399,7 +399,7 @@ export async function describeCreateError(res: Response): Promise<string> {
  *
  * Warning-only signal for the agent picker: `true` only when the host
  * explicitly reported the harness as not ready (CLI missing or no
- * default credential — see `omnigent setup`). A missing readiness map
+ * default credential — see `goalrail setup`). A missing readiness map
  * (older host build) or an unknown harness yields `false`, so unknown
  * never warns; the host re-checks authoritatively at launch time.
  *
@@ -2076,7 +2076,7 @@ export function NewChatLandingScreen() {
               <TriangleAlertIcon className="size-3.5 shrink-0" />
               <span>
                 {selectedAgent?.display_name} isn&apos;t configured on {harnessWarningHost?.name} —
-                run <code>omnigent setup</code> on that machine.
+                run <code>goalrail setup</code> on that machine.
               </span>
             </p>
           )}
