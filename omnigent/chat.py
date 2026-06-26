@@ -46,6 +46,7 @@ from omnigent_client._events import (
 )
 from rich.console import Console
 
+from omnigent._env_compat import data_home_path
 from omnigent._wrapper_labels import (
     CLAUDE_NATIVE_WRAPPER_VALUE as _CLAUDE_NATIVE_WRAPPER_LABEL_VALUE,
 )
@@ -3395,9 +3396,9 @@ def _omnigent_log_dir() -> Path:
     same per-user state root as session transcripts and CLI
     diagnostics, rather than under the system temp directory.
 
-    :returns: ``~/.omnigent/logs``, created if needed.
+    :returns: The effective runtime log directory, created if needed.
     """
-    log_dir = Path.home() / ".omnigent" / "logs"
+    log_dir = data_home_path() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
 
@@ -3406,11 +3407,10 @@ def _omnigent_persistent_dir() -> Path:
     """
     Resolve the persistent omnigent data directory.
 
-    Honors ``OMNIGENT_DATA_DIR`` (the data-isolation knob a worktree sets
-    to avoid sharing ``~/.omnigent/chat.db``), else lives at
-    ``~/.omnigent`` alongside the native paths ``sessions/`` and ``logs/``
-    (see designs/RUN_OMNIGENT_SESSION_RESUMPTION.md). Created on first access;
-    subsequent calls are idempotent.
+    Honors ``GOALRAIL_DATA_DIR`` and ``OMNIGENT_DATA_DIR`` (the
+    data-isolation knob a worktree sets to avoid sharing
+    ``~/.omnigent/chat.db``), else lives under the effective runtime data
+    home. Created on first access; subsequent calls are idempotent.
 
     Must resolve identically to
     :func:`omnigent.host.local_server._local_data_dir` — the local server
@@ -3422,8 +3422,7 @@ def _omnigent_persistent_dir() -> Path:
         guaranteed to exist along with the ``artifacts/``
         subdir.
     """
-    override = os.environ.get("OMNIGENT_DATA_DIR")
-    ap_dir = Path(override).expanduser() if override else Path.home() / ".omnigent"
+    ap_dir = data_home_path()
     ap_dir.mkdir(parents=True, exist_ok=True)
     (ap_dir / "artifacts").mkdir(exist_ok=True)
     return ap_dir

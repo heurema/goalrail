@@ -32,6 +32,8 @@ _CANONICAL_PREFIX = "GOALRAIL_"
 _COMPAT_PREFIX = "OMNIGENT_"
 _CANONICAL_CONFIG_HOME_ENV = "GOALRAIL_CONFIG_HOME"
 _COMPAT_CONFIG_HOME_ENV = "OMNIGENT_CONFIG_HOME"
+_CANONICAL_DATA_HOME_ENV = "GOALRAIL_DATA_DIR"
+_COMPAT_DATA_HOME_ENV = "OMNIGENT_DATA_DIR"
 _CANONICAL_CONFIG_HOME_DIR = ".goalrail"
 _COMPAT_CONFIG_HOME_DIR = ".omnigent"
 
@@ -95,6 +97,36 @@ def config_home_path() -> Path:
         return Path(config_home).expanduser()
     if config_home := os.environ.get(_COMPAT_CONFIG_HOME_ENV):
         return Path(config_home).expanduser()
+
+    home = Path.home()
+    candidates = (
+        home / _CANONICAL_CONFIG_HOME_DIR,
+        home / _COMPAT_CONFIG_HOME_DIR,
+        *(home / directory for directory in _LEGACY_CONFIG_HOME_DIRS),
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return home / _COMPAT_CONFIG_HOME_DIR
+
+
+def data_home_path() -> Path:
+    """
+    Resolve the per-user runtime data home during the Goalrail rename.
+
+    Explicit data-dir overrides win first, with ``GOALRAIL_DATA_DIR`` taking
+    precedence over ``OMNIGENT_DATA_DIR``. Without an override, existing
+    directories are honored newest-first so users can opt into
+    ``~/.goalrail`` while existing ``~/.omnigent`` installs keep working.
+    Fresh installs still default to ``~/.omnigent`` until daemon/data state
+    migration is handled separately.
+
+    :returns: The effective runtime data home path.
+    """
+    if data_home := os.environ.get(_CANONICAL_DATA_HOME_ENV):
+        return Path(data_home).expanduser()
+    if data_home := os.environ.get(_COMPAT_DATA_HOME_ENV):
+        return Path(data_home).expanduser()
 
     home = Path.home()
     candidates = (

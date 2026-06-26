@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent._env_compat import config_home_path, mirror_legacy_env
+from omnigent._env_compat import config_home_path, data_home_path, mirror_legacy_env
 
 _PREFIXES = ("GOALRAIL_", "OMNIGENT_", "OMNIGENTS_", "OMNIAGENTS_")
 
@@ -120,3 +120,39 @@ def test_config_home_path_keeps_fresh_default_at_omnigent(monkeypatch, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
 
     assert config_home_path() == Path(tmp_path) / ".omnigent"
+
+
+def test_data_home_path_prefers_goalrail_data_dir_env(monkeypatch, tmp_path):
+    _clear_env(monkeypatch, "DATA_DIR")
+    goalrail_home = tmp_path / "goalrail-data"
+    omnigent_home = tmp_path / "omnigent-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(goalrail_home))
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(omnigent_home))
+
+    assert data_home_path() == goalrail_home
+
+
+def test_data_home_path_keeps_omnigent_data_dir_env(monkeypatch, tmp_path):
+    _clear_env(monkeypatch, "DATA_DIR")
+    data_home = tmp_path / "omnigent-data"
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(data_home))
+
+    assert data_home_path() == data_home
+
+
+def test_data_home_path_uses_existing_goalrail_home(monkeypatch, tmp_path):
+    _clear_env(monkeypatch, "DATA_DIR")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    goalrail_home = tmp_path / ".goalrail"
+    omnigent_home = tmp_path / ".omnigent"
+    goalrail_home.mkdir()
+    omnigent_home.mkdir()
+
+    assert data_home_path() == goalrail_home
+
+
+def test_data_home_path_keeps_fresh_default_at_omnigent(monkeypatch, tmp_path):
+    _clear_env(monkeypatch, "DATA_DIR")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    assert data_home_path() == Path(tmp_path) / ".omnigent"

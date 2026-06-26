@@ -3154,6 +3154,34 @@ def test_run_server_resume_with_local_only_flag_fails_loud_not_attach(
 # ---------------------------------------------------------------------------
 
 
+def test_migrate_legacy_state_dir_skips_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """
+    ``GOALRAIL_DATA_DIR`` disables legacy state migration like old DATA_DIR.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Temporary directory used as a fake HOME/state root.
+    """
+    import omnigent.cli as cli_mod
+
+    state_dir = tmp_path / ".omnigent"
+    legacy_dir = tmp_path / ".omnigents"
+    legacy_dir.mkdir()
+    monkeypatch.setattr(cli_mod, "_STATE_DIR", state_dir)
+    monkeypatch.setattr(cli_mod, "_LEGACY_STATE_DIRS", (legacy_dir,))
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(tmp_path / "goalrail-data"))
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
+
+    cli_mod._migrate_legacy_state_dir()
+
+    assert legacy_dir.exists()
+    assert not state_dir.exists()
+
+
 def test_load_global_config_uses_env_override(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

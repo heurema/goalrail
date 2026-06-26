@@ -28,6 +28,7 @@ from pathlib import Path
 import click
 import psutil
 
+from omnigent._env_compat import data_home_path
 from omnigent.inner import _proc
 
 _LOCAL_SERVER_READY_TIMEOUT_SECONDS = 45.0
@@ -42,11 +43,12 @@ _DOOMED_CHILD_EXIT_GRACE_S = _LOCAL_SERVER_READY_TIMEOUT_SECONDS
 def _local_data_dir() -> Path:
     """Return the local runtime data dir (db, artifacts, logs, pidfile).
 
-    Honors ``OMNIGENT_DATA_DIR`` (the purpose-built data-isolation knob),
-    else ``~/.omnigent``. This lets a checkout/worktree isolate its local
-    runtime DB: two worktrees otherwise share ``~/.omnigent/chat.db``, and
-    if their Alembic heads have diverged the shared DB can't migrate and the
-    daemon-backed local server fails to boot ("schema is out of date").
+    Honors ``GOALRAIL_DATA_DIR`` and ``OMNIGENT_DATA_DIR`` (the purpose-built
+    data-isolation knob), else an existing Goalrail/Omnigent state home. This
+    lets a checkout/worktree isolate its local runtime DB: two worktrees
+    otherwise share ``~/.omnigent/chat.db``, and if their Alembic heads have
+    diverged the shared DB can't migrate and the daemon-backed local server
+    fails to boot ("schema is out of date").
 
     Must stay in lock-step with :func:`omnigent.chat._omnigent_persistent_dir`:
     the local server's DB lives here and ``omnigent run`` resolves the
@@ -58,10 +60,7 @@ def _local_data_dir() -> Path:
 
     :returns: The data directory path (callers create it lazily).
     """
-    value = os.environ.get("OMNIGENT_DATA_DIR")
-    if value:
-        return Path(value).expanduser()
-    return Path.home() / ".omnigent"
+    return data_home_path()
 
 
 # Pidfile carrying the background local server's PID + port (two lines).

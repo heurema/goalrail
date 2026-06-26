@@ -44,6 +44,8 @@ import os
 from pathlib import Path
 from typing import Protocol
 
+from omnigent._env_compat import data_home_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,8 @@ def resolve_data_dir() -> Path:
     1. The parent directory of ``OMNIGENT_ADMIN_CREDENTIALS_PATH`` if
        that env var is set (Docker compose mounts
        ``/data/admin-credentials``, so this yields ``/data``).
-    2. ``~/.omnigent`` for a laptop deploy.
+    2. ``GOALRAIL_DATA_DIR`` / ``OMNIGENT_DATA_DIR`` when set.
+    3. the effective local data home for a laptop deploy.
 
     :returns: The resolved data directory. Not created here — callers
         that only read tolerate a missing directory.
@@ -65,7 +68,7 @@ def resolve_data_dir() -> Path:
     explicit_creds = os.environ.get("OMNIGENT_ADMIN_CREDENTIALS_PATH", "").strip()
     if explicit_creds:
         return Path(explicit_creds).parent
-    return Path.home() / ".omnigent"
+    return data_home_path()
 
 
 def resolve_admin_list_path() -> Path:

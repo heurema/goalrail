@@ -167,8 +167,24 @@ def test_resolve_data_dir_uses_credentials_parent(monkeypatch: pytest.MonkeyPatc
     assert resolve_admin_list_path() == Path("/data/admins")
 
 
+def test_resolve_data_dir_uses_goalrail_data_dir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``GOALRAIL_DATA_DIR`` redirects default server-side state files."""
+    monkeypatch.delenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", raising=False)
+    monkeypatch.delenv("OMNIGENT_ADMIN_LIST_PATH", raising=False)
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(tmp_path / "goalrail-data"))
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "omnigent-data"))
+
+    assert resolve_data_dir() == tmp_path / "goalrail-data"
+    assert resolve_admin_list_path() == tmp_path / "goalrail-data" / "admins"
+
+
 def test_resolve_data_dir_defaults_to_home(monkeypatch: pytest.MonkeyPatch) -> None:
     """With no env, the data dir is ``~/.omnigent``."""
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
+    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
     monkeypatch.delenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", raising=False)
     monkeypatch.delenv("OMNIGENT_ADMIN_LIST_PATH", raising=False)
     assert resolve_data_dir() == Path.home() / ".omnigent"

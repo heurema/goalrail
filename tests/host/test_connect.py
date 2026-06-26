@@ -1226,12 +1226,16 @@ def test_build_runner_env_propagates_data_dir_paths_not_db_uri() -> None:
     allowlist, so the daemon/runner used ``~/.omnigent`` while a CLI run
     under an isolated config home read the local-server pidfile elsewhere —
     discovery then timed out (the e2e ``OMNIGENT_CONFIG_HOME`` isolation
-    case). A failure of the first two asserts means that regression is back;
-    a failure of the third means a DB secret can now leak into a (possibly
+    case). Goalrail-prefixed equivalents must propagate too for callers that
+    set them after package startup. A failure of the path-var asserts means
+    that regression is back; a failure of the DB URI assert means a DB secret
+    can now leak into a (possibly
     hosted) runner.
     """
     base = {
         "PATH": "/usr/bin:/bin",
+        "GOALRAIL_CONFIG_HOME": "/tmp/goalrail-home",
+        "GOALRAIL_DATA_DIR": "/tmp/goalrail-data",
         "OMNIGENT_CONFIG_HOME": "/tmp/iso-home",
         "OMNIGENT_DATA_DIR": "/tmp/iso-data",
         "OMNIGENT_DATABASE_URI": "postgresql://user:pw@host/db",
@@ -1248,6 +1252,8 @@ def test_build_runner_env_propagates_data_dir_paths_not_db_uri() -> None:
 
     # Path vars propagate — they're how the runner finds the same config/data
     # dir the CLI + daemon + local server use.
+    assert env["GOALRAIL_CONFIG_HOME"] == "/tmp/goalrail-home"
+    assert env["GOALRAIL_DATA_DIR"] == "/tmp/goalrail-data"
     assert env["OMNIGENT_CONFIG_HOME"] == "/tmp/iso-home"
     assert env["OMNIGENT_DATA_DIR"] == "/tmp/iso-data"
     # The DB URI is NOT propagated — it may carry credentials and a runner

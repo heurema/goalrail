@@ -409,24 +409,34 @@ def test_stop_local_omnigent_server_escalates_to_sigkill(
 def test_local_data_dir_honors_data_dir_not_config_home(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``_local_data_dir`` isolates the runtime DB via ``OMNIGENT_DATA_DIR`` only.
+    """``_local_data_dir`` isolates the runtime DB via DATA_DIR envs only.
 
     Two worktrees sharing ``~/.omnigent/chat.db`` with divergent Alembic
     heads can't migrate the shared DB, so the daemon-backed server fails to
-    boot. ``OMNIGENT_DATA_DIR`` is the purpose-built data-isolation knob.
+    boot. ``GOALRAIL_DATA_DIR`` / ``OMNIGENT_DATA_DIR`` are the purpose-built
+    data-isolation knobs.
     ``OMNIGENT_CONFIG_HOME`` MUST NOT move the DB — it isolates config only;
     overloading it broke HOME-based data isolation (the resumption e2e tests
     set ``HOME`` to control the DB while inheriting a shared CONFIG_HOME).
     """
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_CONFIG_HOME", raising=False)
     monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
     # Default: ~/.omnigent.
     assert local_server._local_data_dir() == Path.home() / ".omnigent"
     # CONFIG_HOME does NOT move the data dir — a failure here means config
     # isolation is leaking back into data-dir selection.
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path / "goalrail-cfg"))
+    assert local_server._local_data_dir() == Path.home() / ".omnigent"
     monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "cfg"))
     assert local_server._local_data_dir() == Path.home() / ".omnigent"
+    # The new DATA_DIR name wins over the compatibility name.
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(tmp_path / "goalrail-data"))
+    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "omnigent-data"))
+    assert local_server._local_data_dir() == tmp_path / "goalrail-data"
     # DATA_DIR is the data-isolation knob.
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "data"))
     assert local_server._local_data_dir() == tmp_path / "data"
 

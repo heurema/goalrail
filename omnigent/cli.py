@@ -105,9 +105,9 @@ _DEFAULT_GLOBAL_CONFIG_PATH: Path = _GLOBAL_CONFIG_PATH
 # All per-user state (config, registered agents, auth tokens, the host daemon
 # pidfile, runner identity, native session state, logs) lives under
 # :data:`_STATE_DIR`; :func:`_migrate_legacy_state_dir` relocates the old
-# directory on first run. ``OMNIGENT_DATA_DIR`` is the data-isolation override
-# a worktree / test sets; when present the user manages their own state and
-# migration is skipped.
+# directory on first run. ``GOALRAIL_DATA_DIR`` / ``OMNIGENT_DATA_DIR`` are
+# data-isolation overrides a worktree / test sets; when present the user
+# manages their own state and migration is skipped.
 _STATE_DIR: Path = Path.home() / ".omnigent"
 # Pre-rename state directories, newest first. The name evolved
 # ``~/.omniagents`` -> ``~/.omnigents`` -> ``~/.omnigent``; migrate from the
@@ -116,6 +116,7 @@ _LEGACY_STATE_DIRS: tuple[Path, ...] = (
     Path.home() / ".omnigents",
     Path.home() / ".omniagents",
 )
+_GOALRAIL_DATA_DIR_ENV_VAR = "GOALRAIL_DATA_DIR"
 _DATA_DIR_ENV_VAR = "OMNIGENT_DATA_DIR"
 
 
@@ -147,6 +148,7 @@ def _migrate_legacy_state_dir() -> None:
     if (
         os.environ.get(_GOALRAIL_CONFIG_HOME_ENV_VAR)
         or os.environ.get(_CONFIG_HOME_ENV_VAR)
+        or os.environ.get(_GOALRAIL_DATA_DIR_ENV_VAR)
         or os.environ.get(_DATA_DIR_ENV_VAR)
     ):
         return
@@ -320,8 +322,8 @@ def _display_path(path: Path) -> str:
     readability; anything else is shown as its plain string. Unlike a
     hardcoded ``~/.omnigent/...`` literal, this reflects the *actual*
     effective path — so a state dir outside ``$HOME`` (an
-    ``OMNIGENT_CONFIG_HOME`` / ``OMNIGENT_DATA_DIR`` override) renders as
-    its real location rather than a misleading ``~``.
+    ``GOALRAIL_*`` / ``OMNIGENT_*`` path override) renders as its real
+    location rather than a misleading ``~``.
 
     :param path: The path to display, e.g.
         ``Path("/Users/alice/.omnigent/logs/server/local-server-ab12.log")``.
@@ -331,7 +333,7 @@ def _display_path(path: Path) -> str:
     try:
         return f"~/{path.relative_to(Path.home())}"
     except ValueError:
-        # Not under $HOME (e.g. an OMNIGENT_DATA_DIR outside home).
+        # Not under $HOME (e.g. a DATA_DIR override outside home).
         return str(path)
 
 
@@ -794,7 +796,8 @@ def _default_db_uri() -> str:
 
     Resolves to the same path the ``goalrail run`` daemon spawns its
     local server against (``_local_data_dir()``, honoring
-    ``OMNIGENT_DATA_DIR`` → else ``~/.omnigent``). Pinning ``server``
+    ``GOALRAIL_DATA_DIR`` / ``OMNIGENT_DATA_DIR`` → else ``~/.omnigent``).
+    Pinning ``server``
     to the same DB as ``run`` means there is **one local DB — and so one
     accounts admin — per machine**, instead of a fresh CWD-relative
     ``omnigent.db`` (and a fresh admin) for every directory you launch
@@ -829,11 +832,11 @@ def _ensure_sqlite_parent_dir(db_uri: str) -> None:
     SQLite creates the ``.db`` file on first connect but **not** its
     parent directory — an absent parent raises ``sqlite3.OperationalError:
     unable to open database file``. The default ``server`` DB now lives at
-    ``<data_dir>/chat.db`` (machine-global, honoring ``OMNIGENT_DATA_DIR``),
-    so a first-ever run — or any run after the data dir was cleared — must
-    create that dir before the stores connect. The daemon-spawned server
-    handles this in ``ensure_local_omnigent_server``; this is the equivalent for
-    the foreground ``goalrail server`` command.
+    ``<data_dir>/chat.db`` (machine-global, honoring ``GOALRAIL_DATA_DIR`` /
+    ``OMNIGENT_DATA_DIR``), so a first-ever run — or any run after the data dir
+    was cleared — must create that dir before the stores connect. The
+    daemon-spawned server handles this in ``ensure_local_omnigent_server``;
+    this is the equivalent for the foreground ``goalrail server`` command.
 
     No-op for non-SQLite URIs (Postgres etc.) and for in-memory SQLite.
 

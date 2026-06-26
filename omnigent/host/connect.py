@@ -20,6 +20,7 @@ from pathlib import Path
 import websockets.asyncio.client
 from websockets.exceptions import InvalidStatus, InvalidURI
 
+from omnigent._env_compat import data_home_path
 from omnigent._platform import WINDOWS_ENV_PASSTHROUGH
 from omnigent.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
@@ -79,10 +80,9 @@ def _runner_log_dir() -> Path:
     (not a module constant) so tests that repoint ``Path.home`` see the
     override.
 
-    :returns: The host-runner log directory, e.g.
-        ``Path.home() / ".omnigent" / "logs" / "host-runner"``.
+    :returns: The host-runner log directory.
     """
-    return Path.home() / ".omnigent" / "logs" / "host-runner"
+    return data_home_path() / "logs" / "host-runner"
 
 
 def _display_log_path(path: Path) -> str:
@@ -96,7 +96,7 @@ def _display_log_path(path: Path) -> str:
     try:
         return f"~/{path.relative_to(Path.home())}"
     except ValueError:
-        # Not under $HOME (e.g. an OMNIGENT_DATA_DIR outside home).
+        # Not under $HOME (e.g. a DATA_DIR override outside home).
         return str(path)
 
 
@@ -235,14 +235,18 @@ _RUNNER_ENV_ALLOWLIST: frozenset[str] = frozenset(
         # secrets, so they're safe to propagate to the host owner's own
         # daemon/runner subprocesses. They MUST propagate so the whole local
         # chain (CLI → daemon → local server → runner) agrees:
-        #   - OMNIGENT_CONFIG_HOME: where config.yaml / provider config live,
-        #     so the runner resolves the same providers the CLI configured.
-        #   - OMNIGENT_DATA_DIR: where the sqlite db + pidfile live, so the
-        #     CLI doesn't read the local-server pidfile from one dir while the
-        #     daemon writes it to another (that mismatch timed out discovery).
+        #   - GOALRAIL_CONFIG_HOME / OMNIGENT_CONFIG_HOME: where config.yaml /
+        #     provider config live, so the runner resolves the same providers
+        #     the CLI configured.
+        #   - GOALRAIL_DATA_DIR / OMNIGENT_DATA_DIR: where the sqlite db +
+        #     pidfile live, so the CLI doesn't read the local-server pidfile
+        #     from one dir while the daemon writes it to another (that mismatch
+        #     timed out discovery).
         # OMNIGENT_DATABASE_URI is intentionally NOT here — it may embed a
         # DB password, so it's propagated to the local daemon only (see
         # cli._ensure_host_daemon), never to a (possibly hosted) runner.
+        "GOALRAIL_CONFIG_HOME",
+        "GOALRAIL_DATA_DIR",
         "OMNIGENT_CONFIG_HOME",
         "OMNIGENT_DATA_DIR",
         # Auth provider selection. The env-unset default was flipped
