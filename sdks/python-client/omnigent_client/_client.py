@@ -19,7 +19,7 @@ from ._tool_handler import StreamHooks, ToolHandler
 
 
 class OmnigentClient:
-    """Typed Python client for the omnigent server API.
+    """Typed Python client for the Goalrail server API.
 
     One-shot::
 

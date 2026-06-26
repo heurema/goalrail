@@ -1,4 +1,4 @@
-"""Tests for the ``omni upgrade`` command (omnigent.cli.upgrade)."""
+"""Tests for the ``goalrail upgrade`` command (omnigent.cli.upgrade)."""
 
 from __future__ import annotations
 
@@ -272,7 +272,7 @@ def test_drain_returns_immediately_when_only_idle_connected(
     """Regression: 39 idle-but-connected sessions must not block the drain.
 
     Previously the drain counted *connected* sessions, so a box with idle
-    sessions holding their connection open hung ``omni upgrade`` forever.
+    sessions holding their connection open hung ``goalrail upgrade`` forever.
     """
     from omnigent.cli import _SessionPagesResult, _wait_for_local_sessions_to_drain
 
@@ -317,7 +317,16 @@ def test_upgrade_pre_passes_prerelease_flag_to_installer(
     assert ran == ["uv tool upgrade omnigent --prerelease allow"]
 
 
-# ── ``omni update`` alias ────────────────────────────────────────────
+# ── ``goalrail update`` alias ────────────────────────────────────────
+
+
+def test_upgrade_help_uses_goalrail_invocation() -> None:
+    """The public upgrade help should name the Goalrail CLI."""
+    result = CliRunner().invoke(cli, ["upgrade", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "next ``goalrail`` invocation" in result.output
+    assert "next ``omni`` invocation" not in result.output
 
 
 def test_update_is_alias_for_upgrade_same_callback() -> None:
@@ -337,7 +346,7 @@ def test_update_is_alias_for_upgrade_same_callback() -> None:
 
 
 def test_update_up_to_date(monkeypatch: pytest.MonkeyPatch, _wheel_install: None) -> None:
-    """``omni update`` runs the upgrade flow end-to-end (up-to-date path)."""
+    """``goalrail update`` runs the upgrade flow end-to-end (up-to-date path)."""
     monkeypatch.setattr("omnigent.update_check.fetch_latest_version", lambda *_a, **_k: "0.1.0")
 
     def _must_not_run(*_a: object, **_k: object) -> int:

@@ -815,7 +815,7 @@ class RichBlockFormatter:
 
         :param resume_hint: When set, a copy-pasteable shell command
             rendered in dim style below the "Goodbye." line, e.g.
-            ``"omnigent run agent.yaml --resume conv_abc123"``.
+            ``"goalrail run agent.yaml --resume conv_abc123"``.
             ``None`` (default) omits the hint.
         """
         if resume_hint is None:

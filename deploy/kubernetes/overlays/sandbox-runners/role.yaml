@@ -19,7 +19,7 @@ rules:
   # (read_namespaced_pod is a `get`), and terminate() deletes them. The launcher
   # never watches Pods, so `watch` is omitted. NOTE: there is deliberately NO
   # `pods/exec` grant — the host runs as the Pod's OWN entrypoint
-  # (`omnigent host` under a PID-1 reaper), so the server never execs into a
+  # (`goalrail host` under a PID-1 reaper), so the server never execs into a
   # running container. Dropping exec removes the most powerful grant a
   # compromised server could abuse (arbitrary in-Pod command execution).
   - apiGroups: [""]

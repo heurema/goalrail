@@ -13,8 +13,8 @@
 # simply never imported because HarnessProcessManager is never
 # invoked in this deployment mode.
 #
-# The `host` target is the inverse: a prebaked Omnigent HOST image for
-# remote sandboxes (e.g. `omnigent sandbox create --provider modal`)
+# The `host` target is the inverse: a prebaked Goalrail host image for
+# remote sandboxes (e.g. `goalrail sandbox create --provider modal`)
 # and server-launched managed hosts. It bakes the full omnigent
 # install plus the tools a host needs at runtime — git (workspaces /
 # worktrees), tmux (terminal sessions spawned by native harnesses),
@@ -237,7 +237,7 @@ RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # The harness CLI set mirrors omnigent/onboarding/harness_install.py
-# (the binary/package map `omnigent setup` installs from) — keep the
+# (the binary/package map `goalrail setup` installs from) — keep the
 # two in sync. Unpinned on purpose: the official image is rebuilt by
 # CI, so it tracks the same "latest" a laptop install would get.
 RUN npm install -g --no-audit --no-fund \
@@ -297,7 +297,7 @@ COPY --from=builder /build /build
 
 # Sandbox launchers exec commands through `bash -lc`, and Debian's
 # /etc/profile unconditionally resets PATH for login shells — the ENV
-# PATH above would silently drop off and `omnigent` / `pip` would
+# PATH above would silently drop off and `goalrail` / `pip` would
 # resolve to the system Python instead of the venv. profile.d snippets
 # are sourced after that reset, so this puts the venv back in front.
 RUN echo 'export PATH="/opt/venv/bin:${PATH}"' > /etc/profile.d/omnigent-venv.sh
@@ -306,7 +306,7 @@ WORKDIR /root
 
 # CMD only — Modal's `Image.from_registry` (and the sandbox launchers
 # generally) supply their own entrypoint command; an ENTRYPOINT here
-# would hijack it. The hold-open default mirrors what `omnigent
+# would hijack it. The hold-open default mirrors what `goalrail
 # sandbox create` runs so a bare `docker run` behaves the same way.
 CMD ["sleep", "infinity"]
 

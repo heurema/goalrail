@@ -62,7 +62,7 @@ policies:
 **4. Start the server.**
 
 ```bash
-omnigent server --config server_config.yaml
+goalrail server --config server_config.yaml
 ```
 
 After starting, you can also add or remove policies at runtime through the REST API (see [Admin policy REST API](#admin-policy-rest-api)).

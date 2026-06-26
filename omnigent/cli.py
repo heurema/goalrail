@@ -220,7 +220,7 @@ _CLAUDE_STARTUP_PROFILE_ENV_VAR = "OMNIGENT_CLAUDE_STARTUP_PROFILE"
 # only two subscription CLIs ambient detection emits.
 _CLI_LOGIN_BRAND: dict[str, str] = {"claude": "Claude", "codex": "ChatGPT"}
 _HOST_DAEMON_STOP_GRACE_S = 5.0
-# How often ``omni upgrade`` re-polls the local server for in-flight
+# How often ``goalrail upgrade`` re-polls the local server for in-flight
 # (connected) sessions while draining before it stops the server.
 _UPGRADE_DRAIN_POLL_S = 2.0
 # When reusing an existing daemon, how long to let a live-but-offline daemon
@@ -1216,7 +1216,7 @@ def _should_skip_update_check(argv: list[str]) -> bool:
     Skipped for help / version requests, internal TUI subcommands
     (``pane-split`` / ``pane-picker``, invoked by the terminal UI rather
     than the user), and ``upgrade`` (and its ``update`` alias) itself
-    (pointing the user at ``omni upgrade`` while they are running it is
+    (pointing the user at ``goalrail upgrade`` while they are running it is
     noise).
 
     :param argv: CLI arguments without the program name, e.g.
@@ -1410,7 +1410,7 @@ def _is_removed_ad_hoc_invocation(argv: list[str]) -> bool:
       the removed top-level ad-hoc chat accepted.
 
     False when the first non-flag token matches a known
-    subcommand (``goalrail run ...``, ``omnigent attach ...``),
+    subcommand (``goalrail run ...``, ``goalrail attach ...``),
     when the user asks for top-level help/version
     (``omnigent --help``, ``omnigent --version``), or when the
     token is a single command-shaped word (e.g. ``omnigent blah``)
@@ -3432,7 +3432,7 @@ def _count_running_sessions(base_url: str) -> int:
 def _wait_for_local_sessions_to_drain() -> None:
     """Block until no local session is actively running a turn.
 
-    Used by ``omni upgrade`` (without ``--force``) so an upgrade never
+    Used by ``goalrail upgrade`` (without ``--force``) so an upgrade never
     yanks a running agent turn. Waits only on sessions whose status is
     ``"running"`` (see :func:`_count_running_sessions`) — idle-but-connected
     sessions do not hold it up. Polls every :data:`_UPGRADE_DRAIN_POLL_S`
@@ -3467,9 +3467,9 @@ def _wait_for_local_sessions_to_drain() -> None:
 def _drain_and_stop_local_server(*, force: bool) -> None:
     """Drain (or force-stop) the local server + daemon before an upgrade.
 
-    Shared by both ``omni upgrade`` paths (registry and git): the running
+    Shared by both ``goalrail upgrade`` paths (registry and git): the running
     process must stop serving BEFORE its code is swapped, so it never serves
-    half-upgraded modules. The next ``omni`` invocation respawns a fresh
+    half-upgraded modules. The next ``goalrail`` invocation respawns a fresh
     server on the new version.
 
     :param force: When ``False``, wait for in-flight sessions to drain first;
@@ -3484,7 +3484,7 @@ def _drain_and_stop_local_server(*, force: bool) -> None:
 def _upgrade_vcs_install(
     info: _InstalledWheelInfo, *, check_only: bool, force: bool, pre: bool
 ) -> None:
-    """Update a git/VCS ``omni`` install by re-pulling its tracked ref.
+    """Update a git/VCS Goalrail install by re-pulling its tracked ref.
 
     A git install's version string is frozen at whatever its source branch
     declares (e.g. ``0.1.0`` on an unbumped ``main``), so it cannot be
@@ -3585,7 +3585,7 @@ def _upgrade_vcs_install(
         return
     # Couldn't read the new commit — the re-pull ran, but don't assert a
     # result we can't confirm.
-    click.echo("Re-pulled the git ref. Run `omni upgrade --check` to confirm.")
+    click.echo("Re-pulled the git ref. Run `goalrail upgrade --check` to confirm.")
 
 
 @cli.command("upgrade")
@@ -3614,7 +3614,7 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     Detects how Goalrail was installed (uv / pip / pipx / poetry), checks
     the configured index for a newer release and — unless ``--check`` —
     drains and stops the local background server and host daemon, then runs
-    the matching upgrade command. The next ``omni`` invocation starts a
+    the matching upgrade command. The next ``goalrail`` invocation starts a
     fresh server on the new code automatically (via the version-aware
     config signature), so no explicit restart is needed.
 
@@ -3648,7 +3648,7 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     if _find_repo_root() is not None:
         raise click.ClickException(
             "This is a source checkout — update it with `git pull` (and reinstall "
-            "dependencies), not `omni upgrade`."
+            "dependencies), not `goalrail upgrade`."
         )
     info = _read_installed_wheel_info()
     if info is None:
@@ -3657,7 +3657,7 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
         )
     if info.is_editable:
         raise click.ClickException(
-            "This is an editable install — update it with `git pull`, not `omni upgrade`."
+            "This is an editable install — update it with `git pull`, not `goalrail upgrade`."
         )
 
     # A git/VCS install tracks a moving git ref, not a PyPI release. Its
@@ -3719,7 +3719,7 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     if new_version is None:
         click.echo(
             "Ran the upgrade command, but couldn't confirm the installed version. "
-            "Run `omni upgrade --check` to verify."
+            "Run `goalrail upgrade --check` to verify."
         )
         return
     if _is_newer(new_version, current):
@@ -3737,7 +3737,7 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     )
 
 
-# ``omni update`` is an alias for ``omni upgrade`` — mistyping the latter as
+# ``goalrail update`` is an alias for ``goalrail upgrade`` — mistyping the latter as
 # the former is common, and silently doing nothing is annoying. Registering
 # the same Command object under a second name shares the exact callback,
 # options, and semantics; there is no duplicated implementation to drift.
@@ -5910,7 +5910,7 @@ def _dispatch_run(
 
     The click path always drives the Omnigent server-backed REPL. With
     ``--server <url>``, use that server URL instead of starting a
-    local server. (``omnigent attach`` is a separate attach-only
+    local server. (``goalrail attach`` is a separate attach-only
     client and does NOT route through here.)
 
     :param target: Agent YAML/directory path, or ``None`` for

@@ -24,7 +24,7 @@ URL (or your domain), and the container sleeps when idle.
 browser ───────────────►  Worker (src/index.js)
                               │   getContainer("singleton").fetch(req)
                               ▼
-                          Container  ──►  the omnigent server (port 8000)
+                          Container  ──►  the goalrail server (port 8000)
                           (1 instance)        │            │
                           DATABASE_URL ───────┘            │  S3 API (boto3)
                           cloudflare_d1://…                ▼
@@ -157,8 +157,8 @@ Then connect a machine to actually run agents (the server is just the control
 plane):
 
 ```bash
-omnigent login https://omnigent.<your-subdomain>.workers.dev
-omnigent host  --server https://omnigent.<your-subdomain>.workers.dev
+goalrail login https://omnigent.<your-subdomain>.workers.dev
+goalrail host  --server https://omnigent.<your-subdomain>.workers.dev
 ```
 
 ## Verifying durability

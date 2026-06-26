@@ -137,8 +137,8 @@ print(r.choices[0].message.content)
 print(f'input={r.usage.prompt_tokens} output={r.usage.completion_tokens}')
 "
 
-# Start the local omnigent server with tracing
-omni server
+# Start the local goalrail server with tracing
+goalrail server
 ```
 
 Verified output (run against e2-dogfood workspace):

@@ -1,10 +1,10 @@
-// Worker that fronts the Omnigent container and proxies all HTTP (and
-// WebSocket) traffic to it. Omnigent needs a SINGLE server instance (in-memory
+// Worker that fronts the Goalrail container and proxies all HTTP (and
+// WebSocket) traffic to it. Goalrail needs a SINGLE server instance (in-memory
 // runner registry), so every request routes to one fixed container instance.
 import { Container, getContainer } from "@cloudflare/containers";
 
 export class OmnigentServer extends Container {
-  // Port the omnigent server listens on inside the container.
+  // Port the Goalrail server listens on inside the container.
   defaultPort = 8000;
   // Keep the container warm so D1-backed sessions don't cold-start constantly.
   sleepAfter = "30m";

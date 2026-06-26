@@ -19,7 +19,7 @@ pip install 'omnigent[openshell]'
 
 Goalrail uses OpenShell two ways:
 
-- **CLI-launched**: `omnigent sandbox create` / `connect` provisions a sandbox
+- **CLI-launched**: `goalrail sandbox create` / `connect` provisions a sandbox
   from your terminal, ships your local checkout into it, and registers it as a
   host with your server.
 - **Server-managed**: the server provisions a sandbox automatically when a
@@ -37,7 +37,7 @@ Two traits shape the rest of this guide:
   There is no base-URL or token knob in Goalrail — gateway setup and auth are an
   OpenShell concern.
 - **No local port forward.** OpenShell has no sandbox→laptop callback path, so
-  the interactive in-sandbox `omnigent login` / App OAuth step is skipped
+  the interactive in-sandbox `goalrail login` / App OAuth step is skipped
   automatically (as on Modal, Daytona, and CoreWeave) — fine for token/OIDC-auth
   servers.
 
@@ -145,7 +145,7 @@ With a gateway selected, provision a sandbox and ship your local checkout into
 it:
 
 ```bash
-omnigent sandbox create --provider openshell --server https://your-host
+goalrail sandbox create --provider openshell --server https://your-host
 ```
 
 This creates a sandbox from the host image, builds wheels from your local
@@ -153,12 +153,12 @@ checkout, and overlays them on top — so the sandbox runs *your* code, not
 whatever the image was built from. Then register it as a host with your server:
 
 ```bash
-omnigent sandbox connect --provider openshell \
+goalrail sandbox connect --provider openshell \
   --sandbox-id <id-printed-by-create> \
   --server https://your-host
 ```
 
-`connect` runs `omnigent host` inside the sandbox and holds the connection open
+`connect` runs `goalrail host` inside the sandbox and holds the connection open
 in your terminal — Ctrl-C tears it down (stopping the in-sandbox host). New
 sessions targeting that host now run in the sandbox. Pass a unique `--host-name
 <label>` per sandbox when connecting several to one server (the server keys hosts
@@ -174,12 +174,12 @@ sandbox):
 
 ```bash
 export OMNIGENT_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY,GIT_TOKEN
-omnigent sandbox create --provider openshell --server https://your-host
+goalrail sandbox create --provider openshell --server https://your-host
 ```
 
 ## Server-managed sandboxes
 
-Add a `sandbox:` section to the server config (`omnigent server -c config.yaml`,
+Add a `sandbox:` section to the server config (`goalrail server -c config.yaml`,
 or `<data_dir>/config.yaml`):
 
 ```yaml
@@ -382,7 +382,7 @@ Exercised end-to-end against a live OpenShell gateway on an **amd64 Linux** host
   primitive) streaming output and propagating exit codes; the gateway logs the
   matching `CreateSandbox` / `ExecSandbox` / `DeleteSandbox` RPCs.
 - **Full server-managed session** — a `host_type:"managed"` session drove the
-  server to provision a sandbox on the gateway, start `omnigent host` in it (held
+  server to provision a sandbox on the gateway, start `goalrail host` in it (held
   foreground exec), dial back over the tunnel, register, spawn the runner, and
   complete a real agent turn (a Gemini model via the openai-agents harness) — the
   agent's reply came back from inside the sandbox.

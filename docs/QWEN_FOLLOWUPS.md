@@ -5,7 +5,7 @@ Tracks pending work and known limitations for the Qwen Code harness
 
 ## What works today
 
-- `omnigent run --harness qwen` / `executor.harness: qwen` (alias `qwen-code`).
+- `goalrail run --harness qwen` / `executor.harness: qwen` (alias `qwen-code`).
 - ACP executor: streaming turns, system-prompt folding, session-not-found
   reset, missing-binary handling.
 - **Permission gating** (`session/request_permission`): routed through
@@ -13,7 +13,7 @@ Tracks pending work and known limitations for the Qwen Code harness
   (`_decide_permission`), mirroring claude-sdk — a hard policy DENY rejects,
   otherwise the user is asked; default-deny on policy-ASK with no handler.
   Standalone/test use (no bridges wired) falls back to allow.
-- `omnigent setup` → **Qwen Code** row: installs the CLI and guides auth
+- `goalrail setup` → **Qwen Code** row: installs the CLI and guides auth
   (env vars or interactive `/auth`).
 - Auth via the CLI's own ambient credentials (see Auth model below).
 - **Provider / gateway routing (clean env).** A spec `auth:` / `providers:`
@@ -82,7 +82,7 @@ comments; this is the *what*, not the *how*.)
 
 - [x] **Native TUI variant (`qwen-native` / `native-qwen`).** Implemented — the
   live `qwen` TUI runs in a runner-owned tmux pane embedded in the web UI, driven
-  by `omnigent qwen`. Unlike the goose/cursor `tmux send-keys` native harnesses,
+  by `goalrail qwen`. Unlike the goose/cursor `tmux send-keys` native harnesses,
   it uses qwen's built-in remote-control protocol: web-UI turns are appended to
   qwen's `--input-file` (a `{"type":"submit"}` line, routed through the same
   `submitQuery` path the keyboard uses, so it renders in the TUI), and the
@@ -154,7 +154,7 @@ comments; this is the *what*, not the *how*.)
     `_QWEN_CONTEXT_WINDOWS` lookup. One usage-parsing change feeds the model
     chip, the ring, and cost together.
 
-- [x] **Restore qwen's TUI history on resume.** `omni qwen --resume <conv_id>`
+- [x] **Restore qwen's TUI history on resume.** `goalrail qwen --resume <conv_id>`
   used to relaunch a **blank** `qwen` TUI (only the web chat kept history, via the
   forwarder). Fixed, using the **same `external_session_id` convention as
   claude-/codex-/pi-native** (so it's consistent and fork-capable):
@@ -236,7 +236,7 @@ comments; this is the *what*, not the *how*.)
     jq -r .access_token`, `model = <served-endpoint-name>` — run a turn from a
     **clean `HOME`** (so `~/.qwen/settings.json` can't take precedence).
   - *Full route:* spec with `executor.profile: <db-profile>` (or a
-    `databricks-*` model), then `omni run`; confirm the runner log's
+    `databricks-*` model), then `goalrail run`; confirm the runner log's
     `qwen gateway routing:` line shows the Databricks base URL + profile.
 - [ ] **Goalrail tools.** Qwen can only call its own built-in tools; tools
   defined by Goalrail aren't exposed to it (so they can't be invoked or
@@ -272,7 +272,7 @@ Tool-calling reliability depends on the model. Weak/free routes (notably
 `qwen/qwen3-coder:free`) **lose the tool-calling thread when a message carries a
 file attachment**: instead of emitting a structured tool call (which would reach
 our `session/request_permission` gate), they narrate the shell command as prose
-(e.g. printing `Command: rm …` as text). The omni run is deterministic about
+(e.g. printing `Command: rm …` as text). The goalrail run is deterministic about
 this — every `input_file` turn skips policy/elicitation; every text-only turn
 reaches them. `qwen3-coder-plus` keeps tool-calling across the same prompts.
 

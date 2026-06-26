@@ -19,7 +19,7 @@ shape consistent across hosts.
 
 The same Dockerfile also has a `host` target — the prebaked Goalrail
 HOST image (`omnigent-host`) that remote sandboxes boot from
-(`omnigent sandbox create --provider modal`, server-launched managed
+(`goalrail sandbox create --provider modal`, server-launched managed
 hosts). It is the inverse profile: full omnigent install plus git +
 tmux, no SPA, no psycopg, no server entrypoint. Both images are
 published by the same workflows with the same `:sha-<short>` /

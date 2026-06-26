@@ -1,7 +1,7 @@
 # Kubernetes sandbox runners (on-demand host Pods)
 
 This Kustomize overlay turns on the **`kubernetes`** managed-sandbox provider: a
-`host_type: managed` session spawns one **runner Pod** that runs `omnigent host`
+`host_type: managed` session spawns one **runner Pod** that runs `goalrail host`
 as its container entrypoint and dials back to the server over the existing
 launch-token tunnel. It layers the RBAC + config the provider needs onto the
 base server deployment.
@@ -10,7 +10,7 @@ base server deployment.
 
 The runner Pod's container command **is** the host. An **init container**
 prepares the workspace (`mkdir` + optional `git clone`); the **main container**
-then runs `omnigent host` under a tiny PID-1 reaper. The host re-parents runner
+then runs `goalrail host` under a tiny PID-1 reaper. The host re-parents runner
 processes to PID 1, which the reaper reaps; SIGTERM is forwarded for graceful
 shutdown.
 

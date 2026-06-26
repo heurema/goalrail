@@ -1,4 +1,4 @@
-"""omnigent client SDK — Python client for the omnigent server API.
+"""omnigent-client SDK — Python client for the Goalrail server API.
 
 Headless HTTP/SSE client for invoking agents, tracking conversation
 state, and consuming the response stream as either raw events or

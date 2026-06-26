@@ -30,7 +30,7 @@ Server is on http://localhost:8000. The web UI prints the CLI command
 to launch a local runner against it. From your laptop:
 
 ```bash
-omnigent run path/to/agent.yaml --server http://localhost:8000
+goalrail run path/to/agent.yaml --server http://localhost:8000
 ```
 
 Reset everything (drops the DB and the artifact store):
@@ -249,7 +249,7 @@ included (no SPA bundle, no psycopg, no uvicorn entrypoint).
 CI publishes it next to the server image, with the same tag scheme:
 
 - `ghcr.io/omnigent-ai/omnigent-host:latest` — tracks main HEAD
-  (the default for `omnigent sandbox create --provider modal`)
+  (the default for `goalrail sandbox create --provider modal`)
 - `ghcr.io/omnigent-ai/omnigent-host:sha-<short>` — immutable
   per-commit pin
 - `ghcr.io/omnigent-ai/omnigent-host:vX.Y.Z` — release tags
@@ -263,7 +263,7 @@ docker build -t omnigent-host:latest --target host \
 
 ### Using it with the Modal sandbox provider
 
-`omnigent sandbox create --provider modal` boots sandboxes from
+`goalrail sandbox create --provider modal` boots sandboxes from
 `ghcr.io/omnigent-ai/omnigent-host:latest` by default. Your local
 checkout's wheels are still built and overlaid on top at create time
 (`pip install --force-reinstall --no-deps`), so the sandbox runs
@@ -283,7 +283,7 @@ Two environment variables tune the pull:
 
 The same host image backs Daytona-managed sessions (server config
 `sandbox.provider: daytona`; Daytona is managed-only — there is no
-`omnigent sandbox create --provider daytona` CLI flow). Daytona ingests
+`goalrail sandbox create --provider daytona` CLI flow). Daytona ingests
 the registry image into an internal snapshot on first use (the first
 launch from a given image takes minutes; later launches reuse the
 snapshot and take seconds). Override the ref with

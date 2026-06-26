@@ -891,7 +891,7 @@ def test_build_upgrade_suggestion_matrix(
 ) -> None:
     """Upgrade-command formatting and runnable flag match the install shape.
 
-    The ``runnable`` half of the assertion guards ``omni upgrade``: if a
+    The ``runnable`` half of the assertion guards ``goalrail upgrade``: if a
     prose-fallback row ever flipped to runnable=True, the command would
     try to ``subprocess.run`` the literal string "reinstall omnigent
     from ...", which would error or worse (if a binary named "reinstall"
@@ -918,7 +918,7 @@ def test_pip_invocation_pins_to_running_interpreter(monkeypatch: pytest.MonkeyPa
     """``_pip_invocation`` targets ``sys.executable`` (with a bare fallback).
 
     Guards the PATH gotcha: a bare ``pip`` resolves against ``PATH`` and can
-    upgrade a *different* environment than the one running ``omni``. Pinning
+    upgrade a *different* environment than the one running ``goalrail``. Pinning
     to ``<sys.executable> -m pip`` keeps the upgrade in the running
     interpreter's environment.
     """
@@ -1000,7 +1000,7 @@ def test_wheel_check_nags_when_newer_release_available(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Cached latest > installed → nag naming the release and ``omni upgrade``."""
+    """Cached latest > installed → nag naming the release and ``goalrail upgrade``."""
     monkeypatch.delenv("OMNIGENT_NO_UPDATE_CHECK", raising=False)
     _point_cache_at(tmp_path, monkeypatch)
     _write_cache(
@@ -1021,7 +1021,7 @@ def test_wheel_check_nags_when_newer_release_available(
     # proves the message pipeline runs end to end.
     assert "omnigent 0.2.0 is out" in err
     assert "you have 0.1.0" in err
-    assert "omni upgrade" in err
+    assert "goalrail upgrade" in err
     # The notified version is stamped so the nag fires once per release.
     refreshed = _read_cache()
     assert refreshed is not None
@@ -1299,7 +1299,7 @@ def test_fetch_latest_version_retries_transient_then_succeeds(
 ) -> None:
     """``attempts=2`` retries a transient connection error, then succeeds.
 
-    Regression: the foreground ``omni upgrade`` shouldn't report the index as
+    Regression: the foreground ``goalrail upgrade`` shouldn't report the index as
     unreachable on a single momentary blip against a slow mirror.
     """
     import httpx

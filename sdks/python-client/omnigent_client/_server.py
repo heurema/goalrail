@@ -1,4 +1,4 @@
-"""LocalServer — start and manage a local omnigent server."""
+"""LocalServer — start and manage a local Goalrail server."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _find_free_port() -> int:
 
 
 class LocalServer:
-    """Context manager that starts a local omnigent server.
+    """Context manager that starts a local Goalrail server.
 
     Usage::
 

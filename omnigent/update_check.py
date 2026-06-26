@@ -21,13 +21,13 @@ Two install shapes are supported:
   *config files* (``uv.toml`` / ``pip.conf``); default pypi.org. So it
   works on corporate mirrors and air-gapped networks — even when the
   mirror is configured in a file rather than an env var — and stays
-  consistent with what ``omni upgrade`` actually pulls. To avoid adding
+  consistent with what ``goalrail upgrade`` actually pulls. To avoid adding
   latency to the hot
   path, the foreground only ever reads the cached "latest version" and
   prints from it; the (network) lookup runs in a detached background
   process (:func:`refresh_update_cache`) that refreshes the cache for the
   next invocation. The notice fires once per new release (tracked via
-  ``last_notified_version``) and points the user at ``omni upgrade``.
+  ``last_notified_version``) and points the user at ``goalrail upgrade``.
 
 The dispatcher in ``maybe_show_update_notice`` picks the shape based on
 whether a ``.git/`` directory is reachable from this module's path.
@@ -69,7 +69,7 @@ _DIST_NAME = "omnigent"
 # JSON API (`/pypi/<name>/json`): that is Warehouse-specific and 404s on
 # mirrors, so it would silently never work on air-gapped / mirror-only
 # networks. Querying the same index the user installs from also keeps the
-# notice consistent with what ``omni upgrade`` (uv/pip) actually pulls.
+# notice consistent with what ``goalrail upgrade`` (uv/pip) actually pulls.
 _DEFAULT_INDEX_URL = "https://pypi.org/simple"
 # Env vars that point at the default index, in precedence order. The
 # explicit ``OMNIGENT_INDEX_URL`` wins; then uv's and pip's. When none is
@@ -83,9 +83,9 @@ _SIMPLE_JSON_ACCEPT = "application/vnd.pypi.simple.v1+json"
 # Keep the background index lookup snappy. It runs detached so it never
 # blocks the CLI, but a tight timeout still bounds the orphan's lifetime.
 _INDEX_TIMEOUT_SECONDS = 3.0
-# The foreground ``omni upgrade`` is user-initiated and worth waiting on, so it
+# The foreground ``goalrail upgrade`` is user-initiated and worth waiting on, so it
 # uses a more forgiving timeout (and one retry) than the background refresh — a
-# briefly slow mirror shouldn't make ``omni upgrade --check`` spuriously report
+# briefly slow mirror shouldn't make ``goalrail upgrade --check`` spuriously report
 # "couldn't reach the index".
 _UPGRADE_INDEX_TIMEOUT_SECONDS = 10.0
 # The placeholder that PEP 610 tooling (pip, newer uv) writes into
@@ -253,7 +253,7 @@ def _run_installed_wheel_check() -> None:
     in the cache and prints an "update available" notice when a strictly
     newer release exists — and only once per new release, tracked via
     ``last_notified_version``. The notice points the user at
-    ``omni upgrade``.
+    ``goalrail upgrade``.
 
     The foreground never touches the network: it reads the cached latest
     version (written by :func:`refresh_update_cache`) and, when that
@@ -280,7 +280,7 @@ def _run_installed_wheel_check() -> None:
         # is not comparable to the latest PyPI version: the nag would fire
         # forever even on a build that is *ahead* of the latest release,
         # and reinstalling the ref can never change that version. The
-        # ``omni upgrade`` git path re-pulls the ref and reports commit
+        # ``goalrail upgrade`` git path re-pulls the ref and reports commit
         # deltas instead; the passive PyPI nag is simply wrong here.
         return
 
@@ -336,7 +336,7 @@ def _resolve_index_url() -> str:
     """Resolve the package index to query, honoring uv/pip config.
 
     Precedence, mirroring how ``uv`` / ``pip`` (and therefore
-    ``omni upgrade``) actually pick an index:
+    ``goalrail upgrade``) actually pick an index:
 
     1. index env vars (:data:`_INDEX_ENV_VARS`) — explicit
        ``OMNIGENT_INDEX_URL`` first, then uv's and pip's;
@@ -471,12 +471,12 @@ def fetch_latest_version(
     (:func:`_resolve_index_url`) — PEP 691 JSON when the index serves it,
     PEP 503 HTML otherwise. Swallows every error so the update check can never
     break the CLI. The background refresh uses the defaults (one snappy try);
-    the foreground ``omni upgrade`` passes a longer *timeout* and *attempts=2*
+    the foreground ``goalrail upgrade`` passes a longer *timeout* and *attempts=2*
     so a momentarily slow mirror doesn't spuriously read as "unreachable".
 
     :param include_prereleases: When ``False`` (default), pre-releases and
         dev releases are excluded so we never nag about a non-final build.
-        When ``True`` (``omni upgrade --pre`` / TestPyPI rc validation),
+        When ``True`` (``goalrail upgrade --pre`` / TestPyPI rc validation),
         they are considered too.
     :param timeout: Per-request timeout in seconds.
     :param attempts: Total number of tries; a transient connection/timeout
@@ -892,7 +892,7 @@ def _print_pypi_notice(current: str, latest: str) -> None:
     """Print the installed-wheel "update available" notice to stderr.
 
     Informational only — it names the new release and points the user at
-    ``omni upgrade``; the actual upgrade (and the graceful server/daemon
+    ``goalrail upgrade``; the actual upgrade (and the graceful server/daemon
     cycle) lives in that command, not here.
 
     :param current: The installed version, e.g. ``"0.1.0"``.
@@ -908,7 +908,7 @@ def _print_pypi_notice(current: str, latest: str) -> None:
         " — omnigent ",
         (latest, "bold"),
         f" is out (you have {current}).\nRun ",
-        ("omni upgrade", "bold"),
+        ("goalrail upgrade", "bold"),
         " to update.",
     )
     console.print(Panel(body, border_style="yellow", expand=False))
@@ -1241,7 +1241,7 @@ class _UpgradeSuggestion:
     runnable: bool
 
 
-# Per-installer flag that allows pre-releases (``omni upgrade --pre``).
+# Per-installer flag that allows pre-releases (``goalrail upgrade --pre``).
 # Only installers with a clean, well-defined flag are listed; others get
 # no suffix (the base command still runs, just stable-only).
 _PRERELEASE_FLAG = {
@@ -1254,14 +1254,14 @@ _PRERELEASE_FLAG = {
 def _pip_invocation() -> str:
     """Return the pip command prefix bound to the running interpreter.
 
-    ``omni upgrade`` shells out to install the new wheel, and a bare
+    ``goalrail upgrade`` shells out to install the new wheel, and a bare
     ``pip`` is resolved against ``PATH`` — which, in a shell where some
-    *other* environment's ``pip`` shadows the one running ``omni`` (a
+    *other* environment's ``pip`` shadows the one running ``goalrail`` (a
     conda env layered over the venv that actually holds the install,
     say), targets the wrong environment: it silently upgrades a different
     copy of omnigent while the running one stays put. ``<sys.executable>
     -m pip`` pins the upgrade to the interpreter actually running
-    ``omni`` so the new wheel lands where the running CLI lives. Falls
+    ``goalrail`` so the new wheel lands where the running CLI lives. Falls
     back to a bare ``pip`` only when ``sys.executable`` is unknown
     (frozen / embedded interpreters).
 
@@ -1290,7 +1290,7 @@ def _build_upgrade_suggestion(
     unknown) and whether ``direct_url.json`` recorded a VCS URL.
 
     :param info: Metadata from ``_read_installed_wheel_info``.
-    :param allow_prerelease: When ``True`` (``omni upgrade --pre``), append
+    :param allow_prerelease: When ``True`` (``goalrail upgrade --pre``), append
         the installer's allow-pre-releases flag (uv ``--prerelease allow``,
         pip ``--pre``, pipx ``--pip-args=--pre``) so the upgrade can land on
         a release candidate. A no-op for installers without a known flag.
@@ -1378,7 +1378,7 @@ def _run_upgrade_command(command: str, console: Console) -> int:
 def upgrade_command_for_installed() -> _UpgradeSuggestion | None:
     """Return the upgrade command for the current install, or ``None``.
 
-    Convenience wrapper used by ``omni upgrade``: reads the installed
+    Convenience wrapper used by ``goalrail upgrade``: reads the installed
     distribution's metadata and maps it to the installer-appropriate
     upgrade command (``uv tool upgrade omnigent``, ``pip install -U
     omnigent``, etc.).
@@ -1396,12 +1396,12 @@ def upgrade_command_for_installed() -> _UpgradeSuggestion | None:
 def _probe_installed_distribution() -> tuple[str | None, str | None]:
     """Read the freshly-installed version and VCS commit in a subprocess.
 
-    ``omni upgrade`` swaps the on-disk install while *this* process is
+    ``goalrail upgrade`` swaps the on-disk install while *this* process is
     running, but the running interpreter already imported the old
     ``omnigent`` and cached its metadata — re-reading in-process returns the
     *pre-upgrade* version. A fresh ``sys.executable`` subprocess loads the
     new metadata from disk, so it reports what the upgrade actually
-    produced. This is what lets ``omni upgrade`` verify the install really
+    produced. This is what lets ``goalrail upgrade`` verify the install really
     advanced instead of trusting the installer's exit code (a no-op upgrade
     — pinned spec, cooldown, stale index cache, or a git ref that can't move
     the version — exits 0 without changing anything).
@@ -1478,7 +1478,7 @@ def _remote_git_head(vcs_url: str) -> str | None:
     """Return the remote commit a ``git+`` install's ref points at, or ``None``.
 
     Runs ``git ls-remote`` against the bare repo URL for the install's
-    revision (or ``HEAD`` when none was pinned), so ``omni upgrade`` can tell
+    revision (or ``HEAD`` when none was pinned), so ``goalrail upgrade`` can tell
     whether a git install is behind its tracked ref *before* re-pulling.
     Best-effort with a tight timeout: any failure (offline, auth, bad URL, no
     ``git`` binary) yields ``None`` so ``--check`` degrades to "can't

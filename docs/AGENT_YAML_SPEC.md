@@ -3,7 +3,7 @@
 Goalrail can run an agent from a single YAML file:
 
 ```bash
-omnigent run path/to/agent.yaml
+goalrail run path/to/agent.yaml
 ```
 
 Use this file to choose the harness/model, write the system prompt, and declare
@@ -67,7 +67,7 @@ gateway / `auth.type: databricks` does not apply. Authenticate it with
 id (e.g. `auto`, `gpt-5`) rather than a `databricks-*` id.
 
 The `kiro-native` harness is the native Kiro CLI terminal path used by
-`omnigent kiro`. It requires `kiro-cli` on `PATH` and Kiro's own login/auth; it
+`goalrail kiro`. It requires `kiro-cli` on `PATH` and Kiro's own login/auth; it
 does not use Databricks, OpenAI, or Anthropic provider credentials. Plain
 `harness: kiro` is not a generic Goalrail harness id.
 
@@ -99,7 +99,7 @@ antigravity it talks only to GitHub's Copilot backend — there is no Databricks
 gateway / `auth.type: databricks` path. Authenticate with a **GitHub token** that
 carries Copilot access: a fine-grained PAT with the "Copilot Requests"
 permission, or an OAuth token from the GitHub CLI (`gh auth token`) / Copilot
-CLI. Resolution: spec `auth.api_key` → a token registered via `omnigent setup`
+CLI. Resolution: spec `auth.api_key` → a token registered via `goalrail setup`
 (the `copilot:` config block) → ambient `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
 `GITHUB_TOKEN`. Choose a Copilot model id (e.g. `claude-haiku-4.5`, `gpt-5-mini`,
 or omit for auto-select) rather than a `databricks-*` id. Classic `ghp_` PATs are
@@ -142,7 +142,7 @@ the workspace.
 
 CLI flags such as `--harness` and `--model` can override or supply missing
 executor values for a run. Databricks credentials come from the spec's
-`executor.auth` block or your `omnigent setup` provider config — there is
+`executor.auth` block or your `goalrail setup` provider config — there is
 no profile flag.
 
 ## Qwen Code
@@ -393,5 +393,5 @@ tools:
 - Run the YAML before publishing it:
 
   ```bash
-  omnigent run path/to/agent.yaml -p "Say hello"
+  goalrail run path/to/agent.yaml -p "Say hello"
   ```

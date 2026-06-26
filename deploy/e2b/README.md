@@ -3,7 +3,7 @@
 [E2B](https://e2b.dev) sandboxes give you disposable cloud machines for
 running Goalrail hosts, two ways:
 
-- **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
+- **CLI-launched**: `goalrail sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
   registers it as a host with your server.
 - **Server-managed**: the server provisions a sandbox automatically when
@@ -86,7 +86,7 @@ rebuild).
 Provision a sandbox and ship your local checkout into it:
 
 ```bash
-omnigent sandbox create --provider e2b
+goalrail sandbox create --provider e2b
 ```
 
 This starts a sandbox from the `omnigent-host` template, builds wheels
@@ -95,12 +95,12 @@ from your local checkout, and overlays them on top — so the sandbox runs
 as a host with your server:
 
 ```bash
-omnigent sandbox connect --provider e2b \
+goalrail sandbox connect --provider e2b \
   --sandbox-id <id-printed-by-create> \
   --server https://your-host
 ```
 
-`connect` runs `omnigent host` inside the sandbox and holds the
+`connect` runs `goalrail host` inside the sandbox and holds the
 connection open in your terminal — Ctrl-C tears it down (and kills the
 remote process; E2B exposes a real kill handle). New sessions targeting
 that host now run in the sandbox.
@@ -123,13 +123,13 @@ sandbox at provision time.
 > [!NOTE]
 > E2B has no local→sandbox port forward (it exposes sandbox ports
 > *outward* via public URLs only). The interactive in-sandbox
-> `omnigent login` / App OAuth step is therefore skipped automatically
+> `goalrail login` / App OAuth step is therefore skipped automatically
 > (as on Modal / Daytona): use E2B with servers that don't require
 > in-sandbox App auth, or authenticate via injected credentials (below).
 
 ## Server-managed sandboxes
 
-Add a `sandbox:` section to the server config (`omnigent server -c
+Add a `sandbox:` section to the server config (`goalrail server -c
 config.yaml`, or `<data_dir>/config.yaml`):
 
 ```yaml

@@ -167,7 +167,7 @@ class Session:
         ``None`` when no task has failed.
     :param external_session_id: Runtime-native session id this
         conversation wraps (e.g. Claude Code's session uuid for
-        ``omnigent claude`` sessions). ``None`` for regular AP-only
+        ``goalrail claude`` sessions). ``None`` for regular AP-only
         conversations.
     :param archived: Whether the session is archived. Archived
         sessions are hidden from the default ``list`` listing and
@@ -251,7 +251,7 @@ class SessionListItem:
     :param owner: User ID of the session owner.
     :param external_session_id: Runtime-native session id this
         conversation wraps (e.g. Claude Code's session uuid for
-        ``omnigent claude`` sessions). ``None`` for regular AP-only
+        ``goalrail claude`` sessions). ``None`` for regular AP-only
         conversations.
     :param pending_elicitations_count: Number of approval prompts
         currently waiting on this session. Powers the web sidebar's

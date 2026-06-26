@@ -1,4 +1,4 @@
-"""OSS Docker entrypoint for the Omnigent server.
+"""OSS Docker entrypoint for the Goalrail server.
 
 Mirrors ``deploy/databricks/src/app.py`` (the Databricks Apps entrypoint) but
 configured for a plain Postgres database and a local-filesystem
@@ -7,7 +7,7 @@ artifact store. Intended to run inside the image built by
 
 Execution mode: external runners only. The server accepts runner
 WebSocket connections at ``/v1/runner/tunnel`` and never spawns
-harness subprocesses on its own. Users run ``omnigent run … --server
+harness subprocesses on its own. Users run ``goalrail run … --server
 <url>`` on their own machine; that runner dials in.
 
 Importing this module has **no side effects**: configuration loading,
@@ -122,7 +122,7 @@ def _resolve_config() -> _ResolvedConfig:
     # Non-secret settings come from a YAML config file (default
     # <data_dir>/config.yaml, e.g. /data/config.yaml on the volume, or
     # OMNIGENT_CONFIG) — the same experience a laptop gets from
-    # `omnigent server -c`. Secrets stay in the environment:
+    # `goalrail server -c`. Secrets stay in the environment:
     # DATABASE_URL (carries the password) and the cookie / OIDC secrets.
     cfg = load_server_config()
 
@@ -171,7 +171,7 @@ def _resolve_config() -> _ResolvedConfig:
     )
 
     # Containerized / remote deploys default to authenticated auth.
-    # The framework-wide default (a bare local `omnigent server`) is
+    # The framework-wide default (a bare local `goalrail server`) is
     # single-user header mode with no login, but a Docker / HF / PaaS
     # instance is typically network-exposed, so we opt it into the
     # multi-user login flow here — accounts by default, or OIDC if the
@@ -381,7 +381,7 @@ def main() -> None:
             RUNNER_TUNNEL_MAX_MESSAGE_BYTES,
         )
 
-        logger.info("Starting omnigent server on %s:%d", resolved.host, resolved.port)
+        logger.info("Starting Goalrail server on %s:%d", resolved.host, resolved.port)
         uvicorn.run(
             resolved.app,
             host=resolved.host,
@@ -389,7 +389,7 @@ def main() -> None:
             ws_max_size=RUNNER_TUNNEL_MAX_MESSAGE_BYTES,
         )
     except Exception:  # noqa: BLE001 — startup catch-all so failures land in logs
-        logger.error("FATAL: omnigent server failed to start:\n%s", traceback.format_exc())
+        logger.error("FATAL: Goalrail server failed to start:\n%s", traceback.format_exc())
         # Keep the process alive briefly so the container log capture has time
         # to flush before the orchestrator restarts us.
         import time  # deferred — keeps module inert

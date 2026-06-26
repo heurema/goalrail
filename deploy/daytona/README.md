@@ -3,7 +3,7 @@
 [Daytona](https://www.daytona.io) sandboxes give you disposable cloud
 machines for running Goalrail hosts, two ways:
 
-- **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
+- **CLI-launched**: `goalrail sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
   registers it as a host with your server.
 - **Server-managed**: the server provisions a sandbox automatically
@@ -81,7 +81,7 @@ export DAYTONA_API_KEY=dtn_…
 Provision a sandbox and ship your local checkout into it:
 
 ```bash
-omnigent sandbox create --provider daytona
+goalrail sandbox create --provider daytona
 ```
 
 This pulls the host image, builds wheels from your local checkout, and
@@ -89,12 +89,12 @@ overlays them on top — so the sandbox runs *your* code, not whatever
 the image was built from. Then register it as a host with your server:
 
 ```bash
-omnigent sandbox connect --provider daytona \
+goalrail sandbox connect --provider daytona \
   --sandbox-id <id-printed-by-create> \
   --server https://your-host
 ```
 
-`connect` runs `omnigent host` inside the sandbox (over a PTY session)
+`connect` runs `goalrail host` inside the sandbox (over a PTY session)
 and holds the connection open in your terminal — Ctrl-C tears it down.
 New sessions targeting that host now run in the sandbox.
 
@@ -110,7 +110,7 @@ billing until removed via the
 
 > [!NOTE]
 > On free-tier (Tier 1/2) organizations the `--server` URL must pass
-> the egress allowlist or the in-sandbox `omnigent host` can't dial
+> the egress allowlist or the in-sandbox `goalrail host` can't dial
 > back — see the tier note above and the
 > [relay setup](#free-tier-relay-setup-tier-12).
 
@@ -122,7 +122,7 @@ the sandbox at provision time.
 
 ## Server-managed sandboxes
 
-Add a `sandbox:` section to the server config (`omnigent server -c
+Add a `sandbox:` section to the server config (`goalrail server -c
 config.yaml`, or `<data_dir>/config.yaml`):
 
 ```yaml

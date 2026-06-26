@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "omnigent-client"
 version = "0.3.0.dev0"
-description = "Python client SDK for the omnigent server API"
+description = "Python client SDK for the Goalrail server API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

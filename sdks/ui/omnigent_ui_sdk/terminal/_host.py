@@ -831,9 +831,9 @@ class TerminalHost:
     :param accent_color: Color for prompt bars and marker.
     :param history_file: Path for persistent input history.
         Defaults to ``"~/.omnigent_history"`` to match the
-        legacy ``omnigent run`` CLI's location
+        legacy CLI history location
         (``omnigent/inner/cli.py:_cli_history_file_path``) so
-        users who flip between legacy and Omnigent mode see the same
+        users who flip between legacy and Goalrail mode see the same
         ↑ / Ctrl+R recall in both. SDK consumers outside
         omnigent can override.
     :param model_name: Shown in the bottom toolbar.

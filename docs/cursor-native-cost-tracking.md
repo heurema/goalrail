@@ -2,7 +2,7 @@
 
 **Status:** Prototype (implemented; behind a live e2e validation)
 **Date:** 2026-06-25
-**Harness:** `cursor-native` (the `omnigent cursor` interactive TUI wrapper)
+**Harness:** `cursor-native` (the `goalrail cursor` interactive TUI wrapper)
 
 ## 1. Motivation
 
@@ -148,7 +148,7 @@ this prototype.
   captured `stop` payloads → correct `cursor_usage.jsonl`; accumulator produced
   the expected cumulative POST body; verified dedup (re-read ≠ double-count) and
   skip-empty.
-- **e2e (pending):** launch `omnigent cursor`, run a couple of turns, confirm
+- **e2e (pending):** launch `goalrail cursor`, run a couple of turns, confirm
   the Session-cost / token-usage popover updates in the web UI. The
   `cursor-sdk-e2e-dev` skill spins up a live server; cursor-native needs the TUI
   path (PTY-driven), so reuse the cursor-native e2e harness.

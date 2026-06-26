@@ -1,18 +1,19 @@
-# Upgrade experience: `omni upgrade` + release-available notices
+# Upgrade experience: `goalrail upgrade` + release-available notices
 
 How Goalrail keeps a user's CLI — and the local processes it spawns — current
 across PyPI releases. Three pieces ship together:
 
 1. A **version-aware server signature** so a running local server is cycled
    onto new code automatically after any upgrade.
-2. An **`omni upgrade`** command that upgrades the CLI and gracefully cycles
+2. A **`goalrail upgrade`** command that upgrades the CLI and gracefully cycles
    the local server / daemon / runners.
 3. A **"release available" notice** that fires only when a newer release is
-   actually on PyPI, and points at `omni upgrade`.
+   actually on PyPI, and points at `goalrail upgrade`.
 
 ## Background
 
-- The CLI ships as `omnigent` / `omni` → `omnigent.cli:main()`; the installed
+- The CLI ships as `goalrail` plus legacy `omnigent` / `omni` aliases →
+  `omnigent.cli:main()`; the installed
   version comes from `importlib.metadata.version("omnigent")`.
 - Releases publish three lockstep packages (`omnigent`, `omnigent-client`,
   `omnigent-ui-sdk`) to PyPI via `.github/workflows/release-omnigent.yml`.
@@ -48,14 +49,15 @@ installed package version into the signature alongside the resolved auth source:
 payload = json.dumps({"auth": resolve_auth_source(), "version": version}, sort_keys=True)
 ```
 
-Effect: after *any* upgrade — `omni upgrade` **or** a manual `uv tool upgrade` —
-the next CLI command sees the running server's recorded signature no longer
+Effect: after *any* upgrade — `goalrail upgrade` **or** a manual
+`uv tool upgrade` — the next CLI command sees the running server's recorded
+signature no longer
 match and respawns it on the new code through the **existing** config-drift
 respawn path. This is the keystone: "running servers get upgraded" works even
 when the user never runs the dedicated command. (Running from a source tree with
 no registered distribution contributes an empty version and is unaffected.)
 
-## 2. `omni upgrade`
+## 2. `goalrail upgrade`
 
 `omnigent/cli.py`, command `upgrade`. Flow:
 
@@ -74,8 +76,8 @@ no registered distribution contributes an empty version and is unaffected.)
 5. Run the installer-appropriate command (`_build_upgrade_suggestion` +
    `_run_upgrade_command`): `uv tool upgrade omnigent`, `pip install -U
    omnigent`, `pipx upgrade omnigent`, `--reinstall <vcs_url>`, etc.
-6. **Lazy respawn**: do not restart the server. The next `omni` command spawns
-   a fresh new-code server via the signature change above.
+6. **Lazy respawn**: do not restart the server. The next `goalrail` command
+   spawns a fresh new-code server via the signature change above.
 
 Most of steps 2/5 reuse helpers that already existed in `update_check.py`.
 
@@ -93,7 +95,7 @@ Most of steps 2/5 reuse helpers that already existed in `update_check.py`.
   **config files** (`uv.toml`'s `index-url` or default `[[index]]`; `pip.conf`'s
   `[global] index-url`), default `pypi.org/simple`. So it works on corporate
   mirrors / air-gapped networks even when the mirror lives in a config file
-  (the common case), and matches what `omni upgrade` pulls.
+  (the common case), and matches what `goalrail upgrade` pulls.
 - **Fire once per release**: the cache tracks `last_notified_version`; the
   notice shows once per new version, never on every invocation.
 - **Never on the hot path**: the foreground only reads the cache (instant). The
@@ -105,7 +107,7 @@ Most of steps 2/5 reuse helpers that already existed in `update_check.py`.
 - Dev clones keep the existing git "commits behind origin/main" notice
   (pointing at `git pull`), unchanged.
 
-The notice points at `omni upgrade`; it no longer runs an interactive upgrade
+The notice points at `goalrail upgrade`; it no longer runs an interactive upgrade
 itself (that responsibility moved to the command).
 
 ## Decisions

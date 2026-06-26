@@ -2,7 +2,7 @@
 #
 # Copy to the persistent volume as `/data/config.yaml` (the default the
 # server looks for), or point OMNIGENT_CONFIG at an explicit path. The
-# server (Docker entrypoint, Databricks Apps, and `omnigent server -c`)
+# server (Docker entrypoint, Databricks Apps, and `goalrail server -c`)
 # reads the same keys — so a hosted deploy keeps its settings here just
 # like a laptop does, instead of a pile of env vars.
 #

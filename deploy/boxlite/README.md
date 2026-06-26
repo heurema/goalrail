@@ -7,8 +7,8 @@ Hypervisor.framework on macOS) booted from a standard OCI image.
 
 The boxlite provider is **server-managed only**: the server provisions a
 box automatically when a session is created with `"host_type":
-"managed"`, starts `omnigent host` inside it, and removes it when the
-session is deleted. (There is no `omnigent sandbox create` CLI bootstrap
+"managed"`, starts `goalrail host` inside it, and removes it when the
+session is deleted. (There is no `goalrail sandbox create` CLI bootstrap
 for boxlite yet — see [Limitations](#limitations).)
 
 A single `boxlite` provider spans **both** runtime targets, chosen by
@@ -48,7 +48,7 @@ host needs no virtualization.
 
 ## Server configuration
 
-Add a `sandbox:` block to your server config (`omnigent server -c …` /
+Add a `sandbox:` block to your server config (`goalrail server -c …` /
 `OMNIGENT_CONFIG` / `<data_dir>/config.yaml`).
 
 ### Local micro-VMs (no cloud account)
@@ -135,7 +135,7 @@ values never live in the config file.
    persistent — the managed-session machinery owns teardown.
 2. Network defaults to full egress, so the in-box host can reach
    `server_url`.
-3. The server runs `omnigent host` inside the box (over `box.exec`) with
+3. The server runs `goalrail host` inside the box (over `box.exec`) with
    a one-time launch token in its environment; the host dials back over
    a WebSocket tunnel and registers. From there the session rides the
    same host/runner machinery every Goalrail host uses — the agent's
@@ -149,7 +149,7 @@ the in-box host logs to `/tmp/omnigent-host.log`.
 
 ## Limitations
 
-- **Managed-only.** The `omnigent sandbox create` / `connect` CLI
+- **Managed-only.** The `goalrail sandbox create` / `connect` CLI
   bootstrap (local wheel shipping + in-sandbox App OAuth) is not
   implemented for boxlite. Use the server-managed flow above. (Adding
   CLI bootstrap later is straightforward — the async `Box.copy_into`

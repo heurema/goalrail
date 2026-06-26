@@ -183,7 +183,7 @@ WebSocket tunnel:
 
 The deploy options here are all about the server. Runners aren't
 deployed; every user launches one on their own machine with
-`omnigent run …  --server <url>` or `omnigent claude  --server <url>`.
+`goalrail run …  --server <url>` or `goalrail claude  --server <url>`.
 
 This separation is why the server image is small (no `tmux`, no
 harness SDKs, no LLM API keys in the image) and why no agent code
@@ -195,7 +195,7 @@ Once the server is up, sign in from your machine. The token is reused by
 `run`, `attach`, and `host`:
 
 ```bash
-omnigent login https://your-host
+goalrail login https://your-host
 ```
 
 `login` detects the server's auth mode automatically. Built-in accounts,
@@ -208,13 +208,13 @@ Then register the machine as a host, so sessions created in the web UI can
 run on it:
 
 ```bash
-omnigent host https://your-host
+goalrail host https://your-host
 ```
 
 Or point a one-off run at the server directly:
 
 ```bash
-omnigent run path/to/agent.yaml --server https://your-host
+goalrail run path/to/agent.yaml --server https://your-host
 ```
 
 ## Run hosts in cloud sandboxes
@@ -227,8 +227,8 @@ needed (`pip install 'omnigent[modal]'`, `'omnigent[daytona]'`, or
 (`modal token new`, `DAYTONA_API_KEY`, `ISLO_API_KEY`, or `E2B_API_KEY`), then:
 
 ```bash
-omnigent sandbox create --provider modal     # or --provider daytona / islo / e2b
-omnigent sandbox connect --provider modal --sandbox-id <id> --server https://your-host
+goalrail sandbox create --provider modal     # or --provider daytona / islo / e2b
+goalrail sandbox connect --provider modal --sandbox-id <id> --server https://your-host
 ```
 
 > [!NOTE]
@@ -246,7 +246,7 @@ session with `"host_type": "managed"` (e.g.
 server provision a sandbox, start a host in it, and run the session there.
 No laptop, no CLI steps per session; the sandbox is terminated when the
 session is deleted. Configuration is a `sandbox:` section in the server
-config (`omnigent server -c config.yaml`, or `<data_dir>/config.yaml`):
+config (`goalrail server -c config.yaml`, or `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
@@ -347,7 +347,7 @@ guide lives at [`daytona/README.md`](daytona/README.md); the Islo guide
 ## Auth
 
 Auth is driven by a single switch, `OMNIGENT_AUTH_ENABLED`. The framework
-default (a bare local `omnigent server`) leaves it off: single-user
+default (a bare local `goalrail server`) leaves it off: single-user
 `header` mode, no login. The containerized deploys here (Docker / HF / Render /
 Railway / Modal / Fly) set `OMNIGENT_AUTH_ENABLED=1` by default in their
 entrypoints,

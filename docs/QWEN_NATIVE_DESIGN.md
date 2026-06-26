@@ -51,7 +51,7 @@ accepts `submit` + `confirmation_response`, so Stop sends `Escape` to the pane.
 
 ```mermaid
 flowchart TD
-    subgraph CLI["omnigent qwen (CLI wrapper)"]
+    subgraph CLI["goalrail qwen (CLI wrapper)"]
       W[qwen_native.py<br/>daemon bind · terminal-ready poll · tmux attach]
     end
 
@@ -177,7 +177,7 @@ sequenceDiagram
             ▲ launched by
             │
    ┌──────────────────────────────────────────────────────────────────┐
-   │   omnigent qwen  (CLI wrapper, qwen_native.py)                     │
+   │   goalrail qwen  (CLI wrapper, qwen_native.py)                     │
    │   daemon bind · terminal-ready poll · attach local TTY            │
    └──────────────────────────────────────────────────────────────────┘
 ```
@@ -287,7 +287,7 @@ trade-offs; one is inherent to the embedded-terminal UX.
 | `omnigent/inner/qwen_native_harness.py` | `create_app()` factory |
 | `omnigent/qwen_native_bridge.py` | input-file append (`submit` / `confirmation_response`), tmux.json, `inject_interrupt` (Escape), `kill_session`, `build_qwen_native_spawn_env` |
 | `omnigent/qwen_native_forwarder.py` | tail `--json-file`, mirror transcript, drive the permission gate |
-| `omnigent/qwen_native.py` | `omnigent qwen` wrapper (clone `goose_native.py`) |
+| `omnigent/qwen_native.py` | `goalrail qwen` wrapper (clone `goose_native.py`) |
 
 ## Registration touch-points (one-liners, beside the goose entries)
 
@@ -296,7 +296,7 @@ trade-offs; one is inherent to the embedded-terminal UX.
 - `omnigent/native_coding_agents.py` + `omnigent/_wrapper_labels.py` → `QWEN_NATIVE_*`
 - `omnigent/onboarding/harness_install.py` → `_HARNESS_NAME_TO_KEY` → existing `QWEN_KEY`
 - `omnigent/runner/app.py` → `_auto_create_qwen_terminal` + the ~7 goose-native dispatch sites
-- `omnigent/cli.py` → `omnigent qwen` command
+- `omnigent/cli.py` → `goalrail qwen` command
 
 > Naming: keep `qwen` = ACP (piped); add `qwen-native` / `native-qwen` for the TUI,
 > mirroring how `goose` and `goose-native` coexist. The default can be flipped later.
@@ -382,7 +382,7 @@ safe because genuine *boot* failures never reach this path — they surface via
 
 ## Session resume (verified)
 
-On `omni qwen --resume <conv_id>` (or a runner restart), `_auto_create_qwen_terminal`
+On `goalrail qwen --resume <conv_id>` (or a runner restart), `_auto_create_qwen_terminal`
 restores the qwen TUI's own history so the embedded pane shows the prior
 conversation instead of a blank prompt. It follows the **same
 `external_session_id` convention as claude-/codex-/pi-native** so it's consistent
