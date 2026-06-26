@@ -1,5 +1,5 @@
 """
-Databricks profile onboarding for Omnigent.
+Databricks profile onboarding for Goalrail.
 
 The internal-beta onboarding configures a fixed set of Databricks profiles in
 ``~/.databrickscfg`` (the specific workspaces live in
@@ -56,7 +56,7 @@ _CONFLICTING_ENV_VARS = CONFLICTING_ENV_VARS
 @dataclass(frozen=True)
 class ProfileSpec:
     """
-    One Databricks profile Omnigent depends on.
+    One Databricks profile Goalrail depends on.
 
     :param name: Profile name written to ``~/.databrickscfg``,
         e.g. ``"oss"``.
@@ -382,8 +382,8 @@ def run_onboarding() -> bool:
 
     console.print(
         Panel(
-            "[bold]Omnigent onboarding[/bold]\n\n"
-            "Setting up the Databricks profiles Omnigent needs "
+            "[bold]Goalrail onboarding[/bold]\n\n"
+            "Setting up the Databricks profiles Goalrail needs "
             f"({', '.join(f'`{s.name}`' for s in DEFAULT_PROFILES)}).",
             border_style="cyan",
             padding=(1, 2),
@@ -523,9 +523,9 @@ def login_databricks_workspace(workspace_url: str, *, console: Console | None = 
     Runs ``databricks auth login --host <workspace_url> --profile <name>``
     for a single workspace and returns the profile name, so the caller can
     persist a ``kind: databricks`` provider keyed on it. This is the only
-    place Omnigent triggers a Databricks CLI login: it fires solely when
+    place Goalrail triggers a Databricks CLI login: it fires solely when
     a user explicitly adds a Databricks provider in
-    ``omnigent setup --no-internal-beta``, never on a bare ``omnigent run``.
+    ``goalrail setup --no-internal-beta``, never on a bare ``goalrail run``.
 
     Idempotent: when a profile already points at this host (the OAuth token
     cache is host-keyed, so the login is still valid), it is reused without
@@ -591,7 +591,7 @@ def login_databricks_workspace(workspace_url: str, *, console: Console | None = 
 
 def maybe_run_onboarding() -> None:
     """
-    Pre-flight onboarding for ``omnigent run``.
+    Pre-flight onboarding for ``goalrail run``.
 
     Fast path on every call: read ``~/.databrickscfg``, classify
     profiles, and:
@@ -624,8 +624,8 @@ def maybe_run_onboarding() -> None:
         n = _apply_silent_aliases(actions.aliasable, console)
         if n:
             console.print(
-                f"omnigent: aliased {n} existing profile(s) "
-                f"to Omnigent names: "
+                f"goalrail: aliased {n} existing profile(s) "
+                f"to Goalrail names: "
                 f"{', '.join(spec.name for _, spec in actions.aliasable)}"
             )
         existing = _existing_profile_hosts()
@@ -637,7 +637,7 @@ def maybe_run_onboarding() -> None:
     missing_parts = [s.name for s in actions.oauth]
     missing_parts += [f"{s.name} (wrong host)" for s, _ in actions.wrong_host]
     console.print(
-        f"\n  [yellow]Omnigent needs Databricks profiles: {', '.join(missing_parts)}[/yellow]"
+        f"\n  [yellow]Goalrail needs Databricks profiles: {', '.join(missing_parts)}[/yellow]"
     )
     try:
         answer = input("  Run onboarding now? [Y/n] ").strip().lower()

@@ -1,7 +1,7 @@
 """
-Sandbox launchers: run Omnigent hosts in remote sandboxes.
+Sandbox launchers: run Goalrail hosts in remote sandboxes.
 
-Public API for the ``omnigent sandbox`` CLI and anything else that
+Public API for the ``goalrail sandbox`` CLI and anything else that
 bootstraps a sandbox-backed host. Providers are registered by name in
 :data:`_LAUNCHERS`; launcher modules may be absent from a given
 distribution (e.g. the Databricks Lakebox launcher), in which case the
@@ -80,7 +80,7 @@ def available_providers() -> tuple[str, ...]:
 
     Uses ``find_spec`` (no import side effects), so it is cheap enough
     to call at CLI startup to decide whether to register the
-    ``omnigent sandbox`` command group.
+    ``goalrail sandbox`` command group.
 
     :returns: Provider names in registration order, e.g.
         ``("lakebox", "modal")`` internally or ``("modal",)`` in the

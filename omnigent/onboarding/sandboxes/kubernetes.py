@@ -9,7 +9,7 @@ dependency (``pip install 'omnigent[kubernetes]'``) imported lazily, so the
 provider can be listed and the module probed without it.
 
 The model is **entrypoint-as-host**: the Pod's container command IS
-``omnigent host``. :meth:`~KubernetesSandboxLauncher.provision` only RESERVES
+``goalrail host``. :meth:`~KubernetesSandboxLauncher.provision` only RESERVES
 the Pod name (no Pod yet); :meth:`~KubernetesSandboxLauncher.start_host` then
 creates the Pod — an init container prepares the workspace (``mkdir`` + optional
 ``git clone``) and the main container runs the host under a tiny PID-1 reaper,
@@ -31,7 +31,7 @@ Platform notes that shape this launcher:
   and ``fsGroup`` makes it group-writable.
 - **PID-1 reaper.** The in-sandbox host re-parents orphaned runner processes to
   PID 1, so the container command is a tiny supervisor that spawns
-  ``omnigent host``, reaps any children, and forwards SIGTERM for prompt,
+  ``goalrail host``, reaps any children, and forwards SIGTERM for prompt,
   graceful termination.
 - **Least privilege.** ``automountServiceAccountToken: false`` keeps the runner
   SA's (absent) rights out of the sandbox, the Pod runs as a non-root user,
@@ -197,7 +197,7 @@ _RESERVED_ENV_NAMES: frozenset[str] = frozenset(
 )
 
 # PID-1 reaper, run as the host container's entrypoint. It spawns its argv
-# (``omnigent host …``) as a child, forwards SIGTERM/SIGINT for prompt graceful
+# (``goalrail host …``) as a child, forwards SIGTERM/SIGINT for prompt graceful
 # shutdown, and loops os.wait() to reap every child — including runner processes
 # the in-sandbox host re-parents to PID 1 — until the host child exits. Stdlib
 # only, so it runs under the image's bare python3.
@@ -395,12 +395,12 @@ def _render_workspace_prep_command(
 
 def _render_host_command(server_url: str) -> list[str]:
     """
-    Render the main container command that runs ``omnigent host`` under the
+    Render the main container command that runs ``goalrail host`` under the
     PID-1 reaper.
 
     ``exec`` replaces the login shell with the reaper (so it becomes PID 1, with
     the venv on PATH from the image's profile), and the reaper spawns its argv —
-    ``omnigent host --server <url>`` — as its child. Identity + token reach the
+    ``goalrail host --server <url>`` — as its child. Identity + token reach the
     host through the Pod environment (literal env + the token ``secretKeyRef``),
     not this command.
 
@@ -409,7 +409,7 @@ def _render_host_command(server_url: str) -> list[str]:
     """
     script = (
         f"exec python3 -c {shlex.quote(_REAPER_SRC)} "
-        f"omnigent host --server {shlex.quote(server_url)}"
+        f"goalrail host --server {shlex.quote(server_url)}"
     )
     return ["bash", "-lc", script]
 
@@ -474,7 +474,7 @@ def build_pod_manifest(
 
     - An **init container** (:data:`_INIT_CONTAINER_NAME`) creates the workspace
       and clones the repository; the **main container**
-      (:data:`_CONTAINER_NAME`) runs ``omnigent host`` under the PID-1 reaper.
+      (:data:`_CONTAINER_NAME`) runs ``goalrail host`` under the PID-1 reaper.
       Both share the writable-HOME ``emptyDir``.
     - ``restartPolicy: Never`` — a crashed host should not silently restart with
       a stale launch token; the managed machinery provisions a replacement.
@@ -740,7 +740,7 @@ class KubernetesSandboxLauncher(SandboxLauncher):
     Server-managed only and entrypoint-as-host: :meth:`provision` reserves a Pod
     name, :meth:`start_host` creates a per-Pod token Secret and a Pod whose init
     container prepares the workspace and whose main container runs
-    ``omnigent host``, and :meth:`terminate` deletes both. All transport rides the
+    ``goalrail host``, and :meth:`terminate` deletes both. All transport rides the
     official ``kubernetes`` client's ``CoreV1Api`` built into an isolated
     :class:`~kubernetes.client.Configuration` (no global client-state mutation),
     preferring in-cluster ServiceAccount config and falling back to a kubeconfig.
@@ -996,7 +996,7 @@ class KubernetesSandboxLauncher(SandboxLauncher):
         """
         Reserve a Pod name for a managed launch — no Pod is created here.
 
-        Entrypoint-as-host: the Pod (which boots running ``omnigent host``) is
+        Entrypoint-as-host: the Pod (which boots running ``goalrail host``) is
         materialized by :meth:`start_host`, not here. ``provision`` only mints
         the DNS-label-safe Pod name, so the server can register the launch token
         against it BEFORE the Pod exists — closing the host dial-back race by
@@ -1027,7 +1027,7 @@ class KubernetesSandboxLauncher(SandboxLauncher):
         :meth:`~omnigent.onboarding.sandboxes.base.SandboxLauncher.start_host`
         (there is no exec bootstrap): the Pod's init container creates
         ``<HOME>/workspace`` and clones the repository (when requested), and its
-        main container runs ``omnigent host``, which dials back over the
+        main container runs ``goalrail host``, which dials back over the
         launch-token tunnel. Because the launcher controls ``HOME``
         (:data:`_HOME_DIR`), the workspace path is known without asking the
         sandbox. The pod-start wait fast-fails (with the container log tail) on a

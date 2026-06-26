@@ -3,7 +3,7 @@ Islo sandbox launcher.
 
 Implements :class:`~omnigent.onboarding.sandboxes.base.SandboxLauncher`
 for `Islo <https://islo.dev>`_ sandboxes. The integration talks to the
-Islo HTTP API directly through ``httpx`` (already a base Omnigent
+Islo HTTP API directly through ``httpx`` (already a base Goalrail
 dependency), so there is no provider SDK extra to install.
 
 Platform notes that shape this launcher:
@@ -12,7 +12,7 @@ Platform notes that shape this launcher:
   session token via ``POST /auth/token``. The token is cached until
   shortly before expiry, mirroring Islo's Go SDK.
 - **Prebaked host image.** Like Modal and Daytona, sandboxes boot from
-  the official Omnigent host image unless overridden. That keeps
+  the official Goalrail host image unless overridden. That keeps
   server-managed launches fast.
 - **No local port forwarding.** Islo can run commands and upload files
   through its API, but it does not provide a local-to-sandbox port

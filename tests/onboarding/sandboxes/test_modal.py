@@ -488,7 +488,7 @@ def test_attach_rejects_unknown_sandbox(monkeypatch: pytest.MonkeyPatch) -> None
     with pytest.raises(click.ClickException) as exc:
         ModalSandboxLauncher().attach("sb-gone")
     assert "sb-gone" in str(exc.value)
-    assert "sandbox create --provider modal" in str(exc.value)
+    assert "goalrail sandbox create --provider modal" in str(exc.value)
 
 
 def test_keep_alive_surfaces_lifetime_cap(

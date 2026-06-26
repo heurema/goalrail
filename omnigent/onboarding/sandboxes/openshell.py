@@ -21,7 +21,7 @@ Notes that shape this launcher:
   gateway (its endpoint, TLS material, and OIDC token) from the gateway
   selected by ``openshell gateway select`` — i.e. ``$OPENSHELL_GATEWAY``
   or ``~/.config/openshell/active_gateway``. There is no base-URL knob.
-- **Custom host image.** Omnigent boots its prebaked host image, which
+- **Custom host image.** Goalrail boots its prebaked host image, which
   rides in ``SandboxSpec.template.image``. The SDK's public ``create``
   takes only a ``SandboxSpec`` and does not re-export the spec
   protobufs, so the spec is built from the generated ``openshell._proto``
@@ -74,7 +74,7 @@ overrides ``~/.config/openshell/active_gateway``."""
 
 _READY_TIMEOUT_S = 300
 _EXEC_TIMEOUT_S = 300
-# A foreground host (`omnigent host`) is held open until Ctrl-C, so its
+# A foreground host (`goalrail host`) is held open until Ctrl-C, so its
 # exec stream must not hit a gRPC deadline mid-session — give it a long
 # ceiling. The pidfile records the in-sandbox pid so Ctrl-C can kill the
 # remote process (cancelling the local stream doesn't stop it).
@@ -85,7 +85,7 @@ _FOREGROUND_PIDFILE_TEMPLATE = "/tmp/oa-openshell-foreground-{sandbox_id}.pid"
 # contract; see deploy/docker/Dockerfile), whose home is ``/home/sandbox``.
 # The host image keeps ``WORKDIR /root`` for the root-based providers, so we
 # pin every exec's cwd + ``$HOME`` to the sandbox user's writable home here
-# rather than changing the shared image — otherwise ``omnigent host`` resolves
+# rather than changing the shared image — otherwise ``goalrail host`` resolves
 # its config under ``/root`` (unreadable to the sandbox user) and crashes, and
 # the managed flow's ``$HOME/workspace`` lands somewhere unwritable.
 _SANDBOX_HOME = "/home/sandbox"
@@ -413,7 +413,7 @@ class OpenShellSandboxLauncher(SandboxLauncher):
         """
         Run *command* in the sandbox, streaming its output, until it exits.
 
-        Holds ``omnigent host`` open for ``omnigent sandbox connect``;
+        Holds ``goalrail host`` open for ``goalrail sandbox connect``;
         Ctrl-C kills the remote process and re-raises ``KeyboardInterrupt``.
         """
         client = self._openshell()

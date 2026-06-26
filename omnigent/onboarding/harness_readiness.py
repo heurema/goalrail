@@ -9,7 +9,7 @@ actionable error instead of dying inside the executor).
 can reliably determine locally is whether a harness's wrapped CLI binary
 is on ``PATH``. That gates the native CLI harnesses (Claude Code / Codex
 via ``claude`` / ``codex``) and ``pi`` — the common "I picked Claude Code
-but never ran ``omnigent setup`` to install it" case.
+but never ran ``goalrail setup`` to install it" case.
 
 In-process SDK harnesses (``claude-sdk``, ``openai-agents``) run without
 any CLI and resolve their model credentials at runtime from sources the
@@ -98,7 +98,7 @@ _OPENCODE_HARNESSES: frozenset[str] = frozenset({"opencode-native"})
 _CURSOR_NATIVE_HARNESSES: frozenset[str] = frozenset({"cursor-native", "native-cursor"})
 
 # Native Kiro harnesses boot the standalone ``kiro-cli`` TUI. Kiro has its own
-# auth backend and no Omnigent provider family, so readiness is binary presence.
+# auth backend and no Goalrail provider family, so readiness is binary presence.
 _KIRO_NATIVE_HARNESSES: frozenset[str] = frozenset({"kiro-native", "native-kiro"})
 
 # Native Goose harnesses. Boot the ``goose session`` TUI (``omni goose``) and
@@ -213,7 +213,7 @@ def harness_is_configured(harness: str) -> bool:
         # Cursor runs in-process via ``cursor-sdk`` and authenticates with a
         # ``CURSOR_API_KEY`` (a ``cursor-agent login`` does not apply). So,
         # unlike the CLI-wrapping harnesses, there is no binary to gate on:
-        # readiness is whether a key is resolvable — stored by ``omnigent setup``
+        # readiness is whether a key is resolvable — stored by ``goalrail setup``
         # (the ``cursor:`` block — see :mod:`omnigent.onboarding.cursor_auth`)
         # or inherited from the env. A bad key surfaces at run time.
         #
@@ -231,7 +231,7 @@ def harness_is_configured(harness: str) -> bool:
         # SDK bundles the CLI binary it drives, so there is no separate binary to
         # gate on) and authenticates against GitHub's Copilot backend with a
         # GitHub token. So, like cursor, readiness is whether a token is
-        # resolvable — one stored by ``omnigent setup`` (the ``copilot:`` config
+        # resolvable — one stored by ``goalrail setup`` (the ``copilot:`` config
         # block — see :mod:`omnigent.onboarding.copilot_auth`) or inherited from
         # the environment. A bad / Copilot-less token surfaces at run time.
         from omnigent.onboarding.copilot_auth import (

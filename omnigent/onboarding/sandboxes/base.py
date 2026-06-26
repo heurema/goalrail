@@ -1,5 +1,5 @@
 """
-Provider-agnostic interface for running Omnigent hosts in remote sandboxes.
+Provider-agnostic interface for running Goalrail hosts in remote sandboxes.
 
 A *sandbox launcher* wraps one sandbox provider (Databricks Lakebox, Modal,
 Daytona, …) behind the small set of transport / lifecycle primitives that the
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 DEFAULT_HOST_IMAGE: str = "ghcr.io/omnigent-ai/omnigent-host:latest"
 """Default sandbox image across providers: the official prebaked
-Omnigent host image, published by CI from the ``host`` target of
+Goalrail host image, published by CI from the ``host`` target of
 ``deploy/docker/Dockerfile`` (``:latest`` tracks main; ``:sha-<short>``
 pins a commit). It bakes the full omnigent install plus git / tmux /
 curl and the coding-harness CLIs, so sandbox creation skips the
@@ -178,7 +178,7 @@ class SandboxLauncher(ABC):
     supports_local_port_forward: ClassVar[bool] = False
 
     # Whether this provider supports the CLI bootstrap flow
-    # (``omnigent sandbox create`` / ``connect``: wheel shipping via
+    # (``goalrail sandbox create`` / ``connect``: wheel shipping via
     # ``put`` + ``wheel_install_command``, streaming attach via
     # ``stream_exec`` / ``exec_foreground``). Managed-only providers
     # (e.g. Daytona) implement just the server-managed subset
@@ -241,7 +241,7 @@ class SandboxLauncher(ABC):
         on_stage: Callable[[str], None] | None = None,
     ) -> str:
         """
-        Start ``omnigent host`` in the sandbox and return the workspace path.
+        Start ``goalrail host`` in the sandbox and return the workspace path.
 
         The default is the EXEC model: probe ``$HOME``, create
         ``<HOME>/workspace``, optionally clone the repository into it, and start
@@ -323,7 +323,7 @@ class SandboxLauncher(ABC):
         )
         self.run_background(
             sandbox_id,
-            f"{env_prefix} omnigent host --server {shlex.quote(server_url)}",
+            f"{env_prefix} goalrail host --server {shlex.quote(server_url)}",
         )
         return workspace
 
@@ -389,7 +389,7 @@ class SandboxLauncher(ABC):
 
         :param sandbox_id: Target sandbox.
         :param command: Shell command to background, e.g.
-            ``"ENV=val omnigent host --server https://…"``.
+            ``"ENV=val goalrail host --server https://…"``.
         :param log_path: Where stdout/stderr of the backgrounded process
             are redirected inside the sandbox.
         :returns: A synthetic result with ``stdout="launched\\n"`` on success.
@@ -523,13 +523,13 @@ class SandboxLauncher(ABC):
         current terminal, blocking until it exits (Ctrl-C detaches and
         tears the remote process down).
 
-        Used to hold ``omnigent host`` open while the sandbox is
+        Used to hold ``goalrail host`` open while the sandbox is
         registered with the App. CLI-bootstrap capability —
         managed-only launchers need not override the raising default.
 
         :param sandbox_id: Target sandbox.
         :param command: Shell command to execute remotely, e.g.
-            ``"omnigent host --server https://… --profile oss"``.
+            ``"goalrail host --server https://… --profile oss"``.
         :returns: The remote command's exit code.
         :raises SandboxCapabilityError: When the provider does not
             support foreground execs.

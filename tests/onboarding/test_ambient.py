@@ -636,7 +636,7 @@ def test_vertex_claude_detected_with_all_env_vars(
     Claude Code natively supports Vertex AI via CLAUDE_CODE_USE_VERTEX,
     ANTHROPIC_VERTEX_PROJECT_ID, and CLOUD_ML_REGION. When all three are
     set, ambient detection must surface a vertex-claude provider so
-    Omnigent recognises the credential and routes through the CLI's own
+    Goalrail recognises the credential and routes through the CLI's own
     Vertex auth (GCP ADC).
     """
     monkeypatch.setenv("CLAUDE_CODE_USE_VERTEX", "1")

@@ -1,11 +1,11 @@
-"""Cursor API-key credential storage for ``omnigent setup`` and the runtime.
+"""Cursor API-key credential storage for ``goalrail setup`` and the runtime.
 
 Cursor is deliberately outside the anthropic/openai provider-family + gateway
 machinery (see :func:`omnigent.runtime.workflow._build_cursor_spawn_env`): the
 Cursor SDK (``cursor-sdk``) talks only to Cursor's own backend via a
 ``CURSOR_API_KEY`` — which it requires — never the Databricks AI gateway. It
 therefore has no ``providers:`` family entry, but a user should still be able to
-register a ``CURSOR_API_KEY`` once through ``omnigent setup`` rather than
+register a ``CURSOR_API_KEY`` once through ``goalrail setup`` rather than
 exporting it in every shell.
 
 This module is that home. The key is stored exactly like the api-key

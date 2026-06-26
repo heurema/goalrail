@@ -1,4 +1,4 @@
-"""Antigravity Gemini API-key credential storage for ``omnigent setup``.
+"""Antigravity Gemini API-key credential storage for ``goalrail setup``.
 
 Antigravity is Gemini-native (the SDK has no OpenAI-compatible ``base_url``), so
 it sits outside the anthropic/openai provider-family machinery. Its key lives in

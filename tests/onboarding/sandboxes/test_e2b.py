@@ -427,8 +427,10 @@ def test_attach_rejects_stopped_sandbox(sdk: _State) -> None:
 
 def test_resolve_missing_sandbox_is_friendly(sdk: _State) -> None:
     sdk.connect_missing = True
-    with pytest.raises(click.ClickException, match="not found"):
+    with pytest.raises(click.ClickException) as exc:
         E2BSandboxLauncher().run("gone", "echo hi")
+    assert "not found" in str(exc.value)
+    assert "goalrail sandbox create --provider e2b" in str(exc.value)
 
 
 # ── keep_alive ──────────────────────────────────────────────

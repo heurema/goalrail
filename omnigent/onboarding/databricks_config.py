@@ -88,7 +88,7 @@ DATABRICKS_CLAUDE_DEFAULT_MODEL = "databricks-claude-opus-4-8"
 def list_databricks_profiles() -> list[str]:
     """Return the profile section names declared in ``~/.databrickscfg``.
 
-    Used by ``omnigent setup --no-internal-beta`` to offer the user a pick-list
+    Used by ``goalrail setup --no-internal-beta`` to offer the user a pick-list
     when adding a ``kind: databricks`` provider, so they don't have to
     recall the exact profile name.
 
@@ -114,7 +114,7 @@ def get_workspace_url_for_profile(profile: str) -> str | None:
     """Return the workspace host for a ``~/.databrickscfg`` profile.
 
     Reads the INI-style ``~/.databrickscfg`` directly with
-    :mod:`configparser`, then falls back to Omnigent' built-in setup
+    :mod:`configparser`, then falls back to Goalrail's built-in setup
     profile metadata for legacy names.
 
     :param profile: Profile section name, e.g. ``"<your-profile>"`` or

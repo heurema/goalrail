@@ -5,7 +5,7 @@ to talk to Databricks Unity AI Gateway.  After ``ucode configure`` runs, it
 writes ``~/.ucode/state.json`` with the workspace URL, available models,
 base URLs, and per-agent auth/config snippets.
 
-Omnigent reads this file to pick per-harness model defaults, base URLs,
+Goalrail reads this file to pick per-harness model defaults, base URLs,
 and auth helpers instead of hardcoding them.  ucode is the source of
 truth for these values.
 """
@@ -101,7 +101,7 @@ def _parse_agent_state(raw: object) -> UcodeAgentState:
     :param raw: Raw JSON value for one agent entry.
     :returns: Parsed :class:`UcodeAgentState`. Invalid or missing fields
         are omitted rather than raising so unrelated state additions do
-        not break Omnigent.
+        not break Goalrail.
     """
     if not isinstance(raw, dict):
         return UcodeAgentState()
@@ -133,7 +133,7 @@ def read_ucode_state(workspace_url: str) -> UcodeWorkspaceState | None:
 
     Opens ``~/.ucode/state.json`` and returns the entry for *workspace_url*
     (trailing-slash-insensitive).  The reader is intentionally tolerant of
-    state-version changes; it validates the keys Omnigent consumes rather
+    state-version changes; it validates the keys Goalrail consumes rather
     than rejecting the whole file based on ``state_version``.
 
     :param workspace_url: The Databricks workspace URL to look up,

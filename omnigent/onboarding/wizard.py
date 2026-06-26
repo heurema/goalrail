@@ -1,7 +1,7 @@
 """
-Interactive setup flow for ``omnigent``.
+Interactive setup flow for ``goalrail``.
 
-``omnigent setup`` helps users create a coding agent configuration. It detects
+``goalrail setup`` helps users create a coding agent configuration. It detects
 locally installed CLI tools, generates a YAML agent spec, and starts
 the server + REPL + web UI.
 
@@ -596,7 +596,7 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
 
 def _prompt_server_url(current: str | None) -> str | None:
     """
-    Prompt for the Omnigent server URL, or confirm the existing one.
+    Prompt for the Goalrail server URL, or confirm the existing one.
 
     Skipped when *current* is already set and the user presses Enter to
     accept it. The user can type a new value to override.
@@ -618,7 +618,7 @@ def _prompt_server_url(current: str | None) -> str | None:
             return current
     console.print("  [bold]Server URL[/bold]")
     console.print(
-        "  [dim]The Omnigent server your agents connect to."
+        "  [dim]The Goalrail server your agents connect to."
         " Leave blank to run locally (no server).[/dim]"
     )
     console.print()
@@ -667,7 +667,7 @@ def _prompt_existing_or_new(configs: list[Path]) -> Path | None:
         console.print()
         console.print("[bold]What would you like to do?[/bold]")
         console.print()
-        choice = _arrow_menu(["Create a new Omnigent", "Run an existing Omnigent"])
+        choice = _arrow_menu(["Create a new agent", "Run an existing agent"])
         if choice == 0:
             return None
 
@@ -714,14 +714,14 @@ def _show_welcome() -> None:
     from omnigent.inner.mascots import MASCOT_ART_COLOR
 
     banner = startup_banner_strings(
-        "Welcome to Omnigent!",
-        hint_line="skip anytime: omnigent run <agent.yaml>",
+        "Welcome to Goalrail!",
+        hint_line="skip anytime: goalrail run <agent.yaml>",
         art_color=MASCOT_ART_COLOR,
     )
     console.print()
     sys.stdout.write(banner.ansi + "\n")
     console.print()
-    console.print("  Omnigent is a declarative agent authoring and runtime framework.")
+    console.print("  Goalrail is a declarative agent authoring and runtime framework.")
     console.print("  Define your agent in a YAML config and the framework handles the rest.")
     console.print()
     console.print(
@@ -751,7 +751,7 @@ def _show_welcome() -> None:
     console.print()
     console.print("  This setup flow will help you create your first YAML config.")
     console.print("  Once you're familiar, just write your own and run:")
-    console.print("  [dim]omnigent run <your-agent.yaml>[/dim]")
+    console.print("  [dim]goalrail run <your-agent.yaml>[/dim]")
     console.print()
     console.print("  [dim]Check out examples/ in the repo for ready-to-run agent configs.[/dim]")
 
@@ -764,7 +764,7 @@ def _show_welcome() -> None:
 def _prompt_use_case() -> int:
     """Prompt for use case. Returns 1 (single), 2 (multi), or 3 (custom)."""
     console.print(
-        "  Here are two popular coding agent scenarios where people find Omnigent useful:"
+        "  Here are two popular coding agent scenarios where people find Goalrail useful:"
     )
     console.print()
     options = [
@@ -1333,7 +1333,7 @@ def _store_default_config(yaml_path: Path, supervisor: _SupervisorConfig | None 
             settings["auth"] = {"type": "api_key", "api_key": "$OPENAI_API_KEY"}
     _save_global_config(settings)
     console.print(f"  [green]✓ stored default_agent in {_GLOBAL_CONFIG_PATH}[/green]")
-    console.print("  [dim]Type `omnigent` to start a new session.[/dim]\n")
+    console.print("  [dim]Type `goalrail` to start a new session.[/dim]\n")
 
 
 def _finish_new_setup(
@@ -1361,8 +1361,8 @@ def _finish_new_setup(
     console.print(
         "  [dim]Tip: Edit this YAML directly to change harness,"
         " model, add policies, tools, and more.[/dim]\n"
-        f"  [dim]Run it anytime with:[/dim] omnigent run [link={file_uri}]{yaml_path}[/link]\n"
-        "  [dim]See examples:[/dim] omnigent/examples/ in the repo, or omnigent run --help\n"
+        f"  [dim]Run it anytime with:[/dim] goalrail run [link={file_uri}]{yaml_path}[/link]\n"
+        "  [dim]See examples:[/dim] examples/ in the repo, or goalrail run --help\n"
     )
 
     _store_default_config(yaml_path, supervisor=supervisor)
@@ -1388,18 +1388,18 @@ def run_wizard_and_launch() -> None:
     Asks for three things in order, then writes them to
     ``~/.omnigent/config.yaml``:
 
-    1. **Server URL** — the Omnigent server to connect to (optional;
+    1. **Server URL** — the Goalrail server to connect to (optional;
        blank means run locally).
     2. **Auth** — ``api_key`` (bearer token + optional base URL) or
        ``databricks`` (profile name). When ``type: databricks``, the
-       same profile is reused automatically for Omnigent server OAuth so no
+       same profile is reused automatically for Goalrail server OAuth so no
        separate ``profile:`` key is needed.
     3. **Agent YAML** — path to the agent spec file that becomes
-       ``default_agent`` so ``omnigent run`` uses it without an
+       ``default_agent`` so ``goalrail run`` uses it without an
        argument.
 
     All three prompts are skippable by pressing Enter or Escape; the
-    user can re-run ``omnigent setup --no-internal-beta`` at any time
+    user can re-run ``goalrail setup --no-internal-beta`` at any time
     to update the values.
     """
     from omnigent.cli import _GLOBAL_CONFIG_PATH, _load_global_config, _save_global_config
@@ -1422,7 +1422,7 @@ def run_wizard_and_launch() -> None:
 
     # ── Step 2: LLM executor auth ─────────────────────────────────────
     # When auth.type == "databricks", the same profile is also used to
-    # authenticate with the Omnigent server, so no separate ``profile:`` key
+    # authenticate with the Goalrail server, so no separate ``profile:`` key
     # is needed in the global config.
     _section()
     console.print("  [bold]Step 2 / 3 — LLM auth[/bold]")
@@ -1457,7 +1457,7 @@ def run_wizard_and_launch() -> None:
             "  [dim]Path to your agent YAML file (e.g. examples/hello_world.yaml).[/dim]"
         )
         console.print(
-            "  [dim]Leave blank to skip — run ``omnigent run <yaml>`` directly later.[/dim]"
+            "  [dim]Leave blank to skip — run ``goalrail run <yaml>`` directly later.[/dim]"
         )
         console.print()
     try:
@@ -1480,9 +1480,9 @@ def run_wizard_and_launch() -> None:
     console.print()
     if save_settings.get("default_agent"):
         console.print(
-            f"  Run your agent:  [bold]omnigent run {save_settings['default_agent']}[/bold]"
+            f"  Run your agent:  [bold]goalrail run {save_settings['default_agent']}[/bold]"
         )
     else:
-        console.print("  Run an agent:  [bold]omnigent run <your-agent.yaml>[/bold]")
-    console.print("  See examples:   [bold]omnigent/examples/[/bold] in the repo")
+        console.print("  Run an agent:  [bold]goalrail run <your-agent.yaml>[/bold]")
+    console.print("  See examples:   [bold]examples/[/bold] in the repo")
     console.print()

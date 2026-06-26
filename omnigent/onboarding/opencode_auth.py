@@ -1,10 +1,10 @@
-"""OpenCode readiness + credential reporting for ``omnigent setup``.
+"""OpenCode readiness + credential reporting for ``goalrail setup``.
 
-Like :mod:`omnigent.onboarding.goose_auth`, Omnigent stores **no** OpenCode
+Like :mod:`omnigent.onboarding.goose_auth`, Goalrail stores **no** OpenCode
 credentials: OpenCode owns its own provider auth via ``opencode auth login``
 (stored in ``~/.local/share/opencode/auth.json``) or ambient provider env vars
 (``OPENAI_API_KEY`` / ``ANTHROPIC_API_KEY`` / …). This module is a thin,
-read-only reporter so ``omnigent setup`` can show which providers OpenCode can
+read-only reporter so ``goalrail setup`` can show which providers OpenCode can
 reach and offer to run its native login — without ever touching its secrets.
 
 It reads ``auth.json`` directly (a JSON object keyed by provider id — see

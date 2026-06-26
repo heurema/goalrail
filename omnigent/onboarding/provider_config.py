@@ -159,7 +159,7 @@ _HARNESS_FAMILY: dict[str, str] = {
     # the OpenAI-compatible wire, so it consumes the ``openai`` family.
     "antigravity": OPENAI_FAMILY,
     # NB: ``kimi`` is intentionally absent. Upstream Kimi Code CLI has no
-    # per-spawn provider override flag, so Omnigent cannot thread a generic
+    # per-spawn provider override flag, so Goalrail cannot thread a generic
     # provider through. Provider routing for kimi lives in ``~/.kimi/config.toml``
     # and is managed out-of-band via ``kimi provider add``.
     # Qwen Code uses an OpenAI-compatible provider.

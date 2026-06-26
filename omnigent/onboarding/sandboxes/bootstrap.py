@@ -1,14 +1,14 @@
 """
-Provider-agnostic sandbox bootstrap for Omnigent hosts.
+Provider-agnostic sandbox bootstrap for Goalrail hosts.
 
 Composes a :class:`~omnigent.onboarding.sandboxes.base.SandboxLauncher`
-into the full host-bootstrap flow: build the Omnigent wheels locally,
+into the full host-bootstrap flow: build the Goalrail wheels locally,
 ship + install them in the sandbox, run the Databricks Apps OAuth flow
 *inside the sandbox* (driving the browser step from the local machine
 over a forwarded callback port), and register the sandbox as a host by
-holding ``omnigent host`` open in it. The end state is a sandbox whose
-sessions are reachable from the Omnigent server's UI, TUI, and
-``omnigent resume``.
+holding ``goalrail host`` open in it. The end state is a sandbox whose
+sessions are reachable from the Goalrail server's UI, TUI, and
+``goalrail resume``.
 
 The OAuth token is minted and stored by the sandbox's own CLI rather
 than shipped from the laptop. Shipping a laptop-minted token was
@@ -65,7 +65,7 @@ DEFAULT_BUILD_LOG: str = "/tmp/lakebox-build.log"
 """Default ``uv build`` log location."""
 
 DEFAULT_SANDBOX_NAME: str = "omnigent-host"
-"""Default label used when ``omnigent sandbox create`` provisions a
+"""Default label used when ``goalrail sandbox create`` provisions a
 new sandbox."""
 
 _REMOTE_WHEELS_TGZ: str = "/tmp/oa-wheels.tgz"
@@ -89,7 +89,7 @@ def build_wheels(
     pypi_proxy: str | None = None,
 ) -> None:
     """
-    Build the Omnigent wheels and pack them into a single tarball.
+    Build the Goalrail wheels and pack them into a single tarball.
 
     Builds the three packages in :data:`WHEEL_PACKAGE_PATHS` via
     ``uv build --wheel`` into a staging directory, then tars the staging
@@ -119,7 +119,7 @@ def build_wheels(
             "`curl -LsSf https://astral.sh/uv/install.sh | sh` and retry."
         )
 
-    click.echo(f"▸ Building Omnigent wheels → {tgz_path}")
+    click.echo(f"▸ Building Goalrail wheels → {tgz_path}")
     env = os.environ.copy()
     if pypi_proxy is not None:
         env.setdefault("UV_INDEX_URL", pypi_proxy)
@@ -195,7 +195,7 @@ def ship_wheels(
     wheels_tgz: Path,
 ) -> None:
     """
-    Install Omnigent wheels into a sandbox.
+    Install Goalrail wheels into a sandbox.
 
     Performs three remote operations, in order: ship wheels.tgz →
     pip install (the launcher supplies the image-appropriate flags) →
@@ -291,7 +291,7 @@ def _read_login_url(stream: Iterable[str]) -> str | None:
         tests).
     :returns: The authorize URL, or ``None`` when the stream ends
         without printing one — which is NOT necessarily an error:
-        ``omnigent login`` reuses a cached workspace OAuth grant when
+        ``goalrail login`` reuses a cached workspace OAuth grant when
         one verifies against the server, completing without a browser
         step. The caller distinguishes success from failure by the
         process's exit code.
@@ -343,7 +343,7 @@ def _probe_server(server_url: str) -> httpx.Response | None:
 class DerivedWorkspace:
     """
     Databricks workspace coordinates derived from unauthenticated
-    probes of an Omnigent server URL.
+    probes of a Goalrail server URL.
 
     Consumed in two places: seeding the sandbox's ``~/.databrickscfg``
     before the in-sandbox login, and pinning the LOCAL ``databricks
@@ -386,7 +386,7 @@ def derive_workspace(server_url: str) -> DerivedWorkspace | None:
     """
     Return the Databricks workspace fronting *server_url*, if any.
 
-    Runs the same unauthenticated detection ``omnigent login``
+    Runs the same unauthenticated detection ``goalrail login``
     performs — but from the LOCAL machine. Two consumers: the in-sandbox
     login step seeds the sandbox's ``~/.databrickscfg`` with the result,
     and the sandbox CLI commands pin their local ``databricks lakebox``
@@ -422,24 +422,24 @@ def login_app_oauth_in_sandbox(
     skip: bool = False,
 ) -> None:
     """
-    Log the sandbox in to *server_url* by running ``omnigent login``
+    Log the sandbox in to *server_url* by running ``goalrail login``
     **inside the sandbox**, driving the browser step from the local
     machine.
 
     Databricks Apps front their HTTP/WS endpoints with an OAuth edge —
     workspace PATs (including the Lakebox image's baked credential)
-    are rejected; only workspace OAuth tokens pass. ``omnigent
+    are rejected; only workspace OAuth tokens pass. ``goalrail
     login`` owns the credential inference used everywhere else: it
     probes *server_url*, discovers the fronting workspace
     from the probe response, mints a workspace OAuth grant (running
     ``databricks auth login --host <workspace>`` when no cached grant
-    verifies), and stores a pointer record so ``omnigent host`` and
+    verifies), and stores a pointer record so ``goalrail host`` and
     runners mint fresh workspace tokens for this server automatically.
     No Databricks profile is created or consulted.
 
     The sandbox is headless, so when the login needs a browser this:
 
-    1. runs ``omnigent login <server_url>`` inside the sandbox over a
+    1. runs ``goalrail login <server_url>`` inside the sandbox over a
        PTY;
     2. reads the dynamically-chosen loopback callback port back from the
        printed authorize URL;
@@ -474,7 +474,7 @@ def login_app_oauth_in_sandbox(
         ``SandboxCapabilityError`` naming the ``--no-auth`` escape
         hatch).
     :param sandbox_id: Target sandbox, e.g. ``"fast-tarantula-6030"``.
-    :param server_url: Omnigent server URL to log in to, e.g.
+    :param server_url: Goalrail server URL to log in to, e.g.
         ``"https://myapp-123.aws.databricksapps.com"``. Required
         unless *skip*.
     :param workspace: The workspace fronting *server_url*, from
@@ -526,7 +526,7 @@ def login_app_oauth_in_sandbox(
         )
     login = launcher.stream_exec(
         sandbox_id,
-        f"omnigent login {shlex.quote(server_url)}",
+        f"goalrail login {shlex.quote(server_url)}",
         pty=True,
     )
     try:
@@ -541,7 +541,7 @@ def _complete_browser_login(
     login: RemoteProcess,
 ) -> None:
     """
-    Drive the browser half of an in-sandbox ``omnigent login``.
+    Drive the browser half of an in-sandbox ``goalrail login``.
 
     Reads the authorize URL off the login process's output, bridges the
     URL's dynamically-chosen loopback callback port into the sandbox,
@@ -560,13 +560,13 @@ def _complete_browser_login(
     """
     url = _read_login_url(login.lines)
     if url is None:
-        # No browser needed: `omnigent login` verified a cached
+        # No browser needed: `goalrail login` verified a cached
         # workspace grant against the server (or failed before the
         # browser step — the exit code tells which).
         returncode = login.wait()
         if returncode != 0:
             raise click.ClickException(
-                f"`omnigent login` inside sandbox '{sandbox_id}' exited "
+                f"`goalrail login` inside sandbox '{sandbox_id}' exited "
                 f"with code {returncode} before printing a verification "
                 "URL. Run it inside the sandbox manually to debug."
             )
@@ -587,7 +587,7 @@ def _complete_browser_login(
         returncode = login.wait()
         if returncode != 0:
             raise click.ClickException(
-                f"`omnigent login` inside sandbox '{sandbox_id}' exited with code {returncode}."
+                f"`goalrail login` inside sandbox '{sandbox_id}' exited with code {returncode}."
             )
 
 
@@ -602,7 +602,7 @@ def set_sandbox_host_name(launcher: SandboxLauncher, sandbox_id: str, host_name:
     The host's ``host_id`` is preserved across the edit — only the
     ``name`` field is rewritten. If config.yaml doesn't exist yet,
     a minimal one is created with a fresh host_id; the next
-    ``omnigent host`` will load that file as-is.
+    ``goalrail host`` will load that file as-is.
 
     Implementation note: the edit runs as a Python one-liner inside
     the sandbox (instead of ``sed``) so it survives YAML quirks
@@ -639,15 +639,15 @@ def connect_sandbox_host(
     host_name: str | None = None,
 ) -> None:
     """
-    Register the sandbox as a host by running ``omnigent host`` in it.
+    Register the sandbox as a host by running ``goalrail host`` in it.
 
     The remote command holds a WebSocket open until interrupted —
     Ctrl-C tears down the foreground transport and the remote process.
 
-    The remote command is always the bare ``omnigent host --server
-    <url>``: ``omnigent host`` no longer takes a ``--profile`` flag
+    The remote command is always the bare ``goalrail host --server
+    <url>``: ``goalrail host`` no longer takes a ``--profile`` flag
     — it resolves credentials itself, via a stored
-    ``omnigent login`` token or the sandbox's ambient Databricks
+    ``goalrail login`` token or the sandbox's ambient Databricks
     credentials (e.g. the Lakebox image's baked workspace PAT, which
     authenticates to servers in the sandbox's own workspace).
 
@@ -662,7 +662,7 @@ def connect_sandbox_host(
 
     :param launcher: The provider's launcher.
     :param sandbox_id: Target sandbox.
-    :param server_url: Omnigent App URL the runner registers with.
+    :param server_url: Goalrail App URL the runner registers with.
     :param host_name: Optional override for the host's registered
         name. ``None`` keeps whatever's already in the sandbox's
         config.yaml (usually ``socket.gethostname()``).
@@ -671,11 +671,11 @@ def connect_sandbox_host(
     click.echo(f"▸ Registering sandbox '{sandbox_id}' as a host with {server_url}")
     if host_name is not None:
         set_sandbox_host_name(launcher, sandbox_id, host_name)
-    click.echo("  → running `omnigent host` in the sandbox (Ctrl-C to detach)")
-    returncode = launcher.exec_foreground(sandbox_id, f"omnigent host --server {server_url}")
+    click.echo("  → running `goalrail host` in the sandbox (Ctrl-C to detach)")
+    returncode = launcher.exec_foreground(sandbox_id, f"goalrail host --server {server_url}")
     if returncode != 0:
         raise click.ClickException(
-            f"`omnigent host` on sandbox '{sandbox_id}' exited with code {returncode}."
+            f"`goalrail host` on sandbox '{sandbox_id}' exited with code {returncode}."
         )
 
 
@@ -696,7 +696,7 @@ def bootstrap_sandbox_host(
     Run the full sandbox-host bootstrap end-to-end.
 
     Six steps: provider preflight → provision or attach sandbox →
-    keep-alive → build wheels → ship wheels → ``omnigent login``
+    keep-alive → build wheels → ship wheels → ``goalrail login``
     inside the sandbox.
 
     :param launcher: The provider's launcher.
@@ -704,12 +704,12 @@ def bootstrap_sandbox_host(
         provision a new one.
     :param sandbox_name: Label for a new sandbox (ignored when
         *sandbox_id* is set).
-    :param server_url: Omnigent server URL the sandbox logs in to.
+    :param server_url: Goalrail server URL the sandbox logs in to.
         Required unless *skip_auth*.
     :param workspace: The workspace fronting *server_url*, from
         :func:`derive_workspace` (the CLI derives once per command).
         ``None`` when the server is not Databricks-fronted.
-    :param repo_root: Path to the omnigent repo checkout.
+    :param repo_root: Path to the Goalrail repo checkout.
     :param skip_auth: When ``True``, skip the in-sandbox login.
     :returns: The sandbox id (the one we created or attached to).
     :raises click.ClickException: Propagated from any failing step.

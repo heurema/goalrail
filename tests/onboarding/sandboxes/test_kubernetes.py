@@ -60,9 +60,9 @@ def test_build_pod_manifest_runs_host_under_reaper_as_container_command() -> Non
     command = host["command"]
     assert command[:2] == ["bash", "-lc"]
     script = command[2]
-    # exec the reaper (so it is PID 1) which then runs `omnigent host`.
+    # exec the reaper (so it is PID 1) which then runs `goalrail host`.
     assert "exec python3 -c" in script
-    assert "omnigent host --server http://srv.example.com" in script
+    assert "goalrail host --server http://srv.example.com" in script
     # The reaper source rides the command (spawns sys.argv[1:] + reaps children).
     assert "os.wait()" in script
 

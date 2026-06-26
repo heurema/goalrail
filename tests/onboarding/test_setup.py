@@ -1,6 +1,6 @@
 """Tests for :mod:`omnigent.onboarding.setup`.
 
-Cover the onboarding helpers used by ``omnigent setup``: env-var hygiene
+Cover the onboarding helpers used by ``goalrail setup``: env-var hygiene
 (``detect_conflicting_env_vars``), profile-host discovery
 (``_existing_profile_hosts``), CLI lookup (``find_databricks_cli``), the
 ``maybe_run_onboarding`` skip guards, and profile-name derivation in

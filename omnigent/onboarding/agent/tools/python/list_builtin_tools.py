@@ -1,4 +1,4 @@
-"""List all built-in tools available in Omnigent.
+"""List all built-in tools available in Goalrail.
 
 Returns the live registry of builtin tool names and their
 descriptions, so the onboarding assistant always recommends
@@ -33,7 +33,7 @@ _TOOL_CLASSES: dict[str, tuple[str, str]] = {
 @tool
 def list_builtin_tools() -> str:
     """
-    List all built-in tools available in Omnigent.
+    List all built-in tools available in Goalrail.
 
     Returns tool names and descriptions. Call this before
     recommending tools for a new agent.

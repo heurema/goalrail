@@ -8,7 +8,7 @@ ucode-owned sidecar files, but two pieces land in files the *user* owns:
 - **Codex < 0.134.0 (ucode's legacy layout):** ucode deep-merges into the
   real ``~/.codex/config.toml`` — a top-level ``profile = "ucode"`` plus
   ``[profiles.ucode]`` and ``[model_providers.ucode-databricks]`` tables —
-  which makes every *bare* ``codex`` run (and Omnigent' inner codex, which
+  which makes every *bare* ``codex`` run (and Goalrail's inner codex, which
   inherits the shared config) route through the workspace gateway.
   ``ucode revert`` does not restore this file (it only restores the
   per-profile ``~/.codex/ucode.config.toml``), so the edit outlives both

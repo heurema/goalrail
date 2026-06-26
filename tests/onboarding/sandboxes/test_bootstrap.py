@@ -156,6 +156,8 @@ class _FakeLauncher(SandboxLauncher):
         """Record the remote command and report success."""
         self.log.append(f"run:{command}")
         self.run_commands.append(command)
+        if command == 'printf %s "$HOME"':
+            return RemoteCommandResult(returncode=0, stdout="/home/sandbox", stderr="")
         return RemoteCommandResult(returncode=0, stdout="", stderr="")
 
     def put(self, sandbox_id: str, local_path: Path, remote_path: str) -> None:
@@ -259,7 +261,7 @@ def test_read_login_url_returns_first_authorize_url() -> None:
 def test_read_login_url_returns_none_when_no_url_printed() -> None:
     """
     A stream that ends without an authorize URL yields ``None`` — not
-    an exception: ``omnigent login`` legitimately completes without a
+    an exception: ``goalrail login`` legitimately completes without a
     browser step when a cached workspace grant verifies, and the
     caller decides success vs. failure from the exit code.
     """
@@ -301,7 +303,7 @@ def test_login_runs_in_sandbox_and_forwards_callback_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Golden path: run ``omnigent login`` inside the box with a forced
+    Golden path: run ``goalrail login`` inside the box with a forced
     PTY, parse the dynamic callback port from the printed URL, forward
     exactly that port BEFORE opening the URL locally, and clean the
     process up.
@@ -333,11 +335,11 @@ def test_login_runs_in_sandbox_and_forwards_callback_port(
     )
 
     # The login runs INSIDE the sandbox with a forced PTY — and it is
-    # `omnigent login <server>` (which infers the fronting workspace
+    # `goalrail login <server>` (which infers the fronting workspace
     # itself), NOT a raw `databricks auth login` with profile flags.
     assert launcher.stream_calls == [
         _StreamCall(
-            command="omnigent login https://app.example.com",
+            command="goalrail login https://app.example.com",
             pty=True,
         )
     ]
@@ -370,7 +372,7 @@ def test_login_runs_in_sandbox_and_forwards_callback_port(
     ]
     # The seed lands before the login spawn (the login reads the cfg).
     assert launcher.log.index(f"run:{launcher.run_commands[0]}") < launcher.log.index(
-        "stream:omnigent login https://app.example.com"
+        "stream:goalrail login https://app.example.com"
     )
 
 
@@ -378,7 +380,7 @@ def test_login_completes_without_browser_when_no_url_printed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``omnigent login`` reuses a cached workspace grant when one
+    ``goalrail login`` reuses a cached workspace grant when one
     verifies against the server — it then exits 0 without printing an
     authorize URL. The flow must treat that as success: no port
     forward, no browser, no error.
@@ -584,6 +586,7 @@ def test_login_raises_when_no_url_and_nonzero_exit(
             launcher, "sb-1", server_url="https://app.example.com", workspace=None
         )
     assert "sb-1" in str(exc.value)
+    assert "`goalrail login` inside sandbox 'sb-1' exited with code 1" in str(exc.value)
     assert launcher.stream_processes[0].closed is True
     # The in-sandbox error line was echoed through, not swallowed.
     assert "Could not reach https://app.example.com/v1/me" in capsys.readouterr().out
@@ -743,8 +746,8 @@ def test_ship_wheels_puts_installs_and_persists_path(tmp_path: Path) -> None:
 
 def test_connect_runs_bare_host_command() -> None:
     """
-    The foreground command must be the bare ``omnigent host --server
-    <url>`` — ``omnigent host`` no longer takes ``--profile``, so any
+    The foreground command must be the bare ``goalrail host --server
+    <url>`` — ``goalrail host`` no longer takes ``--profile``, so any
     extra flag here makes the remote command exit with
     "no such option" and the sandbox never registers.
     """
@@ -754,14 +757,39 @@ def test_connect_runs_bare_host_command() -> None:
         "sb-1",
         server_url="https://app.example.com",
     )
-    assert launcher.foreground_commands == ["omnigent host --server https://app.example.com"]
+    assert launcher.foreground_commands == ["goalrail host --server https://app.example.com"]
+
+
+def test_start_host_backgrounds_goalrail_host_with_launch_identity() -> None:
+    """
+    Managed sandbox startup backgrounds the public ``goalrail host`` alias.
+
+    The package still installs ``omnigent`` for compatibility, but new
+    sandboxes should exercise the rebranded entry point when they are
+    launched by Goalrail.
+    """
+    launcher = _FakeLauncher()
+
+    workspace = launcher.start_host(
+        "sb-1",
+        token="launch-token",
+        host_id="host_123",
+        host_name="managed-123",
+        server_url="https://app.example.com",
+    )
+
+    assert workspace == "/home/sandbox/workspace"
+    assert any(
+        "goalrail host --server https://app.example.com" in cmd for cmd in launcher.run_commands
+    )
+    assert all("omnigent host --server" not in cmd for cmd in launcher.run_commands)
 
 
 def test_connect_sets_host_name_before_connecting() -> None:
     """
     When ``host_name`` is set, connect must (a) edit the sandbox's
     ``~/.omnigent/config.yaml`` to use that name, and (b) THEN run
-    ``omnigent host``. Order matters — the host reads config.yaml at
+    ``goalrail host``. Order matters — the host reads config.yaml at
     startup.
     """
     launcher = _FakeLauncher()

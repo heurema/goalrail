@@ -10,7 +10,7 @@ can be listed and the module probed without it.
 
 Supports both server-managed hosts (``host_type="managed"`` sessions —
 ``prepare`` / ``provision`` / ``run`` / ``terminate``) and the CLI
-bootstrap flow (``omnigent sandbox create`` / ``connect`` — file
+bootstrap flow (``goalrail sandbox create`` / ``connect`` — file
 shipping via the SDK's filesystem API, foreground attach via a PTY
 session). The one unimplemented primitive is ``stream_exec``: its only
 consumer is the in-sandbox App OAuth login, which requires
@@ -94,7 +94,7 @@ _SANDBOX_MEMORY_GIB: int = 4
 _CREATE_TIMEOUT_S: float = 900.0
 
 # Daytona's idle auto-stop default is 15 minutes; 0 disables it. An
-# Omnigent host must survive arbitrary idle gaps between turns, so
+# Goalrail host must survive arbitrary idle gaps between turns, so
 # auto-stop is always disabled (sandbox lifecycle is owned by the
 # managed-session machinery: session delete / relaunch terminate it).
 _AUTO_STOP_DISABLED: int = 0
@@ -142,7 +142,7 @@ def _drive_foreground_pty(pty: PtyHandle, sandbox_id: str, command: str) -> int:
         connected; the SDK waits for the connection during creation).
     :param sandbox_id: Sandbox the session runs in, for error messages.
     :param command: Shell command to execute remotely, e.g.
-        ``"omnigent host --server https://…"``.
+        ``"goalrail host --server https://…"``.
     :returns: The remote command's exit code.
     :raises click.ClickException: When the session ends without
         reporting an exit code (e.g. a dropped websocket).
@@ -500,7 +500,7 @@ class DaytonaSandboxLauncher(SandboxLauncher):
 
         :param sandbox_id: Target sandbox.
         :param command: Shell command to execute remotely, e.g.
-            ``"omnigent host --server https://…"``.
+            ``"goalrail host --server https://…"``.
         :returns: The remote command's exit code.
         :raises click.ClickException: When the PTY session cannot be
             created or ends without reporting an exit code.

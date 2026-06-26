@@ -11,7 +11,7 @@ BoxLite uniquely covers BOTH runtime targets through one launcher, selected by
 config:
 
 - **Local** (no ``endpoint``): ``Boxlite.default()`` — boxes are micro-VMs on
-  the omnigent-server host itself (KVM on Linux / Hypervisor.framework on
+  the Goalrail server host itself (KVM on Linux / Hypervisor.framework on
   macOS). BoxLite is embedded in-process: NO daemon, NO ``boxlite serve``. The
   first local, hardware-isolated, persistent provider — no cloud account.
 - **Cloud** (``endpoint`` set): ``Boxlite.rest(BoxliteRestOptions)`` — a thin
@@ -20,14 +20,14 @@ config:
 
 Managed-only (``supports_cli_bootstrap=False``): the server-managed flow only
 calls ``prepare`` / ``provision`` / ``run`` / ``terminate`` — it boots the
-prebaked host image and starts ``omnigent host`` over ``run``; it never ships
+prebaked host image and starts ``goalrail host`` over ``run``; it never ships
 wheels (``put``) or runs the in-sandbox App OAuth (``stream_exec`` /
 ``forward_local_port``). Those CLI-bootstrap primitives keep the base class's
 raising defaults.
 
 Concurrency model: BoxLite's async API drives a tokio runtime bridged to a
 Python asyncio loop, and (mirroring the SDK's own ``SyncBoxlite``) wants a
-stable, long-lived loop. omnigent calls launcher methods synchronously off its
+stable, long-lived loop. Goalrail calls launcher methods synchronously off its
 own event loop (via ``asyncio.to_thread``), and a launcher is constructed PER
 launch, so a per-launcher background loop would leak a thread per session.
 Instead every boxlite call is marshalled onto a single PROCESS-LIFETIME loop
@@ -207,7 +207,7 @@ class BoxliteSandboxLauncher(SandboxLauncher):
 
         :param endpoint: Remote ``boxlite serve`` URL, e.g.
             ``"https://boxlite.example.com:8100"``. ``None`` selects LOCAL mode
-            (boxes run on the omnigent-server host via ``Boxlite.default()``).
+            (boxes run on the Goalrail server host via ``Boxlite.default()``).
             In cloud mode the API key is read from ``BOXLITE_API_KEY`` in the
             server environment (12-factor; never in the config file) via
             ``ApiKeyCredential.from_env()``.

@@ -227,7 +227,7 @@ def test_setup_hint_for_native_kiro_points_at_vendor_installer(harness: str) -> 
 
 
 @pytest.mark.parametrize("harness", ["claude-native", "codex", "pi", "claude-sdk", None])
-def test_setup_hint_defaults_to_omnigent_setup(harness: str | None) -> None:
+def test_setup_hint_defaults_to_goalrail_setup(harness: str | None) -> None:
     """Harnesses whose CLI ``goalrail setup`` installs (npm CLIs) — and the
     SDK / unknown / ``None`` cases — route to the ``goalrail setup`` hint."""
     hint = hi.harness_setup_hint(harness)

@@ -1,6 +1,6 @@
-"""Goose readiness + config reporting for ``omnigent setup``.
+"""Goose readiness + config reporting for ``goalrail setup``.
 
-Unlike :mod:`omnigent.onboarding.cursor_auth`, Omnigent manages **no** Goose
+Unlike :mod:`omnigent.onboarding.cursor_auth`, Goalrail manages **no** Goose
 credentials: Goose owns its own auth via ``goose configure`` (keyring or
 ``~/.config/goose/config.yaml``). This module is a thin, read-only reporter —
 it confirms the ``goose`` binary is installed and surfaces the configured

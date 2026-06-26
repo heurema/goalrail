@@ -9,8 +9,8 @@ A coding harness is "ready" along two independent axes:
   that axis, mirroring how ``ucode`` checks (``shutil.which(binary)``) and the
   npm packages it installs.
 
-``omnigent setup --no-internal-beta`` uses this to mark an uninstalled harness and
-offer to ``npm install`` it; the first-run ``omnigent run`` flow uses the
+``goalrail setup --no-internal-beta`` uses this to mark an uninstalled harness and
+offer to ``npm install`` it; the first-run ``goalrail run`` flow uses the
 same map so the two surfaces never disagree about what the machine can launch.
 
 This module also owns the per-harness **CLI binary name**, so it is the natural
@@ -72,7 +72,7 @@ KIRO_KEY = "kiro"
 OPENCODE_KEY = "opencode"
 
 # Goose authenticates against its own config (``goose configure`` → keyring /
-# ``~/.config/goose/config.yaml``) with no Omnigent-managed credential, and ships
+# ``~/.config/goose/config.yaml``) with no Goalrail-managed credential, and ships
 # via Homebrew / a curl installer rather than npm — so it carries an
 # ``install_hint``, not a ``package``.
 GOOSE_KEY = "goose"
@@ -86,7 +86,7 @@ COPILOT_KEY = "copilot"
 
 # Hermes Agent is installed via a curl installer from Nous Research and
 # authenticates through its own ``hermes model`` interactive flow (no
-# Omnigent-managed credentials). The ``hermes`` binary must be on PATH.
+# Goalrail-managed credentials). The ``hermes`` binary must be on PATH.
 HERMES_KEY = "hermes"
 
 
