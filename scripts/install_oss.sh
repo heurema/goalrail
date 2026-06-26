@@ -1,10 +1,11 @@
 #!/bin/sh
 
-# Omnigent installer.
+# Goalrail installer.
 #
-# Installs the published `omnigent` wheel from PyPI with uv, wires up PATH,
-# and points you at first-run. The wheel bundles the prebuilt web UI, so the
-# default install needs no Node/npm and runs no build.
+# Installs the published `omnigent` wheel from PyPI with uv, verifies the
+# public `goalrail` CLI entry point, wires up PATH, and points you at
+# first-run. The wheel bundles the prebuilt web UI, so the default install
+# needs no Node/npm and runs no build.
 #
 # Options:
 #   --version X   install a specific PyPI release (default: latest)
@@ -55,8 +56,8 @@ init_style() {
     RESET="${ESC}[0m"
     BOLD="${ESC}[1m"
     DIM="${ESC}[2m"
-    # Brand accent — Otto's magenta-pink (#F43BA6), matching the Python CLI
-    # palette in omnigent/inner/ui.py so the installer and the tool agree.
+    # Brand accent — magenta-pink (#F43BA6), matching the Python CLI palette
+    # in omnigent/inner/ui.py so the installer and the tool agree.
     MAGENTA="${ESC}[38;2;244;59;166m"
     GREEN="${ESC}[32m"
     YELLOW="${ESC}[33m"
@@ -64,18 +65,17 @@ init_style() {
   fi
 }
 
-# The Otto + "omnigent" wordmark lockup, printed once at the top of an
-# interactive install. Mirrors omnigent.inner.wordmark.lockup_lines(); the
-# whole lockup is painted in the brand magenta (flat — no gradient in sh).
+# The Goalrail wordmark, printed once at the top of an interactive install.
 # Skipped off a TTY (use_terminal_ui) so piped/CI installs stay clean.
 print_banner() {
   use_terminal_ui || return 0
   printf '\n'
-  printf '%s  ⠀⠀⠀⢠⣿⡄⠀⠀⠀   ██████╗ ███╗   ███╗███╗   ██╗██╗ ██████╗ ███████╗███╗   ██╗████████╗%s\n' "$MAGENTA" "$RESET"
-  printf '%s  ⢴⣶⣶⠉⣿⠉⣶⣶⡦  ██╔═══██╗████╗ ████║████╗  ██║██║██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝%s\n' "$MAGENTA" "$RESET"
-  printf '%s  ⠀⠙⣿⣶⣿⣶⣿⠋⠀  ██║   ██║██╔████╔██║██╔██╗ ██║██║██║  ███╗█████╗  ██╔██╗ ██║   ██║%s\n' "$MAGENTA" "$RESET"
-  printf '%s  ⠀⢠⣿⡿⠿⢿⣿⡄⠀  ╚██████╔╝██║ ╚═╝ ██║██║ ╚████║██║╚██████╔╝███████╗██║ ╚████║   ██║%s\n' "$MAGENTA" "$RESET"
-  printf '%s  ⠀⠈⠁⠀⠀⠀⠈⠁⠀   ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝%s\n' "$MAGENTA" "$RESET"
+  printf '%s  ██████╗  ██████╗  █████╗ ██╗     ██████╗  █████╗ ██╗██╗%s\n' "$MAGENTA" "$RESET"
+  printf '%s  ██╔════╝ ██╔═══██╗██╔══██╗██║     ██╔══██╗██╔══██╗██║██║%s\n' "$MAGENTA" "$RESET"
+  printf '%s  ██║  ███╗██║   ██║███████║██║     ██████╔╝███████║██║██║%s\n' "$MAGENTA" "$RESET"
+  printf '%s  ██║   ██║██║   ██║██╔══██║██║     ██╔══██╗██╔══██║██║██║%s\n' "$MAGENTA" "$RESET"
+  printf '%s  ╚██████╔╝╚██████╔╝██║  ██║███████╗██║  ██║██║  ██║██║███████╗%s\n' "$MAGENTA" "$RESET"
+  printf '%s   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝%s\n' "$MAGENTA" "$RESET"
   printf '%s  all your agents, one cli%s\n\n' "$DIM" "$RESET"
 }
 
@@ -126,8 +126,8 @@ run_with_spinner() {
     return
   fi
 
-  log_file="${TMPDIR:-/tmp}/omnigent-oss-installer.$$.log"
-  status_file="${TMPDIR:-/tmp}/omnigent-oss-installer.$$.status"
+  log_file="${TMPDIR:-/tmp}/goalrail-oss-installer.$$.log"
+  status_file="${TMPDIR:-/tmp}/goalrail-oss-installer.$$.status"
   rm -f "$log_file" "$status_file"
 
   (
@@ -388,7 +388,7 @@ check_npm() {
   fi
 }
 
-# `omnigent claude` / `omnigent codex` launch through a local tmux terminal
+# `goalrail claude` / `goalrail codex` launch through a local tmux terminal
 # and won't start without it, so surface it up front and offer to install it.
 # Emit the package-manager command that installs $1 on this Linux box, or
 # nothing when no known package manager is present. Shared by the tmux and
@@ -417,31 +417,31 @@ check_tmux() {
   case "$(uname -s)" in
     Darwin)
       if command -v brew >/dev/null 2>&1; then
-        if prompt_yes_no "tmux is missing (needed for \`omnigent claude\` / \`omnigent codex\`). Install it with brew?"; then
-          run_with_spinner "brew install tmux" brew install tmux || warn "brew install tmux failed — install tmux manually before \`omnigent claude\`."
+        if prompt_yes_no "tmux is missing (needed for \`goalrail claude\` / \`goalrail codex\`). Install it with brew?"; then
+          run_with_spinner "brew install tmux" brew install tmux || warn "brew install tmux failed — install tmux manually before \`goalrail claude\`."
           return
         fi
       fi
-      warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install with: brew install tmux"
+      warn "tmux not found — \`goalrail claude\` / \`goalrail codex\` need it. Install with: brew install tmux"
       ;;
     Linux)
       install_cmd="$(linux_pkg_install_cmd tmux)"
-      if [ -n "$install_cmd" ] && prompt_yes_no "tmux is missing (needed for \`omnigent claude\` / \`omnigent codex\`). Install it now ($install_cmd)?"; then
+      if [ -n "$install_cmd" ] && prompt_yes_no "tmux is missing (needed for \`goalrail claude\` / \`goalrail codex\`). Install it now ($install_cmd)?"; then
         # Run directly (not via run_with_spinner) so sudo can prompt for a password.
         sh -c "$install_cmd" || warn "tmux install failed — run manually: $install_cmd"
         command -v tmux >/dev/null 2>&1 && step "tmux installed"
         return
       fi
       if [ -n "$install_cmd" ]; then
-        warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install with: $install_cmd"
+        warn "tmux not found — \`goalrail claude\` / \`goalrail codex\` need it. Install with: $install_cmd"
       else
-        warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install it with your package manager."
+        warn "tmux not found — \`goalrail claude\` / \`goalrail codex\` need it. Install it with your package manager."
       fi
       ;;
   esac
 }
 
-# The native `omnigent claude` / `omnigent codex` / `pi` harnesses wrap each
+# The native `goalrail claude` / `goalrail codex` / `goalrail pi` harnesses wrap each
 # agent terminal in a bubblewrap (`bwrap`) OS-sandbox; on Linux that isolation
 # is mandatory and fail-loud, so a missing `bwrap` binary makes those terminals
 # fail to start. macOS sandboxes with the built-in seatbelt backend and needs
@@ -455,14 +455,14 @@ check_bubblewrap() {
   fi
 
   install_cmd="$(linux_pkg_install_cmd bubblewrap)"
-  if [ -n "$install_cmd" ] && prompt_yes_no "bubblewrap is missing (needed to sandbox native \`omnigent claude\` / \`omnigent codex\` terminals). Install it now ($install_cmd)?"; then
+  if [ -n "$install_cmd" ] && prompt_yes_no "bubblewrap is missing (needed to sandbox native \`goalrail claude\` / \`goalrail codex\` terminals). Install it now ($install_cmd)?"; then
     run_with_spinner "install bubblewrap" sh -c "$install_cmd" || warn "bubblewrap install failed — run manually: $install_cmd"
     return
   fi
   if [ -n "$install_cmd" ]; then
-    warn "bubblewrap (bwrap) not found — native \`omnigent claude\` / \`omnigent codex\` terminals need it on Linux. Install with: $install_cmd"
+    warn "bubblewrap (bwrap) not found — native \`goalrail claude\` / \`goalrail codex\` terminals need it on Linux. Install with: $install_cmd"
   else
-    warn "bubblewrap (bwrap) not found — native \`omnigent claude\` / \`omnigent codex\` terminals need it on Linux. Install it with your package manager."
+    warn "bubblewrap (bwrap) not found — native \`goalrail claude\` / \`goalrail codex\` terminals need it on Linux. Install it with your package manager."
   fi
 }
 
@@ -487,16 +487,16 @@ install_omnigent() {
     else
       target="$INSTALL_URL"
     fi
-    step "Installing Omnigent from source${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing Goalrail from source${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   elif [ -n "$VERSION" ]; then
     target="${PACKAGE_NAME}${extras_suffix}==${VERSION}"
-    step "Installing Omnigent $VERSION${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing Goalrail $VERSION${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   else
     target="${PACKAGE_NAME}${extras_suffix}"
-    step "Installing Omnigent${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing Goalrail${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   fi
   # --force so re-running upgrades instead of no-op'ing; -q hides uv's
-  # "Installed N executables" summary (the package also ships an `omni` alias).
+  # "Installed N executables" summary (the package also ships compatibility aliases).
   run_with_spinner "uv tool install" uv tool install --force -q --python "$PYTHON_VERSION" "$target"
 }
 
@@ -579,8 +579,9 @@ maybe_add_bin_to_path() {
 
   path_line="export PATH=\"$bin_dir:\$PATH\""
   profile="$(pick_profile)"
-  begin_marker="# >>> Omnigent installer >>>"
-  end_marker="# <<< Omnigent installer <<<"
+  begin_marker="# >>> Goalrail installer >>>"
+  end_marker="# <<< Goalrail installer <<<"
+  legacy_begin_marker="# >>> Omnigent installer >>>"
 
   warn "$bin_dir is not on PATH."
   if [ "$NON_INTERACTIVE" = true ]; then
@@ -588,12 +589,12 @@ maybe_add_bin_to_path() {
     return
   fi
 
-  if [ -f "$profile" ] && grep -F "$begin_marker" "$profile" >/dev/null 2>&1; then
+  if [ -f "$profile" ] && { grep -F "$begin_marker" "$profile" >/dev/null 2>&1 || grep -F "$legacy_begin_marker" "$profile" >/dev/null 2>&1; }; then
     if grep -F "$path_line" "$profile" >/dev/null 2>&1; then
       step "PATH is already configured in $profile"
       return
     fi
-    fail "$profile already has an Omnigent installer block. Update it manually to: $path_line"
+    fail "$profile already has a Goalrail/Omnigent installer block. Update it manually to: $path_line"
   fi
 
   if ! prompt_yes_no "Add $bin_dir to PATH in $profile?"; then
@@ -612,29 +613,29 @@ maybe_add_bin_to_path() {
 
 verify_omnigent() {
   bin_dir="$1"
-  cli_path="$bin_dir/omnigent"
+  cli_path="$bin_dir/goalrail"
 
   if [ ! -x "$cli_path" ]; then
-    cli_path="$(command -v omnigent 2>/dev/null || true)"
+    cli_path="$(command -v goalrail 2>/dev/null || true)"
   fi
 
   if [ -z "$cli_path" ]; then
-    fail "Omnigent installed, but the omnigent command was not found."
+    fail "Goalrail installed, but the goalrail command was not found."
   fi
 
   "$cli_path" --help >/dev/null
   step "Verified $cli_path"
 
-  # `omni` is a shorthand alias installed alongside `omnigent`; check it so a
-  # packaging regression that drops it surfaces here rather than later.
-  for alias_cmd in omni; do
+  # Compatibility aliases are installed alongside `goalrail`; check them so a
+  # packaging regression that drops one surfaces here rather than later.
+  for alias_cmd in omnigent omni; do
     if [ ! -x "$bin_dir/$alias_cmd" ] && ! command -v "$alias_cmd" >/dev/null 2>&1; then
-      warn "the $alias_cmd alias was not installed (expected a console-script entry point alongside omnigent)."
+      warn "the $alias_cmd compatibility alias was not installed (expected a console-script entry point alongside goalrail)."
     fi
   done
 }
 
-# No setup step here by design: the first `omnigent` run configures a model
+# No setup step here by design: the first `goalrail` run configures a model
 # credential and offers to install the harness CLI you pick.
 print_next_steps() {
   bin_dir="$1"
@@ -644,17 +645,17 @@ print_next_steps() {
     command_prefix="PATH=\"$bin_dir:\$PATH\" "
   fi
 
-  printf '\n%sOmnigent installed successfully.%s\n\n' "$BOLD" "$RESET"
+  printf '\n%sGoalrail installed successfully.%s\n\n' "$BOLD" "$RESET"
   printf 'Start chatting — first run sets up a model and a local web UI:\n'
-  printf '  %s%somnigent%s\n\n' "$command_prefix" "$MAGENTA" "$RESET"
+  printf '  %s%sgoalrail%s\n\n' "$command_prefix" "$MAGENTA" "$RESET"
   printf 'Or launch a specific coding harness:\n'
-  printf '  %somnigent claude          # Claude Code\n' "$command_prefix"
-  printf '  %somnigent codex           # Codex\n\n' "$command_prefix"
+  printf '  %sgoalrail claude          # Claude Code\n' "$command_prefix"
+  printf '  %sgoalrail codex           # Codex\n\n' "$command_prefix"
   printf 'Manage model credentials any time:\n'
-  printf '  %somnigent configure harness\n\n' "$command_prefix"
+  printf '  %sgoalrail setup\n\n' "$command_prefix"
   printf '%sUsing a Databricks workspace as your model provider? Install the\n' "$DIM"
   printf 'Databricks CLI (https://docs.databricks.com/aws/en/dev-tools/cli/install)\n'
-  printf 'and add it via: omnigent configure harness -> Databricks.%s\n' "$RESET"
+  printf 'and add it via: goalrail setup -> Databricks.%s\n' "$RESET"
 }
 
 main() {

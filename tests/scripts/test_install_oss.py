@@ -368,7 +368,7 @@ def test_install_codebase_memory_runs_safe_companion_commands(lib: Path, tmp_pat
 
 
 def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> None:
-    """CBM failures warn but never abort the base Omnigent installer."""
+    """CBM failures warn but never abort the base Goalrail installer."""
     r = run(
         lib,
         (
@@ -380,6 +380,30 @@ def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> Non
     assert r.returncode == 0, r.stderr
     assert "continued" in r.stdout
     assert "codebase-memory-mcp companion install failed" in r.stderr
+
+
+def test_verify_omnigent_uses_goalrail_entrypoint(lib: Path, tmp_path: Path) -> None:
+    """The installer verifies the public Goalrail CLI entry point."""
+    goalrail = tmp_path / "goalrail"
+    goalrail.write_text('#!/bin/sh\ncase "$1" in --help) exit 0 ;; *) exit 1 ;; esac\n')
+    goalrail.chmod(0o755)
+    r = run(lib, f"verify_omnigent {shlex.quote(str(tmp_path))}")
+    assert r.returncode == 0, r.stderr
+    assert f"Verified {goalrail}" in r.stdout
+
+
+def test_print_next_steps_recommends_goalrail_commands(lib: Path) -> None:
+    """Successful installs should introduce Goalrail as the first-run command."""
+    r = run(
+        lib,
+        "PATH=/tmp/bin:$PATH; print_next_steps /tmp/bin",
+    )
+    assert r.returncode == 0, r.stderr
+    assert "Goalrail installed successfully." in r.stdout
+    assert "goalrail\n" in r.stdout
+    assert "goalrail claude" in r.stdout
+    assert "goalrail codex" in r.stdout
+    assert "goalrail setup" in r.stdout
 
 
 def test_main_respects_skip_codebase_memory(lib: Path) -> None:

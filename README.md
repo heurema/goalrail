@@ -95,16 +95,16 @@ uv tool install -q --python 3.12 git+https://github.com/heurema/goalrail.git
   The installer offers to set this up for you.
 - **`git`** (required).
 - **Node.js 22 LTS or newer** with **`npm`**, for the Claude, Codex, and Pi
-  coding harnesses. `omnigent run` installs the harness CLI you pick.
+  coding harnesses. `goalrail run` installs the harness CLI you pick.
   https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
-- **Kiro CLI** (optional), for `omnigent kiro`: install with
+- **Kiro CLI** (optional), for `goalrail kiro`: install with
   `curl -fsSL https://cli.kiro.dev/install | bash`, then sign in with Kiro.
-- **`tmux`**, required by the native `omnigent claude` / `omnigent codex` /
-  `omnigent kiro`
+- **`tmux`**, required by the native `goalrail claude` / `goalrail codex` /
+  `goalrail kiro`
   wrappers (`brew install tmux` / `apt install tmux`; the installer offers
   to install it for you).
-- **`bubblewrap`** (`bwrap`), **Linux only**. The native `omnigent claude` /
-  `omnigent codex` / `omnigent kiro` and `pi` harnesses wrap each agent
+- **`bubblewrap`** (`bwrap`), **Linux only**. The native `goalrail claude` /
+  `goalrail codex` / `goalrail kiro` and `goalrail pi` harnesses wrap each agent
   terminal in a `bwrap` OS-sandbox; on Linux that isolation is mandatory, so a
   missing `bwrap` binary makes those terminals fail to start
   (`apt install bubblewrap`; the installer offers to install it for you). macOS
@@ -129,14 +129,14 @@ uv tool install --python 3.12 omnigent
 uv tool install --python 3.12 git+https://github.com/heurema/goalrail.git
 ```
 
-What works on Windows: `omnigent server`, the web UI, and the SDK-based
-harnesses (`omnigent run <agent.yaml>` with the claude-sdk / cursor / copilot
+What works on Windows: `goalrail server`, the web UI, and the SDK-based
+harnesses (`goalrail run <agent.yaml>` with the claude-sdk / cursor / copilot
 / codex harnesses). Agents run under a Windows **Job Object** for process-tree
 containment.
 
 What is **not** available on Windows (use Linux/macOS, or WSL, for these):
 
-- the native `omnigent claude` / `omnigent codex` / `omnigent cursor`
+- the native `goalrail claude` / `goalrail codex` / `goalrail cursor`
   tmux/PTY terminal wrappers (run an SDK harness or the web UI instead);
 - `bwrap`/`seatbelt` filesystem & network sandboxing and the L7 egress proxy
   — the Job Object backend contains the process tree and enforces resource
@@ -151,14 +151,14 @@ When a newer release is on PyPI, the CLI shows a one-line notice (once per
 release) pointing here. To update:
 
 ```bash
-omni upgrade            # detects how you installed, drains & stops the local
-                        # server, then runs the matching upgrade command
-omni upgrade --check    # just report whether a newer release is available
+goalrail upgrade            # detects how you installed, drains & stops the local
+                            # server, then runs the matching upgrade command
+goalrail upgrade --check    # just report whether a newer release is available
 ```
 
-`omni upgrade` waits for in-flight agent sessions to finish before stopping the
-local server (pass `--force` to stop them immediately); the next `omni` command
-brings the server back up on the new version. Source checkouts update with
+`goalrail upgrade` waits for in-flight agent sessions to finish before stopping
+the local server (pass `--force` to stop them immediately); the next `goalrail`
+command brings the server back up on the new version. Source checkouts update with
 `git pull` instead. Silence the notice with `OMNIGENT_NO_UPDATE_CHECK=1`.
 
 The check queries your configured package index — honoring `UV_INDEX_URL` /
@@ -169,15 +169,15 @@ mirrors work out of the box; override with `OMNIGENT_INDEX_URL` if needed.
 
 ### 2. Start your first agent
 
-`omnigent` picks a model with you and starts a session in your terminal. It
+`goalrail` picks a model with you and starts a session in your terminal. It
 also launches a local web UI at `http://localhost:6767` that shows the same
 session in the browser, or on a phone on your network (step 4). Desktop and
 mobile downloads are not published yet; they will live on
 [golrail.dev](https://golrail.dev).
 
 > [!NOTE]
-> The install puts two names for the same CLI on your PATH: `omnigent` and
-> the shorter `omni`. They're interchangeable.
+> The install puts `goalrail` on your PATH. The legacy `omnigent` and `omni`
+> aliases remain available during the rename.
 
 > [!TIP]
 > On first run, Goalrail picks up model credentials already in your
@@ -185,17 +185,17 @@ mobile downloads are not published yet; they will live on
 > `codex` CLI you're logged into) and offers one as the default.
 
 ```bash
-omnigent
+goalrail
 ```
 
 Or launch a specific agent runtime, or your own agent:
 
 ```bash
-omnigent claude                      # Claude Code, in a session your team can join
-omnigent codex                       # Codex
-omnigent kiro                        # Kiro CLI
-omnigent kimi                        # Kimi Code (https://kimi.com), headless
-omnigent run path/to/agent.yaml      # your own agent (see "Write your own agent")
+goalrail claude                      # Claude Code, in a session your team can join
+goalrail codex                       # Codex
+goalrail kiro                        # Kiro CLI
+goalrail kimi                        # Kimi Code (https://kimi.com), headless
+goalrail run path/to/agent.yaml      # your own agent (see "Write your own agent")
 ```
 
 #### 🐙 Polly, 🟠🔵 Debby, and ✍️ Scribe
@@ -203,15 +203,15 @@ omnigent run path/to/agent.yaml      # your own agent (see "Write your own agent
 Three example agents ship with the repo, and they make good first sessions:
 
 ```bash
-omnigent run examples/polly/
-omnigent run examples/debby/
-omnigent run examples/scribe/
+goalrail run examples/polly/
+goalrail run examples/debby/
+goalrail run examples/scribe/
 
 # Run an orchestrator on a different harness (sub-agents keep their own):
-omnigent run examples/polly/ --harness pi
-omnigent run examples/debby/ --harness openai-agents
-omnigent run examples/polly/ --harness cursor  # Cursor CLI (needs cursor-agent + CURSOR_API_KEY)
-omnigent run examples/polly/ --harness copilot # GitHub Copilot SDK (needs a GitHub token w/ Copilot, e.g. GH_TOKEN)
+goalrail run examples/polly/ --harness pi
+goalrail run examples/debby/ --harness openai-agents
+goalrail run examples/polly/ --harness cursor  # Cursor CLI (needs cursor-agent + CURSOR_API_KEY)
+goalrail run examples/polly/ --harness copilot # GitHub Copilot SDK (needs a GitHub token w/ Copilot, e.g. GH_TOKEN)
 ```
 
 **🐙 Polly** is a multi-agent coding orchestrator who writes no code herself.
@@ -235,17 +235,17 @@ independent different-vendor reviewer to fact-check its claims before it ships.
 **Prefer the browser?** Start a server and register your machine as a host:
 
 ```bash
-omnigent server start   # start the local server and web UI in the background
-omnigent host           # (separate terminal) register this machine as a host
+goalrail server start   # start the local server and web UI in the background
+goalrail host           # (separate terminal) register this machine as a host
 ```
 
 In the web UI, hit **New Chat**, pick your machine, and go. Check status with
-`omnigent server status`; stop everything with `omnigent stop`.
+`goalrail server status`; stop everything with `goalrail stop`.
 
 ### 3. Choose & switch models
 
 ```bash
-omnigent setup
+goalrail setup
 ```
 
 Add a credential, set a default, or remove one, grouped by agent. Goalrail
@@ -264,7 +264,7 @@ can also switch models in the middle of a session with the `/model` command.
 <details>
 <summary>Gateway base URLs (OpenRouter, Ollama)</summary>
 
-When you add a **Gateway** credential, `omnigent setup` asks for a base URL
+When you add a **Gateway** credential, `goalrail setup` asks for a base URL
 and a key. The base URL depends on which agent you point it at:
 
 | Provider | For | Base URL | Key |
@@ -297,8 +297,8 @@ targets, the database options, and the sandbox setup live in
 Once the server is up, sign in and register your laptop as a host:
 
 ```bash
-omnigent login https://your-host    # sign in once; run / attach / host reuse the token
-omnigent host  https://your-host    # new sessions can now run on this machine
+goalrail login https://your-host    # sign in once; run / attach / host reuse the token
+goalrail host  https://your-host    # new sessions can now run on this machine
 ```
 
 > [!TIP]
@@ -311,7 +311,7 @@ Goalrail supports **multi-user accounts**, controlled by one environment
 variable:
 
 ```bash
-OMNIGENT_AUTH_ENABLED=1 omnigent server start
+OMNIGENT_AUTH_ENABLED=1 goalrail server start
 ```
 
 The **Docker deploy in [step 4](#4-deploy-a-server-and-use-it-from-your-phone)
@@ -341,14 +341,14 @@ and they're in. Signup is invite-only.
   keyboard to a domain expert mid-investigation.
 
   ```bash
-  omnigent attach <session_id>
+  goalrail attach <session_id>
   ```
 
 - **Fork.** Clone a conversation onto your own machine and continue
   independently from the fork point.
 
   ```bash
-  omnigent run --fork <session_id>
+  goalrail run --fork <session_id>
   ```
 
 > [!TIP]
@@ -429,7 +429,7 @@ tools:
 Run it with:
 
 ```bash
-omnigent run path/to/my_agent.yaml
+goalrail run path/to/my_agent.yaml
 ```
 
 The same file can declare sub-agents and reviewers. For a fuller example, see
