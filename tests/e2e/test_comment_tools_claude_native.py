@@ -155,7 +155,7 @@ def _claude_code_session(
     This mirrors what ``omnigent claude`` does when a user runs it,
     so the relay feature is tested against the real code path.
 
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param model: Claude model id to pin via ``--model``, e.g.
         ``"databricks-claude-sonnet-4-6"``. ``None`` lets the CLI choose.
     :param launch_env: Extra environment for the launched ``claude``
@@ -355,7 +355,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     - The relay HTTP server is not running or not callable from the bridge,
       so Claude's tool call returns an error.
     - ``_execute_comment_tool`` call path broken (server_client / session
-      scoping), so the Omnigent server ``PATCH /v1/sessions/{id}/comments`` is
+      scoping), so the Goalrail server ``PATCH /v1/sessions/{id}/comments`` is
       never hit.
     - Comments still ``"draft"`` → update path didn't persist.
 
@@ -425,7 +425,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     # ── 3. Pre-configure mock LLM with tool-call responses ─────────────────
     # The mock server returns these responses in order for any model key.
     # The Claude CLI executes the tool_use blocks as real MCP calls against
-    # the relay, so comment status changes reach the Omnigent server even
+    # the relay, so comment status changes reach the Goalrail server even
     # though the LLM itself is a mock.  We configure with the actual IDs
     # now (after posting) so update_comment receives the right targets.
     reset_mock_llm(mock_llm_server_url)
@@ -508,7 +508,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
         # Claude processes the injected message, calls list_comments to find
         # the draft comments, then calls update_comment on each. These tool
         # calls go through the relay HTTP server running in the runner process
-        # and hit the Omnigent server directly, so the comment status changes appear
+        # and hit the Goalrail server directly, so the comment status changes appear
         # in the REST API without needing to observe the forwarder stream.
         deadline = time.monotonic() + _COMMENT_POLL_TIMEOUT_S
         while time.monotonic() < deadline:
@@ -558,10 +558,10 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
         assert post_statuses.get(comment1_id) == "addressed", (
             f"Comment 1 still has status {post_statuses.get(comment1_id)!r} "
             f"after {_COMMENT_POLL_TIMEOUT_S}s; expected 'addressed'. "
-            f"If 'draft', the update_comment relay call did not reach the Omnigent server."
+            f"If 'draft', the update_comment relay call did not reach the Goalrail server."
         )
         assert post_statuses.get(comment2_id) == "addressed", (
             f"Comment 2 still has status {post_statuses.get(comment2_id)!r} "
             f"after {_COMMENT_POLL_TIMEOUT_S}s; expected 'addressed'. "
-            f"If 'draft', the update_comment relay call did not reach the Omnigent server."
+            f"If 'draft', the update_comment relay call did not reach the Goalrail server."
         )

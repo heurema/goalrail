@@ -390,7 +390,7 @@ def _expected_delta_data(
     item_type: str = "agentMessage",
 ) -> dict[str, Any]:
     """
-    Build the Omnigent event data expected for one Codex native text delta.
+    Build the Goalrail event data expected for one Codex native text delta.
 
     :param delta: Coalesced text fragment, e.g. ``"hello"``.
     :param turn_id: Codex turn id, e.g. ``"turn_123"``.
@@ -408,9 +408,9 @@ def _expected_delta_data(
 
 def _expected_status_data(status: str, turn_id: str) -> dict[str, Any]:
     """
-    Build the Omnigent event data expected for one Codex native status edge.
+    Build the Goalrail event data expected for one Codex native status edge.
 
-    :param status: Omnigent session status, e.g. ``"running"``.
+    :param status: Goalrail session status, e.g. ``"running"``.
     :param turn_id: Codex turn id, e.g. ``"turn_123"``.
     :returns: Expected ``external_session_status`` data payload.
     """
@@ -447,7 +447,7 @@ def _usage_coalescer(
     Build the required Codex usage coalescer for direct handler tests.
 
     :param client: HTTP client used by the coalescer.
-    :param session_id: Omnigent session id, e.g. ``"conv_123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_123"``.
     :returns: Usage coalescer bound to ``session_id``.
     """
     return codex_native_forwarder._SessionUsageCoalescer(client, session_id)
@@ -822,7 +822,7 @@ def test_wait_for_thread_started_uses_tui_created_thread() -> None:
 def test_wait_for_thread_started_fails_when_stream_ends() -> None:
     """
     A Codex TUI that exits before creating a thread fails loudly instead
-    of leaving the Omnigent session without a bridge state.
+    of leaving the Goalrail session without a bridge state.
     """
     fake_client = _FakeCodexAppServerClient(events=[])
 
@@ -1067,7 +1067,7 @@ def test_subscribe_until_ready_replays_completed_turn_status(
     Host-spawned codex-native suppresses the runner's injection-task ``idle``
     edge, so a reconnect that misses both ``turn/started`` and
     ``turn/completed`` must recover the terminal status from explicit resume
-    turn state instead of leaving the Omnigent session running forever.
+    turn state instead of leaving the Goalrail session running forever.
 
     :param tmp_path: Temporary bridge directory.
     :returns: None.
@@ -1267,7 +1267,7 @@ def test_subscribe_until_ready_parks_until_signal_then_resumes(
 
 def test_forwarder_ignores_thread_started_for_current_codex_thread(tmp_path: Path) -> None:
     """
-    A duplicate ``thread/started`` notification does not rotate Omnigent sessions.
+    A duplicate ``thread/started`` notification does not rotate Goalrail sessions.
 
     Codex can broadcast the current thread after the forwarder has
     already bound it. This fails if the rotation detector treats every
@@ -1322,7 +1322,7 @@ def test_forwarder_rotates_session_on_new_codex_thread_and_posts_to_new_session(
     tmp_path: Path,
 ) -> None:
     """
-    Native Codex thread switches create a replacement Omnigent session.
+    Native Codex thread switches create a replacement Goalrail session.
 
     This is the ``/clear`` regression shape: Codex keeps the terminal
     alive but starts a new app-server thread. The forwarder must move
@@ -1345,10 +1345,10 @@ def test_forwarder_rotates_session_on_new_codex_thread_and_posts_to_new_session(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Serve Omnigent calls made during Codex session rotation.
+        Serve Goalrail calls made during Codex session rotation.
 
         :param request: HTTP request from the forwarder.
-        :returns: Fake Omnigent response.
+        :returns: Fake Goalrail response.
         """
         body = json.loads(request.content) if request.content else None
         requests.append((request.method, request.url.path, body))
@@ -1524,7 +1524,7 @@ def test_forwarder_rotation_failure_preserves_old_target(
         """
         Test coalescer that records lifecycle calls.
 
-        :param session_id: Omnigent session id represented by this fake,
+        :param session_id: Goalrail session id represented by this fake,
             e.g. ``"conv_old"``.
         """
 
@@ -1532,7 +1532,7 @@ def test_forwarder_rotation_failure_preserves_old_target(
             """
             Initialize the fake coalescer.
 
-            :param session_id: Omnigent session id represented by this fake,
+            :param session_id: Goalrail session id represented by this fake,
                 e.g. ``"conv_old"``.
             :returns: None.
             """
@@ -2637,7 +2637,7 @@ def test_output_text_delta_coalescer_auto_flushes(
 
     Each parametrized case isolates one automatic trigger: timer
     expiry, character threshold, and newline. The test waits for the
-    Omnigent post directly instead of calling ``flush()``, so removing any
+    Goalrail post directly instead of calling ``flush()``, so removing any
     trigger leaves that case stuck until ``wait_for`` fails.
 
     :param deltas: Text fragments appended to the coalescer, e.g.
@@ -2653,7 +2653,7 @@ def test_output_text_delta_coalescer_auto_flushes(
 
     async def run() -> None:
         """
-        Append deltas and wait for the automatic Omnigent post.
+        Append deltas and wait for the automatic Goalrail post.
 
         :returns: None.
         """
@@ -2804,8 +2804,8 @@ def test_supervise_forwarder_continues_after_event_handler_failure(
         """
         Fail the first event and record subsequent events.
 
-        :param _client: Omnigent HTTP client.
-        :param session_id: Omnigent session id, e.g. ``"conv_123"``.
+        :param _client: Goalrail HTTP client.
+        :param session_id: Goalrail session id, e.g. ``"conv_123"``.
         :param bridge_dir: Native Codex bridge directory.
         :param event: Codex event payload.
         :param delta_coalescer: Optional text-delta coalescer.
@@ -3476,10 +3476,10 @@ def test_forwarder_flushes_plan_text_before_codex_request_user_input(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Capture Omnigent posts in arrival order.
+        Capture Goalrail posts in arrival order.
 
         :param request: HTTP request sent by the forwarder.
-        :returns: Omnigent response appropriate to the endpoint.
+        :returns: Goalrail response appropriate to the endpoint.
         """
         request_paths.append(request.url.path)
         request_bodies.append(json.loads(request.content))
@@ -3583,10 +3583,10 @@ def test_forwarder_synthesizes_plan_implementation_prompt_after_completed_plan_t
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Capture Omnigent posts and decline the synthesized prompt.
+        Capture Goalrail posts and decline the synthesized prompt.
 
         :param request: HTTP request sent by the forwarder.
-        :returns: Omnigent response appropriate to the endpoint.
+        :returns: Goalrail response appropriate to the endpoint.
         """
         request_paths.append(request.url.path)
         request_bodies.append(json.loads(request.content))
@@ -4450,7 +4450,7 @@ def test_forwarder_logs_unsupported_codex_server_request(
         :param request: HTTP request sent by the forwarder.
         :returns: Never returns.
         """
-        raise AssertionError(f"unexpected Omnigent request: {request.method} {request.url}")
+        raise AssertionError(f"unexpected Goalrail request: {request.method} {request.url}")
 
     async def run() -> None:
         """
@@ -4630,7 +4630,7 @@ def test_forwarder_posts_user_message_on_assistant_item_started(tmp_path: Path) 
 def test_forwarder_posts_codex_user_and_agent_messages(tmp_path: Path) -> None:
     """
     Codex app-server completed message items are translated into
-    external conversation items for the Omnigent session stream.
+    external conversation items for the Goalrail session stream.
     """
     posted: list[dict[str, Any]] = []
 
@@ -4957,7 +4957,7 @@ def test_forwarder_posts_codex_turn_plan_update(tmp_path: Path) -> None:
 
 def test_forwarder_posts_completed_codex_plan_item() -> None:
     """
-    Completed Codex ``plan`` thread items are mirrored into Omnigent history.
+    Completed Codex ``plan`` thread items are mirrored into Goalrail history.
 
     This covers resume/replay and final transcript state, where the
     plan arrives as a completed thread item rather than a live
@@ -5024,7 +5024,7 @@ async def _replay_completed_item(
     Drive one Codex ``item/completed`` notification through the forwarder.
 
     :param item: Codex item payload, e.g. a ``commandExecution`` item.
-    :param handler: MockTransport handler capturing the Omnigent posts.
+    :param handler: MockTransport handler capturing the Goalrail posts.
     :returns: None.
     """
     async with httpx.AsyncClient(
@@ -6242,7 +6242,7 @@ async def test_prepare_codex_terminal_via_daemon_creates_runner_and_ensures_term
     Daemon preparation owns session create, runner launch, and terminal ensure.
 
     This exercises the real ``_prepare_codex_terminal_via_daemon`` orchestration
-    against an ``httpx.MockTransport`` Omnigent server. Removing terminal launch arg
+    against an ``httpx.MockTransport`` Goalrail server. Removing terminal launch arg
     persistence, daemon runner launch, the runner re-bind (which clears
     ``omnigent.stopped`` on resume), the ``ensure_native_terminal``
     request, or terminal metadata decoding turns this test red.
@@ -6255,10 +6255,10 @@ async def test_prepare_codex_terminal_via_daemon_creates_runner_and_ensures_term
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Route Omnigent requests issued by daemon preparation.
+        Route Goalrail requests issued by daemon preparation.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         path = request.url.path
         body: object = None
@@ -6373,7 +6373,7 @@ async def test_prepare_codex_terminal_via_daemon_live_resume_skips_config_patch(
     ``model_override`` would only change the database for a later cold start and
     silently mislead the user. The helper must return the live terminal and warn
     instead of PATCHing the session. It also must not rewrite the live Codex
-    rollout from Omnigent history while the app-server may be appending to it.
+    rollout from Goalrail history while the app-server may be appending to it.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param capsys: Pytest capture fixture.
@@ -6394,10 +6394,10 @@ async def test_prepare_codex_terminal_via_daemon_live_resume_skips_config_patch(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Route Omnigent requests for a live resume.
+        Route Goalrail requests for a live resume.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         path = request.url.path
         body: object = json.loads(request.content) if request.content else None
@@ -6476,7 +6476,7 @@ async def test_prepare_codex_terminal_hot_resume_does_not_rewrite_rollout(
 
     ``_prepare_codex_terminal`` has an early return when the terminal
     resource is already running. That hot path must not synthesize or
-    rewrite rollout files from Omnigent history because Codex may be appending
+    rewrite rollout files from Goalrail history because Codex may be appending
     to the same JSONL file concurrently.
 
     :param monkeypatch: Pytest monkeypatch fixture.
@@ -6503,10 +6503,10 @@ async def test_prepare_codex_terminal_hot_resume_does_not_rewrite_rollout(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Serve a codex-native session, live terminal, and Omnigent item history.
+        Serve a codex-native session, live terminal, and Goalrail item history.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         path = request.url.path
         calls.append((request.method, path))
@@ -6625,7 +6625,7 @@ async def test_find_running_codex_terminal_known_misses_relaunch(
         Return a reattach miss response.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         assert request.url.path.endswith("/resources/terminals/terminal_codex_main")
         return httpx.Response(status_code, json=body)
@@ -6650,7 +6650,7 @@ async def test_find_running_codex_terminal_unexpected_error_still_raises() -> No
         Return an unexpected server error.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         del request
         return httpx.Response(500, text="database unavailable")
@@ -6681,7 +6681,7 @@ async def test_find_running_codex_terminal_generic_errors_still_raise(
         Return a non-reattach failure response.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         del request
         return httpx.Response(
@@ -7000,7 +7000,7 @@ def test_attach_with_forwarder_closes_active_rotated_session_terminal(
     tmp_path: Path,
 ) -> None:
     """
-    Wrapper exit closes the terminal on the active rotated Omnigent session.
+    Wrapper exit closes the terminal on the active rotated Goalrail session.
 
     Codex ``/clear`` transfers the terminal resource to a replacement
     session. Shutdown must follow the bridge state written by the
@@ -7232,7 +7232,7 @@ def test_session_usage_data_extracts_cumulative_tokens() -> None:
 
     Codex's ``tokenUsage.total`` is cumulative across the thread, so these are
     the session totals; without them codex-native ``session_usage.total_cost_usd``
-    stays 0 (codex produces no ``response.completed`` for the Omnigent relay).
+    stays 0 (codex produces no ``response.completed`` for the Goalrail relay).
     """
     params = {
         "threadId": "thread_123",
@@ -7629,10 +7629,10 @@ def _transcript_posts(
     session_id: str,
 ) -> list[dict[str, Any]]:
     """
-    Filter Omnigent posts to the ``external_conversation_item`` events for one session.
+    Filter Goalrail posts to the ``external_conversation_item`` events for one session.
 
-    :param posted: All captured Omnigent posts as ``(path, body)`` tuples.
-    :param session_id: Omnigent session id to filter for.
+    :param posted: All captured Goalrail posts as ``(path, body)`` tuples.
+    :param session_id: Goalrail session id to filter for.
     :returns: List of ``external_conversation_item`` body dicts.
     """
     return [
@@ -7648,10 +7648,10 @@ def _registration_posts(
     parent_session_id: str,
 ) -> list[dict[str, Any]]:
     """
-    Filter Omnigent posts to the ``external_codex_subagent_start`` events for a parent.
+    Filter Goalrail posts to the ``external_codex_subagent_start`` events for a parent.
 
-    :param posted: All captured Omnigent posts as ``(path, body)`` tuples.
-    :param parent_session_id: Parent Omnigent session id to filter for.
+    :param posted: All captured Goalrail posts as ``(path, body)`` tuples.
+    :param parent_session_id: Parent Goalrail session id to filter for.
     :returns: List of ``external_codex_subagent_start`` body dicts.
     """
     return [
@@ -7667,10 +7667,10 @@ def _make_omnigent_handler(
     child_session_id: str = "conv_child",
 ) -> Callable[[httpx.Request], httpx.Response]:
     """
-    Build an Omnigent ``MockTransport`` handler that registers a child session on demand.
+    Build a Goalrail ``MockTransport`` handler that registers a child session on demand.
 
-    :param posted: Mutable list collecting all captured Omnigent requests.
-    :param child_session_id: Omnigent child session id to return for
+    :param posted: Mutable list collecting all captured Goalrail requests.
+    :param child_session_id: Goalrail child session id to return for
         ``external_codex_subagent_start`` events.
     :returns: Request handler for ``httpx.MockTransport``.
     """
@@ -7680,7 +7680,7 @@ def _make_omnigent_handler(
         Capture the request and return the appropriate mock response.
 
         :param request: Incoming HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         body = json.loads(request.content)
         posted.append((request.url.path, body))
@@ -7828,12 +7828,12 @@ def test_forwarder_child_thread_started_does_not_rotate_parent_session(
 ) -> None:
     """
     A ``thread/started`` event from a Codex AgentControl child does not
-    rotate the parent Omnigent session.
+    rotate the parent Goalrail session.
 
     Native ``/clear`` starts a new top-level thread and must rotate.
     Child threads also emit ``thread/started`` when they begin — those
     events carry ``source.subAgent.thread_spawn`` and must be ignored
-    by the rotation check, otherwise the parent's Omnigent session would be
+    by the rotation check, otherwise the parent's Goalrail session would be
     replaced every time a child starts.
 
     The test fails if ``_maybe_rotate_session_on_thread_started`` returns
@@ -7895,7 +7895,7 @@ def test_forwarder_child_thread_started_does_not_rotate_parent_session(
         "Expected child thread/started to NOT rotate the parent session; "
         "it rotated. _thread_started_is_subagent guard is missing or broken."
     )
-    # No Omnigent calls should have been made during rotation detection.
+    # No Goalrail calls should have been made during rotation detection.
     assert ap_posts == []
 
 
@@ -7904,7 +7904,7 @@ def test_forwarder_routes_live_child_items_to_child_session(
 ) -> None:
     """
     Live ``item/completed`` events for a known child thread are routed
-    to the child Omnigent session, not the parent.
+    to the child Goalrail session, not the parent.
 
     Once a child thread is registered in ``forwarder_state.subagents_by_thread``,
     the routing layer must direct any event carrying the child's ``threadId``
@@ -8126,7 +8126,7 @@ def test_forwarder_resolves_child_thread_elicitation_on_child_session(
     A child-thread elicitation resolves on the child session, not the parent.
 
     When a collab child thread raises an elicitation, the approval card is
-    published on the child Omnigent session (``route_session_id``). Codex's
+    published on the child Goalrail session (``route_session_id``). Codex's
     ``serverRequest/resolved`` must clear it on that same child session;
     resolving on the parent leaves the child's card stuck for any web user
     watching the child.
@@ -8472,11 +8472,11 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_omnigent_history(
     tmp_path: Path,
 ) -> None:
     """
-    Cross-machine Codex resume rebuilds a local rollout from Omnigent history.
+    Cross-machine Codex resume rebuilds a local rollout from Goalrail history.
 
-    The server can know the Omnigent conversation and Codex thread id while the
+    The server can know the Goalrail conversation and Codex thread id while the
     current host has no ``$CODEX_HOME/sessions/.../rollout-*-<thread>.jsonl``.
-    This helper must fetch committed Omnigent items, follow pagination, and write
+    This helper must fetch committed Goalrail items, follow pagination, and write
     the response items before ``codex resume <thread>`` launches. If it only
     checked for local rollout state, this test would leave no file to read.
 
@@ -8541,7 +8541,7 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_omnigent_history(
         Serve two chronological item pages.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         requested_urls.append(str(request.url))
         assert request.url.path == "/v1/sessions/conv_codex/items"
@@ -8671,13 +8671,13 @@ async def test_ensure_local_codex_resume_rollout_preserves_existing_rollout(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Fail if Omnigent history is fetched despite a local rollout.
+        Fail if Goalrail history is fetched despite a local rollout.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         del request
-        raise AssertionError("existing rollout should avoid Omnigent history fetch")
+        raise AssertionError("existing rollout should avoid Goalrail history fetch")
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -8733,16 +8733,16 @@ async def test_ensure_local_codex_resume_rollout_rejects_malformed_tool_history(
     because Codex would then resume a tool history that never happened.
 
     :param tmp_path: Temporary directory for isolated ``CODEX_HOME``.
-    :param bad_item: Malformed Omnigent item to serve.
+    :param bad_item: Malformed Goalrail item to serve.
     :param message: Expected diagnostic substring.
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Serve malformed Omnigent history.
+        Serve malformed Goalrail history.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent item page.
+        :returns: Mock Goalrail item page.
         """
         assert request.url.path == "/v1/sessions/conv_codex/items"
         return httpx.Response(200, json={"data": [bad_item], "has_more": False})
@@ -8777,7 +8777,7 @@ async def test_ensure_local_codex_resume_rollout_rejects_unsafe_thread_id(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Fail if Omnigent history is fetched for an unsafe thread id.
+        Fail if Goalrail history is fetched for an unsafe thread id.
 
         :param request: Incoming mock HTTP request.
         :returns: Never returns.

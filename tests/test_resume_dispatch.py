@@ -92,7 +92,7 @@ def test_dispatch_by_runtime_claude_native_remote_routes_to_wrapper(
     wrapper's resume kwarg). A bug that passed ``None`` would mint a
     fresh session and the user would lose their prior context.
     Also asserts ``server`` carries through so the wrapper hits the
-    right Omnigent server.
+    right Goalrail server.
     """
     monkeypatch.setattr(
         resume_dispatch,

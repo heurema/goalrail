@@ -119,7 +119,7 @@ def _claude_code_session(
     directory, launches Claude Code with MCP + hook injection, writes
     ``tmux.json``, and waits for ``server.json`` before yielding.
 
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param model: Claude model id to pin, e.g.
         ``"databricks-claude-sonnet-4-6"``. ``None`` lets the CLI choose.
     :param launch_env: Extra environment for the launched ``claude``

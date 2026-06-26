@@ -454,7 +454,7 @@ def test_attach_url_encodes_path_components() -> None:
 
 def test_materialized_session_spec_is_valid_terminal_metadata(tmp_path: Path) -> None:
     """
-    The generated bundled agent spec validates for Omnigent session creation.
+    The generated bundled agent spec validates for Goalrail session creation.
 
     The session agent only exists so the Sessions API can create a
     normal session row; Claude itself is launched as a terminal
@@ -562,7 +562,7 @@ def test_local_run_preflights_local_claude_binary(
     """
     Local-server mode also requires a local Claude executable.
 
-    The Omnigent server and web UI are local in this mode, but Claude is
+    The Goalrail server and web UI are local in this mode, but Claude is
     still launched by a local runner-owned terminal resource.
     """
     called_local = False
@@ -1593,7 +1593,7 @@ async def test_find_running_claude_terminal_reads_resource_endpoint() -> None:
         Return one running Claude terminal resource.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         requested_urls.append(str(request.url))
         return httpx.Response(
@@ -1632,7 +1632,7 @@ async def test_find_running_claude_terminal_miss_statuses_relaunch(
         Return a reattach miss response.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         del request
         return httpx.Response(status_code, json={"error": {"message": "not attachable"}})
@@ -1899,7 +1899,7 @@ async def test_ensure_local_claude_resume_transcript_returns_none_when_no_record
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Empty Omnigent history → ``None`` and no transcript file written.
+    Empty Goalrail history → ``None`` and no transcript file written.
 
     ``claude --resume`` against a zero-record transcript exits with "No
     conversation found with session ID" instead of starting; for claude-
@@ -1958,7 +1958,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
         Mock POST /v1/sessions (create). PATCH must not be issued.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         if request.method == "POST":
             body = request.content.decode("utf-8")
@@ -3611,7 +3611,7 @@ def _items_response_body(
     last_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    Build a minimal Omnigent item-list response body.
+    Build a minimal Goalrail item-list response body.
 
     :param items: Session item dicts returned in ``data``.
     :param has_more: Whether a following page exists.
@@ -3715,7 +3715,7 @@ async def test_resolve_cold_resume_args_declines_resume_when_no_history(
     tmp_path: Path,
 ) -> None:
     """
-    Empty Omnigent history → ``()`` (launch fresh), not ``("--resume", sid)``.
+    Empty Goalrail history → ``()`` (launch fresh), not ``("--resume", sid)``.
 
     An ``external_session_id`` is set, but the conversation has no
     convertible items, so the synthesized transcript would be empty.
@@ -3751,12 +3751,12 @@ async def test_resolve_cold_resume_args_bootstraps_missing_local_claude_transcri
     tmp_path: Path,
 ) -> None:
     """
-    Cross-machine cold resume downloads Omnigent history into Claude JSONL.
+    Cross-machine cold resume downloads Goalrail history into Claude JSONL.
 
     This is the regression case behind the feature: the server knows
-    the Omnigent conversation and Claude external session id, but the local
+    the Goalrail conversation and Claude external session id, but the local
     machine has no ``~/.claude/projects/<cwd>/<sid>.jsonl``. The
-    helper must fetch committed Omnigent items and write a transcript before
+    helper must fetch committed Goalrail items and write a transcript before
     returning ``--resume <sid>``; otherwise Claude starts with no
     local context.
     """
@@ -3809,7 +3809,7 @@ async def test_resolve_cold_resume_args_bootstraps_missing_local_claude_transcri
         Serve the session snapshot and two chronological item pages.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         requested_paths.append(str(request.url))
         if request.url.path == "/v1/sessions/conv_abc":
@@ -3888,11 +3888,11 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
     tmp_path: Path,
 ) -> None:
     """
-    Cold resume treats Omnigent history as source of truth over local JSONL.
+    Cold resume treats Goalrail history as source of truth over local JSONL.
 
     Claude can leave a local ``~/.claude/projects/<cwd>/<sid>.jsonl``
     that diverges from the Omnigent transcript we have persisted. The resume
-    path must still fetch Omnigent items and overwrite that stale file before
+    path must still fetch Goalrail items and overwrite that stale file before
     returning ``--resume <sid>``. If the helper reintroduces an early
     return when the local target exists, this test keeps the stale line
     and fails.
@@ -3932,7 +3932,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         Serve the session snapshot and AP-authoritative item page.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock Goalrail response.
         """
         nonlocal item_requests
         if request.url.path == "/v1/sessions/conv_abc":
@@ -3955,7 +3955,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         args = await claude_native._resolve_cold_resume_args(client, "conv_abc")
 
     assert args == ("--resume", "claude-uuid-abc")
-    assert item_requests == 1, "cold resume must fetch Omnigent items even when local JSONL exists"
+    assert item_requests == 1, "cold resume must fetch Goalrail items even when local JSONL exists"
     records = [
         json.loads(line)
         for line in transcript_path.read_text(encoding="utf-8").splitlines()
@@ -4156,7 +4156,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
         Capture the launch args without invoking the real runner.
 
         :param _client: HTTP client (ignored).
-        :param session_id: Omnigent conversation id — captured
+        :param session_id: Goalrail conversation id — captured
             for the end-to-end assertion.
         :param claude_args: Args the launch will pass to claude —
             this is the load-bearing capture.
@@ -4355,7 +4355,7 @@ async def test_attach_passes_start_at_end_true_on_cold_resume(
     to pass ``prepared.reattached`` again (the original buggy
     behavior), this test would fail: cold resume's ``reattached``
     is ``False`` by construction, so the forwarder would still
-    walk the prior transcript from offset 0 and Omnigent would broadcast
+    walk the prior transcript from offset 0 and Goalrail would broadcast
     every prior turn as new.
     """
     captured: dict[str, Any] = {}
@@ -4568,7 +4568,7 @@ def test_is_claude_native_conversation_logs_warning_on_non_200(
 ) -> None:
     """
     Non-200 returns False but ALSO logs a warning. Without the
-    warning a misrouted resume (auth failure → silent Omnigent REPL on
+    warning a misrouted resume (auth failure → silent Goalrail REPL on
     top of a tmux session) would have zero breadcrumbs in logs.
 
     Patches ``logger.warning`` directly (not caplog) to keep the
@@ -4613,7 +4613,7 @@ def test_is_claude_native_conversation_returns_false_on_transport_error(
     """
     Connection / DNS / TLS failure → False, with a warning logged.
 
-    The caller falls back to the Omnigent REPL path, which surfaces its
+    The caller falls back to the Goalrail REPL path, which surfaces its
     own connect-fail error; we just record what we saw so a flaky
     server doesn't cause a silent misroute.
     """
@@ -5020,7 +5020,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
         """
         Minimal context-manager stand-in for :class:`httpx.Client`.
 
-        :param base_url: Omnigent server base URL.
+        :param base_url: Goalrail server base URL.
         :param headers: HTTP headers passed by the wrapper.
         :param timeout: Request timeout in seconds.
         """
@@ -5035,7 +5035,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
             """
             Capture construction arguments for later assertions.
 
-            :param base_url: Omnigent server base URL.
+            :param base_url: Goalrail server base URL.
             :param headers: HTTP headers passed by the wrapper.
             :param timeout: Request timeout in seconds.
             :returns: None.
@@ -5078,7 +5078,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
             """
             Return a session response for the requested URL.
 
-            :param url: Relative Omnigent session path, e.g.
+            :param url: Relative Goalrail session path, e.g.
                 ``"/v1/sessions/conv%20with%20space"``.
             :returns: HTTP response with ``external_session_id``.
             """

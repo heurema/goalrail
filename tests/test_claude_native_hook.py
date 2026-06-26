@@ -80,7 +80,7 @@ def test_session_start_hook_emits_conversation_url_system_message(
 
     This fails if ``omnigent claude`` stops routing the web URL
     through Claude's hook output path, leaving users with no startup
-    pointer back to the Omnigent conversation.
+    pointer back to the Goalrail conversation.
     """
     monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
@@ -171,7 +171,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    ``/clear`` SessionStart prints the URL for the replacement Omnigent session.
+    ``/clear`` SessionStart prints the URL for the replacement Goalrail session.
 
     Claude renders hook stdout immediately, before the background
     forwarder can poll the hook log. This test fails if the banner
@@ -221,7 +221,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Return the old session snapshot.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :returns: HTTP response object.
             """
             import httpx
@@ -242,7 +242,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Create the replacement session or transfer the terminal.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -265,7 +265,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Bind the new session or clear the old runner binding.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -332,7 +332,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
     # The /clear rotation gates Claude's welcome banner and must fail
     # fast — it uses _SESSION_ROTATION_TIMEOUT_S, NOT the day-long
     # permission long-poll budget. If this regresses to
-    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Omnigent server would hang
+    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Goalrail server would hang
     # the banner for a full day instead of returning None so the
     # background forwarder can rotate.
     rotation_timeout = _FakeHttpxClient.captured_timeouts[0]
@@ -346,7 +346,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Claude ``/fork`` SessionStart prints the URL for the forked Omnigent session.
+    Claude ``/fork`` SessionStart prints the URL for the forked Goalrail session.
 
     Claude reports ``/fork``/``/branch`` as ``SessionStart`` with
     ``source=resume``. This test fails if the hook no longer detects
@@ -397,7 +397,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
             """
             Return the old session snapshot.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :returns: HTTP response object.
             """
             import httpx
@@ -416,9 +416,9 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Fork the Omnigent session or transfer the terminal.
+            Fork the Goalrail session or transfer the terminal.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -441,7 +441,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
             """
             Bind the forked session or clear the old runner binding.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -527,7 +527,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
     # The /fork rotation gates Claude's welcome banner and must fail
     # fast — it uses _SESSION_ROTATION_TIMEOUT_S, NOT the day-long
     # permission long-poll budget. If this regresses to
-    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Omnigent server would hang
+    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Goalrail server would hang
     # the banner for a full day instead of returning None so the
     # background forwarder can fork.
     rotation_timeout = _FakeHttpxClient.captured_timeouts[0]
@@ -544,12 +544,12 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
     Ordinary Claude resumes do not create Omnigent forks.
 
     This fails if every ``SessionStart source=resume`` starts forking
-    Omnigent sessions, which would break normal Claude resume flows.
+    Goalrail sessions, which would break normal Claude resume flows.
     """
 
     class _FailingHttpxClient:
         """
-        HTTP client stub that fails if fork detection makes Omnigent calls.
+        HTTP client stub that fails if fork detection makes Goalrail calls.
 
         :param headers: Headers passed to :class:`httpx.Client`.
         :param timeout: Timeout passed to :class:`httpx.Client`.
@@ -656,10 +656,10 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Permission command hook routes to the current active Omnigent session.
+    Permission command hook routes to the current active Goalrail session.
 
     This fails if the hook bakes in the launch conversation id: after
-    Claude ``/clear`` rotates the bridge to a new Omnigent session, approval
+    Claude ``/clear`` rotates the bridge to a new Goalrail session, approval
     requests would still appear on the old conversation.
     """
     posted: dict[str, object] = {}
@@ -702,9 +702,9 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request.
+            Record the outgoing Goalrail request.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -765,7 +765,7 @@ def _prepare_permission_bridge(tmp_path: Path, session_id: str) -> Path:
 
     :param tmp_path: Test-scoped temp directory (already patched as the
         trusted bridge parent by the caller).
-    :param session_id: Active Omnigent session id, e.g. ``"conv_x"``.
+    :param session_id: Active Goalrail session id, e.g. ``"conv_x"``.
     :returns: The prepared bridge directory.
     """
     bridge_dir = prepare_bridge_dir(
@@ -837,7 +837,7 @@ def test_permission_request_hook_retries_transport_cut_with_same_id(
             """
             Fail the first attempt at the transport layer, then succeed.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP 200 with a decision on the second attempt.
             :raises httpx.ReadError: On the first attempt.
@@ -891,7 +891,7 @@ def test_permission_request_hook_does_not_retry_rejections(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    A 4xx from the Omnigent server is a deliberate answer — no retry.
+    A 4xx from the Goalrail server is a deliberate answer — no retry.
 
     Retrying a rejection (bad payload, foreign elicitation id) would
     hammer the server with a request it already refused; the hook must
@@ -938,7 +938,7 @@ def test_permission_request_hook_does_not_retry_rejections(
             """
             Reject every attempt with HTTP 400.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body.
             :returns: HTTP 400 response.
             """
@@ -1083,9 +1083,9 @@ def test_build_hook_settings_omits_policy_hooks_without_omnigent_server_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``build_hook_settings`` omits policy hooks when no Omnigent URL is set.
+    ``build_hook_settings`` omits policy hooks when no Goalrail URL is set.
 
-    Without an Omnigent server there are no policies to evaluate; registering
+    Without a Goalrail server there are no policies to evaluate; registering
     the hooks would cause no-op subprocesses on every tool call.
     """
     monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
@@ -1104,7 +1104,7 @@ def test_build_hook_settings_omits_policy_hooks_without_omnigent_server_url(
     for entry in hooks.get("PostToolUse", []):
         cmd = entry["hooks"][0]["command"]
         assert "evaluate-policy" not in cmd, (
-            "Policy evaluation hook should not be registered without Omnigent URL"
+            "Policy evaluation hook should not be registered without Goalrail URL"
         )
 
 
@@ -1161,9 +1161,9 @@ def test_evaluate_policy_pre_tool_use_converts_and_returns_deny(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request and return a DENY verdict.
+            Record the outgoing Goalrail request and return a DENY verdict.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body (EvaluationRequest).
             :returns: HTTP response object with EvaluationResponse.
             """
@@ -1340,9 +1340,9 @@ def test_evaluate_policy_post_tool_use_converts_and_returns_context(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request and return a DENY verdict.
+            Record the outgoing Goalrail request and return a DENY verdict.
 
-            :param url: Target Omnigent URL.
+            :param url: Target Goalrail URL.
             :param json: Request JSON body (EvaluationRequest).
             :returns: HTTP response with EvaluationResponse.
             """
@@ -1448,7 +1448,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
 
         def post(self, *_args: object, **_kwargs: object) -> object:
             """
-            Fail if Omnigent is called — must not happen in non-bypass mode.
+            Fail if Goalrail is called — must not happen in non-bypass mode.
 
             :param _args: Ignored.
             :param _kwargs: Ignored.
@@ -1476,7 +1476,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
         exit_code = claude_native_hook.main(["ask-user-question", "--bridge-dir", str(bridge_dir)])
         captured = capsys.readouterr()
-        # No Omnigent call, no output — "no opinion" so PermissionRequest takes over.
+        # No Goalrail call, no output — "no opinion" so PermissionRequest takes over.
         assert exit_code == 0, f"Non-zero exit for mode={mode!r}"
         assert captured.out == "", f"Unexpected output for mode={mode!r}: {captured.out!r}"
         assert calls == [], f"AP client was constructed for mode={mode!r}"
@@ -1492,11 +1492,11 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
 
     In bypass mode ``PermissionRequest`` never fires, so this PreToolUse hook
     is the only opportunity to surface ``AskUserQuestion`` in the web UI.  It
-    must POST the payload to the Omnigent session's permission-request endpoint, then
+    must POST the payload to the Goalrail session's permission-request endpoint, then
     convert the ``PermissionRequest``-format response to ``PreToolUse`` format
     (lifting ``decision.updatedInput`` to the top-level ``updatedInput`` field).
 
-    Fails if: Omnigent is not called in bypass mode, the URL targets the wrong session,
+    Fails if: Goalrail is not called in bypass mode, the URL targets the wrong session,
     the response is not converted from PermissionRequest to PreToolUse format,
     or the user's answers are not surfaced in ``updatedInput``.
     """
@@ -1552,7 +1552,7 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the Omnigent request and return a canned PermissionRequest response.
+            Record the Goalrail request and return a canned PermissionRequest response.
 
             :param url: Target URL.
             :param json: Request body.
@@ -1592,7 +1592,7 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    # Omnigent must be called with the active session's URL.
+    # Goalrail must be called with the active session's URL.
     assert posted["url"] == (
         "http://127.0.0.1:8787/v1/sessions/conv_bypass/hooks/permission-request"
     )

@@ -397,7 +397,7 @@ def test_update_conversation_id_mutates_correctly(bridge_dir: Path) -> None:
     update_conversation_id updates the conversation_id and active_turn_id.
 
     Guards conversation rotation: when agy creates a fresh conversation while
-    the Omnigent session stays the same, the bridge must reflect the new id.
+    the Goalrail session stays the same, the bridge must reflect the new id.
     """
     _seed_active_turn(bridge_dir, "turn_old")
     assert update_conversation_id(bridge_dir, "agy_conv_new", active_turn_id="turn_fresh") is True

@@ -48,7 +48,7 @@ def test_claude_native_wrapper_constants_match_chat_module() -> None:
     The chat module uses these in ``_is_claude_native_conversation``
     to decide whether to redirect a resume to the claude wrapper. A
     drift here would mean ``omnigent attach <claude-id>``
-    silently opens an Omnigent REPL on top of a tmux session it can't see —
+    silently opens a Goalrail REPL on top of a tmux session it can't see —
     the misroute's root cause.
     """
     from omnigent import chat
