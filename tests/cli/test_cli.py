@@ -175,6 +175,18 @@ def test_goalrail_native_command_help_uses_goalrail_product_name() -> None:
     assert "omnigent codex" not in result.output
 
 
+def test_goalrail_server_and_debug_help_use_goalrail_product_name() -> None:
+    """
+    Server and maintenance help should keep internal names out of the public CLI.
+    """
+    for args in (["server", "--help"], ["debug", "--help"]):
+        result = CliRunner().invoke(cli, args, prog_name="goalrail")
+
+        assert result.exit_code == 0, result.output
+        assert "Goalrail" in result.output
+        assert "Omnigent" not in result.output
+
+
 @pytest.mark.parametrize(
     ("argv", "expected"),
     [

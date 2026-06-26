@@ -3227,11 +3227,11 @@ def server(
 
 
 def _stop_local_server_and_daemon(*, force: bool) -> bool:
-    """Stop the background Omnigent server and the local host daemon that owns it.
+    """Stop the background Goalrail server and the local host daemon that owns it.
 
     Stops the local-mode host daemon first (the daemon spawns its server
     once and never respawns it, so leaving it alive would only have it
-    reconnect-flap against a dead server), then the detached Omnigent server
+    reconnect-flap against a dead server), then the detached Goalrail server
     recorded in ``~/.omnigent/local_server.pid``. Best-effort and
     idempotent — a missing daemon or server is a no-op.
 
@@ -3256,7 +3256,7 @@ def _stop_local_server_and_daemon(*, force: bool) -> bool:
 
 @server.command("start")
 def server_start() -> None:
-    """Ensure the managed background Omnigent server is running.
+    """Ensure the managed background Goalrail server is running.
 
     Reuses a healthy background server if one is already up (started here or
     by a prior ``run`` / ``host``); otherwise spawns a detached one on a
@@ -3288,7 +3288,7 @@ def server_start() -> None:
     help="SIGKILL the local host daemon if it does not exit on SIGTERM.",
 )
 def server_stop(force: bool) -> None:
-    """Stop the background Omnigent server and the local host daemon.
+    """Stop the background Goalrail server and the local host daemon.
 
     Stops the local host daemon first, then the detached server recorded
     in ``~/.omnigent/local_server.pid`` — its web UI and sessions become
@@ -3308,7 +3308,7 @@ def server_stop(force: bool) -> None:
 @server.command("status")
 @click.option("--json", "json_output", is_flag=True, help="Emit JSON.")
 def server_status(json_output: bool) -> None:
-    """Show whether the background Omnigent server is running.
+    """Show whether the background Goalrail server is running.
 
     Reports the recorded pid/port, URL, live-session count, and whether a
     local host daemon is attached. Reads ``~/.omnigent/local_server.pid``
@@ -11414,7 +11414,7 @@ if _sandbox_providers():
 # Operator-only maintenance commands, grouped under ``omnigent debug``
 # so they stay out of the everyday surface.
 #
-# ``db-upgrade`` runs manual schema operations on an Omnigent tracking
+# ``db-upgrade`` runs manual schema operations on a Goalrail tracking
 # database. Mirrors ``mlflow db upgrade`` (``mlflow/db.py``) so the
 # workflow is familiar to anyone who's bumped an MLflow database before.
 # The server initializes a fresh database on first boot and attempts to
@@ -11440,7 +11440,7 @@ def debug() -> None:
 @click.argument("url")
 def debug_db_upgrade(url: str) -> None:
     """
-    Upgrade the schema of an Omnigent tracking database to the
+    Upgrade the schema of a Goalrail tracking database to the
     latest supported version.
 
     URL is a SQLAlchemy database URL, e.g.
