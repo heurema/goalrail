@@ -148,7 +148,7 @@ async function fetchSessionAgent(sessionId: string): Promise<Agent> {
 
 /**
  * Fetch a single agent by session id. Used for session-scoped agents
- * created by `omnigent run --server` which may not appear in the
+ * created by `goalrail run --server` which may not appear in the
  * sessions-derived agent list. Only fires when `sessionId` is non-null.
  */
 export function useSessionAgent(sessionId: string | null) {

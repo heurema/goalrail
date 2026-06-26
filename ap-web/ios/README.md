@@ -5,8 +5,8 @@ loads the server-served web UI instead of shipping a duplicate copy of the SPA.
 
 ## Development
 
-Open the legacy `Omnigent.xcodeproj` in Xcode 16 or newer and run the `Omnigent` scheme on
-an iOS 18 simulator.
+Open the legacy `Omnigent.xcodeproj` in Xcode 16 or newer and run the legacy `Omnigent`
+scheme on an iOS 18 simulator. The installed app display name is `Goalrail`.
 
 Debug builds allow `http://` web content for local development by enabling
 `NSAllowsArbitraryLoadsInWebContent`. Release builds keep App Transport

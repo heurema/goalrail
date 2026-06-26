@@ -48,7 +48,7 @@ export const PANEL_NO_TERMINAL_KEY = "";
 /**
  * Resource ids of the AGENT's own terminal — the pane behind the
  * connection pill's Terminal view, runner-created per session shape:
- * the embedded Omnigent REPL (``tui``/``main``) for SDK sessions,
+ * the embedded Goalrail REPL (``tui``/``main``) for SDK sessions,
  * and the vendor pane (``claude``/``main``, ``codex``/``main``,
  * ``pi``/``main``, ``cursor``/``main``, ``kiro``/``main``, ``goose``/``main``,
  * ``qwen``/``main``, ``antigravity``/``main``, or ``kimi``/``main``) for

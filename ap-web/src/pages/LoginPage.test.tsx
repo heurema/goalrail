@@ -64,6 +64,18 @@ afterEach(() => {
 });
 
 describe("LoginPage sanitizeReturnTo open-redirect defense", () => {
+  it("uses Goalrail wording for the initial admin credentials hint", () => {
+    vi.mocked(accountsApi.getMe).mockResolvedValue(null);
+
+    renderLoginAt("%2F");
+
+    expect(screen.getByText(/Goalrail stores a copy/i)).toBeInTheDocument();
+    expect(screen.getByText("~/.omnigent/admin-credentials")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/On a fresh install the initial admin password/i),
+    ).not.toBeInTheDocument();
+  });
+
   it("replaces a backslash protocol-relative payload with the safe default", async () => {
     // %2F%5Cevil.com decodes to /\evil.com — passes a naive
     // startsWith("/") + !startsWith("//") check, but WHATWG URL parsing

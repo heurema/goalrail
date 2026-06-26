@@ -574,7 +574,7 @@ export function ChatPage() {
   const conversationLoadError = useChatStore((s) => s.conversationLoadError);
   const boundAgentId = useChatStore((s) => s.boundAgentId);
   const boundAgentName = useChatStore((s) => s.boundAgentName);
-  // Fallback for session-scoped agents (created by `omnigent run --server`):
+  // Fallback for session-scoped agents (created by `goalrail run --server`):
   // the sessions-derived list only carries id+name, so fetch the full
   // agent object for the active session. Drives the picker's
   // name/description; the same react-query cache also feeds the header
@@ -625,7 +625,7 @@ export function ChatPage() {
   // picker alone in those cases.
   //
   // If the bound agent isn't in the cached list (e.g. a new agent was
-  // registered by a fresh `omnigent run` after the page loaded),
+  // registered by a fresh `goalrail run` after the page loaded),
   // refetch so the list stays current. staleTime: Infinity means the
   // query won't self-update, so we do it manually on demand.
   useEffect(() => {
@@ -1449,7 +1449,7 @@ function MainAgentSurface({
   // (the server has no slash_command path for native sessions). Undefined
   // → the composer falls through to the plaintext send for these. Keyed
   // on the wrapper label, NOT `isTerminalFirst` — a terminal-first SDK
-  // session (embedded Omnigent REPL terminal) runs an in-process harness
+  // session (embedded Goalrail REPL terminal) runs an in-process harness
   // with the full server-side slash_command path.
   const isTerminalFirst = terminalFirst?.isTerminalFirst === true;
   const isNativeWrapper = terminalFirst?.isNativeWrapper === true;
@@ -2932,7 +2932,7 @@ interface ComposerProps {
   /**
    * Native-CLI wrapper session (claude-native / codex-native). Drops the
    * `/model` slash command unless the session also has a model picker
-   * (`showModels`); terminal-first SDK sessions (embedded Omnigent REPL
+   * (`showModels`); terminal-first SDK sessions (embedded Goalrail REPL
    * terminal) keep it.
    */
   isNativeWrapper?: boolean;
@@ -4647,7 +4647,7 @@ function AgentPicker({
   // forwarder's terminal→web mirror and by web-side picks. Surface *that* as
   // the live model — never the cross-session sticky `selectedModel` (a pick
   // carried over from some other session) nor the meaningless `llmModel`
-  // default. The other vendor-owns wrappers have no Omnigent-visible model and
+  // default. The other vendor-owns wrappers have no Goalrail-visible model and
   // stay null.
   const pickerSelectedModel = modelPickerKind === "cursor" ? sessionModelOverride : selectedModel;
   const effectiveModel = nativeVendorOwnsModel

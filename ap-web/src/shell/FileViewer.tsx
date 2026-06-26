@@ -298,7 +298,7 @@ interface FileViewerProps {
 export function FileViewer(props: FileViewerProps) {
   // boundAgentId is populated from the active session's agent binding —
   // works for both template agents and session-scoped agents from
-  // `omnigent run --server`.
+  // `goalrail run --server`.
   const agentId = useChatStore((s) => s.boundAgentId);
   return (
     <CommentSenderProvider sessionId={props.conversationId} agentId={agentId}>

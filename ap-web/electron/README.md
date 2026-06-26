@@ -189,8 +189,8 @@ npm run build:linux       # AppImage + .deb
 npm run build:win         # NSIS installer
 ```
 
-Output lands in `electron/dist/` (the legacy DMG artifact is currently named
-`Omnigent-<version>-<arch>.dmg`).
+Output lands in `electron/dist/` (the DMG artifact is named
+`Goalrail-<version>-<arch>.dmg`).
 
 ## macOS code signing & notarization
 
@@ -261,7 +261,7 @@ notarization step to add a few minutes (Apple-side processing). Verify the
 result with:
 
 ```bash
-spctl -a -vv dist/mac-arm64/Omnigent.app   # → "accepted, source=Notarized Developer ID"
+spctl -a -vv dist/mac-arm64/Goalrail.app   # → "accepted, source=Notarized Developer ID"
 ```
 
 `build:mac:release` **fails loudly** if signing or notarization

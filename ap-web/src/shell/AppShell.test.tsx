@@ -2407,7 +2407,7 @@ describe("Mobile session menu", () => {
   });
 
   it("keeps the Terminals entry in terminal-first SDK sessions (no native wrapper)", () => {
-    // Terminal-first SDK sessions (embedded Omnigent REPL, `omnigent.ui:
+    // Terminal-first SDK sessions (embedded Goalrail REPL, `omnigent.ui:
     // terminal` without a wrapper label) keep the rail/menu Shells entry
     // for user shells: the pill is quick access to the REPL, while the
     // rail lists the shell inventory (sans the agent's own terminal).

@@ -429,7 +429,7 @@ export function buildAttachPath(sessionId: string, terminalId: string, readOnly:
  * Build the WebSocket URL for the resource-addressed attach endpoint.
  *
  * Uses the current page's origin so the URL works whether the SPA is
- * served from the Omnigent server itself or via the Vite dev proxy.
+ * served from the Goalrail server itself or via the Vite dev proxy.
  * ``ws:``/``wss:`` matches the page's ``http:``/``https:``.
  *
  * :param sessionId: Session/conversation identifier.

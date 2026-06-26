@@ -19,7 +19,7 @@
 // The flags used to coincide when the
 // native wrappers were the only sessions stamping the terminal UI
 // label; runner-hosted SDK sessions now stamp `omnigent.ui` WITHOUT a
-// wrapper label (their embedded terminal hosts the Omnigent REPL), so
+// wrapper label (their embedded terminal hosts the Goalrail REPL), so
 // behavior gates must use `isNativeWrapper`, never `isTerminalFirst`.
 
 import { createContext, useContext } from "react";
@@ -33,7 +33,7 @@ export interface TerminalFirstContextValue {
    * True when the session runs a native-CLI wrapper. Keys harness *behavior* gates — composer slash
    * commands and the `/model` command — unlike `isTerminalFirst`,
    * which only gates presentation (SDK sessions with an embedded
-   * Omnigent REPL terminal are terminal-first but not native).
+   * Goalrail REPL terminal are terminal-first but not native).
    */
   isNativeWrapper: boolean;
   /** True when `omnigent.ui === "terminal"` — gates the toggle + sidebar card. */

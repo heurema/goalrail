@@ -299,7 +299,7 @@ export function AppShell() {
   const isClaudeNative = sessionLabels["omnigent.wrapper"] === "claude-code-native-ui";
   // Native-CLI wrapper of either family. Keys harness behavior gates
   // (composer slash commands, `/model`); terminal-first SDK sessions
-  // (embedded Omnigent REPL terminal) have NO wrapper label and must
+  // (embedded Goalrail REPL terminal) have NO wrapper label and must
   // keep regular chat behavior. See TerminalFirstContext.tsx.
   const isNativeWrapper = isNativeWrapperLabel(sessionLabels["omnigent.wrapper"]);
   const todos = useChatStore((s) => s.todos);

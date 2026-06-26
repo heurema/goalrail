@@ -23,7 +23,7 @@ function TodoIcon({ status }: { status: TodoItem["status"] }) {
 }
 
 /**
- * Displays Claude Code's active todo list for `omnigent claude` sessions.
+ * Displays Claude Code's active todo list for `goalrail claude` sessions.
  *
  * Reads from `useChatStore.todos` which is populated by:
  * - the session snapshot on bind (from `_session_todos_cache` on the server)

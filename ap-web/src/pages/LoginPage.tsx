@@ -183,8 +183,8 @@ export function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
-          On a fresh install the initial admin password was printed to the server's stderr and saved
-          to{" "}
+          Goalrail stores a copy of the initial admin password in the current legacy data directory
+          and also prints it to the server's stderr:{" "}
           <code className="rounded bg-muted px-1 py-0.5 font-mono">
             ~/.omnigent/admin-credentials
           </code>

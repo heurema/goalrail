@@ -76,7 +76,7 @@ function HostLabel({ host }: { host: Host }) {
  * original over the same files.
  *
  * When the source's host is offline there is no runner to launch, so the
- * dialog falls back to the CLI reconnect command (``omnigent connect``)
+ * dialog falls back to the CLI reconnect command
  * — the same escape hatch ``ResumeChatDialog`` shows.
  *
  * @param open - Whether the dialog is visible.
@@ -282,7 +282,7 @@ export function ResumeWithDirectoryDialog({
                 serverUrl,
                 wrapper,
                 // The source's host is offline here. With a host binding the
-                // owner re-registers the host (`omnigent host`); without one
+                // owner re-registers the host (`goalrail host`); without one
                 // the runner is relaunched directly via the wrapper's resume
                 // form.
                 state: sourceHostId ? "host_offline" : "local_stranded",

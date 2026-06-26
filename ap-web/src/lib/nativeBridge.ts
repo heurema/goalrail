@@ -1,7 +1,7 @@
 // Bridge between the web app and the optional native shells.
 //
 // The SAME `ap-web` bundle runs in two places:
-//   1. A normal browser tab (served by the Omnigent server).
+//   1. A normal browser tab (served by the Goalrail server).
 //   2. Inside the Electron desktop wrapper (`ap-web/electron`), which loads
 //      that exact server-served bundle in a Chromium BrowserWindow.
 //   3. Inside the iOS wrapper (`ap-web/ios`), which loads the same bundle in
