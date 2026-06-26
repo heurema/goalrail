@@ -382,12 +382,12 @@ def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> Non
     assert "codebase-memory-mcp companion install failed" in r.stderr
 
 
-def test_verify_omnigent_uses_goalrail_entrypoint(lib: Path, tmp_path: Path) -> None:
+def test_verify_goalrail_uses_goalrail_entrypoint(lib: Path, tmp_path: Path) -> None:
     """The installer verifies the public Goalrail CLI entry point."""
     goalrail = tmp_path / "goalrail"
     goalrail.write_text('#!/bin/sh\ncase "$1" in --help) exit 0 ;; *) exit 1 ;; esac\n')
     goalrail.chmod(0o755)
-    r = run(lib, f"verify_omnigent {shlex.quote(str(tmp_path))}")
+    r = run(lib, f"verify_goalrail {shlex.quote(str(tmp_path))}")
     assert r.returncode == 0, r.stderr
     assert f"Verified {goalrail}" in r.stdout
 
@@ -421,9 +421,9 @@ def test_main_respects_skip_codebase_memory(lib: Path) -> None:
                 "check_npm() { :; }",
                 "check_tmux() { :; }",
                 "check_bubblewrap() { :; }",
-                "install_omnigent() { :; }",
+                "install_goalrail() { :; }",
                 "uv_tool_bin_dir() { printf '/tmp/bin\\n'; }",
-                "verify_omnigent() { :; }",
+                "verify_goalrail() { :; }",
                 "install_codebase_memory() { echo called; }",
                 "maybe_add_bin_to_path() { :; }",
                 "print_next_steps() { :; }",

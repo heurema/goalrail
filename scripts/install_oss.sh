@@ -466,7 +466,7 @@ check_bubblewrap() {
   fi
 }
 
-install_omnigent() {
+install_goalrail() {
   # Default: the published PyPI wheel (`omnigent`, optionally `omnigent==X`).
   # The wheel ships the prebuilt web UI, so there is no npm/Node step and no
   # source build — the fast, reliable path. `--repo` switches INSTALL_URL to a
@@ -611,7 +611,7 @@ maybe_add_bin_to_path() {
   step "Added $bin_dir to PATH in $profile"
 }
 
-verify_omnigent() {
+verify_goalrail() {
   bin_dir="$1"
   cli_path="$bin_dir/goalrail"
 
@@ -669,9 +669,9 @@ main() {
   check_npm
   check_tmux
   check_bubblewrap
-  install_omnigent
+  install_goalrail
   bin_dir="$(uv_tool_bin_dir)"
-  verify_omnigent "$bin_dir"
+  verify_goalrail "$bin_dir"
   if [ "$INSTALL_CODEBASE_MEMORY" = true ]; then
     install_codebase_memory "$bin_dir"
   else
