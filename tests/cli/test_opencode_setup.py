@@ -1,4 +1,4 @@
-"""Tests for the OpenCode ``omni setup`` default-model picker helpers."""
+"""Tests for the OpenCode ``goalrail setup`` default-model picker helpers."""
 
 from __future__ import annotations
 

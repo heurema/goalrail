@@ -44,12 +44,16 @@ from omnigent.cli import (
     _node_version,
     _pick_first_run_harness,
     _preregister_agent,
+    _print_goose_auth_help,
+    _print_kimi_auth_help,
+    _print_opencode_auth_help,
     _qwen_auth_configured,
     _resolve_auto_open_conversation_from_config,
     _resolve_auto_open_conversation_setting,
     _resolve_bundle_env_vars,
     _resolve_default_agent_target,
     _resolve_first_run_plan,
+    _run_configure_databricks,
     _save_global_config,
     _start_cli_runner_process,
     _warn_missing_harness_dependencies,
@@ -2386,6 +2390,21 @@ def test_materialize_harness_launcher_file_writes_omnigent_yaml() -> None:
     assert "profile" not in raw["executor"], raw["executor"]
 
 
+def test_materialize_harness_launcher_file_default_prompt_uses_goalrail() -> None:
+    """No-AGENT generated launcher prompts should use the public product name."""
+    generated = _materialize_harness_launcher_file(
+        harness="codex",
+        model=None,
+        system_prompt=None,
+    )
+
+    raw = yaml.safe_load(generated.read_text())
+    assert raw["prompt"] == (
+        "You are Codex, running through Goalrail. Help the user with software engineering tasks."
+    )
+    assert "Omnigent" not in raw["prompt"]
+
+
 def test_materialize_harness_launcher_file_kimi_gets_os_env() -> None:
     """``run --harness kimi`` bakes a caller-process ``os_env`` so the SDK kimi
     operates in the user's current directory, matching claude-sdk.
@@ -4066,7 +4085,7 @@ def test_unknown_command_reports_no_such_command(
 
 
 def test_setup_command_replaces_wizard(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnigent setup`` is the visible standard setup flow command."""
+    """``goalrail setup`` is the visible standard setup flow command."""
     configure_flow = Mock()
     configure_databricks = Mock()
     run_onboarding = Mock(return_value=True)
@@ -4122,6 +4141,32 @@ def test_setup_no_internal_beta_runs_configure_flow(
     configure_flow.assert_called_once_with()
     configure_databricks.assert_not_called()
     run_onboarding.assert_not_called()
+
+
+def test_configure_databricks_completion_uses_goalrail(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The internal-beta Databricks setup completion text should use Goalrail."""
+    monkeypatch.setattr("omnigent.cli.find_ucode_command", lambda: ["ucode"])
+    monkeypatch.setattr(
+        "omnigent.cli.model_gateway_workspace_urls",
+        lambda: ["https://workspace.example.com"],
+    )
+    monkeypatch.setattr(
+        "omnigent.cli.build_ucode_configure_command",
+        lambda command, *, workspace_urls: [*command, "configure"],
+    )
+    monkeypatch.setattr(
+        "omnigent.cli.subprocess.run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0),
+    )
+
+    _run_configure_databricks()
+
+    output = capsys.readouterr().out
+    assert "Goalrail will use state.json for harness setup." in output
+    assert "Omnigent" not in output
 
 
 # ─── setup dependency preflight (Node / tmux) ─────────────────────────
@@ -4794,7 +4839,7 @@ def test_run_agent_with_native_terminal_harness_is_rejected() -> None:
         )
 
 
-# ── omnigent setup: Qwen Code drill-in (_manage_qwen_harness) ────────────
+# ── goalrail setup: Qwen Code drill-in (_manage_qwen_harness) ────────────
 
 
 def test_qwen_auth_configured_detects_env_var(
@@ -4882,7 +4927,7 @@ def test_manage_qwen_harness_back_does_not_launch(
     launch.assert_not_called()
 
 
-# ── omnigent setup: Goose drill-in (_manage_goose_harness) ───────────────
+# ── goalrail setup: Goose drill-in (_manage_goose_harness) ───────────────
 
 
 def test_manage_goose_harness_missing_cli_shows_hint_returns(
@@ -4957,7 +5002,21 @@ def test_manage_goose_harness_configure_launches(
     launch.assert_called_once()
 
 
-# ── omnigent setup: Kimi Code drill-in (_manage_kimi_harness) ────────────
+def test_goose_auth_help_uses_goalrail_product_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Goose setup help should describe Goalrail as the owning product."""
+    import omnigent.onboarding.interactive as it
+
+    console = Mock()
+    monkeypatch.setattr(it, "console", console)
+
+    _print_goose_auth_help()
+
+    printed = " ".join(str(c.args[0]) for c in console.print.call_args_list if c.args)
+    assert "Goalrail stores no Goose credential" in printed
+    assert "Omnigent" not in printed
+
+
+# ── goalrail setup: Kimi Code drill-in (_manage_kimi_harness) ────────────
 
 
 def test_manage_kimi_harness_not_installed_shows_hint_returns(
@@ -5034,3 +5093,36 @@ def test_manage_kimi_harness_login_runs_kimi_login(
 
     login.assert_called_once_with(hi.KIMI_KEY)
     logout.assert_not_called()
+
+
+def test_kimi_auth_help_uses_goalrail_product_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Kimi setup help should describe Goalrail as the owning product."""
+    import omnigent.onboarding.interactive as it
+
+    console = Mock()
+    monkeypatch.setattr(it, "console", console)
+
+    _print_kimi_auth_help()
+
+    printed = " ".join(str(c.args[0]) for c in console.print.call_args_list if c.args)
+    assert "Goalrail stores no kimi credential" in printed
+    assert "Omnigent" not in printed
+
+
+def test_opencode_auth_help_uses_goalrail_product_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenCode setup help should describe Goalrail as the owning product."""
+    import omnigent.onboarding.interactive as it
+
+    console = Mock()
+    monkeypatch.setattr(it, "console", console)
+
+    _print_opencode_auth_help()
+
+    printed = " ".join(str(c.args[0]) for c in console.print.call_args_list if c.args)
+    assert "Goalrail synthesizes opencode's per-session provider config" in printed
+    assert "Goalrail stores no OpenCode credential" in printed
+    assert "`goalrail opencode` launches on" in printed
+    assert "Omnigent" not in printed
+    assert "`omni opencode`" not in printed

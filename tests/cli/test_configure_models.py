@@ -1,4 +1,4 @@
-"""Tests for ``omnigent setup --no-internal-beta`` (CLI model-provider config).
+"""Tests for ``goalrail setup --no-internal-beta`` (CLI model-provider config).
 
 Drives the click command tree with :class:`click.testing.CliRunner` and
 piped stdin, then asserts on the **exact config mutations** written to a
@@ -2485,7 +2485,7 @@ def test_configure_harnesses_add_other_key_no_remaining_providers_aborts_cleanly
     Regression for #820: when every catch-all key provider is already configured,
     ``other_key_providers()`` returns ``[]`` and the secondary ``select`` was
     handed an empty option list, raising ``ValueError: select() requires at least
-    one option`` out of ``omnigent setup``. The add branch must detect the empty
+    one option`` out of ``goalrail setup``. The add branch must detect the empty
     list, tell the user, and return — exit code 0, no traceback. Driven under Pi
     (the surface from the report), with the harness CLI forced installed so the
     drill-in reaches the add menu.

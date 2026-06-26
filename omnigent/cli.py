@@ -191,7 +191,7 @@ _GLOBAL_CONFIG_KEYS: frozenset[str] = frozenset(
         "harness",
         "model",
         # OpenCode-specific default model (``provider/model``) the native
-        # ``omni opencode`` TUI launches on; set via `omni setup` → OpenCode.
+        # ``goalrail opencode`` TUI launches on; set via `goalrail setup` → OpenCode.
         "opencode_model",
         "server",
         _AUTO_OPEN_CONVERSATION_CONFIG_KEY,
@@ -4437,7 +4437,7 @@ def opencode(
     if server is None:
         server = cfg.get("server")
     if model is None:
-        # Prefer the OpenCode-specific default (set in `omni setup` → OpenCode →
+        # Prefer the OpenCode-specific default (set in `goalrail setup` → OpenCode →
         # "Set default model"); fall back to the shared `model` key for back-compat.
         model = cfg.get("opencode_model") or cfg.get("model")
     auto_open_conversation = _resolve_auto_open_conversation_from_config(cfg)
@@ -5506,28 +5506,28 @@ _LOG_HELP = "Write a JSON dump of the conversation to ~/.omnigent/logs/ on exit.
 
 _DEFAULT_HARNESS_PROMPTS = {
     "claude-sdk": (
-        "You are Claude Code, running through Omnigent. "
+        "You are Claude Code, running through Goalrail. "
         "Help the user with software engineering tasks."
     ),
     "codex": (
-        "You are Codex, running through Omnigent. Help the user with software engineering tasks."
+        "You are Codex, running through Goalrail. Help the user with software engineering tasks."
     ),
     "cursor": (
-        "You are Cursor, running through Omnigent. Help the user with software engineering tasks."
+        "You are Cursor, running through Goalrail. Help the user with software engineering tasks."
     ),
     "kimi": (
-        "You are Kimi Code, running through Omnigent. "
+        "You are Kimi Code, running through Goalrail. "
         "Help the user with software engineering tasks."
     ),
     "qwen": (
-        "You are Qwen Code, running through Omnigent. "
+        "You are Qwen Code, running through Goalrail. "
         "Help the user with software engineering tasks."
     ),
     "goose": (
-        "You are Goose, running through Omnigent. Help the user with software engineering tasks."
+        "You are Goose, running through Goalrail. Help the user with software engineering tasks."
     ),
 }
-_DEFAULT_HARNESS_PROMPT = "You are a helpful coding agent running through Omnigent."
+_DEFAULT_HARNESS_PROMPT = "You are a helpful coding agent running through Goalrail."
 
 # Harnesses whose auto-generated launcher YAML should include an
 # ``os_env`` block.  This triggers the workflow's ``ToolManager``
@@ -8131,7 +8131,7 @@ def _run_configure_databricks() -> None:
 
     Shells out to ``ucode configure`` to authenticate workspaces and set
     up harnesses (Claude SDK, Codex, OpenAI Agents, Pi). After setup,
-    Omnigent reads ``~/.ucode/state.json`` to pick per-harness model
+    Goalrail reads ``~/.ucode/state.json`` to pick per-harness model
     defaults and base URLs.
 
     :returns: None.
@@ -8155,7 +8155,7 @@ def _run_configure_databricks() -> None:
             "see the command output above for details."
         )
 
-    click.echo("ucode configuration complete. Omnigent will use state.json for harness setup.")
+    click.echo("ucode configuration complete. Goalrail will use state.json for harness setup.")
 
 
 def _warn_missing_harness_dependencies() -> None:
@@ -9872,11 +9872,11 @@ def _manage_qwen_harness() -> None:
 
 
 def _print_goose_auth_help() -> None:
-    """Print Goose's configuration options (Omnigent manages no Goose credential)."""
+    """Print Goose's configuration options (Goalrail manages no Goose credential)."""
     from omnigent.onboarding.interactive import console
 
     console.print(
-        "\n  [bold]Configure Goose[/bold] (Omnigent stores no Goose credential):\n"
+        "\n  [bold]Configure Goose[/bold] (Goalrail stores no Goose credential):\n"
         "    • Interactive: run [bold]goose configure[/bold] to pick a provider "
         "and store its key (keyring or ~/.config/goose/config.yaml)\n"
         "    • Env override: set [bold]GOOSE_PROVIDER[/bold] + [bold]GOOSE_MODEL[/bold] "
@@ -10040,7 +10040,7 @@ def _manage_kiro_harness() -> None:
     """Run the level-2 loop for Kiro: ensure the CLI is installed and signed in.
 
     Kiro owns its own auth via ``kiro-cli login`` (Builder ID / social login /
-    Identity Center) and is installed via Kiro's curl installer — Omnigent stores
+    Identity Center) and is installed via Kiro's curl installer — Goalrail stores
     no Kiro credential. A missing CLI gates the drill-in; when installed, the
     drill-in offers to launch ``kiro-cli login`` to sign in. Mirrors
     :func:`_manage_hermes_harness`.
@@ -10097,13 +10097,13 @@ def _manage_kiro_harness() -> None:
 def _print_kimi_auth_help() -> None:
     """Print Kimi Code's authentication options.
 
-    Kimi authenticates against Moonshot AI's backend rather than an Omnigent
+    Kimi authenticates against Moonshot AI's backend rather than a Goalrail
     credential: ``kimi login`` (OAuth or a Moonshot API key) for the default
     provider, and ``kimi provider add`` to register any other provider (an
     OpenAI-compatible endpoint, a Databricks gateway, …) in
-    ``~/.kimi/config.toml``. Omnigent has no per-spawn provider override for
+    ``~/.kimi/config.toml``. Goalrail has no per-spawn provider override for
     upstream kimi, so all of this lives in the kimi CLI's own config —
-    Omnigent-side injection remains a deferred follow-up.
+    Goalrail-side injection remains a deferred follow-up.
     """
     from omnigent.onboarding.interactive import console
 
@@ -10115,7 +10115,7 @@ def _print_kimi_auth_help() -> None:
         "    • Other providers: run [bold]kimi provider add[/bold] "
         "(OpenAI-compatible endpoint, gateway, …), then pin that model id in "
         "the agent spec\n"
-        "    • Omnigent stores no kimi credential and cannot thread one per "
+        "    • Goalrail stores no kimi credential and cannot thread one per "
         "spawn — configure it once in the kimi CLI\n"
     )
 
@@ -10709,7 +10709,7 @@ def _list_opencode_models() -> list[str]:
 def _set_opencode_default_model(current: str | None) -> str | None:
     """Pick OpenCode's default model and persist it as ``opencode_model``.
 
-    The choice is what ``omni opencode`` launches on when no ``--model`` is
+    The choice is what ``goalrail opencode`` launches on when no ``--model`` is
     given — written into the per-session ``opencode.json`` at spawn so the TUI
     starts on it instead of ``opencode/big-pickle``. Returns a status line for
     the drill-in, or ``None`` when cancelled.
@@ -10771,9 +10771,9 @@ def _print_opencode_auth_help() -> None:
         "      stored in ~/.local/share/opencode/auth.json.\n"
         "    • Provider env vars (OPENAI_API_KEY / ANTHROPIC_API_KEY / …) are auto-detected.\n"
         "    • Databricks gateway: set an agent ``profile`` (configured under Claude / Codex);\n"
-        "      Omnigent synthesizes opencode's per-session provider config from it.\n"
-        "  Omnigent stores no OpenCode credential of its own.\n"
-        "  [dim]Tip:[/dim] 'Set default model' picks which model `omni opencode` launches on\n"
+        "      Goalrail synthesizes opencode's per-session provider config from it.\n"
+        "  Goalrail stores no OpenCode credential of its own.\n"
+        "  [dim]Tip:[/dim] 'Set default model' picks which model `goalrail opencode` launches on\n"
         "  (otherwise OpenCode uses its built-in default, opencode/big-pickle)."
     )
 
@@ -10836,7 +10836,7 @@ def _manage_opencode_harness() -> None:
             return
 
     # OpenCode owns its provider auth (``opencode auth login`` → auth.json) or
-    # ambient env keys; Omnigent stores nothing. Report what's reachable and
+    # ambient env keys; Goalrail stores nothing. Report what's reachable and
     # offer to run its native login — like the Goose/Qwen drill-ins.
     status: str | None = None
     while True:
@@ -11147,7 +11147,7 @@ def _run_configure_harnesses_interactive() -> None:
         row_target.append(None)
         # Goose (its own provider config — no provider family, like Cursor /
         # Antigravity / Qwen). Goose owns its auth via ``goose configure``
-        # (keyring / ~/.config/goose/config.yaml); Omnigent stores no key, so
+        # (keyring / ~/.config/goose/config.yaml); Goalrail stores no key, so
         # "ready" means the CLI is installed AND a provider is configured
         # (``goose_config_summary`` reads GOOSE_PROVIDER from env or the config
         # file, so a fresh, unconfigured install never falsely shows as ready).
@@ -11253,7 +11253,7 @@ def _run_configure_harnesses_interactive() -> None:
         row_target.append(None)
         # Kimi Code (Moonshot AI's multi-provider CLI, no provider family — like
         # Cursor / Antigravity / Qwen). Auth lives entirely in the kimi CLI and
-        # Omnigent stores no kimi credential, so "ready" is just whether the
+        # Goalrail stores no kimi credential, so "ready" is just whether the
         # binary is installed; the drill-in runs install + ``kimi login``. Kimi
         # has no status probe, so the overview can't claim "signed in" — it only
         # distinguishes installed vs. not.
