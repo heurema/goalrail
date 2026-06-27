@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/goalrail-logo.svg" alt="" height="38" valign="middle" /> Goalrail
+# Goalrail
 
 ### The open-source AI agent framework and meta-harness for all your AI agents.
 
@@ -10,13 +10,9 @@ Goalrail is an open-source **AI agent framework** and meta-harness that gives yo
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](#1-install)
 
-[goalrail.dev](https://goalrail.dev) · Downloads coming soon
+[goalrail.dev](https://goalrail.dev) · [Download desktop for macOS Apple Silicon](https://github.com/heurema/goalrail/releases/download/desktop-v0.1.1/Goalrail-0.1.1-arm64.dmg)
 
 </div>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/goalrail-hero.png" alt="A Goalrail orchestrator and its sub-agents in one shared session" width="520" />
-</p>
 
 ---
 
@@ -109,11 +105,6 @@ uv tool install -q --python 3.12 git+https://github.com/heurema/goalrail.git
   missing `bwrap` binary makes those terminals fail to start
   (`apt install bubblewrap`; the installer offers to install it for you). macOS
   uses the built-in `seatbelt` sandbox and needs nothing extra.
-- **Databricks** (optional). To use a Databricks workspace as your model
-  provider, install the current package with the `databricks` extra:
-  `uv tool install "goalrail[databricks]"` — or pass it to the bootstrap
-  installer with `... | sh -s -- --extra databricks`. Signing in to the
-  workspace also uses the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install).
 
 </details>
 
@@ -171,9 +162,10 @@ mirrors work out of the box; override with `GOALRAIL_INDEX_URL` if needed.
 
 `goalrail` picks a model with you and starts a session in your terminal. It
 also launches a local web UI at `http://localhost:6767` that shows the same
-session in the browser, or on a phone on your network (step 4). Desktop and
-mobile downloads are not published yet; they will live on
-[goalrail.dev](https://goalrail.dev).
+session in the browser, or on a phone on your network (step 4). The macOS
+Apple Silicon desktop app is available from the
+[Goalrail desktop release](https://github.com/heurema/goalrail/releases/download/desktop-v0.1.1/Goalrail-0.1.1-arm64.dmg);
+mobile downloads are not published yet.
 
 > [!NOTE]
 > The install puts `goalrail` on your PATH.
@@ -255,7 +247,6 @@ works with four kinds of credentials:
 | 🔑 | **API key** | A first-party vendor key for Anthropic, OpenAI, and similar providers |
 | 🎟️ | **Subscription** | A Claude Pro/Max or ChatGPT plan, via the official `claude` / `codex` CLIs |
 | 🌐 | **Gateway** | Any OpenAI- or Anthropic-compatible `base_url` and key (OpenRouter, LiteLLM, Ollama, vLLM, Azure) |
-| 🧱 | **Databricks** | A Databricks workspace profile (requires the `databricks` extra) |
 
 Defaults are per agent, so a Claude default and a Codex default coexist. You
 can also switch models in the middle of a session with the `/model` command.

@@ -24,12 +24,6 @@ struct ConnectView: View {
       Spacer(minLength: 24)
 
       VStack(spacing: 0) {
-        Image(colorScheme == .dark ? "GoalrailLogoReverse" : "GoalrailLogo")
-          .resizable()
-          .scaledToFit()
-          .frame(height: 80)
-          .padding(.bottom, 12)
-
         Text("Enter the URL of the Goalrail server. The iOS app loads its web UI directly.")
           .font(.system(size: 14))
           .lineSpacing(2)

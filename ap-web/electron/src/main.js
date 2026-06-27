@@ -21,7 +21,6 @@ const {
   clipboard,
   dialog,
   ipcMain,
-  nativeImage,
   screen,
   session,
   shell,
@@ -65,9 +64,6 @@ const ERR_ABORTED = -3;
  * shows no prompt of its own — so it goes through a consent dialog first.
  */
 const WEB_SCHEMES = new Set(["http:", "https:", "mailto:"]);
-
-/** Absolute path to the app icon (PNG works for the macOS dock at runtime). */
-const ICON_PNG = path.join(__dirname, "..", "icons", "icon.png");
 
 /**
  * Permissions the SPA legitimately needs and we auto-grant. The dictation
@@ -380,24 +376,6 @@ function isLocalhostTrustedOrigin(origin) {
  */
 function registerLocalhostAccess() {
   registerLocalhostCors(session.defaultSession, isLocalhostTrustedOrigin);
-}
-
-/**
- * Override the macOS dock icon at runtime. In `electron .` (dev) the dock tile
- * name AND icon are read from the generic prebuilt Electron.app bundle, so they
- * show "Electron" + the atom logo; the correct name/icon only land in a
- * packaged build (electron-builder reads productName + icon.icns). We can't
- * change the dock NAME in dev, but `app.dock.setIcon` lets us at least show the
- * real icon. No-op off macOS / if the image fails to load.
- */
-function applyDockIcon() {
-  if (process.platform !== "darwin" || !app.dock) return;
-  // Packaged builds get the bundle icon (Assets.car / icon.icns), which has
-  // the standard margins and dynamic-icon support; overriding it with the
-  // full-bleed PNG would render oversized in the Dock.
-  if (app.isPackaged) return;
-  const img = nativeImage.createFromPath(ICON_PNG);
-  if (!img.isEmpty()) app.dock.setIcon(img);
 }
 
 /**
@@ -1636,7 +1614,6 @@ if (!gotLock) {
   app.whenReady().then(() => {
     // App User Model ID so Windows attributes notifications/taskbar correctly.
     if (process.platform === "win32") app.setAppUserModelId("dev.goalrail.desktop");
-    applyDockIcon();
     registerPermissions();
     registerLocalhostAccess();
     registerWebAuthn();

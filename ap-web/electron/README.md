@@ -113,8 +113,12 @@ electron/
   src/find_preload.js # contextBridge for the find bar: window.goalrailFind
   setup/index.html    # the bundled "connect to server" setup page
   find/index.html     # the bundled find-in-page bar (Cmd/Ctrl+F)
-  icons/              # app icons
+  icons/              # source and generated desktop app icons
 ```
+
+The desktop shell ships a simple Goalrail app icon generated from
+`icons/goalrail-icon.svg`. It intentionally does not restore the old setup-screen
+logo.
 
 Native niceties beyond notifications/badge: a right-click context menu
 (cut/copy/paste, spelling suggestions + Add to Dictionary, Copy Link

@@ -5,7 +5,7 @@
   "description": "Goalrail desktop shell (Electron edition) — a thin native wrapper around the server-served web UI.",
   "private": true,
   "main": "src/main.js",
-  "author": "Databricks, Inc.",
+  "author": "Heurema",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
@@ -30,17 +30,7 @@
     "files": [
       "src/**/*",
       "setup/**/*",
-      "find/**/*",
-      "icons/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "../platform-assets",
-        "to": "platform-assets",
-        "filter": [
-          "**/*"
-        ]
-      }
+      "find/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -51,8 +41,7 @@
       "entitlements": "signing/entitlements.mac.plist",
       "entitlementsInherit": "signing/entitlements.mac.inherit.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Goalrail uses the microphone for voice dictation in the message composer.",
-        "CFBundleIconName": "AppIcon"
+        "NSMicrophoneUsageDescription": "Goalrail uses the microphone for voice dictation in the message composer."
       },
       "gatekeeperAssess": false,
       "notarize": false,
@@ -83,8 +72,8 @@
       ]
     },
     "linux": {
-      "icon": "icons/icon.png",
       "category": "Development",
+      "icon": "icons/icon.png",
       "target": [
         "AppImage",
         "deb"

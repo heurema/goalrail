@@ -1,30 +1,9 @@
-# App icons
+# Goalrail Desktop Icons
 
-- `../../platform-assets/AppIcon.icon` — source of truth for the Apple
-  platform icon: an Apple Icon Composer bundle (layered artwork + gradient
-  background), shared by Electron and iOS.
-- `Assets.car` + `icon.icns` — compiled from `AppIcon.icon` by `actool`
-  (checked in so builds don't require Xcode 26+). `Assets.car` gives the
-  native dynamic icon on macOS 26+ (liquid glass, light/dark/tinted);
-  `icon.icns` is the static fallback used by older macOS and as
-  electron-builder's `mac.icon`. The `build/afterPack.js` hook copies
-  `Assets.car` into the app bundle, and `CFBundleIconName=AppIcon`
-  (in `mac.extendInfo`) tells macOS to look for it. electron-builder
-  has no native `.icon` support yet — see
-  https://github.com/electron-userland/electron-builder/issues/9254.
-- `icon.ico` / `icon.png` — Windows / Linux icons.
+`goalrail-icon.svg` is the source asset. The generated desktop build inputs are:
 
-## Regenerating after editing AppIcon.icon
+- `icon.png` for Linux and fallback use
+- `icon.icns` for macOS
+- `icon.ico` for Windows
 
-Requires Xcode 26+ (Icon Composer `.icon` support in actool):
-
-```bash
-cd ap-web/electron/icons
-TMP=$(mktemp -d)
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun actool ../../platform-assets/AppIcon.icon \
-  --compile "$TMP" --platform macosx --minimum-deployment-target 11.0 \
-  --app-icon AppIcon --output-partial-info-plist "$TMP/partial.plist"
-cp "$TMP/Assets.car" Assets.car
-cp "$TMP/AppIcon.icns" icon.icns
-rm -rf "$TMP"
-```
+The icon is intentionally separate from the removed setup-screen logo assets.
