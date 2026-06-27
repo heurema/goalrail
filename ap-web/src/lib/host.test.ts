@@ -1,26 +1,26 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { getCliServerUrl, setOmnigentHostConfig } from "./host";
+import { getCliServerUrl, setGoalrailHostConfig } from "./host";
 
 afterEach(() => {
-  setOmnigentHostConfig({});
+  setGoalrailHostConfig({});
 });
 
 describe("getCliServerUrl", () => {
   it("returns window.location.origin when no suffix is configured", () => {
-    setOmnigentHostConfig({});
+    setGoalrailHostConfig({});
     const url = getCliServerUrl();
     expect(url).toBe(window.location.origin);
   });
 
   it("appends the configured cliServerUrlSuffix", () => {
-    setOmnigentHostConfig({ cliServerUrlSuffix: "/api/2.0/omnigent" });
+    setGoalrailHostConfig({ cliServerUrlSuffix: "/api/2.0/goalrail" });
     const url = getCliServerUrl();
-    expect(url).toBe(`${window.location.origin}/api/2.0/omnigent`);
+    expect(url).toBe(`${window.location.origin}/api/2.0/goalrail`);
   });
 
   it("handles an empty string suffix the same as no suffix", () => {
-    setOmnigentHostConfig({ cliServerUrlSuffix: "" });
+    setGoalrailHostConfig({ cliServerUrlSuffix: "" });
     expect(getCliServerUrl()).toBe(window.location.origin);
   });
 });

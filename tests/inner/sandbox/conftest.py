@@ -17,7 +17,7 @@ The fixtures here are the one source of truth for:
   (:func:`active_sandbox_type`),
 - how to build an :class:`OSEnvSandboxSpec` for that backend with the
   repo root pre-added to ``read_paths`` so helper subprocesses can
-  ``import omnigent.*`` from a tempdir cwd
+  ``import goalrail.*`` from a tempdir cwd
   (:func:`active_sandbox_spec_factory`),
 - how to materialise the PYTHONPATH env var the helper inherits
   (:func:`sandbox_pythonpath_env`),
@@ -40,7 +40,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.datamodel import CredentialProxySpec, OSEnvSandboxSpec
+from goalrail.inner.datamodel import CredentialProxySpec, OSEnvSandboxSpec
 
 _BWRAP_AVAILABLE = shutil.which("bwrap") is not None
 _SANDBOX_EXEC_AVAILABLE = shutil.which("sandbox-exec") is not None
@@ -49,14 +49,14 @@ _SANDBOX_EXEC_AVAILABLE = shutil.which("sandbox-exec") is not None
 def _repo_root_for_pythonpath() -> str:
     """
     Return the absolute repo-root path so a sandbox-spawned helper can
-    reach the ``omnigent`` package via ``PYTHONPATH``.
+    reach the ``goalrail`` package via ``PYTHONPATH``.
 
     Helper subprocesses run with ``cwd`` set to a throwaway tempdir
-    in these tests, so they can't ``import omnigent`` unless the
+    in these tests, so they can't ``import goalrail`` unless the
     repo root is on ``sys.path`` and visible inside the sandbox.
 
     :returns: Absolute path to the repository root containing the
-        ``omnigent/`` package.
+        ``goalrail/`` package.
     """
     # tests/inner/sandbox/conftest.py → tests/inner/sandbox/ →
     # tests/inner/ → tests/ → repo root.
@@ -108,7 +108,7 @@ def active_sandbox_spec_factory(
     currently parametrized backend.
 
     The factory pre-adds the repo root to ``read_paths`` so the
-    helper subprocess can ``import omnigent.*`` from a tempdir
+    helper subprocess can ``import goalrail.*`` from a tempdir
     cwd. Both backends need this because they otherwise hide
     everything outside cwd / the default system mounts.
 
@@ -157,7 +157,7 @@ def sandbox_pythonpath_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     Helpers spawned with ``cwd`` set to a tempdir would otherwise
     fail with ``ModuleNotFoundError`` because the agent's own
-    bootstrap runs ``import omnigent.inner.os_env`` in the helper.
+    bootstrap runs ``import goalrail.inner.os_env`` in the helper.
     The active backend's ``env_passthrough`` is filtered, but
     ``PYTHONPATH`` is set explicitly on the spawn env so this
     fixture just preserves it for the parent process.

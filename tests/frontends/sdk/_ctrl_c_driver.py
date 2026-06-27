@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from omnigent_ui_sdk import TerminalHost
+from goalrail_ui_sdk import TerminalHost
 
 # Printed to stdout after the host cleanly exits via the
 # two-press Ctrl+C sequence. Unusual enough that pexpect won't

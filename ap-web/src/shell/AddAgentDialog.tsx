@@ -15,7 +15,7 @@ import { childSessionsQueryKey } from "@/hooks/useChildSessions";
 import { createSession } from "@/lib/sessionsApi";
 
 // Title sentinel marking a user-added agent. Mirrors the server's
-// ``_UI_ADDED_AGENT_TITLE_PREFIX`` in omnigent/server/routes/sessions.py:
+// ``_UI_ADDED_AGENT_TITLE_PREFIX`` in goalrail/server/routes/sessions.py:
 // the 3-segment "ui:<agent>:<name>" title is parsed back into
 // tool=<agent>, session_name=<name> by the child_sessions endpoint, and a
 // sub-agent named "ui" is rejected by the spec validator to avoid collision.

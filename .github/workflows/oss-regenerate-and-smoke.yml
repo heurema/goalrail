@@ -28,7 +28,7 @@ jobs:
       contents: write # push the regen branch
       pull-requests: write # open / update the regen PR
     # Gated to this repository; inert in forks and mirrors.
-    if: github.repository == 'omnigent-ai/omnigent'
+    if: github.repository == 'heurema/goalrail'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -78,20 +78,20 @@ jobs:
       # Validate BEFORE committing: the Docker build proves the regenerated
       # locks + public registries produce a working image.
       - name: Docker build (FE + Python, public registries)
-        run: docker build -f deploy/docker/Dockerfile -t omnigent-smoke .
+        run: docker build -f deploy/docker/Dockerfile -t goalrail-smoke .
 
       - name: CLI smoke
-        run: docker run --rm omnigent-smoke omnigent --help
+        run: docker run --rm goalrail-smoke goalrail --help
 
       # App token = distinct actor (not GITHUB_TOKEN) so the regen PR runs its
       # own CI. Skipped when the App isn't configured (falls back to GITHUB_TOKEN).
       - name: Mint App token
         id: app-token
-        if: vars.OMNIGENT_BOT_APP_ID != ''
+        if: vars.GOALRAIL_BOT_APP_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
-          app-id: ${{ vars.OMNIGENT_BOT_APP_ID }}
-          private-key: ${{ secrets.OMNIGENT_BOT_APP_KEY }}
+          app-id: ${{ vars.GOALRAIL_BOT_APP_ID }}
+          private-key: ${{ secrets.GOALRAIL_BOT_APP_KEY }}
 
       # Persist the validated lockfiles via a PR (not a direct push to main, so
       # it works under branch protection). App token so `gh pr create` isn't
@@ -103,8 +103,8 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          git config user.name "omnigent-ci[bot]"
-          git config user.email "294685417+omnigent-ci[bot]@users.noreply.github.com"
+          git config user.name "goalrail-ci[bot]"
+          git config user.email "294685417+goalrail-ci[bot]@users.noreply.github.com"
           # --porcelain (not git diff) so first-regen UNTRACKED lockfiles count too.
           if [ -z "$(git status --porcelain -- uv.lock ap-web/package-lock.json)" ]; then
             echo "Lockfiles already current — nothing to PR."
@@ -126,7 +126,7 @@ jobs:
           # exempts gh from `set -e`, so a non-zero exit hits the else branch.)
           if gh pr create --base main --head "$BRANCH" \
               --title "chore(oss): regenerate public lockfiles against public PyPI/npm" \
-              --body "Automated: regenerated uv.lock + ap-web/package-lock.json against public PyPI/npm, validated by a Docker build + omnigent --help smoke (run ${{ github.run_id }}). Merge to keep the public lockfiles current and buildable."; then
+              --body "Automated: regenerated uv.lock + ap-web/package-lock.json against public PyPI/npm, validated by a Docker build + goalrail --help smoke (run ${{ github.run_id }}). Merge to keep the public lockfiles current and buildable."; then
             echo "Opened the regen PR."
           else
             echo "::warning::Could not open the regen PR automatically (the GITHUB_TOKEN may be disallowed from creating PRs). The branch '$BRANCH' is pushed with the regenerated lockfiles — open the PR by hand:"

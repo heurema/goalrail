@@ -1,4 +1,4 @@
-"""Tests for :class:`omnigent.inner.copilot_executor.CopilotExecutor`.
+"""Tests for :class:`goalrail.inner.copilot_executor.CopilotExecutor`.
 
 The copilot harness drives the GitHub Copilot SDK (``github-copilot-sdk``,
 imported as ``copilot``). The SDK is replaced with an injected fake module (so
@@ -19,7 +19,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.copilot_executor import (
+from goalrail.inner.copilot_executor import (
     CopilotExecutor,
     _accumulate_usage,
     _ambient_github_token,
@@ -30,7 +30,7 @@ from omnigent.inner.copilot_executor import (
     _finalize_usage,
     _resolve_model,
 )
-from omnigent.inner.executor import (
+from goalrail.inner.executor import (
     ExecutorConfig,
     ExecutorError,
     Message,

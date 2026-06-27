@@ -5,7 +5,6 @@ import base64
 import json
 import logging
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,10 +13,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from omnigent.inner.claude_sdk_executor import _to_anthropic_content_blocks
-from omnigent.inner.executor import (
+from goalrail.inner.claude_sdk_executor import _to_anthropic_content_blocks
+from goalrail.inner.executor import (
     ExecutorError,
     TextChunk,
     ToolCallComplete,
@@ -42,7 +39,7 @@ def _run(coro):
 
 class TestPromptExtraction(unittest.TestCase):
     def _make_executor(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         return ClaudeSDKExecutor()
 
@@ -92,8 +89,8 @@ class TestPromptExtraction(unittest.TestCase):
 
 class TestConstructor(unittest.TestCase):
     def test_default_values(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.spec.types import RetryPolicy
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.spec.types import RetryPolicy
 
         executor = ClaudeSDKExecutor()
         self.assertFalse(executor._os_env)
@@ -110,8 +107,8 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(executor._extra_env, RetryPolicy().claude_cli.env())
 
     def test_os_env_spec_with_no_sandbox_keeps_native_tools_enabled(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
         executor = ClaudeSDKExecutor(
             os_env=OSEnvSpec(
@@ -123,19 +120,19 @@ class TestConstructor(unittest.TestCase):
         self.assertIsNotNone(executor._os_env_spec)
 
     def test_os_env_spec_wraps_cli_and_enables_native_tools(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, PreparedClaudeCli
-        from omnigent.inner.datamodel import OSEnvSpec
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, PreparedClaudeCli
+        from goalrail.inner.datamodel import OSEnvSpec
 
         spec = OSEnvSpec(type="caller_process", cwd="/tmp/work")
         with (
             patch(
-                "omnigent.inner.claude_sdk_executor._find_system_claude",
+                "goalrail.inner.claude_sdk_executor._find_system_claude",
                 return_value="/usr/bin/claude",
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor.prepare_claude_cli_path",
+                "goalrail.inner.claude_sdk_executor.prepare_claude_cli_path",
                 return_value=PreparedClaudeCli(
-                    cli_path="/tmp/omnigent-claude-wrapper",
+                    cli_path="/tmp/goalrail-claude-wrapper",
                     enable_native_tools=True,
                 ),
             ),
@@ -144,13 +141,13 @@ class TestConstructor(unittest.TestCase):
 
         self.assertTrue(executor._os_env)
         self.assertEqual(executor._os_env_spec, spec)
-        self.assertEqual(executor._cli_path, "/tmp/omnigent-claude-wrapper")
+        self.assertEqual(executor._cli_path, "/tmp/goalrail-claude-wrapper")
         self.assertEqual(executor._cwd, "/tmp/work")
 
     def test_prepare_claude_cli_path_adds_internal_roots_to_read_allowlist(self):
-        from omnigent.inner.claude_sdk_executor import prepare_claude_cli_path
-        from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-        from omnigent.inner.sandbox import SandboxPolicy
+        from goalrail.inner.claude_sdk_executor import prepare_claude_cli_path
+        from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+        from goalrail.inner.sandbox import SandboxPolicy
 
         captured: dict[str, SandboxPolicy] = {}
 
@@ -171,7 +168,7 @@ class TestConstructor(unittest.TestCase):
 
         with (
             patch(
-                "omnigent.inner.claude_sdk_executor.resolve_sandbox",
+                "goalrail.inner.claude_sdk_executor.resolve_sandbox",
                 return_value=SandboxPolicy(
                     backend_type="linux_bwrap",
                     active=True,
@@ -182,15 +179,15 @@ class TestConstructor(unittest.TestCase):
                 ),
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor._claude_internal_write_roots",
+                "goalrail.inner.claude_sdk_executor._claude_internal_write_roots",
                 return_value=[Path("/home/test/.claude/sessions")],
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor._claude_internal_write_files",
+                "goalrail.inner.claude_sdk_executor._claude_internal_write_files",
                 return_value=[],
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor.create_exec_launcher",
+                "goalrail.inner.claude_sdk_executor.create_exec_launcher",
                 side_effect=_capture_launcher,
             ),
         ):
@@ -206,16 +203,16 @@ class TestConstructor(unittest.TestCase):
         self.assertIn(expected, captured["sandbox"].read_roots)
 
     def test_default_process_sandbox_wraps_cli_without_enabling_native_tools(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
             patch(
-                "omnigent.inner.claude_sdk_executor._find_system_claude",
+                "goalrail.inner.claude_sdk_executor._find_system_claude",
                 return_value="/usr/bin/claude",
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor.prepare_tight_cli_process_path",
-                return_value="/tmp/omnigent-claude-tight-wrapper",
+                "goalrail.inner.claude_sdk_executor.prepare_tight_cli_process_path",
+                return_value="/tmp/goalrail-claude-tight-wrapper",
             ),
         ):
             executor = ClaudeSDKExecutor()
@@ -224,21 +221,21 @@ class TestConstructor(unittest.TestCase):
         self.assertIsNone(executor._os_env_spec)
         self.assertEqual(
             executor._cli_path,
-            "/tmp/omnigent-claude-tight-wrapper",
+            "/tmp/goalrail-claude-tight-wrapper",
         )
 
     def test_os_env_spec_without_supported_native_sandbox_disables_native_tools(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, PreparedClaudeCli
-        from omnigent.inner.datamodel import OSEnvSpec
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, PreparedClaudeCli
+        from goalrail.inner.datamodel import OSEnvSpec
 
         spec = OSEnvSpec(type="caller_process", cwd="/tmp/work")
         with (
             patch(
-                "omnigent.inner.claude_sdk_executor._find_system_claude",
+                "goalrail.inner.claude_sdk_executor._find_system_claude",
                 return_value="/usr/bin/claude",
             ),
             patch(
-                "omnigent.inner.claude_sdk_executor.prepare_claude_cli_path",
+                "goalrail.inner.claude_sdk_executor.prepare_claude_cli_path",
                 return_value=PreparedClaudeCli(
                     cli_path="/usr/bin/claude",
                     enable_native_tools=False,
@@ -252,29 +249,29 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(executor._cli_path, "/usr/bin/claude")
 
     def test_model_override(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         executor = ClaudeSDKExecutor(model="claude-haiku-4-5-20251001")
         self.assertEqual(executor._model_override, "claude-haiku-4-5-20251001")
 
     def test_supports_streaming(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         self.assertTrue(ClaudeSDKExecutor().supports_streaming())
 
     def test_supports_tool_calling(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         self.assertTrue(ClaudeSDKExecutor().supports_tool_calling())
 
     def test_databricks_flag_with_profile(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         with (
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -290,7 +287,7 @@ class TestConstructor(unittest.TestCase):
             self.assertEqual(executor._extra_env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
             self.assertIn(
                 'databricks auth token --host "https://example.cloud.databricks.com"',
-                executor._extra_env["OMNIGENT_CLAUDE_API_KEY_HELPER"],
+                executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
             )
             self.assertNotIn("ANTHROPIC_AUTH_TOKEN", executor._extra_env)
 
@@ -303,13 +300,13 @@ class TestConstructor(unittest.TestCase):
         which profile") → empty token → a silent ``status=401``. Selecting
         by ``--profile`` avoids that.
         """
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         with (
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -317,7 +314,7 @@ class TestConstructor(unittest.TestCase):
             ),
         ):
             executor = ClaudeSDKExecutor(gateway=True, databricks_profile="oss")
-        helper = executor._extra_env["OMNIGENT_CLAUDE_API_KEY_HELPER"]
+        helper = executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"]
         # Proves the selector is --profile, not --host. A regression to --host
         # makes a two-profiles-one-host workspace yield an empty token → 401.
         self.assertIn('databricks auth token --profile "oss"', helper)
@@ -331,21 +328,21 @@ class TestConstructor(unittest.TestCase):
         self.assertNotIn('oss" --force-refresh', helper)
 
     def test_databricks_flag_no_creds_raises(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
             patch.dict("os.environ", {}, clear=True),
-            patch("omnigent.inner.claude_sdk_executor._resolve_gateway_env", return_value={}),
+            patch("goalrail.inner.claude_sdk_executor._resolve_gateway_env", return_value={}),
         ):
             with self.assertRaises(EnvironmentError):
                 ClaudeSDKExecutor(gateway=True)
 
     def test_databricks_flag_with_host_override(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
             patch.dict("os.environ", {}, clear=True),
-            patch("omnigent.inner.databricks_executor._read_databrickscfg") as read_cfg,
+            patch("goalrail.inner.databricks_executor._read_databrickscfg") as read_cfg,
         ):
             executor = ClaudeSDKExecutor(
                 gateway=True,
@@ -361,12 +358,12 @@ class TestConstructor(unittest.TestCase):
             "https://example.databricks.com/ai-gateway/anthropic",
         )
         self.assertEqual(
-            executor._extra_env["OMNIGENT_CLAUDE_API_KEY_HELPER"],
+            executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
             "printf token",
         )
 
     def test_databricks_flag_with_host_override_requires_base_url(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
             patch.dict("os.environ", {}, clear=True),
@@ -379,7 +376,7 @@ class TestConstructor(unittest.TestCase):
             )
 
     def test_databricks_flag_with_host_override_requires_auth_command(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
             patch.dict("os.environ", {}, clear=True),
@@ -392,8 +389,8 @@ class TestConstructor(unittest.TestCase):
             )
 
     def test_databricks_false_no_extra_env(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.spec.types import RetryPolicy
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.spec.types import RetryPolicy
 
         executor = ClaudeSDKExecutor(gateway=False)
         # gateway=False → no Databricks env, but RetryPolicy CLI env
@@ -409,15 +406,15 @@ class TestConstructor(unittest.TestCase):
         generic-provider gateway path never does this (see
         ``test_neutral_gateway_no_model_does_not_inject_databricks_default``).
         """
-        from omnigent.inner.claude_sdk_executor import (
+        from goalrail.inner.claude_sdk_executor import (
             _DATABRICKS_CLAUDE_DEFAULT_MODEL,
             ClaudeSDKExecutor,
         )
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
             with patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -448,10 +445,10 @@ class TestConstructor(unittest.TestCase):
         """Neutral gateway (base URL supplied directly) + no model → ``None``.
 
         The neutral generic-provider gateway transport never falls back to a
-        ``databricks-*`` model: the Omnigent producer resolves a concrete model
+        ``databricks-*`` model: the Goalrail producer resolves a concrete model
         before spawning, so the executor passes ``None`` through to the SDK.
         """
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor(
@@ -482,12 +479,12 @@ class TestConstructor(unittest.TestCase):
 
     def test_gateway_model_passes_through(self):
         """Explicit model on the gateway path passes through unchanged."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
             with patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -516,7 +513,7 @@ class TestConstructor(unittest.TestCase):
 
     def test_no_databricks_default_when_databricks_off(self):
         """gateway=False keeps prior behavior: None falls through to the SDK."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor(gateway=False)
@@ -541,12 +538,12 @@ class TestConstructor(unittest.TestCase):
 
     def test_databricks_opus_pins_thinking_to_adaptive(self):
         """gateway=True + opus sets ``thinking={"type": "adaptive", "display": "summarized"}``."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
             with patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -581,12 +578,12 @@ class TestConstructor(unittest.TestCase):
         thinking=enabled for it too. If this stays unset, a fable session
         through the gateway 400s on the first request.
         """
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
             with patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.databricks.com",
                     token="dapi_test_token",
@@ -615,12 +612,12 @@ class TestConstructor(unittest.TestCase):
 
     def test_databricks_sonnet_leaves_thinking_unset(self):
         """gateway=True + non-adaptive-tier model preserves CLI default thinking."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
             with patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -649,7 +646,7 @@ class TestConstructor(unittest.TestCase):
 
     def test_no_databricks_leaves_thinking_unset(self):
         """gateway=False does not touch ``thinking``; preserves CLI default."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor(gateway=False, model="claude-opus-4-7")
@@ -673,7 +670,7 @@ class TestConstructor(unittest.TestCase):
         _run(_t())
 
     def test_force_close_client_uses_process_tree_termination(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _Transport:
             def __init__(self):
@@ -688,7 +685,7 @@ class TestConstructor(unittest.TestCase):
 
         async def _t():
             with patch(
-                "omnigent.inner.claude_sdk_executor._terminate_process_tree"
+                "goalrail.inner.claude_sdk_executor._terminate_process_tree"
             ) as terminate_tree:
                 await ClaudeSDKExecutor._force_close_client(client)
             terminate_tree.assert_called_once()
@@ -702,7 +699,7 @@ class TestConstructor(unittest.TestCase):
         # `_stderr_task_group` attribute at all) must not raise AttributeError
         # out of `_force_close_client` — that exception escaped the runner's
         # lifespan shutdown and crashed it on every session stop.
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         stderr_task = SimpleNamespace(cancel=Mock())
 
@@ -720,7 +717,7 @@ class TestConstructor(unittest.TestCase):
 
         async def _t():
             with patch(
-                "omnigent.inner.claude_sdk_executor._terminate_process_tree"
+                "goalrail.inner.claude_sdk_executor._terminate_process_tree"
             ) as terminate_tree:
                 await ClaudeSDKExecutor._force_close_client(client)
             terminate_tree.assert_called_once()
@@ -734,26 +731,26 @@ class TestConstructor(unittest.TestCase):
         self.assertIsNone(transport._stderr_task)
 
     def test_claude_internal_write_files_omits_missing_config(self):
-        from omnigent.inner.claude_sdk_executor import _claude_internal_write_files
+        from goalrail.inner.claude_sdk_executor import _claude_internal_write_files
 
         with tempfile.TemporaryDirectory() as td:
             home = Path(td)
             config_path = home / ".claude.json"
             self.assertFalse(config_path.exists())
-            with patch("omnigent.inner.claude_sdk_executor.pathlib.Path.home", return_value=home):
+            with patch("goalrail.inner.claude_sdk_executor.pathlib.Path.home", return_value=home):
                 paths = _claude_internal_write_files()
 
             self.assertEqual(paths, [])
             self.assertFalse(config_path.exists())
 
     def test_claude_internal_write_files_includes_existing_config(self):
-        from omnigent.inner.claude_sdk_executor import _claude_internal_write_files
+        from goalrail.inner.claude_sdk_executor import _claude_internal_write_files
 
         with tempfile.TemporaryDirectory() as td:
             home = Path(td)
             config_path = home / ".claude.json"
             config_path.write_text("{}\n", encoding="utf-8")
-            with patch("omnigent.inner.claude_sdk_executor.pathlib.Path.home", return_value=home):
+            with patch("goalrail.inner.claude_sdk_executor.pathlib.Path.home", return_value=home):
                 paths = _claude_internal_write_files()
 
             self.assertEqual(paths, [config_path])
@@ -766,7 +763,7 @@ class TestConstructor(unittest.TestCase):
 
 class TestBuildMcpTools(unittest.TestCase):
     def test_builds_tools_from_schemas(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         async def mock_executor(name, args):
             return {"result": "ok"}
@@ -786,12 +783,12 @@ class TestBuildMcpTools(unittest.TestCase):
         self.assertEqual(tools[0].name, "calc")
 
     def test_empty_schemas(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         self.assertEqual(_build_mcp_tools([], None), [])
 
     def test_handler_calls_executor(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         calls = []
 
@@ -818,7 +815,7 @@ class TestBuildMcpTools(unittest.TestCase):
         self.assertNotIn("isError", result)
 
     def test_handler_marks_blocked_result_as_error(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         async def mock_executor(name, args):
             return {"blocked": True, "reason": "Exceeded max tool calls"}
@@ -840,7 +837,7 @@ class TestBuildMcpTools(unittest.TestCase):
         self.assertTrue(parsed["blocked"])
 
     def test_handler_marks_error_result_as_error(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         async def mock_executor(name, args):
             return {"error": "boom"}
@@ -862,7 +859,7 @@ class TestBuildMcpTools(unittest.TestCase):
         self.assertEqual(parsed["error"], "boom")
 
     def test_handler_no_executor(self):
-        from omnigent.inner.claude_sdk_executor import _build_mcp_tools
+        from goalrail.inner.claude_sdk_executor import _build_mcp_tools
 
         schemas = [
             {
@@ -887,13 +884,13 @@ class TestBuildMcpTools(unittest.TestCase):
 
 class TestResolveGatewayEnv(unittest.TestCase):
     def test_from_profile(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         with (
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.databricks.com",
                     token="dapi_abc123",
@@ -908,18 +905,18 @@ class TestResolveGatewayEnv(unittest.TestCase):
             self.assertEqual(env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
             self.assertIn(
                 'databricks auth token --host "https://example.databricks.com"',
-                env["OMNIGENT_CLAUDE_API_KEY_HELPER"],
+                env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
             )
             self.assertNotIn("ANTHROPIC_AUTH_TOKEN", env)
 
     def test_strips_trailing_slash(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
-        from omnigent.inner.databricks_executor import DatabricksCredentials
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         with (
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnigent.inner.databricks_executor._read_databrickscfg",
+                "goalrail.inner.databricks_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(host="https://my-workspace.com/", token="tok"),
             ),
         ):
@@ -928,19 +925,19 @@ class TestResolveGatewayEnv(unittest.TestCase):
             self.assertTrue(env["ANTHROPIC_BASE_URL"].endswith("/ai-gateway/anthropic"))
 
     def test_no_creds_returns_empty(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
         with (
             patch.dict("os.environ", {}, clear=True),
-            patch("omnigent.inner.databricks_executor._read_databrickscfg", return_value=None),
+            patch("goalrail.inner.databricks_executor._read_databrickscfg", return_value=None),
         ):
             env = _resolve_gateway_env()
             self.assertEqual(env, {})
 
     def test_host_override_skips_profile_lookup(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
-        with patch("omnigent.inner.databricks_executor._read_databrickscfg") as read_cfg:
+        with patch("goalrail.inner.databricks_executor._read_databrickscfg") as read_cfg:
             env = _resolve_gateway_env(
                 profile="missing-profile",
                 host_override="https://example.databricks.com/",
@@ -953,10 +950,10 @@ class TestResolveGatewayEnv(unittest.TestCase):
             env["ANTHROPIC_BASE_URL"],
             "https://example.databricks.com/ai-gateway/anthropic",
         )
-        self.assertEqual(env["OMNIGENT_CLAUDE_API_KEY_HELPER"], "printf token")
+        self.assertEqual(env["GOALRAIL_CLAUDE_API_KEY_HELPER"], "printf token")
 
     def test_host_override_requires_base_url(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
         with self.assertRaisesRegex(OSError, "GATEWAY_BASE_URL"):
             _resolve_gateway_env(
@@ -965,7 +962,7 @@ class TestResolveGatewayEnv(unittest.TestCase):
             )
 
     def test_host_override_requires_auth_command(self):
-        from omnigent.inner.claude_sdk_executor import _resolve_gateway_env
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
         with self.assertRaisesRegex(OSError, "GATEWAY_AUTH_COMMAND"):
             _resolve_gateway_env(
@@ -981,7 +978,7 @@ class TestResolveGatewayEnv(unittest.TestCase):
 
 class TestEmptyPrompt(unittest.TestCase):
     def test_empty_prompt_yields_turn_complete(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor()
@@ -997,7 +994,7 @@ class TestEmptyPrompt(unittest.TestCase):
 
 class TestSystemMessages(unittest.TestCase):
     def test_databricks_auth_uses_api_key_helper_settings(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         captured_options = []
 
@@ -1044,7 +1041,7 @@ class TestSystemMessages(unittest.TestCase):
         ):
             return {
                 "ANTHROPIC_BASE_URL": base_url_override or "https://host/ai-gateway/anthropic",
-                "OMNIGENT_CLAUDE_API_KEY_HELPER": "databricks auth token --host https://host",
+                "GOALRAIL_CLAUDE_API_KEY_HELPER": "databricks auth token --host https://host",
                 "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "900000",
                 "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
             }
@@ -1062,10 +1059,10 @@ class TestSystemMessages(unittest.TestCase):
             )
             with (
                 patch(
-                    "omnigent.inner.claude_sdk_executor._resolve_gateway_env",
+                    "goalrail.inner.claude_sdk_executor._resolve_gateway_env",
                     _resolve_gateway_env,
                 ),
-                patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK),
+                patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK),
             ):
                 events = [
                     e
@@ -1102,7 +1099,7 @@ class TestSystemMessages(unittest.TestCase):
         self.assertTrue(shim_upstream["base_url"].startswith("http://127.0.0.1:"))
         self.assertEqual(shim_upstream["upstream"], "https://host/ai-gateway/anthropic")
         self.assertEqual(captured_options[0].env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
-        self.assertNotIn("OMNIGENT_CLAUDE_API_KEY_HELPER", captured_options[0].env)
+        self.assertNotIn("GOALRAIL_CLAUDE_API_KEY_HELPER", captured_options[0].env)
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", captured_options[0].env)
 
     def test_auth_retry_surfaces_executor_error(self):
@@ -1116,7 +1113,7 @@ class TestSystemMessages(unittest.TestCase):
             SystemMessage as SDKSystemMessage,
         )
 
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _Sentinel:
             pass
@@ -1162,7 +1159,7 @@ class TestSystemMessages(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -1206,7 +1203,7 @@ class TestSkillsFilterTranslation(unittest.TestCase):
         explicit list here would freeze the default and miss
         future SDK changes.
         """
-        from omnigent.inner.claude_sdk_executor import _resolve_skills_option
+        from goalrail.inner.claude_sdk_executor import _resolve_skills_option
 
         result = _resolve_skills_option("all")
         assert result is not None
@@ -1229,7 +1226,7 @@ class TestSkillsFilterTranslation(unittest.TestCase):
         ``skills=[]`` set, ``skills: none`` in YAML still showed
         every host skill in the model's output.
         """
-        from omnigent.inner.claude_sdk_executor import _resolve_skills_option
+        from goalrail.inner.claude_sdk_executor import _resolve_skills_option
 
         result = _resolve_skills_option("none")
         assert result is not None
@@ -1238,7 +1235,7 @@ class TestSkillsFilterTranslation(unittest.TestCase):
 
     def test_list_lets_sdk_default_setting_sources(self) -> None:
         """A list of names round-trips and uses the SDK default."""
-        from omnigent.inner.claude_sdk_executor import _resolve_skills_option
+        from goalrail.inner.claude_sdk_executor import _resolve_skills_option
 
         result = _resolve_skills_option(["foo", "bar:baz"])
         assert result is not None
@@ -1252,7 +1249,7 @@ class TestSkillsFilterTranslation(unittest.TestCase):
         spec parser already validates, so this is a belt-and-
         suspenders defense at the executor boundary.
         """
-        from omnigent.inner.claude_sdk_executor import _resolve_skills_option
+        from goalrail.inner.claude_sdk_executor import _resolve_skills_option
 
         self.assertIsNone(_resolve_skills_option("bogus"))
 
@@ -1263,8 +1260,8 @@ class TestSkillsFilterTranslation(unittest.TestCase):
 
 
 class TestStreamEventStreaming(unittest.TestCase):
-    def test_live_clients_are_reused_per_omnigent_session(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    def test_live_clients_are_reused_per_goalrail_session(self):
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         query_calls = []
         connect_calls = []
@@ -1321,7 +1318,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 session_a = [{"role": "user", "content": "hello", "session_id": "session-a"}]
                 session_b = [{"role": "user", "content": "bonjour", "session_id": "session-b"}]
 
@@ -1356,8 +1353,8 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_os_env_spec_exposes_only_explicit_native_tools(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
         captured_options = {}
 
@@ -1430,7 +1427,7 @@ class TestStreamEventStreaming(unittest.TestCase):
                     sandbox=OSEnvSandboxSpec(type="none"),
                 ),
             )
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -1448,14 +1445,14 @@ class TestStreamEventStreaming(unittest.TestCase):
             # OS operations route through sys_os_* MCP tools, not SDK
             # built-ins. Only Skill remains in the native base set.
             self.assertEqual(captured_options["tools"], ["Skill"])
-            self.assertIn("mcp__omnigent__sleep", captured_options["allowed_tools"])
+            self.assertIn("mcp__goalrail__sleep", captured_options["allowed_tools"])
             self.assertNotIn("Bash", captured_options["allowed_tools"])
             self.assertIsInstance(events[-1], TurnComplete)
 
         _run(_t())
 
     def test_mcp_only_session_disables_native_tool_base_set(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         captured_options = {}
 
@@ -1517,7 +1514,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -1540,13 +1537,13 @@ class TestStreamEventStreaming(unittest.TestCase):
             # the FS attack surface; it only loads pre-approved
             # SKILL.md content.
             self.assertEqual(captured_options["tools"], ["Skill"])
-            self.assertEqual(captured_options["allowed_tools"], ["mcp__omnigent__sleep"])
+            self.assertEqual(captured_options["allowed_tools"], ["mcp__goalrail__sleep"])
             self.assertIsInstance(events[-1], TurnComplete)
 
         _run(_t())
 
     def test_session_send_tool_is_exposed_via_mcp(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         captured_options = {}
 
@@ -1608,7 +1605,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -1630,9 +1627,9 @@ class TestStreamEventStreaming(unittest.TestCase):
                         "Delegate through `sys_session_send`.",
                     )
                 ]
-            self.assertIn("mcp__omnigent__sys_session_send", captured_options["allowed_tools"])
+            self.assertIn("mcp__goalrail__sys_session_send", captured_options["allowed_tools"])
             self.assertIn(
-                "use `mcp__omnigent__sys_session_send` when instructions say `sys_session_send`",
+                "use `mcp__goalrail__sys_session_send` when instructions say `sys_session_send`",
                 captured_options["system_prompt"],
             )
             self.assertIsInstance(events[-1], TurnComplete)
@@ -1640,7 +1637,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_crashed_session_refuses_future_turns(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _FakeSDK:
             AssistantMessage = type("AssistantMessage", (), {})
@@ -1674,7 +1671,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         async def _t():
             executor = ClaudeSDKExecutor()
             messages = [{"role": "user", "content": "hello", "session_id": "session-a"}]
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 first_events = [e async for e in executor.run_turn(messages, [], "")]
                 second_events = [e async for e in executor.run_turn(messages, [], "")]
 
@@ -1688,7 +1685,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_close_session_disconnects_live_client(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 
         disconnect = AsyncMock()
         client = type("Client", (), {"disconnect": disconnect})()
@@ -1714,7 +1711,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         next turn would resume and silently continue the canceled
         instruction.
         """
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 
         interrupt = AsyncMock()
         disconnect = AsyncMock()
@@ -1745,7 +1742,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         leave the abandoned-prompt session resumable. If ``close_session``
         is not awaited here, the interrupt-failure path leaks the session.
         """
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 
         async def fail_interrupt():
             raise RuntimeError("boom")
@@ -1764,7 +1761,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_close_disconnects_all_live_clients(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 
         disconnect_a = AsyncMock()
         disconnect_b = AsyncMock()
@@ -1783,7 +1780,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_close_session_force_closes_on_loop_mismatch(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 
         client = type("Client", (), {})()
         client.disconnect = AsyncMock()
@@ -1815,7 +1812,7 @@ class TestStreamEventStreaming(unittest.TestCase):
             StreamEvent as SDKStreamEvent,
         )
 
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _Sentinel:
             pass
@@ -1877,7 +1874,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -1934,7 +1931,7 @@ class TestStreamEventStreaming(unittest.TestCase):
             ToolUseBlock as SDKToolUseBlock,
         )
 
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _Sentinel:
             pass
@@ -2016,7 +2013,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -2040,7 +2037,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_tool_result_error_yields_tool_call_complete_error(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _ToolUseBlock:
             def __init__(self, id, name, input):
@@ -2114,7 +2111,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -2131,7 +2128,7 @@ class TestStreamEventStreaming(unittest.TestCase):
         _run(_t())
 
     def test_tool_result_blocked_yields_blocked_status(self):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         class _ToolUseBlock:
             def __init__(self, id, name, input):
@@ -2205,7 +2202,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         async def _t():
             executor = ClaudeSDKExecutor()
-            with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
                 events = [
                     e
                     async for e in executor.run_turn(
@@ -2229,7 +2226,7 @@ class TestStreamEventStreaming(unittest.TestCase):
 
 def test_unset_env_var_removes_and_restores(monkeypatch):
     """Env var present before ``with`` is absent during, restored after."""
-    from omnigent.inner.claude_sdk_executor import _unset_env_var
+    from goalrail.inner.claude_sdk_executor import _unset_env_var
 
     monkeypatch.setenv("CLAUDECODE", "parent-value")
     with _unset_env_var("CLAUDECODE"):
@@ -2239,7 +2236,7 @@ def test_unset_env_var_removes_and_restores(monkeypatch):
 
 def test_unset_env_var_noop_when_unset(monkeypatch):
     """When env var is not set before ``with``, block runs cleanly and key stays unset."""
-    from omnigent.inner.claude_sdk_executor import _unset_env_var
+    from goalrail.inner.claude_sdk_executor import _unset_env_var
 
     monkeypatch.delenv("CLAUDECODE", raising=False)
     with _unset_env_var("CLAUDECODE"):
@@ -2249,7 +2246,7 @@ def test_unset_env_var_noop_when_unset(monkeypatch):
 
 def test_unset_env_var_restores_on_exception(monkeypatch):
     """Restoration must still happen when the block raises."""
-    from omnigent.inner.claude_sdk_executor import _unset_env_var
+    from goalrail.inner.claude_sdk_executor import _unset_env_var
 
     monkeypatch.setenv("CLAUDECODE", "original")
     with pytest.raises(RuntimeError, match="boom"):
@@ -2267,7 +2264,7 @@ def test_databricks_model_without_routing_raises() -> None:
     """
     import pytest
 
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     with pytest.raises(ValueError, match="Databricks-hosted model"):
         ClaudeSDKExecutor(
@@ -2281,7 +2278,7 @@ def test_non_databricks_model_without_routing_does_not_raise() -> None:
 
     Ensures the guard only fires on the ``databricks-`` prefix.
     """
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     executor = ClaudeSDKExecutor(
         model="claude-3-5-sonnet-20241022",
@@ -2305,7 +2302,7 @@ async def test_anthropic_api_key_stripped_during_connect(monkeypatch):
     captures ``os.environ`` at the moment ``connect()`` is invoked,
     ensuring both ``CLAUDECODE`` and ``ANTHROPIC_API_KEY`` are absent.
     """
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     # Env snapshot captured inside connect() -- proves the real code
     # path strips the keys, not just a standalone _unset_env_var call.
@@ -2365,8 +2362,8 @@ async def test_get_or_create_client_surfaces_cli_stderr_on_connect_timeout(monke
     raised ``TimeoutError`` so CI logs surface what the subprocess was
     doing while it hung.
     """
-    from omnigent.inner import claude_sdk_executor as cse
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner import claude_sdk_executor as cse
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     monkeypatch.setattr(cse, "_CONNECT_TIMEOUT_SECONDS", 0.2)
 
@@ -2417,21 +2414,21 @@ def test_prepare_claude_cli_path_bypasses_wrapper_when_env_set(
     monkeypatch, caplog, env_value: str
 ) -> None:
     """
-    ``OMNIGENT_CLAUDE_SDK_NO_SANDBOX`` (any truthy value) must skip
+    ``GOALRAIL_CLAUDE_SDK_NO_SANDBOX`` (any truthy value) must skip
     ``create_exec_launcher`` and hand back the raw CLI path. Used as a
     diagnostic knob to isolate the sandbox as a cause of the silent
     claude-sdk connect hang on the nightly Linux runner.
     """
-    from omnigent.inner.claude_sdk_executor import prepare_claude_cli_path
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from goalrail.inner.claude_sdk_executor import prepare_claude_cli_path
+    from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_SDK_NO_SANDBOX", env_value)
+    monkeypatch.setenv("GOALRAIL_CLAUDE_SDK_NO_SANDBOX", env_value)
 
     def _fail_if_called(*args, **kwargs) -> str:
         raise AssertionError("create_exec_launcher must not be called when bypass is enabled")
 
     monkeypatch.setattr(
-        "omnigent.inner.claude_sdk_executor.create_exec_launcher",
+        "goalrail.inner.claude_sdk_executor.create_exec_launcher",
         _fail_if_called,
     )
 
@@ -2445,7 +2442,7 @@ def test_prepare_claude_cli_path_bypasses_wrapper_when_env_set(
             allow_network=True,
         ),
     )
-    with caplog.at_level(logging.WARNING, logger="omnigent.inner.claude_sdk_executor"):
+    with caplog.at_level(logging.WARNING, logger="goalrail.inner.claude_sdk_executor"):
         prepared = prepare_claude_cli_path("/usr/bin/claude", spec)
 
     assert prepared.cli_path == "/usr/bin/claude"
@@ -2462,15 +2459,15 @@ def test_prepare_claude_cli_path_bypasses_wrapper_when_env_set(
 
 def test_prepare_tight_cli_process_path_bypasses_wrapper_when_env_set(monkeypatch) -> None:
     """``prepare_tight_cli_process_path`` must also honor the bypass env."""
-    from omnigent.inner.claude_sdk_executor import prepare_tight_cli_process_path
+    from goalrail.inner.claude_sdk_executor import prepare_tight_cli_process_path
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_SDK_NO_SANDBOX", "1")
+    monkeypatch.setenv("GOALRAIL_CLAUDE_SDK_NO_SANDBOX", "1")
 
     def _fail_if_called(*args, **kwargs) -> str:
         raise AssertionError("create_exec_launcher must not be called when bypass is enabled")
 
     monkeypatch.setattr(
-        "omnigent.inner.claude_sdk_executor.create_exec_launcher",
+        "goalrail.inner.claude_sdk_executor.create_exec_launcher",
         _fail_if_called,
     )
 
@@ -2537,7 +2534,7 @@ def test_to_anthropic_content_blocks_plain_text_uses_text_source() -> None:
 @pytest.mark.asyncio
 async def test_get_or_create_client_surfaces_cli_stderr_on_connect_error() -> None:
     """A non-timeout connect failure includes captured CLI stderr."""
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     class _StubClient:
         def __init__(self, options: object) -> None:
@@ -2606,7 +2603,7 @@ async def test_result_message_usage_populates_turn_complete_usage() -> None:
     from claude_agent_sdk.types import ResultMessage as SDKResultMessage
     from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     class _Sentinel:
         pass
@@ -2655,7 +2652,7 @@ async def test_result_message_usage_populates_turn_complete_usage() -> None:
                 return None
 
     executor = ClaudeSDKExecutor()
-    with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+    with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
         events = [
             e
             async for e in executor.run_turn(
@@ -2753,7 +2750,7 @@ async def test_context_tokens_uses_last_call_not_cumulative_on_multi_iteration_t
     from claude_agent_sdk.types import ResultMessage as SDKResultMessage
     from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     class _Sentinel:
         pass
@@ -2823,7 +2820,7 @@ async def test_context_tokens_uses_last_call_not_cumulative_on_multi_iteration_t
                 return None
 
     executor = ClaudeSDKExecutor()
-    with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+    with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
         events = [
             e
             async for e in executor.run_turn(
@@ -2885,7 +2882,7 @@ async def test_assistant_message_model_flows_to_turn_usage() -> None:
     from claude_agent_sdk.types import ResultMessage as SDKResultMessage
     from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     class _AsstMsg:
         """Minimal stand-in for the SDK AssistantMessage (carries model)."""
@@ -2934,7 +2931,7 @@ async def test_assistant_message_model_flows_to_turn_usage() -> None:
                 return None
 
     executor = ClaudeSDKExecutor()
-    with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+    with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
         events = [
             e
             async for e in executor.run_turn(
@@ -2975,7 +2972,7 @@ async def test_result_message_usage_none_yields_turn_complete_without_usage() ->
     from claude_agent_sdk.types import ResultMessage as SDKResultMessage
     from claude_agent_sdk.types import StreamEvent as SDKStreamEvent
 
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     class _Sentinel:
         pass
@@ -3019,7 +3016,7 @@ async def test_result_message_usage_none_yields_turn_complete_without_usage() ->
                 return None
 
     executor = ClaudeSDKExecutor()
-    with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+    with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
         events = [
             e
             async for e in executor.run_turn(
@@ -3051,13 +3048,13 @@ class TestToolCallPolicyGate(unittest.TestCase):
     """
 
     def _make_executor(self, permission_mode="bypassPermissions"):
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         return ClaudeSDKExecutor(permission_mode=permission_mode)
 
     @staticmethod
     def _verdict(action, reason=None):
-        from omnigent.runtime.harnesses._scaffold import PolicyVerdictPayload
+        from goalrail.runtime.harnesses._scaffold import PolicyVerdictPayload
 
         return PolicyVerdictPayload(action=action, reason=reason)
 
@@ -3122,7 +3119,7 @@ class TestToolCallPolicyGate(unittest.TestCase):
         _run(_t())
 
     def test_ask_verdict_prompts_even_under_bypass(self):
-        """A raw ASK verdict is supported by routing to Omnigent
+        """A raw ASK verdict is supported by routing to Goalrail
         elicitation, even under bypassPermissions."""
         from claude_agent_sdk import PermissionResultAllow
 
@@ -3224,7 +3221,7 @@ class TestToolCallPolicyGate(unittest.TestCase):
             )
 
             self.assertIsInstance(result, PermissionResultDeny)
-            self.assertIn("Unexpected Omnigent TOOL_CALL policy verdict", result.message)
+            self.assertIn("Unexpected Goalrail TOOL_CALL policy verdict", result.message)
 
         _run(_t())
 
@@ -3269,8 +3266,8 @@ class TestToolCallPolicyGate(unittest.TestCase):
 
         _run(_t())
 
-    def test_omnigent_own_tool_skips_evaluation(self):
-        """``mcp__omnigent__*`` tools are already TOOL_CALL-gated server-side
+    def test_goalrail_own_tool_skips_evaluation(self):
+        """``mcp__goalrail__*`` tools are already TOOL_CALL-gated server-side
         via the dispatch bridge / ProxyMcpManager, so the gate must NOT
         evaluate them again (avoids double-evaluation)."""
         from claude_agent_sdk import PermissionResultAllow
@@ -3281,7 +3278,7 @@ class TestToolCallPolicyGate(unittest.TestCase):
             executor._policy_evaluator = evaluator
 
             result = await executor._can_use_tool_gate(
-                "mcp__omnigent__sys_os_read",
+                "mcp__goalrail__sys_os_read",
                 {"path": "/tmp/x"},
                 self._perm_ctx(),
             )
@@ -3322,7 +3319,7 @@ class TestToolCallPolicyGate(unittest.TestCase):
         """run_turn installs the can_use_tool gate even under
         bypassPermissions when a policy evaluator is wired — the
         regression this feature fixes."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor(permission_mode="bypassPermissions")
@@ -3354,7 +3351,7 @@ class TestToolCallPolicyGate(unittest.TestCase):
     def test_gate_not_installed_without_evaluator_or_handler(self):
         """With neither a policy evaluator nor an elicitation handler, no
         can_use_tool callback is installed (unchanged baseline)."""
-        from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         async def _t():
             executor = ClaudeSDKExecutor(permission_mode="bypassPermissions")
@@ -3387,8 +3384,8 @@ def test_precompact_hook_emits_compaction_complete_with_session_messages() -> No
     """When PreCompact fires and a ResultMessage carries a session_id,
     CompactionComplete is emitted with compacted_messages read from
     the CLI's session transcript."""
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-    from omnigent.inner.executor import CompactionComplete
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.executor import CompactionComplete
 
     class _ResultMessage:
         def __init__(self, session_id, result):
@@ -3465,7 +3462,7 @@ def test_precompact_hook_emits_compaction_complete_with_session_messages() -> No
         executor = ClaudeSDKExecutor()
         with (
             patch(
-                "omnigent.inner.claude_sdk_executor._ensure_sdk",
+                "goalrail.inner.claude_sdk_executor._ensure_sdk",
                 return_value=_FakeSDK,
             ),
             patch(
@@ -3500,8 +3497,8 @@ def test_precompact_hook_emits_compaction_complete_with_session_messages() -> No
 
 def test_no_precompact_no_compaction_event() -> None:
     """When no PreCompact hook fires, no CompactionComplete is yielded."""
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-    from omnigent.inner.executor import CompactionComplete
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.executor import CompactionComplete
 
     class _ResultMessage:
         def __init__(self, session_id, result):
@@ -3550,7 +3547,7 @@ def test_no_precompact_no_compaction_event() -> None:
 
     async def _t():
         executor = ClaudeSDKExecutor()
-        with patch("omnigent.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+        with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
             events = [
                 e
                 async for e in executor.run_turn(

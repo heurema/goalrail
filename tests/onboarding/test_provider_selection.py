@@ -1,11 +1,11 @@
-"""Tests for omnigent.onboarding.provider_selection — selection logic."""
+"""Tests for goalrail.onboarding.provider_selection — selection logic."""
 
 from __future__ import annotations
 
 import pytest
 from click import ClickException
 
-from omnigent.onboarding.provider_selection import (
+from goalrail.onboarding.provider_selection import (
     ProviderSelection,
     resolve_provider_from_model,
 )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from omnigent_client.tools import ToolState, tool
+from goalrail_client.tools import ToolState, tool
 
 
 def _empty_state() -> dict[str, object]:

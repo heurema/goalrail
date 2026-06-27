@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.client_specified."""
+"""Tests for goalrail.tools.client_specified."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.client_specified import (
+from goalrail.tools.base import ToolContext
+from goalrail.tools.client_specified import (
     ClientSideTool,
     ClientSideToolSpec,
     parse_client_side_tool_spec,
@@ -103,7 +103,7 @@ def test_parse_schema_stored_verbatim(minimal_raw_tool: dict[str, Any]) -> None:
     """
     parse_client_side_tool_spec stores the schema dict verbatim.
 
-    There is no ``omnigent`` extension key to strip — the raw dict
+    There is no ``goalrail`` extension key to strip — the raw dict
     IS the schema that gets stored and later returned to the LLM.
     """
     spec = parse_client_side_tool_spec(minimal_raw_tool)

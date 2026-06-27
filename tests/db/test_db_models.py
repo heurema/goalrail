@@ -1,4 +1,4 @@
-"""Tests for SQLAlchemy ORM models (omnigent/db/db_models.py).
+"""Tests for SQLAlchemy ORM models (goalrail/db/db_models.py).
 
 Verifies that each ORM model can be instantiated, persisted, read back,
 and that relationships, defaults, nullable columns, and constraints
@@ -12,7 +12,7 @@ import time
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from omnigent.db.db_models import (
+from goalrail.db.db_models import (
     SqlAccountToken,
     SqlAgent,
     SqlComment,
@@ -26,7 +26,7 @@ from omnigent.db.db_models import (
     SqlUser,
     SqlUserDailyCost,
 )
-from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
+from goalrail.db.utils import get_or_create_engine, make_managed_session_maker
 
 # ── helpers ───────────────────────────────────────────
 
@@ -667,7 +667,7 @@ class TestSqlPolicy:
             name="cost-guard",
             created_at=_now(),
             type="python",
-            handler="omnigent.policies.cost_guard:handler",
+            handler="goalrail.policies.cost_guard:handler",
             enabled=True,
         )
         with managed() as session:

@@ -3,7 +3,7 @@ Grant a Databricks App service principal Lakebase schema privileges.
 
 Run this after ``wc.apps.create`` creates the app service principal and
 before ``wc.apps.deploy`` starts the app. The app needs these grants so
-Alembic can create and migrate Omnigent tables on first boot.
+Alembic can create and migrate Goalrail tables on first boot.
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ class _GrantArgs(Protocol):
     """
     Parsed CLI arguments for the grant helper.
 
-    :param app_name: Databricks App name, e.g. ``"omnigent"``.
+    :param app_name: Databricks App name, e.g. ``"goalrail"``.
     :param lakebase_endpoint: Full Lakebase endpoint resource path, e.g.
-        ``"projects/omnigent/branches/production/endpoints/primary"``.
+        ``"projects/goalrail/branches/production/endpoints/primary"``.
     :param database: PostgreSQL database name, e.g.
         ``"databricks_postgres"``.
     :param profile: Optional Databricks CLI profile name, e.g.
@@ -45,14 +45,14 @@ def _parse_args() -> _GrantArgs:
     parser.add_argument(
         "--app-name",
         required=True,
-        help="Databricks App name, e.g. 'omnigent'.",
+        help="Databricks App name, e.g. 'goalrail'.",
     )
     parser.add_argument(
         "--lakebase-endpoint",
         required=True,
         help=(
             "Full Lakebase endpoint resource path, e.g. "
-            "'projects/omnigent/branches/production/endpoints/primary'."
+            "'projects/goalrail/branches/production/endpoints/primary'."
         ),
     )
     parser.add_argument(
@@ -95,7 +95,7 @@ def _resolve_endpoint_host(wc: WorkspaceClient, endpoint_name: str) -> str | Non
 
     :param wc: Databricks workspace client.
     :param endpoint_name: Full Lakebase endpoint resource path, e.g.
-        ``"projects/omnigent/branches/production/endpoints/primary"``.
+        ``"projects/goalrail/branches/production/endpoints/primary"``.
     :returns: Endpoint hostname, or ``None`` when the endpoint is not ready.
     """
     endpoint = wc.postgres.get_endpoint(name=endpoint_name)
@@ -121,7 +121,7 @@ def _build_conn_params(
     :param database: PostgreSQL database name, e.g.
         ``"databricks_postgres"``.
     :param endpoint_name: Full Lakebase endpoint resource path, e.g.
-        ``"projects/omnigent/branches/production/endpoints/primary"``.
+        ``"projects/goalrail/branches/production/endpoints/primary"``.
     :returns: psycopg connection keyword params for the current user.
     """
     cred = wc.postgres.generate_database_credential(endpoint=endpoint_name)
@@ -171,7 +171,7 @@ def main() -> int:
     with psycopg.connect(autocommit=True, **params) as conn, conn.cursor() as cur:
         cur.execute(_grant_sql(sp_uuid))
 
-    print("Done. The app can create and migrate Omnigent tables on first boot.")
+    print("Done. The app can create and migrate Goalrail tables on first boot.")
     return 0
 
 

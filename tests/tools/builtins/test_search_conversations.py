@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.tools.builtins.search_conversations`."""
+"""Unit tests for :mod:`goalrail.tools.builtins.search_conversations`."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.conversation import (
+from goalrail.entities.conversation import (
     FunctionCallData,
     FunctionCallOutputData,
     MessageData,
 )
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.search_conversations import (
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.search_conversations import (
     SearchConversationsTool,
     _extract_text,
     _format_results,
@@ -108,7 +108,7 @@ def test_invoke_returns_results(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     ]
     monkeypatch.setattr(
-        "omnigent.runtime.get_conversation_store",
+        "goalrail.runtime.get_conversation_store",
         lambda: _FakeConversationStore(items),
     )
 
@@ -123,7 +123,7 @@ def test_invoke_returns_results(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invoke_no_results(monkeypatch: pytest.MonkeyPatch) -> None:
     """invoke() returns empty results with a message."""
     monkeypatch.setattr(
-        "omnigent.runtime.get_conversation_store",
+        "goalrail.runtime.get_conversation_store",
         lambda: _FakeConversationStore([]),
     )
 
@@ -145,7 +145,7 @@ def test_invoke_respects_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     items = [_FakeItem(f"item_{i}", f"conv_{i}", i, "message", _message_data()) for i in range(20)]
     store = _FakeConversationStore(items)
     monkeypatch.setattr(
-        "omnigent.runtime.get_conversation_store",
+        "goalrail.runtime.get_conversation_store",
         lambda: store,
     )
 

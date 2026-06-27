@@ -33,7 +33,7 @@ files plus two secrets.
    | `PORT` | variable | `8000` (pin it so the app and `app_port` agree) |
    | `HOST` | variable | `0.0.0.0` |
    | `DATABASE_URL` | variable | `sqlite:////data/artifacts/chat.db` |
-   | `OMNIGENT_ACCOUNTS_COOKIE_SECRET` | secret | `openssl rand -hex 32` (pin it: ephemeral disk would otherwise drop sessions on restart) |
+   | `GOALRAIL_ACCOUNTS_COOKIE_SECRET` | secret | `openssl rand -hex 32` (pin it: ephemeral disk would otherwise drop sessions on restart) |
 
 4. The Space builds + boots. Admin password is in the Space **Logs** on first
    boot. The base URL is auto-detected from `SPACE_HOST`, so it needs no manual

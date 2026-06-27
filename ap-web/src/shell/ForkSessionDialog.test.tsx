@@ -276,7 +276,7 @@ describe("ForkSessionDialog", () => {
     // Source is claude-sdk (anthropic). Every classifiable target carries
     // history: SDK targets replay the transcript as context, and native
     // targets (claude-native AND codex-native) rebuild their on-disk
-    // transcript from the copied Omnigent items — the codex rollout
+    // transcript from the copied Goalrail items — the codex rollout
     // synthesizer writes the session_meta + event_msg records codex
     // ≥ 0.133 needs (verified on 0.136.0), so cross-family codex-native
     // is offered too.
@@ -345,7 +345,7 @@ describe("ForkSessionDialog", () => {
     // A same-family SDK target (openai gpt) is still offered.
     expect(screen.getByTestId("fork-session-agent-option-ag_openai")).toBeInTheDocument();
     // Cross-family claude-native is offered for an openai source — the
-    // runner rebuilds its transcript from the copied Omnigent items.
+    // runner rebuilds its transcript from the copied Goalrail items.
     expect(screen.getByTestId("fork-session-agent-option-ag_claude_native")).toBeInTheDocument();
   });
 

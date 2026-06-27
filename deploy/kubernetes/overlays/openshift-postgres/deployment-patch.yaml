@@ -1,14 +1,14 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: omnigent
+  name: goalrail
 spec:
   template:
     spec:
       securityContext:
         runAsNonRoot: true
       containers:
-        - name: omnigent
+        - name: goalrail
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

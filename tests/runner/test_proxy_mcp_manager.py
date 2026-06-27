@@ -21,9 +21,9 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runner.mcp_manager import McpSchemasResult
-from omnigent.runner.proxy_mcp_manager import ProxyMcpManager
-from omnigent.spec.types import AgentSpec, MCPServerConfig
+from goalrail.runner.mcp_manager import McpSchemasResult
+from goalrail.runner.proxy_mcp_manager import ProxyMcpManager
+from goalrail.spec.types import AgentSpec, MCPServerConfig
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -261,7 +261,7 @@ async def test_schemas_for_injects_empty_properties_when_missing() -> None:
 async def test_schemas_for_http_error_returns_failure() -> None:
     """An HTTP 500 from the proxy must surface as a failure, not raise.
 
-    Failure means an Omnigent server error crashes the harness instead of surfacing
+    Failure means an Goalrail server error crashes the harness instead of surfacing
     as a graceful tool-unavailable message to the LLM.
     """
     transport = _StubTransport([httpx.Response(status_code=500)])
@@ -449,7 +449,7 @@ async def test_call_tool_network_error_raises() -> None:
 
 def test_proxy_call_timeout_exceeds_forward_timeout() -> None:
     """The outer MCP proxy timeout must exceed the AP→runner timeout."""
-    from omnigent.runner.tool_dispatch import (
+    from goalrail.runner.tool_dispatch import (
         _OS_ENV_SHELL_DEFAULT_TIMEOUT_S,
         _RUNNER_EXECUTION_TIMEOUT_S,
         MCP_PROXY_CALL_TIMEOUT_S,
@@ -474,7 +474,7 @@ def test_proxy_call_timeout_exceeds_forward_timeout() -> None:
 @pytest.mark.asyncio
 async def test_call_tool_uses_configured_read_timeout() -> None:
     """``call_tool`` must POST with the configured proxy read timeout."""
-    from omnigent.runner.tool_dispatch import MCP_PROXY_CALL_TIMEOUT_S
+    from goalrail.runner.tool_dispatch import MCP_PROXY_CALL_TIMEOUT_S
 
     captured: dict[str, object] = {}
 

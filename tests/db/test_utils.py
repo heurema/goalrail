@@ -1,4 +1,4 @@
-"""Tests for database engine pool configuration (omnigent/db/utils.py)."""
+"""Tests for database engine pool configuration (goalrail/db/utils.py)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from alembic import command
 from sqlalchemy import create_engine
 
-from omnigent.db.utils import (
+from goalrail.db.utils import (
     _LAKEBASE_POOL_RECYCLE_SECONDS,
     _SERVER_POOL_RECYCLE_SECONDS,
     _build_alembic_config,
@@ -29,7 +29,7 @@ from omnigent.db.utils import (
     set_lakebase_token_provider,
     strip_nul_bytes,
 )
-from omnigent.entities.conversation import (
+from goalrail.entities.conversation import (
     ErrorData,
     NewConversationItem,
     ResourceEventData,
@@ -61,12 +61,12 @@ def test_non_sqlite_engine_has_pool_settings(
         return mock_engine
 
     monkeypatch.setattr(
-        "omnigent.db.utils.create_engine",
+        "goalrail.db.utils.create_engine",
         _capturing_create_engine,
     )
     # Skip migrations -- we only care about engine creation kwargs.
     monkeypatch.setattr(
-        "omnigent.db.utils._run_migrations",
+        "goalrail.db.utils._run_migrations",
         lambda engine, db_uri: None,
     )
 
@@ -92,7 +92,7 @@ def test_sqlite_engine_skips_server_pool_settings_and_enables_wal(
     (``pool_pre_ping`` / ``pool_recycle``) — those are meaningful
     only for multi-connection server databases. They must, however,
     enable WAL journal mode and a 20s ``busy_timeout`` on every
-    connection so multi-process workloads (REPL + Omnigent server +
+    connection so multi-process workloads (REPL + Goalrail server +
     runner subprocess + DBOS scheduler all hitting the same
     ``chat.db``) don't surface as ``disk I/O error`` /
     ``database is locked`` under default ``journal_mode=DELETE``.
@@ -104,7 +104,7 @@ def test_sqlite_engine_skips_server_pool_settings_and_enables_wal(
     took effect on a fresh DBAPI connection.
     """
     monkeypatch.setattr(
-        "omnigent.db.utils._run_migrations",
+        "goalrail.db.utils._run_migrations",
         lambda engine, db_uri: None,
     )
 
@@ -141,7 +141,7 @@ def test_sqlite_engine_skips_server_pool_settings_and_enables_wal(
 def _clear_lakebase_override() -> Any:
     """Ensure the process-wide token provider override never leaks across
     tests (it is module-global state). Clears before and after each test."""
-    from omnigent.db.utils import set_lakebase_token_provider as _set
+    from goalrail.db.utils import set_lakebase_token_provider as _set
 
     _set(None)
     yield
@@ -157,10 +157,10 @@ def test_static_postgres_uri_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> 
     attached. A regression here would mean the opt-in path leaked into the
     default static-password Postgres deploy.
     """
-    from omnigent.db import utils
+    from goalrail.db import utils
 
     # No override installed (autouse fixture) and no env var → no token path.
-    monkeypatch.delenv("OMNIGENT_LAKEBASE_INSTANCE", raising=False)
+    monkeypatch.delenv("GOALRAIL_LAKEBASE_INSTANCE", raising=False)
     assert _resolve_lakebase_token_provider() is None
 
     engine = utils._create_engine("postgresql+psycopg://user:pass@host:5432/db")
@@ -198,16 +198,16 @@ def test_static_postgres_uri_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_resolve_token_provider_env_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    The provider resolves from ``OMNIGENT_LAKEBASE_INSTANCE`` when set, and an
+    The provider resolves from ``GOALRAIL_LAKEBASE_INSTANCE`` when set, and an
     explicit override installed via :func:`set_lakebase_token_provider` takes
     precedence over the env var.
     """
     # Env var unset → no provider.
-    monkeypatch.delenv("OMNIGENT_LAKEBASE_INSTANCE", raising=False)
+    monkeypatch.delenv("GOALRAIL_LAKEBASE_INSTANCE", raising=False)
     assert _resolve_lakebase_token_provider() is None
 
     # Env var set → a provider resolves (the SDK-backed lambda).
-    monkeypatch.setenv("OMNIGENT_LAKEBASE_INSTANCE", "omnigent-db")
+    monkeypatch.setenv("GOALRAIL_LAKEBASE_INSTANCE", "goalrail-db")
     assert callable(_resolve_lakebase_token_provider())
 
     # Explicit override wins over the env var.
@@ -269,7 +269,7 @@ def test_create_engine_wires_token_refresh_and_short_recycle(
     listener (verified by spying on the install helper to confirm it receives
     the resolved provider).
     """
-    from omnigent.db import utils
+    from goalrail.db import utils
 
     def _override() -> str:
         return "live-token"
@@ -420,7 +420,7 @@ def test_initialize_or_verify_schema_reports_manual_retry_when_auto_migration_fa
     """
     If automatic migration fails, startup still terminates, but with
     an actionable message that includes the stale revision, expected
-    head, DB URL, and manual ``omnigent debug db-upgrade`` retry command.
+    head, DB URL, and manual ``goalrail debug db-upgrade`` retry command.
     """
     db_path = tmp_path / "stale_failure.db"
     stale_revision = "8a4f1e9c2b07"
@@ -431,7 +431,7 @@ def test_initialize_or_verify_schema_reports_manual_retry_when_auto_migration_fa
     def _fail_migration(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("omnigent.db.utils._run_migrations", _fail_migration)
+    monkeypatch.setattr("goalrail.db.utils._run_migrations", _fail_migration)
 
     engine = create_engine(uri)
     try:
@@ -448,7 +448,7 @@ def test_initialize_or_verify_schema_reports_manual_retry_when_auto_migration_fa
     assert head in msg, (
         f"Error message must include the expected head so the operator knows the gap. Got: {msg!r}"
     )
-    assert "omnigent debug db-upgrade" in msg, (
+    assert "goalrail debug db-upgrade" in msg, (
         f"Error message must include the literal upgrade command "
         f"the operator can run manually. Got: {msg!r}"
     )
@@ -493,8 +493,8 @@ def test_item_type_id_and_data_registries_cover_the_same_types() -> None:
     loud unit-test failure instead of a per-item production traceback — exactly
     how ``resource_event`` slipped through (added to the data map, forgotten in
     the id map)."""
-    from omnigent.db.utils import _ITEM_TYPE_PREFIX
-    from omnigent.entities.conversation import ITEM_TYPE_TO_DATA_CLS
+    from goalrail.db.utils import _ITEM_TYPE_PREFIX
+    from goalrail.entities.conversation import ITEM_TYPE_TO_DATA_CLS
 
     assert set(_ITEM_TYPE_PREFIX) == set(ITEM_TYPE_TO_DATA_CLS), (
         "item-type registries diverged — "

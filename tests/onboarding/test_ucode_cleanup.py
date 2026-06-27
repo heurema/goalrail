@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.ucode_cleanup`.
+"""Tests for :mod:`goalrail.onboarding.ucode_cleanup`.
 
 The fixture configs mirror what ucode actually writes (see ucode's
 ``agents/codex.py`` legacy overlay and ``agents/claude.py`` MCP entry), so
@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 import tomllib
 
-from omnigent.errors import OmnigentError
-from omnigent.onboarding.ucode_cleanup import (
+from goalrail.errors import GoalrailError
+from goalrail.onboarding.ucode_cleanup import (
     UcodeWiringRemoval,
     remove_ucode_sidecars,
     remove_ucode_web_search_mcp,
@@ -183,7 +183,7 @@ def test_strip_malformed_toml_raises_and_leaves_file(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(original, encoding="utf-8")
 
-    with pytest.raises(OmnigentError, match="not valid TOML"):
+    with pytest.raises(GoalrailError, match="not valid TOML"):
         strip_ucode_codex_config(config_path)
     # The broken file is exactly as we found it.
     assert config_path.read_text(encoding="utf-8") == original
@@ -269,7 +269,7 @@ def test_remove_web_search_removes_ucode_owned_entry(
     )
     cli_calls: list[bool] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_cleanup._remove_web_search_via_claude_cli",
+        "goalrail.onboarding.ucode_cleanup._remove_web_search_via_claude_cli",
         lambda: cli_calls.append(True) or True,
     )
 
@@ -310,7 +310,7 @@ def test_remove_web_search_never_touches_non_ucode_config(
         )
 
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_cleanup._remove_web_search_via_claude_cli",
+        "goalrail.onboarding.ucode_cleanup._remove_web_search_via_claude_cli",
         _must_not_run,
     )
 

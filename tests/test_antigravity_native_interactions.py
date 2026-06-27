@@ -1,6 +1,6 @@
 """Tests for the agy interaction bridge (detect → elicit → deliver loop).
 
-These exercise :func:`omnigent.antigravity_native_interactions.bridge_interaction`
+These exercise :func:`goalrail.antigravity_native_interactions.bridge_interaction`
 with fakes for its three injectable seams (``get_steps``,
 ``request_elicitation``, ``deliver``) so the timeout/re-read logic is unit-tested
 WITHOUT a live agy server.
@@ -34,14 +34,14 @@ from typing import Any
 
 import pytest
 
-from omnigent.antigravity_native_interactions import (
+from goalrail.antigravity_native_interactions import (
     _freshest_waiting,
     agy_elicitation_id,
     bridge_interaction,
 )
-from omnigent.antigravity_native_rpc import AntigravityRpcError
-from omnigent.antigravity_native_steps import PendingInteraction
-from omnigent.server.schemas import ElicitationRequestParams, ElicitationResult
+from goalrail.antigravity_native_rpc import AntigravityRpcError
+from goalrail.antigravity_native_steps import PendingInteraction
+from goalrail.server.schemas import ElicitationRequestParams, ElicitationResult
 
 _CASCADE = "test-cascade-id"
 _TRAJ = "test-trajectory-id"
@@ -59,7 +59,7 @@ def _question_step(
     Build a WAITING ask_question step dict at a given trajectory index.
 
     Mirrors the live RPC shape consumed by
-    :func:`omnigent.antigravity_native_steps.pending_interaction`:
+    :func:`goalrail.antigravity_native_steps.pending_interaction`:
     ``status``, ``requestedInteraction.askQuestion``, and the
     ``metadata.sourceTrajectoryStepInfo`` ids.
 

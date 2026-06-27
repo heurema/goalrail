@@ -11,8 +11,8 @@ import pytest
 import yaml
 from click import ClickException
 
-from omnigent._wrapper_labels import KIRO_NATIVE_WRAPPER_VALUE, WRAPPER_LABEL_KEY
-from omnigent.kiro_native import (
+from goalrail._wrapper_labels import KIRO_NATIVE_WRAPPER_VALUE, WRAPPER_LABEL_KEY
+from goalrail.kiro_native import (
     _KIRO_PATH_ENV,
     LaunchedKiroTerminal,
     PreparedKiroTerminal,
@@ -88,12 +88,12 @@ def test_materialize_kiro_agent_spec_uses_native_identity(tmp_path: Path) -> Non
 
 
 def test_materialized_kiro_agent_spec_passes_current_validator(tmp_path: Path) -> None:
-    """``omnigent kiro`` must not be rejected as an unknown harness at upload."""
-    from omnigent.spec._omnigent_compat import load_omnigent_yaml
+    """``goalrail kiro`` must not be rejected as an unknown harness at upload."""
+    from goalrail.spec._goalrail_compat import load_goalrail_yaml
 
     path = _materialize_kiro_agent_spec(tmp_path, model=None)
 
-    spec = load_omnigent_yaml(path)
+    spec = load_goalrail_yaml(path)
 
     assert spec.executor.config["harness"] == "kiro-native"
 
@@ -152,7 +152,7 @@ async def test_attach_terminal_resource_requires_tmux_metadata() -> None:
 
 def test_session_labels_use_kiro_wrapper_value() -> None:
     """Kiro wrapper sessions stamp the centralized wrapper label."""
-    from omnigent.kiro_native import _SESSION_LABELS
+    from goalrail.kiro_native import _SESSION_LABELS
 
     assert _SESSION_LABELS[WRAPPER_LABEL_KEY] == KIRO_NATIVE_WRAPPER_VALUE
 
@@ -182,7 +182,7 @@ def test_resolve_kiro_executable_errors_when_missing() -> None:
 
 
 def test_resolve_kiro_executable_honors_path_override() -> None:
-    """``OMNIGENT_KIRO_PATH`` selects the executable to resolve."""
+    """``GOALRAIL_KIRO_PATH`` selects the executable to resolve."""
     seen: list[str] = []
 
     def _which(command: str) -> str:
@@ -240,12 +240,12 @@ def test_launched_kiro_terminal_without_metadata_has_no_tmux() -> None:
 def test_tmux_attach_env_filters_to_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
     """Only allowlisted, set environment keys reach the tmux attach process."""
     monkeypatch.setenv("TERM", "xterm-256color")
-    monkeypatch.setenv("OMNIGENT_UNLISTED_VAR", "present")
+    monkeypatch.setenv("GOALRAIL_UNLISTED_VAR", "present")
 
     env = _tmux_attach_env()
 
     assert env["TERM"] == "xterm-256color"
-    assert "OMNIGENT_UNLISTED_VAR" not in env
+    assert "GOALRAIL_UNLISTED_VAR" not in env
 
 
 def test_direct_tmux_unavailable_reason_reports_each_gap(
@@ -346,7 +346,7 @@ def test_resolve_session_id_for_resume_no_picker_returns_none() -> None:
 
 def test_run_kiro_native_requires_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """A missing server URL is a programming error surfaced as a clear message."""
-    monkeypatch.setattr("omnigent.kiro_native._preflight_local_tools", lambda: None)
+    monkeypatch.setattr("goalrail.kiro_native._preflight_local_tools", lambda: None)
 
     with pytest.raises(ClickException, match="resolved Goalrail server URL"):
         run_kiro_native(server=None, session_id=None, kiro_args=())
@@ -356,7 +356,7 @@ def test_run_kiro_native_materializes_spec_and_delegates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The launcher writes a spec and hands a trimmed base URL to the server path."""
-    monkeypatch.setattr("omnigent.kiro_native._preflight_local_tools", lambda: None)
+    monkeypatch.setattr("goalrail.kiro_native._preflight_local_tools", lambda: None)
     captured: dict[str, object] = {}
 
     def _fake_remote(base_url: str, spec_path: Path, **kwargs: object) -> None:
@@ -364,7 +364,7 @@ def test_run_kiro_native_materializes_spec_and_delegates(
         captured["spec_exists"] = spec_path.exists()
         captured["kwargs"] = kwargs
 
-    monkeypatch.setattr("omnigent.kiro_native._run_with_remote_server", _fake_remote)
+    monkeypatch.setattr("goalrail.kiro_native._run_with_remote_server", _fake_remote)
 
     run_kiro_native(
         server="http://server/",

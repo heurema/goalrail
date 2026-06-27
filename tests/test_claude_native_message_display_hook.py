@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import claude_native_message_display_hook as hook
-from omnigent.claude_native_bridge import read_message_deltas_from_offset
+from goalrail import claude_native_message_display_hook as hook
+from goalrail.claude_native_bridge import read_message_deltas_from_offset
 
 
 def _run_hook(

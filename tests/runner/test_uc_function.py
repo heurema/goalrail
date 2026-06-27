@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.runner.uc_function`.
+"""Unit tests for :mod:`goalrail.runner.uc_function`.
 
 Tests cover:
 
@@ -22,10 +22,10 @@ from typing import Any
 
 import pytest
 
-from omnigent.runner.uc_function import (
+from goalrail.runner.uc_function import (
     _build_select_statement,
 )
-from omnigent.spec.types import LocalToolInfo, ToolRuntime
+from goalrail.spec.types import LocalToolInfo, ToolRuntime
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -230,7 +230,7 @@ async def test_execute_uc_function_missing_warehouse_id() -> None:
     This prevents a confusing SDK error downstream — the user
     gets a clear message about the missing config.
     """
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     with pytest.raises(ValueError, match="requires a warehouse_id"):
         await execute_uc_function(
@@ -250,7 +250,7 @@ async def test_execute_uc_function_missing_warehouse_id_env_unset(
     the parameter nor ``DATABRICKS_WAREHOUSE_ID`` is available,
     the error message names both sources.
     """
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     monkeypatch.delenv("DATABRICKS_WAREHOUSE_ID", raising=False)
     with pytest.raises(ValueError, match="requires a warehouse_id"):
@@ -292,7 +292,7 @@ async def test_execute_uc_function_warehouse_from_env(monkeypatch: pytest.Monkey
         )
 
     monkeypatch.setattr(
-        "omnigent.runner.uc_function._get_workspace_client",
+        "goalrail.runner.uc_function._get_workspace_client",
         lambda profile: _FakeClient(),
     )
 
@@ -305,7 +305,7 @@ async def test_execute_uc_function_warehouse_from_env(monkeypatch: pytest.Monkey
     monkeypatch.setattr("databricks.sdk.service.sql.StatementState", _FakeStatementState)
     monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "env-wh-456")
 
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     result = await execute_uc_function(
         catalog_path="cat.schema.func",
@@ -368,7 +368,7 @@ async def test_execute_uc_function_success(monkeypatch: pytest.MonkeyPatch) -> N
     fake_client = _FakeClient()
 
     monkeypatch.setattr(
-        "omnigent.runner.uc_function._get_workspace_client",
+        "goalrail.runner.uc_function._get_workspace_client",
         lambda profile: fake_client,
     )
 
@@ -388,7 +388,7 @@ async def test_execute_uc_function_success(monkeypatch: pytest.MonkeyPatch) -> N
         _FakeStatementState,
     )
 
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     result = await execute_uc_function(
         catalog_path="cat.schema.classify",
@@ -428,7 +428,7 @@ async def test_execute_uc_function_failed_statement(monkeypatch: pytest.MonkeyPa
         )
 
     monkeypatch.setattr(
-        "omnigent.runner.uc_function._get_workspace_client",
+        "goalrail.runner.uc_function._get_workspace_client",
         lambda profile: _FakeClient(),
     )
 
@@ -446,7 +446,7 @@ async def test_execute_uc_function_failed_statement(monkeypatch: pytest.MonkeyPa
         _FakeStatementState,
     )
 
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     with pytest.raises(RuntimeError, match="Function not found"):
         await execute_uc_function(
@@ -479,7 +479,7 @@ async def test_execute_uc_function_null_result(monkeypatch: pytest.MonkeyPatch) 
         )
 
     monkeypatch.setattr(
-        "omnigent.runner.uc_function._get_workspace_client",
+        "goalrail.runner.uc_function._get_workspace_client",
         lambda profile: _FakeClient(),
     )
 
@@ -497,7 +497,7 @@ async def test_execute_uc_function_null_result(monkeypatch: pytest.MonkeyPatch) 
         _FakeStatementState,
     )
 
-    from omnigent.runner.uc_function import execute_uc_function
+    from goalrail.runner.uc_function import execute_uc_function
 
     result = await execute_uc_function(
         catalog_path="cat.schema.func",
@@ -513,14 +513,14 @@ async def test_execute_uc_function_null_result(monkeypatch: pytest.MonkeyPatch) 
 
 def test_is_uc_function_tool_true() -> None:
     """``_is_uc_function_tool`` returns True for UC_FUNCTION tools."""
-    from omnigent.runner.tool_dispatch import _is_uc_function_tool
+    from goalrail.runner.tool_dispatch import _is_uc_function_tool
 
     spec = _FakeAgentSpec(
         local_tools=[
             LocalToolInfo(
                 name="classify",
                 path=None,
-                language="omnigent-python-callable",
+                language="goalrail-python-callable",
                 runtime=ToolRuntime.UC_FUNCTION,
                 catalog_path="cat.schema.classify",
                 warehouse_id="wh-123",
@@ -535,7 +535,7 @@ def test_is_uc_function_tool_true() -> None:
 
 def test_is_uc_function_tool_false_for_server_tool() -> None:
     """``_is_uc_function_tool`` returns False for SERVER-runtime tools."""
-    from omnigent.runner.tool_dispatch import _is_uc_function_tool
+    from goalrail.runner.tool_dispatch import _is_uc_function_tool
 
     spec = _FakeAgentSpec(
         local_tools=[
@@ -552,14 +552,14 @@ def test_is_uc_function_tool_false_for_server_tool() -> None:
 
 def test_is_uc_function_tool_no_spec() -> None:
     """``_is_uc_function_tool`` returns False when agent_spec is None."""
-    from omnigent.runner.tool_dispatch import _is_uc_function_tool
+    from goalrail.runner.tool_dispatch import _is_uc_function_tool
 
     assert _is_uc_function_tool("classify", None) is False
 
 
 def test_resolve_uc_profile_from_auth() -> None:
     """Profile is extracted from ``executor.auth.profile``."""
-    from omnigent.runner.tool_dispatch import _resolve_uc_profile
+    from goalrail.runner.tool_dispatch import _resolve_uc_profile
 
     spec = _FakeAgentSpec(
         executor=_FakeExecutorSpec(
@@ -571,7 +571,7 @@ def test_resolve_uc_profile_from_auth() -> None:
 
 def test_resolve_uc_profile_from_deprecated_field() -> None:
     """Profile falls back to ``executor.profile`` when auth is absent."""
-    from omnigent.runner.tool_dispatch import _resolve_uc_profile
+    from goalrail.runner.tool_dispatch import _resolve_uc_profile
 
     spec = _FakeAgentSpec(
         executor=_FakeExecutorSpec(profile="legacy-profile"),
@@ -581,7 +581,7 @@ def test_resolve_uc_profile_from_deprecated_field() -> None:
 
 def test_resolve_uc_profile_from_config() -> None:
     """Profile falls back to ``executor.config["profile"]``."""
-    from omnigent.runner.tool_dispatch import _resolve_uc_profile
+    from goalrail.runner.tool_dispatch import _resolve_uc_profile
 
     spec = _FakeAgentSpec(
         executor=_FakeExecutorSpec(config={"profile": "compat-profile"}),
@@ -591,7 +591,7 @@ def test_resolve_uc_profile_from_config() -> None:
 
 def test_resolve_uc_profile_none() -> None:
     """Returns None when no profile is configured anywhere."""
-    from omnigent.runner.tool_dispatch import _resolve_uc_profile
+    from goalrail.runner.tool_dispatch import _resolve_uc_profile
 
     spec = _FakeAgentSpec(executor=_FakeExecutorSpec())
     assert _resolve_uc_profile(spec) is None

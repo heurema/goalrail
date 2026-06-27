@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.bootstrap`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.bootstrap`."""
 
 from __future__ import annotations
 
@@ -15,14 +15,14 @@ import click
 import httpx
 import pytest
 
-from omnigent.onboarding.sandboxes import bootstrap as bootstrap_mod
-from omnigent.onboarding.sandboxes.base import (
+from goalrail.onboarding.sandboxes import bootstrap as bootstrap_mod
+from goalrail.onboarding.sandboxes.base import (
     RemoteCommandResult,
     RemoteProcess,
     SandboxCapabilityError,
     SandboxLauncher,
 )
-from omnigent.onboarding.sandboxes.bootstrap import (
+from goalrail.onboarding.sandboxes.bootstrap import (
     DEFAULT_SANDBOX_NAME,
     DerivedWorkspace,
     _extract_oauth_url,
@@ -731,7 +731,7 @@ def test_ship_wheels_puts_installs_and_persists_path(tmp_path: Path) -> None:
     # with the shipped tarball path — if a generic pip line appears
     # instead, the provider's image-specific flags were bypassed.
     assert launcher.run_commands[0] == "FAKE-INSTALL /tmp/oa-wheels.tgz"
-    # PATH persistence makes `omnigent` resolvable for later
+    # PATH persistence makes `goalrail` resolvable for later
     # `bash -lc` foreground runs.
     assert ".local/bin" in launcher.run_commands[1]
     # Upload must precede install (can't install a tarball that isn't
@@ -764,7 +764,7 @@ def test_start_host_backgrounds_goalrail_host_with_launch_identity() -> None:
     """
     Managed sandbox startup backgrounds the public ``goalrail host`` alias.
 
-    The package still installs ``omnigent`` for compatibility, but new
+    The package still installs ``goalrail`` for compatibility, but new
     sandboxes should exercise the rebranded entry point when they are
     launched by Goalrail.
     """
@@ -782,13 +782,12 @@ def test_start_host_backgrounds_goalrail_host_with_launch_identity() -> None:
     assert any(
         "goalrail host --server https://app.example.com" in cmd for cmd in launcher.run_commands
     )
-    assert all("omnigent host --server" not in cmd for cmd in launcher.run_commands)
 
 
 def test_connect_sets_host_name_before_connecting() -> None:
     """
     When ``host_name`` is set, connect must (a) edit the sandbox's
-    ``~/.omnigent/config.yaml`` to use that name, and (b) THEN run
+    ``~/.goalrail/config.yaml`` to use that name, and (b) THEN run
     ``goalrail host``. Order matters — the host reads config.yaml at
     startup.
     """

@@ -1,4 +1,4 @@
-"""Tests for omnigent.spec.tar_utils."""
+"""Tests for goalrail.spec.tar_utils."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.spec.tar_utils import ExtractionError, extract_safe
+from goalrail.spec.tar_utils import ExtractionError, extract_safe
 
 
 def _create_tar(tmp_path: Path, members: dict[str, bytes | str]) -> Path:

@@ -1,7 +1,7 @@
 """
 Unit tests for the ``sys_terminal_*`` tool family.
 
-Per ``designs/OMNIGENT_TERMINAL_BRIDGE.md`` §8.2, these tests use the
+Per ``designs/GOALRAIL_TERMINAL_BRIDGE.md`` §8.2, these tests use the
 established ``tests/tools/builtins/test_terminal.py`` pattern from
 the deleted legacy suite: monkeypatch
 ``_globals._terminal_registry`` to inject a fresh
@@ -22,16 +22,16 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.conversation import MessageData
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
-from omnigent.runtime import _globals
-from omnigent.spec.types import AgentSpec
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.entities.conversation import MessageData
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
+from goalrail.runtime import _globals
+from goalrail.spec.types import AgentSpec
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.terminals.registry import TerminalRegistry
-from omnigent.tools.base import Tool, ToolContext
-from omnigent.tools.builtins.sys_terminal import (
+from goalrail.terminals.registry import TerminalRegistry
+from goalrail.tools.base import Tool, ToolContext
+from goalrail.tools.builtins.sys_terminal import (
     SysTerminalCloseTool,
     SysTerminalLaunchTool,
     SysTerminalListTool,
@@ -123,7 +123,7 @@ async def cleanup_registry(registry: TerminalRegistry) -> AsyncIterator[None]:
 async def _invoke(tool: Tool, payload: dict[str, object], ctx: ToolContext) -> dict:
     """Drive ``tool.invoke`` via ``asyncio.to_thread`` and decode JSON.
 
-    Mirrors production dispatch: ``omnigent/runtime/workflow.py`` calls
+    Mirrors production dispatch: ``goalrail/runtime/workflow.py`` calls
     ``tool_mgr.call_tool`` inside ``asyncio.to_thread`` so the sync
     ``invoke`` runs on a worker thread (with no event loop), letting
     the tool spin its own ``asyncio.run()`` for async work. Calling
@@ -494,7 +494,7 @@ def test_cwd_resolution_uses_workspace_when_spec_cwd_is_dot(
     """
     Per §4.6: when the spec's ``os_env.cwd`` is the bare ``"."``
     placeholder, the launch falls through to ``ctx.workspace``.
-    This is the load-bearing fix — under Omnigent mode, AP's process
+    This is the load-bearing fix — under Goalrail mode, AP's process
     cwd is meaningless to the agent.
 
     Tests the resolver in isolation by inspecting the resolved
@@ -509,7 +509,7 @@ def test_cwd_resolution_uses_workspace_when_spec_cwd_is_dot(
 
     # Public API doesn't expose the resolution result; we reach
     # in to verify the precedence directly. This is one of the
-    # rare cases the omnigent-testing skill rule-14 ("no
+    # rare cases the goalrail-testing skill rule-14 ("no
     # private method calls") tolerates: the resolver's logic is
     # security-relevant (cwd is the sandbox root anchor) and
     # warrants direct testing rather than only being covered

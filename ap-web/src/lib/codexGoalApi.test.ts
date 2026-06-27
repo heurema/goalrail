@@ -90,7 +90,7 @@ describe("codex goal API", () => {
     );
   });
 
-  it("reads standard nested Omnigent error envelopes", async () => {
+  it("reads standard nested Goalrail error envelopes", async () => {
     const err = await codexGoalApiErrorFromResponse(
       mockJsonResponse(
         { error: { code: "codex_native_goal_failed", message: "runner is asleep" } },

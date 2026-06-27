@@ -8,10 +8,10 @@ description: >-
 # Fact-checker on the Codex harness — deliberately a DIFFERENT vendor than
 # Scribe's claude-sdk brain, so it catches claims the author's own model would
 # wave through. No model is pinned, so it runs on whatever OpenAI provider you
-# configured (`omnigent setup`). Booting this agent needs an OpenAI provider; if
+# configured (`goalrail setup`). Booting this agent needs an OpenAI provider; if
 # none is configured, Scribe finalizes without the cross-check.
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: codex
 
@@ -31,7 +31,7 @@ guardrails:
       type: function
       on: [tool_call]
       function:
-        path: omnigent.inner.nessie.policies.blast_radius
+        path: goalrail.inner.nessie.policies.blast_radius
         arguments:
           gate_pushes: false
 

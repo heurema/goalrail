@@ -4,10 +4,10 @@ The native ``cursor-native`` ("Cursor") wrapper is terminal-first: a real
 ``cursor-agent`` CLI runs in the session terminal, the SPA's **Terminal** view
 attaches to that live TUI over a WebSocket, and the SPA's **Chat** view renders
 the SAME canonical transcript (``GET /v1/sessions/{id}/items``) the TUI prints.
-A native forwarder (:mod:`omnigent.cursor_native_forwarder`) tails
+A native forwarder (:mod:`goalrail.cursor_native_forwarder`) tails
 ``cursor-agent``'s own chat store and mirrors the transcript back OUT as
 conversation items; web-composer messages are injected INTO the TUI's tmux pane
-by :class:`omnigent.inner.cursor_native_executor.CursorNativeExecutor`. This
+by :class:`goalrail.inner.cursor_native_executor.CursorNativeExecutor`. This
 suite asserts that round-trips both ways and renders exactly once — the same
 three properties the codex/claude native forwarders are pinned against
 (:mod:`tests.e2e_ui.messages.test_native_codex_render_parity`):
@@ -43,12 +43,12 @@ CI coverage without a Cursor account
 ------------------------------------
 Because the live test above skips wherever Cursor is not logged in — i.e. on
 every PR — :func:`test_native_cursor_mirror_renders_without_live_agent` covers
-the same Omnigent-owned half (the forwarder mirroring cursor's transcript OUT as
+the same Goalrail-owned half (the forwarder mirroring cursor's transcript OUT as
 conversation items the SPA renders as bubbles) with no live ``cursor-agent`` and
 no LLM. ``cursor-agent`` has no OpenAI-compatible / custom-endpoint shim (see
-``omnigent.inner.cursor_harness``), so it cannot be pointed at the mock LLM the
+``goalrail.inner.cursor_harness``), so it cannot be pointed at the mock LLM the
 custom-agent suites use; instead this test seeds a cursor chat store and runs the
-real :func:`omnigent.cursor_native_forwarder.forward_cursor_store_to_session`
+real :func:`goalrail.cursor_native_forwarder.forward_cursor_store_to_session`
 against the spawned server, so the mirror→server→web path runs on every PR.
 """
 
@@ -70,7 +70,7 @@ import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
-from omnigent import cursor_native_forwarder as fwd
+from goalrail import cursor_native_forwarder as fwd
 
 # Reuse the custom-agent suite's helpers — both surfaces render from the same
 # canonical transcript, so parity / dedup / ordering are asserted identically.
@@ -454,7 +454,7 @@ def test_native_cursor_mirror_renders_without_live_agent(
     """Cursor's forwarder mirrors its chat store into the web chat — in CI.
 
     The live render-parity test above needs a real ``cursor-agent`` + Cursor
-    login, so it skips on every PR. This covers the SAME Omnigent-owned path —
+    login, so it skips on every PR. This covers the SAME Goalrail-owned path —
     the forwarder mirroring cursor's transcript OUT as conversation items the SPA
     renders as bubbles — with no live agent and no LLM: seed a cursor chat store,
     run the real ``forward_cursor_store_to_session`` against the spawned server,

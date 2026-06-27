@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from omnigent.llms.adapters.openai import (
+from goalrail.llms.adapters.openai import (
     OpenAIAdapter,
     OpenAICompatibleAdapter,
     _parse_sse_line,
 )
-from omnigent.llms.types import ResponseTextDeltaEvent
+from goalrail.llms.types import ResponseTextDeltaEvent
 
 # ── Payload building ─────────────────────────────────────
 
@@ -283,7 +283,7 @@ def test_stream_responses_decodes_utf8_split_across_chunks() -> None:
 
 
 def test_resolve_base_url_override_wins() -> None:
-    from omnigent.llms.adapters.openai import _resolve_base_url
+    from goalrail.llms.adapters.openai import _resolve_base_url
 
     assert (
         _resolve_base_url("https://custom.api/v1/", "https://default.api/v1")
@@ -292,16 +292,16 @@ def test_resolve_base_url_override_wins() -> None:
 
 
 def test_resolve_base_url_falls_back_to_default() -> None:
-    from omnigent.llms.adapters.openai import _resolve_base_url
+    from goalrail.llms.adapters.openai import _resolve_base_url
 
     assert _resolve_base_url(None, "https://default.api/v1") == "https://default.api/v1"
 
 
 def test_resolve_base_url_raises_when_both_none() -> None:
-    from omnigent.errors import OmnigentError
-    from omnigent.llms.adapters.openai import _resolve_base_url
+    from goalrail.errors import GoalrailError
+    from goalrail.llms.adapters.openai import _resolve_base_url
 
-    with pytest.raises(OmnigentError, match="base_url"):
+    with pytest.raises(GoalrailError, match="base_url"):
         _resolve_base_url(None, None)
 
 
@@ -309,7 +309,7 @@ def test_resolve_base_url_raises_when_both_none() -> None:
 
 
 def test_to_responses_tools_flattens_chat_format() -> None:
-    from omnigent.llms.adapters.openai import _to_responses_tools
+    from goalrail.llms.adapters.openai import _to_responses_tools
 
     tools = [
         {
@@ -332,7 +332,7 @@ def test_to_responses_tools_flattens_chat_format() -> None:
 
 
 def test_to_responses_tools_passes_through_responses_format() -> None:
-    from omnigent.llms.adapters.openai import _to_responses_tools
+    from goalrail.llms.adapters.openai import _to_responses_tools
 
     tools = [
         {
@@ -346,7 +346,7 @@ def test_to_responses_tools_passes_through_responses_format() -> None:
 
 
 def test_to_responses_tools_no_description() -> None:
-    from omnigent.llms.adapters.openai import _to_responses_tools
+    from goalrail.llms.adapters.openai import _to_responses_tools
 
     tools = [
         {
@@ -365,8 +365,8 @@ def test_to_responses_tools_no_description() -> None:
 
 
 def test_parse_responses_output_message() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_output
-    from omnigent.llms.types import MessageOutput
+    from goalrail.llms.adapters.openai import _parse_responses_output
+    from goalrail.llms.types import MessageOutput
 
     items = [
         {
@@ -381,8 +381,8 @@ def test_parse_responses_output_message() -> None:
 
 
 def test_parse_responses_output_function_call() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_output
-    from omnigent.llms.types import FunctionCallOutput
+    from goalrail.llms.adapters.openai import _parse_responses_output
+    from goalrail.llms.types import FunctionCallOutput
 
     items = [
         {
@@ -400,8 +400,8 @@ def test_parse_responses_output_function_call() -> None:
 
 
 def test_parse_responses_output_native_tool() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_output
-    from omnigent.llms.types import NativeToolOutput
+    from goalrail.llms.adapters.openai import _parse_responses_output
+    from goalrail.llms.types import NativeToolOutput
 
     items = [
         {
@@ -417,8 +417,8 @@ def test_parse_responses_output_native_tool() -> None:
 
 
 def test_parse_responses_output_reasoning_item() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_output
-    from omnigent.llms.types import NativeToolOutput
+    from goalrail.llms.adapters.openai import _parse_responses_output
+    from goalrail.llms.types import NativeToolOutput
 
     items = [
         {
@@ -432,7 +432,7 @@ def test_parse_responses_output_reasoning_item() -> None:
 
 
 def test_parse_responses_output_ignores_unknown_type() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_output
+    from goalrail.llms.adapters.openai import _parse_responses_output
 
     items = [{"type": "unknown_future_type", "data": "something"}]
     output = _parse_responses_output(items)
@@ -443,8 +443,8 @@ def test_parse_responses_output_ignores_unknown_type() -> None:
 
 
 def test_parse_responses_response_full() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_response
-    from omnigent.llms.types import MessageOutput, Usage
+    from goalrail.llms.adapters.openai import _parse_responses_response
+    from goalrail.llms.types import MessageOutput, Usage
 
     data = {
         "model": "gpt-5.4",
@@ -467,15 +467,15 @@ def test_parse_responses_response_full() -> None:
 
 
 def test_parse_responses_response_missing_model_raises() -> None:
-    from omnigent.errors import OmnigentError
-    from omnigent.llms.adapters.openai import _parse_responses_response
+    from goalrail.errors import GoalrailError
+    from goalrail.llms.adapters.openai import _parse_responses_response
 
-    with pytest.raises(OmnigentError, match="model"):
+    with pytest.raises(GoalrailError, match="model"):
         _parse_responses_response({"output": []})
 
 
 def test_parse_responses_response_no_usage() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_response
+    from goalrail.llms.adapters.openai import _parse_responses_response
 
     data = {"model": "gpt-5.4", "output": []}
     resp = _parse_responses_response(data)
@@ -486,8 +486,8 @@ def test_parse_responses_response_no_usage() -> None:
 
 
 def test_parse_responses_event_text_delta() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import ResponseTextDeltaEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import ResponseTextDeltaEvent
 
     event = _parse_responses_event("response.output_text.delta", {"delta": "Hello"})
     assert isinstance(event, ResponseTextDeltaEvent)
@@ -495,8 +495,8 @@ def test_parse_responses_event_text_delta() -> None:
 
 
 def test_parse_responses_event_reasoning_delta() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import ResponseReasoningTextDeltaEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import ResponseReasoningTextDeltaEvent
 
     event = _parse_responses_event("response.reasoning_text.delta", {"delta": "thinking"})
     assert isinstance(event, ResponseReasoningTextDeltaEvent)
@@ -504,8 +504,8 @@ def test_parse_responses_event_reasoning_delta() -> None:
 
 
 def test_parse_responses_event_reasoning_summary_delta() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import ResponseReasoningSummaryTextDeltaEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import ResponseReasoningSummaryTextDeltaEvent
 
     event = _parse_responses_event("response.reasoning_summary_text.delta", {"delta": "summary"})
     assert isinstance(event, ResponseReasoningSummaryTextDeltaEvent)
@@ -513,16 +513,16 @@ def test_parse_responses_event_reasoning_summary_delta() -> None:
 
 
 def test_parse_responses_event_reasoning_started() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import ResponseReasoningStartedEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import ResponseReasoningStartedEvent
 
     event = _parse_responses_event("response.output_item.added", {"item": {"type": "reasoning"}})
     assert isinstance(event, ResponseReasoningStartedEvent)
 
 
 def test_parse_responses_event_native_tool_done() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import NativeToolOutputAddedEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import NativeToolOutputAddedEvent
 
     event = _parse_responses_event(
         "response.output_item.done",
@@ -533,8 +533,8 @@ def test_parse_responses_event_native_tool_done() -> None:
 
 
 def test_parse_responses_event_reasoning_done() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import NativeToolOutputAddedEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import NativeToolOutputAddedEvent
 
     event = _parse_responses_event(
         "response.output_item.done",
@@ -544,8 +544,8 @@ def test_parse_responses_event_reasoning_done() -> None:
 
 
 def test_parse_responses_event_completed() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
-    from omnigent.llms.types import ResponseCompletedEvent
+    from goalrail.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.types import ResponseCompletedEvent
 
     event = _parse_responses_event(
         "response.completed",
@@ -567,14 +567,14 @@ def test_parse_responses_event_completed() -> None:
 
 
 def test_parse_responses_event_unknown_returns_none() -> None:
-    from omnigent.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.adapters.openai import _parse_responses_event
 
     assert _parse_responses_event("response.some_future_event", {}) is None
 
 
 def test_parse_responses_event_non_reasoning_item_added_returns_none() -> None:
     """output_item.added for non-reasoning types returns None."""
-    from omnigent.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.adapters.openai import _parse_responses_event
 
     event = _parse_responses_event("response.output_item.added", {"item": {"type": "message"}})
     assert event is None
@@ -582,7 +582,7 @@ def test_parse_responses_event_non_reasoning_item_added_returns_none() -> None:
 
 def test_parse_responses_event_non_native_item_done_returns_none() -> None:
     """output_item.done for non-native types returns None."""
-    from omnigent.llms.adapters.openai import _parse_responses_event
+    from goalrail.llms.adapters.openai import _parse_responses_event
 
     event = _parse_responses_event("response.output_item.done", {"item": {"type": "message"}})
     assert event is None

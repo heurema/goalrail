@@ -1,8 +1,8 @@
 """Tests for the ``runtime: server | client`` tool-spec field.
 
-Covers the end-to-end contract — YAML parser (via the omnigent
+Covers the end-to-end contract — YAML parser (via the goalrail
 inner-stack loader, which is the entry point every YAML spec
-flows through today), the spec translator, and the omnigent
+flows through today), the spec translator, and the goalrail
 validator. The runtime path that emits ``action_required`` for
 client-runtime tools lives in a separate stack and is intentionally
 not exercised here.
@@ -12,15 +12,15 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.inner.loader import load_agent_def
-from omnigent.inner.tools import FunctionTool
-from omnigent.spec.types import (
+from goalrail.inner.loader import load_agent_def
+from goalrail.inner.tools import FunctionTool
+from goalrail.spec.types import (
     AgentSpec,
     ExecutorSpec,
     LocalToolInfo,
     ToolRuntime,
 )
-from omnigent.spec.validator import validate
+from goalrail.spec.validator import validate
 
 
 def _load_tool(name: str, tool_data: object) -> FunctionTool:
@@ -67,7 +67,7 @@ def _minimal_spec(**overrides: object) -> AgentSpec:
 
 
 # ---------------------------------------------------------------
-# Parser (omnigent inner-stack loader) coverage.
+# Parser (goalrail inner-stack loader) coverage.
 # ---------------------------------------------------------------
 
 

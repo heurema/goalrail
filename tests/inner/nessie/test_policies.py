@@ -1,6 +1,6 @@
 """Unit tests for nessie's bounds + blast-radius policies.
 
-These exercise the real :mod:`omnigent.inner.nessie.policies` evaluator
+These exercise the real :mod:`goalrail.inner.nessie.policies` evaluator
 logic. The callables take and return plain dicts, so no mocks are needed —
 the tests construct real V0 event dicts and assert on the decision. Each
 test fails if the corresponding guard regresses (a command mis-classified,
@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.nessie.policies import (
+from goalrail.inner.nessie.policies import (
     blast_radius,
     headless_subagent_purpose_guard,
     spawn_bounds,
@@ -401,7 +401,7 @@ def test_worktree_guard_blocks_escapes(path: str, expected: str) -> None:
         # Claude native Edit also uses ``file_path``.
         ("Edit", "file_path", "main.py", "ALLOW"),
         ("Edit", "file_path", "~/.bashrc", "DENY"),
-        # Pi native write/edit (lowercase) use ``path`` (Omnigent convention).
+        # Pi native write/edit (lowercase) use ``path`` (Goalrail convention).
         ("write", "path", "src/app.py", "ALLOW"),
         ("write", "path", "/etc/passwd", "DENY"),
         ("edit", "path", "../escape.py", "DENY"),
@@ -433,7 +433,7 @@ def test_worktree_guard_gates_native_write_edit(
 
     :param tool: Native tool name, e.g. ``"Write"``.
     :param path_key: The argument key carrying the file path (``"file_path"``
-        for Claude native, ``"path"`` for Omnigent built-in).
+        for Claude native, ``"path"`` for Goalrail built-in).
     :param path: The file path value to test.
     :param expected: ``"ALLOW"`` or ``"DENY"``.
     """

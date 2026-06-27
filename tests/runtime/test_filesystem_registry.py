@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.runtime.filesystem_registry`.
+"""Tests for :mod:`goalrail.runtime.filesystem_registry`.
 
 Covers the ``list_changed_files`` merge logic for :class:`AgentEditFilesystemRegistry`
 — specifically the invariant that a file first created in a session keeps status
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.filesystem_registry import (
+from goalrail.runtime.filesystem_registry import (
     AgentEditFilesystemRegistry,
     GitFilesystemRegistry,
     _normalize_path,

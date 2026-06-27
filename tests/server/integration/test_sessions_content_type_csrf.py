@@ -276,7 +276,7 @@ async def test_mcp_proxy_reached_with_application_json(
     body = resp.json()
     # JSON-RPC envelope echoed back → the handler ran, not the gate.
     assert body["id"] == 1
-    assert body["result"]["serverInfo"]["name"] == "omnigent-mcp-proxy"
+    assert body["result"]["serverInfo"]["name"] == "goalrail-mcp-proxy"
 
 
 # ── create_session: JSON and multipart both work; text/plain is 415 ──

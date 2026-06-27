@@ -49,24 +49,24 @@
 # Usage:
 #   # Read-only cwd should let the agent inspect this repo but reject
 #   # any write attempt:
-#   uv run omnigent examples/agent_with_os_env_bwrap.yaml \
+#   uv run goalrail examples/agent_with_os_env_bwrap.yaml \
 #       --profile <profile> \
 #       --prompt "List files in cwd with ls -la, then try to write 'x' to a file named blocked.txt and report what happens."
 #
 #   # Dotfile masking smoke test — even with shell access the agent
 #   # cannot read host secrets that live behind dotfiles:
-#   uv run omnigent examples/agent_with_os_env_bwrap.yaml \
+#   uv run goalrail examples/agent_with_os_env_bwrap.yaml \
 #       --profile <profile> \
 #       --prompt "Try to cat .env, .git/config, and ~/.aws/credentials. Report exactly what each command prints."
 #
 #   # Writable scratch tmpdir — the agent can build artifacts under
 #   # $TMPDIR even though cwd is read-only:
-#   uv run omnigent examples/agent_with_os_env_bwrap.yaml \
+#   uv run goalrail examples/agent_with_os_env_bwrap.yaml \
 #       --profile <profile> \
 #       --prompt "Use sys_os_shell to write 'hello' to \$TMPDIR/note.txt, then read it back."
 #
 #   # Seccomp smoke test — nested namespaces are blocked:
-#   uv run omnigent examples/agent_with_os_env_bwrap.yaml \
+#   uv run goalrail examples/agent_with_os_env_bwrap.yaml \
 #       --profile <profile> \
 #       --prompt "Run python3 -c \"import ctypes,os; libc=ctypes.CDLL(None,use_errno=True); rc=libc.unshare(0x10000000); print(rc, os.strerror(ctypes.get_errno()))\" and report the output."
 #

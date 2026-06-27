@@ -5,13 +5,13 @@ What goes wrong
 
 When test code writes::
 
-    with patch("omnigent.tools.mcp.asyncio.sleep", new_callable=AsyncMock):
+    with patch("goalrail.tools.mcp.asyncio.sleep", new_callable=AsyncMock):
         ...
 
 ``unittest.mock``'s dotted-path resolver walks:
 
-1. ``import omnigent.tools.mcp``
-2. ``getattr(omnigent.tools.mcp, "asyncio")`` -> returns the
+1. ``import goalrail.tools.mcp``
+2. ``getattr(goalrail.tools.mcp, "asyncio")`` -> returns the
    ``asyncio`` module singleton (because production code did
    ``import asyncio`` at module top).
 3. ``setattr(asyncio_module, "sleep", mock)`` -> globally clobbers
@@ -150,7 +150,7 @@ def _is_monkeypatch_setattr(func: ast.expr) -> bool:
 def _attribute_ends_in_asyncio(node: ast.expr) -> bool:
     """Return True if ``node`` is an attribute access ending in ``.asyncio``.
 
-    e.g. matches ``mcp_mod.asyncio`` and ``omnigent.tools.mcp.asyncio``.
+    e.g. matches ``mcp_mod.asyncio`` and ``goalrail.tools.mcp.asyncio``.
     """
     return isinstance(node, ast.Attribute) and node.attr == "asyncio"
 

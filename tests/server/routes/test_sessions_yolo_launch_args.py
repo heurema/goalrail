@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.server.routes.sessions import _derive_terminal_launch_args_from_spec
-from omnigent.spec.types import AgentSpec, ExecutorSpec
+from goalrail.server.routes.sessions import _derive_terminal_launch_args_from_spec
+from goalrail.spec.types import AgentSpec, ExecutorSpec
 
 
 def _spec_with_config(config: dict[str, str]) -> AgentSpec:
@@ -37,7 +37,7 @@ def _spec_with_config(config: dict[str, str]) -> AgentSpec:
     return AgentSpec(
         spec_version=1,
         name="impl",
-        executor=ExecutorSpec(type="omnigent", config=config),
+        executor=ExecutorSpec(type="goalrail", config=config),
     )
 
 

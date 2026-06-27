@@ -11,7 +11,7 @@
 #
 # Usage:
 #   cd your-project/
-#   .venv/bin/python -m omnigent examples/terminal_workers.yaml
+#   .venv/bin/python -m goalrail examples/terminal_workers.yaml
 #
 # Example prompts:
 #   "Launch a worker and have it read the README"

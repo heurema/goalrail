@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from omnigent.db.db_models import SqlHost
-from omnigent.db.utils import get_or_create_engine, now_epoch
-from omnigent.stores.host_store import (
+from goalrail.db.db_models import SqlHost
+from goalrail.db.utils import get_or_create_engine, now_epoch
+from goalrail.stores.host_store import (
     HOST_LIVENESS_TTL_S,
     Host,
     HostStore,
@@ -140,7 +140,7 @@ def test_upsert_reconnect_overwrites_and_nulls_configured_harnesses(
         owner="alice@example.com",
         configured_harnesses={"codex": False},
     )
-    # Reconnect with fresh values — the user ran `omnigent setup`.
+    # Reconnect with fresh values — the user ran `goalrail setup`.
     host_store.upsert_on_connect(
         host_id="host_ch2",
         name="laptop2",
@@ -213,7 +213,7 @@ def test_reconnect_with_rotated_host_id_repoints_bound_conversations(
     (b) repoint the conversation to the new host_id so its binding
     survives the rotation.
     """
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from goalrail.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
 
@@ -264,7 +264,7 @@ def test_reown_host_id_across_owner_change_preserves_conversation_binding(
     place — keeping the host_id and its conversation binding — instead of
     colliding on the host_id UNIQUE constraint.
     """
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from goalrail.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
 
@@ -811,7 +811,7 @@ def test_managed_host_raw_token_never_stored(db_uri: str) -> None:
     """
     from sqlalchemy import select
 
-    from omnigent.stores.host_store import hash_host_launch_token
+    from goalrail.stores.host_store import hash_host_launch_token
 
     store = HostStore(db_uri)
     store.register_managed_host(

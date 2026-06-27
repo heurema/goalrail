@@ -38,7 +38,6 @@ import { GooseIcon } from "@/components/icons/GooseIcon";
 import { KimiIcon } from "@/components/icons/KimiIcon";
 import { NessieIcon } from "@/components/icons/NessieIcon";
 import { OpenCodeIcon } from "@/components/icons/OpenCodeIcon";
-import { OttoIcon } from "@/components/icons/OttoIcon";
 import { PiIcon } from "@/components/icons/PiIcon";
 import { RunningDot } from "@/components/RunningDot";
 import { MAX_TREE_DEPTH, useChildSessions, type ChildSessionInfo } from "@/hooks/useChildSessions";
@@ -262,7 +261,7 @@ const SETTLED_STATE: Record<AgentActivity, boolean> = {
  * role at a glance (Claude Code spawns many same-type "Explore" agents — the
  * icon distinguishes roles; the preview line below distinguishes instances).
  * Category icons are monochrome — the row applies the muted color; the
- * fallback is the full-color Otto (starfish) mascot.
+ * fallback is the generic bot glyph.
  *
  * @param tool - The agent type, e.g. ``"Explore"`` or ``"researcher"``;
  *   ``null`` when the child carries no type.
@@ -285,7 +284,7 @@ export function iconForAgentType(tool: string | null): AgentRowIcon {
   ) {
     return Code2Icon;
   }
-  return OttoIcon;
+  return BotIcon;
 }
 
 /**
@@ -297,7 +296,7 @@ export function iconForAgentType(tool: string | null): AgentRowIcon {
  *
  * Only full native sessions get the brand glyph. *Sub-agent* wrapper
  * children (``…-subagent``) deliberately fall through to the role icons
- * (and the Otto fallback) — a native session's sub-agents are all the
+ * (and the generic fallback) — a native session's sub-agents are all the
  * same brand, so repeating the logo down the tree says nothing, while
  * role icons distinguish what each one is doing.
  *
@@ -466,7 +465,7 @@ function mainMessagePreview(items: SessionItem[] | undefined): string | null {
  * Resolve a session's brand icon from its native-wrapper ``iconKind``
  * (authoritative for native-terminal sessions) with a harness-substring
  * fallback for plain SDK sessions that carry no wrapper label — e.g.
- * ``omni --harness kimi``, whose ``harness: "kimi"`` would otherwise fall
+ * ``goalrail --harness kimi``, whose ``harness: "kimi"`` would otherwise fall
  * through to the generic bot. Mirrors ``iconForAgent`` in ``AgentCard.tsx``.
  */
 function iconForWrapperOrHarness(

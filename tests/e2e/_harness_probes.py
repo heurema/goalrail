@@ -9,7 +9,7 @@ up (``[claude-sdk]``, ``[codex]``, etc.) and a per-harness failure
 is visible without re-reading the parametrize tuple.
 
 Add a new entry here when a new harness wrap lands in
-:data:`omnigent.runtime.harnesses._HARNESS_MODULES`. Every
+:data:`goalrail.runtime.harnesses._HARNESS_MODULES`. Every
 parametrized e2e test then picks up the new harness without
 per-file edits.
 """
@@ -72,7 +72,7 @@ class HarnessProbe:
 # 4c: codex, 4d: pi; 4e is pending).
 #
 # Probe models resolve at import time with a stable per-harness key,
-# so the OMNIGENT_TEST_MODEL_* env vars can rebalance a harness's
+# so the GOALRAIL_TEST_MODEL_* env vars can rebalance a harness's
 # rows without code edits; pools stay within the API style each
 # harness supports.
 HARNESS_PROBES: list[HarnessProbe] = [
@@ -114,7 +114,7 @@ HARNESS_PROBES: list[HarnessProbe] = [
         # natural fit per CLAUDE.md (``databricks-gpt-5-4-mini``
         # is the OpenAI-style Databricks model). Registry key is
         # ``openai-agents`` (not ``-sdk``) to match the
-        # Omnigent YAML ``executor.harness`` spelling.
+        # Goalrail YAML ``executor.harness`` spelling.
         model=resolve_model("databricks-gpt-5-4-mini", key="probe:openai-agents"),
         env_prefix="HARNESS_OPENAI_AGENTS_",
         marker="OPENAI_AGENTS_E2E_OK",

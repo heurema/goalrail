@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 
 import pytest
-from omnigent_client._blocks import (
+from goalrail_client._blocks import (
     BlockContext,
     ErrorBlock,
     ReasoningBlock,
@@ -23,13 +23,13 @@ from omnigent_client._blocks import (
     ToolExecution,
     ToolGroup,
 )
-from omnigent_ui_sdk.terminal._formatter import (
+from goalrail_ui_sdk.terminal._formatter import (
     RichBlockFormatter,
     StreamingText,
     StreamLive,
     StreamReplace,
 )
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from goalrail_ui_sdk.terminal._host import TerminalHost
 
 # ── Helpers ─────────────────────────────────────────────────────
 
@@ -408,7 +408,7 @@ def test_pipeline_streaming_text_linkifies_urls_on_word_wrap(
     """
     host = TerminalHost(model_name="test")
     # Force a narrow terminal so the text wraps.
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 40)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 40)
     # Build text longer than 40 cols with a URL near the start.
     text = "See https://example.com " + "x" * 60
     host.output(StreamingText(text=text))

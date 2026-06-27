@@ -23,13 +23,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-import omnigent.server.routes.sessions as sessions_routes
-from omnigent.server.auth import LEVEL_OWNER, UnifiedAuthProvider
-from omnigent.server.routes.sessions import SessionLiveness, create_sessions_router
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+import goalrail.server.routes.sessions as sessions_routes
+from goalrail.server.auth import LEVEL_OWNER, UnifiedAuthProvider
+from goalrail.server.routes.sessions import SessionLiveness, create_sessions_router
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 ALICE = "alice@example.com"
 BOB = "bob@example.com"
@@ -445,7 +445,7 @@ def test_watch_set_truncated_at_cap(
     s1 = _seed_session(stores, owner=ALICE, title="one")
     s2 = _seed_session(stores, owner=ALICE, title="two")
     s3 = _seed_session(stores, owner=ALICE, title="three")
-    with caplog.at_level(logging.WARNING, logger="omnigent.server.routes.sessions"):
+    with caplog.at_level(logging.WARNING, logger="goalrail.server.routes.sessions"):
         with TestClient(app).websocket_connect(
             "/v1/sessions/updates", headers={"X-Forwarded-Email": ALICE}
         ) as ws:
@@ -601,7 +601,7 @@ def comment_clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """
     state = {"now": 1_000}
     monkeypatch.setattr(
-        "omnigent.stores.comment_store.sqlalchemy_store.now_epoch_us",
+        "goalrail.stores.comment_store.sqlalchemy_store.now_epoch_us",
         lambda: state["now"] * _US,
     )
     return state

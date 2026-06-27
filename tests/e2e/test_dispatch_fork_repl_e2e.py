@@ -1,5 +1,5 @@
 """
-PTY-driven e2e: ``omnigent run --harness <harness>`` returns
+PTY-driven e2e: ``goalrail run --harness <harness>`` returns
 the LLM's reply through the new harness contract (mock LLM).
 
 Why this test exists: it covers the interactive CLI path that
@@ -135,12 +135,12 @@ def repl_env(mock_llm_server_url: str, tmp_path: Path) -> dict[str, str]:
     process's LLM calls are answered by the mock without real credentials.
 
     :param mock_llm_server_url: Mock LLM server base URL.
-    :param tmp_path: Isolated temp directory for OMNIGENT_CONFIG_HOME.
+    :param tmp_path: Isolated temp directory for GOALRAIL_CONFIG_HOME.
     :returns: Env mapping for ``pexpect.spawn``.
     """
-    from tests.e2e.omnigent._pexpect_harness import ensure_repl_test_theme_env
+    from tests.e2e.goalrail._pexpect_harness import ensure_repl_test_theme_env
 
-    config_home = tmp_path / "omnigent-config"
+    config_home = tmp_path / "goalrail-config"
     config_home.mkdir()
     (config_home / "config.yaml").write_text(
         "auth:\n  type: none\n",
@@ -148,9 +148,9 @@ def repl_env(mock_llm_server_url: str, tmp_path: Path) -> dict[str, str]:
     )
     env = {
         **os.environ,
-        "OMNIGENT_CONFIG_HOME": str(config_home),
+        "GOALRAIL_CONFIG_HOME": str(config_home),
         # PYTHONPATH so the worktree wins over any sibling
-        # editable install of omnigent.
+        # editable install of goalrail.
         "PYTHONPATH": (f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}"),
         # Force ANSI on; we strip it per-assertion via _ANSI_RE.
         "TERM": "xterm-256color",
@@ -182,7 +182,7 @@ def test_repl_run_routes_harness_through_new_harness_contract(
     mock_llm_server_url: str,
 ) -> None:
     """
-    Drive the full ``omnigent run --harness <harness>``
+    Drive the full ``goalrail run --harness <harness>``
     flow under a PTY and verify the mock LLM's reply comes back.
 
     Verifies the path that the HTTP-only e2e tests miss:
@@ -192,9 +192,9 @@ def test_repl_run_routes_harness_through_new_harness_contract(
     2. It spawns a local Goalrail server subprocess.
     3. It uploads the spec via ``/api/agents``.
     4. The Goalrail server's ``_create_executor`` sees an
-       ``executor.type == "omnigent"`` +
+       ``executor.type == "goalrail"`` +
        ``config.harness == <harness>`` spec (after the
-       omnigent-YAML translator runs) and dispatches to
+       goalrail-YAML translator runs) and dispatches to
        the harness HTTP client via the step-5f branch.
     5. The mock LLM replies with ``XYZZY42`` which streams back
        through SSE → the REPL's SDK client → terminal rendering.
@@ -224,7 +224,7 @@ def test_repl_run_routes_harness_through_new_harness_contract(
         sys.executable,
         [
             "-m",
-            "omnigent.cli",
+            "goalrail.cli",
             "run",
             "tests/resources/examples/hello_world.yaml",
             "--harness",
@@ -284,7 +284,7 @@ def test_repl_pexpect_dependencies_are_present() -> None:
     # Trivially true; the load-time import-or-skip is what
     # matters.
     assert pexpect is not None
-    # Sanity that ``omnigent`` is importable from this
+    # Sanity that ``goalrail`` is importable from this
     # worktree — if it isn't, the REPL spawn would fail with
     # a confusing ``ModuleNotFoundError`` instead of a clean
     # skip on missing fixtures. ``shutil.which`` is irrelevant

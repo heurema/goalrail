@@ -2,7 +2,7 @@
 
 import pytest
 
-from omnigent.llms.adapters._content import parse_data_uri
+from goalrail.llms.adapters._content import parse_data_uri
 
 
 def test_parse_data_uri_png() -> None:

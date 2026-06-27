@@ -5,8 +5,8 @@
 // specific fields directly alongside the common ones (`id`, `type`,
 // `response_id`, `status`), with no nested `{type, data}` wrapper.
 //
-// Source of truth for the shape: `omnigent/entities/conversation.py`
-// + `omnigent/server/routes/conversations.py:54-67` (`to_api_dict`).
+// Source of truth for the shape: `goalrail/entities/conversation.py`
+// + `goalrail/server/routes/conversations.py:54-67` (`to_api_dict`).
 //
 // We model only the fields the renderer needs. Unknown future types are
 // passed through silently as `BaseItem & Record<string, unknown>` so the

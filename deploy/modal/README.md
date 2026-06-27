@@ -33,12 +33,12 @@ Heroku or Cloudflare.
 
 ```bash
 # 1. One secret bundle with the three required values. The app URL is
-#    deterministic: https://<workspace>--omnigent-server.modal.run
+#    deterministic: https://<workspace>--goalrail-server.modal.run
 #    (your workspace name is shown by `modal profile current`).
-modal secret create omnigent-deploy \
+modal secret create goalrail-deploy \
   DATABASE_URL='postgres://…neon.tech/…' \
-  OMNIGENT_ACCOUNTS_COOKIE_SECRET="$(openssl rand -hex 32)" \
-  OMNIGENT_ACCOUNTS_BASE_URL='https://<workspace>--omnigent-server.modal.run'
+  GOALRAIL_ACCOUNTS_COOKIE_SECRET="$(openssl rand -hex 32)" \
+  GOALRAIL_ACCOUNTS_BASE_URL='https://<workspace>--goalrail-server.modal.run'
 
 # 2. Ship it.
 modal deploy deploy/modal/modal_app.py
@@ -53,7 +53,7 @@ The first boot runs DB migrations over the network (~1 minute on Neon).
 **Get the admin password:** the first boot prints it to the app log:
 
 ```bash
-modal app logs omnigent
+modal app logs goalrail
 ```
 
 ```
@@ -64,8 +64,8 @@ modal app logs omnigent
 Log in as the admin and invite teammates from **Members** in the web UI.
 
 > To set a known admin password instead, add
-> `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD=<password>` to the
-> `omnigent-deploy` secret before the first deploy.
+> `GOALRAIL_ACCOUNTS_INIT_ADMIN_PASSWORD=<password>` to the
+> `goalrail-deploy` secret before the first deploy.
 
 ### Modal-specific caveats
 
@@ -88,19 +88,19 @@ Log in as the admin and invite teammates from **Members** in the web UI.
 
 ### Use your own IdP instead (OIDC)
 
-Add the OIDC values to the `omnigent-deploy` secret (Modal secrets are
+Add the OIDC values to the `goalrail-deploy` secret (Modal secrets are
 key-value bundles; `modal secret create` with the same name replaces it)
 and redeploy:
 
 ```bash
-modal secret create omnigent-deploy \
+modal secret create goalrail-deploy \
   DATABASE_URL='…' \
-  OMNIGENT_AUTH_PROVIDER=oidc \
-  OMNIGENT_OIDC_ISSUER='https://github.com' \
-  OMNIGENT_OIDC_CLIENT_ID='…' \
-  OMNIGENT_OIDC_CLIENT_SECRET='…' \
-  OMNIGENT_OIDC_REDIRECT_URI='https://<workspace>--omnigent-server.modal.run/auth/callback' \
-  OMNIGENT_OIDC_COOKIE_SECRET="$(openssl rand -hex 32)"
+  GOALRAIL_AUTH_PROVIDER=oidc \
+  GOALRAIL_OIDC_ISSUER='https://github.com' \
+  GOALRAIL_OIDC_CLIENT_ID='…' \
+  GOALRAIL_OIDC_CLIENT_SECRET='…' \
+  GOALRAIL_OIDC_REDIRECT_URI='https://<workspace>--goalrail-server.modal.run/auth/callback' \
+  GOALRAIL_OIDC_COOKIE_SECRET="$(openssl rand -hex 32)"
 ```
 
 The IdP registration steps (GitHub / Google / Okta callback URLs, domain
@@ -109,15 +109,15 @@ allow-listing) are identical to the other platforms — see
 
 ### Custom domain
 
-Pass `custom_domains=["omnigent.example.com"]` to `@modal.web_server`
+Pass `custom_domains=["goalrail.example.com"]` to `@modal.web_server`
 in `modal_app.py` (requires a paid Modal plan), point your DNS at Modal
-per the printed instructions, and update `OMNIGENT_ACCOUNTS_BASE_URL`
+per the printed instructions, and update `GOALRAIL_ACCOUNTS_BASE_URL`
 (or the OIDC redirect URI) to match.
 
 ### Upgrading
 
 `modal deploy deploy/modal/modal_app.py` again — Modal re-resolves
-`ghcr.io/omnigent-ai/omnigent-server:latest`, so a redeploy is an
+`ghcr.io/heurema/goalrail-server:latest`, so a redeploy is an
 upgrade. The rollout replaces the container; runners reconnect.
 
 ### Cost
@@ -149,7 +149,7 @@ not minutes.
 ### Sandbox prerequisites
 
 ```bash
-pip install 'omnigent[modal]'   # installs the modal SDK extra
+pip install 'goalrail[modal]'   # installs the modal SDK extra
 modal token new                  # one-time browser auth with Modal
 ```
 
@@ -160,7 +160,7 @@ flow), Modal credentials must be available — either that file or the
 
 ### The host image
 
-Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, an image
+Sandboxes boot from `ghcr.io/heurema/goalrail-host:latest`, an image
 published by CI from the `host` target of
 [`deploy/docker/Dockerfile`](../docker/Dockerfile) with Goalrail
 and its dependencies preinstalled — including the coding-harness CLIs
@@ -172,14 +172,14 @@ same target and push it anywhere Modal can pull from:
 
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/goalrail-host:latest .
+docker push docker.io/<you>/goalrail-host:latest
 ```
 
-Then point Goalrail at it — `OMNIGENT_MODAL_HOST_IMAGE` for the CLI
+Then point Goalrail at it — `GOALRAIL_MODAL_HOST_IMAGE` for the CLI
 flow, or `sandbox.modal.image` in the server config for the managed
 flow (see below). For private registries, set
-`OMNIGENT_MODAL_REGISTRY_SECRET` to the name of a
+`GOALRAIL_MODAL_REGISTRY_SECRET` to the name of a
 [Modal secret](https://modal.com/secrets) containing
 `REGISTRY_USERNAME` / `REGISTRY_PASSWORD`.
 
@@ -230,14 +230,14 @@ present credentials when it dials back to a server that requires
 authentication. The interactive `goalrail login` browser flow can't
 run inside a sandbox, so inject the keys for the relevant server
 instead: park them in a [Modal secret](https://modal.com/secrets) and
-name it in `OMNIGENT_MODAL_SANDBOX_SECRETS` (comma-separated) before
+name it in `GOALRAIL_MODAL_SANDBOX_SECRETS` (comma-separated) before
 running `create`:
 
 ```bash
-modal secret create omnigent-server-auth \
+modal secret create goalrail-server-auth \
   DATABRICKS_HOST=https://example.databricks.com \
   DATABRICKS_TOKEN=<your-pat>
-export OMNIGENT_MODAL_SANDBOX_SECRETS=omnigent-server-auth
+export GOALRAIL_MODAL_SANDBOX_SECRETS=goalrail-server-auth
 goalrail sandbox create --provider modal
 ```
 
@@ -253,7 +253,7 @@ and neither do [server-managed sandboxes](#server-managed-sandboxes) —
 those authenticate with a server-minted per-launch token automatically.
 
 (The same env var also carries LLM / git credentials for CLI-launched
-sandboxes — any secret named in `OMNIGENT_MODAL_SANDBOX_SECRETS` lands
+sandboxes — any secret named in `GOALRAIL_MODAL_SANDBOX_SECRETS` lands
 in the sandbox environment, exactly like `sandbox.modal.secrets` does
 for managed launches.)
 
@@ -298,8 +298,8 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    image: docker.io/<you>/omnigent-host:latest   # default: official image
-    secrets: [omnigent-llm]                       # Modal secrets to inject
+    image: docker.io/<you>/goalrail-host:latest   # default: official image
+    secrets: [goalrail-llm]                       # Modal secrets to inject
 ```
 
 ### LLM credentials for managed sandboxes
@@ -311,7 +311,7 @@ sandbox, and the in-sandbox host forwards the standard harness
 credential vars to its runners:
 
 ```bash
-modal secret create omnigent-llm \
+modal secret create goalrail-llm \
   ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
 ```
 
@@ -358,7 +358,7 @@ Common setups:
   the same way via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`.
 
 For env vars beyond the standard set, add
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the secret — the
+`GOALRAIL_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the secret — the
 host forwards the named extras to its runners.
 
 To check what actually landed in a sandbox, exec into it with Modal's
@@ -378,7 +378,7 @@ push` the agent runs later — put an HTTPS token in a Modal secret as
 `GIT_TOKEN`:
 
 ```bash
-modal secret create omnigent-git GIT_TOKEN=github_pat_…
+modal secret create goalrail-git GIT_TOKEN=github_pat_…
 ```
 
 and list the secret under `sandbox.modal.secrets` (multiple secrets
@@ -390,7 +390,7 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    secrets: [omnigent-llm, omnigent-git]
+    secrets: [goalrail-llm, goalrail-git]
 ```
 
 The host image ships a git credential helper that answers HTTPS
@@ -424,16 +424,16 @@ or a custom image.
 | Variable | Where it's read | Purpose |
 |---|---|---|
 | `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | CLI machine / server | Modal API credentials (alternative to `~/.modal.toml`) |
-| `OMNIGENT_MODAL_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.modal.image` takes precedence for managed) |
-| `OMNIGENT_MODAL_REGISTRY_SECRET` | CLI machine / server | Modal secret name with `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` for private image pulls |
-| `OMNIGENT_MODAL_SANDBOX_SECRETS` | CLI machine / server | Comma-separated Modal secret names to inject (`sandbox.modal.secrets` takes precedence for managed) |
-| `OMNIGENT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (set via a Modal secret) | Extra env var names the host forwards to runners |
+| `GOALRAIL_MODAL_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.modal.image` takes precedence for managed) |
+| `GOALRAIL_MODAL_REGISTRY_SECRET` | CLI machine / server | Modal secret name with `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` for private image pulls |
+| `GOALRAIL_MODAL_SANDBOX_SECRETS` | CLI machine / server | Comma-separated Modal secret names to inject (`sandbox.modal.secrets` takes precedence for managed) |
+| `GOALRAIL_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (set via a Modal secret) | Extra env var names the host forwards to runners |
 | `GIT_TOKEN` | inside the sandbox (set via a Modal secret) | HTTPS token for private repository clone / fetch / push |
 | `GIT_USERNAME` | inside the sandbox (set via a Modal secret) | Auth username paired with `GIT_TOKEN` (default `x-access-token`; GitLab uses `oauth2`) |
 
 All of the above are supported public configuration. The variables the
 managed launcher itself sets inside the sandbox —
-`OMNIGENT_HOST_TOKEN`, `OMNIGENT_HOST_ID`, `OMNIGENT_HOST_NAME` —
+`GOALRAIL_HOST_TOKEN`, `GOALRAIL_HOST_ID`, `GOALRAIL_HOST_NAME` —
 are internal plumbing (server-minted per launch) and are never set by
 users.
 
@@ -450,10 +450,10 @@ users.
 - **Managed launch hangs then fails.** The server waits up to two
   minutes for the in-sandbox host to come online. If it times out,
   check that `server_url` is publicly reachable from Modal, then
-  inspect the host log inside the sandbox: `/tmp/omnigent-host.log`.
+  inspect the host log inside the sandbox: `/tmp/goalrail-host.log`.
 - **Image pull failures.** Private image without
-  `OMNIGENT_MODAL_REGISTRY_SECRET` set, or a secret missing
+  `GOALRAIL_MODAL_REGISTRY_SECRET` set, or a secret missing
   `REGISTRY_USERNAME` / `REGISTRY_PASSWORD`.
 - **Agent has no credentials.** Verify the Modal secret is listed in
   `sandbox.modal.secrets` and its var names match the forwarded set
-  above (or are named in `OMNIGENT_RUNNER_ENV_PASSTHROUGH`).
+  above (or are named in `GOALRAIL_RUNNER_ENV_PASSTHROUGH`).

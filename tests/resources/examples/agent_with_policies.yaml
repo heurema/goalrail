@@ -4,23 +4,23 @@
 #   export DATABRICKS_CONFIG_PROFILE=<your-profile>
 #
 #   # MCP tool — allowed
-#   python -m omnigent tests/resources/examples/agent_with_policies.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
 #       --prompt "Use the sleep tool to sleep for 2 seconds."
 #
 #   # MCP tool — blocked tool call
-#   python -m omnigent tests/resources/examples/agent_with_policies.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
 #       --prompt "Use the sleep tool to sleep for 8 seconds."
 #
 #   # type:function tool — allowed
-#   python -m omnigent tests/resources/examples/agent_with_policies.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
 #       --prompt "Calculate 6 * 7."
 #
 #   # type:function tool — blocked tool call
-#   python -m omnigent tests/resources/examples/agent_with_policies.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
 #       --prompt "Calculate 10 / 2."
 #
 #   # Blocked output
-#   python -m omnigent tests/resources/examples/agent_with_policies.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
 #       --prompt "What are the biggest countries in North America?"
 
 name: agent_with_policies

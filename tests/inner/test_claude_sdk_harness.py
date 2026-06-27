@@ -22,8 +22,8 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.inner import claude_sdk_harness
-from omnigent.runtime.harnesses import _HARNESS_MODULES
+from goalrail.inner import claude_sdk_harness
+from goalrail.runtime.harnesses import _HARNESS_MODULES
 
 
 def test_harness_module_registered_in_module_registry() -> None:
@@ -32,8 +32,8 @@ def test_harness_module_registered_in_module_registry() -> None:
     Without this entry, the runner subprocess can't find the wrap
     when AP-side tries to spawn it.
     """
-    assert _HARNESS_MODULES.get("claude-sdk") == "omnigent.inner.claude_sdk_harness"
-    assert _HARNESS_MODULES.get("claude") == "omnigent.inner.claude_sdk_harness"
+    assert _HARNESS_MODULES.get("claude-sdk") == "goalrail.inner.claude_sdk_harness"
+    assert _HARNESS_MODULES.get("claude") == "goalrail.inner.claude_sdk_harness"
 
 
 def test_create_app_returns_fastapi_with_required_routes() -> None:
@@ -109,7 +109,7 @@ def test_executor_factory_reads_env_vars(
         captured["gateway_auth_refresh_interval_ms"] = gateway_auth_refresh_interval_ms
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -146,7 +146,7 @@ def test_executor_factory_decodes_os_env_json(
 ) -> None:
     """``HARNESS_CLAUDE_SDK_OS_ENV`` decodes into the inner OSEnvSpec.
 
-    Omnigent serializes ``spec.executor.config["os_env"]`` via
+    Goalrail serializes ``spec.executor.config["os_env"]`` via
     :func:`dataclasses.asdict` and JSON-encodes the result; the
     wrap must reconstruct an :class:`OSEnvSpec` (with nested
     sandbox spec) so :class:`ClaudeSDKExecutor` sees the same
@@ -192,7 +192,7 @@ def test_executor_factory_decodes_os_env_json(
         captured["os_env"] = os_env
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -242,7 +242,7 @@ def test_executor_factory_falls_back_on_malformed_os_env_json(
         captured["os_env"] = os_env
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -291,7 +291,7 @@ def test_databricks_env_var_truthy_parsing(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -316,7 +316,7 @@ def test_skills_filter_env_var_decodes(
     """``HARNESS_CLAUDE_SDK_SKILLS_FILTER`` decodes JSON into ``str``
     or ``list[str]``.
 
-    The env-var bridge between the Omnigent runtime and the
+    The env-var bridge between the Goalrail runtime and the
     claude-sdk harness subprocess is the load-bearing surface
     for ``skills:`` plumbing — without it the harness wrap
     falls back to the constructor's ``"all"`` default and
@@ -330,7 +330,7 @@ def test_skills_filter_env_var_decodes(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -354,7 +354,7 @@ def test_skills_filter_env_var_missing_falls_back_to_all(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -379,7 +379,7 @@ def test_skills_filter_env_var_malformed_json_falls_back_to_all(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -410,7 +410,7 @@ def test_bundle_dir_and_agent_name_env_vars_thread_through(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()
@@ -436,7 +436,7 @@ def test_bundle_dir_unset_passes_none(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        "goalrail.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
         _fake_init,
     ):
         claude_sdk_harness._build_claude_sdk_executor()

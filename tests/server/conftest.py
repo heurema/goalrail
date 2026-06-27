@@ -22,7 +22,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.llms.types import (
+from goalrail.llms.types import (
     FunctionCallOutput,
     MessageOutput,
     OutputText,
@@ -31,20 +31,20 @@ from omnigent.llms.types import (
     ResponseStreamEvent,
     ResponseTextDeltaEvent,
 )
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
-from omnigent.runtime import init as init_runtime
-from omnigent.runtime import pending_elicitations
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server import _elicitation_registry, presence
-from omnigent.server.app import create_app
-from omnigent.server.routes import sessions as sessions_routes
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
+from goalrail.runtime import init as init_runtime
+from goalrail.runtime import pending_elicitations
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server import _elicitation_registry, presence
+from goalrail.server.app import create_app
+from goalrail.server.routes import sessions as sessions_routes
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
 
 # ── Controllable mock LLM ─────────────────────────────
 
@@ -473,7 +473,7 @@ def pytest_runtest_teardown(item: pytest.Item) -> None:
     for name in leaked:
         setattr(sessions_routes, name, _GUARDED_SESSIONS_GLOBALS[name])
     raise RuntimeError(
-        f"omnigent.server.routes.sessions.{', '.join(leaked)} left monkeypatched "
+        f"goalrail.server.routes.sessions.{', '.join(leaked)} left monkeypatched "
         f"after {item.nodeid}: a fixture finalizer (monkeypatch undo) did not run. "
         "The original has been restored for subsequent tests. If no test in this "
         "file patches it, suspect rerun/fixture-teardown plugin breakage "
@@ -518,7 +518,7 @@ def runtime_init(
     )
     # Patch the LLM client so the mock is used everywhere.
     monkeypatch.setattr(
-        "omnigent.runtime.workflow._get_llm_client",
+        "goalrail.runtime.workflow._get_llm_client",
         lambda: mock_llm,
     )
     yield
@@ -559,7 +559,7 @@ def _first_party_origin_on_asgi(monkeypatch: pytest.MonkeyPatch) -> None:
         :returns: The app's response.
         """
         if "origin" not in request.headers:
-            request.headers["origin"] = OMNIGENT_INTERNAL_WS_ORIGIN
+            request.headers["origin"] = GOALRAIL_INTERNAL_WS_ORIGIN
         return await original(self, request)
 
     monkeypatch.setattr(httpx.ASGITransport, "handle_async_request", _with_origin)
@@ -613,8 +613,8 @@ async def client(
     """
     # Initialize the HarnessProcessManager for tests that hit the
     # fallback executor path (when _runner_client is not set).
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from goalrail.runtime import set_harness_process_manager
+    from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()

@@ -8,12 +8,12 @@ description: >-
   exfiltration attack surface entirely.
 
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: claude-sdk
 
 prompt: |
-  You are a triage bot for the omnigent GitHub repository. You classify
+  You are a triage bot for the goalrail GitHub repository. You classify
   new GitHub issues by analyzing the provided context and outputting a
   JSON decision.
 
@@ -54,7 +54,7 @@ prompt: |
   for docs-only issues.
 
   **components** — list of affected subsystems (one or more):
-  - `comp:server` — the Omnigent server, API, session management
+  - `comp:server` — the Goalrail server, API, session management
   - `comp:runner` — the agent runner, execution engine
   - `comp:repr` — serialization, representation layer
   - `comp:web-ui` — the web frontend (ap-web)

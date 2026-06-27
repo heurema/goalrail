@@ -1,5 +1,5 @@
 """
-Tests for ``omnigent.server.routes._workspace_validation``.
+Tests for ``goalrail.server.routes._workspace_validation``.
 
 Drives the validator with a fake host that auto-replies to
 ``host.stat`` frames with controlled outcomes — covers each of the
@@ -16,13 +16,13 @@ from typing import Any
 
 import pytest
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HostHelloFrame,
     HostStatFrame,
     decode_host_frame,
 )
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.routes._workspace_validation import (
+from goalrail.server.host_registry import HostRegistry
+from goalrail.server.routes._workspace_validation import (
     WorkspaceValidationError,
     validate_workspace,
 )

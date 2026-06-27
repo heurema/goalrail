@@ -1,4 +1,4 @@
-"""Unit tests for :class:`omnigent_client.tools.ToolState`.
+"""Unit tests for :class:`goalrail_client.tools.ToolState`.
 
 Exercises the public API directly using a tmp_path root. No
 subprocess, no server — that part is covered by e2e tests.
@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 
 import pytest
-from omnigent_client.tools import ToolState
+from goalrail_client.tools import ToolState
 
 
 @pytest.fixture()

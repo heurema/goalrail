@@ -3,7 +3,7 @@
 Covers the pieces that make an individually-invited, off-domain email
 admissible:
 
-1. ``OIDCConfig`` parsing of ``OMNIGENT_OIDC_ALLOW_INVITES`` and the
+1. ``OIDCConfig`` parsing of ``GOALRAIL_OIDC_ALLOW_INVITES`` and the
    ``base_url`` derivation used to build invite links.
 2. ``SqlAlchemyAccountStore.redeem_oidc_invite`` / ``is_email_invited``
    against a real DB — the OIDC invite reuses the existing
@@ -30,13 +30,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from omnigent.server.accounts_store import SqlAlchemyAccountStore
-from omnigent.server.admin_list import AdminList
-from omnigent.server.auth import UnifiedAuthProvider
-from omnigent.server.oidc import OIDCConfig, mint_session_cookie
-from omnigent.server.oidc_access import OidcAdmissionPolicy
-from omnigent.server.routes.auth import create_auth_router
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.server.accounts_store import SqlAlchemyAccountStore
+from goalrail.server.admin_list import AdminList
+from goalrail.server.auth import UnifiedAuthProvider
+from goalrail.server.oidc import OIDCConfig, mint_session_cookie
+from goalrail.server.oidc_access import OidcAdmissionPolicy
+from goalrail.server.routes.auth import create_auth_router
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 _TEST_SECRET = bytes.fromhex("aa" * 32)
 
@@ -67,7 +67,7 @@ def _oidc_config(*, allow_invites: bool, allowed_domains: frozenset[str] | None)
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    # Follows the project env-var convention (omnigent.server.auth
+    # Follows the project env-var convention (goalrail.server.auth
     # .env_var_is_truthy): 1/true/yes are truthy (case-insensitive);
     # everything else — including "on" — is false.
     [("1", True), ("true", True), ("YES", True), ("on", False), ("0", False), ("", False)],
@@ -75,16 +75,16 @@ def _oidc_config(*, allow_invites: bool, allowed_domains: frozenset[str] | None)
 def test_allow_invites_env_parsing(
     monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
 ) -> None:
-    """``OMNIGENT_OIDC_ALLOW_INVITES`` parses truthy values; default off.
+    """``GOALRAIL_OIDC_ALLOW_INVITES`` parses truthy values; default off.
 
     Built via the GitHub provider branch so no network discovery runs.
     """
-    monkeypatch.setenv("OMNIGENT_OIDC_ISSUER", "https://github.com")
-    monkeypatch.setenv("OMNIGENT_OIDC_CLIENT_ID", "cid")
-    monkeypatch.setenv("OMNIGENT_OIDC_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("OMNIGENT_OIDC_REDIRECT_URI", "https://app.example.com/auth/callback")
-    monkeypatch.setenv("OMNIGENT_OIDC_COOKIE_SECRET", "aa" * 32)
-    monkeypatch.setenv("OMNIGENT_OIDC_ALLOW_INVITES", value)
+    monkeypatch.setenv("GOALRAIL_OIDC_ISSUER", "https://github.com")
+    monkeypatch.setenv("GOALRAIL_OIDC_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOALRAIL_OIDC_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("GOALRAIL_OIDC_REDIRECT_URI", "https://app.example.com/auth/callback")
+    monkeypatch.setenv("GOALRAIL_OIDC_COOKIE_SECRET", "aa" * 32)
+    monkeypatch.setenv("GOALRAIL_OIDC_ALLOW_INVITES", value)
 
     config = OIDCConfig.from_env()
     assert config.allow_invites is expected

@@ -6,7 +6,7 @@ import logging
 from typing import Annotated, Any, Literal
 
 import pytest
-from omnigent_client.tools._schema import build_function_schema
+from goalrail_client.tools._schema import build_function_schema
 from pydantic import BaseModel, Field
 
 # ─── primitives ─────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ def test_schema_warns_on_any_param(caplog: pytest.LogCaptureFixture) -> None:
         """Process."""
         return str(payload)
 
-    with caplog.at_level(logging.INFO, logger="omnigent_client.tools._schema"):
+    with caplog.at_level(logging.INFO, logger="goalrail_client.tools._schema"):
         build_function_schema(fn, strict=False)
 
     # Find the warning by content — must name function and parameter.
@@ -296,7 +296,7 @@ def test_schema_warns_on_object_param(caplog: pytest.LogCaptureFixture) -> None:
         """Process."""
         return str(thing)
 
-    with caplog.at_level(logging.INFO, logger="omnigent_client.tools._schema"):
+    with caplog.at_level(logging.INFO, logger="goalrail_client.tools._schema"):
         build_function_schema(fn, strict=False)
 
     warning_messages = [r.message for r in caplog.records]
@@ -314,7 +314,7 @@ def test_schema_warns_on_missing_annotation(
         """Process."""
         return x
 
-    with caplog.at_level(logging.INFO, logger="omnigent_client.tools._schema"):
+    with caplog.at_level(logging.INFO, logger="goalrail_client.tools._schema"):
         build_function_schema(fn, strict=False)
 
     warning_messages = [r.message for r in caplog.records]
@@ -332,7 +332,7 @@ def test_schema_no_warning_for_concrete_type(
         """Process."""
         return x
 
-    with caplog.at_level(logging.INFO, logger="omnigent_client.tools._schema"):
+    with caplog.at_level(logging.INFO, logger="goalrail_client.tools._schema"):
         build_function_schema(fn, strict=False)
 
     warning_messages = [r.message for r in caplog.records]

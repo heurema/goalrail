@@ -16,16 +16,16 @@ import httpx
 import pytest
 import yaml
 
-from omnigent import codex_native, codex_native_app_server, codex_native_forwarder
-from omnigent._runner_startup import RunnerStartupProgress
-from omnigent.codex_native_bridge import (
+from goalrail import codex_native, codex_native_app_server, codex_native_forwarder
+from goalrail._runner_startup import RunnerStartupProgress
+from goalrail.codex_native_bridge import (
     CodexNativeBridgeState,
     clear_bridge_state,
     read_bridge_state,
     write_bridge_state,
 )
-from omnigent.codex_native_elicitation import codex_elicitation_id
-from omnigent.spec import load
+from goalrail.codex_native_elicitation import codex_elicitation_id
+from goalrail.spec import load
 
 
 class _FakeTerminalClient:
@@ -233,7 +233,7 @@ def test_preload_codex_thread_for_resume_resumes_and_closes(
         return fake_client
 
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server.CodexAppServerClient",
+        "goalrail.codex_native_app_server.CodexAppServerClient",
         fake_client_factory,
     )
 
@@ -485,7 +485,7 @@ def test_materialize_codex_agent_spec_uses_codex_native_harness(tmp_path: Path) 
     }
 
 
-def test_materialized_codex_agent_spec_loads_as_valid_omnigent_yaml(
+def test_materialized_codex_agent_spec_loads_as_valid_goalrail_yaml(
     tmp_path: Path,
 ) -> None:
     """
@@ -521,7 +521,7 @@ def test_materialized_codex_agent_spec_loads_as_valid_omnigent_yaml(
 @pytest.mark.parametrize(
     ("codex_args", "thread_id", "remote_url", "expected"),
     [
-        # Fresh thread over a Unix socket (local ``omnigent codex``
+        # Fresh thread over a Unix socket (local ``goalrail codex``
         # cold start): no ``resume``/thread id, transport passed verbatim.
         (
             (),
@@ -607,7 +607,7 @@ def test_build_codex_remote_args_passes_transport_verbatim(
                 "-c",
                 'model="databricks-gpt-5-5"',
                 "-c",
-                'model_provider="omnigent_databricks"',
+                'model_provider="goalrail_databricks"',
                 "--remote",
                 "ws://127.0.0.1:9876",
             ],
@@ -620,7 +620,7 @@ def test_build_codex_remote_args_passes_transport_verbatim(
                 "-c",
                 'model="databricks-gpt-5-5"',
                 "-c",
-                'model_provider="omnigent_databricks"',
+                'model_provider="goalrail_databricks"',
                 "resume",
                 "--remote",
                 "ws://127.0.0.1:9876",
@@ -655,7 +655,7 @@ def test_build_codex_remote_args_emits_config_overrides_before_subcommand(
             remote_url="ws://127.0.0.1:9876",
             config_overrides=(
                 'model="databricks-gpt-5-5"',
-                'model_provider="omnigent_databricks"',
+                'model_provider="goalrail_databricks"',
             ),
         )
         == expected
@@ -914,7 +914,7 @@ def test_supervise_forwarder_resumes_when_it_opens_client(
     # Patch at the source: the forwarder builds its fallback client via
     # client_for_transport, which constructs the app_server module's class.
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server.CodexAppServerClient", fake_client_factory
+        "goalrail.codex_native_app_server.CodexAppServerClient", fake_client_factory
     )
 
     async def run() -> None:
@@ -1360,8 +1360,8 @@ def test_forwarder_rotates_session_on_new_codex_thread_and_posts_to_new_session(
                     "agent_id": "ag_codex",
                     "runner_id": "runner_123",
                     "labels": {
-                        "omnigent.wrapper": "codex-native-ui",
-                        "omnigent.codex_native.bridge_id": "bridge_shared",
+                        "goalrail.wrapper": "codex-native-ui",
+                        "goalrail.codex_native.bridge_id": "bridge_shared",
                     },
                 },
             )
@@ -1481,8 +1481,8 @@ def test_forwarder_rotates_session_on_new_codex_thread_and_posts_to_new_session(
         {
             "agent_id": "ag_codex",
             "labels": {
-                "omnigent.wrapper": "codex-native-ui",
-                "omnigent.codex_native.bridge_id": "bridge_shared",
+                "goalrail.wrapper": "codex-native-ui",
+                "goalrail.codex_native.bridge_id": "bridge_shared",
             },
         },
     ) in requests
@@ -5647,7 +5647,7 @@ def test_local_run_prints_resume_hint_after_attach(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Local ``omnigent codex`` prints a copyable resume hint on exit.
+    Local ``goalrail codex`` prints a copyable resume hint on exit.
 
     This exercises the run-level call site, not just the formatter:
     a regression that prepares and attaches successfully but forgets
@@ -5708,11 +5708,11 @@ def test_local_run_prints_resume_hint_after_attach(
         """
         del kwargs
 
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 23456)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("goalrail.chat._find_free_port", lambda: 23456)
+    monkeypatch.setattr("goalrail.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("goalrail.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("goalrail.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("goalrail.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(codex_native, "_prepare_codex_terminal", fake_prepare)
     monkeypatch.setattr(codex_native, "_attach_with_forwarder", fake_attach_with_forwarder)
     monkeypatch.setattr(
@@ -5753,7 +5753,7 @@ def test_local_resume_does_not_print_redundant_resume_hint(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    ``omnigent codex --resume`` does not echo another resume prompt.
+    ``goalrail codex --resume`` does not echo another resume prompt.
 
     This prevents the hint from becoming always-on noise after a user
     has already chosen the conversation id to resume.
@@ -5812,10 +5812,10 @@ def test_local_resume_does_not_print_redundant_resume_hint(
         """
         del kwargs
 
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 23457)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("goalrail.chat._find_free_port", lambda: 23457)
+    monkeypatch.setattr("goalrail.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("goalrail.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("goalrail.chat._wait_for_server", lambda *a, **k: None)
     monkeypatch.setattr(codex_native, "_prepare_codex_terminal", fake_prepare)
     monkeypatch.setattr(codex_native, "_attach_with_forwarder", fake_attach_with_forwarder)
 
@@ -5914,12 +5914,12 @@ def test_record_launch_for_fresh_session_persists_current_cwd(
     :param tmp_path: Temporary workspace and state root.
     :returns: None.
     """
-    from omnigent.codex_native_state import read_launch_state
+    from goalrail.codex_native_state import read_launch_state
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.chdir(workspace)
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
 
     codex_native._record_launch_for_fresh_session("conv_abc")
 
@@ -5939,10 +5939,10 @@ def test_align_working_directory_with_session_matching_cwd_is_noop(
     :param tmp_path: Temporary workspace and state root.
     :returns: None.
     """
-    from omnigent.codex_native_state import write_launch_state
+    from goalrail.codex_native_state import write_launch_state
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
     write_launch_state("conv_abc", str(tmp_path.resolve()))
 
     def fail_prompt(**_kwargs: object) -> str:
@@ -5971,14 +5971,14 @@ def test_align_working_directory_with_session_switches_to_recorded_cwd(
     :param tmp_path: Temporary workspace and state root.
     :returns: None.
     """
-    from omnigent.codex_native_state import write_launch_state
+    from goalrail.codex_native_state import write_launch_state
 
     recorded = tmp_path / "recorded"
     current = tmp_path / "current"
     recorded.mkdir()
     current.mkdir()
     monkeypatch.chdir(current)
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
     write_launch_state("conv_abc", str(recorded.resolve()))
     monkeypatch.setattr(
         codex_native,
@@ -6002,13 +6002,13 @@ def test_align_working_directory_with_session_missing_recorded_cwd_raises(
     :param tmp_path: Temporary workspace and state root.
     :returns: None.
     """
-    from omnigent.codex_native_state import write_launch_state
+    from goalrail.codex_native_state import write_launch_state
 
     current = tmp_path / "current"
     missing = tmp_path / "missing"
     current.mkdir()
     monkeypatch.chdir(current)
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CODEX_NATIVE_STATE_DIR", str(tmp_path / "state"))
     write_launch_state("conv_abc", str(missing))
 
     with pytest.raises(click.ClickException) as excinfo:
@@ -6049,9 +6049,9 @@ def test_run_with_remote_server_aligns_cwd_before_daemon_prepare(
     :param tmp_path: Temporary paths for prepared Codex details.
     :returns: None.
     """
-    import omnigent.chat as chat_mod
-    import omnigent.cli as cli_mod
-    import omnigent.host.identity as identity_mod
+    import goalrail.chat as chat_mod
+    import goalrail.cli as cli_mod
+    import goalrail.host.identity as identity_mod
 
     order: list[str] = []
 
@@ -6164,7 +6164,7 @@ def test_run_with_local_server_records_fresh_session_before_attach(
     :param tmp_path: Temporary paths for fake server and Codex details.
     :returns: None.
     """
-    import omnigent.chat as chat_mod
+    import goalrail.chat as chat_mod
 
     order: list[str] = []
 
@@ -6244,7 +6244,7 @@ async def test_prepare_codex_terminal_via_daemon_creates_runner_and_ensures_term
     This exercises the real ``_prepare_codex_terminal_via_daemon`` orchestration
     against an ``httpx.MockTransport`` Goalrail server. Removing terminal launch arg
     persistence, daemon runner launch, the runner re-bind (which clears
-    ``omnigent.stopped`` on resume), the ``ensure_native_terminal``
+    ``goalrail.stopped`` on resume), the ``ensure_native_terminal``
     request, or terminal metadata decoding turns this test red.
 
     :param monkeypatch: Pytest monkeypatch fixture.
@@ -6344,7 +6344,7 @@ async def test_prepare_codex_terminal_via_daemon_creates_runner_and_ensures_term
         "/v1/hosts/host_local/runners",
         {"session_id": "conv_new", "workspace": "/repo"},
     ) in calls
-    # Runner re-bind clears omnigent.stopped on resume.
+    # Runner re-bind clears goalrail.stopped on resume.
     assert ("PATCH", "/v1/sessions/conv_new", {"runner_id": "runner_new"}) in calls
     assert (
         "POST",
@@ -6382,8 +6382,8 @@ async def test_prepare_codex_terminal_via_daemon_live_resume_skips_config_patch(
     original_async_client = httpx.AsyncClient
     calls: list[tuple[str, str, object]] = []
     thread_id = "019e96aa-0be2-7343-8d3b-6f914d60936b"
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
     live_rollout = _write_source_rollout(
         codex_home=codex_home_for_bridge_dir(bridge_dir_for_bridge_id("conv_live")),
@@ -6406,7 +6406,7 @@ async def test_prepare_codex_terminal_via_daemon_live_resume_skips_config_patch(
             return httpx.Response(
                 200,
                 json={
-                    "labels": {"omnigent.wrapper": "codex-native-ui"},
+                    "labels": {"goalrail.wrapper": "codex-native-ui"},
                     "external_session_id": thread_id,
                 },
             )
@@ -6490,8 +6490,8 @@ async def test_prepare_codex_terminal_hot_resume_does_not_rewrite_rollout(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.chdir(workspace)
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
     live_rollout = _write_source_rollout(
         codex_home=codex_home_for_bridge_dir(bridge_dir_for_bridge_id(bridge_id)),
@@ -6515,8 +6515,8 @@ async def test_prepare_codex_terminal_hot_resume_does_not_rewrite_rollout(
                 200,
                 json={
                     "labels": {
-                        "omnigent.wrapper": "codex-native-ui",
-                        "omnigent.codex_native.bridge_id": bridge_id,
+                        "goalrail.wrapper": "codex-native-ui",
+                        "goalrail.codex_native.bridge_id": bridge_id,
                     },
                     "external_session_id": thread_id,
                 },
@@ -6866,7 +6866,7 @@ def test_attach_with_forwarder_uses_direct_tmux_when_socket_is_local(
         """
         raise AssertionError("WebSocket attach path should not be used")
 
-    monkeypatch.setattr("omnigent.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
+    monkeypatch.setattr("goalrail.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
     monkeypatch.setattr(codex_native, "_attach_direct_tmux", fake_attach_direct_tmux)
     monkeypatch.setattr(codex_native, "_attach_with_reconnect", fail_attach_with_reconnect)
 
@@ -7117,7 +7117,7 @@ def test_attach_terminal_resource_runner_owned_missing_socket_fails_loud(
         """
         raise AssertionError("Runner-owned Codex attach must not use WebSocket")
 
-    monkeypatch.setattr("omnigent.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
+    monkeypatch.setattr("goalrail.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
     monkeypatch.setattr(codex_native, "_attach_with_reconnect", fail_attach_with_reconnect)
 
     with pytest.raises(click.ClickException) as exc_info:
@@ -7196,7 +7196,7 @@ def test_attach_with_forwarder_falls_back_when_tmux_socket_is_not_local(
         assert active_session_id_reader() == "conv_rotated"
         websocket_attaches.append(attach_url)
 
-    monkeypatch.setattr("omnigent.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
+    monkeypatch.setattr("goalrail.codex_native.shutil.which", lambda _name: "/usr/bin/tmux")
     monkeypatch.setattr(codex_native, "_attach_direct_tmux", fail_attach_direct_tmux)
     monkeypatch.setattr(codex_native, "_attach_with_reconnect", fake_attach_with_reconnect)
 
@@ -7662,7 +7662,7 @@ def _registration_posts(
     ]
 
 
-def _make_omnigent_handler(
+def _make_goalrail_handler(
     posted: list[tuple[str, dict[str, Any]]],
     child_session_id: str = "conv_child",
 ) -> Callable[[httpx.Request], httpx.Response]:
@@ -7741,7 +7741,7 @@ def test_forwarder_dedupes_replay_and_live_child_item(
             app_server_url=str(tmp_path / "app-server.sock"),
             thread_id="thread_parent",
             client=codex_client,  # type: ignore[arg-type]
-            ap_transport=httpx.MockTransport(_make_omnigent_handler(posted)),
+            ap_transport=httpx.MockTransport(_make_goalrail_handler(posted)),
         )
 
     asyncio.run(run())
@@ -7796,7 +7796,7 @@ def test_forwarder_does_not_double_write_stable_id_item_delivered_twice(
         """
         async with httpx.AsyncClient(
             base_url="http://127.0.0.1:8000",
-            transport=httpx.MockTransport(_make_omnigent_handler(posted)),
+            transport=httpx.MockTransport(_make_goalrail_handler(posted)),
         ) as client:
             uc = codex_native_forwarder._SessionUsageCoalescer(client, "conv_parent")
             for _ in range(2):
@@ -7869,7 +7869,7 @@ def test_forwarder_child_thread_started_does_not_rotate_parent_session(
         """
         async with httpx.AsyncClient(
             base_url="http://127.0.0.1:8000",
-            transport=httpx.MockTransport(_make_omnigent_handler(ap_posts)),
+            transport=httpx.MockTransport(_make_goalrail_handler(ap_posts)),
         ) as ap_client:
             target = codex_native_forwarder._ForwarderTarget(
                 session_id="conv_parent",
@@ -7927,7 +7927,7 @@ def test_forwarder_routes_live_child_items_to_child_session(
         """
         async with httpx.AsyncClient(
             base_url="http://127.0.0.1:8000",
-            transport=httpx.MockTransport(_make_omnigent_handler(posted)),
+            transport=httpx.MockTransport(_make_goalrail_handler(posted)),
         ) as client:
             await codex_native_forwarder._handle_event(
                 client,
@@ -7986,7 +7986,7 @@ def test_forwarder_collab_item_started_registers_child_before_completed(
         """
         async with httpx.AsyncClient(
             base_url="http://127.0.0.1:8000",
-            transport=httpx.MockTransport(_make_omnigent_handler(posted)),
+            transport=httpx.MockTransport(_make_goalrail_handler(posted)),
         ) as client:
             await codex_native_forwarder._handle_event(
                 client,
@@ -8286,9 +8286,9 @@ def test_clone_codex_rollout_rewrites_id_and_structural_cwd_into_clone_home(
     workspace, the rollout lands in the CLONE's CODEX_HOME under the
     target id, and record order is preserved.
     """
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
     source_thread = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     target_thread = "019eaa11-1111-7222-8333-444455556666"
     source_cwd = "/repo/worktree-source"
@@ -8340,9 +8340,9 @@ def test_clone_codex_rollout_leaves_historical_cwd_untouched(
     workspace; rewriting them would fabricate history. Only the two
     structural fields move.
     """
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
     source_thread = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     target_thread = "019eaa11-1111-7222-8333-444455556666"
     source_cwd = "/repo/worktree-source"
@@ -8387,9 +8387,9 @@ def test_clone_codex_rollout_leaves_source_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The source rollout is read-only — cloning never mutates it."""
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
     source_thread = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     source_cwd = "/repo/worktree-source"
 
@@ -8423,9 +8423,9 @@ def test_clone_codex_rollout_returns_none_when_source_missing(
     the source rollout must not strand the clone pointing at a missing
     thread.
     """
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
     clone_home = codex_home_for_bridge_dir(bridge_dir_for_bridge_id("conv_clone"))
 
     result = codex_native._clone_codex_rollout(
@@ -8448,9 +8448,9 @@ def test_clone_codex_rollout_returns_none_for_unsafe_target_id(
     Guards against path traversal via the minted id being interpolated
     into the rollout filename.
     """
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from goalrail.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
 
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "bridges")
     source_thread = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     source_home = codex_home_for_bridge_dir(bridge_dir_for_bridge_id("conv_source"))
     _write_source_rollout(codex_home=source_home, thread_id=source_thread, source_cwd="/repo/src")
@@ -8468,7 +8468,7 @@ def test_clone_codex_rollout_returns_none_for_unsafe_target_id(
 
 
 @pytest.mark.asyncio
-async def test_ensure_local_codex_resume_rollout_synthesizes_omnigent_history(
+async def test_ensure_local_codex_resume_rollout_synthesizes_goalrail_history(
     tmp_path: Path,
 ) -> None:
     """
@@ -8562,7 +8562,7 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_omnigent_history(
             external_session_id=thread_id,
             codex_home=codex_home,
             workspace=workspace.resolve(),
-            model_provider="omnigent_databricks",
+            model_provider="goalrail_databricks",
             codex_path=None,
         )
 
@@ -8591,7 +8591,7 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_omnigent_history(
     # when model_provider is absent (verified against codex 0.136.0).
     assert records[0]["payload"]["timestamp"] == records[0]["timestamp"]
     assert records[0]["payload"]["cli_version"] == "0.0.0"
-    assert records[0]["payload"]["model_provider"] == "omnigent_databricks"
+    assert records[0]["payload"]["model_provider"] == "goalrail_databricks"
     assert records[1]["payload"]["turn_id"] == "turn_1"
     assert records[1]["payload"]["cwd"] == str(workspace.resolve())
     assert records[2]["payload"] == {
@@ -8687,7 +8687,7 @@ async def test_ensure_local_codex_resume_rollout_preserves_existing_rollout(
             external_session_id=thread_id,
             codex_home=codex_home,
             workspace=(tmp_path / "workspace").resolve(),
-            model_provider="omnigent_databricks",
+            model_provider="goalrail_databricks",
             codex_path=None,
         )
 
@@ -8756,7 +8756,7 @@ async def test_ensure_local_codex_resume_rollout_rejects_malformed_tool_history(
                 external_session_id="019e96aa-0be2-7343-8d3b-6f914d60936b",
                 codex_home=tmp_path / "codex-home",
                 workspace=(tmp_path / "workspace").resolve(),
-                model_provider="omnigent_databricks",
+                model_provider="goalrail_databricks",
                 codex_path=None,
             )
 
@@ -8794,7 +8794,7 @@ async def test_ensure_local_codex_resume_rollout_rejects_unsafe_thread_id(
                 external_session_id="../../etc/passwd",
                 codex_home=tmp_path / "codex-home",
                 workspace=(tmp_path / "workspace").resolve(),
-                model_provider="omnigent_databricks",
+                model_provider="goalrail_databricks",
                 codex_path=None,
             )
 

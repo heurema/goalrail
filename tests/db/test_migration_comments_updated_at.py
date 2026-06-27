@@ -15,7 +15,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic import command
 
-from omnigent.db.utils import _build_alembic_config
+from goalrail.db.utils import _build_alembic_config
 
 # Revision ids bounding the migration under test.
 _PRIOR_HEAD = "j1a2b3c4d5e6"

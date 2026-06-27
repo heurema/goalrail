@@ -17,6 +17,6 @@ const CODEX_NATIVE_WRAPPER = "codex-native-ui";
 export function supportsEffortControl(
   session: { labels?: Record<string, string | null> | null } | null | undefined,
 ): boolean {
-  const wrapper = session?.labels?.["omnigent.wrapper"];
+  const wrapper = session?.labels?.["goalrail.wrapper"];
   return wrapper === CLAUDE_NATIVE_WRAPPER || wrapper === CODEX_NATIVE_WRAPPER;
 }

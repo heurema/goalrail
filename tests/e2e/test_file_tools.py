@@ -3,7 +3,7 @@
 ``test_markdown_file_attachment`` runs against the mock LLM server.
 ``test_list_files_finds_uploaded_file`` and
 ``test_download_file_retrieves_content`` require a real LLM (the
-bundled archer agent declares ``tools.builtins`` which the omnigent
+bundled archer agent declares ``tools.builtins`` which the goalrail
 single-file YAML format does not support for inline agents).
 
 Usage::
@@ -154,7 +154,7 @@ def test_list_files_finds_uploaded_file(
 
     upload_resp = http_client.post(
         f"/v1/sessions/{session_id}/resources/files",
-        files={"file": ("test_data.txt", b"Hello from omnigent", "text/plain")},
+        files={"file": ("test_data.txt", b"Hello from goalrail", "text/plain")},
     )
     upload_resp.raise_for_status()
 

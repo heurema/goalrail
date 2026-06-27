@@ -1,4 +1,4 @@
-"""Tests for omnigent.onboarding.secrets."""
+"""Tests for goalrail.onboarding.secrets."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.onboarding.secrets import _config_home
+from goalrail.onboarding.secrets import _config_home
 
 
 def test_config_home_uses_goalrail_config_home_env(
@@ -15,6 +15,5 @@ def test_config_home_uses_goalrail_config_home_env(
 ) -> None:
     """``GOALRAIL_CONFIG_HOME`` redirects the secrets file backend."""
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
 
     assert _config_home() == str(tmp_path)

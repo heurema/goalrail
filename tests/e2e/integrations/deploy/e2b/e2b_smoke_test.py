@@ -2,7 +2,7 @@
 """
 Smoke test for the E2B sandbox provider.
 
-Drives the REAL :class:`~omnigent.onboarding.sandboxes.e2b.E2BSandboxLauncher`
+Drives the REAL :class:`~goalrail.onboarding.sandboxes.e2b.E2BSandboxLauncher`
 against a live E2B sandbox to validate every primitive the managed-host /
 CLI-bootstrap flows rely on: provision -> run (incl. the non-zero-exit
 ``CommandExitException`` path) -> put + read-back -> keep_alive ->
@@ -11,11 +11,11 @@ stream_exec (combined output) -> attach -> public egress -> terminate
 the launcher makes, end to end.
 
 By default it boots from E2B's stock ``base`` template, so it needs NO
-pre-built omnigent host template — it validates the launcher's SDK wiring
-in isolation. Pass ``--template omnigent-host`` (after ``e2b template
+pre-built goalrail host template — it validates the launcher's SDK wiring
+in isolation. Pass ``--template goalrail-host`` (after ``e2b template
 build``; see deploy/e2b/README.md) to smoke the real host template too.
 
-    pip install 'omnigent[e2b]'
+    pip install 'goalrail[e2b]'
     export E2B_API_KEY=e2b_...
     python tests/e2e/integrations/deploy/e2b/e2b_smoke_test.py [--template NAME] [--keep]
 
@@ -30,15 +30,15 @@ import sys
 import time
 
 # The launcher lazy-imports the e2b SDK; surface a clean hint if it (or the
-# omnigent package) isn't importable rather than a raw traceback.
+# goalrail package) isn't importable rather than a raw traceback.
 try:
-    from omnigent.onboarding.sandboxes.e2b import (
+    from goalrail.onboarding.sandboxes.e2b import (
         E2BSandboxLauncher,
         resolve_max_lifetime_s,
     )
 except ImportError as exc:  # pragma: no cover - environment guard
     print(f"ERROR: cannot import the launcher ({exc}).", file=sys.stderr)
-    print("Run from the repo root with omnigent installed.", file=sys.stderr)
+    print("Run from the repo root with goalrail installed.", file=sys.stderr)
     raise SystemExit(2) from exc
 
 
@@ -55,7 +55,7 @@ def main() -> int:
         "--template",
         default="base",
         help="E2B template to boot from (default: E2B's stock 'base'; pass "
-        "'omnigent-host' to smoke the real host template once built).",
+        "'goalrail-host' to smoke the real host template once built).",
     )
     parser.add_argument("--keep", action="store_true", help="don't terminate at the end")
     args = parser.parse_args()
@@ -67,7 +67,7 @@ def main() -> int:
     # A sentinel env var we inject at provision and read back from inside the
     # sandbox — exercises the env-passthrough path (resolved from THIS process
     # env by name, exactly like the server forwards its own environment).
-    marker_name = "OMNIGENT_E2B_SMOKE_MARKER"
+    marker_name = "GOALRAIL_E2B_SMOKE_MARKER"
     marker_value = f"smoke-{int(time.time())}"
     os.environ[marker_name] = marker_value
 
@@ -103,7 +103,7 @@ def main() -> int:
         import tempfile
         from pathlib import Path
 
-        payload = b"e2b-omnigent-smoke\x00\x01binary\n"
+        payload = b"e2b-goalrail-smoke\x00\x01binary\n"
         with tempfile.NamedTemporaryFile(delete=False) as tmp:
             tmp.write(payload)
             local = Path(tmp.name)

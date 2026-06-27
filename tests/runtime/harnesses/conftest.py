@@ -2,7 +2,7 @@
 Conftest for the harness process-manager / runner tests.
 
 Ensures the runner subprocesses these tests spawn can import both
-the production ``omnigent`` package AND the test fixture harness
+the production ``goalrail`` package AND the test fixture harness
 at ``tests.runtime.harnesses._test_harness``.
 
 pytest's :data:`pyproject.toml` ``pythonpath = ["."]`` adds the
@@ -10,7 +10,7 @@ project root to ``sys.path`` of the test process — but
 :func:`asyncio.create_subprocess_exec` only inherits the OS env
 (``PYTHONPATH``), not the parent's ``sys.path`` mutations. Without
 this fixture the runner subprocess starts with no project root on
-its path and fails to import either ``omnigent.runtime.harnesses._runner``
+its path and fails to import either ``goalrail.runtime.harnesses._runner``
 or the test harness module.
 
 The fixture is autouse-scoped to this directory, so every spawn
@@ -37,7 +37,7 @@ def _ensure_subprocess_pythonpath(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Prepend the project root to the ``PYTHONPATH`` env var for the
     duration of the test, so spawned subprocesses can import
-    ``omnigent`` and ``tests.*``.
+    ``goalrail`` and ``tests.*``.
 
     Prepend (don't overwrite) so any developer-set ``PYTHONPATH``
     is preserved as the suffix.

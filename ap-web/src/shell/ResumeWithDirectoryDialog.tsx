@@ -63,7 +63,7 @@ function HostLabel({ host }: { host: Host }) {
 /**
  * Dialog surfaced when the user tries to chat with an unbound *coding*
  * clone (a fork of a session that had a working directory — it carries
- * the ``omnigent.fork.source_id`` label). Unlike ``ResumeChatDialog``
+ * the ``goalrail.fork.source_id`` label). Unlike ``ResumeChatDialog``
  * (which only prints a CLI command), this binds the clone to a host +
  * directory in-app via ``POST /v1/hosts/{id}/runners`` (``launchRunner``)
  * and lets the runner start, after which ChatPage replays the queued
@@ -83,9 +83,9 @@ function HostLabel({ host }: { host: Host }) {
  * @param onOpenChange - Radix-controlled visibility setter.
  * @param sessionId - The unbound clone to bind, e.g. ``"conv_clone"``.
  * @param sourceSessionId - The source the clone was forked from
- *   (``omnigent.fork.source_id``); read for host/dir/branch prefill.
+ *   (``goalrail.fork.source_id``); read for host/dir/branch prefill.
  * @param serverUrl - Origin for the CLI fallback command.
- * @param wrapper - The clone's ``omnigent.wrapper`` label (CLI fallback).
+ * @param wrapper - The clone's ``goalrail.wrapper`` label (CLI fallback).
  * @param onBound - Called after a successful bind so the caller can
  *   replay the message the user was trying to send.
  */

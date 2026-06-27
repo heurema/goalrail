@@ -2,7 +2,7 @@
 //
 // Loaded by both the Electron main process (`require("./url")` in
 // `src/main.js`) and the bundled setup page (`<script src="../src/url.js">` in
-// `setup/index.html`, where it publishes `window.omnigentUrl`). One copy keeps
+// `setup/index.html`, where it publishes `window.goalrailUrl`). One copy keeps
 // the two from drifting — the setup page's plain-http warning and the main
 // process's navigation must agree on what a bare URL means.
 //
@@ -13,7 +13,7 @@
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {
-    root.omnigentUrl = api;
+    root.goalrailUrl = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
@@ -105,14 +105,14 @@
    * ``https://<ws>.azuredatabricks.net``) lands on a 404 unless this suffix is
    * appended.
    *
-   * NOTE: the Python CLI records the UI mount as ``/omnigent`` in
-   * ``omnigent/conversation_browser.py`` (WORKSPACE_UI_PATH), whereas the
-   * desktop deliberately keeps ``/ml/omnigents`` for now — that is the path the
+   * NOTE: the Python CLI records the UI mount as ``/goalrail`` in
+   * ``goalrail/conversation_browser.py`` (WORKSPACE_UI_PATH), whereas the
+   * desktop deliberately keeps ``/ml/goalrail`` for now — that is the path the
    * live workspace serves the embedded SPA on. The two are intentionally
-   * divergent pending reconciliation; do not "fix" this to ``/omnigent``
+   * divergent pending reconciliation; do not "fix" this to ``/goalrail``
    * without verifying what the workspace actually serves to the desktop shell.
    */
-  const WORKSPACE_UI_PATH = "/ml/omnigents";
+  const WORKSPACE_UI_PATH = "/ml/goalrail";
 
   /**
    * Probe timeout for Databricks workspace detection. Deliberately short: a
@@ -125,11 +125,11 @@
    * Expand a bare Databricks workspace URL to its Goalrail web-UI mount.
    *
    * Mirrors the Goalrail CLI's behavioral detection
-   * (``omnigent/cli.py:_workspace_api_server_url``): rather than match
+   * (``goalrail/cli.py:_workspace_api_server_url``): rather than match
    * hostnames, probe the URL and adopt the mount only when the host answers
    * like a Databricks workspace — a response carrying the ``server: databricks``
    * header. URLs that already carry a path, or aren't https, are returned
-   * untouched WITHOUT a probe, so a user who pastes the full ``…/ml/omnigents``
+   * untouched WITHOUT a probe, so a user who pastes the full ``…/ml/goalrail``
    * URL (or connects to any non-workspace server) is never second-guessed.
    *
    * The CLI appends the API mount because it's an API client; the desktop shell

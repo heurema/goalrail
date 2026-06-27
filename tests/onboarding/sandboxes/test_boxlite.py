@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.boxlite`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.boxlite`."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from pathlib import Path
 import click
 import pytest
 
-from omnigent.onboarding.sandboxes import boxlite as blmod
-from omnigent.onboarding.sandboxes.base import (
+from goalrail.onboarding.sandboxes import boxlite as blmod
+from goalrail.onboarding.sandboxes.base import (
     DEFAULT_HOST_IMAGE,
     SandboxCapabilityError,
 )
-from omnigent.onboarding.sandboxes.boxlite import (
+from goalrail.onboarding.sandboxes.boxlite import (
     HOST_IMAGE_ENV_VAR,
     SANDBOX_ENV_PASSTHROUGH_ENV_VAR,
     BoxliteSandboxLauncher,
@@ -327,7 +327,7 @@ def test_prepare_local_requires_kvm_on_linux(
     fake_boxlite: _FakeBoxliteState, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Local mode on Linux without /dev/kvm fails loud (no hypervisor)."""
-    monkeypatch.setattr("omnigent.onboarding.sandboxes.boxlite.platform.system", lambda: "Linux")
+    monkeypatch.setattr("goalrail.onboarding.sandboxes.boxlite.platform.system", lambda: "Linux")
     monkeypatch.setattr("os.path.exists", lambda path: False)
     with pytest.raises(click.ClickException, match="KVM"):
         BoxliteSandboxLauncher().prepare()
@@ -337,7 +337,7 @@ def test_prepare_local_passes_on_macos(
     fake_boxlite: _FakeBoxliteState, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """macOS always has Hypervisor.framework → no KVM probe, preflight passes."""
-    monkeypatch.setattr("omnigent.onboarding.sandboxes.boxlite.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("goalrail.onboarding.sandboxes.boxlite.platform.system", lambda: "Darwin")
     BoxliteSandboxLauncher().prepare()
 
 
@@ -345,7 +345,7 @@ def test_prepare_cloud_skips_virtualization_check(
     fake_boxlite: _FakeBoxliteState, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Cloud mode delegates virtualization to the remote pool — no local KVM check."""
-    monkeypatch.setattr("omnigent.onboarding.sandboxes.boxlite.platform.system", lambda: "Linux")
+    monkeypatch.setattr("goalrail.onboarding.sandboxes.boxlite.platform.system", lambda: "Linux")
     monkeypatch.setattr("os.path.exists", lambda path: False)
     BoxliteSandboxLauncher(endpoint="https://boxlite.example.com:8100").prepare()
 

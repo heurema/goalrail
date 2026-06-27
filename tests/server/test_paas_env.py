@@ -1,8 +1,8 @@
-"""Unit tests for PaaS bind-host + base-URL derivation (omnigent.server.paas_env)."""
+"""Unit tests for PaaS bind-host + base-URL derivation (goalrail.server.paas_env)."""
 
 import pytest
 
-from omnigent.server.paas_env import detect_base_url, resolve_bind_host
+from goalrail.server.paas_env import detect_base_url, resolve_bind_host
 
 # A minimal env that trips the Railway detection (any RAILWAY_-prefixed key).
 _RAILWAY_ENV = {"RAILWAY_PUBLIC_DOMAIN": "svc.up.railway.app"}
@@ -79,6 +79,6 @@ def test_detect_base_url(environ: dict[str, str], expected: str):
 
     A failure means a provider's public-URL derivation regressed (wrong env
     var, missing ``https://`` prefix, or broken precedence), which would set a
-    wrong ``OMNIGENT_ACCOUNTS_BASE_URL`` and break magic-link / cookie flows.
+    wrong ``GOALRAIL_ACCOUNTS_BASE_URL`` and break magic-link / cookie flows.
     """
     assert detect_base_url(environ, host="0.0.0.0", port=8000) == expected

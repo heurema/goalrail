@@ -1,7 +1,7 @@
 """
 Tests for :func:`_await_elicitation` and the verdict parser.
 
-Ports these omnigent ``test_labels_and_policies.py`` cases:
+Ports these goalrail ``test_labels_and_policies.py`` cases:
 
 - ``test_label_policy_ask_approve`` — accept round-trip
   applies set_labels
@@ -40,27 +40,27 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.types import ElicitationRequest, PolicyResult
-from omnigent.runtime.policies.approval import (
+from goalrail.policies.function import FunctionPolicy
+from goalrail.policies.types import ElicitationRequest, PolicyResult
+from goalrail.runtime.policies.approval import (
     ELICITATION_PENDING_TOOL_NAME,
     _await_elicitation,
     _parse_verdict,
     _truncate,
 )
-from omnigent.runtime.policies.approval import (
+from goalrail.runtime.policies.approval import (
     build_elicitation_params_json as _params_json,
 )
-from omnigent.runtime.policies.approval import (
+from goalrail.runtime.policies.approval import (
     build_elicitation_request_event as _elicitation_request_event,
 )
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy
@@ -304,7 +304,7 @@ def test_elicitation_request_event_url_mode(monkeypatch: pytest.MonkeyPatch) -> 
     This is the primary contract the frontend relies on to render a
     link instead of inline buttons.
     """
-    monkeypatch.setattr("omnigent.runtime.policies.approval._ELICITATION_MODE", "url")
+    monkeypatch.setattr("goalrail.runtime.policies.approval._ELICITATION_MODE", "url")
     req = ElicitationRequest(
         message="approve shell?",
         phase="tool_call",
@@ -324,7 +324,7 @@ def test_elicitation_request_event_form_mode_explicit(monkeypatch: pytest.Monkey
     form mode and carries no ``url`` field even when session_id is
     provided.
     """
-    monkeypatch.setattr("omnigent.runtime.policies.approval._ELICITATION_MODE", "form")
+    monkeypatch.setattr("goalrail.runtime.policies.approval._ELICITATION_MODE", "form")
     req = ElicitationRequest(
         message="approve?",
         phase="tool_call",
@@ -344,7 +344,7 @@ def test_elicitation_request_event_no_session_id_stays_form(
     uses form mode regardless of config — the runner doesn't serve
     HTML pages.
     """
-    monkeypatch.setattr("omnigent.runtime.policies.approval._ELICITATION_MODE", "url")
+    monkeypatch.setattr("goalrail.runtime.policies.approval._ELICITATION_MODE", "url")
     req = ElicitationRequest(
         message="approve?",
         phase="tool_call",
@@ -364,7 +364,7 @@ def test_elicitation_request_event_no_session_id_stays_form(
 async def test_accept_applies_labels(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent
+    """Ports goalrail
     ``test_label_policy_ask_approve``. On accept, the
     ASK-accumulated set_labels reach the store."""
     policy = _ask_policy("gate", set_labels={"integrity": "0"})
@@ -398,7 +398,7 @@ async def test_accept_applies_labels(
 async def test_decline_does_not_apply_labels(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_label_policy_ask_deny``.
+    """Ports goalrail ``test_label_policy_ask_deny``.
     On explicit decline, labels are NOT applied — the
     load-bearing §7.2 invariant that a denied ASK leaves
     no side effects."""
@@ -463,7 +463,7 @@ async def test_cancel_does_not_apply_labels(
 async def test_timeout_does_not_apply_labels(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_ask_timeout``. Park raises
+    """Ports goalrail ``test_ask_timeout``. Park raises
     TimeoutError → helper returns False without applying
     labels."""
     policy = _ask_policy("gate", set_labels={"integrity": "0"})
@@ -494,7 +494,7 @@ async def test_timeout_does_not_apply_labels(
 async def test_missing_verdict_row_denies(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_no_handler_denies``. Park
+    """Ports goalrail ``test_no_handler_denies``. Park
     returns None (cancelled / missing row) → helper returns
     False. Covers the cancel-during-elicitation path where
     the pending row was advanced to ``cancelled`` by the

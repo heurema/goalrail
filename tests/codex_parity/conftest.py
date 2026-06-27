@@ -1,6 +1,6 @@
 """Opt-in Codex parity fixtures.
 
-These tests run Omnigent's real CodexExecutor against a real Codex CLI while
+These tests run Goalrail's real CodexExecutor against a real Codex CLI while
 mocking only the upstream Responses API with Codex's own WireMock helpers.
 """
 

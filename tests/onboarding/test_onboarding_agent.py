@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.parser import parse
+from goalrail.spec.parser import parse
 
 
 def onboarding_agent_dir() -> Path:
     """
     Return the path to the built-in onboarding agent directory.
 
-    :returns: Absolute path to ``omnigent/onboarding/agent/``.
+    :returns: Absolute path to ``goalrail/onboarding/agent/``.
     """
-    return Path(__file__).parent.parent.parent / "omnigent" / "onboarding" / "agent"
+    return Path(__file__).parent.parent.parent / "goalrail" / "onboarding" / "agent"
 
 
 def test_onboarding_agent_parses_successfully(
@@ -38,9 +38,9 @@ def test_onboarding_agent_has_expected_skills(
     skill_names = sorted(s.name for s in spec.skills)
     # These are the three skills defined in the design doc, in sorted order.
     assert skill_names == [
-        "build-omnigent",
+        "build-goalrail",
         "detect-framework",
-        "omnigent-knowledge",
+        "goalrail-knowledge",
     ], f"Expected exactly the three designed skills, got {skill_names}."
 
 

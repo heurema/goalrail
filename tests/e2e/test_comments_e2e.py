@@ -31,7 +31,7 @@ from typing import Any
 import httpx
 import yaml
 
-from omnigent.server.auth import LEVEL_READ
+from goalrail.server.auth import LEVEL_READ
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -72,7 +72,7 @@ def _build_minimal_agent_bundle() -> bytes:
             "spec_version": 1,
             "name": _AGENT_NAME,
             "executor": {
-                "type": "omnigent",
+                "type": "goalrail",
                 "config": {"harness": "openai-agents"},
             },
             "llm": {

@@ -1,17 +1,17 @@
 ---
 # Namespaced Role granting the server EXACTLY what the entrypoint-as-host
 # launcher calls — nothing more (no watch, no pods/exec). Lives in the DEDICATED
-# runner namespace `omnigent-sandboxes` and is bound to the omnigent-server SA
-# (in `omnigent`) via the cross-namespace rolebinding.yaml. Because the grant is
-# a namespaced Role here, it can ONLY ever touch objects in `omnigent-sandboxes`,
-# never the server/DB Pods or Secrets in `omnigent`.
+# runner namespace `goalrail-sandboxes` and is bound to the goalrail-server SA
+# (in `goalrail`) via the cross-namespace rolebinding.yaml. Because the grant is
+# a namespaced Role here, it can ONLY ever touch objects in `goalrail-sandboxes`,
+# never the server/DB Pods or Secrets in `goalrail`.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: omnigent-sandbox-manager
-  namespace: omnigent-sandboxes
+  name: goalrail-sandbox-manager
+  namespace: goalrail-sandboxes
   labels:
-    app.kubernetes.io/name: omnigent
+    app.kubernetes.io/name: goalrail
     app.kubernetes.io/component: server
 rules:
   # Manage the lifecycle of runner Pods, scoped to exactly what the launcher

@@ -44,7 +44,7 @@ permissions:
 env:
   # No ap-web SPA build during `uv sync`: this job never serves the
   # bundle and the build hits public npm with no registry mirror.
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   # Never let the test server pick up the runner's own credentials.
   ANTHROPIC_API_KEY: ""
   OPENAI_API_KEY: ""

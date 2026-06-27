@@ -1,4 +1,4 @@
-"""Tests for omnigent.repl._repl helpers.
+"""Tests for goalrail.repl._repl helpers.
 
 Covers pure parsing helpers used by the Ctrl+O debug overlay. The
 overlay fetches items from the conversation store and walks
@@ -15,7 +15,7 @@ import json
 import pytest
 from prompt_toolkit.document import Document
 
-from omnigent.repl._repl import (
+from goalrail.repl._repl import (
     _SLASH_COMMAND_ALIASES,
     COMMANDS,
     WELCOME_HINTS,
@@ -42,12 +42,12 @@ from omnigent.repl._repl import (
     _tmux_pane_snapshot,
     _tmux_session_alive,
 )
-from omnigent.spec.types import SkillSpec
+from goalrail.spec.types import SkillSpec
 
 
 def test_parse_sub_agent_handle_returns_raw_handle_dict() -> None:
     """
-    Native omnigent builtins persist the spawn output as a raw
+    Native goalrail builtins persist the spawn output as a raw
     JSON string encoding the handle dict. The parser should return
     it unchanged.
 
@@ -164,7 +164,7 @@ def test_parse_sub_agent_handle_returns_none_for_garbage(raw: str) -> None:
 
 class _CapturingHost:
     """
-    Minimal :class:`omnigent_ui_sdk.TerminalHost`-shaped stub that
+    Minimal :class:`goalrail_ui_sdk.TerminalHost`-shaped stub that
     records every ``output(...)`` call.
 
     The real :class:`TerminalHost` writes to prompt-toolkit's UI;
@@ -322,7 +322,7 @@ def test_render_history_item_assistant_message_empty_body_is_silently_skipped() 
     """
     Empty assistant items
     (``[{"type":"output_text","text":""}]``) are persisted by the
-    omnigent workflow alongside every real reply. Rendering them
+    goalrail workflow alongside every real reply. Rendering them
     would produce a phantom ``◆ <model>`` header with no body — the
     "double-label" regression.
 
@@ -939,7 +939,7 @@ def test_terminal_attach_command_uses_socket_and_target() -> None:
 
 def test_parse_terminal_tool_output_handles_direct_dict() -> None:
     """
-    Direct-JSON shape (default executor / omnigent builtins)
+    Direct-JSON shape (default executor / goalrail builtins)
     decodes to the inner dict.
     """
     raw = json.dumps({"terminal": "bash", "session": "s1", "status": "launched"})
@@ -977,7 +977,7 @@ def test_reconstruct_terminals_records_owning_conversation() -> None:
     This is the unit-level proof that the cross-conversation
     discovery the e2e test couldn't easily exercise (inline
     sub-agents can't own terminals per the
-    OMNIGENT_TERMINAL_BRIDGE.md design) is wired correctly. A future
+    GOALRAIL_TERMINAL_BRIDGE.md design) is wired correctly. A future
     sub-agent shape that DOES own terminals will pick this up
     for free.
     """
@@ -1188,7 +1188,7 @@ def test_render_startup_banner_contains_agent_name() -> None:
     What this proves: the user sees the agent name centered in
     the box on REPL boot. If the assertion fails, the banner
     would render with the mascot art and box border but no
-    visible label — users on a fresh Omnigent session would have
+    visible label — users on a fresh Goalrail session would have
     no in-banner cue for which agent they're talking to (the
     bottom toolbar shows the model, but the welcome panel is
     where the legacy CLI puts it). Bold ANSI sequence ``\\x1b[1m``
@@ -1197,7 +1197,7 @@ def test_render_startup_banner_contains_agent_name() -> None:
     """
     ansi = _render_startup_banner_ansi("hello world")
     # ``\x1b[1m`` is the SGR Bold sequence; the legacy banner
-    # builder wraps the agent label with it (omnigent/inner/
+    # builder wraps the agent label with it (goalrail/inner/
     # cli.py:988-989). If the prefix is missing, the agent name
     # would render in the same weight as the dim hint line —
     # the typographic hierarchy that distinguishes them is gone.
@@ -1212,7 +1212,7 @@ def test_render_startup_banner_contains_agent_name() -> None:
 
 def test_render_startup_banner_omits_keybinding_hints() -> None:
     """
-    The Omnigent welcome banner does NOT carry the keybinding hint row.
+    The Goalrail welcome banner does NOT carry the keybinding hint row.
 
     What this proves: keybinding hints live in the bottom toolbar
     only — duplicating them inside the welcome box widens the
@@ -1232,13 +1232,13 @@ def test_render_startup_banner_omits_keybinding_hints() -> None:
     for legacy_hint in ("ctrl-g debug", "ctrl-d exit"):
         assert legacy_hint not in ansi, (
             f"AP welcome banner contains legacy hint {legacy_hint!r} "
-            f"which doesn't correspond to an Omnigent binding."
+            f"which doesn't correspond to an Goalrail binding."
         )
 
 
 def test_render_startup_banner_uses_mascot_accent_color() -> None:
     """
-    The Omnigent mode banner box border is rendered in the Omnigent
+    The Goalrail mode banner box border is rendered in the Goalrail
     starfish magenta-pink brand accent (truecolor RGB ``#F43BA6`` →
     ``38;2;244;59;166``), matching the bottom toolbar, prompt
     marker, and tool-call glyphs.
@@ -1247,44 +1247,44 @@ def test_render_startup_banner_uses_mascot_accent_color() -> None:
     the bottom toolbar, the prompt marker ``❯``, and the SDK's
     formatter accent together survives the AP-side render. If a
     future change drops the truecolor escape (e.g. by stripping
-    ANSI on the Omnigent path or swapping Rich for raw text), the
+    ANSI on the Goalrail path or swapping Rich for raw text), the
     banner would render as a plain unstyled box and visually
     diverge from the rest of the UI. The override happens in
-    :func:`omnigent.repl._repl._render_startup_banner_ansi`.
+    :func:`goalrail.repl._repl._render_startup_banner_ansi`.
     """
     ansi = _render_startup_banner_ansi("agent")
     # ``38;2;244;59;166`` is the SGR truecolor foreground encoding
-    # of #F43BA6 — the Omnigent starfish magenta-pink brand accent
+    # of #F43BA6 — the Goalrail starfish magenta-pink brand accent
     # (also ``TerminalHost.accent_color`` default). The banner
     # builder injects it for both the box border and the mascot art
-    # on the Omnigent path.
+    # on the Goalrail path.
     assert "\x1b[38;2;244;59;166m" in ansi, (
-        f"Banner missing Omnigent truecolor accent escape "
+        f"Banner missing Goalrail truecolor accent escape "
         f"(\\x1b[38;2;244;59;166m); got: {ansi!r}. If this is "
         f"absent, the AP-side override in "
         f"``_render_startup_banner_ansi`` isn't propagating into "
         f"the banner — the box border and mascot art would lose "
         f"the brand magenta, breaking the visual link with the "
-        f"rest of the Omnigent UI."
+        f"rest of the Goalrail UI."
     )
 
 
 def test_run_banner_uses_magenta_mascot_color() -> None:
     """
-    The ``omnigent run`` banner renders in the starfish
+    The ``goalrail run`` banner renders in the starfish
     magenta-pink brand accent
     (``MASCOT_ART_COLOR = "#F43BA6"`` → ``38;2;244;59;166``).
-    The default ``art_color`` and the explicit ``--omnigent`` override
+    The default ``art_color`` and the explicit ``--goalrail`` override
     both resolve to the same brand magenta, so the mascot, box
     border, and prompt marker all read as one accent regardless
     of mode.
     """
-    from omnigent.inner.banner import startup_banner_strings
-    from omnigent.inner.mascots import MASCOT_ART_COLOR
+    from goalrail.inner.banner import startup_banner_strings
+    from goalrail.inner.mascots import MASCOT_ART_COLOR
 
     assert MASCOT_ART_COLOR == "#F43BA6", (
         f"MASCOT_ART_COLOR must be the starfish magenta-pink brand "
-        f"accent (#F43BA6) for the ``omnigent run`` welcome "
+        f"accent (#F43BA6) for the ``goalrail run`` welcome "
         f"banner; got {MASCOT_ART_COLOR!r}."
     )
 
@@ -1299,11 +1299,11 @@ def test_run_banner_uses_magenta_mascot_color() -> None:
 
 def test_render_startup_banner_fits_under_80_columns() -> None:
     """
-    The Omnigent welcome box stays under 80 columns wide even when
+    The Goalrail welcome box stays under 80 columns wide even when
     paired with the longest example agent name.
 
     What this proves: in an 80-column terminal (the de-facto
-    minimum for a usable shell) the Omnigent banner does not wrap. The
+    minimum for a usable shell) the Goalrail banner does not wrap. The
     box width is driven by the agent label (the hint row is
     blanked, so ``WELCOME_HINTS`` does not push the box wider).
     If a future change reintroduces the hint text in the box, or
@@ -1335,7 +1335,7 @@ def test_render_startup_banner_shows_remote_server_url() -> None:
 
     What this proves: a user connected with ``--server <url>``
     sees which workspace they're talking to in the welcome
-    banner. A user running ``omnigent run`` against a freshly
+    banner. A user running ``goalrail run`` against a freshly
     spawned local server doesn't get the noise.
     """
     remote = "https://example.databricks.com"
@@ -1398,7 +1398,7 @@ def test_startup_header_box_includes_folder_model_and_credential() -> None:
     import re
 
     header = _StartupHeader(
-        folder="~/omnigent",
+        folder="~/goalrail",
         description="Multi-agent coding orchestrator",
         model_label="claude-sonnet-4-6",
         credential="Subscription",
@@ -1409,7 +1409,7 @@ def test_startup_header_box_includes_folder_model_and_credential() -> None:
     assert "Multi-agent coding orchestrator" in plain  # one-line summary row
     assert "claude-sonnet-4-6" in plain  # model row
     assert "Subscription" in plain  # credential row (glyphless — see _header_glyph)
-    assert "~/omnigent" in plain  # working-folder row
+    assert "~/goalrail" in plain  # working-folder row
     # No separate creds line was requested, so none is appended.
     assert "→" not in plain
 
@@ -1552,8 +1552,8 @@ def test_build_startup_header_subscription_credential(tmp_path, monkeypatch) -> 
     regression in the config→header resolution would drop or mislabel
     the credential; a reappearing 🎟️ means _header_glyph was bypassed.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(var, raising=False)
@@ -1588,8 +1588,8 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
     lookup renders "pi → not configured" (no "pi" family exists) or leaks
     the subscription into the Pi segment.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(var, raising=False)
@@ -1664,7 +1664,7 @@ async def test_list_all_conversation_items_paginates_past_100(
     ``list_items(limit=100)`` call): the assertion ``len(items)
     == total`` fails with ``100 != 217``.
     """
-    from omnigent.repl._repl import _list_all_conversation_items
+    from goalrail.repl._repl import _list_all_conversation_items
 
     # Build a 217-item synthetic conversation: enough to require
     # 3 pages (100 + 100 + 17). Item ids encode position so the
@@ -1746,7 +1746,7 @@ async def test_list_all_conversation_items_handles_empty_conversation() -> None:
     Catches a regression where the loop infinite-loops on an
     empty first page or makes redundant fetches.
     """
-    from omnigent.repl._repl import _list_all_conversation_items
+    from goalrail.repl._repl import _list_all_conversation_items
 
     fetch_count = 0
 
@@ -1780,7 +1780,7 @@ async def test_list_all_conversation_items_falls_back_on_error() -> None:
     so an error mid-pagination should surface a partial item
     list rather than crashing the overlay builder.
     """
-    from omnigent.repl._repl import _list_all_conversation_items
+    from goalrail.repl._repl import _list_all_conversation_items
 
     fetch_count = 0
 
@@ -2014,7 +2014,7 @@ class _StubFmt:
 
 def test_clear_command_registered_in_help() -> None:
     """``/clear`` is in the COMMANDS registry so /help lists it."""
-    from omnigent.repl._repl import COMMANDS
+    from goalrail.repl._repl import COMMANDS
 
     assert "/clear" in COMMANDS, "/clear missing — /help would not list it"
     help_text, _ = COMMANDS["/clear"]
@@ -2085,7 +2085,7 @@ class _StubSkillSession:
 
 async def test_registered_skill_command_uses_structured_slash_command() -> None:
     """Skill slash commands no longer send a visible ``load_skill`` prompt."""
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     skill = SkillSpec(
         name="meta-skill-test",
@@ -2150,7 +2150,7 @@ async def test_clear_command_clears_screen_and_resets_session(
     (resets local session state). The old conversation persists
     server-side and is resumable via ``/switch``.
     """
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     clear_calls: list[None] = []
     monkeypatch.setattr(repl_mod, "_clear_screen", lambda: clear_calls.append(None))
@@ -2183,7 +2183,7 @@ async def test_new_command_resets_session_without_clearing_screen(
     ``/new`` starts a new conversation but leaves the visible
     scrollback intact — distinguishes it from ``/clear``.
     """
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     clear_calls: list[None] = []
     monkeypatch.setattr(repl_mod, "_clear_screen", lambda: clear_calls.append(None))
@@ -2238,7 +2238,7 @@ async def test_clear_command_in_sessions_mode_calls_start_new_conversation(
     Without this, sessions mode would either skip the unbind (if it
     called ``reset()`` only) or double-fire (if it called both).
     """
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     clear_calls: list[None] = []
     monkeypatch.setattr(repl_mod, "_clear_screen", lambda: clear_calls.append(None))
@@ -2267,7 +2267,7 @@ async def test_new_command_in_sessions_mode_calls_start_new_conversation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Same dispatch contract as ``/clear`` but ``/new`` does not clear scrollback."""
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     clear_calls: list[None] = []
     monkeypatch.setattr(repl_mod, "_clear_screen", lambda: clear_calls.append(None))
@@ -2295,7 +2295,7 @@ async def test_clear_command_renders_error_when_unbind_fails(
     + welcome banner — leaving the REPL on the prior conversation so
     the user can retry.
     """
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     clear_calls: list[None] = []
     monkeypatch.setattr(repl_mod, "_clear_screen", lambda: clear_calls.append(None))
@@ -2324,7 +2324,7 @@ async def test_slash_command_exception_renders_inline_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Slash-command failures render instead of escaping background tasks."""
-    from omnigent.repl import _repl as repl_mod
+    from goalrail.repl import _repl as repl_mod
 
     async def raise_remote_error(
         arg,
@@ -2484,10 +2484,10 @@ def test_server_event_to_sdk_event_translates_llm_error_event() -> None:
     emitted by the workflow's except-all handler will be silently dropped
     by the AP-mode REPL and the user will see no error message.
     """
-    from omnigent_client._events import ErrorEvent as _SDKErrorEvent
-    from omnigent_client._types import ErrorInfo
+    from goalrail_client._events import ErrorEvent as _SDKErrorEvent
+    from goalrail_client._types import ErrorInfo
 
-    from omnigent.server.schemas import ErrorEvent, RetryErrorDetail
+    from goalrail.server.schemas import ErrorEvent, RetryErrorDetail
 
     server_event = ErrorEvent(
         type="response.error",
@@ -2518,9 +2518,9 @@ def test_server_event_to_sdk_event_translates_tool_error_event() -> None:
     Failure meaning: tool-failure errors (e.g. retry exhaustion) would
     be silently dropped in AP-mode, hiding the name of the failing tool.
     """
-    from omnigent_client._events import ErrorEvent as _SDKErrorEvent
+    from goalrail_client._events import ErrorEvent as _SDKErrorEvent
 
-    from omnigent.server.schemas import ErrorEvent, RetryErrorDetail
+    from goalrail.server.schemas import ErrorEvent, RetryErrorDetail
 
     server_event = ErrorEvent(
         type="response.error",
@@ -2632,11 +2632,11 @@ def test_resume_hint_appends_resume_flag_to_invocation_parts() -> None:
     import shlex
 
     resume_parts = [
-        "omnigent",
+        "goalrail",
         "run",
         "examples/databricks_coding_agent.yaml",
         "--server",
-        "https://omnigent-app.databricksapps.com",
+        "https://goalrail-app.databricksapps.com",
         "--profile",
         "oss",
         "--harness",
@@ -2644,8 +2644,8 @@ def test_resume_hint_appends_resume_flag_to_invocation_parts() -> None:
     ]
     hint = shlex.join([*resume_parts, "--resume", "conv_abc"])
     assert hint == (
-        "omnigent run examples/databricks_coding_agent.yaml "
-        "--server https://omnigent-app.databricksapps.com "
+        "goalrail run examples/databricks_coding_agent.yaml "
+        "--server https://goalrail-app.databricksapps.com "
         "--profile oss "
         "--harness claude-sdk "
         "--resume conv_abc"

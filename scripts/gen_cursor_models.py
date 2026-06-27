@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate ``_CURSOR_BASE_MODELS`` for ``omnigent/cursor_native.py``.
+"""Generate ``_CURSOR_BASE_MODELS`` for ``goalrail/cursor_native.py``.
 
 The cursor-native web picker needs *base* model ids — the namespace that (a)
 launches via ``cursor-agent --model <id>``, (b) injects via ``/model <id>`` in
@@ -21,7 +21,7 @@ Usage::
     python scripts/gen_cursor_models.py        # shells out to ``cursor-agent models``
 
 Re-run when cursor ships new models and paste the printed literal into
-``omnigent/cursor_native.py`` (between the ``# >>> generated`` markers). Review
+``goalrail/cursor_native.py`` (between the ``# >>> generated`` markers). Review
 the diff: a brand-new model with a *new* irregular spelling needs a one-line
 ``_BASE_ID_OVERRIDES`` entry, and the script warns when it sees an unmapped
 claude reordering so the gap never lands silently.

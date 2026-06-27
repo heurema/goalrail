@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.runtime.inflight_text`.
+Unit tests for :mod:`goalrail.runtime.inflight_text`.
 
 The in-flight-text index recovers the assistant text streamed in the
 current turn so a client (re)connecting mid-turn can replay it.
@@ -17,7 +17,7 @@ they actually live — rather than through a full workflow:
   inert and never double-renders the cold-load snapshot).
 * Reasoning deltas are intentionally NOT tracked.
 
-The wire-up between :func:`omnigent.runtime.session_stream.publish`
+The wire-up between :func:`goalrail.runtime.session_stream.publish`
 and this index, plus the snapshot/live-tail partition guarantee, is
 tested in :file:`tests/runtime/test_session_stream.py`.
 """
@@ -28,7 +28,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.runtime import inflight_text
+from goalrail.runtime import inflight_text
 
 
 @pytest.fixture(autouse=True)

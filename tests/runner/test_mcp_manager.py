@@ -26,14 +26,14 @@ from typing import Any
 import pytest
 from mcp.types import Tool as McpToolDef
 
-from omnigent.runner import mcp_manager as _mcp_manager_module
-from omnigent.runner.mcp_manager import (
+from goalrail.runner import mcp_manager as _mcp_manager_module
+from goalrail.runner.mcp_manager import (
     _POOL_SPEC_CAPACITY,
     McpSchemasResult,
     RunnerMcpManager,
     compute_spec_hash,
 )
-from omnigent.spec.types import AgentSpec, MCPServerConfig
+from goalrail.spec.types import AgentSpec, MCPServerConfig
 
 
 def _make_spec(*configs: MCPServerConfig) -> AgentSpec:
@@ -127,7 +127,7 @@ def patch_connection(
             return await self._inner.call_tool(name, arguments)
 
     monkeypatch.setattr(
-        "omnigent.runner.mcp_manager.McpServerConnection",
+        "goalrail.runner.mcp_manager.McpServerConnection",
         _PatchedConn,
     )
     # Tests script per-server behavior by mutating these dicts BEFORE
@@ -256,14 +256,14 @@ async def test_invalid_tool_name_is_filtered(
     LLM providers reject these at API call time with unhelpful errors;
     filter at schema-injection time and log a warning instead.
     """
-    # Force the `omnigent` package logger to propagate so caplog
-    # captures warnings. Defensive: ``omnigent.cli_diagnostics
-    # .setup_cli_logging`` sets ``omnigent.propagate = False`` and
+    # Force the `goalrail` package logger to propagate so caplog
+    # captures warnings. Defensive: ``goalrail.cli_diagnostics
+    # .setup_cli_logging`` sets ``goalrail.propagate = False`` and
     # if a sibling test on this xdist worker invoked it via a fixture
     # that didn't tear down (e.g. crash mid-test), the False sticks
     # for the rest of the worker — caplog's root handler then misses
-    # every ``omnigent.*`` warning.
-    logging.getLogger("omnigent").propagate = True
+    # every ``goalrail.*`` warning.
+    logging.getLogger("goalrail").propagate = True
     patch_connection["__tools_for__"]["jira"] = [
         _make_tool_def("ok_tool"),
         _make_tool_def("bad name with spaces"),
@@ -274,17 +274,17 @@ async def test_invalid_tool_name_is_filtered(
     spec = _make_spec(_make_config("jira"))
     manager = RunnerMcpManager()
     # Capture at the source logger directly. Another test in the same
-    # xdist worker may have set ``omnigent.propagate = False`` (the CLI
+    # xdist worker may have set ``goalrail.propagate = False`` (the CLI
     # diagnostics setup does), which severs propagation to the root logger
     # where caplog listens — capturing nothing. Attaching caplog's handler
     # to the mcp_manager logger makes capture independent of the propagate
     # chain, so the assertion below is robust to that state leak.
-    mcp_logger = logging.getLogger("omnigent.runner.mcp_manager")
+    mcp_logger = logging.getLogger("goalrail.runner.mcp_manager")
     mcp_logger.addHandler(caplog.handler)
     try:
         # Bare ``at_level(WARNING)`` — no ``logger=`` arg. We've forced
         # propagation above, so records reach the root logger where
-        # caplog's handler lives. Passing ``logger="omnigent.runner.
+        # caplog's handler lives. Passing ``logger="goalrail.runner.
         # mcp_manager"`` here in addition would double-attach the
         # handler (root + that named logger), capturing each warning
         # twice.
@@ -648,7 +648,7 @@ def test_strip_mcp_tool_prefix_preserves_bare_double_underscore() -> None:
     Only strip Claude-SDK MCP-prefixed names; pass everything else
     through.
     """
-    from omnigent.runtime.workflow import _strip_mcp_tool_prefix
+    from goalrail.runtime.workflow import _strip_mcp_tool_prefix
 
     # Claude-SDK shape: stripped to the bare name.
     assert _strip_mcp_tool_prefix("mcp__jira__jira_search_issues") == "jira_search_issues"

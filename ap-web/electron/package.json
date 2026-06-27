@@ -1,5 +1,5 @@
 {
-  "name": "omnigent-desktop-electron",
+  "name": "goalrail-desktop-electron",
   "productName": "Goalrail",
   "version": "0.1.1",
   "description": "Goalrail desktop shell (Electron edition) — a thin native wrapper around the server-served web UI.",
@@ -21,7 +21,7 @@
     "electron-builder": "^26.0.0"
   },
   "build": {
-    "appId": "ai.omnigent.desktop",
+    "appId": "dev.goalrail.desktop",
     "productName": "Goalrail",
     "directories": {
       "output": "dist"
@@ -46,7 +46,7 @@
       "category": "public.app-category.developer-tools",
       "icon": "icons/icon.icns",
       "identity": "Databricks, Inc. (8RMX4WU6F8)",
-      "provisioningProfile": "signing/omnigent.provisionprofile",
+      "provisioningProfile": "signing/goalrail.provisionprofile",
       "hardenedRuntime": true,
       "entitlements": "signing/entitlements.mac.plist",
       "entitlementsInherit": "signing/entitlements.mac.inherit.plist",

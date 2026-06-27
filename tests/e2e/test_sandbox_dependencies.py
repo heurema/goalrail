@@ -150,14 +150,14 @@ def test_pip_install_and_use_package(
                             {
                                 "command": (
                                     "PYTHONPATH=./_sandbox_pip_cowsay python3 -c "
-                                    "\"import cowsay; cowsay.cow('hello from omnigent')\""
+                                    "\"import cowsay; cowsay.cow('hello from goalrail')\""
                                 ),
                             }
                         ),
                     }
                 ],
             },
-            {"text": "Here is the cowsay output with hello from omnigent."},
+            {"text": "Here is the cowsay output with hello from goalrail."},
         ],
         key=model,
     )
@@ -174,7 +174,7 @@ def test_pip_install_and_use_package(
             "1) `python3 -m ensurepip --upgrade`\n"
             "2) `python3 -m pip install cowsay --target ./_sandbox_pip_cowsay`\n"
             "3) `PYTHONPATH=./_sandbox_pip_cowsay python3 -c "
-            "\"import cowsay; cowsay.cow('hello from omnigent')\"`\n"
+            "\"import cowsay; cowsay.cow('hello from goalrail')\"`\n"
             "Show me the cow ASCII art output."
         ),
     )
@@ -200,8 +200,8 @@ def test_pip_install_and_use_package(
     text = _extract_all_text(body)
     all_output = _tool_call_output_text(body)
     combined = (text + " " + all_output).lower()
-    assert "hello from omnigent" in combined, (
-        f"Expected cowsay ASCII art with 'hello from omnigent' "
+    assert "hello from goalrail" in combined, (
+        f"Expected cowsay ASCII art with 'hello from goalrail' "
         f"in output -- proves pip install succeeded and the package "
         f"ran. Got: {combined[:500]}"
     )
@@ -380,14 +380,14 @@ def test_uv_pip_install_and_use_package(
                             {
                                 "command": (
                                     "PYTHONPATH=./_sandbox_uv_cowsay python3 -c "
-                                    "\"import cowsay; cowsay.cow('hello from omnigent via uv')\""
+                                    "\"import cowsay; cowsay.cow('hello from goalrail via uv')\""
                                 ),
                             }
                         ),
                     }
                 ],
             },
-            {"text": "Here is the cowsay output with hello from omnigent via uv."},
+            {"text": "Here is the cowsay output with hello from goalrail via uv."},
         ],
         key=model,
     )
@@ -404,7 +404,7 @@ def test_uv_pip_install_and_use_package(
             "1) `uv pip install cowsay --target ./_sandbox_uv_cowsay "
             "--cache-dir ./.uv-cache`\n"
             "2) `PYTHONPATH=./_sandbox_uv_cowsay python3 -c "
-            "\"import cowsay; cowsay.cow('hello from omnigent via uv')\"`\n"
+            "\"import cowsay; cowsay.cow('hello from goalrail via uv')\"`\n"
             "Show me the cow ASCII art output."
         ),
     )
@@ -424,8 +424,8 @@ def test_uv_pip_install_and_use_package(
     text = _extract_all_text(body)
     all_output = _tool_call_output_text(body)
     combined = (text + " " + all_output).lower()
-    assert "hello from omnigent via uv" in combined, (
-        f"Expected cowsay output with 'hello from omnigent via uv' -- proves "
+    assert "hello from goalrail via uv" in combined, (
+        f"Expected cowsay output with 'hello from goalrail via uv' -- proves "
         f"`uv pip install` succeeded and the package ran. "
         f"Got: {combined[:500]}"
     )

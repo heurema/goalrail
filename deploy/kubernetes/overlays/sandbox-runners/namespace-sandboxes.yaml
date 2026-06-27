@@ -1,16 +1,16 @@
 ---
 # Dedicated namespace for the on-demand agent-runner Pods.
-# Kept SEPARATE from the server namespace (`omnigent`) so the server SA's Pod
+# Kept SEPARATE from the server namespace (`goalrail`) so the server SA's Pod
 # create/get/delete + Secret create/delete rights — scoped to this namespace via
 # role.yaml + rolebinding.yaml — can never reach the server/DB Pods or the
 # server's Secrets. The runner SA, the harness-credentials Secret, the Role and
-# the RoleBinding all live here; only the omnigent-server SA stays in `omnigent`.
+# the RoleBinding all live here; only the goalrail-server SA stays in `goalrail`.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: omnigent-sandboxes
+  name: goalrail-sandboxes
   labels:
-    app.kubernetes.io/name: omnigent
+    app.kubernetes.io/name: goalrail
     app.kubernetes.io/component: runner
     # Pod Security Admission: enforce the `restricted` standard in the runner
     # namespace. Defense-in-depth — even though the server SA holds pods/create

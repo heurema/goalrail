@@ -1,7 +1,7 @@
-"""Unit tests for :mod:`omnigent.llms._usage_observer`.
+"""Unit tests for :mod:`goalrail.llms._usage_observer`.
 
 Covers the observer registry contract (add/remove/exception-isolation)
-and the auto-recorder that activates when ``OMNIGENT_TOKEN_USAGE_JSON``
+and the auto-recorder that activates when ``GOALRAIL_TOKEN_USAGE_JSON``
 is set.
 """
 
@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.llms import _usage_observer
+from goalrail.llms import _usage_observer
 
 
 @pytest.fixture(autouse=True)
@@ -207,7 +207,7 @@ def test_records_survive_sigkill(tmp_path: Path) -> None:
     target = tmp_path / "tokens.json"
     script = (
         "import os, signal\n"
-        "from omnigent.llms import _usage_observer\n"
+        "from goalrail.llms import _usage_observer\n"
         "_usage_observer.notify(model='m', input_tokens=7, output_tokens=3, total_tokens=10)\n"
         "os.kill(os.getpid(), signal.SIGKILL)\n"
     )
@@ -295,7 +295,7 @@ def test_subprocess_attributes_usage_to_parent_test_via_sidecar(tmp_path: Path) 
     target = tmp_path / "tokens.json"
     (tmp_path / "tokens-current-test-main.txt").write_text("tests/e2e/test_x.py::test_y")
     script = (
-        "from omnigent.llms import _usage_observer\n"
+        "from goalrail.llms import _usage_observer\n"
         "_usage_observer.notify(model='m', input_tokens=7, output_tokens=3, total_tokens=10)\n"
     )
     env = {**os.environ, _usage_observer._ENV_VAR: str(target)}
@@ -374,8 +374,8 @@ async def test_client_notify_records_with_active_test(
 ) -> None:
     """``Client().responses.create()`` runs through :func:`notify` and
     lands in the auto-recorder when the env var is set."""
-    from omnigent.llms.client import Client, _ResponsesNamespace
-    from omnigent.llms.types import MessageOutput, OutputText, Response, Usage
+    from goalrail.llms.client import Client, _ResponsesNamespace
+    from goalrail.llms.types import MessageOutput, OutputText, Response, Usage
 
     monkeypatch.setenv(_usage_observer._ENV_VAR, str(tmp_path / "tokens.json"))
     fake = Response(

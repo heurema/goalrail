@@ -14,7 +14,7 @@ This guide covers the Goalrail-specific OpenShell setup:
 - configure CLI-launched or server-managed sandboxes.
 
 ```bash
-pip install 'omnigent[openshell]'
+pip install 'goalrail[openshell]'
 ```
 
 Goalrail uses OpenShell two ways:
@@ -99,7 +99,7 @@ automatically — Goalrail needs no extra configuration.
 
 ## The host image
 
-Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI
+Sandboxes boot from `ghcr.io/heurema/goalrail-host:latest`, published by CI
 from the `host` target of [`deploy/docker/Dockerfile`](../docker/Dockerfile) with
 Goalrail and its dependencies preinstalled — including the coding-harness CLIs
 (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
@@ -117,7 +117,7 @@ Before using an image with OpenShell, smoke-test that contract from the same
 Docker daemon the gateway uses:
 
 ```bash
-docker run --rm --entrypoint sh ghcr.io/omnigent-ai/omnigent-host:latest \
+docker run --rm --entrypoint sh ghcr.io/heurema/goalrail-host:latest \
   -lc 'id sandbox && command -v ip && command -v nft'
 ```
 
@@ -128,11 +128,11 @@ where the gateway's driver can pull from:
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
   --platform linux/amd64 \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/goalrail-host:latest .
+docker push docker.io/<you>/goalrail-host:latest
 ```
 
-Then point Goalrail at it with `OMNIGENT_OPENSHELL_HOST_IMAGE`.
+Then point Goalrail at it with `GOALRAIL_OPENSHELL_HOST_IMAGE`.
 
 > [!NOTE]
 > **Air-gapped?** Pre-load the host image (and OpenShell's supervisor image) into
@@ -165,7 +165,7 @@ sessions targeting that host now run in the sandbox. Pass a unique `--host-name
 on (owner, name)). Sandboxes are disposable; when your code changes, create a new
 one.
 
-To inject LLM/git credentials into the sandbox, set `OMNIGENT_OPENSHELL_SANDBOX_ENV`
+To inject LLM/git credentials into the sandbox, set `GOALRAIL_OPENSHELL_SANDBOX_ENV`
 in your shell to a comma-separated list of variable names before running
 `create` — the named variables are copied from your environment into the sandbox
 at provision time. A listed name that is **not** set fails the launch loudly (it
@@ -173,7 +173,7 @@ would otherwise surface much later as an opaque harness auth failure inside the
 sandbox):
 
 ```bash
-export OMNIGENT_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY,GIT_TOKEN
+export GOALRAIL_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY,GIT_TOKEN
 goalrail sandbox create --provider openshell --server https://your-host
 ```
 
@@ -217,7 +217,7 @@ sandbox:
   provider: openshell
   server_url: https://your-host
   openshell:
-    image: docker.io/<you>/omnigent-host:latest         # default: official image
+    image: docker.io/<you>/goalrail-host:latest         # default: official image
     env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]  # server env var NAMES to inject
     cluster: my-gateway                                  # default: active gateway
 ```
@@ -262,13 +262,13 @@ network_policies:
 > **Forward the proxy vars to the runner.** The host inherits the sandbox's
 > `https_proxy`/`http_proxy`, but the runner subprocess it spawns does **not** —
 > so the runner fails with `Temporary failure in name resolution` even though the
-> host connected. Inject `OMNIGENT_RUNNER_ENV_PASSTHROUGH` naming the proxy vars so
+> host connected. Inject `GOALRAIL_RUNNER_ENV_PASSTHROUGH` naming the proxy vars so
 > the host forwards them:
 > ```yaml
 > sandbox:
 >   openshell:
->     env: [OMNIGENT_RUNNER_ENV_PASSTHROUGH, …]   # value set in the server env:
-> # OMNIGENT_RUNNER_ENV_PASSTHROUGH=https_proxy,http_proxy,HTTPS_PROXY,HTTP_PROXY,NO_PROXY,no_proxy
+>     env: [GOALRAIL_RUNNER_ENV_PASSTHROUGH, …]   # value set in the server env:
+> # GOALRAIL_RUNNER_ENV_PASSTHROUGH=https_proxy,http_proxy,HTTPS_PROXY,HTTP_PROXY,NO_PROXY,no_proxy
 > ```
 
 > [!TIP]
@@ -280,14 +280,14 @@ network_policies:
 ## Model credentials (LLM keys)
 
 A fresh sandbox has no model credentials. Name the variables to inject in
-`OMNIGENT_OPENSHELL_SANDBOX_ENV`; the launcher copies the value from your
+`GOALRAIL_OPENSHELL_SANDBOX_ENV`; the launcher copies the value from your
 environment into the sandbox, and the in-sandbox host forwards the standard
 harness credential vars (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
 `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `GEMINI_API_KEY`, …) to its runners.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-…
-export OMNIGENT_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY
+export GOALRAIL_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY
 ```
 
 Which variables to inject — providers, gateways, subscriptions — is identical to
@@ -295,7 +295,7 @@ the other providers; see the [Modal variable table and per-plan
 recipes](../modal/README.md#llm-credentials-for-managed-sandboxes). For a Claude
 **subscription**, run `claude setup-token` on your own machine (one-time browser
 auth) and inject the resulting `CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the
-standard set, inject `OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
+standard set, inject `GOALRAIL_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 > [!TIP]
 > OpenShell can also enforce credential and egress policy at the sandbox boundary
@@ -305,7 +305,7 @@ standard set, inject `OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 ## Git credentials (private repositories)
 
 Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`) via
-`OMNIGENT_OPENSHELL_SANDBOX_ENV`. The host image's git credential helper answers
+`GOALRAIL_OPENSHELL_SANDBOX_ENV`. The host image's git credential helper answers
 HTTPS auth from it for both the launch-time clone and the agent's later `fetch` /
 `push`, writing nothing to disk. Use HTTPS repository URLs. Details by provider
 match the [Modal git guide](../modal/README.md#git-credentials-private-repositories).
@@ -347,11 +347,11 @@ match the [Modal git guide](../modal/README.md#git-credentials-private-repositor
   was started with `DOCKER_HOST` pointed at colima's socket — `/var/run/docker.sock`
   may point at a different (stopped) Docker.
 - **Agent has no credentials** — verify the injected var names match the forwarded
-  set (or are named in `OMNIGENT_RUNNER_ENV_PASSTHROUGH`), and that each name was
+  set (or are named in `GOALRAIL_RUNNER_ENV_PASSTHROUGH`), and that each name was
   actually set in the launching environment.
 - **Host registers but the runner never comes online / runner log shows
   `Temporary failure in name resolution`** — the runner subprocess isn't getting
-  the sandbox's proxy vars. Forward them with `OMNIGENT_RUNNER_ENV_PASSTHROUGH`
+  the sandbox's proxy vars. Forward them with `GOALRAIL_RUNNER_ENV_PASSTHROUGH`
   (see [Network egress policy](#network-egress-policy)).
 - **Turn fails reaching the model, or proxy returns `403`** — the destination
   isn't in the sandbox's egress allow-list. Add the LLM host (and any
@@ -367,9 +367,9 @@ match the [Modal git guide](../modal/README.md#git-credentials-private-repositor
 | Variable | Where it's read | Purpose |
 |---|---|---|
 | `OPENSHELL_GATEWAY` | CLI machine / server | Gateway name to use; overrides `~/.config/openshell/active_gateway` (read by the SDK). `sandbox.openshell.cluster` takes precedence for managed. |
-| `OMNIGENT_OPENSHELL_HOST_IMAGE` | CLI machine | Override the host image ref (default `ghcr.io/omnigent-ai/omnigent-host:latest`); `sandbox.openshell.image` is the managed equivalent |
-| `OMNIGENT_OPENSHELL_SANDBOX_ENV` | CLI machine | Comma-separated launcher-side env var names to inject into the sandbox; `sandbox.openshell.env` is the managed equivalent |
-| `OMNIGENT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
+| `GOALRAIL_OPENSHELL_HOST_IMAGE` | CLI machine | Override the host image ref (default `ghcr.io/heurema/goalrail-host:latest`); `sandbox.openshell.image` is the managed equivalent |
+| `GOALRAIL_OPENSHELL_SANDBOX_ENV` | CLI machine | Comma-separated launcher-side env var names to inject into the sandbox; `sandbox.openshell.env` is the managed equivalent |
+| `GOALRAIL_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
 | `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |
 
 ## Validation

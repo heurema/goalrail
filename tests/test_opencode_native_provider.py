@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.opencode_native_provider import (
+from goalrail.opencode_native_provider import (
     DEFAULT_DATABRICKS_GATEWAY_MODEL,
     OpenCodeGatewayResolution,
     _gateway_endpoint_for_model,

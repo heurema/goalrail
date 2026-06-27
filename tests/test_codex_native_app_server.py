@@ -14,17 +14,17 @@ try:
 except ImportError:  # pragma: no cover - Python < 3.11
     import tomli as tomllib  # type: ignore[no-redef]
 
-from omnigent.codex_native_app_server import (
+from goalrail.codex_native_app_server import (
     _POLICY_HOOK_TIMEOUT_SECONDS,
     CodexNativeAppServer,
     _codex_policy_hooks_settings,
     build_codex_native_server,
     trust_native_policy_hooks,
 )
-from omnigent.codex_native_hook import _EVALUATE_POLICY_TIMEOUT_S
+from goalrail.codex_native_hook import _EVALUATE_POLICY_TIMEOUT_S
 
 _CWD = "/home/user/repo"
-_OUR_COMMAND = "/venv/bin/python -m omnigent.codex_native_hook evaluate-policy --bridge-dir /b"
+_OUR_COMMAND = "/venv/bin/python -m goalrail.codex_native_hook evaluate-policy --bridge-dir /b"
 _USER_COMMAND = "bash /home/user/.config/llm-cli/hooks/guard.sh"
 
 
@@ -153,11 +153,11 @@ def test_build_codex_native_server_profile_error_names_profile(
     stale/missing runner env apart from a generic Codex startup failure.
     """
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server._find_codex_cli",
+        "goalrail.codex_native_app_server._find_codex_cli",
         lambda: sys.executable,
     )
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server._read_databrickscfg",
+        "goalrail.codex_native_app_server._read_databrickscfg",
         lambda _profile: None,
     )
     monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(tmp_path / "missing-databrickscfg"))
@@ -182,18 +182,18 @@ def test_build_codex_native_server_uses_profile_host_without_static_token(
     """
     Native Codex accepts Databricks CLI OAuth profiles without static tokens.
 
-    A default Omnigent install may not include ``databricks-sdk`` in the
+    A default Goalrail install may not include ``databricks-sdk`` in the
     runner process. In that case ``_read_databrickscfg`` cannot mint a bearer
     at startup, but the profile's host is still enough: Codex gets an
     ``auth.command`` that runs ``databricks auth token --profile`` at request
     time.
     """
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server._find_codex_cli",
+        "goalrail.codex_native_app_server._find_codex_cli",
         lambda: sys.executable,
     )
     monkeypatch.setattr(
-        "omnigent.codex_native_app_server._read_databrickscfg",
+        "goalrail.codex_native_app_server._read_databrickscfg",
         lambda _profile: None,
     )
     cfg_path = tmp_path / "databrickscfg"
@@ -270,11 +270,11 @@ async def test_start_upserts_mcp_server_config_across_relaunches(
 [projects."/repo"]
 trust_level = "trusted"
 
-[mcp_servers.omnigent] # stale generated table
+[mcp_servers.goalrail] # stale generated table
 command = "/old/python"
 args = ["old"]
 
-[mcp_servers.omnigent.env] # stale generated env
+[mcp_servers.goalrail.env] # stale generated env
 OLD = "1"
 
 [mcp_servers.other]
@@ -300,16 +300,16 @@ args = []
     config_path = codex_home / "config.toml"
     assert not config_path.is_symlink()
     rendered = config_path.read_text(encoding="utf-8")
-    assert rendered.count("[mcp_servers.omnigent]") == 1
-    assert "[mcp_servers.omnigent.env]" not in rendered
+    assert rendered.count("[mcp_servers.goalrail]") == 1
+    assert "[mcp_servers.goalrail.env]" not in rendered
     parsed = tomllib.loads(rendered)
     assert parsed["mcp_servers"]["other"]["command"] == "other"
-    assert parsed["mcp_servers"]["omnigent"] == {
+    assert parsed["mcp_servers"]["goalrail"] == {
         "command": "/new/python",
         "args": [
             "-I",
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(bridge_dir),
@@ -341,14 +341,14 @@ async def test_start_writes_fresh_mcp_config_without_leading_blanks(
     await server.close()
 
     rendered = (codex_home / "config.toml").read_text(encoding="utf-8")
-    assert rendered.startswith("[mcp_servers.omnigent]\n")
+    assert rendered.startswith("[mcp_servers.goalrail]\n")
     parsed = tomllib.loads(rendered)
-    assert parsed["mcp_servers"]["omnigent"] == {
+    assert parsed["mcp_servers"]["goalrail"] == {
         "command": "/new/python",
         "args": [
             "-I",
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(bridge_dir),
@@ -358,7 +358,7 @@ async def test_start_writes_fresh_mcp_config_without_leading_blanks(
 
 async def test_untrusted_hook_is_trusted_via_batchwrite() -> None:
     """
-    An untrusted Omnigent hook is trusted with its currentHash.
+    An untrusted Goalrail hook is trusted with its currentHash.
 
     This is the core flow: list → write trusted_hash → verify trusted.
     It fails if the batchWrite omits our key, writes the wrong hash, or
@@ -393,7 +393,7 @@ async def test_already_trusted_hook_skips_batchwrite() -> None:
 
 async def test_missing_hook_raises() -> None:
     """
-    No discovered Omnigent hook fails loud (anti fail-open).
+    No discovered Goalrail hook fails loud (anti fail-open).
 
     If our hook was never registered/loaded, enforcement would silently
     not run. The flow must raise rather than return quietly. Fails if a
@@ -424,7 +424,7 @@ async def test_still_untrusted_after_write_raises() -> None:
 
 async def test_user_hooks_are_never_trusted() -> None:
     """
-    Only Omnigent hooks are trusted; user-declared hooks are left alone.
+    Only Goalrail hooks are trusted; user-declared hooks are left alone.
 
     The private CODEX_HOME symlinks the user's config.toml, which may
     declare its own hooks. Auto-trusting those would be a security hole.
@@ -532,7 +532,7 @@ def _set_codex_version(
     async def _fake_version(_codex_path: str) -> tuple[int, int, int] | None:
         return version
 
-    monkeypatch.setattr("omnigent.codex_native_app_server._codex_cli_version", _fake_version)
+    monkeypatch.setattr("goalrail.codex_native_app_server._codex_cli_version", _fake_version)
 
 
 async def test_old_codex_skips_policy_hook_and_records_reason(
@@ -655,7 +655,7 @@ async def test_trust_failure_is_fail_open_with_reason(
     _set_codex_version(monkeypatch, (0, 136, 0))
 
     async def _raise_trust(_self: CodexNativeAppServer) -> None:
-        raise RuntimeError("Omnigent policy hook was not discovered for cwd ...")
+        raise RuntimeError("Goalrail policy hook was not discovered for cwd ...")
 
     monkeypatch.setattr(CodexNativeAppServer, "_trust_policy_hooks", _raise_trust)
 
@@ -729,7 +729,7 @@ class TestPinCodexConfigModel:
         "model", and keys inside tables must never be touched — both were
         plausible regressions for a line-match implementation.
         """
-        from omnigent.codex_native_app_server import _pin_codex_config_model
+        from goalrail.codex_native_app_server import _pin_codex_config_model
 
         config = tmp_path / "config.toml"
         config.write_text(
@@ -750,7 +750,7 @@ class TestPinCodexConfigModel:
 
     def test_inserts_model_when_absent(self, tmp_path: Path) -> None:
         """A config with no top-level ``model`` gains one as the first line."""
-        from omnigent.codex_native_app_server import _pin_codex_config_model
+        from goalrail.codex_native_app_server import _pin_codex_config_model
 
         config = tmp_path / "config.toml"
         config.write_text("[profiles.default]\nx = 1\n", encoding="utf-8")
@@ -762,7 +762,7 @@ class TestPinCodexConfigModel:
     def test_materializes_symlink_without_touching_source(self, tmp_path: Path) -> None:
         """A symlinked config.toml is copied per-session; the shared source
         keeps its own model line (the live-caught clobber scenario)."""
-        from omnigent.codex_native_app_server import _pin_codex_config_model
+        from goalrail.codex_native_app_server import _pin_codex_config_model
 
         shared = tmp_path / "shared-config.toml"
         shared.write_text('model = "gpt-5.5"\n', encoding="utf-8")
@@ -783,8 +783,8 @@ class TestPinCodexConfigModel:
         reported the shared file's stale model and overwrote the child's
         ``model_override``.
         """
-        from omnigent.codex_native_app_server import _pin_codex_config_model
-        from omnigent.codex_native_bridge import read_codex_config_model
+        from goalrail.codex_native_app_server import _pin_codex_config_model
+        from goalrail.codex_native_bridge import read_codex_config_model
 
         home = tmp_path / "codex-home"
         home.mkdir()

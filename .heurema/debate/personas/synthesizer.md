@@ -14,4 +14,4 @@ Turn the debate into a bounded engineering decision. Return:
 5. rollback point;
 6. what not to change yet.
 
-Keep the synthesis concrete and bounded to Goalrail plus the Omnigent rewrite.
+Keep the synthesis concrete and bounded to Goalrail plus the Goalrail rewrite.

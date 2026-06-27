@@ -129,7 +129,7 @@ describe("quick pin/unpin hover button", () => {
 
     // Persisted to localStorage so the pin survives a reload (same contract
     // as the kebab's Pin item).
-    expect(localStorage.getItem("omnigent:pinned-conversation-ids")).toContain("conv_1");
+    expect(localStorage.getItem("goalrail:pinned-conversation-ids")).toContain("conv_1");
 
     // Clicking again unpins: the Pinned section disappears.
     fireEvent.click(screen.getByTestId("quick-pin-conversation"));
@@ -154,7 +154,7 @@ describe("quick pin/unpin hover button", () => {
     const pinnedHeader = screen.getByText("Pinned");
     const pinnedSection = pinnedHeader.closest("section")!;
     expect(within(pinnedSection).getByText("My Session")).toBeInTheDocument();
-    expect(localStorage.getItem("omnigent:pinned-conversation-ids")).toContain("conv_1");
+    expect(localStorage.getItem("goalrail:pinned-conversation-ids")).toContain("conv_1");
   });
 
   it("splits the two pin affordances by viewport via Tailwind responsive classes", () => {

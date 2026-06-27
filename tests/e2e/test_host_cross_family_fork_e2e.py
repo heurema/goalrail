@@ -4,13 +4,13 @@ Covers forking an openai-family source into the anthropic NATIVE harness:
 codex-native → claude-native and openai-agents (SDK) → claude-native. The
 source's history is the wrong format (or has no native transcript at all)
 for the target, so the runner must take the REBUILD path: synthesize the
-Claude transcript from the fork's copied Omnigent items
+Claude transcript from the fork's copied Goalrail items
 (``_ensure_local_claude_resume_transcript``) under a freshly minted
 session uuid, then ``--resume`` it.
 
 The codex→claude test deliberately waits for the SOURCE to capture its
 ``external_session_id`` before forking. That makes the regression sharp:
-the fork route must SKIP the ``omnigent.fork.source_external_session_id``
+the fork route must SKIP the ``goalrail.fork.source_external_session_id``
 directive on a cross-family switch even though the source has one — if it
 were stamped, the runner's clone branch would look for a native transcript
 in the wrong format, find nothing, and launch FRESH (silently losing
@@ -31,7 +31,7 @@ Opt-in: the codex→claude test needs BOTH CLIs installed and logged in
 ``$HOME``; codex needs ``codex`` on PATH with model credentials); the
 SDK→native test needs only the Claude side. Set the matching gates::
 
-    OMNIGENT_E2E_CLAUDE_NATIVE=1 OMNIGENT_E2E_CODEX_NATIVE=1 \\
+    GOALRAIL_E2E_CLAUDE_NATIVE=1 GOALRAIL_E2E_CODEX_NATIVE=1 \\
     .venv/bin/python -m pytest tests/e2e/test_host_cross_family_fork_e2e.py \\
         --llm-api-key "mock-key" \\
         -v
@@ -48,7 +48,7 @@ from typing import Protocol
 import httpx
 import pytest
 
-from omnigent.stores.conversation_store import (
+from goalrail.stores.conversation_store import (
     FORK_CARRY_HISTORY_LABEL_KEY,
     FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY,
 )
@@ -90,20 +90,20 @@ from tests.e2e.test_host_codex_native_e2e import (
 # test_host_claude_native_e2e / test_host_codex_native_e2e for why binary
 # presence alone is not a sufficient gate.
 _BOTH_NATIVE_GATE = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CLAUDE_NATIVE") != "1"
-    or os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1"
+    os.environ.get("GOALRAIL_E2E_CLAUDE_NATIVE") != "1"
+    or os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1"
     or shutil.which("claude") is None
     or shutil.which("codex") is None,
     reason=(
         "cross-family native↔native fork e2e needs `claude` AND `codex` installed/logged in; "
-        "set OMNIGENT_E2E_CLAUDE_NATIVE=1 and OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "set GOALRAIL_E2E_CLAUDE_NATIVE=1 and GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 _CLAUDE_NATIVE_GATE = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
+    os.environ.get("GOALRAIL_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
     reason=(
         "cross-family SDK→claude-native fork e2e needs an interactive Claude login; "
-        "set OMNIGENT_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
+        "set GOALRAIL_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
     ),
 )
 
@@ -161,7 +161,7 @@ def _assert_cross_family_fork_labels(
         f"cross-family fork must NOT stamp the source's native session id, got labels {labels!r}"
     )
     # The clone's UI mode must reflect the TARGET harness, not the source's.
-    assert labels.get("omnigent.wrapper") == expected_wrapper, (
+    assert labels.get("goalrail.wrapper") == expected_wrapper, (
         f"fork should present as the TARGET harness {expected_wrapper!r}, got labels {labels!r}"
     )
 
@@ -210,7 +210,7 @@ def _recall_marker_in_clone(
     """
     Ask the clone to recall the planted word and assert it surfaces.
 
-    The recall only succeeds if the source's Omnigent items were rebuilt
+    The recall only succeeds if the source's Goalrail items were rebuilt
     into the clone's native transcript and resumed — a fresh launch (the
     regression) has no history and never echoes the marker.
 
@@ -233,7 +233,7 @@ def _recall_marker_in_clone(
     text = poll_marker(client, session_id=fork_id, marker=marker, timeout=180.0)
     assert marker in text, (
         f"{target_harness} clone did not recall {marker!r} (got {text!r}) — the "
-        f"{source_harness} source's Omnigent items were not rebuilt into the "
+        f"{source_harness} source's Goalrail items were not rebuilt into the "
         f"clone's native transcript, so it launched fresh without history"
     )
 
@@ -250,7 +250,7 @@ def test_fork_codex_native_into_claude_native_rebuilds_history(
     The headline cross-family case: the source has a captured Codex thread
     id, but a Claude target can't resume a Codex rollout — the fork must
     skip the source-session directive and the runner must rebuild the
-    Claude transcript from the copied Omnigent items, then ``--resume`` it.
+    Claude transcript from the copied Goalrail items, then ``--resume`` it.
 
     :param live_server: The test server URL.
     :param http_client: HTTP client pointed at the test server.
@@ -318,7 +318,7 @@ def test_fork_openai_sdk_source_into_claude_native_rebuilds_history(
     from the target's (anthropic), so — unlike the same-family
     ``test_fork_sdk_source_into_native_builds_history`` — the fork route
     used to refuse to carry history at all. The runner must rebuild the
-    clone's Claude transcript from the copied Omnigent items and resume it.
+    clone's Claude transcript from the copied Goalrail items and resume it.
     Only the Claude CLI is needed (the source runs in-process on the
     server's runner), so this is the cross-family case that runs on hosts
     without a codex login.

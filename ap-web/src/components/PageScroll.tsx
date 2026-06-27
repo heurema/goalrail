@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * bar + OS safe area).
  *
  * All of that comes from the shared inset variables defined in index.css
- * (`--omnigent-header-height`, `--omnigent-inset-top/bottom`). Off the iOS shell
+ * (`--goalrail-header-height`, `--goalrail-inset-top/bottom`). Off the iOS shell
  * those resolve to `0` / plain `env(safe-area-*)`, so the SAME component renders
  * correctly in the browser, Electron, and the iOS shell with no runtime branch.
  *
@@ -57,10 +57,10 @@ export function PageScroll({
   // missed. The padding lives on the scroll container so the last item can
   // scroll up clear of the bar.
   const style: CSSProperties = {
-    paddingTop: `calc(${extraTop}${clearHeader ? " + var(--omnigent-header-height)" : ""}${
-      insetTop ? " + var(--omnigent-inset-top)" : ""
+    paddingTop: `calc(${extraTop}${clearHeader ? " + var(--goalrail-header-height)" : ""}${
+      insetTop ? " + var(--goalrail-inset-top)" : ""
     })`,
-    paddingBottom: `calc(${extraBottom}${insetBottom ? " + var(--omnigent-inset-bottom)" : ""})`,
+    paddingBottom: `calc(${extraBottom}${insetBottom ? " + var(--goalrail-inset-bottom)" : ""})`,
   };
 
   return (

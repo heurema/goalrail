@@ -6,7 +6,7 @@ issues a server-side 302 to it. Without validation that is an open
 redirect — ``/auth/login?return_to=https://evil.example`` would land the
 user on an attacker page under the app's own domain.
 
-These tests pin both halves of the fix in ``omnigent/server/routes/auth.py``:
+These tests pin both halves of the fix in ``goalrail/server/routes/auth.py``:
 
 1. **Ingest** (``/auth/login``): a malicious ``return_to`` is reduced to
    ``"/"`` *before* it is signed into the state cookie, so the cookie
@@ -33,12 +33,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import omnigent.server.routes.auth as auth_module
-from omnigent.server.admin_list import AdminList
-from omnigent.server.auth import UnifiedAuthProvider
-from omnigent.server.oidc import OIDCConfig
-from omnigent.server.routes.auth import create_auth_router
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+import goalrail.server.routes.auth as auth_module
+from goalrail.server.admin_list import AdminList
+from goalrail.server.auth import UnifiedAuthProvider
+from goalrail.server.oidc import OIDCConfig
+from goalrail.server.routes.auth import create_auth_router
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 _TEST_SECRET = bytes.fromhex("aa" * 32)
 # The plain (non-__Host-) state cookie name, used because the test

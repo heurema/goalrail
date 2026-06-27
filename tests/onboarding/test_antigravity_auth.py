@@ -1,4 +1,4 @@
-"""Tests for ``omnigent/onboarding/antigravity_auth.py`` — the Gemini key store.
+"""Tests for ``goalrail/onboarding/antigravity_auth.py`` — the Gemini key store.
 
 Isolate config + secret store to a tmp dir (file backend) and assert the
 read/resolve/configured helpers — including the soft resolution that returns
@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.onboarding import antigravity_auth
-from omnigent.onboarding import secrets as secret_store
-from omnigent.onboarding.antigravity_auth import (
+from goalrail.onboarding import antigravity_auth
+from goalrail.onboarding import secrets as secret_store
+from goalrail.onboarding.antigravity_auth import (
     ANTIGRAVITY_SECRET_NAME,
     antigravity_api_key_configured,
     antigravity_api_key_ref,
@@ -33,8 +33,8 @@ def _isolate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
     :returns: The tmp config-home dir, so a test can write a ``config.yaml``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("ANTIGRAVITY_API_KEY", raising=False)
     return tmp_path
@@ -87,7 +87,7 @@ def test_inline_api_key_field_accepted(_isolate: Path, monkeypatch: pytest.Monke
 def test_dangling_keychain_ref_is_soft_none(_isolate: Path) -> None:
     """A reference to a never-stored keychain entry resolves softly to ``None``.
 
-    Failure (an ``OmnigentError`` escaping) would crash an antigravity run / the
+    Failure (an ``GoalrailError`` escaping) would crash an antigravity run / the
     setup readout on a deleted secret instead of falling back to the SDK's
     ambient / Vertex credentials.
     """
@@ -151,7 +151,7 @@ def test_antigravity_install_command_prefers_uv(monkeypatch: pytest.MonkeyPatch)
     """With ``uv`` on PATH, the install runs ``uv pip install`` — no index URL."""
     monkeypatch.setattr(antigravity_auth.shutil, "which", lambda name: "/usr/bin/uv")
     cmd = antigravity_install_command()
-    assert cmd == ["uv", "pip", "install", "omnigent[antigravity]"]
+    assert cmd == ["uv", "pip", "install", "goalrail[antigravity]"]
     # No hardcoded index / proxy leaks into committed code.
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -165,7 +165,7 @@ def test_antigravity_install_command_falls_back_to_pip(monkeypatch: pytest.Monke
         "-m",
         "pip",
         "install",
-        "omnigent[antigravity]",
+        "goalrail[antigravity]",
     ]
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -194,7 +194,7 @@ def test_install_antigravity_sdk_runs_command_then_rechecks(
 
     assert install_antigravity_sdk() is True
     assert calls == [
-        [antigravity_auth.sys.executable, "-m", "pip", "install", "omnigent[antigravity]"]
+        [antigravity_auth.sys.executable, "-m", "pip", "install", "goalrail[antigravity]"]
     ]
 
 

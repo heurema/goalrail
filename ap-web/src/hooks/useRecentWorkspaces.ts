@@ -3,7 +3,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-const STORAGE_KEY = "omnigent:recent-workspaces";
+const STORAGE_KEY = "goalrail:recent-workspaces";
 const MAX_PER_HOST = 8;
 
 // Map of host_id -> most-recent-first list of absolute paths.

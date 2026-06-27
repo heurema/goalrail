@@ -1,30 +1,30 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: omnigent
+  name: goalrail
   labels:
-    app: omnigent
+    app: goalrail
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: omnigent
+      app: goalrail
   template:
     metadata:
       labels:
-        app: omnigent
+        app: goalrail
     spec:
       containers:
-        - name: omnigent
-          image: ghcr.io/omnigent-ai/omnigent-server:latest
+        - name: goalrail
+          image: ghcr.io/heurema/goalrail-server:latest
           ports:
             - containerPort: 8000
               name: http
           envFrom:
             - configMapRef:
-                name: omnigent-config
+                name: goalrail-config
             - secretRef:
-                name: omnigent-secrets
+                name: goalrail-secrets
           volumeMounts:
             - name: artifacts
               mountPath: /data/artifacts
@@ -52,4 +52,4 @@ spec:
       volumes:
         - name: artifacts
           persistentVolumeClaim:
-            claimName: omnigent-artifacts
+            claimName: goalrail-artifacts

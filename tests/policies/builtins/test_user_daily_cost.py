@@ -22,8 +22,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.cost import user_daily_cost_budget
-from omnigent.policies.schema import USER_DAILY_ASK_APPROVED_STATE_KEY, PolicyEvent
+from goalrail.policies.builtins.cost import user_daily_cost_budget
+from goalrail.policies.schema import USER_DAILY_ASK_APPROVED_STATE_KEY, PolicyEvent
 
 
 def _tool(

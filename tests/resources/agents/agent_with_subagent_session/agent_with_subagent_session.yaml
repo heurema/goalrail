@@ -3,7 +3,7 @@
 # Usage:
 #   export DATABRICKS_CONFIG_PROFILE=<your-profile>
 #
-#   .venv/bin/python -m omnigent examples/agent_with_subagent_session.yaml \
+#   .venv/bin/python -m goalrail examples/agent_with_subagent_session.yaml \
 #       --harness databricks --model databricks-gpt-5-4-mini
 #
 #   Then try prompts like:

@@ -13,8 +13,8 @@ import asyncio
 
 import pytest
 
-from omnigent.server.host_registry import RunnerExitReports
-from omnigent.server.routes.sessions import _wait_for_runner_client
+from goalrail.server.host_registry import RunnerExitReports
+from goalrail.server.routes.sessions import _wait_for_runner_client
 
 pytestmark = pytest.mark.asyncio
 

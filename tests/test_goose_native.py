@@ -1,11 +1,11 @@
-"""Unit tests for the omni goose CLI-side helpers (no server needed)."""
+"""Unit tests for the goalrail goose CLI-side helpers (no server needed)."""
 
 from __future__ import annotations
 
 import click
 import pytest
 
-from omnigent import goose_native as gn
+from goalrail import goose_native as gn
 
 
 def test_resolve_goose_executable_found() -> None:
@@ -17,7 +17,7 @@ def test_resolve_goose_executable_found() -> None:
 
 def test_resolve_goose_executable_honors_path_override() -> None:
     resolved = gn.resolve_goose_executable(
-        env={"OMNIGENT_GOOSE_PATH": "/opt/goose"},
+        env={"GOALRAIL_GOOSE_PATH": "/opt/goose"},
         which=lambda cmd: cmd if cmd == "/opt/goose" else None,
     )
     assert resolved == "/opt/goose"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
 
 
 @pytest.fixture()

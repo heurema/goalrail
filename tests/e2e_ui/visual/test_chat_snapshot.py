@@ -154,7 +154,7 @@ def test_chat_conversation_matches_baseline(
 
     :param snapshot_page: page pinned to a fixed viewport + light palette (see
         the suite ``conftest.py``).
-    :param live_server: Base URL of the spawned ``omnigent server`` serving the
+    :param live_server: Base URL of the spawned ``goalrail server`` serving the
         built SPA. Every data call the chat bind makes is stubbed below, so no
         real session / LLM is involved.
     :param fulfill_json: 200-JSON route helper (suite ``conftest.py``).

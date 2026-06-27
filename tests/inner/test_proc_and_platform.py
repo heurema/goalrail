@@ -1,6 +1,6 @@
 """Tests for the cross-platform process/platform primitives and Windows backend.
 
-Covers omnigent._platform, omnigent.inner._proc, the harness IPC endpoint
+Covers goalrail._platform, goalrail.inner._proc, the harness IPC endpoint
 abstraction, and the windows_jobobject sandbox backend. The platform-specific
 assertions are gated with ``posix_only`` / ``windows_only`` markers so the
 file runs on both Linux CI and a Windows box.
@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import _platform
-from omnigent.inner import _proc
+from goalrail import _platform
+from goalrail.inner import _proc
 
 
 def _spin_cmd() -> list[str]:
@@ -39,9 +39,9 @@ def test_platform_flags_are_mutually_consistent() -> None:
 
 
 def test_default_shell_argv_runs_an_echo() -> None:
-    argv = _platform.default_shell_argv("echo omnigent-shell-ok")
+    argv = _platform.default_shell_argv("echo goalrail-shell-ok")
     out = subprocess.run(argv, capture_output=True, text=True, check=True)
-    assert "omnigent-shell-ok" in out.stdout
+    assert "goalrail-shell-ok" in out.stdout
 
 
 def test_stable_user_id_is_stable_and_path_safe() -> None:
@@ -123,7 +123,7 @@ def test_terminate_tree_stops_the_process() -> None:
 
 
 def test_endpoint_uds_variant_shape() -> None:
-    from omnigent.runtime.harnesses.process_manager import _HarnessEndpoint
+    from goalrail.runtime.harnesses.process_manager import _HarnessEndpoint
 
     ep = _HarnessEndpoint(socket_path=Path("/tmp/x/conv.sock"))
     assert ep.is_uds is True
@@ -132,7 +132,7 @@ def test_endpoint_uds_variant_shape() -> None:
 
 
 def test_endpoint_tcp_variant_shape() -> None:
-    from omnigent.runtime.harnesses.process_manager import _HarnessEndpoint
+    from goalrail.runtime.harnesses.process_manager import _HarnessEndpoint
 
     ep = _HarnessEndpoint(host="127.0.0.1", port=54321)
     assert ep.is_uds is False
@@ -141,7 +141,7 @@ def test_endpoint_tcp_variant_shape() -> None:
 
 
 def test_endpoint_create_picks_platform_transport() -> None:
-    from omnigent.runtime.harnesses.process_manager import _HarnessEndpoint
+    from goalrail.runtime.harnesses.process_manager import _HarnessEndpoint
 
     ep = _HarnessEndpoint.create(Path("/tmp/inst"), "conv_x")
     assert ep.is_uds == (os.name != "nt")
@@ -154,15 +154,15 @@ def test_endpoint_create_picks_platform_transport() -> None:
 
 @pytest.mark.windows_only
 def test_windows_jobobject_is_platform_default() -> None:
-    from omnigent.inner import sandbox
+    from goalrail.inner import sandbox
 
     assert sandbox._default_sandbox_for_platform().type == "windows_jobobject"
 
 
 @pytest.mark.windows_only
 def test_windows_jobobject_kill_on_close_terminates_tree() -> None:
-    from omnigent.inner.sandbox import SandboxPolicy
-    from omnigent.inner.windows_jobobject_sandbox import WindowsJobObjectSandboxBackend
+    from goalrail.inner.sandbox import SandboxPolicy
+    from goalrail.inner.windows_jobobject_sandbox import WindowsJobObjectSandboxBackend
 
     backend = WindowsJobObjectSandboxBackend()
     policy = SandboxPolicy(
@@ -187,8 +187,8 @@ def test_windows_jobobject_kill_on_close_terminates_tree() -> None:
 
 @pytest.mark.windows_only
 def test_explicit_bwrap_errors_loudly_on_windows() -> None:
-    from omnigent.inner import sandbox
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from goalrail.inner import sandbox
+    from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     sandbox._ensure_builtin_backends()
     backend = sandbox.get_backend("linux_bwrap")
@@ -198,7 +198,7 @@ def test_explicit_bwrap_errors_loudly_on_windows() -> None:
 
 @pytest.mark.posix_only
 def test_posix_default_sandbox_is_not_jobobject() -> None:
-    from omnigent.inner import sandbox
+    from goalrail.inner import sandbox
 
     assert sandbox._default_sandbox_for_platform().type in {"linux_bwrap", "darwin_seatbelt"}
 
@@ -206,11 +206,11 @@ def test_posix_default_sandbox_is_not_jobobject() -> None:
 @pytest.mark.windows_only
 def test_helper_env_keeps_systemroot_so_child_can_import_asyncio() -> None:
     # Regression: a filtered (active-sandbox) helper env that drops SYSTEMROOT
-    # makes any spawned `python -m omnigent...` die at `import asyncio` with
+    # makes any spawned `python -m goalrail...` die at `import asyncio` with
     # WinError 10106 (Winsock loads providers from %SystemRoot%). The os_env
     # allowlist must carry the Windows system vars.
-    from omnigent.inner.os_env import build_helper_env
-    from omnigent.inner.sandbox import SandboxPolicy
+    from goalrail.inner.os_env import build_helper_env
+    from goalrail.inner.sandbox import SandboxPolicy
 
     policy = SandboxPolicy(
         backend_type="windows_jobobject",
@@ -237,7 +237,7 @@ def test_parent_death_watchdog_does_not_false_fire_on_windows() -> None:
     # launcher breaks the parent link), so the getppid-based orphan check
     # reported the runner orphaned the instant it started and tore it down
     # (clean exit 0). With a live parent_pid the runner must NOT be orphaned.
-    from omnigent.runner._entry import _parent_is_orphaned
+    from goalrail.runner._entry import _parent_is_orphaned
 
     assert _parent_is_orphaned(os.getpid()) is False
     assert _parent_is_orphaned(2_000_000_000) is True
@@ -250,7 +250,7 @@ def test_host_runner_env_lets_child_import_asyncio_and_resolve_home() -> None:
     # directory"). Both must pass through so a spawned runner can boot.
     import sys
 
-    from omnigent.host.connect import _build_runner_env
+    from goalrail.host.connect import _build_runner_env
 
     env = _build_runner_env(
         base_env=os.environ,

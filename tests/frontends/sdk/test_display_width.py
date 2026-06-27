@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from omnigent_ui_sdk.terminal._host import (
+from goalrail_ui_sdk.terminal._host import (
     _display_width,
     _term_height,
     _term_width,

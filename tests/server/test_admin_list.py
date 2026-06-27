@@ -1,4 +1,4 @@
-"""Tests for the file-backed admin roster (:mod:`omnigent.server.admin_list`).
+"""Tests for the file-backed admin roster (:mod:`goalrail.server.admin_list`).
 
 Covers three layers:
 
@@ -29,9 +29,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from omnigent.server.accounts_config import AccountsConfig
-from omnigent.server.accounts_store import SqlAlchemyAccountStore
-from omnigent.server.admin_list import (
+from goalrail.server.accounts_config import AccountsConfig
+from goalrail.server.accounts_store import SqlAlchemyAccountStore
+from goalrail.server.admin_list import (
     AdminList,
     MtimeCachedIdentitySet,
     load_admin_list,
@@ -39,10 +39,10 @@ from omnigent.server.admin_list import (
     resolve_admin_list_path,
     resolve_data_dir,
 )
-from omnigent.server.auth import UnifiedAuthProvider
-from omnigent.server.passwords import hash_password
-from omnigent.server.routes.accounts_auth import create_accounts_auth_router
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.server.auth import UnifiedAuthProvider
+from goalrail.server.passwords import hash_password
+from goalrail.server.routes.accounts_auth import create_accounts_auth_router
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 # ── File loader: parsing ──────────────────────────────────────────
 
@@ -82,7 +82,7 @@ def test_loader_ignores_comments_and_blanks(tmp_path: Path) -> None:
     never match.
     """
     f = tmp_path / "admins"
-    f.write_text("# Omnigent admins\n\nalice@example.com   # founder\n   \nbob@example.com\n")
+    f.write_text("# Goalrail admins\n\nalice@example.com   # founder\n   \nbob@example.com\n")
     s = MtimeCachedIdentitySet(f)
     assert s.snapshot() == frozenset({"alice@example.com", "bob@example.com"})
 
@@ -154,15 +154,15 @@ def test_loader_unreadable_file_is_empty(tmp_path: Path) -> None:
 
 
 def test_resolve_admin_list_path_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``OMNIGENT_ADMIN_LIST_PATH`` wins over the default."""
-    monkeypatch.setenv("OMNIGENT_ADMIN_LIST_PATH", "/etc/omnigent/admins")
-    assert resolve_admin_list_path() == Path("/etc/omnigent/admins")
+    """``GOALRAIL_ADMIN_LIST_PATH`` wins over the default."""
+    monkeypatch.setenv("GOALRAIL_ADMIN_LIST_PATH", "/etc/goalrail/admins")
+    assert resolve_admin_list_path() == Path("/etc/goalrail/admins")
 
 
 def test_resolve_data_dir_uses_credentials_parent(monkeypatch: pytest.MonkeyPatch) -> None:
     """Data dir co-locates with the credentials file (Docker ``/data``)."""
-    monkeypatch.setenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", "/data/admin-credentials")
-    monkeypatch.delenv("OMNIGENT_ADMIN_LIST_PATH", raising=False)
+    monkeypatch.setenv("GOALRAIL_ADMIN_CREDENTIALS_PATH", "/data/admin-credentials")
+    monkeypatch.delenv("GOALRAIL_ADMIN_LIST_PATH", raising=False)
     assert resolve_data_dir() == Path("/data")
     assert resolve_admin_list_path() == Path("/data/admins")
 
@@ -172,30 +172,30 @@ def test_resolve_data_dir_uses_goalrail_data_dir(
     tmp_path: Path,
 ) -> None:
     """``GOALRAIL_DATA_DIR`` redirects default server-side state files."""
-    monkeypatch.delenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", raising=False)
-    monkeypatch.delenv("OMNIGENT_ADMIN_LIST_PATH", raising=False)
+    monkeypatch.delenv("GOALRAIL_ADMIN_CREDENTIALS_PATH", raising=False)
+    monkeypatch.delenv("GOALRAIL_ADMIN_LIST_PATH", raising=False)
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(tmp_path / "goalrail-data"))
-    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "omnigent-data"))
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(tmp_path / "goalrail-data"))
 
     assert resolve_data_dir() == tmp_path / "goalrail-data"
     assert resolve_admin_list_path() == tmp_path / "goalrail-data" / "admins"
 
 
 def test_resolve_data_dir_defaults_to_home(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With no env, the data dir is ``~/.omnigent``."""
+    """With no env, the data dir is ``~/.goalrail``."""
     monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
-    monkeypatch.delenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", raising=False)
-    monkeypatch.delenv("OMNIGENT_ADMIN_LIST_PATH", raising=False)
-    assert resolve_data_dir() == Path.home() / ".omnigent"
-    assert resolve_admin_list_path() == Path.home() / ".omnigent" / "admins"
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_ADMIN_CREDENTIALS_PATH", raising=False)
+    monkeypatch.delenv("GOALRAIL_ADMIN_LIST_PATH", raising=False)
+    assert resolve_data_dir() == Path.home() / ".goalrail"
+    assert resolve_admin_list_path() == Path.home() / ".goalrail" / "admins"
 
 
 def test_load_admin_list_binds_resolved_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """``load_admin_list`` constructs an AdminList at the resolved path."""
-    monkeypatch.setenv("OMNIGENT_ADMIN_LIST_PATH", "/tmp/omnigent-admins-test")
+    monkeypatch.setenv("GOALRAIL_ADMIN_LIST_PATH", "/tmp/goalrail-admins-test")
     al = load_admin_list()
-    assert al.path == Path("/tmp/omnigent-admins-test")
+    assert al.path == Path("/tmp/goalrail-admins-test")
 
 
 # ── config admins (the `extra` set) + file union ──────────────────
@@ -221,7 +221,7 @@ def test_admin_list_unions_config_and_file(tmp_path: Path) -> None:
 
 def test_load_admin_list_passes_extra(monkeypatch: pytest.MonkeyPatch) -> None:
     """``load_admin_list(extra=…)`` threads the config admins through."""
-    monkeypatch.setenv("OMNIGENT_ADMIN_LIST_PATH", "/tmp/omnigent-admins-absent")
+    monkeypatch.setenv("GOALRAIL_ADMIN_LIST_PATH", "/tmp/goalrail-admins-absent")
     al = load_admin_list(extra=frozenset({"carol@example.com"}))
     assert al.is_admin("carol@example.com")
 

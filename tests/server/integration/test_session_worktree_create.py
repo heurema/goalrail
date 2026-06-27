@@ -20,15 +20,15 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HostCreateWorktreeFrame,
     HostHelloFrame,
     HostStatFrame,
     decode_host_frame,
 )
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.server.host_registry import HostConnection
-from omnigent.stores.host_store import HostStore
+from goalrail.server.auth import RESERVED_USER_LOCAL
+from goalrail.server.host_registry import HostConnection
+from goalrail.stores.host_store import HostStore
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio

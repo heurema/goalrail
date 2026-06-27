@@ -1,0 +1,742 @@
+{
+  "repo": "/Users/vi/personal/heurema/goalrail",
+  "tracked_files_scanned": 2638,
+  "occurrence_lines": 24927,
+  "occurrence_count": 26379,
+  "files_with_occurrences": 1673,
+  "word_omni_lines": 233,
+  "token_counts": {
+    "goalrail": 18601,
+    "Goalrail": 5386,
+    "GOALRAIL": 2190,
+    "heurema": 135,
+    "goalrail": 21,
+    "goalrail.dev": 16,
+    "GOALRAIL": 6,
+    "GOALRAIL": 6,
+    "goalrail": 5,
+    "goalrail": 5,
+    "Goalrail": 4,
+    "GOALRAIL": 4
+  },
+  "group_counts": {
+    "python-tests": 12423,
+    "python-runtime": 10030,
+    "deploy": 1297,
+    "web-app-src": 534,
+    "root-config-docs": 366,
+    "docs": 295,
+    "github-ci": 280,
+    "sdks": 261,
+    "other": 214,
+    "ios-app": 160,
+    "desktop-electron": 133,
+    "heurema-lab": 119,
+    "scripts": 100,
+    "web-app-config": 59,
+    "examples": 57,
+    "designs": 51
+  },
+  "top_files": [
+    [
+      "goalrail/cli.py",
+      938
+    ],
+    [
+      "goalrail/server/routes/sessions.py",
+      574
+    ],
+    [
+      "goalrail/runner/app.py",
+      545
+    ],
+    [
+      "tests/cli/test_cli.py",
+      451
+    ],
+    [
+      "tests/runner/test_app_sessions_native.py",
+      402
+    ],
+    [
+      "tests/spec/test_goalrail_adapter.py",
+      320
+    ],
+    [
+      "goalrail/spec/goalrail.py",
+      303
+    ],
+    [
+      "goalrail/chat.py",
+      272
+    ],
+    [
+      "tests/cli/test_update_check.py",
+      242
+    ],
+    [
+      "tests/test_codex_native.py",
+      225
+    ],
+    [
+      "goalrail/codex_native_forwarder.py",
+      224
+    ],
+    [
+      "tests/runner/test_runner_dispatch.py",
+      222
+    ],
+    [
+      "goalrail/repl/_repl.py",
+      218
+    ],
+    [
+      "tests/server/integration/test_sessions_endpoints.py",
+      215
+    ],
+    [
+      "tests/cli/test_chat.py",
+      201
+    ],
+    [
+      "goalrail/spec/parser.py",
+      184
+    ],
+    [
+      "tests/inner/test_claude_sdk_executor.py",
+      178
+    ],
+    [
+      "goalrail/claude_native.py",
+      176
+    ],
+    [
+      "goalrail/runner/tool_dispatch.py",
+      159
+    ],
+    [
+      "tests/test_claude_native.py",
+      151
+    ],
+    [
+      "tests/server/test_accounts.py",
+      149
+    ],
+    [
+      "tests/e2e/goalrail/test_run_goalrail_resumption.py",
+      140
+    ],
+    [
+      "goalrail/codex_native.py",
+      137
+    ],
+    [
+      "tests/e2e_ui/conftest.py",
+      125
+    ],
+    [
+      "goalrail/claude_native_bridge.py",
+      123
+    ],
+    [
+      "goalrail/claude_native_forwarder.py",
+      115
+    ],
+    [
+      "tests/test_claude_native_hook.py",
+      115
+    ],
+    [
+      "openapi.json",
+      114
+    ],
+    [
+      "tests/e2e/goalrail/test_run_goalrail_coding_supervisor.py",
+      114
+    ],
+    [
+      "goalrail/spec/_goalrail_compat.py",
+      112
+    ],
+    [
+      "goalrail/server/app.py",
+      107
+    ],
+    [
+      "tests/test_claude_native_bridge.py",
+      106
+    ],
+    [
+      "goalrail/runtime/workflow.py",
+      105
+    ],
+    [
+      "goalrail/antigravity_native.py",
+      100
+    ],
+    [
+      "tests/repl/test_tmux_pane.py",
+      96
+    ],
+    [
+      "tests/inner/test_pi_executor.py",
+      95
+    ],
+    [
+      "tests/server/routes/test_session_resources.py",
+      94
+    ],
+    [
+      "tests/spec/test_parser.py",
+      94
+    ],
+    [
+      "goalrail/claude_native_hook.py",
+      92
+    ],
+    [
+      "tests/cli/test_configure_models.py",
+      92
+    ],
+    [
+      "tests/server/test_oidc.py",
+      91
+    ],
+    [
+      "tests/e2e/goalrail/test_per_harness_antigravity.py",
+      90
+    ],
+    [
+      "pyproject.toml",
+      89
+    ],
+    [
+      "goalrail/antigravity_native_reader.py",
+      85
+    ],
+    [
+      "docs/databricks.md",
+      82
+    ],
+    [
+      "tests/runtime/harnesses/test_executor_adapter.py",
+      81
+    ],
+    [
+      "tests/cli/test_backend.py",
+      80
+    ],
+    [
+      "tests/e2e/goalrail/test_repl_session_lifecycle.py",
+      80
+    ],
+    [
+      "goalrail/repl/_tmux_pane.py",
+      79
+    ],
+    [
+      "tests/cli/test_upgrade_command.py",
+      79
+    ],
+    [
+      "deploy/docker/README.md",
+      78
+    ],
+    [
+      "goalrail/server/schemas.py",
+      78
+    ],
+    [
+      "goalrail/server/managed_hosts.py",
+      77
+    ],
+    [
+      "goalrail/codex_native_app_server.py",
+      76
+    ],
+    [
+      "goalrail/host/local_server.py",
+      75
+    ],
+    [
+      "tests/cli/test_server_lifecycle.py",
+      74
+    ],
+    [
+      "tests/e2e/goalrail/test_run_goalrail.py",
+      74
+    ],
+    [
+      "tests/host/test_connect.py",
+      74
+    ],
+    [
+      "goalrail/inner/claude_sdk_executor.py",
+      72
+    ],
+    [
+      "tests/inner/test_codex_executor.py",
+      71
+    ],
+    [
+      "goalrail/spec/__init__.py",
+      70
+    ],
+    [
+      "deploy/docker/.env.example",
+      68
+    ],
+    [
+      "deploy/modal/README.md",
+      68
+    ],
+    [
+      "tests/host/test_local_server.py",
+      68
+    ],
+    [
+      "tests/test_claude_native_forwarder.py",
+      68
+    ],
+    [
+      "deploy/README.md",
+      67
+    ],
+    [
+      "goalrail/host/connect.py",
+      67
+    ],
+    [
+      "tests/e2e/goalrail/test_antigravity_lifecycle_e2e.py",
+      67
+    ],
+    [
+      "deploy/docker/docker-compose.yaml",
+      66
+    ],
+    [
+      "goalrail/onboarding/provider_config.py",
+      66
+    ],
+    [
+      "tests/inner/test_openai_agents_sdk_executor.py",
+      65
+    ],
+    [
+      "RELEASING.md",
+      64
+    ],
+    [
+      "tests/e2e/goalrail/test_config_defaults_e2e.py",
+      64
+    ],
+    [
+      "goalrail/runtime/harnesses/_executor_adapter.py",
+      63
+    ],
+    [
+      "tests/spec/test_load.py",
+      63
+    ],
+    [
+      "tests/stores/test_conversation_store.py",
+      62
+    ],
+    [
+      "README.md",
+      60
+    ],
+    [
+      ".claude/skills/cli-setup-verify/verify_cli.py",
+      58
+    ],
+    [
+      "ap-web/ios/Goalrail.xcodeproj/project.pbxproj",
+      58
+    ],
+    [
+      "goalrail/runner/_entry.py",
+      58
+    ]
+  ],
+  "top_files_by_token": {
+    "goalrail/cli.py": {
+      "goalrail": 718,
+      "Goalrail": 161,
+      "GOALRAIL": 46,
+      "goalrail": 5,
+      "goalrail": 5,
+      "goalrail": 3
+    },
+    "goalrail/server/routes/sessions.py": {
+      "Goalrail": 369,
+      "goalrail": 199,
+      "GOALRAIL": 6
+    },
+    "goalrail/runner/app.py": {
+      "goalrail": 345,
+      "Goalrail": 184,
+      "GOALRAIL": 16
+    },
+    "tests/cli/test_cli.py": {
+      "goalrail": 406,
+      "GOALRAIL": 24,
+      "Goalrail": 21
+    },
+    "tests/runner/test_app_sessions_native.py": {
+      "goalrail": 311,
+      "Goalrail": 73,
+      "GOALRAIL": 18
+    },
+    "tests/spec/test_goalrail_adapter.py": {
+      "goalrail": 259,
+      "Goalrail": 50,
+      "GOALRAIL": 11
+    },
+    "goalrail/spec/goalrail.py": {
+      "goalrail": 209,
+      "Goalrail": 85,
+      "GOALRAIL": 9
+    },
+    "goalrail/chat.py": {
+      "goalrail": 156,
+      "Goalrail": 84,
+      "GOALRAIL": 32
+    },
+    "tests/cli/test_update_check.py": {
+      "goalrail": 212,
+      "GOALRAIL": 23,
+      "heurema": 7
+    },
+    "tests/test_codex_native.py": {
+      "Goalrail": 151,
+      "goalrail": 70,
+      "GOALRAIL": 4
+    },
+    "goalrail/codex_native_forwarder.py": {
+      "Goalrail": 211,
+      "goalrail": 13
+    },
+    "tests/runner/test_runner_dispatch.py": {
+      "goalrail": 175,
+      "Goalrail": 36,
+      "GOALRAIL": 11
+    },
+    "goalrail/repl/_repl.py": {
+      "goalrail": 153,
+      "Goalrail": 53,
+      "GOALRAIL": 11,
+      "heurema": 1
+    },
+    "tests/server/integration/test_sessions_endpoints.py": {
+      "goalrail": 181,
+      "Goalrail": 34
+    },
+    "tests/cli/test_chat.py": {
+      "goalrail": 131,
+      "GOALRAIL": 44,
+      "Goalrail": 26
+    },
+    "goalrail/spec/parser.py": {
+      "Goalrail": 155,
+      "goalrail": 27,
+      "GOALRAIL": 2
+    },
+    "tests/inner/test_claude_sdk_executor.py": {
+      "goalrail": 165,
+      "GOALRAIL": 10,
+      "Goalrail": 3
+    },
+    "goalrail/claude_native.py": {
+      "Goalrail": 88,
+      "goalrail": 83,
+      "GOALRAIL": 5
+    },
+    "goalrail/runner/tool_dispatch.py": {
+      "goalrail": 89,
+      "Goalrail": 61,
+      "GOALRAIL": 9
+    },
+    "tests/test_claude_native.py": {
+      "goalrail": 103,
+      "Goalrail": 43,
+      "GOALRAIL": 5
+    },
+    "tests/server/test_accounts.py": {
+      "GOALRAIL": 81,
+      "goalrail": 68
+    },
+    "tests/e2e/goalrail/test_run_goalrail_resumption.py": {
+      "goalrail": 136,
+      "GOALRAIL": 3,
+      "Goalrail": 1
+    },
+    "goalrail/codex_native.py": {
+      "Goalrail": 91,
+      "goalrail": 46
+    },
+    "tests/e2e_ui/conftest.py": {
+      "goalrail": 97,
+      "GOALRAIL": 26,
+      "Goalrail": 2
+    },
+    "goalrail/claude_native_bridge.py": {
+      "goalrail": 65,
+      "Goalrail": 56,
+      "GOALRAIL": 2
+    },
+    "goalrail/claude_native_forwarder.py": {
+      "Goalrail": 108,
+      "goalrail": 7
+    },
+    "tests/test_claude_native_hook.py": {
+      "goalrail": 71,
+      "Goalrail": 44
+    },
+    "openapi.json": {
+      "Goalrail": 60,
+      "goalrail": 52,
+      "GOALRAIL": 2
+    },
+    "tests/e2e/goalrail/test_run_goalrail_coding_supervisor.py": {
+      "goalrail": 93,
+      "Goalrail": 21
+    },
+    "goalrail/spec/_goalrail_compat.py": {
+      "goalrail": 69,
+      "GOALRAIL": 26,
+      "Goalrail": 17
+    },
+    "goalrail/server/app.py": {
+      "goalrail": 93,
+      "GOALRAIL": 9,
+      "Goalrail": 5
+    },
+    "tests/test_claude_native_bridge.py": {
+      "goalrail": 87,
+      "Goalrail": 19
+    },
+    "goalrail/runtime/workflow.py": {
+      "goalrail": 67,
+      "Goalrail": 35,
+      "GOALRAIL": 3
+    },
+    "goalrail/antigravity_native.py": {
+      "goalrail": 51,
+      "Goalrail": 49
+    },
+    "tests/repl/test_tmux_pane.py": {
+      "goalrail": 96
+    },
+    "tests/inner/test_pi_executor.py": {
+      "goalrail": 86,
+      "GOALRAIL": 7,
+      "Goalrail": 2
+    },
+    "tests/server/routes/test_session_resources.py": {
+      "goalrail": 78,
+      "Goalrail": 16
+    },
+    "tests/spec/test_parser.py": {
+      "Goalrail": 58,
+      "goalrail": 36
+    },
+    "goalrail/claude_native_hook.py": {
+      "goalrail": 53,
+      "Goalrail": 39
+    },
+    "tests/cli/test_configure_models.py": {
+      "goalrail": 85,
+      "GOALRAIL": 6,
+      "Goalrail": 1
+    },
+    "tests/server/test_oidc.py": {
+      "GOALRAIL": 82,
+      "goalrail": 9
+    },
+    "tests/e2e/goalrail/test_per_harness_antigravity.py": {
+      "goalrail": 83,
+      "Goalrail": 5,
+      "GOALRAIL": 2
+    },
+    "pyproject.toml": {
+      "goalrail": 83,
+      "Goalrail": 3,
+      "GOALRAIL": 2,
+      "goalrail": 1
+    },
+    "goalrail/antigravity_native_reader.py": {
+      "Goalrail": 60,
+      "goalrail": 25
+    },
+    "docs/databricks.md": {
+      "goalrail": 70,
+      "heurema": 10,
+      "GOALRAIL": 2
+    },
+    "tests/runtime/harnesses/test_executor_adapter.py": {
+      "goalrail": 68,
+      "Goalrail": 13
+    },
+    "tests/cli/test_backend.py": {
+      "goalrail": 69,
+      "GOALRAIL": 7,
+      "Goalrail": 4
+    },
+    "tests/e2e/goalrail/test_repl_session_lifecycle.py": {
+      "goalrail": 59,
+      "Goalrail": 13,
+      "GOALRAIL": 8
+    },
+    "goalrail/repl/_tmux_pane.py": {
+      "goalrail": 78,
+      "Goalrail": 1
+    },
+    "tests/cli/test_upgrade_command.py": {
+      "goalrail": 77,
+      "heurema": 2
+    },
+    "deploy/docker/README.md": {
+      "GOALRAIL": 45,
+      "goalrail": 27,
+      "heurema": 4,
+      "Goalrail": 2
+    },
+    "goalrail/server/schemas.py": {
+      "goalrail": 56,
+      "Goalrail": 21,
+      "GOALRAIL": 1
+    },
+    "goalrail/server/managed_hosts.py": {
+      "goalrail": 70,
+      "GOALRAIL": 4,
+      "Goalrail": 2,
+      "heurema": 1
+    },
+    "goalrail/codex_native_app_server.py": {
+      "goalrail": 48,
+      "Goalrail": 28
+    },
+    "goalrail/host/local_server.py": {
+      "goalrail": 52,
+      "GOALRAIL": 17,
+      "Goalrail": 6
+    },
+    "tests/cli/test_server_lifecycle.py": {
+      "goalrail": 74
+    },
+    "tests/e2e/goalrail/test_run_goalrail.py": {
+      "goalrail": 63,
+      "GOALRAIL": 11
+    },
+    "tests/host/test_connect.py": {
+      "goalrail": 52,
+      "GOALRAIL": 22
+    },
+    "goalrail/inner/claude_sdk_executor.py": {
+      "Goalrail": 40,
+      "goalrail": 30,
+      "GOALRAIL": 2
+    },
+    "tests/inner/test_codex_executor.py": {
+      "goalrail": 59,
+      "GOALRAIL": 7,
+      "Goalrail": 4,
+      "heurema": 1
+    },
+    "goalrail/spec/__init__.py": {
+      "goalrail": 58,
+      "Goalrail": 12
+    },
+    "deploy/docker/.env.example": {
+      "GOALRAIL": 48,
+      "goalrail": 18,
+      "heurema": 2
+    },
+    "deploy/modal/README.md": {
+      "goalrail": 32,
+      "GOALRAIL": 25,
+      "Goalrail": 9,
+      "heurema": 2
+    },
+    "tests/host/test_local_server.py": {
+      "goalrail": 56,
+      "GOALRAIL": 7,
+      "Goalrail": 5
+    },
+    "tests/test_claude_native_forwarder.py": {
+      "goalrail": 36,
+      "Goalrail": 32
+    },
+    "deploy/README.md": {
+      "GOALRAIL": 36,
+      "goalrail": 23,
+      "Goalrail": 6,
+      "heurema": 2
+    },
+    "goalrail/host/connect.py": {
+      "goalrail": 41,
+      "GOALRAIL": 21,
+      "Goalrail": 5
+    },
+    "tests/e2e/goalrail/test_antigravity_lifecycle_e2e.py": {
+      "goalrail": 65,
+      "GOALRAIL": 2
+    },
+    "deploy/docker/docker-compose.yaml": {
+      "GOALRAIL": 53,
+      "goalrail": 11,
+      "Goalrail": 1,
+      "heurema": 1
+    },
+    "goalrail/onboarding/provider_config.py": {
+      "Goalrail": 38,
+      "goalrail": 25,
+      "GOALRAIL": 3
+    },
+    "tests/inner/test_openai_agents_sdk_executor.py": {
+      "goalrail": 62,
+      "heurema": 2,
+      "Goalrail": 1
+    },
+    "RELEASING.md": {
+      "goalrail": 55,
+      "heurema": 9
+    },
+    "tests/e2e/goalrail/test_config_defaults_e2e.py": {
+      "goalrail": 62,
+      "GOALRAIL": 2
+    },
+    "goalrail/runtime/harnesses/_executor_adapter.py": {
+      "Goalrail": 35,
+      "goalrail": 28
+    },
+    "tests/spec/test_load.py": {
+      "goalrail": 46,
+      "Goalrail": 17
+    },
+    "tests/stores/test_conversation_store.py": {
+      "goalrail": 59,
+      "Goalrail": 3
+    },
+    "README.md": {
+      "goalrail": 53,
+      "GOALRAIL": 5,
+      "heurema": 2
+    },
+    ".claude/skills/cli-setup-verify/verify_cli.py": {
+      "goalrail": 46,
+      "GOALRAIL": 11,
+      "Goalrail": 1
+    },
+    "ap-web/ios/Goalrail.xcodeproj/project.pbxproj": {
+      "Goalrail": 54,
+      "goalrail": 4
+    },
+    "goalrail/runner/_entry.py": {
+      "goalrail": 36,
+      "Goalrail": 12,
+      "GOALRAIL": 10
+    }
+  }
+}

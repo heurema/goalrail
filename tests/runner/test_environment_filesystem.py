@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,13 +12,13 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.entities import DEFAULT_ENVIRONMENT_ID
-from omnigent.entities.environment_filesystem import FilesystemPathNotFound
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import create_os_environment
-from omnigent.runner import create_runner_app
-from omnigent.runner.environment_filesystem import CallerProcessFilesystem
-from omnigent.runner.resource_registry import SessionResourceRegistry
+from goalrail.entities import DEFAULT_ENVIRONMENT_ID
+from goalrail.entities.environment_filesystem import FilesystemPathNotFound
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.os_env import create_os_environment
+from goalrail.runner import create_runner_app
+from goalrail.runner.environment_filesystem import CallerProcessFilesystem
+from goalrail.runner.resource_registry import SessionResourceRegistry
 from tests.runner.helpers import NullServerClient
 
 
@@ -37,7 +37,7 @@ def workspace(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def registry(workspace: Path) -> SessionResourceRegistry:
+def registry(workspace: Path) -> Iterator[SessionResourceRegistry]:
     """Registry with a real CallerProcessOSEnvironment."""
     os_env = create_os_environment(
         OSEnvSpec(
@@ -49,7 +49,10 @@ def registry(workspace: Path) -> SessionResourceRegistry:
     assert os_env is not None
     reg = SessionResourceRegistry()
     reg._primary_envs["conv_test"] = os_env
-    return reg
+    try:
+        yield reg
+    finally:
+        os_env.close()
 
 
 @pytest.fixture
@@ -113,31 +116,34 @@ async def test_list_environment_root_with_broken_symlink(
     assert os_env is not None
     reg = SessionResourceRegistry()
     reg._primary_envs["conv_broken"] = os_env
-    app = create_runner_app(
-        resource_registry=reg,
-        runner_workspace=ws,
-        server_client=NullServerClient(),  # type: ignore[arg-type]
-    )
-
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://runner") as c:
-        resp = await c.get(
-            f"/v1/sessions/conv_broken/resources/environments/{DEFAULT_ENVIRONMENT_ID}/filesystem"
+    try:
+        app = create_runner_app(
+            resource_registry=reg,
+            runner_workspace=ws,
+            server_client=NullServerClient(),  # type: ignore[arg-type]
         )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["object"] == "list"
-    names = {e["name"] for e in body["data"]}
-    # The real file is visible.
-    assert "real.txt" in names
-    # Broken symlinks are listed as file-type entries via the lstat fallback
-    # rather than being silently skipped or crashing. Size is None because
-    # os.stat() (which follows symlinks) fails and lstat() on the symlink
-    # itself doesn't reflect the target's size.
-    assert "broken_link" in names
-    broken_entry = next(e for e in body["data"] if e["name"] == "broken_link")
-    assert broken_entry["type"] == "file"
-    assert broken_entry["bytes"] is None
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://runner") as c:
+            resp = await c.get(
+                f"/v1/sessions/conv_broken/resources/environments/{DEFAULT_ENVIRONMENT_ID}/filesystem"
+            )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["object"] == "list"
+        names = {e["name"] for e in body["data"]}
+        # The real file is visible.
+        assert "real.txt" in names
+        # Broken symlinks are listed as file-type entries via the lstat fallback
+        # rather than being silently skipped or crashing. Size is None because
+        # os.stat() (which follows symlinks) fails and lstat() on the symlink
+        # itself doesn't reflect the target's size.
+        assert "broken_link" in names
+        broken_entry = next(e for e in body["data"] if e["name"] == "broken_link")
+        assert broken_entry["type"] == "file"
+        assert broken_entry["bytes"] is None
+    finally:
+        os_env.close()
 
 
 @pytest.mark.asyncio
@@ -215,10 +221,13 @@ async def test_read_text_byte_cap_truncates_on_utf8_boundary(
     assert os_env is not None
     fs = CallerProcessFilesystem(os_env)
 
-    content = await fs.read("accents.txt", max_bytes=2)
-    assert content.truncated is True
-    # The partial trailing codepoint is dropped, leaving decodable bytes.
-    assert content.data.decode("utf-8") == "a"
+    try:
+        content = await fs.read("accents.txt", max_bytes=2)
+        assert content.truncated is True
+        # The partial trailing codepoint is dropped, leaving decodable bytes.
+        assert content.data.decode("utf-8") == "a"
+    finally:
+        os_env.close()
 
 
 @pytest.mark.asyncio
@@ -404,7 +413,7 @@ async def test_stat_path_with_command_substitution_does_not_execute(
     containing a command substitution must raise ``FilesystemPathNotFound``
     without creating the marker the substituted command would produce.
     """
-    from omnigent.runner.environment_filesystem import CallerProcessFilesystem
+    from goalrail.runner.environment_filesystem import CallerProcessFilesystem
 
     os_env = create_os_environment(
         OSEnvSpec(
@@ -416,16 +425,19 @@ async def test_stat_path_with_command_substitution_does_not_execute(
     assert os_env is not None
     fs = CallerProcessFilesystem(os_env)
 
-    marker = workspace / "PWNED_STAT"
-    assert not marker.exists(), "Precondition: stat marker must not exist."
+    try:
+        marker = workspace / "PWNED_STAT"
+        assert not marker.exists(), "Precondition: stat marker must not exist."
 
-    with pytest.raises(FilesystemPathNotFound):
-        await fs.stat("inj$(touch PWNED_STAT)x")
+        with pytest.raises(FilesystemPathNotFound):
+            await fs.stat("inj$(touch PWNED_STAT)x")
 
-    assert not marker.exists(), (
-        "stat executed the injected command: 'PWNED_STAT' marker was created "
-        "(shell-injection regression in stat())."
-    )
+        assert not marker.exists(), (
+            "stat executed the injected command: 'PWNED_STAT' marker was created "
+            "(shell-injection regression in stat())."
+        )
+    finally:
+        os_env.close()
 
 
 @pytest.mark.asyncio
@@ -439,7 +451,7 @@ async def test_stat_real_file_with_command_substitution_name(
     file-type entry with the real byte size. A shell-interpreted path would
     stat a different string and raise instead.
     """
-    from omnigent.runner.environment_filesystem import CallerProcessFilesystem
+    from goalrail.runner.environment_filesystem import CallerProcessFilesystem
 
     os_env = create_os_environment(
         OSEnvSpec(
@@ -451,22 +463,25 @@ async def test_stat_real_file_with_command_substitution_name(
     assert os_env is not None
     fs = CallerProcessFilesystem(os_env)
 
-    weird_name = "report$(id).txt"
-    contents = "twelve bytes"
-    (workspace / weird_name).write_text(contents)
+    try:
+        weird_name = "report$(id).txt"
+        contents = "twelve bytes"
+        (workspace / weird_name).write_text(contents)
 
-    entry = await fs.stat(weird_name)
+        entry = await fs.stat(weird_name)
 
-    # type/name/bytes prove the literal path was statted, not a shell-expanded
-    # variant (which would have raised FilesystemPathNotFound instead).
-    assert entry.type == "file", f"Expected a file entry, got type={entry.type!r}."
-    assert entry.name == weird_name, (
-        f"Expected name {weird_name!r}, got {entry.name!r}; the path was not passed verbatim."
-    )
-    assert entry.bytes == len(contents.encode("utf-8")), (
-        f"Expected {len(contents.encode('utf-8'))} bytes, got {entry.bytes}; "
-        "stat read the wrong path."
-    )
+        # type/name/bytes prove the literal path was statted, not a shell-expanded
+        # variant (which would have raised FilesystemPathNotFound instead).
+        assert entry.type == "file", f"Expected a file entry, got type={entry.type!r}."
+        assert entry.name == weird_name, (
+            f"Expected name {weird_name!r}, got {entry.name!r}; the path was not passed verbatim."
+        )
+        assert entry.bytes == len(contents.encode("utf-8")), (
+            f"Expected {len(contents.encode('utf-8'))} bytes, got {entry.bytes}; "
+            "stat read the wrong path."
+        )
+    finally:
+        os_env.close()
 
 
 @pytest.mark.asyncio
@@ -1302,8 +1317,11 @@ async def glob_client(glob_workspace: Path) -> AsyncIterator[httpx.AsyncClient]:
         server_client=NullServerClient(),  # type: ignore[arg-type]
     )
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://runner") as c:
-        yield c
+    try:
+        async with httpx.AsyncClient(transport=transport, base_url="http://runner") as c:
+            yield c
+    finally:
+        os_env.close()
 
 
 @pytest.mark.asyncio
@@ -1527,22 +1545,26 @@ async def test_worktree_session_uses_session_workspace_for_changes(
         base_url="http://fake-server",
     )
 
-    app = create_runner_app(
-        resource_registry=reg,
-        runner_workspace=runner_ws,
-        server_client=server_client,
-    )
+    try:
+        app = create_runner_app(
+            resource_registry=reg,
+            runner_workspace=runner_ws,
+            server_client=server_client,
+        )
 
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://runner") as client:
-        resp = await client.get(
-            f"/v1/sessions/{session_id}/resources/environments/{DEFAULT_ENVIRONMENT_ID}/changes"
-        )
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        paths = [e["path"] for e in body["data"]]
-        assert "agent_change.py" in paths, (
-            f"Expected 'agent_change.py' in changes but got {paths}. "
-            "The /changes endpoint is reading from the runner's global "
-            "workspace instead of the session's worktree workspace."
-        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://runner") as client:
+            resp = await client.get(
+                f"/v1/sessions/{session_id}/resources/environments/{DEFAULT_ENVIRONMENT_ID}/changes"
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            paths = [e["path"] for e in body["data"]]
+            assert "agent_change.py" in paths, (
+                f"Expected 'agent_change.py' in changes but got {paths}. "
+                "The /changes endpoint is reading from the runner's global "
+                "workspace instead of the session's worktree workspace."
+            )
+    finally:
+        await server_client.aclose()
+        os_env.close()

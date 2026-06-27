@@ -1,5 +1,5 @@
 """
-Tunnel three-layer integration test: Omnigent → WS tunnel → runner → harness.
+Tunnel three-layer integration test: Goalrail → WS tunnel → runner → harness.
 
 Production-shaped variant of ``test_sessions_three_layer.py``. The
 prior test wired the AP's ``_runner_client`` directly to the runner
@@ -19,7 +19,7 @@ encode/decode regressions, tunnel registry leak/registration races,
 reaches for ``app.state.tunnel_registry`` / ``get_runner_router()``.
 
 Layers:
-    Omnigent server ──HTTP──> RunnerRouter ──WSTunnelTransport──>
+    Goalrail server ──HTTP──> RunnerRouter ──WSTunnelTransport──>
         TunnelRegistry ──tunnel WS route──> ApplicationCommunicator ──>
         forwarder task ──> create_runner_app ──> FakeProcessManager ──>
         EchoHarness ASGI app
@@ -48,37 +48,37 @@ import pytest_asyncio
 import yaml
 from asgiref.testing import ApplicationCommunicator
 from fastapi import FastAPI
-from omnigent_client._events import ResponseCompleted, ResponseFailed
-from omnigent_client._files import FilesNamespace
-from omnigent_client._sessions import SessionsNamespace
+from goalrail_client._events import ResponseCompleted, ResponseFailed
+from goalrail_client._files import FilesNamespace
+from goalrail_client._sessions import SessionsNamespace
 
-from omnigent.repl._repl import _SessionsChatReplAdapter
-from omnigent.runner.app import create_runner_app
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.repl._repl import _SessionsChatReplAdapter
+from goalrail.runner.app import create_runner_app
+from goalrail.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     RequestFrame,
     decode_frame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.serve import dispatch_via_asgi
-from omnigent.runner.transports.ws_tunnel.transport import WSTunnelTransport
-from omnigent.runtime import (
+from goalrail.runner.transports.ws_tunnel.serve import dispatch_via_asgi
+from goalrail.runner.transports.ws_tunnel.transport import WSTunnelTransport
+from goalrail.runtime import (
     init as init_runtime,
 )
-from omnigent.runtime import (
+from goalrail.runtime import (
     set_harness_process_manager,
     set_runner_id,
     set_runner_router,
 )
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.runtime.harnesses import _HARNESS_MODULES
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.runtime.harnesses import _HARNESS_MODULES
+from goalrail.server.app import create_app
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
 from tests.runner.helpers import NullServerClient
 from tests.runtime.harnesses._test_scaffold_harnesses import _EchoHarness
 
@@ -162,7 +162,7 @@ class FakeProcessManager:
 def _build_harness_agent_bundle() -> bytes:
     """Build an agent bundle that routes through the harness path.
 
-    Uses ``executor.type='omnigent'`` with
+    Uses ``executor.type='goalrail'`` with
     ``executor.harness=<TEST_HARNESS>`` so ``_create_executor`` in
     ``runtime/workflow.py`` routes to ``the harness HTTP client`` and
     thus through the runner → harness HTTP chain.
@@ -173,7 +173,7 @@ def _build_harness_agent_bundle() -> bytes:
         "spec_version": 1,
         "name": "echo-tunnel-test",
         "executor": {
-            "type": "omnigent",
+            "type": "goalrail",
             "config": {"harness": _TEST_HARNESS_NAME},
             "model": "test-model",
         },
@@ -320,7 +320,7 @@ async def _forward_requests_to_runner(
                 await task
 
 
-# ── Fixture: Omnigent app + tunnel WS + runner app + EchoHarness ────
+# ── Fixture: Goalrail app + tunnel WS + runner app + EchoHarness ────
 
 
 @dataclass
@@ -332,10 +332,10 @@ class _TunnelStack:
 
 @pytest_asyncio.fixture()
 async def tunnel_three_layer_stack(tmp_path: Path) -> AsyncIterator[_TunnelStack]:
-    """Wire Omnigent server + WS-tunneled runner + EchoHarness in-process.
+    """Wire Goalrail server + WS-tunneled runner + EchoHarness in-process.
 
     Lifecycle: build stores, init runtime, override the test harness
-    module entry, build Omnigent app + runner app, open the WS tunnel via
+    module entry, build Goalrail app + runner app, open the WS tunnel via
     ``ApplicationCommunicator``, send hello, start the forwarder
     task, register the runner in the AP-side ``set_runner_router``
     so resource paths can resolve it, then yield an
@@ -386,7 +386,7 @@ async def tunnel_three_layer_stack(tmp_path: Path) -> AsyncIterator[_TunnelStack
         server_client=NullServerClient(),  # type: ignore[arg-type]
     )
 
-    # Build the Omnigent server. ``create_app`` constructs the
+    # Build the Goalrail server. ``create_app`` constructs the
     # ``TunnelRegistry`` + ``RunnerRouter`` synchronously (before
     # lifespan) and threads ``runner_router`` into every router as a
     # closure, so the WS route + the sessions route share the same
@@ -485,13 +485,13 @@ def _fake_client(ap_client: httpx.AsyncClient) -> object:
     the real namespace classes keeps request/response parsing on the
     production client path while avoiding an actual network client.
 
-    :param ap_client: ASGI-backed client pointed at the Omnigent app.
+    :param ap_client: ASGI-backed client pointed at the Goalrail app.
     :returns: Duck-typed client with the namespaces the adapter uses.
     """
     base = str(ap_client.base_url).rstrip("/")
 
     class _FakeClient:
-        """Duck-typed Omnigent client backed by the tunnel-stack httpx client."""
+        """Duck-typed Goalrail client backed by the tunnel-stack httpx client."""
 
         def __init__(self) -> None:
             self.sessions = SessionsNamespace(ap_client, base)
@@ -508,9 +508,9 @@ def _new_repl_adapter(
     runner_id: str = _RUNNER_ID,
     runner_recover: Any | None = None,
 ) -> _SessionsChatReplAdapter:
-    """Create a sessions REPL adapter over the tunneled Omnigent stack.
+    """Create a sessions REPL adapter over the tunneled Goalrail stack.
 
-    :param ap_client: ASGI-backed client pointed at the Omnigent app.
+    :param ap_client: ASGI-backed client pointed at the Goalrail app.
     :param agent_name: Human-readable agent display name.
     :param session_id: Optional existing session to resume.
     :param runner_id: Runner id the adapter should bind before send.
@@ -827,9 +827,9 @@ async def test_on_runner_connect_restarts_relay_via_router(
     routed client, and (c) leaves a sibling session bound to a
     different runner alone (per-conv ``runner_id`` filter).
     """
-    from omnigent.runner.routing import RoutedRunner
-    from omnigent.server.routes import sessions as sessions_routes
-    from omnigent.server.routes.sessions import _runner_relay_tasks
+    from goalrail.runner.routing import RoutedRunner
+    from goalrail.server.routes import sessions as sessions_routes
+    from goalrail.server.routes.sessions import _runner_relay_tasks
 
     ap_client = tunnel_three_layer_stack.ap_client
     ap_app = tunnel_three_layer_stack.ap_app
@@ -859,7 +859,7 @@ async def test_on_runner_connect_restarts_relay_via_router(
     # ``runner_id`` filter has something to skip. Written via the
     # store directly because PATCH-bind would spawn a relay against
     # a runner that has no WS pump, hanging teardown.
-    from omnigent.runtime import get_conversation_store
+    from goalrail.runtime import get_conversation_store
 
     other_runner_id = "runner-other-irrelevant"
     other_create_resp = await ap_client.post(

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { getOmnigentHostConfig, hostFetch } from "@/lib/host";
+import { getGoalrailHostConfig, hostFetch } from "@/lib/host";
 
 export interface SessionImageProps {
   /**
@@ -27,7 +27,7 @@ export interface SessionImageProps {
 export function SessionImage({ path, alt, className }: SessionImageProps) {
   // Host config is installed once at embed startup and never changes, so it's
   // safe to branch on it before any hooks. Hooks live in the embedded child.
-  if (!getOmnigentHostConfig().fetcher) {
+  if (!getGoalrailHostConfig().fetcher) {
     return <img src={path} alt={alt} className={className} />;
   }
   return <EmbeddedSessionImage path={path} alt={alt} className={className} />;

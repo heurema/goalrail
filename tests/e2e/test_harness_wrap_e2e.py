@@ -3,15 +3,15 @@ End-to-end smoke test for the per-harness wraps with a real LLM
 behind each, against the session-keyed harness API surface.
 
 Parametrized across every harness wrap registered in
-:data:`omnigent.runtime.harnesses._HARNESS_MODULES`. For each:
+:data:`goalrail.runtime.harnesses._HARNESS_MODULES`. For each:
 spawn a real harness subprocess via
 :class:`HarnessProcessManager`, drive a turn via the session-keyed
 ``POST /v1/sessions/{conversation_id}/events`` endpoint with a
 deterministic prompt, and verify the full round-trip works:
 
 - The runner subprocess loads the wrap module
-  (e.g. :mod:`omnigent.inner.claude_sdk_harness` or
-  :mod:`omnigent.inner.codex_harness`).
+  (e.g. :mod:`goalrail.inner.claude_sdk_harness` or
+  :mod:`goalrail.inner.codex_harness`).
 - Reads its ``HARNESS_<HARNESS>_*`` env vars (per-spawn, per
   harness contract step 5a).
 - Constructs a real inner Executor configured for the Databricks
@@ -28,7 +28,7 @@ whose scaffold owns exactly one conversation_id, validated via
 creation is needed, and the scaffold's
 ``POST /v1/sessions/{id}/events`` endpoint returns the SSE
 stream directly as the HTTP response (no separate subscribe
-hop, unlike the AP-level :mod:`omnigent.runtime.session_stream`
+hop, unlike the AP-level :mod:`goalrail.runtime.session_stream`
 pub-sub).
 
 Gated on ``--profile`` (the existing tests/conftest.py option).
@@ -56,7 +56,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 from tests.e2e._harness_probes import (
     HARNESS_IDS,
     HARNESS_PROBES,
@@ -89,7 +89,7 @@ def short_tmp_parent() -> Iterator[Path]:
     default tmp_path exceeds that. Same pattern as the other
     HarnessProcessManager tests.
     """
-    parent = Path("/tmp") / f"omni-cs-{uuid.uuid4().hex[:8]}"
+    parent = Path("/tmp") / f"goalrail-cs-{uuid.uuid4().hex[:8]}"
     parent.mkdir(mode=0o700)
     try:
         yield parent
@@ -201,7 +201,7 @@ async def test_harness_wrap_real_llm_smoke(
         # output for debugging.
         #
         # Wire shape: session-keyed ``MessageEvent`` body per
-        # ``omnigent/runtime/harnesses/_scaffold.py``. The
+        # ``goalrail/runtime/harnesses/_scaffold.py``. The
         # outer ``type``/``role`` discriminate this as a fresh
         # downward user-side ``message`` event; ``content`` is
         # a list of input blocks the scaffold forwards to the

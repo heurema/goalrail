@@ -1,23 +1,23 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: omnigent
+  name: goalrail
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - omnigent.example.com
-      secretName: omnigent-tls
+        - goalrail.example.com
+      secretName: goalrail-tls
   rules:
-    - host: omnigent.example.com
+    - host: goalrail.example.com
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: omnigent
+                name: goalrail
                 port:
                   name: http

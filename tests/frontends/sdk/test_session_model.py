@@ -13,9 +13,9 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from omnigent_client._events import ResponseCompleted, ResponseCreated
-from omnigent_client._session import Session
-from omnigent_client._types import Response
+from goalrail_client._events import ResponseCompleted, ResponseCreated
+from goalrail_client._session import Session
+from goalrail_client._types import Response
 
 
 class _ResponsesStub:
@@ -24,7 +24,7 @@ class _ResponsesStub:
     Concrete class (not :class:`MagicMock`) so an unexpected attribute
     access fails loudly instead of silently auto-creating mocks —
     matches the project's testing rules. See
-    ``.claude/skills/omnigent-testing/SKILL.md`` rule 3.
+    ``.claude/skills/goalrail-testing/SKILL.md`` rule 3.
     """
 
     def __init__(self) -> None:
@@ -46,7 +46,7 @@ class _ResponsesStub:
 
 
 class _ClientStub:
-    """Stand-in for :class:`OmnigentClient` exposing only ``responses``."""
+    """Stand-in for :class:`GoalrailClient` exposing only ``responses``."""
 
     def __init__(self) -> None:
         self.responses = _ResponsesStub()

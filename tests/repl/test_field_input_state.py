@@ -1,4 +1,4 @@
-"""Tests for ``_FieldInputState`` in ``omnigent.repl._repl``.
+"""Tests for ``_FieldInputState`` in ``goalrail.repl._repl``.
 
 Covers the future-based field input collection used to prompt
 schema fields interactively in the REPL.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from omnigent.repl._repl import _FieldInputState, _SessionsChatReplAdapter
+from goalrail.repl._repl import _FieldInputState, _SessionsChatReplAdapter
 
 
 def test_not_pending_initially() -> None:

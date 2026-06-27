@@ -121,7 +121,7 @@ def _expect_dispatch_tool_call_rendered(page: Page) -> None:
     first. The trigger renders toolTitle.ts's raw-name fallback
     ("sys_session_send(...)"), not the friendly "Start child session:"
     verb: sessionTitle() reads `tool`/`session` args while the named
-    spawn schema (omnigent/tools/builtins/spawn.py) sends `agent`/`title`,
+    spawn schema (goalrail/tools/builtins/spawn.py) sends `agent`/`title`,
     so the formatter never matches. If this starts failing with the
     friendly verb present instead, that mismatch was fixed and this
     should assert "Start child session:".

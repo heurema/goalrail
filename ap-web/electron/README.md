@@ -98,7 +98,7 @@ conversations can be watched at once.
 
 The native enhancements live on the web side in
 [`../src/lib/nativeBridge.ts`](../src/lib/nativeBridge.ts). It detects the
-Electron shell at runtime (the preload exposes `window.omnigentDesktop`
+Electron shell at runtime (the preload exposes `window.goalrailDesktop`
 with `kind: "electron"`) and routes notifications/badge through the IPC
 bridge; in a plain browser it falls back to the Web Notifications path. So the
 one `ap-web` bundle works both in a browser and under Electron.
@@ -109,8 +109,8 @@ one `ap-web` bundle works both in a browser and under Electron.
 electron/
   package.json        # Electron + electron-builder deps and build config
   src/main.js         # main process: window, settings, menu, IPC, badge, notify
-  src/preload.js      # contextBridge: window.omnigentDesktop + omnigentSetup
-  src/find_preload.js # contextBridge for the find bar: window.omnigentFind
+  src/preload.js      # contextBridge: window.goalrailDesktop + goalrailSetup
+  src/find_preload.js # contextBridge for the find bar: window.goalrailFind
   setup/index.html    # the bundled "connect to server" setup page
   find/index.html     # the bundled find-in-page bar (Cmd/Ctrl+F)
   icons/              # app icons
@@ -147,7 +147,7 @@ dismisses.
     `notify` / `setBadgeCount` only work when both the calling frame _and_
     the window's top-level page are on the pinned origin (so a pinned-origin
     iframe embedded in a hostile page gets nothing); the setup bridge
-    (`omnigentSetup`) only works for the bundled setup page itself, so a
+    (`goalrailSetup`) only works for the bundled setup page itself, so a
     server page can never read or silently re-point the saved server URL.
     Foreign pages get an inert bridge.
   - The microphone permission grant is likewise scoped: only the audio set,
@@ -275,7 +275,7 @@ server from this repo:
 
 ```bash
 # from the repo root, with the project venv:
-.venv/bin/python -m omnigent.server   # serves on http://localhost:8000
+.venv/bin/python -m goalrail.server   # serves on http://localhost:8000
 ```
 
 Then enter `http://localhost:8000` in the setup page.
@@ -295,19 +295,19 @@ macOS Touch ID / keychain dialog, and a native chooser appears when several
 saved passkeys match. Three pieces must agree before this activates:
 
 1. `WEBAUTHN_KEYCHAIN_ACCESS_GROUP` in `src/main.js` —
-   `"<TEAM_ID>.ai.omnigent.desktop"`.
+   `"<TEAM_ID>.dev.goalrail.desktop"`.
 2. The same string in the `keychain-access-groups` entitlement in
    `signing/entitlements.mac.plist`.
 3. An **embedded Developer ID provisioning profile**
-   (`signing/omnigent.provisionprofile`, wired via `provisioningProfile`
+   (`signing/goalrail.provisionprofile`, wired via `provisioningProfile`
    in `package.json`). `keychain-access-groups` is a _restricted_
    entitlement: a Developer ID signature alone doesn't authorize it, and
    AMFI SIGKILLs the app at launch ("Launchd job spawn failed", POSIX
    error 163). Create the profile in the Apple Developer portal: an App ID
-   for `ai.omnigent.desktop` (no extra capabilities — every profile
+   for `dev.goalrail.desktop` (no extra capabilities — every profile
    automatically authorizes keychain groups under `<TEAM_ID>.*`), then
    Profiles → Distribution → Developer ID for that App ID. Verify with
-   `security cms -D -i signing/omnigent.provisionprofile`.
+   `security cms -D -i signing/goalrail.provisionprofile`.
 
 The signing identity's team must match the group prefix —
 `package.json` pins `"identity"` for this reason (with several certs in
@@ -378,7 +378,7 @@ count and notification titles are prefixed with the firing server's hostname.
 
 - **Runtime:** bundled Chromium (so the build is ~100+ MB, but the renderer
   matches Chrome's behavior exactly — no OS-webview quirks).
-- **Native bridge detection:** `window.omnigentDesktop` (`kind: "electron"`),
+- **Native bridge detection:** `window.goalrailDesktop` (`kind: "electron"`),
   exposed by the preload. The web-side `nativeBridge.ts` routes the badge to
   `app.setBadgeCount` and notifications to the main-process `Notification` API
   via IPC; in a plain browser it falls back to the Web Notifications path.

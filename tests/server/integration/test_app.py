@@ -7,15 +7,15 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server import app as app_module
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server import app as app_module
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,7 +53,7 @@ async def test_root_returns_api_metadata_without_web_ui(
 
     assert resp.status_code == 200
     assert resp.json() == {
-        "service": "omnigent",
+        "service": "goalrail",
         "status": "ok",
         "health": "/health",
         "docs": "/docs",
@@ -199,7 +199,7 @@ async def test_host_routes_mounted_with_host_store(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With a host_store configured, the host REST routes are mounted."""
-    from omnigent.stores.host_store import HostStore
+    from goalrail.stores.host_store import HostStore
 
     monkeypatch.setattr(app_module, "_WEB_UI_DIST", tmp_path / "missing-web-ui")
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
@@ -236,17 +236,17 @@ async def test_me_header_mode_behaviors(
     :param db_uri: Test database URI.
     :param tmp_path: Pytest temporary directory fixture.
     :param monkeypatch: Pytest monkeypatch fixture — pins
-        ``OMNIGENT_AUTH_PROVIDER=header`` explicitly so an ambient
-        ``OMNIGENT_AUTH_ENABLED=1`` in the shell can't flip this
+        ``GOALRAIL_AUTH_PROVIDER=header`` explicitly so an ambient
+        ``GOALRAIL_AUTH_ENABLED=1`` in the shell can't flip this
         test into accounts mode (header is the env-unset default, but the
         explicit pin guarantees it), and clears
-        ``OMNIGENT_LOCAL_SINGLE_USER`` so the strict (deployed
+        ``GOALRAIL_LOCAL_SINGLE_USER`` so the strict (deployed
         multi-user) posture is under test.
     """
-    from omnigent.server.auth import create_auth_provider
+    from goalrail.server.auth import create_auth_provider
 
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "header")
-    monkeypatch.delenv("OMNIGENT_LOCAL_SINGLE_USER", raising=False)
+    monkeypatch.setenv("GOALRAIL_AUTH_PROVIDER", "header")
+    monkeypatch.delenv("GOALRAIL_LOCAL_SINGLE_USER", raising=False)
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
     auth_provider = create_auth_provider()
     app = app_module.create_app(

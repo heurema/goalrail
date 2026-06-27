@@ -1,15 +1,15 @@
 """
 Tests for the codex-native forwarder's model-change sync-back
-(:mod:`omnigent.codex_native_forwarder`).
+(:mod:`goalrail.codex_native_forwarder`).
 
 For codex-native, ``config.toml``'s ``model`` key is the cost-policy source
 of truth (it is what an in-TUI ``/model`` writes). At subscription and at
 each ``turn/started`` the forwarder reads it (``_refresh_model_from_config``,
 which delegates to the shared ``read_codex_config_model`` in the bridge
-module) onto ``_CodexForwarderState.model`` and mirrors it to the Omnigent server
+module) onto ``_CodexForwarderState.model`` and mirrors it to the Goalrail server
 as an ``external_model_change`` event (→ persisted ``conv.model_override``)
 so the cost-budget policy resolves the selected model. The startup/spawn
-model IS mirrored (so Omnigent learns the session's model even when unchanged);
+model IS mirrored (so Goalrail learns the session's model even when unchanged);
 only an already-mirrored value is not re-posted.
 """
 
@@ -20,8 +20,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import codex_native_forwarder as fwd
-from omnigent.codex_native_bridge import codex_home_for_bridge_dir
+from goalrail import codex_native_forwarder as fwd
+from goalrail.codex_native_bridge import codex_home_for_bridge_dir
 
 
 class _RecordingClient:
@@ -67,7 +67,7 @@ def _state(model: str | None, posted_model: str | None) -> fwd._CodexForwarderSt
 async def test_sync_model_change_posts_on_change() -> None:
     """A model differing from the baseline posts external_model_change.
 
-    The in-TUI ``/model`` switch (gpt-5.5 → gpt-5.4) must mirror to Omnigent as
+    The in-TUI ``/model`` switch (gpt-5.5 → gpt-5.4) must mirror to Goalrail as
     an ``external_model_change`` and advance the baseline so it isn't
     re-posted. A missing post here is exactly the bug a user hit: the
     terminal model changed but the cost policy kept seeing gpt-5.5.
@@ -92,7 +92,7 @@ async def test_sync_model_change_posts_on_change() -> None:
 async def test_sync_model_change_no_post_when_unchanged() -> None:
     """Model equal to the baseline (seeded spawn default) does not post.
 
-    Prevents the spawn/startup model from being echoed back to Omnigent as a
+    Prevents the spawn/startup model from being echoed back to Goalrail as a
     spurious "change" (which would also fire on every settings update).
     """
     client = _RecordingClient()
@@ -152,7 +152,7 @@ def test_refresh_model_from_config_updates_state(tmp_path: Path) -> None:
 def test_note_resume_response_records_model_without_seeding_baseline() -> None:
     """The startup/resume model is recorded but the baseline stays unset.
 
-    Omnigent must learn the session's ACTUAL model — including the spawn default —
+    Goalrail must learn the session's ACTUAL model — including the spawn default —
     because the cost gate resolves ``conv.model_override or spec.llm.model``
     and for codex the spawn model is frequently NOT ``spec.llm.model``. So
     ``note_resume_response`` records ``model`` but leaves ``posted_model``
@@ -174,7 +174,7 @@ async def test_sync_after_resume_posts_spawn_model() -> None:
     """End-to-end: an unchanged spawn model is mirrored to AP.
 
     This is the regression for the wrongly-blocked cheap session: codex
-    spawned on gpt-5.4-mini, the model never "changed", yet Omnigent must still
+    spawned on gpt-5.4-mini, the model never "changed", yet Goalrail must still
     receive it as ``model_override`` so the cost gate sees a cheap model
     instead of falling back to the spec model and DENYing.
     """
@@ -200,7 +200,7 @@ def test_thread_settings_updated_records_effort_and_collaboration_mode() -> None
 
     App-server sends the public ``ThreadSettings`` shape with ``effort`` and
     ``collaborationMode``. If this parser regresses, the later sync helpers have
-    no state to mirror, so Omnigent would keep stale ``reasoning_effort`` and
+    no state to mirror, so Goalrail would keep stale ``reasoning_effort`` and
     mode metadata even though Codex changed them.
     """
     state = fwd._CodexForwarderState()
@@ -230,7 +230,7 @@ def test_thread_settings_updated_records_effort_and_collaboration_mode() -> None
 @pytest.mark.asyncio
 async def test_sync_reasoning_effort_change_posts_and_dedupes() -> None:
     """
-    Codex effort changes mirror to Omnigent exactly once per observed value.
+    Codex effort changes mirror to Goalrail exactly once per observed value.
 
     The first sync must POST ``external_reasoning_effort_change`` so the server
     persists ``conversation.reasoning_effort``. The second sync with the same
@@ -269,11 +269,11 @@ async def test_sync_reasoning_effort_change_posts_and_dedupes() -> None:
 @pytest.mark.asyncio
 async def test_sync_reasoning_effort_change_posts_clear() -> None:
     """
-    Codex clearing effort mirrors JSON null to Omnigent.
+    Codex clearing effort mirrors JSON null to Goalrail.
 
     ``None`` is a meaningful observed value (model/default effort), so the
     forwarder must still post it after a prior explicit effort. If this returned
-    early on falsey ``None``, Omnigent would keep a stale explicit effort.
+    early on falsey ``None``, Goalrail would keep a stale explicit effort.
     """
     client = _RecordingClient()
     state = fwd._CodexForwarderState(
@@ -304,7 +304,7 @@ async def test_sync_reasoning_effort_change_posts_clear() -> None:
 @pytest.mark.asyncio
 async def test_sync_codex_collaboration_mode_change_posts_and_dedupes() -> None:
     """
-    Codex collaboration mode changes mirror to Omnigent labels once.
+    Codex collaboration mode changes mirror to Goalrail labels once.
 
     The ``mode`` value is the durable "Plan vs Default" signal we can get from
     app-server. Missing this POST would leave the session snapshot without the
@@ -363,7 +363,7 @@ def test_user_message_has_file_content(content: object, expected: bool) -> None:
 @pytest.mark.asyncio
 async def test_post_user_message_image_only_posts_empty_content() -> None:
     """
-    An image-only ``userMessage`` is posted with EMPTY Omnigent content.
+    An image-only ``userMessage`` is posted with EMPTY Goalrail content.
 
     Regression guard for the image-only bleed/ordering bug: the forwarder
     must post the user item (so the server drains the pending-input FIFO

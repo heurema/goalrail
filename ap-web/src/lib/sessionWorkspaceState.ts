@@ -21,7 +21,7 @@ export interface SessionWorkspaceState {
   selectedFilePath?: string | null;
 }
 
-const STORAGE_KEY = "omnigent:session-workspace-state";
+const STORAGE_KEY = "goalrail:session-workspace-state";
 // Cap stored sessions so the store can't grow without bound. The
 // least-recently-touched entries (front of the array) are pruned first once the
 // cap is exceeded.

@@ -10,7 +10,7 @@ clone — and asserts truncation two independent ways:
    NOT the post-fork (dropped) one — the DOM proves the server copied a
    truncated item list, not the whole conversation.
 2. Asking the clone "what did I ask you" surfaces only the kept code word.
-   The SDK harness replays the copied Omnigent transcript as context, so a
+   The SDK harness replays the copied Goalrail transcript as context, so a
    reply that recalls the dropped word would mean the truncation point was
    ignored and the full history leaked into the fork.
 

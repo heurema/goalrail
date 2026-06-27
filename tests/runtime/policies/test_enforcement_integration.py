@@ -1,7 +1,7 @@
 """
 Integration tests for the full policy pipeline (Phase 5).
 
-Loads agent fixtures ported from omnigent examples, builds
+Loads agent fixtures ported from goalrail examples, builds
 PolicyEngine via the real ``build_policy_engine``, and
 exercises every declared policy through the ``_enforce_policy``
 entry point that the workflow will use in later phases.
@@ -14,16 +14,16 @@ before the workflow wiring lands — if a production agent
 declared any of the three fixture YAMLs, it would behave
 exactly as asserted here.
 
-Fixture parity with omnigent example YAMLs:
+Fixture parity with goalrail example YAMLs:
 
 - ``tests/_fixtures/agents/policies-demo/`` ↔
-  ``omnigent/examples/agent_with_policies.yaml``
+  ``goalrail/examples/agent_with_policies.yaml``
 - ``tests/_fixtures/agents/rate-limited-search/`` ↔
-  ``omnigent/examples/rate_limited_search_agent.yaml``
+  ``goalrail/examples/rate_limited_search_agent.yaml``
 - ``tests/_fixtures/agents/secure-research/`` ↔
-  ``omnigent/examples/secure_research_agent.yaml``
+  ``goalrail/examples/secure_research_agent.yaml``
 
-Corresponding omnigent test cases ported:
+Corresponding goalrail test cases ported:
 - ``test_label_examples.py::test_first_db_query_allowed_but_escalates``
 - ``test_label_examples.py::test_second_db_query_requires_ask``
 - ``test_label_examples.py::test_full_pipeline_happy_path``
@@ -38,18 +38,18 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies import (
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies import (
     _enforce_policy,
     build_policy_engine,
 )
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec import load
-from omnigent.spec.types import (
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec import load
+from goalrail.spec.types import (
     Phase,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -104,7 +104,7 @@ async def test_policies_demo_allows_short_sleep(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """Sleep with a short duration passes through the
-    FunctionPolicy. Mirrors the omnigent "Allowed" usage
+    FunctionPolicy. Mirrors the goalrail "Allowed" usage
     example at the top of agent_with_policies.yaml."""
     engine = _load_engine("policies-demo", conversation_store)
     result = await _enforce_policy(
@@ -119,7 +119,7 @@ async def test_policies_demo_denies_long_sleep(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """Sleep over the threshold blocks. Mirrors the
-    omnigent "Blocked tool call" example at the top of
+    goalrail "Blocked tool call" example at the top of
     agent_with_policies.yaml."""
     engine = _load_engine("policies-demo", conversation_store)
     result = await _enforce_policy(
@@ -185,7 +185,7 @@ async def test_policies_demo_initial_label_seeded(
 async def test_rate_limited_search_first_three_allowed(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_first_db_query_allowed_but_escalates``
+    """Ports goalrail ``test_first_db_query_allowed_but_escalates``
     semantics. The first N calls pass; calls beyond the budget
     ASK for approval (not DENY — lets the user extend the run
     interactively)."""
@@ -208,7 +208,7 @@ async def test_rate_limited_search_first_three_allowed(
 async def test_rate_limited_search_fourth_asks(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_second_db_query_requires_ask``
+    """Ports goalrail ``test_second_db_query_requires_ask``
     for our budget=3 policy: the 4th call crosses the budget
     and the FunctionPolicy returns ASK."""
     engine = _load_engine("rate-limited-search", conversation_store)
@@ -272,7 +272,7 @@ async def test_secure_research_initial_labels_seeded(
 async def test_secure_research_clean_agent_allows_shell(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_clean_agent_calls_freely``. An
+    """Ports goalrail ``test_clean_agent_calls_freely``. An
     agent that has not touched web_search or confidential
     reads can run shell commands unconditionally."""
     engine = _load_engine("secure-research", conversation_store)
@@ -291,7 +291,7 @@ async def test_secure_research_web_then_shell_asks(
 ) -> None:
     """Web search taints integrity → subsequent shell is
     ASK (low-integrity enforcement). Ports a happy-path slice
-    of omnigent ``test_full_pipeline_happy_path``."""
+    of goalrail ``test_full_pipeline_happy_path``."""
     engine = _load_engine("secure-research", conversation_store)
 
     # web_search: ALLOW + integrity→0.
@@ -342,7 +342,7 @@ async def test_secure_research_doc_then_shell_asks(
 async def test_secure_research_both_taints_deny_shell(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent
+    """Ports goalrail
     ``test_indirect_pii_plus_external_asks_on_write`` shape
     for our labels. When BOTH integrity and confidentiality
     are tainted, the stricter DENY policy fires (first in

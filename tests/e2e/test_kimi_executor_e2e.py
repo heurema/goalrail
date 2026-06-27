@@ -1,14 +1,14 @@
-"""End-to-end tests for :class:`omnigent.inner.kimi_executor.KimiExecutor`.
+"""End-to-end tests for :class:`goalrail.inner.kimi_executor.KimiExecutor`.
 
 Real-binary tests gated on:
 
-- ``OMNIGENT_E2E_KIMI=1`` in the environment, and
+- ``GOALRAIL_E2E_KIMI=1`` in the environment, and
 - the ``kimi`` binary (or whichever ``HARNESS_KIMI_PATH`` points at)
   present on PATH.
 
 When either gate fails the test is skipped — keeps CI green without the
 upstream binary while still letting maintainers run the happy path locally
-with ``OMNIGENT_E2E_KIMI=1 uv run pytest tests/e2e/test_kimi_executor_e2e.py``.
+with ``GOALRAIL_E2E_KIMI=1 uv run pytest tests/e2e/test_kimi_executor_e2e.py``.
 
 Mirrors ``tests/e2e/test_cursor_executor_e2e.py`` / ``test_pi_executor_e2e.py``
 in shape.
@@ -23,12 +23,12 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.executor import TextChunk, TurnComplete
-from omnigent.inner.kimi_executor import KimiExecutor, _resolve_kimi_binary
+from goalrail.inner.executor import TextChunk, TurnComplete
+from goalrail.inner.kimi_executor import KimiExecutor, _resolve_kimi_binary
 
 
 def _kimi_e2e_enabled() -> bool:
-    if os.environ.get("OMNIGENT_E2E_KIMI") != "1":
+    if os.environ.get("GOALRAIL_E2E_KIMI") != "1":
         return False
     return shutil.which(_resolve_kimi_binary()) is not None
 
@@ -36,10 +36,10 @@ def _kimi_e2e_enabled() -> bool:
 pytestmark = pytest.mark.skipif(
     not _kimi_e2e_enabled(),
     reason=(
-        "Real-binary e2e: requires OMNIGENT_E2E_KIMI=1 and the ``kimi`` (or "
+        "Real-binary e2e: requires GOALRAIL_E2E_KIMI=1 and the ``kimi`` (or "
         "HARNESS_KIMI_PATH) binary on PATH. Install via "
         "`curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash` and "
-        "run ``kimi login`` once, then re-run with OMNIGENT_E2E_KIMI=1."
+        "run ``kimi login`` once, then re-run with GOALRAIL_E2E_KIMI=1."
     ),
 )
 

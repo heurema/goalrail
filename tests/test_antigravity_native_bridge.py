@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-import omnigent.antigravity_native_bridge as _mod
-from omnigent.antigravity_native_bridge import (
+import goalrail.antigravity_native_bridge as _mod
+from goalrail.antigravity_native_bridge import (
     ANTIGRAVITY_NATIVE_BRIDGE_DIR_ENV_VAR,
     ANTIGRAVITY_NATIVE_REQUEST_SESSION_ID_ENV_VAR,
     AntigravityNativeBridgeState,
@@ -44,7 +44,7 @@ def test_bridge_root_honors_goalrail_data_dir(
     tmp_path: Path,
 ) -> None:
     """Goalrail data-dir override moves the default antigravity-native bridge root."""
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     data_dir = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
 
@@ -451,7 +451,7 @@ def test_update_conversation_id_returns_false_and_warns_when_no_state(
     logs a WARNING naming the dropped id so the cold-start caller can report that
     the reader will stay bound to the ``agy_conv_*`` placeholder.
     """
-    with caplog.at_level(logging.WARNING, logger="omnigent.antigravity_native_bridge"):
+    with caplog.at_level(logging.WARNING, logger="goalrail.antigravity_native_bridge"):
         result = update_conversation_id(bridge_dir, "agy_conv_new")  # empty bridge dir
     assert result is False
     assert read_bridge_state(bridge_dir) is None
@@ -634,11 +634,11 @@ def test_write_read_tmux_target_roundtrip(tmp_path: Path) -> None:
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
-        socket_path=Path("/tmp/omnigent-x/tmux.sock"),
+        socket_path=Path("/tmp/goalrail-x/tmux.sock"),
         tmux_target="main",
     )
     info = read_tmux_info(bridge_dir)
-    assert info == {"socket_path": "/tmp/omnigent-x/tmux.sock", "tmux_target": "main"}
+    assert info == {"socket_path": "/tmp/goalrail-x/tmux.sock", "tmux_target": "main"}
 
 
 def test_read_tmux_info_missing_returns_none(tmp_path: Path) -> None:
@@ -772,7 +772,7 @@ def test_inject_user_message_via_tui_happy_path(
         "/tmp/ex/tmux.sock",
         "load-buffer",
         "-b",
-        "omnigent-agy-paste",
+        "goalrail-agy-paste",
         load[-1],  # the temp paste file path (unlinked after the paste)
     ]
     assert paste == [
@@ -783,7 +783,7 @@ def test_inject_user_message_via_tui_happy_path(
         "-p",
         "-d",
         "-b",
-        "omnigent-agy-paste",
+        "goalrail-agy-paste",
         "-t",
         "main",
     ]
@@ -1035,15 +1035,15 @@ def test_inject_user_message_via_tui_rejects_empty_content(tmp_path: Path) -> No
 # ---------------------------------------------------------------------------
 
 
-def test_build_mcp_config_registers_omnigent_relay(tmp_path: Path) -> None:
+def test_build_mcp_config_registers_goalrail_relay(tmp_path: Path) -> None:
     """build_mcp_config emits the shared serve-mcp relay command + enabledTools."""
     config = build_mcp_config(tmp_path, python_executable="python-test")
-    server = config["mcpServers"]["omnigent"]
+    server = config["mcpServers"]["goalrail"]
     assert server["command"] == "python-test"
     assert server["args"] == [
         "-I",
         "-m",
-        "omnigent.claude_native_bridge",
+        "goalrail.claude_native_bridge",
         "serve-mcp",
         "--bridge-dir",
         str(tmp_path),
@@ -1066,7 +1066,7 @@ def test_build_mcp_config_defaults_python_to_current_interpreter(tmp_path: Path)
     """Omitting python_executable uses sys.executable so the relay runs in our venv."""
     import sys
 
-    server = build_mcp_config(tmp_path)["mcpServers"]["omnigent"]
+    server = build_mcp_config(tmp_path)["mcpServers"]["goalrail"]
     assert server["command"] == sys.executable
 
 
@@ -1080,7 +1080,7 @@ def test_write_mcp_config_targets_isolated_agy_home(tmp_path: Path) -> None:
     # actually loads MCP servers from — so the user's real ~/.gemini is untouched.
     assert path == agy_home_dir(bridge_dir) / ".gemini" / "config" / "mcp_config.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["mcpServers"]["omnigent"]["command"] == "python-test"
+    assert payload["mcpServers"]["goalrail"]["command"] == "python-test"
     # The bridge token the shared relay requires is written into the bridge dir.
     assert json.loads((bridge_dir / "bridge.json").read_text(encoding="utf-8"))["token"]
 

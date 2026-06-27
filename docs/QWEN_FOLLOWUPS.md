@@ -103,7 +103,7 @@ comments; this is the *what*, not the *how*.)
   wins; qwen's `dual-output.md` confirms `control_request` is emitted whenever a
   tool needs approval — the earlier "default mode doesn't emit these" note was
   wrong).
-  - **Mirror:** `omnigent/qwen_native_permissions.py` —
+  - **Mirror:** `goalrail/qwen_native_permissions.py` —
     `supervise_qwen_approval_mirror` tails the *same* `--json-file` the
     transcript forwarder reads (seeded at EOF so only new prompts park), POSTs
     each `can_use_tool` to the server's `qwen-permission-request` hook, and on
@@ -137,7 +137,7 @@ comments; this is the *what*, not the *how*.)
   (and effort/approval-mode if meaningful). The data is already on qwen's
   `--json-file` stream — `assistant` message events carry `message.model` (e.g.
   `openai/gpt-oss-120b:free`) and the `system/session_start` event carries model
-  metadata. The forwarder (`omnigent/qwen_native_forwarder.py`) could parse it
+  metadata. The forwarder (`goalrail/qwen_native_forwarder.py`) could parse it
   and report it onto the session so the chip reflects qwen's reality.
   - **Context ring + cost tracking also missing**, same root cause: native-qwen
     emits no token usage, so `tokensUsed` / `contextWindow` stay null (the ring
@@ -147,7 +147,7 @@ comments; this is the *what*, not the *how*.)
     today* (`_accumulate_usage`); native-qwen needs the equivalent off the
     `--json-file` stream. Parse `result.usage` (`input_tokens` / `output_tokens`
     / `cache_read_input_tokens` / `total_tokens`) in
-    `omnigent/qwen_native_forwarder.py`, split `cache_read_input_tokens` out of
+    `goalrail/qwen_native_forwarder.py`, split `cache_read_input_tokens` out of
     `input_tokens` (qwen's `input_tokens` is cache-inclusive; cost wants the
     non-cached portion), and report it onto the session so the cost observer +
     context ring pick it up; the context-window *limit* comes from the curated
@@ -161,7 +161,7 @@ comments; this is the *what*, not the *how*.)
   `_auto_create_qwen_terminal` persists the qwen session id on the Goalrail
   session (`_persist_qwen_external_session_id` → `PATCH /v1/sessions/{id}`), reads
   it back from the snapshot (`launch_config.external_session_id`) on the next
-  launch, and it's stamped as `omnigent.fork.source_external_session_id` for fork
+  launch, and it's stamped as `goalrail.fork.source_external_session_id` for fork
   history carry-over. qwen is cleaner than claude/codex here — it lets us *assign*
   the id via `--session-id`, so we mint a deterministic one
   (`qwen_session_id_for_conversation`, UUIDv5 of the `conv_id`) up front instead
@@ -190,7 +190,7 @@ comments; this is the *what*, not the *how*.)
   compression the Chat tab just shows the turn stall, and afterward the mirrored
   token counts don't reflect the shrink. Goalrail already has the web-facing
   primitives — `response.compaction.in_progress` / `.completed` / `.failed`
-  (`omnigent/runtime/compaction.py`, `omnigent/server/schemas.py:3158+`,
+  (`goalrail/runtime/compaction.py`, `goalrail/server/schemas.py:3158+`,
   rendered by `ap-web` as the "Compacting…" spinner / compaction divider) — so
   this is a *forwarder* change, not new UI.
   - **Verify the wire shape first (live E2E):** confirm whether qwen emits a
@@ -202,7 +202,7 @@ comments; this is the *what*, not the *how*.)
     elicitation work proved the stream carries non-transcript control events, so
     a compression event is plausible but unconfirmed — `permission_suggestions`
     was null, so don't assume field richness.
-  - **Mirror it:** in `omnigent/qwen_native_forwarder.py`, on a
+  - **Mirror it:** in `goalrail/qwen_native_forwarder.py`, on a
     compression-in-progress marker publish `response.compaction.in_progress`
     (POST to the session) so the spinner shows, and on completion publish
     `response.compaction.completed` with the post-compression `total_tokens`

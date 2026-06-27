@@ -14,19 +14,19 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.entities import Conversation, ConversationItem
-from omnigent.entities.agent import Agent, LoadedAgent
-from omnigent.entities.conversation import FunctionCallData
-from omnigent.policies.types import PolicyAction, PolicyResult
-from omnigent.server.routes.sessions import (
+from goalrail.entities import Conversation, ConversationItem
+from goalrail.entities.agent import Agent, LoadedAgent
+from goalrail.entities.conversation import FunctionCallData
+from goalrail.policies.types import PolicyAction, PolicyResult
+from goalrail.server.routes.sessions import (
     _build_skill_slash_command_policy_body,
     _evaluate_input_policy,
     _evaluate_tool_call_policy,
     _persist_policy_deny_sentinel,
 )
-from omnigent.server.schemas import SessionEventInput
-from omnigent.spec import AgentSpec
-from omnigent.spec.types import Phase, PolicySpec
+from goalrail.server.schemas import SessionEventInput
+from goalrail.spec import AgentSpec
+from goalrail.spec.types import Phase, PolicySpec
 
 # ── Stub stores ──────────────────────────────────────────────
 
@@ -205,10 +205,10 @@ def _make_spec_no_guardrails() -> AgentSpec:
 # ── Tests ────────────────────────────────────────────────────
 
 
-_CACHE_PATCH = "omnigent.server.routes.sessions.get_agent_cache"
-_ENGINE_PATCH = "omnigent.server.routes.sessions.build_policy_engine"
-_HOLD_GATE_PATCH = "omnigent.server.routes.sessions._hold_native_ask_gate"
-_STREAM_PATCH = "omnigent.server.routes.sessions.session_stream"
+_CACHE_PATCH = "goalrail.server.routes.sessions.get_agent_cache"
+_ENGINE_PATCH = "goalrail.server.routes.sessions.build_policy_engine"
+_HOLD_GATE_PATCH = "goalrail.server.routes.sessions._hold_native_ask_gate"
+_STREAM_PATCH = "goalrail.server.routes.sessions.session_stream"
 
 
 @pytest.mark.asyncio
@@ -454,7 +454,7 @@ def _make_spec_with_guardrails() -> AgentSpec:
 
     :returns: AgentSpec with guardrails enabled.
     """
-    from omnigent.spec.types import GuardrailsSpec
+    from goalrail.spec.types import GuardrailsSpec
 
     return AgentSpec(
         spec_version=1,
@@ -870,7 +870,7 @@ async def test_output_allow_verdict():
     """OUTPUT policy evaluation returns allow when the engine
     ALLOWs the assistant response.
     """
-    from omnigent.server.routes.sessions import _evaluate_output_policy
+    from goalrail.server.routes.sessions import _evaluate_output_policy
 
     conv_store = _FakeConversationStore()
     agent_store = _FakeAgentStore(agent=_make_agent())
@@ -910,7 +910,7 @@ async def test_output_deny_replaces_text():
     """OUTPUT policy DENY replaces the assistant text with the
     deny sentinel in the persisted message.
     """
-    from omnigent.server.routes.sessions import _evaluate_output_policy
+    from goalrail.server.routes.sessions import _evaluate_output_policy
 
     conv_store = _FakeConversationStore()
     agent_store = _FakeAgentStore(agent=_make_agent())

@@ -2,7 +2,7 @@
 
 Re-homes the suppressed D6 e2e coverage (which targeted the removed
 ``POST /v1/responses`` route and a real LLM) at the mock-LLM
-sessions-API integration layer. Drives the real ``omnigent server``
+sessions-API integration layer. Drives the real ``goalrail server``
 + runner + harness over the sessions stream/events surface — the
 same path :mod:`tests.integration.test_client_tools` proves works in
 mock mode.

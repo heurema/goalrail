@@ -1,16 +1,16 @@
-"""End-to-end tests: ``omnigent cursor`` drives the native Cursor TUI.
+"""End-to-end tests: ``goalrail cursor`` drives the native Cursor TUI.
 
 The cursor-native sibling of ``test_codex_native_cli_cwd_e2e`` /
 ``test_codex_native_cli_resume_e2e``. ``cursor-native`` is a *terminal-first*
-harness: ``omnigent cursor`` launches the official ``cursor-agent`` TUI in a
+harness: ``goalrail cursor`` launches the official ``cursor-agent`` TUI in a
 runner-owned tmux pane, and each web-UI turn is injected into that pane
 (bracketed paste + Enter) by
-:class:`omnigent.inner.cursor_native_executor.CursorNativeExecutor`. The TUI's
+:class:`goalrail.inner.cursor_native_executor.CursorNativeExecutor`. The TUI's
 own conversation store is tailed by
-:mod:`omnigent.cursor_native_forwarder`, which mirrors ``cursor-agent``'s
-replies back onto the Omnigent conversation as assistant items.
+:mod:`goalrail.cursor_native_forwarder`, which mirrors ``cursor-agent``'s
+replies back onto the Goalrail conversation as assistant items.
 
-These tests drive the full stack the way a user does — spawn ``omnigent
+These tests drive the full stack the way a user does — spawn ``goalrail
 cursor``, then talk to the session **through the server** (``POST
 /v1/sessions/{id}/events``, the web-UI path) — and assert on the persisted
 assistant items:
@@ -32,7 +32,7 @@ prompt nor on per-tool approval prompts — either of which would hang the pane.
 
 Environment requirements (why this is opt-in, not pure-CI)
 ----------------------------------------------------------
-* **Opt-in only**: set ``OMNIGENT_E2E_CURSOR_NATIVE=1`` to run. Like the other
+* **Opt-in only**: set ``GOALRAIL_E2E_CURSOR_NATIVE=1`` to run. Like the other
   native-TUI e2e tests, cursor-native needs an interactive ``cursor-agent
   login`` anchored to the real ``$HOME`` and a ``tmux`` binary; the
   ``cursor-agent`` binary may be present on CI but unauthenticated, which would
@@ -41,7 +41,7 @@ Environment requirements (why this is opt-in, not pure-CI)
   required (checked below).
 * Run it like the codex-native CLI tests::
 
-    OMNIGENT_E2E_CURSOR_NATIVE=1 \
+    GOALRAIL_E2E_CURSOR_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_cursor_native_cli_e2e.py \
         --profile oss \
         --llm-api-key "$(databricks auth token -p oss \
@@ -69,12 +69,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent.cursor_native_bridge import bridge_dir_for_session_id, kill_session
+from goalrail.cursor_native_bridge import bridge_dir_for_session_id, kill_session
 from tests.e2e._native_resume_helpers import (
     PtyHandle,
     cli_env,
+    goalrail_console_script,
     inject_user_message,
-    omnigent_console_script,
     poll_for_assistant_marker,
     poll_for_pending_elicitation,
     resolve_elicitation,
@@ -90,12 +90,12 @@ from tests.e2e._native_resume_helpers import (
 # (present-but-unauthenticated hangs the TUI), so require the explicit env var,
 # plus the two binaries the terminal-first harness needs on PATH.
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CURSOR_NATIVE") != "1"
+    os.environ.get("GOALRAIL_E2E_CURSOR_NATIVE") != "1"
     or shutil.which("cursor-agent") is None
     or shutil.which("tmux") is None,
     reason=(
         "cursor-native CLI e2e needs an interactive `cursor-agent login` and a "
-        "`tmux` binary; set OMNIGENT_E2E_CURSOR_NATIVE=1 (and have `cursor-agent` "
+        "`tmux` binary; set GOALRAIL_E2E_CURSOR_NATIVE=1 (and have `cursor-agent` "
         "installed + logged in and `tmux` on PATH) to run"
     ),
 )
@@ -171,7 +171,7 @@ def test_cursor_native_cli_smoke(
 ) -> None:
     """A cursor-native turn driven through the server returns the model's reply.
 
-    Spawns a backgrounded ``omnigent cursor`` session, waits for its terminal
+    Spawns a backgrounded ``goalrail cursor`` session, waits for its terminal
     to register, injects (via ``/events`` — the web-UI path) a prompt asking
     ``cursor-agent`` to emit a unique marker word, and asserts the marker comes
     back as an assistant item. The marker is a fresh per-run nonce so a match
@@ -192,9 +192,9 @@ def test_cursor_native_cli_smoke(
     pwd_dir.mkdir()
     marker = f"CURSOR_{uuid.uuid4().hex[:8].upper()}"
 
-    omni = str(omnigent_console_script())
+    goalrail = str(goalrail_console_script())
     handle = spawn_cli_background(
-        [omni, "cursor", "--server", resume_test_server, _FORCE_FLAG],
+        [goalrail, "cursor", "--server", resume_test_server, _FORCE_FLAG],
         env=cli_env(profile=profile),
         cwd=str(pwd_dir),
     )
@@ -221,7 +221,7 @@ def test_cursor_native_cli_smoke(
                 )
             except AssertionError as exc:
                 raise AssertionError(
-                    f"`omnigent cursor` did not return marker {marker!r}. The "
+                    f"`goalrail cursor` did not return marker {marker!r}. The "
                     "cursor-native path regressed somewhere between tmux injection, "
                     "the cursor-agent turn, and the forwarder mirroring the reply "
                     f"onto the conversation.\n\nCLI output tail:\n{handle.output()[-2000:]}"
@@ -235,9 +235,9 @@ def test_cursor_native_cli_runs_in_launch_cwd(
     tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
-    """``omnigent cursor`` launches ``cursor-agent`` in the directory it was run from.
+    """``goalrail cursor`` launches ``cursor-agent`` in the directory it was run from.
 
-    Spawns a backgrounded ``omnigent cursor`` whose process cwd is a temp
+    Spawns a backgrounded ``goalrail cursor`` whose process cwd is a temp
     directory containing a marker file, then injects (via the server, the
     web-UI path) a request to read that file. The marker exists only in the
     launch cwd (never in the runner's spec-bundle dir), so it can come back
@@ -257,9 +257,9 @@ def test_cursor_native_cli_runs_in_launch_cwd(
     marker = f"PWD_{uuid.uuid4().hex[:6].upper()}"
     (pwd_dir / _CWD_MARKER_FILE).write_text(marker + "\n")
 
-    omni = str(omnigent_console_script())
+    goalrail = str(goalrail_console_script())
     handle = spawn_cli_background(
-        [omni, "cursor", "--server", resume_test_server, _FORCE_FLAG],
+        [goalrail, "cursor", "--server", resume_test_server, _FORCE_FLAG],
         env=cli_env(profile=profile),
         cwd=str(pwd_dir),
     )
@@ -289,7 +289,7 @@ def test_cursor_native_cli_runs_in_launch_cwd(
                 )
             except AssertionError as exc:
                 raise AssertionError(
-                    f"`omnigent cursor` did not return marker {marker!r} from "
+                    f"`goalrail cursor` did not return marker {marker!r} from "
                     f"{_CWD_MARKER_FILE} — it did not run cursor-agent in its launch "
                     "cwd (the wrapper-path cwd resolution regressed, likely the "
                     f"spec-bundle dir).\n\nCLI output tail:\n{handle.output()[-2000:]}"
@@ -306,7 +306,7 @@ def test_cursor_native_cli_resume_warns_when_terminal_was_killed(
     """Live reattach stays quiet, but cold resume tells the truth.
 
     This is the e2e guard for the UX bug in ``CURSOR_NATIVE_AUDIT_FIXES.md``
-    item #2. A second ``omnigent cursor --resume <conv>`` while the original
+    item #2. A second ``goalrail cursor --resume <conv>`` while the original
     tmux pane is still alive should attach to the live terminal and must not
     print the cold-resume warning. After killing that tmux session, the same
     resume command necessarily starts a fresh ``cursor-agent`` TUI with no
@@ -323,8 +323,8 @@ def test_cursor_native_cli_resume_warns_when_terminal_was_killed(
     pwd_dir = tmp_path / "pwd"
     pwd_dir.mkdir()
 
-    omni = str(omnigent_console_script())
-    base = [omni, "cursor", "--server", resume_test_server]
+    goalrail = str(goalrail_console_script())
+    base = [goalrail, "cursor", "--server", resume_test_server]
     primary = spawn_cli_background(
         [*base, _FORCE_FLAG],
         env=cli_env(profile=profile),
@@ -391,16 +391,16 @@ def test_cursor_native_cli_resume_warns_when_terminal_was_killed(
         primary.terminate()
 
 
-def test_cursor_native_cli_exposes_omnigent_mcp_tools(
+def test_cursor_native_cli_exposes_goalrail_mcp_tools(
     resume_test_server: str,
     tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
-    """``omnigent cursor`` wires Omnigent tools into Cursor's native MCP client.
+    """``goalrail cursor`` wires Goalrail tools into Cursor's native MCP client.
 
     Spawns a real cursor-native session, waits for the runner-owned Cursor TUI
     to start, then asks ``cursor-agent``'s own MCP subcommand to discover the
-    workspace-scoped ``omnigent`` server. This catches the regressions that made
+    workspace-scoped ``goalrail`` server. This catches the regressions that made
     Cursor-native unable to call ``sys_*`` tools: missing ``bridge.json``, a
     disabled workspace MCP server, lost ``TMPDIR`` under ``python -I``, missing
     auto-approval config, and stdio framing incompatibility.
@@ -416,10 +416,10 @@ def test_cursor_native_cli_exposes_omnigent_mcp_tools(
     pwd_dir = tmp_path / "pwd"
     pwd_dir.mkdir()
 
-    omni = str(omnigent_console_script())
+    goalrail = str(goalrail_console_script())
     env = cli_env(profile=profile)
     handle = spawn_cli_background(
-        [omni, "cursor", "--server", resume_test_server, _FORCE_FLAG],
+        [goalrail, "cursor", "--server", resume_test_server, _FORCE_FLAG],
         env=env,
         cwd=str(pwd_dir),
     )
@@ -437,10 +437,10 @@ def test_cursor_native_cli_exposes_omnigent_mcp_tools(
         mcp_config_path = pwd_dir / ".cursor" / "mcp.json"
         assert mcp_config_path.is_file(), "cursor-native did not write .cursor/mcp.json"
         assert (bridge_dir / "bridge.json").is_file(), "serve-mcp token bridge was not written"
-        assert (bridge_dir / "tool_relay.json").is_file(), "Omnigent tool relay was not started"
+        assert (bridge_dir / "tool_relay.json").is_file(), "Goalrail tool relay was not started"
 
         payload = json.loads(mcp_config_path.read_text(encoding="utf-8"))
-        server = payload["mcpServers"]["omnigent"]
+        server = payload["mcpServers"]["goalrail"]
         assert server["env"]["TMPDIR"]
         assert "--bridge-dir" in server["args"]
         assert str(bridge_dir) in server["args"]
@@ -451,8 +451,8 @@ def test_cursor_native_cli_exposes_omnigent_mcp_tools(
         if cli_config_path.is_file():
             cli_config = json.loads(cli_config_path.read_text(encoding="utf-8"))
             allow = cli_config.get("permissions", {}).get("allow", [])
-            assert "Mcp(omnigent:sys_session_list)" in allow
-            assert "Mcp(omnigent:sys_os_read)" in allow
+            assert "Mcp(goalrail:sys_session_list)" in allow
+            assert "Mcp(goalrail:sys_os_read)" in allow
 
         listed = subprocess.run(
             ["cursor-agent", "mcp", "list"],
@@ -465,11 +465,11 @@ def test_cursor_native_cli_exposes_omnigent_mcp_tools(
             check=False,
         )
         assert listed.returncode == 0, listed.stdout
-        assert "omnigent" in listed.stdout
+        assert "goalrail" in listed.stdout
         assert "ready" in listed.stdout.lower()
 
         tools = subprocess.run(
-            ["cursor-agent", "mcp", "list-tools", "omnigent"],
+            ["cursor-agent", "mcp", "list-tools", "goalrail"],
             cwd=pwd_dir,
             env=env,
             text=True,
@@ -491,10 +491,10 @@ def test_cursor_native_cli_mcp_can_call_sys_tool(
     tmp_path: Path,
     request: pytest.FixtureRequest,
 ) -> None:
-    """Cursor-native's generated Omnigent MCP server can call ``sys_*`` tools.
+    """Cursor-native's generated Goalrail MCP server can call ``sys_*`` tools.
 
     Launches a real Cursor TUI, then calls the same generated ``.cursor/mcp.json``
-    Omnigent relay that Cursor uses. The tool call is direct JSON-RPC over the
+    Goalrail relay that Cursor uses. The tool call is direct JSON-RPC over the
     generated stdio server rather than model-steered prose, so it deterministically
     proves the Cursor-native MCP wiring can execute relayed ``sys_*`` tools.
     """
@@ -505,10 +505,10 @@ def test_cursor_native_cli_mcp_can_call_sys_tool(
     pwd_dir = tmp_path / "pwd"
     pwd_dir.mkdir()
 
-    omni = str(omnigent_console_script())
+    goalrail = str(goalrail_console_script())
     env = cli_env(profile=profile)
     handle = spawn_cli_background(
-        [omni, "cursor", "--server", resume_test_server, _FORCE_FLAG],
+        [goalrail, "cursor", "--server", resume_test_server, _FORCE_FLAG],
         env=env,
         cwd=str(pwd_dir),
     )
@@ -525,7 +525,7 @@ def test_cursor_native_cli_mcp_can_call_sys_tool(
         bridge_dir = bridge_dir_for_session_id(conversation_id)
         mcp_config_path = pwd_dir / ".cursor" / "mcp.json"
         payload = json.loads(mcp_config_path.read_text(encoding="utf-8"))
-        server = payload["mcpServers"]["omnigent"]
+        server = payload["mcpServers"]["goalrail"]
         proc_env = {**os.environ, **env, **server.get("env", {})}
         proc = subprocess.Popen(
             [server.get("command") or sys.executable, *server["args"]],
@@ -604,7 +604,7 @@ def test_cursor_native_cli_tool_approval_surfaced_as_elicitation(
 ) -> None:
     """A cursor-native tool-approval prompt surfaces as a web elicitation card.
 
-    Unlike the other tests in this module, this launches ``omnigent cursor``
+    Unlike the other tests in this module, this launches ``goalrail cursor``
     **without** the ``-f`` force/trust flag, so ``cursor-agent`` shows its own
     per-tool approval prompt (the Workspace Trust gate is still auto-dismissed
     by the inject path's ``_settle_pane``). It then injects (via the server,
@@ -634,11 +634,11 @@ def test_cursor_native_cli_tool_approval_surfaced_as_elicitation(
     marker = f"CURSOR_APPROVE_{uuid.uuid4().hex[:8].upper()}"
     result_file = pwd_dir / "result.txt"
 
-    omni = str(omnigent_console_script())
+    goalrail = str(goalrail_console_script())
     # No _FORCE_FLAG: we WANT cursor's native per-tool approval prompt so the
     # runner-side TUI-mirror can surface it as a web elicitation.
     handle = spawn_cli_background(
-        [omni, "cursor", "--server", resume_test_server],
+        [goalrail, "cursor", "--server", resume_test_server],
         env=cli_env(profile=profile),
         cwd=str(pwd_dir),
     )
@@ -712,7 +712,7 @@ def test_cursor_native_cli_same_cwd_launch_does_not_duplicate(
 ) -> None:
     """A second cursor-native launch in the same cwd does not duplicate the chat.
 
-    cursor keeps one chat per working directory, so two ``omnigent cursor``
+    cursor keeps one chat per working directory, so two ``goalrail cursor``
     launches from the same dir discover the SAME chat store. The forwarder's
     per-chat claim must let only ONE session (the earlier-launched one) mirror
     it; the later session yields. A marker injected into the FIRST session must
@@ -731,8 +731,8 @@ def test_cursor_native_cli_same_cwd_launch_does_not_duplicate(
     pwd_dir.mkdir()
     marker = f"DEDUP_{uuid.uuid4().hex[:8].upper()}"
 
-    omni = str(omnigent_console_script())
-    base = [omni, "cursor", "--server", resume_test_server, _FORCE_FLAG]
+    goalrail = str(goalrail_console_script())
+    base = [goalrail, "cursor", "--server", resume_test_server, _FORCE_FLAG]
     first = spawn_cli_background(base, env=cli_env(profile=profile), cwd=str(pwd_dir))
     second: PtyHandle | None = None
     try:

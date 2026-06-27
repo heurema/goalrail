@@ -28,8 +28,8 @@ browser ───────────────►  Worker (src/index.js)
                           (1 instance)        │            │
                           DATABASE_URL ───────┘            │  S3 API (boto3)
                           cloudflare_d1://…                ▼
-                                 │                  OMNIGENT_ARTIFACT_URI
-                                 ▼                  s3://omnigent-artifacts
+                                 │                  GOALRAIL_ARTIFACT_URI
+                                 ▼                  s3://goalrail-artifacts
                           Cloudflare D1                    │
                           (SQLite, the DB)                 ▼
                                                     Cloudflare R2
@@ -38,7 +38,7 @@ browser ───────────────►  Worker (src/index.js)
 
 - **Worker** — a thin front that proxies every request to **one** container
   instance (Goalrail keeps an in-memory runner registry, so it's single-replica).
-- **Container** — the official `ghcr.io/omnigent-ai/omnigent-server` image plus
+- **Container** — the official `ghcr.io/heurema/goalrail-server` image plus
   the D1 SQLAlchemy dialect, a shim that re-registers it as a proper SQLite
   dialect, and `boto3` (this directory's `Dockerfile`).
 - **D1** is the database. The server reaches it through the
@@ -47,7 +47,7 @@ browser ───────────────►  Worker (src/index.js)
 - **R2** is the artifact store. Cloudflare container disk is **ephemeral**, so
   artifacts (agent bundles, user files) go to R2 over its **S3 API** via
   Goalrail's native `S3ArtifactStore`, selected with
-  `OMNIGENT_ARTIFACT_URI=s3://<bucket>`. No FUSE mount, no sidecar.
+  `GOALRAIL_ARTIFACT_URI=s3://<bucket>`. No FUSE mount, no sidecar.
 
 ## What's in here
 
@@ -77,14 +77,14 @@ npx wrangler login
 ### 1. Create the D1 database
 
 ```bash
-npx wrangler d1 create omnigent
+npx wrangler d1 create goalrail
 # note the "database_id" it prints — call it <DATABASE_ID>
 ```
 
 ### 2. Create the R2 bucket
 
 ```bash
-npx wrangler r2 bucket create omnigent-artifacts
+npx wrangler r2 bucket create goalrail-artifacts
 ```
 
 ### 3. A D1 API token (for `DATABASE_URL`)
@@ -126,7 +126,7 @@ In `wrangler.jsonc`, set `AWS_ENDPOINT_URL_S3` to your account's R2 endpoint
 npx wrangler secret put DATABASE_URL
 
 # Session cookie secret — any 64-hex string
-openssl rand -hex 32 | npx wrangler secret put OMNIGENT_ACCOUNTS_COOKIE_SECRET
+openssl rand -hex 32 | npx wrangler secret put GOALRAIL_ACCOUNTS_COOKIE_SECRET
 
 # R2 S3 credentials from step 4
 npx wrangler secret put AWS_ACCESS_KEY_ID
@@ -137,13 +137,13 @@ npx wrangler secret put AWS_SECRET_ACCESS_KEY
 
 ```bash
 npx wrangler deploy
-# -> https://omnigent.<your-subdomain>.workers.dev
+# -> https://goalrail.<your-subdomain>.workers.dev
 ```
 
 The container cold-starts on the first request (~10s), then stays warm:
 
 ```bash
-curl https://omnigent.<your-subdomain>.workers.dev/health   # {"status":"ok"}
+curl https://goalrail.<your-subdomain>.workers.dev/health   # {"status":"ok"}
 ```
 
 On a brand-new D1, the **first** boot runs all migrations before the server
@@ -157,8 +157,8 @@ Then connect a machine to actually run agents (the server is just the control
 plane):
 
 ```bash
-goalrail login https://omnigent.<your-subdomain>.workers.dev
-goalrail host  --server https://omnigent.<your-subdomain>.workers.dev
+goalrail login https://goalrail.<your-subdomain>.workers.dev
+goalrail host  --server https://goalrail.<your-subdomain>.workers.dev
 ```
 
 ## Verifying durability

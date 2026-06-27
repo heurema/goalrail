@@ -1,4 +1,4 @@
-"""Unit tests for omnigent.onboarding.ucode_state."""
+"""Unit tests for goalrail.onboarding.ucode_state."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from unittest.mock import patch
 
-from omnigent.onboarding.ucode_state import (
+from goalrail.onboarding.ucode_state import (
     UcodeWorkspaceState,
     read_current_ucode_state,
     read_ucode_state,
@@ -91,7 +91,7 @@ def test_read_ucode_state_returns_state_when_configured(tmp_path: Path) -> None:
     """Reads the correct workspace entry when state.json is present."""
     state_file = _write_state(tmp_path, _VALID_STATE)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         state = read_ucode_state(_WORKSPACE_URL)
 
     assert state is not None
@@ -115,7 +115,7 @@ def test_read_ucode_state_trailing_slash_insensitive(tmp_path: Path) -> None:
     """Workspace URL lookup ignores a trailing slash on either side."""
     state_file = _write_state(tmp_path, _VALID_STATE)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         state = read_ucode_state(_WORKSPACE_URL + "/")
 
     assert state is not None
@@ -124,7 +124,7 @@ def test_read_ucode_state_trailing_slash_insensitive(tmp_path: Path) -> None:
 
 def test_read_ucode_state_returns_none_when_file_absent(tmp_path: Path) -> None:
     """Returns None when state.json does not exist."""
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", tmp_path / "nonexistent.json"):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", tmp_path / "nonexistent.json"):
         assert read_ucode_state(_WORKSPACE_URL) is None
 
 
@@ -132,7 +132,7 @@ def test_read_ucode_state_returns_none_for_unknown_workspace(tmp_path: Path) -> 
     """Returns None when the workspace isn't in state.json."""
     state_file = _write_state(tmp_path, _VALID_STATE)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         assert read_ucode_state("https://example-other-workspace.cloud.databricks.com") is None
 
 
@@ -140,7 +140,7 @@ def test_read_current_ucode_state_uses_current_workspace(tmp_path: Path) -> None
     """Reads the current workspace entry from state.json."""
     state_file = _write_state(tmp_path, _VALID_STATE)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         state = read_current_ucode_state()
 
     assert state is not None
@@ -156,7 +156,7 @@ def test_read_current_ucode_state_accepts_single_workspace_without_current(
     }
     state_file = _write_state(tmp_path, state_without_current)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         state = read_current_ucode_state()
 
     assert state is not None
@@ -176,7 +176,7 @@ def test_read_current_ucode_state_returns_none_for_multiple_without_current(
     }
     state_file = _write_state(tmp_path, state_without_current)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         assert read_current_ucode_state() is None
 
 
@@ -185,7 +185,7 @@ def test_read_ucode_state_accepts_old_state_version_when_keys_match(tmp_path: Pa
     old = {**_VALID_STATE, "state_version": 2}
     state_file = _write_state(tmp_path, old)
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         state = read_ucode_state(_WORKSPACE_URL)
 
     assert state is not None
@@ -197,7 +197,7 @@ def test_read_ucode_state_returns_none_for_malformed_json(tmp_path: Path) -> Non
     state_file = tmp_path / "state.json"
     state_file.write_text("not json {{{")
 
-    with patch("omnigent.onboarding.ucode_state._STATE_PATH", state_file):
+    with patch("goalrail.onboarding.ucode_state._STATE_PATH", state_file):
         assert read_ucode_state(_WORKSPACE_URL) is None
 
 

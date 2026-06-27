@@ -259,7 +259,7 @@ function defaultFetchHandler(input: RequestInfo | URL, init?: RequestInit): Resp
       }
     }
     if ("collaboration_mode" in body && typeof body.collaboration_mode === "string") {
-      labels["omnigent.codex_native.collaboration_mode"] = body.collaboration_mode;
+      labels["goalrail.codex_native.collaboration_mode"] = body.collaboration_mode;
       sessionLabels.set(sessionId, labels);
     }
     return mockResponse({
@@ -751,7 +751,7 @@ describe("chatStore — switchTo", () => {
           created_at: 0,
           items: sessionSnapshots.get("conv_native") ?? [],
           pending_inputs: sessionPendingInputs.get("conv_native") ?? [],
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui" },
         });
       }
       return defaultFetchHandler(input, init);
@@ -865,7 +865,7 @@ describe("chatStore — switchTo", () => {
           created_at: 0,
           items: sessionSnapshots.get("conv_native") ?? [],
           pending_inputs: sessionPendingInputs.get("conv_native") ?? [],
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui" },
         });
       }
       return defaultFetchHandler(input, init);
@@ -951,7 +951,7 @@ describe("chatStore — switchTo", () => {
   // ``isNativeTerminalSession`` gates the optimistic-bubble clear; the companion
   // ``nativeVendorOwnsModel`` hides the composer model/effort chip for native
   // wrappers whose model is chosen inside the vendor TUI (qwen/goose/pi/cursor/
-  // opencode) — claude/codex keep it (they expose an Omnigent model picker).
+  // opencode) — claude/codex keep it (they expose an Goalrail model picker).
   it.each([
     ["claude-code-native-ui", true, false],
     ["codex-native-ui", true, false],
@@ -973,7 +973,7 @@ describe("chatStore — switchTo", () => {
             status: "idle",
             created_at: 0,
             items: [],
-            labels: wrapper === null ? {} : { "omnigent.wrapper": wrapper },
+            labels: wrapper === null ? {} : { "goalrail.wrapper": wrapper },
           });
         }
         return defaultFetchHandler(input, init);
@@ -1603,7 +1603,7 @@ describe("chatStore — send (first-send ordering)", () => {
           status: "idle",
           created_at: 0,
           items: [],
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui" },
         });
       }
       return defaultFetchHandler(input, init);
@@ -2961,7 +2961,7 @@ describe("chatStore — handleSessionEvent (session.* events)", () => {
             status: "idle",
             created_at: 0,
             items: [],
-            labels: { "omnigent.wrapper": "claude-code-native-ui" },
+            labels: { "goalrail.wrapper": "claude-code-native-ui" },
           });
         }
         return defaultFetchHandler(input, init);
@@ -3347,7 +3347,7 @@ describe("chatStore — handleSessionEvent (session.* events)", () => {
             status: "idle",
             created_at: 0,
             items: [],
-            labels: { "omnigent.wrapper": "codex-native-ui" },
+            labels: { "goalrail.wrapper": "codex-native-ui" },
             llm_model: "gpt-5.5",
             harness: "codex",
             skills: [{ name: "inspect", description: "Read session state" }],
@@ -4806,7 +4806,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
 
   it("PATCHes sticky model and effort onto a claude-native session with no overrides", async () => {
     seedSession("conv_cn", []);
-    withSnapshot("conv_cn", { labels: { "omnigent.wrapper": "claude-code-native-ui" } });
+    withSnapshot("conv_cn", { labels: { "goalrail.wrapper": "claude-code-native-ui" } });
 
     useChatStore.setState({
       selectedEffort: "high",
@@ -4831,7 +4831,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
   it("PATCHes sticky model and effort onto a codex-native session with no overrides", async () => {
     seedSession("conv_codex", []);
     withSnapshot("conv_codex", {
-      labels: { "omnigent.wrapper": "codex-native-ui" },
+      labels: { "goalrail.wrapper": "codex-native-ui" },
       model_options: [
         {
           id: "gpt-5.4",
@@ -4872,7 +4872,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     // Observer sticky prefs must not overwrite child sessions.
     seedSession("conv_child", []);
     withSnapshot("conv_child", {
-      labels: { "omnigent.wrapper": "claude-code-native-ui" },
+      labels: { "goalrail.wrapper": "claude-code-native-ui" },
       parent_session_id: "conv_parent",
     });
 
@@ -4900,7 +4900,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     // The handoff must skip a non-Claude model and leave the session on its
     // own default (model_override untouched).
     seedSession("conv_cn_gpt", []);
-    withSnapshot("conv_cn_gpt", { labels: { "omnigent.wrapper": "claude-code-native-ui" } });
+    withSnapshot("conv_cn_gpt", { labels: { "goalrail.wrapper": "claude-code-native-ui" } });
 
     useChatStore.setState({ selectedEffort: null, selectedModel: "gpt-5.4" });
     await useChatStore.getState().switchTo("conv_cn_gpt");
@@ -4913,7 +4913,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     // Same guard in the opposite direction: a Claude alias from the global
     // picker must not be handed to Codex app-server as its next-turn model.
     seedSession("conv_codex_claude", []);
-    withSnapshot("conv_codex_claude", { labels: { "omnigent.wrapper": "codex-native-ui" } });
+    withSnapshot("conv_codex_claude", { labels: { "goalrail.wrapper": "codex-native-ui" } });
 
     useChatStore.setState({ selectedEffort: null, selectedModel: "opus" });
     await useChatStore.getState().switchTo("conv_codex_claude");
@@ -4925,7 +4925,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
   it("shows a claude-native session's stamped effort and does not overwrite it", async () => {
     seedSession("conv_cn_eff", []);
     withSnapshot("conv_cn_eff", {
-      labels: { "omnigent.wrapper": "claude-code-native-ui" },
+      labels: { "goalrail.wrapper": "claude-code-native-ui" },
       reasoning_effort: "medium",
     });
 
@@ -4973,7 +4973,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
 
   it("PATCHes effort on an active claude-native session", async () => {
     seedSession("conv_supported", []);
-    withSnapshot("conv_supported", { labels: { "omnigent.wrapper": "claude-code-native-ui" } });
+    withSnapshot("conv_supported", { labels: { "goalrail.wrapper": "claude-code-native-ui" } });
     await useChatStore.getState().switchTo("conv_supported");
     fetchMock.mockClear();
 
@@ -4985,7 +4985,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
 
   it("PATCHes effort on an active codex-native session", async () => {
     seedSession("conv_codex_supported", []);
-    withSnapshot("conv_codex_supported", { labels: { "omnigent.wrapper": "codex-native-ui" } });
+    withSnapshot("conv_codex_supported", { labels: { "goalrail.wrapper": "codex-native-ui" } });
     await useChatStore.getState().switchTo("conv_codex_supported");
     fetchMock.mockClear();
 
@@ -4999,8 +4999,8 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     seedSession("conv_plan", []);
     withSnapshot("conv_plan", {
       labels: {
-        "omnigent.wrapper": "codex-native-ui",
-        "omnigent.codex_native.collaboration_mode": "plan",
+        "goalrail.wrapper": "codex-native-ui",
+        "goalrail.codex_native.collaboration_mode": "plan",
       },
     });
 
@@ -5013,7 +5013,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     seedSession("conv_not_codex_plan", []);
     withSnapshot("conv_not_codex_plan", {
       labels: {
-        "omnigent.codex_native.collaboration_mode": "plan",
+        "goalrail.codex_native.collaboration_mode": "plan",
       },
     });
 
@@ -5024,7 +5024,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
 
   it("PATCHes Codex Plan mode and settles from the returned labels", async () => {
     seedSession("conv_plan_toggle", []);
-    withSnapshot("conv_plan_toggle", { labels: { "omnigent.wrapper": "codex-native-ui" } });
+    withSnapshot("conv_plan_toggle", { labels: { "goalrail.wrapper": "codex-native-ui" } });
     await useChatStore.getState().switchTo("conv_plan_toggle");
     fetchMock.mockClear();
 
@@ -5036,7 +5036,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
 
   it("rolls back Codex Plan mode when the PATCH is rejected", async () => {
     seedSession("conv_plan_failure", []);
-    withSnapshot("conv_plan_failure", { labels: { "omnigent.wrapper": "codex-native-ui" } });
+    withSnapshot("conv_plan_failure", { labels: { "goalrail.wrapper": "codex-native-ui" } });
     await useChatStore.getState().switchTo("conv_plan_failure");
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
@@ -5063,14 +5063,14 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     expect(patchCallsFor("conv_plan_failure")).toEqual([{ collaboration_mode: "plan" }]);
     expect(useChatStore.getState().codexPlanMode).toBe(false);
     expect(sessionLabels.get("conv_plan_failure")).not.toHaveProperty(
-      "omnigent.codex_native.collaboration_mode",
+      "goalrail.codex_native.collaboration_mode",
     );
   });
 
   it("server-side overrides win over sticky pref and skip the PATCH", async () => {
     seedSession("conv_existing", []);
     withSnapshot("conv_existing", {
-      labels: { "omnigent.wrapper": "claude-code-native-ui" },
+      labels: { "goalrail.wrapper": "claude-code-native-ui" },
       reasoning_effort: "low",
       model_override: "claude-sonnet-4-6",
     });
@@ -5120,7 +5120,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     // The claude-native handoff persists the sticky model, so it IS the
     // session's active override — `/model` should show it.
     seedSession("conv_sticky_cn", []);
-    withSnapshot("conv_sticky_cn", { labels: { "omnigent.wrapper": "claude-code-native-ui" } });
+    withSnapshot("conv_sticky_cn", { labels: { "goalrail.wrapper": "claude-code-native-ui" } });
 
     useChatStore.setState({ selectedModel: "claude-opus-4-7", sessionModelOverride: null });
     await useChatStore.getState().switchTo("conv_sticky_cn");
@@ -5135,7 +5135,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
     // The handoff skips a non-Claude sticky pick (Claude Code can't run
     // it), so it never becomes the session override.
     seedSession("conv_sticky_gpt", []);
-    withSnapshot("conv_sticky_gpt", { labels: { "omnigent.wrapper": "claude-code-native-ui" } });
+    withSnapshot("conv_sticky_gpt", { labels: { "goalrail.wrapper": "claude-code-native-ui" } });
 
     useChatStore.setState({ selectedModel: "gpt-5.4", sessionModelOverride: null });
     await useChatStore.getState().switchTo("conv_sticky_gpt");

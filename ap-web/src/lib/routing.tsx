@@ -14,7 +14,7 @@
 //
 // Embedded mode (same-root): `react-router`/`react-router-dom` are bare
 // externals resolved by the host's rspack to its own instance (see
-// `vite.embed.config.ts`), and `OmnigentApp` renders WITHOUT its own `<Router>`
+// `vite.embed.config.ts`), and `GoalrailApp` renders WITHOUT its own `<Router>`
 // (rendering one inside the
 // host's router throws). ap-web's `<Routes>` become descendant routes of the
 // host router. Since ap-web's `navigate()`/`<Link to>` targets are absolute,

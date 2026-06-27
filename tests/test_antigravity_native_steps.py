@@ -1,6 +1,6 @@
 """Tests for the pure RPC step→item mapper.
 
-These exercise :func:`omnigent.antigravity_native_steps.map_step_to_events`
+These exercise :func:`goalrail.antigravity_native_steps.map_step_to_events`
 using the real recorded fixtures captured from live agy sessions (Task 1).
 No I/O, no live agy: the mapper is driven with fixture dicts and event shapes
 are asserted exactly.
@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from omnigent.antigravity_native_steps import (
+from goalrail.antigravity_native_steps import (
     OutboundEvent,
     _execution_discriminator,
     _ToolCallIdAllocator,

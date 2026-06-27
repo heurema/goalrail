@@ -1,5 +1,5 @@
 """
-Unit tests for :class:`omnigent.terminals.TerminalRegistry`.
+Unit tests for :class:`goalrail.terminals.TerminalRegistry`.
 
 Covers the registry's lifecycle invariants directly, without going
 through the ``sys_terminal_*`` tools. The tools are tested separately
@@ -23,11 +23,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
-from omnigent.inner.terminal import TerminalCreateResult, TerminalInstance
-from omnigent.terminals import TerminalRegistry
-from omnigent.terminals import registry as registry_mod
-from omnigent.terminals.registry import TerminalListEntry, conversation_link_for_id
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
+from goalrail.inner.terminal import TerminalCreateResult, TerminalInstance
+from goalrail.terminals import TerminalRegistry
+from goalrail.terminals import registry as registry_mod
+from goalrail.terminals.registry import TerminalListEntry, conversation_link_for_id
 
 # ── Pure bookkeeping (no tmux) ────────────────────────────────
 
@@ -67,11 +67,11 @@ def test_list_for_conversation_returns_empty_for_unknown_id() -> None:
 
 def test_conversation_link_for_id_uses_relative_path_by_default() -> None:
     """
-    Conversation links stay relative when no Omnigent origin is known.
+    Conversation links stay relative when no Goalrail origin is known.
 
     This is the embedded/test-runner fallback: there is no stable
     hostname to show in the tmux status bar, but the path still points
-    at the conversation route when rendered by the Omnigent web UI.
+    at the conversation route when rendered by the Goalrail web UI.
     """
     assert conversation_link_for_id("conv with/slash") == "/c/conv%20with%2Fslash"
 
@@ -101,23 +101,23 @@ def test_conversation_link_for_id_maps_workspace_hosted_server_to_ui_mount(
     Workspace-hosted runners link to the SPA mount, not the API mount.
 
     The runner threads ``RUNNER_SERVER_URL`` — the API proxy base
-    (``/api/2.0/omnigent``) — into the registry. A naive
+    (``/api/2.0/goalrail``) — into the registry. A naive
     ``{base}/c/<id>`` would put the JSON API path in the tmux status
-    bar; the link must instead land on the ``/omnigent`` SPA mount and
-    carry the ``?o=<org>`` selector ``omnigent login`` recorded, exactly
+    bar; the link must instead land on the ``/goalrail`` SPA mount and
+    carry the ``?o=<org>`` selector ``goalrail login`` recorded, exactly
     like the CLI's ``Web UI:`` line. Pins parity with
-    :func:`omnigent.conversation_browser.conversation_url`.
+    :func:`goalrail.conversation_browser.conversation_url`.
 
     :param tmp_path: Pytest tmp dir for the stubbed auth-token file.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.cli_auth import store_databricks_auth
+    from goalrail.cli_auth import store_databricks_auth
 
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "goalrail.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
-    server = "https://example.databricks.com/api/2.0/omnigent"
+    server = "https://example.databricks.com/api/2.0/goalrail"
     store_databricks_auth(
         server,
         "https://example.databricks.com",
@@ -126,7 +126,7 @@ def test_conversation_link_for_id_maps_workspace_hosted_server_to_ui_mount(
 
     assert (
         conversation_link_for_id("conv_abc123", base_url=server)
-        == "https://example.databricks.com/omnigent/c/conv_abc123?o=2850744067564480"
+        == "https://example.databricks.com/goalrail/c/conv_abc123?o=2850744067564480"
     )
 
 
@@ -225,7 +225,7 @@ def test_transfer_moves_terminal_without_closing_tmux(tmp_path: Path) -> None:
     Terminal transfer changes ownership without touching the instance.
 
     This is the load-bearing invariant for native Claude ``/clear``:
-    moving ``claude/main`` from the old Omnigent conversation to the fresh
+    moving ``claude/main`` from the old Goalrail conversation to the fresh
     one must not call ``close()``, because closing kills the tmux pane
     that still contains the live Claude process.
     """
@@ -457,7 +457,7 @@ async def test_cleanup_conversation_closes_all_owners_terminals(
     conversations' terminals are untouched.
 
     What breaks if this fails: workflow exit doesn't release tmux
-    sessions; orphans accumulate across the Omnigent process lifetime.
+    sessions; orphans accumulate across the Goalrail process lifetime.
     """
     await reg_with_tmux.launch("conv_a", "bash", "s1", bash_spec)
     await reg_with_tmux.launch("conv_a", "bash", "s2", bash_spec)
@@ -722,7 +722,7 @@ async def test_close_with_timeout_still_returns_true(tmp_path: Path) -> None:
 
     # The close should not hang — it uses asyncio.wait_for with _CLOSE_TIMEOUT_S.
     # We patch _CLOSE_TIMEOUT_S to a tiny value so the test finishes quickly.
-    import omnigent.terminals.registry as reg_mod
+    import goalrail.terminals.registry as reg_mod
 
     original = reg_mod._CLOSE_TIMEOUT_S
     reg_mod._CLOSE_TIMEOUT_S = 0.01

@@ -1,4 +1,4 @@
-"""Tests for omnigent.inner.egress.ca — CA generation and bundle creation."""
+"""Tests for goalrail.inner.egress.ca — CA generation and bundle creation."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from cryptography import x509
 
-from omnigent.inner.egress.ca import ensure_ca, ensure_ca_bundle
+from goalrail.inner.egress.ca import ensure_ca, ensure_ca_bundle
 
 
 def test_ensure_ca_generates_new_ca(tmp_path: Path) -> None:

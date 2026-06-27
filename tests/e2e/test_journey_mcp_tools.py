@@ -114,13 +114,13 @@ def _register_mcp_echo_agent(
             tar.addfile(info, io.BytesIO(yaml_bytes))
         bundle = buf.getvalue()
 
-    from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+    from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
 
     resp = client.post(
         "/v1/sessions",
         data={"metadata": _json.dumps({})},
         files={"bundle": ("agent.tar.gz", bundle, "application/gzip")},
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     if resp.status_code not in (200, 201, 409):
         raise RuntimeError(f"MCP agent register failed: {resp.status_code} {resp.text[:500]}")

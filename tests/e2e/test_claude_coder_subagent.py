@@ -1,7 +1,7 @@
 """E2E test: Claude SDK executor spawning a sub-agent (mock LLM).
 
 Verifies that the Claude SDK executor can call ``sys_session_send``
-(a server-side omnigent tool) through the unified ``call_tool``
+(a server-side goalrail tool) through the unified ``call_tool``
 callback, and that the sub-agent executes and returns results.
 
 The mock LLM is configured to issue a ``sys_session_send`` tool

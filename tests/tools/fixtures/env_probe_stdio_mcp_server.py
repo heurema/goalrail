@@ -31,7 +31,7 @@ def read_env(name: str) -> str:
     Report whether env var *name* is visible to this subprocess.
 
     :param name: Environment variable to read, e.g.
-        ``"OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN"``.
+        ``"GOALRAIL_RUNNER_TUNNEL_BINDING_TOKEN"``.
     :returns: ``f"set:{value}"`` when present, or ``"<unset>"`` when
         the variable is absent from this process's environment.
     """

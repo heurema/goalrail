@@ -1,17 +1,13 @@
 """Tests for the Policy type hierarchy and PolicyEngine."""
 
 import asyncio
-import sys
 import unittest
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from omnigent.inner.datamodel import AgentDef, ExecutorSpec
-from omnigent.inner.executor import MockExecutor
-from omnigent.inner.policies import (
+from goalrail.inner.datamodel import AgentDef, ExecutorSpec
+from goalrail.inner.executor import MockExecutor
+from goalrail.inner.policies import (
     FunctionPolicy,
     PolicyAction,
     PolicyResult,
@@ -244,7 +240,7 @@ class TestPromptPolicy(unittest.TestCase):
         _run(_t())
 
     def test_prompt_policy_loader_fields(self):
-        from omnigent.inner.loader import load_agent_def
+        from goalrail.inner.loader import load_agent_def
 
         agent = load_agent_def(
             {

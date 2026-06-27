@@ -1,4 +1,4 @@
-"""Tests for the session presence registry (``omnigent/server/presence.py``).
+"""Tests for the session presence registry (``goalrail/server/presence.py``).
 
 Broadcasts are observed through a real ``session_stream.subscribe``
 collector — the same pub/sub path the SSE route consumes — so every
@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.server import presence
+from goalrail.server import presence
 from tests.server.helpers import start_session_stream_collector
 
 pytestmark = pytest.mark.asyncio

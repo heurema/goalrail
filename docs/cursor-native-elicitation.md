@@ -2,8 +2,8 @@
 
 **Status:** implemented
 **Supersedes:** [`cursor-native-tui-mirror-plan.md`](./cursor-native-tui-mirror-plan.md) (pane-scrape design)
-**Code:** `omnigent/cursor_native_permissions.py`, the `cursor-permission-request` hook in
-`omnigent/server/routes/sessions.py`, runner wiring in `omnigent/runner/app.py`,
+**Code:** `goalrail/cursor_native_permissions.py`, the `cursor-permission-request` hook in
+`goalrail/server/routes/sessions.py`, runner wiring in `goalrail/runner/app.py`,
 `ap-web/.../ApprovalCard.tsx`.
 
 ## Goal / behavior

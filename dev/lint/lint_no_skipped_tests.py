@@ -1,6 +1,6 @@
 """Flag unconditional ``pytest.mark.skip`` on tests.
 
-Per CLAUDE.md and the omnigent-testing skill, skipped tests are
+Per CLAUDE.md and the goalrail-testing skill, skipped tests are
 invisible coverage loss — they silently rot and nobody remembers to
 unskip them. If a test can't pass, rewrite it or delete it. Never
 defer broken tests behind ``@pytest.mark.skip``.

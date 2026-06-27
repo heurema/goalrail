@@ -14,9 +14,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import qwen_native_bridge as qnb
-from omnigent import qwen_native_forwarder as fwd
-from omnigent.qwen_native_bridge import (
+from goalrail import qwen_native_bridge as qnb
+from goalrail import qwen_native_forwarder as fwd
+from goalrail.qwen_native_bridge import (
     BRIDGE_DIR_ENV_VAR,
     bridge_dir_for_session_id,
     build_qwen_native_spawn_env,
@@ -31,7 +31,7 @@ from omnigent.qwen_native_bridge import (
     wait_for_ready,
     write_tmux_target,
 )
-from omnigent.qwen_native_forwarder import (
+from goalrail.qwen_native_forwarder import (
     _event_to_item,
     _ForwardState,
     _read_new_events,
@@ -195,7 +195,7 @@ def test_qwen_session_id_is_deterministic_and_uuid() -> None:
 def test_qwen_session_recording_exists_is_workspace_scoped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from omnigent.qwen_native_bridge import _qwen_project_slug
+    from goalrail.qwen_native_bridge import _qwen_project_slug
 
     monkeypatch.setenv("HOME", str(tmp_path))
     ws_a = tmp_path / "repo_a"
@@ -270,15 +270,15 @@ def test_spawn_env_carries_bridge_dir() -> None:
 
 
 def test_harness_registered_aliased_and_native() -> None:
-    from omnigent.harness_aliases import canonicalize_harness, is_native_harness
-    from omnigent.native_coding_agents import native_coding_agent_for_harness
-    from omnigent.runtime.harnesses import _HARNESS_MODULES
-    from omnigent.spec._omnigent_compat import OMNIGENT_HARNESSES
+    from goalrail.harness_aliases import canonicalize_harness, is_native_harness
+    from goalrail.native_coding_agents import native_coding_agent_for_harness
+    from goalrail.runtime.harnesses import _HARNESS_MODULES
+    from goalrail.spec._goalrail_compat import GOALRAIL_HARNESSES
 
     # Registry entry resolves to the harness module.
-    assert _HARNESS_MODULES["qwen-native"] == "omnigent.inner.qwen_native_harness"
+    assert _HARNESS_MODULES["qwen-native"] == "goalrail.inner.qwen_native_harness"
     # Allowlisted + recognized as a native-terminal harness (both spellings).
-    assert "qwen-native" in OMNIGENT_HARNESSES
+    assert "qwen-native" in GOALRAIL_HARNESSES
     assert is_native_harness("qwen-native") is True
     assert is_native_harness("native-qwen") is True
     assert canonicalize_harness("native-qwen") == "qwen-native"
@@ -291,7 +291,7 @@ def test_harness_registered_aliased_and_native() -> None:
 
 
 def test_harness_create_app_builds() -> None:
-    from omnigent.inner.qwen_native_harness import create_app
+    from goalrail.inner.qwen_native_harness import create_app
 
     app = create_app()
     assert app is not None

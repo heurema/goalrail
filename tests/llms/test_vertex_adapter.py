@@ -2,25 +2,25 @@
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.llms.adapters.vertex import _build_vertex_url, _resolve_vertex_params
+from goalrail.errors import GoalrailError
+from goalrail.llms.adapters.vertex import _build_vertex_url, _resolve_vertex_params
 
 
 def test_resolve_raises_when_no_params() -> None:
     """
-    ``None`` input raises ``OmnigentError`` — Vertex requires
+    ``None`` input raises ``GoalrailError`` — Vertex requires
     connection_params.
     """
-    with pytest.raises(OmnigentError, match="requires connection_params"):
+    with pytest.raises(GoalrailError, match="requires connection_params"):
         _resolve_vertex_params(None)
 
 
 def test_resolve_raises_when_empty_params() -> None:
     """
-    Empty dict raises ``OmnigentError`` — Vertex requires
+    Empty dict raises ``GoalrailError`` — Vertex requires
     connection_params with project/location or base_url.
     """
-    with pytest.raises(OmnigentError, match="requires connection_params"):
+    with pytest.raises(GoalrailError, match="requires connection_params"):
         _resolve_vertex_params({})
 
 
@@ -47,31 +47,31 @@ def test_resolve_builds_url_from_project_and_location() -> None:
 
 def test_resolve_raises_when_project_missing() -> None:
     """
-    OmnigentError when ``"location"`` is provided but ``"project"`` is not.
+    GoalrailError when ``"location"`` is provided but ``"project"`` is not.
     No env var fallback.
     """
     params = {"location": "us-east1"}
-    with pytest.raises(OmnigentError, match="requires 'project'"):
+    with pytest.raises(GoalrailError, match="requires 'project'"):
         _resolve_vertex_params(params)
 
 
 def test_resolve_raises_when_location_missing() -> None:
     """
-    OmnigentError when ``"project"`` is provided but ``"location"`` is not.
+    GoalrailError when ``"project"`` is provided but ``"location"`` is not.
     No env var fallback.
     """
     params = {"project": "my-proj"}
-    with pytest.raises(OmnigentError, match="requires 'location'"):
+    with pytest.raises(GoalrailError, match="requires 'location'"):
         _resolve_vertex_params(params)
 
 
 def test_resolve_raises_when_no_recognized_keys() -> None:
     """
     Params without ``"project"``, ``"location"``, or ``"base_url"``
-    raise OmnigentError — Vertex needs at least one of these.
+    raise GoalrailError — Vertex needs at least one of these.
     """
     params = {"some_other_key": "value"}
-    with pytest.raises(OmnigentError, match="requires 'project'"):
+    with pytest.raises(GoalrailError, match="requires 'project'"):
         _resolve_vertex_params(params)
 
 
@@ -93,10 +93,10 @@ def test_build_vertex_url_structure() -> None:
 
 def test_get_base_url_raises() -> None:
     """VertexAdapter._get_base_url always raises — Vertex requires connection_params."""
-    from omnigent.llms.adapters.vertex import VertexAdapter
+    from goalrail.llms.adapters.vertex import VertexAdapter
 
     adapter = VertexAdapter()
-    with pytest.raises(OmnigentError, match="requires"):
+    with pytest.raises(GoalrailError, match="requires"):
         adapter._get_base_url()
 
 

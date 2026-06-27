@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.setup`.
+"""Tests for :mod:`goalrail.onboarding.setup`.
 
 Cover the onboarding helpers used by ``goalrail setup``: env-var hygiene
 (``detect_conflicting_env_vars``), profile-host discovery
@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 from click import ClickException
 
-from omnigent.onboarding import setup as setup_mod
-from omnigent.onboarding.setup import (
+from goalrail.onboarding import setup as setup_mod
+from goalrail.onboarding.setup import (
     _CONFLICTING_ENV_VARS,
     SKIP_ENV_VAR,
     ProfileSpec,
@@ -118,7 +118,7 @@ def test_find_databricks_cli(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_maybe_run_skips_when_skip_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``OMNIGENT_SKIP_ONBOARD=1`` short-circuits before any side effects."""
+    """``GOALRAIL_SKIP_ONBOARD=1`` short-circuits before any side effects."""
     monkeypatch.setenv(SKIP_ENV_VAR, "1")
     monkeypatch.setattr(setup_mod.sys.stdin, "isatty", lambda: True)
 

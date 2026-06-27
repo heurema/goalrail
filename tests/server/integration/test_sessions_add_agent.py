@@ -25,7 +25,7 @@ pytestmark = pytest.mark.asyncio
 _REVIEW_MARKER = "review impl against designs/feature-x.md [marker-7f3a]"
 
 # A Codex reviewer is just another agent with a codex executor block.
-_CODEX_EXECUTOR: dict[str, Any] = {"type": "omnigent", "config": {"harness": "codex"}}
+_CODEX_EXECUTOR: dict[str, Any] = {"type": "goalrail", "config": {"harness": "codex"}}
 
 
 # ── Helpers ──────────────────────────────────────────────
@@ -161,7 +161,7 @@ async def test_add_claude_native_child_applies_wrapper_label(
     claude-native wrapper label at create time.
 
     The runner routes a session down the Claude Code terminal path only
-    when its conversation carries ``omnigent.wrapper`` =
+    when its conversation carries ``goalrail.wrapper`` =
     ``claude-code-native-ui``. For a user-added Claude Code child that
     label must be applied by ``_create_session_from_existing_agent``
     (the dialog can't persist labels before the runner connects), so
@@ -193,10 +193,10 @@ async def test_add_claude_native_child_applies_wrapper_label(
     row = next(r for r in rows if r["id"] == child_id)
     # Both claude-native labels applied at create time — exact key/values
     # (the wire contracts the runner + Web UI key on), not just presence:
-    #  - omnigent.wrapper → runner routes the session to Claude Code.
-    #  - omnigent.ui=terminal → AppShell renders it terminal-first.
-    assert row["labels"].get("omnigent.wrapper") == "claude-code-native-ui"
-    assert row["labels"].get("omnigent.ui") == "terminal"
+    #  - goalrail.wrapper → runner routes the session to Claude Code.
+    #  - goalrail.ui=terminal → AppShell renders it terminal-first.
+    assert row["labels"].get("goalrail.wrapper") == "claude-code-native-ui"
+    assert row["labels"].get("goalrail.ui") == "terminal"
     # The 3-segment "ui:" title still parses to the bound agent + label.
     assert row["tool"] == "claude-native-ui"
     assert row["session_name"] == "1"
@@ -302,7 +302,7 @@ async def test_added_child_history_and_resources_resolve_independently(
 @pytest.mark.xfail(
     reason=(
         "No mounted GET /api/agents catalog route (documented in "
-        "omnigent/server/API.md, not wired in app.py). Flips to XPASS "
+        "goalrail/server/API.md, not wired in app.py). Flips to XPASS "
         "when the route lands."
     ),
     strict=False,

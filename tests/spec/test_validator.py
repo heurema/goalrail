@@ -1,11 +1,11 @@
-"""Tests for omnigent.spec.validator."""
+"""Tests for goalrail.spec.validator."""
 
 from __future__ import annotations
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.spec.types import (
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.spec.types import (
     AgentSpec,
     CompactionConfig,
     ExecutorSpec,
@@ -17,7 +17,7 @@ from omnigent.spec.types import (
     SkillSpec,
     ToolsConfig,
 )
-from omnigent.spec.validator import validate
+from goalrail.spec.validator import validate
 
 
 def _minimal_spec(**overrides: object) -> AgentSpec:
@@ -373,9 +373,9 @@ def test_agents_sdk_accepts_connection() -> None:
     assert result.valid, f"Expected valid spec, got errors: {result.errors}"
 
 
-def test_omnigent_executor_accepts_valid_harness() -> None:
+def test_goalrail_executor_accepts_valid_harness() -> None:
     """
-    ``omnigent`` executor with ``config.harness`` set to one of
+    ``goalrail`` executor with ``config.harness`` set to one of
     the four supported harnesses validates cleanly.
 
     Failure here means every valid spec is rejected — a complete
@@ -384,7 +384,7 @@ def test_omnigent_executor_accepts_valid_harness() -> None:
     spec = _minimal_spec(
         llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "claude-sdk", "profile": "test-profile"},
         ),
     )
@@ -392,19 +392,19 @@ def test_omnigent_executor_accepts_valid_harness() -> None:
     assert result.valid, f"Expected valid spec, got errors: {result.errors}"
 
 
-def test_omnigent_executor_accepts_antigravity_native_harness() -> None:
+def test_goalrail_executor_accepts_antigravity_native_harness() -> None:
     """
-    ``omnigent`` executor with ``config.harness == "antigravity-native"``
+    ``goalrail`` executor with ``config.harness == "antigravity-native"``
     validates cleanly.
 
     Failure here means the antigravity-native harness is missing from
-    ``OMNIGENT_HARNESSES``, which would cause every spec that targets it
+    ``GOALRAIL_HARNESSES``, which would cause every spec that targets it
     to be rejected at load time with an "unknown harness" validation error.
     """
     spec = _minimal_spec(
         llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "antigravity-native"},
         ),
     )
@@ -412,17 +412,17 @@ def test_omnigent_executor_accepts_antigravity_native_harness() -> None:
     assert result.valid, f"Expected valid spec, got errors: {result.errors}"
 
 
-def test_omnigent_executor_rejects_missing_harness() -> None:
+def test_goalrail_executor_rejects_missing_harness() -> None:
     """
-    ``omnigent`` executor without ``config.harness`` is rejected.
+    ``goalrail`` executor without ``config.harness`` is rejected.
 
-    Without the harness selector the omnigent factory cannot
+    Without the harness selector the goalrail factory cannot
     pick a backend and would silently fall back to a MockExecutor.
     The validator fails loud instead.
     """
     spec = _minimal_spec(
         llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="goalrail", config={}),
     )
     result = validate(spec)
     assert not result.valid
@@ -431,15 +431,15 @@ def test_omnigent_executor_rejects_missing_harness() -> None:
     )
 
 
-def test_omnigent_executor_rejects_unknown_harness() -> None:
+def test_goalrail_executor_rejects_unknown_harness() -> None:
     """
-    ``omnigent`` executor with a harness not in the allowed set
+    ``goalrail`` executor with a harness not in the allowed set
     is rejected with a message naming the allowed harnesses.
     """
     spec = _minimal_spec(
         llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "totally-bogus"},
         ),
     )
@@ -450,16 +450,16 @@ def test_omnigent_executor_rejects_unknown_harness() -> None:
     )
 
 
-def test_omnigent_executor_rejects_compaction() -> None:
+def test_goalrail_executor_rejects_compaction() -> None:
     """
-    ``omnigent`` executor forbids ``compaction`` — the inner
+    ``goalrail`` executor forbids ``compaction`` — the inner
     harness manages context internally, so any compaction
     directive from the spec would be silently ignored.
     """
     spec = _minimal_spec(
         llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "claude-sdk"},
         ),
         compaction=CompactionConfig(),
@@ -478,7 +478,7 @@ def test_mcp_stdio_valid() -> None:
 
     What breaks if this fails: a stdio MCPServerConfig constructed
     programmatically (e.g. by the translator in
-    spec/omnigent.py's _translate_mcp_tool_from_def) would fail
+    spec/goalrail.py's _translate_mcp_tool_from_def) would fail
     validation at spec-load time even though it's correct.
     """
     spec = _minimal_spec(
@@ -573,7 +573,7 @@ def test_mcp_http_with_stdio_field_invalid() -> None:
 # os_env sandbox combo checks.
 # ---------------------------------------------------------------------------
 # These mirror the loader / parser checks so an AgentSpec built
-# programmatically — by tests, the omnigent compat shim, or any
+# programmatically — by tests, the goalrail compat shim, or any
 # caller skipping the YAML pipeline — still gets the same validation
 # guard before the spec reaches the runtime.
 

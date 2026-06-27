@@ -10,8 +10,8 @@ from __future__ import annotations
 import sys
 
 import pytest
-from omnigent_ui_sdk.terminal._formatter import StreamingText, StreamLive
-from omnigent_ui_sdk.terminal._host import (
+from goalrail_ui_sdk.terminal._formatter import StreamingText, StreamLive
+from goalrail_ui_sdk.terminal._host import (
     _BOTTOM_RESERVED_ROWS,
     TerminalHost,
 )
@@ -43,11 +43,14 @@ def test_resize_width_affects_rich_render_columns(
     items. Narrower terminals produce more wrapped lines for the same
     content. Wider terminals produce fewer.
     """
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
     host = TerminalHost(model_name="test")
     writes = _noop_stdout(monkeypatch)
 
     # Wide terminal: 200 columns.
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 200)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 200)
     host.output(Text("A" * 100))
     wide_output = "".join(writes)
     wide_lines = wide_output.strip().split("\n")
@@ -55,7 +58,7 @@ def test_resize_width_affects_rich_render_columns(
     writes.clear()
 
     # Narrow terminal: 40 columns.
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 40)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 40)
     host.output(Text("A" * 100))
     narrow_output = "".join(writes)
     narrow_lines = narrow_output.strip().split("\n")
@@ -85,13 +88,13 @@ def test_resize_width_affects_streaming_text_wrap(
 
     # Wide terminal: 200 columns → text fits in few lines.
     host_wide = TerminalHost(model_name="test")
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 200)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 200)
     host_wide.output(StreamingText(text=long_text))
     wide_count = host_wide._streamed_line_count
 
     # Narrow terminal: 30 columns → text wraps into many lines.
     host_narrow = TerminalHost(model_name="test")
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 30)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 30)
     host_narrow.output(StreamingText(text=long_text))
     narrow_count = host_narrow._streamed_line_count
 
@@ -118,7 +121,7 @@ def test_resize_height_affects_viewport_ceiling(
     _noop_stdout(monkeypatch)
 
     # Small terminal: 10 rows → ceiling = 10 - 5 = 5.
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: 10)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: 10)
     ceiling_small = 10 - _BOTTOM_RESERVED_ROWS
 
     # Stream many lines.
@@ -140,7 +143,7 @@ def test_resize_height_large_allows_more_streaming(
     host = TerminalHost(model_name="test")
     _noop_stdout(monkeypatch)
 
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: 50)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: 50)
     ceiling_large = 50 - _BOTTOM_RESERVED_ROWS
 
     for i in range(20):
@@ -170,7 +173,7 @@ def test_resize_mid_stream_changes_ceiling(
 
     # Start with a tall terminal: ceiling = 20 - 5 = 15.
     height = 20
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: height)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: height)
     for i in range(10):
         host.output(StreamingText(text=f"line {i}\n"))
 
@@ -180,7 +183,7 @@ def test_resize_mid_stream_changes_ceiling(
     # Shrink terminal mid-stream to 8 rows → ceiling = 8 - 5 = 3.
     # The streamed count is already 10, which is way above the new
     # ceiling of 3, so no further lines should be printed.
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: 8)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: 8)
     count_before = host._streamed_line_count
     for i in range(10, 20):
         host.output(StreamingText(text=f"line {i}\n"))
@@ -202,12 +205,12 @@ def test_resize_build_prompt_bar_width(
     """Prompt bar width tracks ``_term_width()``: 50 → 50 chars, 100 → 100 chars."""
     host = TerminalHost(model_name="test")
 
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 50)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 50)
     prompt_50 = host.build_prompt()
     # The prompt contains a bar of "─" * width. Extract the bar segment.
     bar_50 = _extract_bar_from_prompt(prompt_50)
 
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 100)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 100)
     prompt_100 = host.build_prompt()
     bar_100 = _extract_bar_from_prompt(prompt_100)
 
@@ -237,11 +240,11 @@ def test_resize_build_toolbar_right_padding(
     """Wider terminal → longer right-padding bar segment in toolbar."""
     host = TerminalHost(model_name="test")
 
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 60)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 60)
     toolbar_60 = host.build_toolbar()
     bar_60 = _extract_toolbar_bar(toolbar_60)
 
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_width", lambda: 120)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_width", lambda: 120)
     toolbar_120 = host.build_toolbar()
     bar_120 = _extract_toolbar_bar(toolbar_120)
 
@@ -283,7 +286,7 @@ def test_resize_live_region_cap_changes_with_height(
 
     # Small terminal: ceiling = 15 - 5 = 10.
     host_small = TerminalHost(model_name="test")
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: 15)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: 15)
     host_small.output(StreamLive(renderable=Text(long_text)))
     ceiling_small = 15 - _BOTTOM_RESERVED_ROWS
 
@@ -297,7 +300,7 @@ def test_resize_live_region_cap_changes_with_height(
 
     # Tall terminal: ceiling = 40 - 5 = 35.
     host_tall = TerminalHost(model_name="test")
-    monkeypatch.setattr("omnigent_ui_sdk.terminal._host._term_height", lambda: 40)
+    monkeypatch.setattr("goalrail_ui_sdk.terminal._host._term_height", lambda: 40)
     host_tall.output(StreamLive(renderable=Text(long_text)))
 
     # 30 lines fits within ceiling 35 — should be uncapped.

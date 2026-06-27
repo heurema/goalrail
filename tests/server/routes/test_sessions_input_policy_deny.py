@@ -11,19 +11,19 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from omnigent.errors import OmnigentError
-from omnigent.policies.types import PolicyAction, PolicyResult
-from omnigent.server.routes.sessions import create_sessions_router
-from omnigent.spec import AgentSpec
-from omnigent.spec.types import GuardrailsSpec
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.errors import GoalrailError
+from goalrail.policies.types import PolicyAction, PolicyResult
+from goalrail.server.routes.sessions import create_sessions_router
+from goalrail.spec import AgentSpec
+from goalrail.spec.types import GuardrailsSpec
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
-_CACHE_PATCH = "omnigent.server.routes.sessions.get_agent_cache"
-_ENGINE_PATCH = "omnigent.server.routes.sessions.build_policy_engine"
-_STREAM_PATCH = "omnigent.server.routes.sessions.session_stream"
+_CACHE_PATCH = "goalrail.server.routes.sessions.get_agent_cache"
+_ENGINE_PATCH = "goalrail.server.routes.sessions.build_policy_engine"
+_STREAM_PATCH = "goalrail.server.routes.sessions.session_stream"
 
 
 @pytest.fixture
@@ -43,8 +43,8 @@ def route_client(db_uri: str) -> Iterator[tuple[TestClient, str]]:
 
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle_omnigent_error(request: Request, exc: OmnigentError) -> JSONResponse:
+    @app.exception_handler(GoalrailError)
+    async def _handle_goalrail_error(request: Request, exc: GoalrailError) -> JSONResponse:
         del request
         return JSONResponse(
             status_code=exc.http_status,

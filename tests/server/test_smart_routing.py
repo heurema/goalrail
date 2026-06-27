@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.server.smart_routing import (
+from goalrail.server.smart_routing import (
     _VALID_TIERS,
     LLMRoutingClient,
     RoutingResult,
@@ -39,7 +39,7 @@ class _FakeMessageOutput:
 
 @dataclass
 class _FakeResponse:
-    """Minimal stub matching omnigent.llms.types.Response."""
+    """Minimal stub matching goalrail.llms.types.Response."""
 
     output: list[_FakeMessageOutput]
 
@@ -213,7 +213,7 @@ async def test_route_turn_uses_caps_routing_client() -> None:
     )
     caps = _FakeCaps(routing_client=_FakeRoutingClient(expected))
     with patch(
-        "omnigent.runtime._globals._caps",
+        "goalrail.runtime._globals._caps",
         new=caps,
     ):
         model, v = await route_turn("claude-sdk", "hello")
@@ -226,7 +226,7 @@ async def test_route_turn_uses_caps_routing_client() -> None:
 async def test_route_turn_returns_none_when_no_client() -> None:
     caps = _FakeCaps(routing_client=None)
     with patch(
-        "omnigent.runtime._globals._caps",
+        "goalrail.runtime._globals._caps",
         new=caps,
     ):
         model, _v = await route_turn("claude-sdk", "hello")

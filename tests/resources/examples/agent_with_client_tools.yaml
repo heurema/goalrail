@@ -7,7 +7,7 @@
 # when the LLM invokes it. The client executes, returns the
 # result, and the conversation continues.
 #
-# See ``omnigent/tools/client_specified/__init__.py`` for the
+# See ``goalrail/tools/client_specified/__init__.py`` for the
 # request-time client-tool concept this spec field unifies with.
 
 name: editor_agent

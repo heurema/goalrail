@@ -1,6 +1,6 @@
 //! Small process used by the Python parity tests.
 //!
-//! The tests want to run Omnigent -> real Codex CLI -> mock OpenAI Responses
+//! The tests want to run Goalrail -> real Codex CLI -> mock OpenAI Responses
 //! API. Reusing Codex's Rust `core_test_support::responses` helpers keeps the
 //! mock wire format aligned with upstream Codex tests, while this binary gives
 //! pytest a simple JSONL protocol for starting the mock and reading captured

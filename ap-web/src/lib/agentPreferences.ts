@@ -9,7 +9,7 @@
 // reference; the consumer still validates it against the live agent list
 // and falls back to the default when the stored agent no longer exists.
 
-const STORAGE_KEY = "omnigent:last-agent-id";
+const STORAGE_KEY = "goalrail:last-agent-id";
 
 /**
  * Read the last agent id the user picked on the landing composer.

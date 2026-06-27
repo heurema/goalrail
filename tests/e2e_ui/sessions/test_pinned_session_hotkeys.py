@@ -5,12 +5,12 @@ pinned sessions in render order — 1–9 to the first nine, 0 to the tenth
 (``usePinnedSessionHotkeys``). It is **desktop-only**: a browser tab
 reserves ``Cmd/Ctrl+digit`` for native tab-switching, so the hook is inert
 outside the Electron shell (gated on ``isNativeShell()`` ->
-``window.omnigentDesktop.kind === "electron"`` — see
+``window.goalrailDesktop.kind === "electron"`` — see
 ``ap-web/src/lib/nativeBridge.ts``).
 
 The e2e_ui harness runs the SPA in a plain Chromium browser, not Electron,
 so by default ``isNativeShell()`` is false and this behavior can't fire. To
-exercise it end-to-end we inject a minimal ``window.omnigentDesktop`` stub
+exercise it end-to-end we inject a minimal ``window.goalrailDesktop`` stub
 via ``add_init_script`` *before any app script runs* — the same
 feature-detection-stubbing pattern ``test_idle_notifications.py`` uses for
 the OS-notification path. With the stub in place the SPA believes it is
@@ -33,12 +33,12 @@ from playwright.sync_api import Locator, Page, expect
 # Minimal stand-in for the Electron preload bridge. Runs before any app
 # script on every navigation (add_init_script), so the SPA's feature
 # detection (`electronApi()` in nativeBridge.ts, which checks
-# `window.omnigentDesktop?.kind === "electron"`) sees a native shell. Every
+# `window.goalrailDesktop?.kind === "electron"`) sees a native shell. Every
 # method the web layer may call is a guarded no-op: `kind` is all the
 # pinned-hotkey path needs, and the rest keep unrelated native calls (badge,
 # notify, the title-bar server picker) from throwing under the stub.
 _NATIVE_SHELL_INIT_SCRIPT = """
-window.omnigentDesktop = {
+window.goalrailDesktop = {
   kind: "electron",
   setBadgeCount: function () {},
   notify: function () { return Promise.resolve(false); },

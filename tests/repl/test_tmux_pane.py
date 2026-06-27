@@ -2,10 +2,10 @@
 Unit tests for the REPL's tmux pane integration helpers.
 
 The integration's job is to (a) advertise this REPL's pane as an
-omnigent context source via custom pane options and (b) wrap the
+goalrail context source via custom pane options and (b) wrap the
 user's prefix-table ``split-window`` / ``new-window`` bindings with
-``if-shell -F`` conditionals that route to ``omnigent pane-split``
-when the focused pane has ``@omnigent-conv-id`` set, and otherwise
+``if-shell -F`` conditionals that route to ``goalrail pane-split``
+when the focused pane has ``@goalrail-conv-id`` set, and otherwise
 run the user's exact original command.
 
 These tests exercise the pure parsing / classification helpers and
@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.repl._tmux_pane import (
+from goalrail.repl._tmux_pane import (
     OPT_AGENT_NAME,
     OPT_AGENT_YAML,
     OPT_CONV_ID,
@@ -222,7 +222,7 @@ def test_classify_returns_none_for_non_split_commands(tokens: list[str]) -> None
     Claim: custom split wrappers, kill-pane, lambda blocks, and
     empty token lists all return ``None``. A regression that
     classified custom commands as splittable would silently
-    rewrite them, breaking the user's exotic setups in non-omnigent
+    rewrite them, breaking the user's exotic setups in non-goalrail
     panes too.
     """
     assert _classify(tokens) is None
@@ -242,8 +242,8 @@ def test_wrap_binding_constructs_if_shell_wrapper(
 
     This is the load-bearing call: get the if-shell argv shape
     right and the chooser routes correctly; get it wrong and
-    either non-omnigent panes break (lost original) or
-    omnigent panes never see the chooser.
+    either non-goalrail panes break (lost original) or
+    goalrail panes never see the chooser.
 
     Claim: the subprocess is called with the exact 10-element
     argv specified in the design doc. A regression that swapped
@@ -267,7 +267,7 @@ def test_wrap_binding_constructs_if_shell_wrapper(
         direction="v",
         original_command='split-window -c "#{pane_current_path}"',
     )
-    _wrap_binding(binding, ["/venv/bin/omnigent"])
+    _wrap_binding(binding, ["/venv/bin/goalrail"])
 
     # Single subprocess call: the bind-key invocation.
     assert len(captured) == 1, (
@@ -280,18 +280,18 @@ def test_wrap_binding_constructs_if_shell_wrapper(
         f"prefix of the bind-key invocation regressed; got {cmd[:5]!r}. "
         f"This pins the table='prefix' and key='\"' targeting."
     )
-    assert cmd[5:8] == ["if-shell", "-F", "#{?#{@omnigent-conv-id},1,0}"], (
+    assert cmd[5:8] == ["if-shell", "-F", "#{?#{@goalrail-conv-id},1,0}"], (
         f"if-shell -F format-string regressed; got {cmd[5:8]!r}. The "
-        f"format must check truthiness of the @omnigent-conv-id pane "
+        f"format must check truthiness of the @goalrail-conv-id pane "
         f"option — anything else and the wrapper either always or never "
         f"routes to the chooser."
     )
     # True branch: the chooser. Must use the absolute
-    # ``omnigent_bin`` path (tmux's run-shell inherits the
+    # ``goalrail_bin`` path (tmux's run-shell inherits the
     # tmux server's PATH, which usually doesn't include the venv
     # bin/), and direction code 'v' must appear so the user's
     # vertical-split key opens a vertical split.
-    assert cmd[8] == ("run-shell '/venv/bin/omnigent pane-split -v -p #{pane_id}'"), (
+    assert cmd[8] == ("run-shell '/venv/bin/goalrail pane-split -v -p #{pane_id}'"), (
         f"chooser command regressed; got {cmd[8]!r}. If the path is "
         f'missing or relative, ``run-shell`` will exit 127 ("command '
         f"not found\") because the tmux server's PATH typically "
@@ -302,7 +302,7 @@ def test_wrap_binding_constructs_if_shell_wrapper(
     # from the original tokens.
     assert cmd[9] == 'split-window -c "#{pane_current_path}"', (
         f"original-command branch regressed; got {cmd[9]!r}. The user's "
-        f"binding must be preserved exactly so non-omnigent panes get "
+        f"binding must be preserved exactly so non-goalrail panes get "
         f"identical behavior to before — that's what makes the global "
         f"prefix-table mutation behaviorally invisible."
     )
@@ -328,9 +328,9 @@ def test_wrap_binding_uses_horizontal_direction_code(
     )
     _wrap_binding(
         SplitBinding(key="%", direction="h", original_command="split-window -h"),
-        ["/venv/bin/omnigent"],
+        ["/venv/bin/goalrail"],
     )
-    assert captured[0][8] == ("run-shell '/venv/bin/omnigent pane-split -h -p #{pane_id}'")
+    assert captured[0][8] == ("run-shell '/venv/bin/goalrail pane-split -h -p #{pane_id}'")
 
 
 def test_wrap_binding_uses_window_direction_code(
@@ -348,22 +348,22 @@ def test_wrap_binding_uses_window_direction_code(
     )
     _wrap_binding(
         SplitBinding(key="c", direction="w", original_command="new-window"),
-        ["/venv/bin/omnigent"],
+        ["/venv/bin/goalrail"],
     )
-    assert captured[0][8] == ("run-shell '/venv/bin/omnigent pane-split -w -p #{pane_id}'")
+    assert captured[0][8] == ("run-shell '/venv/bin/goalrail pane-split -w -p #{pane_id}'")
 
 
 def test_wrap_binding_quotes_paths_with_spaces(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A venv path like ``/Users/me/My Project/.venv/bin/omnigent``
+    A venv path like ``/Users/me/My Project/.venv/bin/goalrail``
     has a space and would tokenize wrong without ``shlex.quote``.
 
     Claim: the wrapper escapes spaces in the binary path so the
     embedded shell command stays a single token. A regression
     that used naive f-string interpolation would produce
-    ``run-shell '/Users/me/My Project/.venv/bin/omnigent pane-split …'``
+    ``run-shell '/Users/me/My Project/.venv/bin/goalrail pane-split …'``
     where shell-word boundaries split the path mid-way and the
     binding fails.
     """
@@ -371,7 +371,7 @@ def test_wrap_binding_quotes_paths_with_spaces(
     monkeypatch.setattr(subprocess, "run", _make_capturing_runner(captured))
     _wrap_binding(
         SplitBinding(key="|", direction="v", original_command="split-window -h"),
-        ["/Users/me/My Project/.venv/bin/omnigent"],
+        ["/Users/me/My Project/.venv/bin/goalrail"],
     )
     chooser = captured[0][8]
     # The chooser is shell-escaped (whole inner string passed via
@@ -383,11 +383,11 @@ def test_wrap_binding_quotes_paths_with_spaces(
     outer = shlex.split(chooser)
     assert outer[0] == "run-shell", f"chooser must start with run-shell: {outer!r}"
     inner_argv = shlex.split(outer[1])
-    assert inner_argv[0] == "/Users/me/My Project/.venv/bin/omnigent", (
+    assert inner_argv[0] == "/Users/me/My Project/.venv/bin/goalrail", (
         f"path-with-space did not round-trip as a single shell token; "
         f"inner argv[0]={inner_argv[0]!r}, full inner={inner_argv!r}. If "
         f"the path got split, the wrapper produces a broken binding that "
-        f"fires ``cd: /Users/me/My`` instead of running the omnigent "
+        f"fires ``cd: /Users/me/My`` instead of running the goalrail "
         f"binary."
     )
     # The pane-split subcommand + direction also survive.
@@ -400,8 +400,8 @@ def test_wrap_binding_supports_python_m_fallback_argv(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    When :func:`_resolve_omnigent_argv` falls back to
-    ``[sys.executable, "-m", "omnigent.cli"]`` (no resolvable
+    When :func:`_resolve_goalrail_argv` falls back to
+    ``[sys.executable, "-m", "goalrail.cli"]`` (no resolvable
     binary on the PATH the running process inherited), the
     wrapper must embed the full three-element argv into the
     chooser shell command.
@@ -415,20 +415,20 @@ def test_wrap_binding_supports_python_m_fallback_argv(
     monkeypatch.setattr(subprocess, "run", _make_capturing_runner(captured))
     _wrap_binding(
         SplitBinding(key='"', direction="v", original_command="split-window"),
-        ["/usr/bin/python3", "-m", "omnigent.cli"],
+        ["/usr/bin/python3", "-m", "goalrail.cli"],
     )
     chooser = captured[0][8]
     # All three prefix tokens must appear, joined by spaces, BEFORE
     # the ``pane-split`` subcommand. If only the python path
     # appears, the fallback path was truncated.
-    assert "/usr/bin/python3 -m omnigent.cli pane-split -v" in chooser, (
+    assert "/usr/bin/python3 -m goalrail.cli pane-split -v" in chooser, (
         f"python-m fallback prefix not propagated; got chooser={chooser!r}. "
-        f"If ``-m omnigent.cli`` is missing, the wrapper would invoke "
+        f"If ``-m goalrail.cli`` is missing, the wrapper would invoke "
         f"the bare python interpreter without telling it what to run."
     )
 
 
-# ── _resolve_omnigent_argv ──────────────────────────────
+# ── _resolve_goalrail_argv ──────────────────────────────
 
 
 def test_resolve_argv_uses_abspath_when_argv0_is_path_shaped(
@@ -436,7 +436,7 @@ def test_resolve_argv_uses_abspath_when_argv0_is_path_shaped(
 ) -> None:
     """
     When ``sys.argv[0]`` contains a path separator (e.g.
-    ``./.venv/bin/omnigent`` or already absolute), the resolver
+    ``./.venv/bin/goalrail`` or already absolute), the resolver
     abspath's it directly without consulting ``shutil.which``.
 
     Claim: the result is the absolute form of argv[0], length 1.
@@ -444,11 +444,11 @@ def test_resolve_argv_uses_abspath_when_argv0_is_path_shaped(
     would lose user-supplied paths that aren't on the PATH the
     Python process inherited.
     """
-    from omnigent.repl._tmux_pane import _resolve_omnigent_argv
+    from goalrail.repl._tmux_pane import _resolve_goalrail_argv
 
-    monkeypatch.setattr("sys.argv", ["/some/abs/path/omnigent", "run"])
-    argv = _resolve_omnigent_argv()
-    assert argv == ["/some/abs/path/omnigent"], (
+    monkeypatch.setattr("sys.argv", ["/some/abs/path/goalrail", "run"])
+    argv = _resolve_goalrail_argv()
+    assert argv == ["/some/abs/path/goalrail"], (
         f"path-shaped argv0 should pass through to abspath; got {argv!r}"
     )
 
@@ -457,7 +457,7 @@ def test_resolve_argv_uses_which_when_argv0_is_bare_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    When ``sys.argv[0]`` is a bare name like ``"omnigent"`` (the
+    When ``sys.argv[0]`` is a bare name like ``"goalrail"`` (the
     shell already resolved it via PATH but didn't pass the
     absolute path along), the resolver does its own
     :func:`shutil.which` lookup.
@@ -467,12 +467,12 @@ def test_resolve_argv_uses_which_when_argv0_is_bare_name(
     would fall through to the python-m fallback even though a
     perfectly good binary is on PATH.
     """
-    from omnigent.repl._tmux_pane import _resolve_omnigent_argv
+    from goalrail.repl._tmux_pane import _resolve_goalrail_argv
 
-    monkeypatch.setattr("sys.argv", ["omnigent", "run"])
-    monkeypatch.setattr(shutil, "which", lambda name: "/resolved/bin/omnigent")
-    argv = _resolve_omnigent_argv()
-    assert argv == ["/resolved/bin/omnigent"]
+    monkeypatch.setattr("sys.argv", ["goalrail", "run"])
+    monkeypatch.setattr(shutil, "which", lambda name: "/resolved/bin/goalrail")
+    argv = _resolve_goalrail_argv()
+    assert argv == ["/resolved/bin/goalrail"]
 
 
 def test_resolve_argv_falls_back_to_python_m_when_which_misses(
@@ -482,23 +482,23 @@ def test_resolve_argv_falls_back_to_python_m_when_which_misses(
     When neither argv[0] inspection nor ``shutil.which`` can find a
     binary (degraded environment, sandboxed PATH, etc.), the
     resolver falls back to ``[sys.executable, "-m",
-    "omnigent.cli"]`` — bulletproof because if Python is
-    running this code, ``omnigent.cli`` is importable.
+    "goalrail.cli"]`` — bulletproof because if Python is
+    running this code, ``goalrail.cli`` is importable.
 
     Claim: the fallback is exactly three elements with the
     running interpreter and the correct module path. A regression
     that returned a bare name would propagate the 127 ("command
     not found") error the original bug report described.
     """
-    from omnigent.repl._tmux_pane import _resolve_omnigent_argv
+    from goalrail.repl._tmux_pane import _resolve_goalrail_argv
 
-    monkeypatch.setattr("sys.argv", ["omnigent", "run"])
+    monkeypatch.setattr("sys.argv", ["goalrail", "run"])
     monkeypatch.setattr(shutil, "which", lambda name: None)
     monkeypatch.setattr("sys.executable", "/path/to/python")
-    argv = _resolve_omnigent_argv()
-    assert argv == ["/path/to/python", "-m", "omnigent.cli"], (
+    argv = _resolve_goalrail_argv()
+    assert argv == ["/path/to/python", "-m", "goalrail.cli"], (
         f"python-m fallback regressed; got {argv!r}. The fallback is "
-        f"the only path that works in environments where the omnigent "
+        f"the only path that works in environments where the goalrail "
         f"binary isn't directly findable, so silent breakage here means "
         f"silent UX degradation everywhere."
     )
@@ -533,8 +533,8 @@ def test_discover_unwraps_existing_wrapper_to_recover_original(
         # false branch is the user's ``split-window -c
         # "#{pane_current_path}"`` original.
         'bind-key -T prefix \\" if-shell -F '
-        '"#{?#{@omnigent-conv-id},1,0}" '
-        "\"run-shell 'omnigent pane-split -v -p #{pane_id}'\" "
+        '"#{?#{@goalrail-conv-id},1,0}" '
+        "\"run-shell 'goalrail pane-split -v -p #{pane_id}'\" "
         '"split-window -c \\"#{pane_current_path}\\""'
     )
     monkeypatch.setattr(
@@ -543,7 +543,7 @@ def test_discover_unwraps_existing_wrapper_to_recover_original(
         lambda cmd, **_: type("R", (), {"stdout": fake_output, "returncode": 0})(),
     )
 
-    from omnigent.repl._tmux_pane import _discover_split_bindings
+    from goalrail.repl._tmux_pane import _discover_split_bindings
 
     bindings = _discover_split_bindings()
     assert len(bindings) == 1, (
@@ -576,15 +576,15 @@ def test_register_pane_strips_existing_python_m_prefix_idempotently(
     """
     Register-twice scenario: the second invocation receives a
     launch_argv that ALREADY starts with
-    ``[<python>, -m, omnigent.cli, ...]`` (because the first
+    ``[<python>, -m, goalrail.cli, ...]`` (because the first
     invocation normalized it and the user's REPL is now running
-    via ``python -m omnigent.cli``). The second invocation must
+    via ``python -m goalrail.cli``). The second invocation must
     NOT re-prepend, which would produce a doubled
-    ``-m omnigent.cli -m omnigent.cli`` and break the picker
+    ``-m goalrail.cli -m goalrail.cli`` and break the picker
     when it tries to ``os.execvp`` the duplicated argv.
 
     Claim: after a second ``register_pane`` call, the stored
-    ``@omnigent-launch-argv`` has exactly one ``-m omnigent.cli``
+    ``@goalrail-launch-argv`` has exactly one ``-m goalrail.cli``
     marker in the prefix — same shape as a first-time call.
     A regression that re-prepended the prefix would store a
     doubled form and crash the picker on subsequent splits.
@@ -610,13 +610,13 @@ def test_register_pane_strips_existing_python_m_prefix_idempotently(
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     # Simulate the second register_pane invocation: launch_argv is
-    # ALREADY in [python, -m, omnigent.cli, run, ...] form —
+    # ALREADY in [python, -m, goalrail.cli, run, ...] form —
     # what a pane-picker-launched REPL would see at boot.
     register_pane(
         conv_id="conv_x",
         agent_name="a",
         agent_yaml=None,
-        launch_argv=["/p/python", "-m", "omnigent.cli", "run", "/x.yaml", "--omnigent"],
+        launch_argv=["/p/python", "-m", "goalrail.cli", "run", "/x.yaml", "--goalrail"],
         server_url=None,
     )
 
@@ -626,14 +626,14 @@ def test_register_pane_strips_existing_python_m_prefix_idempotently(
     assert stored_argv == [
         "/p/python",
         "-m",
-        "omnigent.cli",
+        "goalrail.cli",
         "run",
         "/x.yaml",
-        "--omnigent",
+        "--goalrail",
     ], (
         f"launch-argv regressed to a doubled form: {stored_argv!r}. The "
         f"picker calls ``os.execvp(argv[0], argv)``, so a doubled "
-        f"``-m omnigent.cli`` would crash with a Python module-import "
+        f"``-m goalrail.cli`` would crash with a Python module-import "
         f"error or invoke a wrong subcommand."
     )
 
@@ -644,9 +644,9 @@ def test_register_pane_repairs_already_doubled_prefix(
 ) -> None:
     """
     Regression test for the live state observed on a real pane:
-    ``[python, -m, omnigent.cli, -m, omnigent.cli, run, ...]``
+    ``[python, -m, goalrail.cli, -m, goalrail.cli, run, ...]``
     — left there by an earlier register_pane that stripped only
-    one ``-m omnigent.cli`` prefix and re-prepended a fresh
+    one ``-m goalrail.cli`` prefix and re-prepended a fresh
     one. The new normalization scans for the user's first
     subcommand (``run``) and slices from there, so any number
     of leading launcher tokens get collapsed to exactly one
@@ -684,12 +684,12 @@ def test_register_pane_repairs_already_doubled_prefix(
         launch_argv=[
             "/p/python",
             "-m",
-            "omnigent.cli",
+            "goalrail.cli",
             "-m",
-            "omnigent.cli",
+            "goalrail.cli",
             "run",
             "/x.yaml",
-            "--omnigent",
+            "--goalrail",
             "--profile",
             "test-profile",
         ],
@@ -702,10 +702,10 @@ def test_register_pane_repairs_already_doubled_prefix(
     assert stored_argv == [
         "/p/python",
         "-m",
-        "omnigent.cli",
+        "goalrail.cli",
         "run",
         "/x.yaml",
-        "--omnigent",
+        "--goalrail",
         "--profile",
         "test-profile",
     ], (
@@ -768,7 +768,7 @@ def test_discover_split_bindings_picks_user_custom_keys(
     """
     Many users rebind splits to ``|`` (vertical) and ``-`` /
     ``_`` (horizontal). Discovery must mirror those custom keys
-    so muscle memory works inside the omnigent pane.
+    so muscle memory works inside the goalrail pane.
 
     Claim: ``|`` and ``_`` get classified by the user's actual
     flag, not the key character. A regression that hardcoded
@@ -814,7 +814,7 @@ def _pane_integration_enabled(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]
     wrapper logic to actually run must explicitly enable it; this
     fixture makes the dependency obvious at the test signature.
     """
-    monkeypatch.setattr("omnigent.repl._tmux_pane.PANE_INTEGRATION_ENABLED", True)
+    monkeypatch.setattr("goalrail.repl._tmux_pane.PANE_INTEGRATION_ENABLED", True)
     yield
 
 
@@ -837,7 +837,7 @@ def test_register_pane_no_op_when_kill_switch_disabled_outside_tmux(
         conv_id="conv_x",
         agent_name="a",
         agent_yaml=None,
-        launch_argv=["omnigent", "run"],
+        launch_argv=["goalrail", "run"],
         server_url=None,
     )
     assert captured == [], f"kill-switch + outside-tmux must be a complete no-op; got {captured!r}"
@@ -852,11 +852,11 @@ def test_register_pane_unmarks_pane_when_kill_switch_disabled_inside_tmux(
     fall through to the user's original split commands.
 
     Claim: ``register_pane`` issues exactly one ``set-option -u
-    <opt>`` invocation per ``@omnigent-*`` option, targeting the
+    <opt>`` invocation per ``@goalrail-*`` option, targeting the
     current pane — and does NOT install any wrapper bindings,
     write new options, or run discovery. This is the cleanup path
     that makes "the feature is disabled" mean what users expect:
-    pressing the split key in an omnigent pane stops opening
+    pressing the split key in an goalrail pane stops opening
     the chooser, even if a prior flag-on run installed wrappers
     that are still in the running tmux server.
     """
@@ -870,17 +870,17 @@ def test_register_pane_unmarks_pane_when_kill_switch_disabled_inside_tmux(
         conv_id="conv_x",
         agent_name="a",
         agent_yaml=None,
-        launch_argv=["omnigent", "run"],
+        launch_argv=["goalrail", "run"],
         server_url=None,
     )
 
-    # Every captured call must be an unset of an ``@omnigent-*``
+    # Every captured call must be an unset of an ``@goalrail-*``
     # option targeting our pane. No bind-key, no list-keys, no
     # version probe — the kill-switch path skips all of those.
     for cmd in captured:
         assert cmd[:5] == ["tmux", "set-option", "-p", "-t", "%5"], (
             f"unexpected tmux call on kill-switch path: {cmd!r}. The "
-            f"only thing this branch should do is unset @omnigent-* "
+            f"only thing this branch should do is unset @goalrail-* "
             f"options on the current pane."
         )
         assert "-u" in cmd, (
@@ -898,7 +898,7 @@ def test_register_pane_unmarks_pane_when_kill_switch_disabled_inside_tmux(
         OPT_LAUNCH_ARGV,
         OPT_SERVER_URL,
     }, (
-        f"kill-switch must unset all 5 @omnigent-* options; got "
+        f"kill-switch must unset all 5 @goalrail-* options; got "
         f"{unset_options!r}. Missing options leave the pane "
         f"partially-marked and the wrapper's truthy check still "
         f"fires."
@@ -929,7 +929,7 @@ def test_register_pane_no_op_outside_tmux(
         conv_id="conv_xyz",
         agent_name="test-agent",
         agent_yaml=Path("/tmp/x.yaml"),
-        launch_argv=["omnigent", "run", "/tmp/x.yaml"],
+        launch_argv=["goalrail", "run", "/tmp/x.yaml"],
         server_url="http://127.0.0.1:9000",
     )
     assert captured == [], (
@@ -961,7 +961,7 @@ def test_register_pane_skips_when_tmux_pane_unset(
         conv_id="conv_xyz",
         agent_name="test-agent",
         agent_yaml=None,
-        launch_argv=["omnigent", "run"],
+        launch_argv=["goalrail", "run"],
         server_url=None,
     )
     assert captured == []
@@ -986,7 +986,7 @@ def test_register_pane_advertises_options_and_wraps_bindings(
     or skip wrapper installation (split key still does plain
     split, no chooser).
 
-    Claim: ``@omnigent-launch-argv`` is JSON, all five options
+    Claim: ``@goalrail-launch-argv`` is JSON, all five options
     appear, and the wrapper invocation count equals the number of
     discovered split bindings (3 here).
     """
@@ -996,8 +996,8 @@ def test_register_pane_advertises_options_and_wraps_bindings(
     # absolute path. This is the path register_pane will splice
     # into ``launch_argv[0]`` and the wrapper's chooser command
     # so the assertions below can predict the exact stored value.
-    monkeypatch.setattr("sys.argv", ["omnigent", "run", "/agents/cs.yaml", "--omnigent"])
-    monkeypatch.setattr(shutil, "which", lambda name: "/venv/bin/omnigent")
+    monkeypatch.setattr("sys.argv", ["goalrail", "run", "/agents/cs.yaml", "--goalrail"])
+    monkeypatch.setattr(shutil, "which", lambda name: "/venv/bin/goalrail")
 
     list_keys_output = "\n".join(
         [
@@ -1024,7 +1024,7 @@ def test_register_pane_advertises_options_and_wraps_bindings(
         conv_id="conv_abc123",
         agent_name="coding-supervisor",
         agent_yaml=Path("/agents/cs.yaml"),
-        launch_argv=["omnigent", "run", "/agents/cs.yaml", "--omnigent"],
+        launch_argv=["goalrail", "run", "/agents/cs.yaml", "--goalrail"],
         server_url="http://127.0.0.1:8123",
     )
 
@@ -1041,10 +1041,10 @@ def test_register_pane_advertises_options_and_wraps_bindings(
     # for the resolved absolute path so the picker's later
     # ``os.execvp`` works regardless of the new pane's PATH.
     parsed_argv = json.loads(set_option_values[OPT_LAUNCH_ARGV])
-    assert parsed_argv == ["/venv/bin/omnigent", "run", "/agents/cs.yaml", "--omnigent"], (
+    assert parsed_argv == ["/venv/bin/goalrail", "run", "/agents/cs.yaml", "--goalrail"], (
         f"launch-argv[0] must be normalized to the resolved absolute "
         f"path so the picker's exec doesn't depend on tmux's PATH; got "
-        f"{parsed_argv!r}. If argv[0] is still 'omnigent' (bare), the "
+        f"{parsed_argv!r}. If argv[0] is still 'goalrail' (bare), the "
         f"picker will hit exit 127 when it tries to relaunch."
     )
     assert set_option_values[OPT_SERVER_URL] == "http://127.0.0.1:8123"
@@ -1068,12 +1068,12 @@ def test_register_pane_advertises_options_and_wraps_bindings(
             f"if-shell-F dispatch only fires post-prefix, so anywhere "
             f"other than the ``prefix`` table is a regression."
         )
-        # The wrapper's conditional must be the ``@omnigent-conv-id``
+        # The wrapper's conditional must be the ``@goalrail-conv-id``
         # truthy check — that's what keeps the wrapper inert in
-        # non-omnigent panes.
+        # non-goalrail panes.
         if_shell_idx = call.index("if-shell")
         assert call[if_shell_idx + 1] == "-F"
-        assert call[if_shell_idx + 2] == "#{?#{@omnigent-conv-id},1,0}"
+        assert call[if_shell_idx + 2] == "#{?#{@goalrail-conv-id},1,0}"
 
 
 def test_register_pane_skips_on_old_tmux(
@@ -1107,7 +1107,7 @@ def test_register_pane_skips_on_old_tmux(
         conv_id="conv_abc",
         agent_name="agent",
         agent_yaml=None,
-        launch_argv=["omnigent", "run"],
+        launch_argv=["goalrail", "run"],
         server_url=None,
     )
 

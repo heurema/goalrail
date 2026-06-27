@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from omnigent.db.utils import get_or_create_engine
-from omnigent.entities import (
+from goalrail.db.utils import get_or_create_engine
+from goalrail.entities import (
     ErrorData,
     FunctionCallData,
     FunctionCallOutputData,
@@ -14,12 +14,12 @@ from omnigent.entities import (
     NewConversationItem,
     ReasoningData,
 )
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.server.auth import RESERVED_USER_LOCAL
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
+from goalrail.stores.host_store import HostStore
 
 # ── CRUD ──────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ def test_get_conversations_bulk(
     b = conversation_store.create_conversation(title="beta")
     # Label only one row to prove labels are joined per-id, not smeared
     # across the batch or dropped for the unlabeled row.
-    conversation_store.set_labels(a.id, {"omnigent.ui": "terminal"})
+    conversation_store.set_labels(a.id, {"goalrail.ui": "terminal"})
 
     result = conversation_store.get_conversations([a.id, b.id, "conv_missing"])
 
@@ -61,7 +61,7 @@ def test_get_conversations_bulk(
     assert result[a.id].title == "alpha"
     assert result[b.id].title == "beta"
     # Labels are attached to the row they belong to and only that row.
-    assert result[a.id].labels == {"omnigent.ui": "terminal"}
+    assert result[a.id].labels == {"goalrail.ui": "terminal"}
     assert result[b.id].labels == {}
 
 
@@ -262,7 +262,7 @@ def test_update_archived_bumps_updated_at(
 
     # Pin the clock past created_at so the new updated_at is unambiguous.
     monkeypatch.setattr(
-        "omnigent.stores.conversation_store.sqlalchemy_store.now_epoch",
+        "goalrail.stores.conversation_store.sqlalchemy_store.now_epoch",
         lambda: created_at + 100,
     )
     updated = conversation_store.update_conversation(conv.id, archived=True)
@@ -570,8 +570,8 @@ def test_unique_position_constraint(
     """
     from sqlalchemy.exc import IntegrityError
 
-    from omnigent.db.db_models import SqlConversationItem
-    from omnigent.db.utils import generate_item_id
+    from goalrail.db.db_models import SqlConversationItem
+    from goalrail.db.utils import generate_item_id
 
     conv = conversation_store.create_conversation()
     conversation_store.append(
@@ -1241,7 +1241,7 @@ def test_list_items_type_filter_returns_only_matching_type(
     list_items(type=...) returns only items of the specified type,
     while list_items() without a filter returns all types.
     """
-    from omnigent.entities import CompactionData
+    from goalrail.entities import CompactionData
 
     conv = conversation_store.create_conversation()
 
@@ -1317,7 +1317,7 @@ def test_list_items_type_filter_with_order_and_limit(
     list_items(type="compaction", order="desc", limit=1) returns only
     the most recently appended compaction item.
     """
-    from omnigent.entities import CompactionData
+    from goalrail.entities import CompactionData
 
     conv = conversation_store.create_conversation()
 
@@ -1504,7 +1504,7 @@ def test_append_bumps_updated_at(
     Appending items to a conversation advances updated_at
     to the current time.
     """
-    import omnigent.stores.conversation_store.sqlalchemy_store as store_mod
+    import goalrail.stores.conversation_store.sqlalchemy_store as store_mod
 
     # Freeze time at creation
     monkeypatch.setattr(store_mod, "now_epoch", lambda: 1000)
@@ -1540,7 +1540,7 @@ def test_update_title_bumps_updated_at(
     """
     Updating the title of a conversation advances updated_at.
     """
-    import omnigent.stores.conversation_store.sqlalchemy_store as store_mod
+    import goalrail.stores.conversation_store.sqlalchemy_store as store_mod
 
     monkeypatch.setattr(store_mod, "now_epoch", lambda: 1000)
     conv = conversation_store.create_conversation()
@@ -1565,7 +1565,7 @@ def test_list_conversations_sort_by_updated_at(
     Sorting by updated_at returns conversations in order of
     last activity, not creation order.
     """
-    import omnigent.stores.conversation_store.sqlalchemy_store as store_mod
+    import goalrail.stores.conversation_store.sqlalchemy_store as store_mod
 
     # Create conv_a at t=100, conv_b at t=200
     monkeypatch.setattr(store_mod, "now_epoch", lambda: 100)
@@ -1619,7 +1619,7 @@ def test_list_conversations_sort_by_updated_at_with_pagination(
     Cursor-based pagination works correctly when sorting
     by updated_at.
     """
-    import omnigent.stores.conversation_store.sqlalchemy_store as store_mod
+    import goalrail.stores.conversation_store.sqlalchemy_store as store_mod
 
     # Create 3 conversations with distinct updated_at values
     ids = []
@@ -1698,7 +1698,7 @@ def test_create_duplicate_title_under_same_parent_raises(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """G36: partial unique index rejects ``(parent_id, title)`` duplicates."""
-    from omnigent.stores.conversation_store import NameAlreadyExistsError
+    from goalrail.stores.conversation_store import NameAlreadyExistsError
 
     parent = conversation_store.create_conversation()
     conversation_store.create_conversation(
@@ -1842,7 +1842,7 @@ def test_list_conversations_filtered_by_agent_id_returns_matching_only(
     agent_store: SqlAlchemyAgentStore,
 ) -> None:
     """
-    Powers Omnigent mode ``--continue`` (resume the most-recent
+    Powers Goalrail mode ``--continue`` (resume the most-recent
     conversation for *this agent*). Two agents, three
     conversations: agent_alpha owns convs 1+2, agent_beta
     owns conv 3. Filtering by agent_alpha returns exactly the
@@ -1939,7 +1939,7 @@ def test_list_conversations_filter_orders_by_sort_by(
     :param agent_store: The agent store fixture.
     :param monkeypatch: Pytest monkeypatch for time control.
     """
-    import omnigent.stores.conversation_store.sqlalchemy_store as store_mod
+    import goalrail.stores.conversation_store.sqlalchemy_store as store_mod
 
     alpha = agent_store.create(agent_id="ag_alpha4", name="alpha4", bundle_location="ag_alpha4/h")
 
@@ -2199,7 +2199,7 @@ def test_set_host_id_missing_conversation_raises(
     If it silently succeeds, the guard clause is missing and a
     stale host_id could be written to a phantom row.
     """
-    from omnigent.stores.conversation_store import ConversationNotFoundError
+    from goalrail.stores.conversation_store import ConversationNotFoundError
 
     with pytest.raises(ConversationNotFoundError):
         conversation_store.set_host_id("conv_nonexistent", "host_xyz")
@@ -2288,7 +2288,7 @@ def test_clear_host_binding_missing_conversation_raises(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """clear_host_binding raises for an unknown conversation id."""
-    from omnigent.stores.conversation_store import ConversationNotFoundError
+    from goalrail.stores.conversation_store import ConversationNotFoundError
 
     with pytest.raises(ConversationNotFoundError):
         conversation_store.clear_host_binding("conv_nonexistent")
@@ -2442,7 +2442,7 @@ def test_create_session_with_agent_top_level_unchanged(
     Verify the no-parent path still creates a top-level default row.
 
     The parent support must not disturb the existing multipart create
-    contract (CLI ``omnigent run`` sessions): kind stays "default",
+    contract (CLI ``goalrail run`` sessions): kind stays "default",
     no parent link, and the row roots its own tree.
     """
     created = conversation_store.create_session_with_agent(
@@ -2471,7 +2471,7 @@ def test_create_session_with_agent_missing_parent_fails_loud(
     must fail loud so no half-linked child row (and no orphaned agent
     row) is committed.
     """
-    from omnigent.stores.conversation_store import ConversationNotFoundError
+    from goalrail.stores.conversation_store import ConversationNotFoundError
 
     with pytest.raises(ConversationNotFoundError):
         conversation_store.create_session_with_agent(
@@ -2778,7 +2778,7 @@ def test_set_external_session_id_missing_conversation_raises(
     routes translate this into a 404, so silently no-oping here would
     let the route return 200 for a write that never happened.
     """
-    from omnigent.stores.conversation_store import ConversationNotFoundError
+    from goalrail.stores.conversation_store import ConversationNotFoundError
 
     with pytest.raises(ConversationNotFoundError):
         conversation_store.set_external_session_id(
@@ -2998,12 +2998,12 @@ def test_fork_conversation_drops_instance_scoped_labels(
     conversation_store.set_labels(
         source.id,
         {
-            "omnigent.claude_native.bridge_id": source.id,
-            "omnigent.codex_native.bridge_id": source.id,
-            "omnigent.last_context_tokens": "39903",
-            "omnigent.last_context_window": "1000000",
+            "goalrail.claude_native.bridge_id": source.id,
+            "goalrail.codex_native.bridge_id": source.id,
+            "goalrail.last_context_tokens": "39903",
+            "goalrail.last_context_window": "1000000",
             # An ordinary, non-instance label that SHOULD carry over.
-            "omnigent.wrapper": "claude-code-native-ui",
+            "goalrail.wrapper": "claude-code-native-ui",
         },
     )
 
@@ -3013,7 +3013,7 @@ def test_fork_conversation_drops_instance_scoped_labels(
     # source's per-instance state. A bridge-id here would re-introduce
     # the cross-bridge bug; the metrics would show the source's stale
     # usage.
-    assert fork.labels == {"omnigent.wrapper": "claude-code-native-ui"}, (
+    assert fork.labels == {"goalrail.wrapper": "claude-code-native-ui"}, (
         f"Fork must drop instance-scoped labels, kept {fork.labels!r}"
     )
 
@@ -3028,7 +3028,7 @@ def test_fork_conversation_stamps_source_external_session_id(
     NULL.
 
     A native harness launching the clone uses
-    ``omnigent.fork.source_external_session_id`` to resume + branch the
+    ``goalrail.fork.source_external_session_id`` to resume + branch the
     source's local transcript (Claude Code ``--fork-session``), so the
     clone opens with prior history. The clone is NOT that session, so its
     own ``external_session_id`` must remain unset until it captures its
@@ -3045,11 +3045,11 @@ def test_fork_conversation_stamps_source_external_session_id(
     fork = conversation_store.fork_conversation(source.id)
 
     # Directive carries the SOURCE's claude uuid for the resume+fork launch.
-    assert fork.labels.get("omnigent.fork.source_external_session_id") == "claude-uuid-abc", (
+    assert fork.labels.get("goalrail.fork.source_external_session_id") == "claude-uuid-abc", (
         f"Fork should carry the source's external session id, got {fork.labels!r}"
     )
     # The clone is a fresh session — it has no native session of its own
-    # yet. Copying external_session_id would make two Omnigent sessions claim
+    # yet. Copying external_session_id would make two Goalrail sessions claim
     # the same Claude session.
     reloaded = conversation_store.get_conversation(fork.id)
     assert reloaded is not None
@@ -3072,7 +3072,7 @@ def test_fork_conversation_no_external_session_id_no_directive(
 
     fork = conversation_store.fork_conversation(source.id)
 
-    assert "omnigent.fork.source_external_session_id" not in fork.labels, (
+    assert "goalrail.fork.source_external_session_id" not in fork.labels, (
         f"No source native session → no resume directive, got {fork.labels!r}"
     )
 
@@ -3158,13 +3158,13 @@ def test_fork_conversation_truncated_drops_external_session_directive(
 ) -> None:
     """A truncated fork omits the native resume directive but keeps carry-history.
 
-    If ``omnigent.fork.source_external_session_id`` were stamped, the
+    If ``goalrail.fork.source_external_session_id`` were stamped, the
     runner would clone the source's FULL native transcript and resume
     it — resurrecting the truncated turns. The directive must be
     omitted so the runner's carry-history fork-rebuild path
     synthesizes the transcript from the truncated items instead.
     """
-    from omnigent.stores.conversation_store import (
+    from goalrail.stores.conversation_store import (
         FORK_CARRY_HISTORY_LABEL_KEY,
         FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY,
     )
@@ -3199,14 +3199,14 @@ def test_fork_conversation_cross_family_drops_external_session_directive(
     """``resume_source_native_session=False`` omits the native resume directive.
 
     A cross-family fork (e.g. codex-native source → claude-native target)
-    must not stamp ``omnigent.fork.source_external_session_id``: the
+    must not stamp ``goalrail.fork.source_external_session_id``: the
     source's native transcript is the wrong format for the target harness,
     and the runner's clone path launches FRESH when its clone attempt
     fails — silently losing history. Omitting the directive routes the
     runner to the carry-history rebuild path (native transcript built from
-    the copied Omnigent items) instead.
+    the copied Goalrail items) instead.
     """
-    from omnigent.stores.conversation_store import (
+    from goalrail.stores.conversation_store import (
         FORK_CARRY_HISTORY_LABEL_KEY,
         FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY,
     )
@@ -3249,7 +3249,7 @@ def test_fork_conversation_up_to_last_response_keeps_external_directive(
     kept — the runner can still clone the source's native transcript
     verbatim (full fidelity) instead of rebuilding from items.
     """
-    from omnigent.stores.conversation_store import FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY
+    from goalrail.stores.conversation_store import FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY
 
     agent_store.create(
         agent_id="ag_fork_trunc_last",
@@ -3376,9 +3376,9 @@ def test_instance_scoped_label_keys_match_harness_constants() -> None:
     forks would re-inherit the source's bridge. Importing the real
     constants here makes that rename fail loudly at test time.
     """
-    from omnigent.claude_native_bridge import BRIDGE_ID_LABEL_KEY
-    from omnigent.codex_native_bridge import CODEX_NATIVE_BRIDGE_ID_LABEL_KEY
-    from omnigent.stores.conversation_store import _INSTANCE_SCOPED_LABEL_KEYS
+    from goalrail.claude_native_bridge import BRIDGE_ID_LABEL_KEY
+    from goalrail.codex_native_bridge import CODEX_NATIVE_BRIDGE_ID_LABEL_KEY
+    from goalrail.stores.conversation_store import _INSTANCE_SCOPED_LABEL_KEYS
 
     # Each harness's canonical bridge-id key must be in the denylist; a
     # miss means a rename slipped past the store's hard-coded literal.
@@ -3484,13 +3484,13 @@ def test_fork_conversation_carry_history_into_native_stamps_label(
 ) -> None:
     """``carry_history_into_native=True`` stamps the carry-history directive.
 
-    The runner reads ``omnigent.fork.carry_history`` to decide whether a
+    The runner reads ``goalrail.fork.carry_history`` to decide whether a
     native target rebuilds its transcript (vs launching fresh). The label
     must be set only when the flag is passed; the default leaves it off so
     a normal fork into a native target doesn't trigger a rebuild from the
     wrong items.
     """
-    from omnigent.stores.conversation_store import FORK_CARRY_HISTORY_LABEL_KEY
+    from goalrail.stores.conversation_store import FORK_CARRY_HISTORY_LABEL_KEY
 
     agent_store.create(
         agent_id="ag_fork_carry",
@@ -3548,21 +3548,21 @@ def test_switch_conversation_agent_cross_family_resets_and_relabels(
     cross-family switch resets model settings, clears the native session
     id, and replaces the harness-presentation labels.
     """
-    from omnigent._wrapper_labels import (
+    from goalrail._wrapper_labels import (
         CODEX_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.stores.conversation_store import (
+    from goalrail.stores.conversation_store import (
         FORK_CARRY_HISTORY_LABEL_KEY,
         SWITCH_PREVIOUS_BUILTIN_LABEL_KEY,
     )
 
     # An instance-scoped label (belongs to the running instance, dropped on a
     # switch). Uses a literal still in _INSTANCE_SCOPED_LABEL_KEYS — the old
-    # omnigent.stopped marker was retired upstream.
-    instance_label = "omnigent.last_context_tokens"
+    # goalrail.stopped marker was retired upstream.
+    instance_label = "goalrail.last_context_tokens"
 
     # A real session binds a session-scoped agent (agent.session_id == conv).
     created = conversation_store.create_session_with_agent(
@@ -3649,12 +3649,12 @@ def test_switch_conversation_agent_same_family_keeps_model_settings(
     presentation labels) drops the old ui/wrapper labels and does not stamp
     the carry-history directive.
     """
-    from omnigent._wrapper_labels import (
+    from goalrail._wrapper_labels import (
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.stores.conversation_store import (
+    from goalrail.stores.conversation_store import (
         FORK_CARRY_HISTORY_LABEL_KEY,
         SWITCH_PREVIOUS_BUILTIN_LABEL_KEY,
     )
@@ -3714,7 +3714,7 @@ def test_get_session_connectivity_batches_runner_and_host(
     This is the bulk read powering the ``/health`` online-dot path: it
     replaced an N+1 fan-out of ``get_conversation`` (plus a labels query
     each). Liveness is now purely "is the tunnel up / is the host
-    fresh" — the retired ``omnigent.stopped`` marker is no longer a
+    fresh" — the retired ``goalrail.stopped`` marker is no longer a
     field on the result. The test pins both binding fields the dot
     decision needs, across a mix of bindings in one call:
 
@@ -3750,14 +3750,14 @@ def test_get_session_connectivity_reports_needs_workspace_for_fork(
     The fork-source label surfaces as ``needs_workspace=True``.
 
     A fork of a session that had a working directory carries the
-    ``omnigent.fork.source_id`` label (set by ``fork_conversation``).
+    ``goalrail.fork.source_id`` label (set by ``fork_conversation``).
     ``get_session_connectivity`` must report ``needs_workspace=True`` for
     it — that flag is what makes ``_bulk_session_liveness`` mark the
     unbound clone offline so the UI prompts for a directory instead of
     dropping the first message.
     """
     fork = conversation_store.create_conversation()
-    conversation_store.set_labels(fork.id, {"omnigent.fork.source_id": "conv_src"})
+    conversation_store.set_labels(fork.id, {"goalrail.fork.source_id": "conv_src"})
     plain = conversation_store.create_conversation()
 
     result = conversation_store.get_session_connectivity([fork.id, plain.id])
@@ -3845,7 +3845,7 @@ def test_get_session_owner_returns_highest_level_grantee(
     db_uri: str,
 ) -> None:
     """The owner is the max-``level`` grantee, regardless of grant order."""
-    from omnigent.stores.permission_store.sqlalchemy_store import (
+    from goalrail.stores.permission_store.sqlalchemy_store import (
         SqlAlchemyPermissionStore,
     )
 
@@ -3876,8 +3876,8 @@ def test_get_session_owner_excludes_public_sentinel(
     db_uri: str,
 ) -> None:
     """A session with only a public grant (no real owner) returns None."""
-    from omnigent.server.auth import RESERVED_USER_PUBLIC
-    from omnigent.stores.permission_store.sqlalchemy_store import (
+    from goalrail.server.auth import RESERVED_USER_PUBLIC
+    from goalrail.stores.permission_store.sqlalchemy_store import (
         SqlAlchemyPermissionStore,
     )
 
@@ -4071,7 +4071,7 @@ def _stored_next_position(
     conversation_store: SqlAlchemyConversationStore, conversation_id: str
 ) -> int | None:
     """Read the raw ``conversations.next_position`` counter for assertions."""
-    from omnigent.db.db_models import SqlConversation
+    from goalrail.db.db_models import SqlConversation
 
     with conversation_store._session() as session:
         row = session.get(SqlConversation, conversation_id)
@@ -4086,7 +4086,7 @@ def _stored_positions(
     truth ``list_items`` (which hides ``position``) cannot assert on."""
     from sqlalchemy import select
 
-    from omnigent.db.db_models import SqlConversationItem
+    from goalrail.db.db_models import SqlConversationItem
 
     with conversation_store._session() as session:
         return sorted(
@@ -4138,7 +4138,7 @@ def test_append_reads_counter_not_max_scan(
     scan: advancing the counter past the real max makes the next item land at
     the counter value, which a scan-based implementation could never produce.
     """
-    from omnigent.db.db_models import SqlConversation
+    from goalrail.db.db_models import SqlConversation
 
     conv = conversation_store.create_conversation()
     conversation_store.append(conv.id, [_user_message("a"), _user_message("b")])
@@ -4163,7 +4163,7 @@ def test_append_falls_back_to_scan_when_counter_null(
     MAX(position) scan to place items correctly, then persists the advanced
     counter so subsequent appends are scan-free.
     """
-    from omnigent.db.db_models import SqlConversation
+    from goalrail.db.db_models import SqlConversation
 
     conv = conversation_store.create_conversation()
     if preexisting:

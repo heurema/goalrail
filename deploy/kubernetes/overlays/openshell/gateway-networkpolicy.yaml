@@ -1,13 +1,13 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: omnigent-to-openshell-gateway
+  name: goalrail-to-openshell-gateway
   labels:
-    app: omnigent
+    app: goalrail
 spec:
   podSelector:
     matchLabels:
-      app: omnigent
+      app: goalrail
   policyTypes:
     - Egress
   egress:

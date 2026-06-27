@@ -119,21 +119,21 @@
    *
    * The bottom chat/terminal bar overlays page content, so it feeds the
    * content inset. The top server switcher floats within the web header band
-   * (ChatHeader, --omnigent-header-height) and is narrower than it, so content
+   * (ChatHeader, --goalrail-header-height) and is narrower than it, so content
    * that already clears the header also clears the switcher — its size is
    * tracked here for symmetry/introspection but is intentionally NOT added to
    * the content top inset to avoid double-counting the header band. */
-  --omnigent-header-height: 3.5rem; /* web ChatHeader (h-14) */
-  --omnigent-safe-top: env(safe-area-inset-top, 0px);
-  --omnigent-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --omnigent-native-top-bar: 0px; /* set by native bridge (px) */
-  --omnigent-native-bottom-bar: 0px; /* set by native bridge (px) */
-  --omnigent-top-bar-visible: 0; /* web-owned 0|1 */
-  --omnigent-bottom-bar-visible: 0; /* web-owned 0|1 */
-  --omnigent-inset-top: var(--omnigent-safe-top);
-  --omnigent-inset-bottom: calc(
-    var(--omnigent-safe-bottom) + var(--omnigent-native-bottom-bar) *
-      var(--omnigent-bottom-bar-visible)
+  --goalrail-header-height: 3.5rem; /* web ChatHeader (h-14) */
+  --goalrail-safe-top: env(safe-area-inset-top, 0px);
+  --goalrail-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --goalrail-native-top-bar: 0px; /* set by native bridge (px) */
+  --goalrail-native-bottom-bar: 0px; /* set by native bridge (px) */
+  --goalrail-top-bar-visible: 0; /* web-owned 0|1 */
+  --goalrail-bottom-bar-visible: 0; /* web-owned 0|1 */
+  --goalrail-inset-top: var(--goalrail-safe-top);
+  --goalrail-inset-bottom: calc(
+    var(--goalrail-safe-bottom) + var(--goalrail-native-bottom-bar) *
+      var(--goalrail-bottom-bar-visible)
   );
 
   /* Brand palette (light). Hex values are the brand spec, kept verbatim
@@ -446,18 +446,18 @@
 @media (width < 48rem) {
   [data-ios-native].app-shell {
     /* Lock the shell to the live visual viewport so the soft keyboard can never
-       pan the whole document (which hides the header). --omnigent-viewport-
+       pan the whole document (which hides the header). --goalrail-viewport-
        height is published by useIOSViewportLock from visualViewport.height; it
        shrinks when the keyboard opens so inputs stay above it and only inner
        panes scroll. Falls back to the large viewport before JS runs / on older
        WebKit. The two-line pattern keeps the lvh fallback for browsers without
        the var. */
     height: 100lvh;
-    height: var(--omnigent-viewport-height, 100lvh);
+    height: var(--goalrail-viewport-height, 100lvh);
     min-height: 100lvh;
-    min-height: var(--omnigent-viewport-height, 100lvh);
+    min-height: var(--goalrail-viewport-height, 100lvh);
     max-height: 100lvh;
-    max-height: var(--omnigent-viewport-height, 100lvh);
+    max-height: var(--goalrail-viewport-height, 100lvh);
     overflow: hidden;
   }
 
@@ -503,28 +503,28 @@
   [data-ios-native] .chat-conversation-content {
     /* header band + 1.5rem breathing room + OS safe area, sourced from the
        shared inset vars (was a hardcoded 5rem). */
-    padding-top: calc(var(--omnigent-header-height) + 1.5rem + var(--omnigent-inset-top));
+    padding-top: calc(var(--goalrail-header-height) + 1.5rem + var(--goalrail-inset-top));
   }
 
   [data-ios-native] .main-terminal-view {
-    padding-top: calc(3.25rem + var(--omnigent-inset-top));
+    padding-top: calc(3.25rem + var(--goalrail-inset-top));
   }
 
   [data-ios-native] .chat-scroll-fade {
     mask-image: linear-gradient(
       to bottom,
-      transparent calc(48px + var(--omnigent-inset-top)),
-      black calc(80px + var(--omnigent-inset-top))
+      transparent calc(48px + var(--goalrail-inset-top)),
+      black calc(80px + var(--goalrail-inset-top))
     );
     -webkit-mask-image: linear-gradient(
       to bottom,
-      transparent calc(48px + var(--omnigent-inset-top)),
-      black calc(80px + var(--omnigent-inset-top))
+      transparent calc(48px + var(--goalrail-inset-top)),
+      black calc(80px + var(--goalrail-inset-top))
     );
   }
 
   [data-ios-native] .chat-composer-form {
-    padding-bottom: calc(0.75rem + var(--omnigent-safe-bottom));
+    padding-bottom: calc(0.75rem + var(--goalrail-safe-bottom));
   }
 
   [data-ios-native] .chat-composer-form.terminal-first-composer-form {
@@ -532,7 +532,7 @@
   }
 
   [data-ios-native] .terminal-first-switcher-container {
-    padding-bottom: calc(0.35rem + var(--omnigent-safe-bottom));
+    padding-bottom: calc(0.35rem + var(--goalrail-safe-bottom));
   }
 
   /* Reserve room for the native Liquid Glass switcher that floats over the web
@@ -541,13 +541,13 @@
      nativeInsets.ts) plus the home-indicator safe area — so it can never drift
      from the bar's real size. Chat sits 1rem tighter: its composer status line
      already cushions the gap to the bar. */
-  [data-ios-native] .omnigent-native-bottom-spacer {
-    height: var(--omnigent-inset-bottom);
+  [data-ios-native] .goalrail-native-bottom-spacer {
+    height: var(--goalrail-inset-bottom);
     flex: none;
   }
 
-  [data-ios-native] .omnigent-native-bottom-spacer--chat {
-    height: calc(var(--omnigent-inset-bottom) - 1rem);
+  [data-ios-native] .goalrail-native-bottom-spacer--chat {
+    height: calc(var(--goalrail-inset-bottom) - 1rem);
   }
 
   [data-ios-native] .terminal-first-switcher {
@@ -623,8 +623,8 @@
       [data-testid="subagents-panel-drawer"],
       [data-testid="todos-panel-drawer"]
     ) {
-    padding-top: var(--omnigent-safe-top);
-    padding-bottom: var(--omnigent-safe-bottom);
+    padding-top: var(--goalrail-safe-top);
+    padding-bottom: var(--goalrail-safe-bottom);
   }
 }
 
@@ -978,42 +978,6 @@
 
 .text-shimmer {
   animation: shimmer-sweep var(--shimmer-duration, 2s) linear infinite;
-}
-
-/* Otto working indicator: gentle bob + periodic blink (see OttoIcon.tsx).
- * Opt-in via .otto-working so the mascot can also render static. The global
- * reduced-motion gate below freezes both animations. */
-@keyframes otto-bob {
-  0%,
-  100% {
-    transform: translateY(5%);
-  }
-  50% {
-    transform: translateY(-5%);
-  }
-}
-
-@keyframes otto-blink {
-  0%,
-  88%,
-  96%,
-  100% {
-    transform: scaleY(1);
-  }
-  92% {
-    transform: scaleY(0.1);
-  }
-}
-
-.otto-working {
-  animation: otto-bob 1.6s ease-in-out infinite;
-}
-
-.otto-working .otto-eye {
-  /* fill-box puts the origin at each eye's own center so the blink collapses in place. */
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: otto-blink 3.4s ease-in-out infinite;
 }
 
 /* Global reduced-motion gate. The two scoped blocks above keep their

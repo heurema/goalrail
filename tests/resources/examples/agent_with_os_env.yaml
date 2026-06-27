@@ -1,10 +1,10 @@
 # Agent with os_env — demonstrates the built-in Pi-like OS tools.
 #
 # Usage:
-#   python -m omnigent examples/agent_with_os_env.yaml \
+#   python -m goalrail examples/agent_with_os_env.yaml \
 #       --prompt "Use sys_os_write to create hello.txt with 'hello', then sys_os_read it back."
 #
-#   python -m omnigent examples/agent_with_os_env.yaml \
+#   python -m goalrail examples/agent_with_os_env.yaml \
 #       --prompt "Use sys_os_shell to run 'pwd' and tell me the current working directory."
 #
 # Notes:

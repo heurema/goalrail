@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from omnigent_client._blocks import (
+from goalrail_client._blocks import (
     ReasoningBlock,
     ReasoningChunk,
     ReasoningStartBlock,
@@ -15,7 +15,7 @@ from omnigent_client._blocks import (
     ToolGroup,
     ToolResultBlock,
 )
-from omnigent_client._events import (
+from goalrail_client._events import (
     MessageDone,
     ReasoningDelta,
     ReasoningStarted,
@@ -27,8 +27,8 @@ from omnigent_client._events import (
     ToolCall,
     ToolResult,
 )
-from omnigent_client._stream import BlockStream
-from omnigent_client._types import Response
+from goalrail_client._stream import BlockStream
+from goalrail_client._types import Response
 
 
 def _make_response(
@@ -566,7 +566,7 @@ async def test_tool_call_dedupe_by_call_id_under_mcp_path(
     parses the ``tool_use`` block, and a post-stream
     action_required event emitted when the SDK invokes the
     MCP-server handler. The adapter
-    (``omnigent/runtime/harnesses/_executor_adapter.py``)
+    (``goalrail/runtime/harnesses/_executor_adapter.py``)
     threads the SDK's ``tool_use_id`` through both so they
     share a ``call_id``; this dedup is what keeps the REPL from
     rendering ``⏵ tool_name`` twice.

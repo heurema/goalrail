@@ -1,4 +1,4 @@
-"""Tests for the OpenCode SSE -> Omnigent event forwarder translation."""
+"""Tests for the OpenCode SSE -> Goalrail event forwarder translation."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ from typing import Any
 
 import httpx
 
-import omnigent.opencode_native_forwarder as fwd_mod
-from omnigent.opencode_native_client import OpenCodeEvent
+import goalrail.opencode_native_forwarder as fwd_mod
+from goalrail.opencode_native_client import OpenCodeEvent
 
 _SESSION = "ses_1"
 
 
 class _RecordingServerClient:
-    """httpx-shaped stub recording Omnigent event POSTs."""
+    """httpx-shaped stub recording Goalrail event POSTs."""
 
     def __init__(self) -> None:
         self.posts: list[tuple[str, dict[str, Any]]] = []
@@ -123,7 +123,7 @@ async def test_each_assistant_message_gets_its_own_response_id() -> None:
 async def test_user_text_part_is_mirrored_before_the_assistant() -> None:
     """The forwarder is the transcript source: it posts the user message too.
 
-    For native-server harnesses omnigent persists no separate user item, so the
+    For native-server harnesses goalrail persists no separate user item, so the
     forwarder must mirror the user message (role=user) — posted eagerly so it
     precedes its assistant reply (correct chat ordering). Deduped by part id.
     """
@@ -248,7 +248,7 @@ async def test_permission_asked_rejects_when_no_policy_wired() -> None:
     await fwd.handle_event(
         _event("permission.v2.asked", id="per_1", action="bash", resources=[{"command": "ls"}])
     )
-    assert opencode.replies == [("per_1", {"reply": "reject", "message": "omnigent-policy"})]
+    assert opencode.replies == [("per_1", {"reply": "reject", "message": "goalrail-policy"})]
 
 
 async def test_permission_asked_rejects_when_policy_denies() -> None:
@@ -326,7 +326,7 @@ async def test_permission_asked_passes_normalized_input_to_evaluator() -> None:
     assert seen[0]["action"] == "bash"
     assert seen[0]["command"] == "ls"
     assert seen[0]["working_directory"] == "/work/repo"
-    assert seen[0]["omnigent_session_id"] == "conv_1"
+    assert seen[0]["goalrail_session_id"] == "conv_1"
 
 
 async def test_permission_asked_dedupes() -> None:

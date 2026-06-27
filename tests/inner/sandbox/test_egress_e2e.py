@@ -42,15 +42,15 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.credential_proxy import SYNTHETIC_CREDENTIAL_PREFIX
-from omnigent.inner.datamodel import (
+from goalrail.inner.credential_proxy import SYNTHETIC_CREDENTIAL_PREFIX
+from goalrail.inner.datamodel import (
     CredentialProxyEntry,
     CredentialProxySpec,
     CredentialSourceSpec,
     OSEnvSandboxSpec,
     OSEnvSpec,
 )
-from omnigent.inner.os_env import create_os_environment
+from goalrail.inner.os_env import create_os_environment
 from tests.inner.sandbox.conftest import run_async
 
 _PUBLIC_HOST_FOR_EGRESS = "example.com"
@@ -775,7 +775,7 @@ def test_s4_same_uid_external_process_cannot_use_helper_relay(
 
         attacker_sock = _socket.create_connection(("127.0.0.1", relay_port), timeout=5)
         try:
-            wrong_header = b"Basic " + base64.b64encode(b"omnigent:totally-wrong-token-aa11bb22")
+            wrong_header = b"Basic " + base64.b64encode(b"goalrail:totally-wrong-token-aa11bb22")
             attacker_sock.sendall(
                 b"GET http://example.com/ HTTP/1.1\r\n"
                 b"Host: example.com\r\n"
@@ -869,7 +869,7 @@ def test_s4_two_sandboxes_cannot_borrow_each_others_proxy(
         )
 
         # Use A's token against B's proxy.
-        a_token_header = b"Basic " + base64.b64encode(f"omnigent:{token_a}".encode())
+        a_token_header = b"Basic " + base64.b64encode(f"goalrail:{token_a}".encode())
         sock = _socket.create_connection(("127.0.0.1", port_b), timeout=5)
         try:
             sock.sendall(

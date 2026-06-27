@@ -3,7 +3,7 @@
 polly intentionally ships **no** OpenCode worker: shipping a sub-agent whose
 ``opencode-native`` harness older clients don't recognize made every old
 runner/host fail to launch *any* polly (the version-skew incident behind
-omnigent-ai/omnigent#1145). polly was reverted to its three-worker roster
+heurema/goalrail#1145). polly was reverted to its three-worker roster
 (claude_code / codex / pi) and the negative test below guards that. debby keeps
 the optional OpenCode perspective (default fanout is still claude + gpt).
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from omnigent.spec import load
+from goalrail.spec import load
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 

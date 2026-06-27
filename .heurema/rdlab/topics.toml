@@ -1,6 +1,6 @@
 [[topics]]
-id = "omnigent-rewrite"
-title = "Omnigent-based Goalrail rewrite"
+id = "goalrail-rewrite"
+title = "Goalrail-based Goalrail rewrite"
 priority = "high"
 freshness = "daily"
 status = "active"

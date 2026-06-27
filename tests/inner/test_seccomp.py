@@ -1,5 +1,5 @@
 """
-Tests for :mod:`omnigent.inner._seccomp`.
+Tests for :mod:`goalrail.inner._seccomp`.
 
 The module owns two responsibilities and these tests cover both:
 
@@ -27,9 +27,15 @@ import sys
 
 import pytest
 
-from omnigent.inner._seccomp import (
+from goalrail.inner._seccomp import (
     BASELINE_DENYLIST_SYSCALLS,
     _compat_arches_for_native,
+)
+
+_LINUX_SECCOMP = os.name == "posix" and sys.platform.startswith("linux")
+_linux_seccomp_only = pytest.mark.skipif(
+    not _LINUX_SECCOMP,
+    reason="seccomp kernel behavioral tests require Linux",
 )
 
 # ---------------------------------------------------------------------------
@@ -234,6 +240,7 @@ def _run_in_child(probe: str) -> int:
     return -1
 
 
+@_linux_seccomp_only
 def test_apply_baseline_denylist_blocks_ptrace_in_child() -> None:
     """
     :func:`apply_baseline_denylist` actually engages the kernel:
@@ -253,7 +260,7 @@ def test_apply_baseline_denylist_blocks_ptrace_in_child() -> None:
     """
     probe = (
         "import ctypes, errno, sys\n"
-        "from omnigent.inner._seccomp import apply_baseline_denylist\n"
+        "from goalrail.inner._seccomp import apply_baseline_denylist\n"
         "libc = ctypes.CDLL(None, use_errno=True)\n"
         # PR_SET_NO_NEW_PRIVS is required before seccomp_load for
         # unprivileged processes.
@@ -276,6 +283,7 @@ def test_apply_baseline_denylist_blocks_ptrace_in_child() -> None:
     )
 
 
+@_linux_seccomp_only
 def test_apply_baseline_denylist_does_not_break_subprocess_basics() -> None:
     """
     A child that loads the baseline can still ``read``, ``write``,
@@ -289,7 +297,7 @@ def test_apply_baseline_denylist_does_not_break_subprocess_basics() -> None:
     """
     probe = (
         "import ctypes, os, sys, tempfile\n"
-        "from omnigent.inner._seccomp import apply_baseline_denylist\n"
+        "from goalrail.inner._seccomp import apply_baseline_denylist\n"
         "ctypes.CDLL(None, use_errno=True).prctl(38, 1, 0, 0, 0)\n"
         "apply_baseline_denylist()\n"
         "fd, path = tempfile.mkstemp()\n"
@@ -314,6 +322,7 @@ def test_apply_baseline_denylist_does_not_break_subprocess_basics() -> None:
     )
 
 
+@_linux_seccomp_only
 def test_arg_filter_blocks_socket_family_only() -> None:
     """
     ``SCMP_CMP_EQ`` on ``socket(domain, ...)`` returns ``EPERM`` for
@@ -329,7 +338,7 @@ def test_arg_filter_blocks_socket_family_only() -> None:
 
     probe = (
         "import errno, json, socket, sys\n"
-        "from omnigent.inner._seccomp import (\n"
+        "from goalrail.inner._seccomp import (\n"
         "    SCMP_CMP_EQ, SeccompArgFilter, SeccompRule,\n"
         "    apply_seccomp_filter, scmp_act_errno,\n"
         ")\n"
@@ -361,6 +370,7 @@ def test_arg_filter_blocks_socket_family_only() -> None:
     assert rc == 0
 
 
+@_linux_seccomp_only
 def test_masked_eq_filter_blocks_clone_with_namespace_bit() -> None:
     """
     ``SCMP_CMP_MASKED_EQ`` on ``clone(flags, ...)`` returns ``EPERM``
@@ -373,7 +383,7 @@ def test_masked_eq_filter_blocks_clone_with_namespace_bit() -> None:
     """
     probe = (
         "import ctypes, errno, os, sys\n"
-        "from omnigent.inner._seccomp import (\n"
+        "from goalrail.inner._seccomp import (\n"
         "    SCMP_CMP_MASKED_EQ, SeccompArgFilter, SeccompRule,\n"
         "    apply_seccomp_filter, scmp_act_errno,\n"
         ")\n"
@@ -402,6 +412,7 @@ def test_masked_eq_filter_blocks_clone_with_namespace_bit() -> None:
     assert rc == 0
 
 
+@_linux_seccomp_only
 def test_unknown_syscall_silently_skipped() -> None:
     """
     A rule referencing a syscall name libseccomp can't resolve on
@@ -415,7 +426,7 @@ def test_unknown_syscall_silently_skipped() -> None:
     """
     probe = (
         "import ctypes, errno, sys\n"
-        "from omnigent.inner._seccomp import (\n"
+        "from goalrail.inner._seccomp import (\n"
         "    SeccompRule, apply_seccomp_filter, scmp_act_errno,\n"
         ")\n"
         "libc = ctypes.CDLL(None, use_errno=True)\n"
@@ -480,6 +491,7 @@ def test_compat_arches_for_native(machine: str, expected: tuple[bytes, ...]) -> 
     platform.machine().lower() not in ("x86_64", "amd64"),
     reason="i386 ABI bypass test only meaningful on x86_64 hosts",
 )
+@_linux_seccomp_only
 def test_seccomp_filter_applies_to_i386_compat_abi_on_x86_64() -> None:
     """
     A filter installed via :func:`apply_seccomp_filter` actually
@@ -508,7 +520,7 @@ def test_seccomp_filter_applies_to_i386_compat_abi_on_x86_64() -> None:
     """
     probe = (
         "import ctypes, errno, mmap, sys\n"
-        "from omnigent.inner._seccomp import (\n"
+        "from goalrail.inner._seccomp import (\n"
         "    SeccompRule, apply_seccomp_filter, scmp_act_errno,\n"
         ")\n"
         "ctypes.CDLL(None, use_errno=True).prctl(38, 1, 0, 0, 0)\n"

@@ -123,7 +123,7 @@ async def test_mcp_initialize_returns_capabilities(
     result = payload["result"]
     assert result["protocolVersion"] == "2024-11-05"
     assert "tools" in result["capabilities"]
-    assert result["serverInfo"]["name"] == "omnigent-mcp-proxy"
+    assert result["serverInfo"]["name"] == "goalrail-mcp-proxy"
     # Echoes the request id.
     assert payload["id"] == 1
 

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from omnigent.spec.types import (
+from goalrail.spec.types import (
     AgentSpec,
     ExecutorSpec,
     LLMConfig,
 )
-from omnigent.tools.builtins.web_fetch import (
+from goalrail.tools.builtins.web_fetch import (
     RESEARCHER_NAME,
     WebFetchTool,
     build_researcher_spec,
@@ -118,7 +118,7 @@ def test_researcher_inherits_parent_sandbox_egress() -> None:
     a sandbox-less child silently bypassed an egress-restricted parent's
     allowlist (e.g. reaching localhost / IMDS the parent blocked).
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     sandbox = OSEnvSandboxSpec(
         egress_rules=["GET api.example.com/**"],
@@ -221,13 +221,13 @@ def test_web_fetch_is_runner_dispatched() -> None:
     The Tool itself owns only the schema and the researcher
     sub-agent spec; the actual spawn runs through
     ``_execute_subagent_tool`` from
-    ``omnigent/runner/tool_dispatch.py``. If a future change
+    ``goalrail/runner/tool_dispatch.py``. If a future change
     drops web_fetch from ``_ALL_LOCAL_TOOLS`` the LLM would call
     ``Tool.invoke`` which now raises ``NotImplementedError`` — a
     silent regression. Pinning the membership here keeps the two
     sides honest.
     """
-    from omnigent.runner.tool_dispatch import should_dispatch_locally
+    from goalrail.runner.tool_dispatch import should_dispatch_locally
 
     assert should_dispatch_locally("web_fetch") is True
 
@@ -245,7 +245,7 @@ def test_runner_handler_validates_query_required() -> None:
     """
     import asyncio
 
-    from omnigent.runner.tool_dispatch import _execute_web_fetch_tool
+    from goalrail.runner.tool_dispatch import _execute_web_fetch_tool
 
     result = asyncio.run(
         _execute_web_fetch_tool(
@@ -281,10 +281,10 @@ def testbuild_researcher_spec_copies_llm() -> None:
 
 
 def testbuild_researcher_spec_default_executor() -> None:
-    """Researcher should use default executor (omnigent)."""
+    """Researcher should use default executor (goalrail)."""
     parent = _make_parent_spec()
     researcher = build_researcher_spec(parent)
-    assert researcher.executor.type == "omnigent"
+    assert researcher.executor.type == "goalrail"
 
 
 def test_web_fetch_is_sync_in_sessions_native_mode() -> None:

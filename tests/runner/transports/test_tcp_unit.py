@@ -1,6 +1,6 @@
 """Unit tests for TCP transport helper functions (no subprocess spawning).
 
-Tests the pure-logic helpers in ``omnigent.runner.transports.tcp``:
+Tests the pure-logic helpers in ``goalrail.runner.transports.tcp``:
 socket probing, port allocation, client factory, and subprocess
 configuration — all without launching real uvicorn.
 """
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from omnigent.runner.transports.tcp import (
+from goalrail.runner.transports.tcp import (
     RunnerTCPSubprocess,
     _is_tcp_listening,
     _pick_free_port,
@@ -44,7 +44,7 @@ def test_is_tcp_listening_returns_true_when_connected() -> None:
 
 def test_is_tcp_listening_returns_false_on_os_error() -> None:
     """OSError (e.g. network unreachable) is caught gracefully."""
-    with patch("omnigent.runner.transports.tcp.socket.create_connection", side_effect=OSError):
+    with patch("goalrail.runner.transports.tcp.socket.create_connection", side_effect=OSError):
         assert _is_tcp_listening("192.0.2.1", 9999) is False
 
 

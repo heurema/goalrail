@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.runtime.harnesses import _runner
+from goalrail.runtime.harnesses import _runner
 
 
 def test_parse_args_requires_all_args() -> None:
@@ -104,13 +104,13 @@ def test_load_harness_app_import_error_exits(
     message naming the bad module path.
     """
     with pytest.raises(SystemExit) as excinfo:
-        _runner._load_harness_app("missing", "omnigent.does_not_exist", "conv_x")
+        _runner._load_harness_app("missing", "goalrail.does_not_exist", "conv_x")
     assert excinfo.value.code == 2
     err = capsys.readouterr().err
     # Catch a future regression where the loud-fail message gets
     # silenced or the module path gets dropped from it.
     assert "cannot import harness module" in err
-    assert "'omnigent.does_not_exist'" in err
+    assert "'goalrail.does_not_exist'" in err
 
 
 def test_load_harness_app_module_without_create_app_exits(
@@ -121,10 +121,10 @@ def test_load_harness_app_module_without_create_app_exits(
     Verifies the runner's structural check (``getattr(module,
     "create_app", None)``) catches the misnaming case loudly.
     Pointing the runner at a real module without ``create_app``
-    (``omnigent.errors``) reproduces the failure mode.
+    (``goalrail.errors``) reproduces the failure mode.
     """
     with pytest.raises(SystemExit) as excinfo:
-        _runner._load_harness_app("broken", "omnigent.errors", "conv_x")
+        _runner._load_harness_app("broken", "goalrail.errors", "conv_x")
     assert excinfo.value.code == 2
     err = capsys.readouterr().err
     assert "does not export create_app" in err

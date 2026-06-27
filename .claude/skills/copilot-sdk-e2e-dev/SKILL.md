@@ -1,20 +1,20 @@
 ---
 name: copilot-sdk-e2e-dev
-description: Spin up a live local Omnigent server and exercise the GitHub Copilot SDK harness end-to-end — build copilot agents, run real turns, smoke-test, and bug-bash. Load when developing, testing, or debugging the copilot harness (omnigent/inner/copilot_executor.py, copilot_harness.py, omnigent/onboarding/copilot_auth.py) or its auth / model / tool-bridge behavior.
+description: Spin up a live local Goalrail server and exercise the GitHub Copilot SDK harness end-to-end — build copilot agents, run real turns, smoke-test, and bug-bash. Load when developing, testing, or debugging the copilot harness (goalrail/inner/copilot_executor.py, copilot_harness.py, goalrail/onboarding/copilot_auth.py) or its auth / model / tool-bridge behavior.
 ---
 
 # Copilot SDK harness: end-to-end dev & testing
 
 The `copilot` harness drives the **GitHub Copilot SDK** (`github-copilot-sdk`,
 imported as `copilot`) — a persistent `CopilotClient` + `CopilotSession` per
-Omnigent conversation — and bridges Omnigent's `sys_*` tools into Copilot as SDK
+Goalrail conversation — and bridges Goalrail's `sys_*` tools into Copilot as SDK
 `Tool`s. The Python SDK **bundles the Copilot CLI binary it drives** as a backing
 server, so there is no separate `@github/copilot` install. This skill is the
 proven recipe for running it **for real** against a live local server — not just
 the unit tests.
 
 > The harness runs as a **local runner** from your current checkout, so
-> `omni run <bundle> --server <url>` exercises exactly the code you're on.
+> `goalrail run <bundle> --server <url>` exercises exactly the code you're on.
 
 ## Prerequisites (check these first)
 
@@ -22,7 +22,7 @@ the unit tests.
    optional extra — install it (without disturbing other extras) with
    `uv sync --frozen --extra dev --extra copilot`. NB: a bare
    `uv run --frozen --extra dev` re-syncs the venv and **prunes** the copilot
-   SDK; for live testing call `.venv/bin/omni` / `.venv/bin/python` directly and
+   SDK; for live testing call `.venv/bin/goalrail` / `.venv/bin/python` directly and
    avoid `uv run` mid-session.
 2. **The SDK is installed:**
    `.venv/bin/python -c "import copilot; print(copilot.__file__)"`.
@@ -31,9 +31,9 @@ the unit tests.
    from the GitHub CLI / Copilot CLI app (classic `ghp_` PATs are rejected).
    Verify (booleans only — never print the token):
    ```bash
-   .venv/bin/python -c "from omnigent.onboarding.copilot_auth import copilot_github_token_configured; import os; print('config:', copilot_github_token_configured(), 'env:', bool(os.environ.get('GH_TOKEN') or os.environ.get('COPILOT_GITHUB_TOKEN')))"
+   .venv/bin/python -c "from goalrail.onboarding.copilot_auth import copilot_github_token_configured; import os; print('config:', copilot_github_token_configured(), 'env:', bool(os.environ.get('GH_TOKEN') or os.environ.get('COPILOT_GITHUB_TOKEN')))"
    ```
-   If both are `False`, run `omni setup` and register a Copilot token, or
+   If both are `False`, run `goalrail setup` and register a Copilot token, or
    `export GH_TOKEN=$(gh auth token)` (when `gh` is logged into an account with
    Copilot). Check the account's entitlement with
    `gh api /copilot_internal/user` (look for `chat_enabled`/`cli_enabled`).
@@ -43,8 +43,8 @@ the unit tests.
 ## Step 1 — start a local server
 
 ```bash
-cd /path/to/omnigent
-.venv/bin/omni server --port 7788 --no-open    # foreground; or `omni server start` for detached
+cd /path/to/goalrail
+.venv/bin/goalrail server --port 7788 --no-open    # foreground; or `goalrail server start` for detached
 curl -s http://127.0.0.1:7788/health           # {"status":"ok"}
 ```
 
@@ -62,7 +62,7 @@ spec_version: 1
 name: copilot-dev
 description: Copilot SDK dev/test agent.
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: copilot
     # model: gpt-5-mini      # optional; omit for Copilot auto-select
@@ -80,7 +80,7 @@ the `spec_version` + `config.yaml` path.)
 
 ```bash
 SERVER=http://127.0.0.1:7788
-timeout 280 .venv/bin/omni run /tmp/copilot-dev \
+timeout 280 .venv/bin/goalrail run /tmp/copilot-dev \
   -p "Reply with exactly the single word: PONG" \
   --server "$SERVER" 2>&1
 ```
@@ -99,7 +99,7 @@ the full stack is good: token, egress, bundled CLI, harness.
 | Bridged `sys_*` / sub-agent dispatch | declare a sub-agent (harness `copilot` so auth is satisfied), prompt the parent to delegate — exercises the SDK `Tool` async-handler bridge into `_tool_executor` |
 | Model routing | run the same bundle with several `--model` values; an unknown id fails **loud**, a `databricks-*` id is dropped to auto with a warning |
 | LLM-phase policy | add a guardrail that denies a keyword; confirm `PHASE_LLM_REQUEST`/`PHASE_LLM_RESPONSE` blocks it |
-| Concurrency / leaks | fire several `omni run … &` at once; then `pgrep -af "copilot/bin/copilot"` to check for orphaned bundled-CLI subprocesses |
+| Concurrency / leaks | fire several `goalrail run … &` at once; then `pgrep -af "copilot/bin/copilot"` to check for orphaned bundled-CLI subprocesses |
 
 ## Running polly (or any orchestrator) on a copilot brain
 
@@ -129,12 +129,12 @@ pass a Copilot-catalog `--brain-model`** (`auto`, `claude-haiku-4.5`,
 .venv/bin/python .claude/skills/polly-e2e-dev/polly_driver.py \
   --local --code-dir <this-worktree> \
   --cuj smoke --brain-harness copilot --brain-model auto      # brain only
-# --cuj fanout  …  and  --cuj review-pr --repo omnigent-ai/omnigent --pr <n>  …
+# --cuj fanout  …  and  --cuj review-pr --repo heurema/goalrail --pr <n>  …
 #   exercise real sub-agent dispatch (claude_code + codex) under a copilot brain.
 ```
 
 All three CUJs (smoke / fanout / review-pr) pass on a copilot brain (verified
-live: fanout dispatched 8 sub-agents, 8/8 OK + a synthesis). Note `omni run -p`
+live: fanout dispatched 8 sub-agents, 8/8 OK + a synthesis). Note `goalrail run -p`
 exits after the dispatch turn (the brain parks until woken), so a sub-agent's
 final answer lands server-side — read it over the AP API
 (`GET /v1/sessions/{id}/items`, child sessions), not just stdout.
@@ -150,7 +150,7 @@ final answer lands server-side — read it over the AP API
    single `.yaml` file.
 3. **Copilot needs a GitHub token** (fine-grained PAT w/ Copilot Requests, or a
    gh/Copilot-CLI OAuth token). Resolution precedence: spec `executor.auth`
-   (api_key) > stored `copilot:` config block (`omni setup`) > ambient
+   (api_key) > stored `copilot:` config block (`goalrail setup`) > ambient
    `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`. Classic `ghp_` rejected.
 4. **No Databricks gateway.** Copilot talks only to GitHub's backend, so a
    `databricks-*` model is silently resolved to Copilot's auto-select — it will
@@ -163,10 +163,10 @@ final answer lands server-side — read it over the AP API
 
 ## Code & tests
 
-- **Executor (SDK bridge):** `omnigent/inner/copilot_executor.py`
-- **Wrap (HARNESS_COPILOT_* env → executor):** `omnigent/inner/copilot_harness.py`
-- **Auth / token resolution:** `omnigent/onboarding/copilot_auth.py`
-- **Spawn env:** `_build_copilot_spawn_env` in `omnigent/runtime/workflow.py`
+- **Executor (SDK bridge):** `goalrail/inner/copilot_executor.py`
+- **Wrap (HARNESS_COPILOT_* env → executor):** `goalrail/inner/copilot_harness.py`
+- **Auth / token resolution:** `goalrail/onboarding/copilot_auth.py`
+- **Spawn env:** `_build_copilot_spawn_env` in `goalrail/runtime/workflow.py`
 
 ```bash
 uv run --frozen --extra dev python -m pytest \
@@ -198,7 +198,7 @@ Cross-check the AP API (`GET /v1/sessions/{id}/items`) — a start failure can e
 - **Copilot fails loud (unlike cursor's swallowed start failures).** Bad token,
   empty/invalid model, and unknown model ids all exit non-zero with a clear error
   AND a server-side failed session + error item — verified, not swallowed.
-- **`omni run -p` against an async orchestrator exits after the dispatch turn**,
+- **`goalrail run -p` against an async orchestrator exits after the dispatch turn**,
   so a delegated sub-agent's final answer is persisted server-side but may not
   reach stdout in one-shot mode. Read the session over the AP API to see it.
 - **Non-graceful exit can orphan the bundled CLI.** Graceful teardown reaps it
@@ -208,7 +208,7 @@ Cross-check the AP API (`GET /v1/sessions/{id}/items`) — a start failure can e
 ## Cleanup
 
 ```bash
-.venv/bin/omni server stop        # or kill the foreground `omni server`
+.venv/bin/goalrail server stop        # or kill the foreground `goalrail server`
 rm -rf /tmp/copilot-dev           # remove scratch bundles
 pgrep -af "copilot/bin/copilot"   # confirm no orphaned bundled-CLI subprocesses linger
 ```

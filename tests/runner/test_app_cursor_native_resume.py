@@ -2,7 +2,7 @@
 
 ``_cursor_native_resume_args`` builds the ``["--resume", chat_id]`` suffix
 that ``_auto_create_cursor_terminal`` appends to cursor-agent's launch args
-when the Omnigent session already has an ``external_session_id`` (set by the
+when the Goalrail session already has an ``external_session_id`` (set by the
 forwarder the first time it discovers the cursor chat store). A missing or
 empty id means a brand-new session — no ``--resume`` is injected. A malformed
 id (not a UUID-shaped hex+dash string) is rejected defensively.
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.runner.app import _cursor_native_resume_args
+from goalrail.runner.app import _cursor_native_resume_args
 
 # A real cursor chat id is a UUID (hex + dashes).
 _CHAT = "0ef42bbf-3b80-4bec-ac39-ca46531cbc47"

@@ -75,8 +75,8 @@ export function RegisterPage() {
       // Centered auth page (no header / native bars): just keep the card clear
       // of the notch + home indicator. 0 off the iOS shell. See index.css.
       style={{
-        paddingTop: "var(--omnigent-safe-top)",
-        paddingBottom: "var(--omnigent-safe-bottom)",
+        paddingTop: "var(--goalrail-safe-top)",
+        paddingBottom: "var(--goalrail-safe-bottom)",
       }}
     >
       <div className="w-full max-w-sm space-y-6">

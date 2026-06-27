@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.policies.function import (
+from goalrail.policies.function import (
     resolve_function_policy,
 )
-from omnigent.spec.types import (
+from goalrail.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
@@ -56,7 +56,7 @@ def test_resolve_missing_module_raises_import_error() -> None:
     so an incorrect spec fails before any evaluation runs."""
     with pytest.raises(ImportError):
         resolve_function_policy(
-            _fn_spec("omnigent_nonexistent_module.handler"),
+            _fn_spec("goalrail_nonexistent_module.handler"),
         )
 
 
@@ -66,7 +66,7 @@ def test_resolve_missing_attribute_raises_attribute_error() -> None:
     name" — gives the author a precise hint."""
     with pytest.raises(AttributeError):
         resolve_function_policy(
-            _fn_spec("omnigent.spec.types.nonexistent_attr"),
+            _fn_spec("goalrail.spec.types.nonexistent_attr"),
         )
 
 
@@ -74,10 +74,10 @@ def test_resolve_non_callable_rejected() -> None:
     """Dotted path resolves to a non-callable (e.g. a module
     constant) → ValueError naming the resolved type."""
     # Point at a non-callable module-level constant
-    # (`omnigent.spec.types.DEFAULT_ASK_TIMEOUT` is an int).
+    # (`goalrail.spec.types.DEFAULT_ASK_TIMEOUT` is an int).
     with pytest.raises(ValueError, match=r"not callable"):
         resolve_function_policy(
-            _fn_spec("omnigent.spec.types.DEFAULT_ASK_TIMEOUT"),
+            _fn_spec("goalrail.spec.types.DEFAULT_ASK_TIMEOUT"),
         )
 
 
@@ -123,8 +123,8 @@ def test_build_engine_fails_on_invalid_function_path(
 ) -> None:
     """build_policy_engine propagates resolution errors so
     the workflow startup fails loudly on a broken spec."""
-    from omnigent.runtime.policies import build_policy_engine
-    from omnigent.spec.types import (
+    from goalrail.runtime.policies import build_policy_engine
+    from goalrail.spec.types import (
         AgentSpec,
         GuardrailsSpec,
     )

@@ -1,10 +1,10 @@
-"""Tests for ``omnigent login`` against Databricks-fronted servers.
+"""Tests for ``goalrail login`` against Databricks-fronted servers.
 
 Covers the two Databricks deployment shapes the login probe detects:
 
 - Databricks Apps (the edge 302s unauthenticated requests to the
   workspace OIDC authorize endpoint), and
-- workspace-hosted omnigent (the API proxy answers 401 with a
+- workspace-hosted goalrail (the API proxy answers 401 with a
   ``WWW-Authenticate: Bearer realm="DatabricksRealm"`` challenge),
 
 plus the guard rails: the ``databricks`` extra gate, the
@@ -22,14 +22,14 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-import omnigent.cli as cli_mod
+import goalrail.cli as cli_mod
 
 cli_group = cli_mod.cli
 
 _APPS_URL = "https://myapp-1234.aws.databricksapps.com"
 _WORKSPACE = "https://example.databricks.com"
 _APPS_REDIRECT = f"{_WORKSPACE}/oidc/oauth2/v2.0/authorize?client_id=abc&response_type=code"
-_WORKSPACE_API_URL = f"{_WORKSPACE}/api/2.0/omnigent"
+_WORKSPACE_API_URL = f"{_WORKSPACE}/api/2.0/goalrail"
 
 
 @dataclass
@@ -84,19 +84,19 @@ def token_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     Logging in stores an auth record (auth_tokens.json, same seam as
     test_cli_auth) and, on success, persists the just-logged-in server as
-    the user-level default (config.yaml, via OMNIGENT_CONFIG_HOME). Both
+    the user-level default (config.yaml, via GOALRAIL_CONFIG_HOME). Both
     are redirected here so tests never touch the developer's real
-    ``~/.omnigent``.
+    ``~/.goalrail``.
 
     :param tmp_path: Pytest temp directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: The temp directory path.
     """
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "goalrail.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     return tmp_path
 
 
@@ -126,7 +126,7 @@ def _patch_login_env(
     # login body's own requests.
     monkeypatch.setattr(cli_mod, "_workspace_api_server_url", lambda server: server)
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
         lambda: sdk_installed,
     )
     tokens = list(cached_tokens if cached_tokens is not None else ["tok-cached"])
@@ -159,7 +159,7 @@ def test_login_apps_redirect_stores_pointer_record(
     The record (not a bearer) is what later commands resolve to fresh
     workspace tokens — this is the core of the no-profile Apps CUJ.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -185,11 +185,11 @@ def test_login_workspace_hosted_401_uses_url_host(
 ) -> None:
     """A DatabricksRealm 401 (workspace API path) logs in to the URL's host.
 
-    Hosted omnigent lives at ``https://<workspace>/api/2.0/omnigent`` —
+    Hosted goalrail lives at ``https://<workspace>/api/2.0/goalrail`` —
     the workspace IS the server host, and the record must key on the full
     server URL (path included).
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -206,7 +206,7 @@ def test_login_workspace_hosted_401_uses_url_host(
     result = CliRunner().invoke(cli_group, ["login", _WORKSPACE_API_URL])
 
     assert result.exit_code == 0, result.output
-    # Keyed by the full server URL (with the /api/2.0/omnigent path) and
+    # Keyed by the full server URL (with the /api/2.0/goalrail path) and
     # pointing at the workspace host without the path.
     assert load_databricks_workspace_host(_WORKSPACE_API_URL) == _WORKSPACE
 
@@ -220,7 +220,7 @@ def test_login_apps_fails_loud_without_databricks_extra(
     fallback to the OIDC flow would produce a baffling ticket-endpoint
     error instead.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(responses=[_response(302, headers={"location": _APPS_REDIRECT})])
     _patch_login_env(monkeypatch, fake_httpx=fake, sdk_installed=False)
@@ -229,7 +229,7 @@ def test_login_apps_fails_loud_without_databricks_extra(
 
     assert result.exit_code != 0
     # The error must carry the canonical install hint, not a generic failure.
-    assert "omnigent[databricks]" in result.output
+    assert "goalrail[databricks]" in result.output
     assert load_databricks_workspace_host(_APPS_URL) is None
 
 
@@ -241,7 +241,7 @@ def test_login_runs_databricks_auth_login_when_no_cached_grant(
     The login is host-keyed (no ``--profile`` / profile name anywhere);
     after it succeeds the token resolves and the record is stored.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -275,7 +275,7 @@ def test_login_fails_loud_when_app_rejects_workspace_token(
     can't reach the app; storing the record anyway would make every later
     command fail with the same opaque 403.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -298,7 +298,7 @@ def test_login_accounts_mode_not_hijacked_by_databricks_detection(
     """A plain accounts-mode 401 (login_url=/login) still routes to accounts.
 
     The Databricks 401 branch keys on the DatabricksRealm challenge; an
-    omnigent accounts server has no such header and must keep its
+    goalrail accounts server has no such header and must keep its
     username/password flow.
     """
 
@@ -324,7 +324,7 @@ def test_login_stale_cached_grant_triggers_fresh_login_and_retry(
     server 302s/403s. Failing outright would strand the user; the fresh
     login replaces the bad cache entry and the retry succeeds.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -360,7 +360,7 @@ def test_login_sets_default_server(monkeypatch: pytest.MonkeyPatch, token_dir: P
     """
     A successful login records the server as the user-level default.
 
-    Without this, a freshly-logged-in user who runs a bare ``omnigent`` is
+    Without this, a freshly-logged-in user who runs a bare ``goalrail`` is
     still routed at whatever default ``setup`` baked in — the "logged in,
     yet asked to log in again to a different server" CUJ. The
     just-logged-in server must become the configured default so the next
@@ -386,9 +386,9 @@ def test_login_header_mode_sets_default_server(
     """
     Header-auth mode logs in nothing but still records the default.
 
-    ``omnigent login <url>`` against a header-mode server needs no
+    ``goalrail login <url>`` against a header-mode server needs no
     credentials (a proxy injects identity), but the user's intent — "make
-    this my server" — is the same, so a bare ``omnigent`` afterwards
+    this my server" — is the same, so a bare ``goalrail`` afterwards
     targets it. This also proves the default is set for a non-Databricks
     posture, not just the Apps branch.
     """
@@ -417,12 +417,12 @@ def test_login_accounts_mode_sets_default_server(
     """
     fake = _FakeHttpx(responses=[_response(401, body={"login_url": "/login"})])
     _patch_login_env(monkeypatch, fake_httpx=fake)
-    monkeypatch.setattr("omnigent.cli._accounts_login", lambda server: None)
+    monkeypatch.setattr("goalrail.cli._accounts_login", lambda server: None)
 
-    result = CliRunner().invoke(cli_group, ["login", "http://omni.internal:6767"])
+    result = CliRunner().invoke(cli_group, ["login", "http://goalrail.internal:6767"])
 
     assert result.exit_code == 0, result.output
-    assert cli_mod._load_global_config().get("server") == "http://omni.internal:6767"
+    assert cli_mod._load_global_config().get("server") == "http://goalrail.internal:6767"
 
 
 def test_login_oidc_mode_sets_default_server(
@@ -438,7 +438,7 @@ def test_login_oidc_mode_sets_default_server(
     import time
     import webbrowser
 
-    server = "http://omni-oidc.internal:6767"
+    server = "http://goalrail-oidc.internal:6767"
     fake = _FakeHttpx(
         responses=[
             # Probe: OIDC 401 (login_url present but not "/login").
@@ -470,7 +470,7 @@ def test_login_failure_leaves_default_server_unchanged(
 
     The default is persisted only after the server accepts the token —
     otherwise a failed login against a server the user can't actually
-    reach would strand every later bare ``omnigent`` on that dead URL.
+    reach would strand every later bare ``goalrail`` on that dead URL.
     """
     # Seed an existing default so we can prove it survives a failed login.
     cli_mod._save_global_config({"server": "https://existing.example.com"})
@@ -516,7 +516,7 @@ def _scripted_normalizer_httpx(
 def test_workspace_url_expands_bare_workspace_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bare workspace URL expands to its /api/2.0/omnigent mount.
+    """A bare workspace URL expands to its /api/2.0/goalrail mount.
 
     The bare host serves the workspace web app (404 + ``server:
     databricks`` for /v1/me); the API mount answers with the
@@ -550,12 +550,13 @@ def test_workspace_url_leaves_oss_server_alone(
     _scripted_normalizer_httpx(
         monkeypatch,
         {
-            "https://omni.example.com/v1/me": _response(401, body={"login_url": "/login"}),
+            "https://goalrail.example.com/v1/me": _response(401, body={"login_url": "/login"}),
         },
     )
 
     assert (
-        cli_mod._workspace_api_server_url("https://omni.example.com") == "https://omni.example.com"
+        cli_mod._workspace_api_server_url("https://goalrail.example.com")
+        == "https://goalrail.example.com"
     )
 
 
@@ -566,7 +567,7 @@ def test_workspace_url_leaves_apps_edge_alone(
 
     Apps hosts are path-less AND answer with ``server: databricks`` —
     only the login-target detection distinguishes them from a bare
-    workspace, so a regression here would bolt /api/2.0/omnigent onto
+    workspace, so a regression here would bolt /api/2.0/goalrail onto
     every app URL.
     """
 
@@ -605,7 +606,7 @@ def test_workspace_url_expands_when_mount_hidden_from_anonymous_probe(
 ) -> None:
     """A mount invisible to anonymous probes expands via a cached bearer.
 
-    Azure workspace edges answer the anonymous /api/2.0/omnigent probe
+    Azure workspace edges answer the anonymous /api/2.0/goalrail probe
     with a plain 404 — not the AWS proxy's 401-with-DatabricksRealm
     challenge — so a mount that works for authenticated callers looks
     absent and the user gets stranded on the bare workspace URL. With
@@ -619,13 +620,13 @@ def test_workspace_url_expands_when_mount_hidden_from_anonymous_probe(
             _response(404, headers={"server": "databricks"}),
             # Mount, anonymous: hidden — plain 404, no realm challenge.
             _response(404, headers={"server": "databricks"}),
-            # Mount, authenticated: omnigent answers.
+            # Mount, authenticated: goalrail answers.
             _response(200, body={"user_id": "alice"}),
         ]
     )
     monkeypatch.setattr(httpx, "get", fake.get)
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
         lambda: True,
     )
     minted_for: list[str] = []
@@ -641,7 +642,7 @@ def test_workspace_url_expands_when_mount_hidden_from_anonymous_probe(
     assert result == _WORKSPACE_API_URL
     # The bearer is minted for the workspace host (the bare URL) — that
     # is what the Databricks OAuth token cache is keyed on, not the
-    # /api/2.0/omnigent candidate.
+    # /api/2.0/goalrail candidate.
     assert minted_for == [_WORKSPACE]
     # Probe order: anonymous root, anonymous mount, authenticated mount.
     # A missing third request means the authed retry never ran; a
@@ -675,7 +676,7 @@ def test_workspace_url_hints_when_mount_dark_and_no_cached_grant(
     )
     monkeypatch.setattr(httpx, "get", fake.get)
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
         lambda: True,
     )
     monkeypatch.setattr(cli_mod, "_databricks_workspace_token", lambda workspace_host: None)
@@ -699,7 +700,7 @@ def test_workspace_url_hints_when_authed_probe_also_misses(
 ) -> None:
     """A mount dark even to authenticated probes declines with a hint.
 
-    A 404 with valid credentials means omnigent is genuinely not
+    A 404 with valid credentials means goalrail is genuinely not
     served on this workspace (or the grant is stale) — the URL is left
     as given, and the message distinguishes this from the
     never-logged-in case so the user doesn't loop on `auth login`.
@@ -715,7 +716,7 @@ def test_workspace_url_hints_when_authed_probe_also_misses(
     )
     monkeypatch.setattr(httpx, "get", fake.get)
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
         lambda: True,
     )
     monkeypatch.setattr(cli_mod, "_databricks_workspace_token", lambda workspace_host: "tok-ws")
@@ -751,7 +752,7 @@ def test_workspace_url_skips_authed_probe_without_databricks_extra(
     )
     monkeypatch.setattr(httpx, "get", fake.get)
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
         lambda: False,
     )
 
@@ -779,8 +780,8 @@ def test_workspace_url_skips_authed_probe_without_databricks_extra(
     [
         # The guide hands out the web URL without a scheme; default https.
         (
-            "dbc-a5d4177a-49dc.cloud.databricks.com/omnigent",
-            "https://dbc-a5d4177a-49dc.cloud.databricks.com/omnigent",
+            "dbc-a5d4177a-49dc.cloud.databricks.com/goalrail",
+            "https://dbc-a5d4177a-49dc.cloud.databricks.com/goalrail",
         ),
         ("example.cloud.databricks.com", "https://example.cloud.databricks.com"),
         # Loopback hosts stay http — local dev servers are plain http.
@@ -797,7 +798,7 @@ def test_with_default_scheme(raw: str, expected: str) -> None:
     """A schemeless server URL defaults to https (http for loopback).
 
     The internal user guide hands out the web URL without a scheme
-    (``<ws>/omnigent``); defaulting to https lets it be pasted verbatim,
+    (``<ws>/goalrail``); defaulting to https lets it be pasted verbatim,
     while loopback hosts stay http so local dev still connects.
     """
 
@@ -811,7 +812,7 @@ def test_resolve_server_url_defaults_scheme_and_expands(
 
     ``_resolve_server_url`` is the single seam every ``--server`` entry
     point routes through; a schemeless bare host AND the guide's
-    ``/omnigent`` web URL both reach the ``/api/2.0/omnigent`` mount over
+    ``/goalrail`` web URL both reach the ``/api/2.0/goalrail`` mount over
     https.
     """
 
@@ -826,17 +827,17 @@ def test_resolve_server_url_defaults_scheme_and_expands(
     )
 
     assert cli_mod._resolve_server_url("example.databricks.com") == _WORKSPACE_API_URL
-    assert cli_mod._resolve_server_url("example.databricks.com/omnigent") == _WORKSPACE_API_URL
+    assert cli_mod._resolve_server_url("example.databricks.com/goalrail") == _WORKSPACE_API_URL
 
 
 def test_workspace_url_expands_web_ui_path_to_api_mount(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The guide's web-UI URL (``<ws>/omnigent``) expands to the API mount.
+    """The guide's web-UI URL (``<ws>/goalrail``) expands to the API mount.
 
-    The internal user guide hands out ``<ws>/omnigent`` for the browser;
-    a user who pastes it into ``omnigent login`` must reach the API mount
-    (``/api/2.0/omnigent``), not 404 the UI path's own /v1/me probe.
+    The internal user guide hands out ``<ws>/goalrail`` for the browser;
+    a user who pastes it into ``goalrail login`` must reach the API mount
+    (``/api/2.0/goalrail``), not 404 the UI path's own /v1/me probe.
     """
 
     probed = _scripted_normalizer_httpx(
@@ -849,31 +850,31 @@ def test_workspace_url_expands_web_ui_path_to_api_mount(
         },
     )
 
-    assert cli_mod._workspace_api_server_url(f"{_WORKSPACE}/omnigent") == _WORKSPACE_API_URL
+    assert cli_mod._workspace_api_server_url(f"{_WORKSPACE}/goalrail") == _WORKSPACE_API_URL
     # The bare root and its API mount were probed — never the UI path itself.
-    assert f"{_WORKSPACE}/omnigent/v1/me" not in probed
+    assert f"{_WORKSPACE}/goalrail/v1/me" not in probed
 
 
 def test_workspace_url_web_ui_path_left_alone_off_workspace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A ``/omnigent`` URL on a non-workspace host is returned untouched.
+    """A ``/goalrail`` URL on a non-workspace host is returned untouched.
 
     Only the bare root is probed; without the ``server: databricks``
     marker the pasted URL is kept verbatim, so a non-workspace server
-    served under ``/omnigent`` still works.
+    served under ``/goalrail`` still works.
     """
 
     _scripted_normalizer_httpx(
         monkeypatch,
         {
-            "https://omni.example.com/v1/me": _response(401, body={"login_url": "/login"}),
+            "https://goalrail.example.com/v1/me": _response(401, body={"login_url": "/login"}),
         },
     )
 
     assert (
-        cli_mod._workspace_api_server_url("https://omni.example.com/omnigent")
-        == "https://omni.example.com/omnigent"
+        cli_mod._workspace_api_server_url("https://goalrail.example.com/goalrail")
+        == "https://goalrail.example.com/goalrail"
     )
 
 
@@ -884,7 +885,7 @@ def test_login_defaults_scheme_to_https(monkeypatch: pytest.MonkeyPatch, token_d
     to https so the probe reaches the workspace API proxy and the stored
     record keys on the https URL.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host
+    from goalrail.cli_auth import load_databricks_workspace_host
 
     fake = _FakeHttpx(
         responses=[
@@ -895,7 +896,7 @@ def test_login_defaults_scheme_to_https(monkeypatch: pytest.MonkeyPatch, token_d
     _patch_login_env(monkeypatch, fake_httpx=fake)
 
     # Schemeless input (no https://) — the guide hands out bare URLs.
-    result = CliRunner().invoke(cli_group, ["login", "example.databricks.com/api/2.0/omnigent"])
+    result = CliRunner().invoke(cli_group, ["login", "example.databricks.com/api/2.0/goalrail"])
 
     assert result.exit_code == 0, result.output
     # The probe used the https:// default, and the record keys on it.

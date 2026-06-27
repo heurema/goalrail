@@ -21,7 +21,7 @@ import respx
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from omnigent.db.utils import (
+from goalrail.db.utils import (
     _FTS_TABLE,
     _supports_fts5,
     delete_fts_by_conversation,

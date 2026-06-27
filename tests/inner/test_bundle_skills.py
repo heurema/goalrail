@@ -1,5 +1,5 @@
 """
-Tests for ``omnigent.inner.bundle_skills`` — the shared helpers that
+Tests for ``goalrail.inner.bundle_skills`` — the shared helpers that
 expose an agent bundle's skills to a Claude harness (the SDK executor and
 the ``claude-native`` CLI launch path both use these so they stay in
 lockstep).
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.bundle_skills import (
+from goalrail.inner.bundle_skills import (
     claude_native_skill_args,
     ensure_bundle_plugin_manifest,
 )
@@ -25,7 +25,7 @@ def test_ensure_bundle_plugin_manifest_writes_when_missing(tmp_path: Path) -> No
 
     A regression that wrote the wrong name (or the bundle's basename)
     would mis-namespace every bundled skill in the model's listing
-    (e.g. ``omnigent-ap-chat-x9p606iz/bundle:researcher``).
+    (e.g. ``goalrail-ap-chat-x9p606iz/bundle:researcher``).
     """
     ensure_bundle_plugin_manifest(tmp_path, "coding-supervisor")
     manifest = tmp_path / ".claude-plugin" / "plugin.json"
@@ -116,7 +116,7 @@ def test_claude_native_skill_args_with_bundle(
 
 def test_claude_native_skill_args_no_bundle_is_empty() -> None:
     """
-    With no bundle (the ``omnigent claude`` CLI path), no plugin args are
+    With no bundle (the ``goalrail claude`` CLI path), no plugin args are
     produced under the default ``"all"`` filter — Claude launches with its
     own host config untouched.
     """

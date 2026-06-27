@@ -21,7 +21,7 @@ required. Proves the advisor's end-to-end contract against the mock substrate:
     ``tests/runner/test_app_sessions_native.py``.  Adding a full e2e test for
     ``applied=True`` would require mocking the Anthropic Messages API — deferred
     until the mock server gains Anthropic SSE support for the claude-sdk harness.
-(c) RUN --MODEL FLAG: ``omnigent run --model X`` is the SPEC default, not a
+(c) RUN --MODEL FLAG: ``goalrail run --model X`` is the SPEC default, not a
     session pin — the optimize advisor still applies its verdict over it.
 
 The mock setup bakes a ``connection`` block into the executor so both the
@@ -47,7 +47,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.cost_plan import COST_CONTROL_PLAN_LABEL
+from goalrail.cost_plan import COST_CONTROL_PLAN_LABEL
 from tests.e2e.test_polly_e2e import (
     _MOCK_BRAIN_MODEL,
     _REPO,
@@ -136,7 +136,7 @@ def _advisor_polly_spec_dir(
 @pytest.fixture
 def local_polly_server(tmp_path: Path) -> Iterator[str]:
     """
-    Start a throwaway local ``omnigent server`` from this working tree.
+    Start a throwaway local ``goalrail server`` from this working tree.
 
     Mirrors ``test_polly_e2e.local_polly_server`` (own sqlite DB + artifact
     dir under ``tmp_path``). Uses a plain env (no OAuth credentials) because
@@ -151,14 +151,14 @@ def local_polly_server(tmp_path: Path) -> Iterator[str]:
 
     env = {
         **os.environ,
-        "OMNIGENT_SKIP_ONBOARD": "1",
-        "OMNIGENT_NO_UPDATE_CHECK": "1",
+        "GOALRAIL_SKIP_ONBOARD": "1",
+        "GOALRAIL_NO_UPDATE_CHECK": "1",
     }
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "server",
             "--host",
             "127.0.0.1",
@@ -202,12 +202,12 @@ def _run_polly_turn(
     :param mock_llm_server_url: Mock LLM server base URL for env injection.
     :param polly_dir: The polly bundle to run.
     :param model: Optional ``--model`` brain pin.
-    :returns: The completed ``omnigent run`` process.
+    :returns: The completed ``goalrail run`` process.
     """
     cmd = [
         sys.executable,
         "-m",
-        "omnigent",
+        "goalrail",
         "run",
         str(polly_dir),
         "--server",
@@ -486,7 +486,7 @@ def test_run_model_flag_is_spec_default_not_session_pin(
     tmp_path: Path,
     mock_llm_server_url: str,
 ) -> None:
-    """``omnigent run --model X`` is the SPEC default, not a session pin —
+    """``goalrail run --model X`` is the SPEC default, not a session pin —
     the optimize advisor still applies its verdict over it.
 
     A live run proved ``--model`` never lands in the session's

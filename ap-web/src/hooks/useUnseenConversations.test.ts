@@ -7,7 +7,7 @@ import {
   useMarkConversationSeen,
 } from "./useUnseenConversations";
 
-const STORAGE_KEY = "omnigent:last-seen-timestamps";
+const STORAGE_KEY = "goalrail:last-seen-timestamps";
 
 beforeEach(() => {
   localStorage.clear();

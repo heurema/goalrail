@@ -15,10 +15,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import _assert_within_cwd, _handle_helper_request
-from omnigent.inner.sandbox import SandboxPolicy
-from omnigent.runner.resource_registry import SessionResourceRegistry
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.os_env import _assert_within_cwd, _handle_helper_request
+from goalrail.inner.sandbox import SandboxPolicy
+from goalrail.runner.resource_registry import SessionResourceRegistry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,7 +87,7 @@ def test_session_workspace_created_with_0700(tmp_path: Path) -> None:
     registry = SessionResourceRegistry()
     # Patch the workspace root so it lands in tmp_path.
     ws_root = tmp_path / "ws"
-    os.environ["OMNIGENT_RUNNER_OS_ENV_ROOT"] = str(ws_root)
+    os.environ["GOALRAIL_RUNNER_OS_ENV_ROOT"] = str(ws_root)
     try:
         registry.resolve_environment(
             "sess_alice",
@@ -101,7 +101,7 @@ def test_session_workspace_created_with_0700(tmp_path: Path) -> None:
         mode = workspace_dir.stat().st_mode & 0o777
         assert mode == 0o700, f"Expected 0o700, got {oct(mode)}"
     finally:
-        os.environ.pop("OMNIGENT_RUNNER_OS_ENV_ROOT", None)
+        os.environ.pop("GOALRAIL_RUNNER_OS_ENV_ROOT", None)
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ def test_create_runner_app_propagates_per_session_workspace_false(
 
     :param tmp_path: Pytest-provided temporary directory.
     """
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
 
     workspace = tmp_path / "project"
     workspace.mkdir()
@@ -394,7 +394,7 @@ def test_create_runner_app_defaults_to_per_session_workspace_true(
 
     :param tmp_path: Pytest-provided temporary directory.
     """
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
 
     workspace = tmp_path / "project"
     workspace.mkdir()
@@ -419,7 +419,7 @@ def test_create_runner_app_defaults_to_per_session_workspace_true(
 @pytest.mark.anyio
 async def test_runner_auth_rejects_no_token() -> None:
     """Requests without an auth header are rejected with 401."""
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
     from tests.runner.helpers import NullServerClient
 
     app = create_runner_app(
@@ -440,7 +440,7 @@ async def test_runner_auth_rejects_no_token() -> None:
 @pytest.mark.anyio
 async def test_runner_auth_rejects_wrong_token() -> None:
     """Requests with the wrong token are rejected with 401."""
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
     from tests.runner.helpers import NullServerClient
 
     app = create_runner_app(
@@ -464,7 +464,7 @@ async def test_runner_auth_rejects_wrong_token() -> None:
 @pytest.mark.anyio
 async def test_runner_auth_accepts_correct_token() -> None:
     """Requests with the correct token pass through to the route."""
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
     from tests.runner.helpers import NullServerClient
 
     app = create_runner_app(
@@ -490,7 +490,7 @@ async def test_runner_auth_accepts_correct_token() -> None:
 @pytest.mark.anyio
 async def test_runner_auth_health_exempt() -> None:
     """GET /health succeeds without any auth token."""
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
     from tests.runner.helpers import NullServerClient
 
     app = create_runner_app(
@@ -511,7 +511,7 @@ async def test_runner_auth_health_exempt() -> None:
 @pytest.mark.anyio
 async def test_runner_no_auth_when_token_is_none() -> None:
     """When auth_token is None, no middleware is installed."""
-    from omnigent.runner.app import create_runner_app
+    from goalrail.runner.app import create_runner_app
     from tests.runner.helpers import NullServerClient
 
     app = create_runner_app(

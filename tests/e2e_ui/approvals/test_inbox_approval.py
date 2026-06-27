@@ -13,7 +13,7 @@ real LLM → nightly + generous timeout.
 
 The second test
 (:func:`test_reparked_elicitation_reliably_resurfaces_in_inbox`) covers
-omnigent#927: when a hook retry re-parks the *same* elicitation id after the
+goalrail#927: when a hook retry re-parks the *same* elicitation id after the
 user already approved it, the inbox card must drop its stale optimistic
 verdict and resurface as an actionable pending card — not stay frozen on
 "Approved" with no buttons. It drives the real claude-native permission hook
@@ -77,8 +77,8 @@ def _wait_for(predicate, *, timeout_s: float = 30.0, interval_s: float = 0.5) ->
 def _permission_hook_payload(elicitation_id: str) -> dict:
     """Build a Claude PermissionRequest hook body that pins a stable id.
 
-    Mirrors the ``omnigent claude`` wrapper's hook subprocess: the
-    ``_omnigent_elicitation_id`` is minted once per prompt and re-sent on
+    Mirrors the ``goalrail claude`` wrapper's hook subprocess: the
+    ``_goalrail_elicitation_id`` is minted once per prompt and re-sent on
     every retry POST, so the server re-parks the SAME elicitation. A plain
     tool name (``Bash``) with no ``requestedSchema`` renders the binary
     Approve/Reject ``ApprovalCard`` (not a form / plan / question card).
@@ -95,7 +95,7 @@ def _permission_hook_payload(elicitation_id: str) -> dict:
         "tool_name": "Bash",
         "tool_input": {"command": "git push origin main"},
         "tool_use_id": "tool_use_e2e",
-        "_omnigent_elicitation_id": elicitation_id,
+        "_goalrail_elicitation_id": elicitation_id,
     }
 
 
@@ -257,7 +257,7 @@ def test_reparked_elicitation_reliably_resurfaces_in_inbox(
 ) -> None:
     """A re-parked, already-approved elicitation resurfaces as an actionable card.
 
-    Regression for omnigent#927. When the user approves an inbox approval, the
+    Regression for goalrail#927. When the user approves an inbox approval, the
     page flips it to "Approved" optimistically (``responded`` keyed by
     elicitation id). When a hook retry later re-parks the SAME id (the server
     re-parks after its disconnect/grace window), the session snapshot lists it
@@ -269,7 +269,7 @@ def test_reparked_elicitation_reliably_resurfaces_in_inbox(
     Recreated end to end against the live server: one elicitation id is parked,
     approved in a real browser, then re-parked again and again through the real
     claude-native permission hook (``POST .../hooks/permission-request``) — the
-    omnigent#927 shape of a single prompt whose hook keeps re-parking the same
+    goalrail#927 shape of a single prompt whose hook keeps re-parking the same
     id. Each retry must bring the card back as a *pending* card
     (``data-state="pending"`` with an Approve button), never a frozen
     "Approved" one. Several retries with randomized delays prove the resurface
@@ -297,7 +297,7 @@ def test_reparked_elicitation_reliably_resurfaces_in_inbox(
     page.goto(f"{base_url}/inbox")
     expect(page.get_by_text("Nothing waiting on you")).to_be_visible(timeout=_REPARK_TIMEOUT_MS)
 
-    # A single elicitation id, re-parked repeatedly — the omnigent#927 scenario
+    # A single elicitation id, re-parked repeatedly — the goalrail#927 scenario
     # is one prompt whose hook keeps re-parking the SAME id after each approval.
     eid = f"elicit_claude_{secrets.token_hex(16)}"
     rng = random.Random()

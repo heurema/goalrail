@@ -242,7 +242,7 @@ export function ForkSessionForm({
   //      fork-suffix-stripped name), since a UI session may bind the
   //      built-in directly, a same-named clone, or a "(fork …)" clone.
   //   2. targets that wouldn't preserve history: SDK targets replay the
-  //      Omnigent transcript and native targets rebuild their on-disk
+  //      Goalrail transcript and native targets rebuild their on-disk
   //      transcript from the copied items (any source) — see
   //      forkTargetCarriesHistory. Unclassifiable harnesses
   //      (harness=null) are hidden.

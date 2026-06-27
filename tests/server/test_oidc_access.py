@@ -1,4 +1,4 @@
-"""Tests for the OIDC admission policy (:mod:`omnigent.server.oidc_access`).
+"""Tests for the OIDC admission policy (:mod:`goalrail.server.oidc_access`).
 
 The callback itself isn't driven end-to-end here (that needs an IdP
 token-exchange mock — covered by the manual REPL/IdP verification in
@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.server.admin_list import AdminList
-from omnigent.server.oidc_access import OidcAdmissionPolicy, resolve_allowed_domains_path
+from goalrail.server.admin_list import AdminList
+from goalrail.server.oidc_access import OidcAdmissionPolicy, resolve_allowed_domains_path
 
 
 def _policy(
@@ -149,13 +149,13 @@ def test_config_allowed_domains_union(tmp_path: Path) -> None:
 
 
 def test_resolve_allowed_domains_path_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``OMNIGENT_OIDC_ALLOWED_DOMAINS_PATH`` wins over the default."""
-    monkeypatch.setenv("OMNIGENT_OIDC_ALLOWED_DOMAINS_PATH", "/etc/omnigent/domains")
-    assert resolve_allowed_domains_path() == Path("/etc/omnigent/domains")
+    """``GOALRAIL_OIDC_ALLOWED_DOMAINS_PATH`` wins over the default."""
+    monkeypatch.setenv("GOALRAIL_OIDC_ALLOWED_DOMAINS_PATH", "/etc/goalrail/domains")
+    assert resolve_allowed_domains_path() == Path("/etc/goalrail/domains")
 
 
 def test_resolve_allowed_domains_path_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default co-locates with the data dir as ``<data_dir>/allowed_domains``."""
-    monkeypatch.delenv("OMNIGENT_OIDC_ALLOWED_DOMAINS_PATH", raising=False)
-    monkeypatch.setenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", "/data/admin-credentials")
+    monkeypatch.delenv("GOALRAIL_OIDC_ALLOWED_DOMAINS_PATH", raising=False)
+    monkeypatch.setenv("GOALRAIL_ADMIN_CREDENTIALS_PATH", "/data/admin-credentials")
     assert resolve_allowed_domains_path() == Path("/data/allowed_domains")

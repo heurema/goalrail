@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins import get_builtin_tool
-from omnigent.tools.builtins.web_search import WebSearchTool
-from omnigent.tools.builtins.web_search_nimble import _resolve_max_results
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins import get_builtin_tool
+from goalrail.tools.builtins.web_search import WebSearchTool
+from goalrail.tools.builtins.web_search_nimble import _resolve_max_results
 
 # ── Registry ─────────────────────────────────────────
 
@@ -118,7 +118,7 @@ def test_google_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_google.httpx.get") as mock_get:
+    with patch("goalrail.tools.builtins.web_search_google.httpx.get") as mock_get:
         mock_get.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "python"}), tool_ctx)
 
@@ -165,7 +165,7 @@ def test_perplexity_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "python"}), tool_ctx)
 
@@ -214,7 +214,7 @@ def test_nimble_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "nimble"}), tool_ctx)
 
@@ -240,7 +240,7 @@ def test_nimble_answer_shown_first_when_present(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "nimble"}), tool_ctx)
 
@@ -276,7 +276,7 @@ def test_nimble_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -293,7 +293,7 @@ def test_nimble_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
 
 
 def test_nimble_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
-    """Every request carries the ``X-Client-Source`` header identifying Omnigent."""
+    """Every request carries the ``X-Client-Source`` header identifying Goalrail."""
     fake_response = MagicMock()
     fake_response.json.return_value = {"results": []}
 
@@ -301,13 +301,13 @@ def test_nimble_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "spec-nimble"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
     headers = mock_post.call_args.kwargs["headers"]
-    assert headers["X-Client-Source"] == "omnigent", (
-        f"Expected X-Client-Source 'omnigent', got {headers.get('X-Client-Source')!r}"
+    assert headers["X-Client-Source"] == "goalrail", (
+        f"Expected X-Client-Source 'goalrail', got {headers.get('X-Client-Source')!r}"
     )
 
 
@@ -319,7 +319,7 @@ def test_nimble_http_error_returns_error_string(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.side_effect = httpx.HTTPStatusError(
             "401", request=MagicMock(), response=fake_response
         )
@@ -336,7 +336,7 @@ def test_nimble_answer_kept_when_no_results(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert result == "Direct answer.", f"Answer must not be dropped, got {result!r}"
@@ -348,7 +348,7 @@ def test_nimble_rejects_unsupported_search_depth(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k", "search_depth": "fast"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert "search_depth" in result
     assert mock_post.call_count == 0, "Must not call the API for an invalid search_depth."
@@ -398,7 +398,7 @@ def test_google_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_google.httpx.get") as mock_get:
+    with patch("goalrail.tools.builtins.web_search_google.httpx.get") as mock_get:
         mock_get.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -423,7 +423,7 @@ def test_perplexity_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
+    with patch("goalrail.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -462,6 +462,6 @@ def test_non_openai_mode_is_sync_in_sessions_native_mode() -> None:
 
 
 def test_openai_mode_is_not_async() -> None:
-    """OpenAI passthrough mode should not enter Omnigent async dispatch."""
+    """OpenAI passthrough mode should not enter Goalrail async dispatch."""
     tool = WebSearchTool(llm_provider="openai")
     assert tool.is_async() is False

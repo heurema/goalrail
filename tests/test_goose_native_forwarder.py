@@ -12,7 +12,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from omnigent import goose_native_forwarder as f
+from goalrail import goose_native_forwarder as f
 
 _SCHEMA = """
 CREATE TABLE sessions (
@@ -36,7 +36,7 @@ def _seed_db(path: Path) -> None:
     con = sqlite3.connect(path)
     con.executescript(_SCHEMA)
     con.execute(
-        "INSERT INTO sessions(id, name, working_dir) VALUES('20260619_1', 'omni-1', '/tmp')"
+        "INSERT INTO sessions(id, name, working_dir) VALUES('20260619_1', 'goalrail-1', '/tmp')"
     )
     con.execute(
         "INSERT INTO messages(session_id, role, content_json, created_timestamp) VALUES (?,?,?,?)",
@@ -68,7 +68,7 @@ def test_content_text_handles_shapes() -> None:
 def test_resolve_session_id_by_name(tmp_path: Path) -> None:
     db = tmp_path / "sessions.db"
     _seed_db(db)
-    assert f._resolve_goose_session_id(db, "omni-1") == "20260619_1"
+    assert f._resolve_goose_session_id(db, "goalrail-1") == "20260619_1"
     assert f._resolve_goose_session_id(db, "missing") is None
 
 

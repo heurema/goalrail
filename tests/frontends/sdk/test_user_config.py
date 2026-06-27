@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from omnigent_ui_sdk.terminal import (
+from goalrail_ui_sdk.terminal import (
     DEFAULT_USER_CONFIG,
     UserConfig,
     UserConfigError,
@@ -19,8 +19,8 @@ from omnigent_ui_sdk.terminal import (
 def test_user_config_path_uses_shared_state_dir(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
-    assert state_dir() == tmp_path / ".omnigent"
-    assert user_config_path() == tmp_path / ".omnigent" / "config.yaml"
+    assert state_dir() == tmp_path / ".goalrail"
+    assert user_config_path() == tmp_path / ".goalrail" / "config.yaml"
 
 
 def test_user_config_path_accepts_explicit_state_dir(tmp_path) -> None:
@@ -38,7 +38,7 @@ def test_save_and_load_user_config_round_trips_yaml(tmp_path) -> None:
 
     assert written == path
     assert path.read_text(encoding="utf-8") == (
-        "# Omnigent user configuration\ntui:\n  theme: dark\n"
+        "# Goalrail user configuration\ntui:\n  theme: dark\n"
     )
     assert load_user_config(path) == UserConfig(theme="dark")
 
@@ -51,7 +51,7 @@ def test_save_preserves_sibling_cli_keys(tmp_path) -> None:
     save_user_config(UserConfig(theme="dark"), path)
 
     assert path.read_text(encoding="utf-8") == (
-        "# Omnigent user configuration\ndefault_agent: foo\nprofile: bar\ntui:\n  theme: dark\n"
+        "# Goalrail user configuration\ndefault_agent: foo\nprofile: bar\ntui:\n  theme: dark\n"
     )
 
 
@@ -66,7 +66,7 @@ def test_save_default_removes_tui_but_keeps_siblings(tmp_path) -> None:
     save_user_config(DEFAULT_USER_CONFIG, path)
 
     assert path.read_text(encoding="utf-8") == (
-        "# Omnigent user configuration\ndefault_agent: foo\n"
+        "# Goalrail user configuration\ndefault_agent: foo\n"
     )
 
 
@@ -96,7 +96,7 @@ def test_save_default_user_config_round_trips_without_tui_table(tmp_path) -> Non
 
     save_user_config(DEFAULT_USER_CONFIG, path)
 
-    assert path.read_text(encoding="utf-8") == "# Omnigent user configuration\n"
+    assert path.read_text(encoding="utf-8") == "# Goalrail user configuration\n"
     assert load_user_config(path) == DEFAULT_USER_CONFIG
 
 

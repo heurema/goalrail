@@ -12,7 +12,7 @@ end-to-end (e2e) test covering the happy-path behaviour of that feature.
 
 ## Backend Test Coverage
 
-A pull request that changes behaviour under `omnigent/` should add or update a
+A pull request that changes behaviour under `goalrail/` should add or update a
 test in the suite matching the area it touches. If a behaviour change ships
 without a covering test, flag it and name the suite the test belongs in.
 
@@ -23,7 +23,7 @@ where a unit test would suffice.
 
 Most backend areas mirror their source directory under `tests/`:
 
-| Area changed (`omnigent/…`) | Expected test suite (`tests/…`) |
+| Area changed (`goalrail/…`) | Expected test suite (`tests/…`) |
 | --- | --- |
 | `server/` | `server/` |
 | `runner/` | `runner/` |

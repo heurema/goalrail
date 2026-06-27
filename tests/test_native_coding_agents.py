@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from omnigent._wrapper_labels import (
+from goalrail._wrapper_labels import (
     KIRO_NATIVE_WRAPPER_VALUE,
     PI_NATIVE_WRAPPER_VALUE,
     UI_MODE_LABEL_KEY,
     UI_MODE_TERMINAL_VALUE,
     WRAPPER_LABEL_KEY,
 )
-from omnigent.native_coding_agents import (
+from goalrail.native_coding_agents import (
     KIRO_NATIVE_CODING_AGENT,
     PI_NATIVE_CODING_AGENT,
     native_coding_agent_for_harness,

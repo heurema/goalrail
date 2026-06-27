@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
  * those calls are rebased onto the host's API surface and auth.
  *
  * Default (no config set) preserves the standalone behavior, so importing
- * this module is a no-op until `setOmnigentHostConfig` is called by the
+ * this module is a no-op until `setGoalrailHostConfig` is called by the
  * embed entry (`embed.tsx`).
  */
 
@@ -24,12 +24,12 @@ export interface UserSuggestion {
   displayName?: string;
 }
 
-export interface OmnigentHostConfig {
+export interface GoalrailHostConfig {
   /**
    * Maps an ap-web API path (always starting with `/v1`, `/health`, or
    * `/api/...`) to a `Response`. The host implementation is responsible for
    * prefixing the real API base and attaching auth (e.g. the monolith's
-   * `workspaceFetch` against `/ajax-api/2.0/omnigent`). When omitted, the
+   * `workspaceFetch` against `/ajax-api/2.0/goalrail`). When omitted, the
    * native `fetch` is used with the path unchanged.
    */
   fetcher?: (path: string, init?: RequestInit) => Promise<Response>;
@@ -57,9 +57,9 @@ export interface OmnigentHostConfig {
   transformShareLink?: (relativePath: string) => string;
   /**
    * Path suffix appended to the origin in CLI `--server` instructions shown
-   * in the UI (e.g. `"/api/2.0/omnigent"`). When the host proxies the
-   * Omnigent API behind a path prefix, CLI users need the full URL
-   * (`https://host/api/2.0/omnigent`) — this suffix supplies the
+   * in the UI (e.g. `"/api/2.0/goalrail"`). When the host proxies the
+   * Goalrail API behind a path prefix, CLI users need the full URL
+   * (`https://host/api/2.0/goalrail`) — this suffix supplies the
    * non-origin part.
    */
   cliServerUrlSuffix?: string;
@@ -82,12 +82,12 @@ export interface OmnigentHostConfig {
   };
 }
 
-let _config: OmnigentHostConfig = {};
+let _config: GoalrailHostConfig = {};
 let _embedRoot: HTMLElement | null = null;
 
-export function setOmnigentHostConfig(config: OmnigentHostConfig): void {
+export function setGoalrailHostConfig(config: GoalrailHostConfig): void {
   // Guard: never clobber an already-installed fetcher with an empty config.
-  // `OmnigentApp` installs config during render and React may re-invoke it with
+  // `GoalrailApp` installs config during render and React may re-invoke it with
   // default/empty props on concurrent or Suspense renders; without this guard
   // such a render would wipe the host transport and API calls would fall back
   // to bare same-origin paths.
@@ -95,7 +95,7 @@ export function setOmnigentHostConfig(config: OmnigentHostConfig): void {
   _config = config ?? {};
 }
 
-export function getOmnigentHostConfig(): OmnigentHostConfig {
+export function getGoalrailHostConfig(): GoalrailHostConfig {
   return _config;
 }
 
@@ -103,7 +103,7 @@ export function getOmnigentHostConfig(): OmnigentHostConfig {
  * The host-provided user search function, or `undefined` when none is
  * configured. Consumers use the absence to stay inert (plain text input).
  */
-export function getOmnigentUserSearch(): OmnigentHostConfig["searchUsers"] {
+export function getGoalrailUserSearch(): GoalrailHostConfig["searchUsers"] {
   return _config.searchUsers;
 }
 
@@ -111,14 +111,14 @@ export function getOmnigentUserSearch(): OmnigentHostConfig["searchUsers"] {
  * The host-provided share-link transform, or `undefined` when none is
  * configured. Absence means the relative URL is used unchanged.
  */
-export function getOmnigentTransformShareLink(): OmnigentHostConfig["transformShareLink"] {
+export function getGoalrailTransformShareLink(): GoalrailHostConfig["transformShareLink"] {
   return _config.transformShareLink;
 }
 
 /**
  * The DOM node the embed is mounted into. Used as the portal container for
  * Radix overlays so portaled content (dialogs, popovers, tooltips, menus)
- * lands inside the scoped `.omnigent-app` subtree and inherits its styles.
+ * lands inside the scoped `.goalrail-app` subtree and inherits its styles.
  * Returns null in standalone mode, where Radix falls back to `document.body`.
  */
 export function setEmbedRoot(el: HTMLElement | null): void {
@@ -151,7 +151,7 @@ export function resolveWebSocketUrl(path: string): string {
 /**
  * Full server URL for CLI `--server` flags shown in in-product docs.
  * Returns `window.location.origin` plus the optional
- * {@link OmnigentHostConfig.cliServerUrlSuffix}.
+ * {@link GoalrailHostConfig.cliServerUrlSuffix}.
  */
 export function getCliServerUrl(): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";

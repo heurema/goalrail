@@ -4,10 +4,10 @@ name: compaction-test
 description: A minimal agent for compaction e2e testing.
 
 # Force the openai-agents harness explicitly. With the default
-# executor.type=omnigent and no config.harness, the runner computes
-# harness="omnigent", never spawns one, and returns empty output.
+# executor.type=goalrail and no config.harness, the runner computes
+# harness="goalrail", never spawns one, and returns empty output.
 executor:
-  type: omnigent
+  type: goalrail
   model: gpt-5.4
   config:
     harness: openai-agents

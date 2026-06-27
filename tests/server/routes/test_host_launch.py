@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 import pytest
 from fastapi import HTTPException
 
-from omnigent.entities import Conversation
-from omnigent.server.routes._host_launch import (
+from goalrail.entities import Conversation
+from goalrail.server.routes._host_launch import (
     resolve_host_launch,
     resolve_host_owner,
 )

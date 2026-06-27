@@ -1,7 +1,7 @@
 """Tests for G27 — tool name collisions fail loud at agent image load.
 
 The collision-detection logic itself lives in
-``omnigent.tools.local.load_local_python_tools``; these tests
+``goalrail.tools.local.load_local_python_tools``; these tests
 exercise it through the loader's public interface with realistic
 agent-image directory layouts.
 """
@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.types import LocalToolInfo
-from omnigent.tools.local import LocalToolLoadError, load_local_python_tools
+from goalrail.spec.types import LocalToolInfo
+from goalrail.tools.local import LocalToolLoadError, load_local_python_tools
 
 
 def _write_tool(py_dir: Path, filename: str, func_name: str) -> None:
@@ -22,7 +22,7 @@ def _write_tool(py_dir: Path, filename: str, func_name: str) -> None:
     py_dir.mkdir(parents=True, exist_ok=True)
     code = (
         '"""tool fixture."""\n'
-        "from omnigent_client import tool\n"
+        "from goalrail_client import tool\n"
         "\n"
         "\n"
         "@tool\n"
@@ -130,7 +130,7 @@ def test_multi_tool_file_collision_with_builtin(tmp_path: Path) -> None:
     multi = textwrap.dedent(
         '''\
         """Multi-tool file with one colliding name."""
-        from omnigent_client import tool
+        from goalrail_client import tool
 
 
         @tool

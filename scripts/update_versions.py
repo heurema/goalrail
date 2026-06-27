@@ -1,16 +1,16 @@
 """
-Bump the omnigent project version across all packages in lockstep.
+Bump the goalrail project version across all packages in lockstep.
 
 The three distributions in this repo release together at a single
 version:
 
-- ``omnigent``         — root ``pyproject.toml``
-- ``omnigent-client``  — ``sdks/python-client/pyproject.toml``
-- ``omnigent-ui-sdk``  — ``sdks/ui/pyproject.toml``
+- ``goalrail``         — root ``pyproject.toml``
+- ``goalrail-client``  — ``sdks/python-client/pyproject.toml``
+- ``goalrail-ui-sdk``  — ``sdks/ui/pyproject.toml``
 
 Each declares its own ``[project].version`` and ``==``-pins its
 siblings — the lockstep contract that
-``.github/workflows/release-omnigent.yml`` verifies at tag time. This
+``.github/workflows/release-goalrail.yml`` verifies at tag time. This
 script rewrites every one of those locations at once so they never
 drift.
 
@@ -65,11 +65,11 @@ class Package:
     """
     One lockstep-versioned distribution in the repo.
 
-    :param name: Distribution name, e.g. ``"omnigent"``.
+    :param name: Distribution name, e.g. ``"goalrail"``.
     :param pyproject: Path to the package's ``pyproject.toml``, e.g.
         ``Path("sdks/python-client/pyproject.toml")``.
     :param sibling_pins: Sibling distribution names this package
-        ``==``-pins, e.g. ``("omnigent-client", "omnigent-ui-sdk")``.
+        ``==``-pins, e.g. ``("goalrail-client", "goalrail-ui-sdk")``.
         Empty for a package that pins no siblings.
     """
 
@@ -87,19 +87,19 @@ def packages(root: Path) -> list[Package]:
     """
     return [
         Package(
-            "omnigent",
+            "goalrail",
             root / "pyproject.toml",
-            ("omnigent-client", "omnigent-ui-sdk"),
+            ("goalrail-client", "goalrail-ui-sdk"),
         ),
         Package(
-            "omnigent-client",
+            "goalrail-client",
             root / "sdks" / "python-client" / "pyproject.toml",
-            ("omnigent",),
+            ("goalrail",),
         ),
         Package(
-            "omnigent-ui-sdk",
+            "goalrail-ui-sdk",
             root / "sdks" / "ui" / "pyproject.toml",
-            ("omnigent-client",),
+            ("goalrail-client",),
         ),
     ]
 
@@ -116,7 +116,7 @@ def _pin_pattern(name: str) -> re.Pattern[str]:
     literal is never matched, and capturing the leading indent so it
     is preserved on rewrite.
 
-    :param name: Distribution name to match, e.g. ``"omnigent-client"``.
+    :param name: Distribution name to match, e.g. ``"goalrail-client"``.
     :returns: A compiled multiline pattern.
     """
     return re.compile(rf'^(?P<indent>\s*)"{re.escape(name)}==[^"]*",$', re.MULTILINE)
@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> None:
 
     :param argv: Argument list (defaults to ``sys.argv[1:]``).
     """
-    parser = argparse.ArgumentParser(description="Bump omnigent package versions in lockstep")
+    parser = argparse.ArgumentParser(description="Bump goalrail package versions in lockstep")
     sub = parser.add_subparsers(dest="command", required=True)
 
     pre = sub.add_parser("pre-release", help="Stamp an exact version across all packages")

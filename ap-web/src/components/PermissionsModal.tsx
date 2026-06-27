@@ -41,7 +41,7 @@ import {
   useRevokePermission,
 } from "@/hooks/usePermissions";
 import { useUserSearch } from "@/hooks/useUserSearch";
-import { getOmnigentTransformShareLink, getOmnigentUserSearch } from "@/lib/host";
+import { getGoalrailTransformShareLink, getGoalrailUserSearch } from "@/lib/host";
 import { useRebasePath } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 
@@ -217,7 +217,7 @@ interface AddUserFieldProps {
 function AddUserField({ value, onChange }: AddUserFieldProps) {
   // Read once: the host installs config eagerly before first render, so the
   // branch is stable for the lifetime of the modal.
-  const searchUsers = getOmnigentUserSearch();
+  const searchUsers = getGoalrailUserSearch();
   if (!searchUsers) {
     return (
       <Input
@@ -383,7 +383,7 @@ function AddUserCombobox({ value, onChange }: AddUserFieldProps) {
  */
 function getShareableLink(sessionId: string, rebasePath: (path: string) => string): string {
   const path = rebasePath(`/c/${sessionId}`);
-  const transform = getOmnigentTransformShareLink();
+  const transform = getGoalrailTransformShareLink();
   return transform ? transform(path) : `${window.location.origin}${path}`;
 }
 

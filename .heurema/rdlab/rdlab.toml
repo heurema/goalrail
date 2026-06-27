@@ -1,7 +1,7 @@
 [project]
 name = "goalrail"
 type = "product-rewrite-incubator"
-description = "Goalrail research layer for the Omnigent-based rewrite, product canon checks, and implementation decision support."
+description = "Goalrail research layer for the Goalrail-based rewrite, product canon checks, and implementation decision support."
 lab_root = ".heurema/rdlab"
 
 [workflow]

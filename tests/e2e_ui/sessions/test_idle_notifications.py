@@ -281,7 +281,7 @@ def test_idle_notification_fires_when_backgrounded(
     if body != "Agent finished and is ready for your input.":
         assert len(body) <= 160, f"preview exceeds its 160-char cap: {notifs}"
         assert body.count("\n") <= 2, f"preview exceeds its 3-line cap: {notifs}"
-    assert first["options"]["tag"] == f"omnigent:session:{session_id}", notifs
+    assert first["options"]["tag"] == f"goalrail:session:{session_id}", notifs
 
 
 def test_idle_notification_suppressed_when_foreground(

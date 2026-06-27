@@ -1,4 +1,4 @@
-"""Tests for the built-in agent bundle builders in ``omnigent/server/app.py``.
+"""Tests for the built-in agent bundle builders in ``goalrail/server/app.py``.
 
 The server seeds Web-UI-launchable agents (claude-native, codex-native, and
 the shipped ``debby`` / ``polly`` examples) by materializing each spec into a
@@ -19,9 +19,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.errors import OmnigentError
-from omnigent.server import app
-from omnigent.spec import load, materialize_bundle
+from goalrail.errors import GoalrailError
+from goalrail.server import app
+from goalrail.spec import load, materialize_bundle
 
 # (builder attribute, the spec entry that proves the bundle was assembled,
 # whether the source is a shipped example that a stripped deployment may omit)
@@ -100,7 +100,7 @@ def test_bundle_builder_is_reproducible(
 # REAL shipped definitions (not synthetic minimal specs — see
 # tests/spec/test_load.py for those) so a regression in either the prune logic
 # OR the polly/debby structure (e.g. a parent that becomes un-prunable) is
-# caught here. See omnigent.spec.load(..., prune_invalid_sub_agents=True).
+# caught here. See goalrail.spec.load(..., prune_invalid_sub_agents=True).
 
 # (name, bundle source dir, sub-agents the shipped definition declares today)
 _SHIPPED_SUB_AGENT_EXAMPLES = [
@@ -167,7 +167,7 @@ def test_shipped_example_survives_unknown_harness_sub_agent(
                 "spec_version": 1,
                 "name": "future_worker",
                 "executor": {
-                    "type": "omnigent",
+                    "type": "goalrail",
                     "config": {"harness": "harness-from-a-newer-server"},
                 },
             }
@@ -182,7 +182,7 @@ def test_shipped_example_survives_unknown_harness_sub_agent(
 
     # Strict: the whole spec still fails (this is what matei hit, preserved for
     # authoring/upload so real harness typos surface to the author).
-    with pytest.raises(OmnigentError, match="invalid agent spec"):
+    with pytest.raises(GoalrailError, match="invalid agent spec"):
         load(bundle, expand_env=False)
 
     # Execution path: parent + real workers survive; only the unknown one drops.

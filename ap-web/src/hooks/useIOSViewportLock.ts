@@ -15,7 +15,7 @@ import { isIOSShell } from "@/lib/nativeBridge";
  *
  * `visualViewport.height` *does* track the keyboard here (verified: it drops to
  * the area above the keyboard while `innerHeight` stays full), so we publish it
- * to `--omnigent-viewport-height`; the app-shell sizes to that (see index.css).
+ * to `--goalrail-viewport-height`; the app-shell sizes to that (see index.css).
  * The focused input is then always within the visible area, WebKit never needs
  * to pan, the header stays put, and only the inner scroll panes move. As a
  * safety net we also snap any residual document pan back to the top.
@@ -43,7 +43,7 @@ export function useIOSViewportLock(): void {
 
     const apply = () => {
       frame = 0;
-      root.style.setProperty("--omnigent-viewport-height", `${Math.round(viewport.height)}px`);
+      root.style.setProperty("--goalrail-viewport-height", `${Math.round(viewport.height)}px`);
       resetPan();
     };
 
@@ -65,7 +65,7 @@ export function useIOSViewportLock(): void {
       viewport.removeEventListener("scroll", schedule);
       window.removeEventListener("scroll", resetPan);
       window.removeEventListener("orientationchange", schedule);
-      root.style.removeProperty("--omnigent-viewport-height");
+      root.style.removeProperty("--goalrail-viewport-height");
     };
   }, []);
 }

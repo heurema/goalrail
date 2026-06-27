@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.policies.schema import SESSION_COST_ASK_APPROVED_STATE_KEY
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.builder import build_policy_engine
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.parser import parse
-from omnigent.spec.types import (
+from goalrail.policies.schema import SESSION_COST_ASK_APPROVED_STATE_KEY
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies.builder import build_policy_engine
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.parser import parse
+from goalrail.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
@@ -29,7 +29,7 @@ from omnigent.spec.types import (
     StateUpdate,
     StateUpdateAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -39,7 +39,7 @@ _COST_POLICY = FunctionPolicySpec(
     name="session_cost_guard",
     on=None,  # the function self-selects the tool_call phase
     function=FunctionRef(
-        path="omnigent.policies.builtins.cost.cost_budget",
+        path="goalrail.policies.builtins.cost.cost_budget",
         arguments={"max_cost_usd": 1000.0, "ask_thresholds_usd": [0.05]},
     ),
 )

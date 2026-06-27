@@ -15,9 +15,9 @@ native CLI: the fork is created on the TARGET agent, the copied transcript
 renders, and the fork's labels route the runner correctly —
 
   - native targets that can replay fork history stamp
-    ``omnigent.fork.carry_history`` (the runner must rebuild the native
+    ``goalrail.fork.carry_history`` (the runner must rebuild the native
     transcript; absent → the clone would launch fresh and lose history) and
-    every native target stamps the TARGET ``omnigent.wrapper`` (so the clone
+    every native target stamps the TARGET ``goalrail.wrapper`` (so the clone
     opens in the right UI mode, not the source's chat mode);
   - the SDK target stamps neither (an SDK target replays the transcript as
     context, and plain chat has no wrapper).
@@ -45,9 +45,9 @@ from tests.e2e_ui.conftest import _FILES_PROBE_ENV_AGENT_NAME
 # another test's message.
 _MARKER = "tangerine-switch-marker"
 
-_WRAPPER_LABEL_KEY = "omnigent.wrapper"
-_CARRY_HISTORY_LABEL_KEY = "omnigent.fork.carry_history"
-_SOURCE_EXTERNAL_SESSION_LABEL_KEY = "omnigent.fork.source_external_session_id"
+_WRAPPER_LABEL_KEY = "goalrail.wrapper"
+_CARRY_HISTORY_LABEL_KEY = "goalrail.fork.carry_history"
+_SOURCE_EXTERNAL_SESSION_LABEL_KEY = "goalrail.fork.source_external_session_id"
 
 
 def _agent_id_by_name(base_url: str, name: str) -> str:
@@ -62,7 +62,7 @@ def _agent_id_by_name(base_url: str, name: str) -> str:
     agent = next((a for a in resp.json()["data"] if a["name"] == name), None)
     assert agent is not None, (
         f"built-in agent {name!r} not registered on the test server — the SDK "
-        f"targets come from OMNIGENT_BUILTIN_AGENT_DIRS and the native targets "
+        f"targets come from GOALRAIL_BUILTIN_AGENT_DIRS and the native targets "
         f"are seeded unconditionally at startup, so absence is a server bug"
     )
     return str(agent["id"])
@@ -112,7 +112,7 @@ def test_fork_switch_agent_carries_history(
     :param seeded_session: ``(base_url, session_id)`` for a pre-created
         runner-bound ``hello_world`` (openai-agents SDK) session.
     :param target_name: Built-in agent name to switch the fork onto.
-    :param expected_wrapper: TARGET ``omnigent.wrapper`` value, or ``None``
+    :param expected_wrapper: TARGET ``goalrail.wrapper`` value, or ``None``
         when the target runs as plain chat (SDK).
     :param expect_carry_history: Whether the fork must stamp the
         carry-history label (true only for native targets that can replay

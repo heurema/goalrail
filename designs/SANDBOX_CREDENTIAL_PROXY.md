@@ -1,8 +1,8 @@
 # Secretless Credential Proxy
 
 > **IMPLEMENTED.** Config surface: `os_env.sandbox.credential_proxy`.
-> Code: `omnigent/inner/credential_proxy.py`,
-> `omnigent/inner/egress/proxy.py`, `omnigent/spec/parser.py`.
+> Code: `goalrail/inner/credential_proxy.py`,
+> `goalrail/inner/egress/proxy.py`, `goalrail/spec/parser.py`.
 
 ## Problem
 
@@ -23,7 +23,7 @@ the real secret ever entering the sandbox**.
 
 The L7 egress proxy is already a mandatory MITM for all HTTP(S) traffic
 leaving the sandbox (see the egress allow-list machinery in
-`omnigent/inner/egress/`). We extend it to attach credentials. The
+`goalrail/inner/egress/`). We extend it to attach credentials. The
 default model is **swap-on-access**: nothing credential-shaped enters
 the sandbox at all.
 
@@ -154,7 +154,7 @@ dataclass the runtime consumes.
 
 ## Internal model
 
-`omnigent/inner/datamodel.py`:
+`goalrail/inner/datamodel.py`:
 
 - `CredentialSourceSpec` — `kind` (`env`/`file`/`command`) + the
   corresponding field.
@@ -165,12 +165,12 @@ dataclass the runtime consumes.
 - `CredentialProxySpec` — list of entries; attached to
   `OSEnvSandboxSpec.credential_proxy`.
 
-The parser (`omnigent/spec/parser.py`, `_parse_credential_proxy`)
+The parser (`goalrail/spec/parser.py`, `_parse_credential_proxy`)
 validates each raw entry with a pydantic boundary model
 (`_CredentialProxyItemModel`, which nests `_CredentialSourceModel` for
 the `source` mapping) — type, target/targets cardinality, source shape,
 POSIX env var names, unknown-key rejection — wrapping any
-`ValidationError` as an `OmnigentError`. It then normalizes the four
+`ValidationError` as an `GoalrailError`. It then normalizes the four
 user-facing types into `CredentialProxyEntry` lists and applies the
 checks pydantic can't express: DNS-safe host (reuses
 `is_dns_safe_host`), duplicate-host rejection, `egress_rules` present,
@@ -178,7 +178,7 @@ backend allow-list, and the `gh_basic`-on-macOS guard.
 
 ## Runtime
 
-`omnigent/inner/credential_proxy.py`:
+`goalrail/inner/credential_proxy.py`:
 
 - `prepare_credential_proxy_runtime(spec, parent_env)` runs in the
   parent. For each entry it resolves the real secret and returns a
@@ -203,11 +203,11 @@ non-secret `oa_cred_*` placeholder.
 > emit the placeholder. Swap-on-access makes that unnecessary: `git`
 > fires its unauthenticated request and the proxy injects the real Basic
 > credential directly. The helper, its config-pipe payload, and the
-> `OMNIGENT_CREDENTIAL_PROXY_GIT_HTTPS` env var are gone.
+> `GOALRAIL_CREDENTIAL_PROXY_GIT_HTTPS` env var are gone.
 
 ## Proxy rewrite
 
-`omnigent/inner/egress/proxy.py`: `EgressProxy` takes
+`goalrail/inner/egress/proxy.py`: `EgressProxy` takes
 `credential_rewrites` and builds two indexes — `_cred_by_host` (the
 swap-on-access path) and `_cred_by_synthetic` (the opt-in placeholder
 path, populated only for rules carrying a synthetic).
@@ -234,7 +234,7 @@ the forwarded request stays byte-faithful. The same helper backs
 `Authorization` rewrite. When nothing matches, the original client bytes
 are forwarded untouched (no needless re-serialization).
 
-`omnigent/inner/egress/controller.py` threads `credential_rewrites`
+`goalrail/inner/egress/controller.py` threads `credential_rewrites`
 through `start_egress_proxy`, and keeps `GIT_SSL_CAINFO` in the CA env
 keys so `git`/libcurl trusts the MITM CA when it connects to the bound
 host (the CA trust is what lets the proxy terminate TLS and inject the
@@ -242,12 +242,12 @@ header — it is independent of how the credential is supplied).
 
 ## Wiring
 
-- `omnigent/inner/os_env.py` — `_start_locked` builds a scoped parent
+- `goalrail/inner/os_env.py` — `_start_locked` builds a scoped parent
   env, calls `prepare_credential_proxy_runtime`, merges
   `helper_env_updates` into the helper env (only non-empty for the
   opt-in `env` shim), and passes `rewrites` to the egress proxy. No
   config-pipe credential payload and no helper-side install step.
-- `omnigent/inner/sandbox.py` — `credential_proxy` field on
+- `goalrail/inner/sandbox.py` — `credential_proxy` field on
   `SandboxPolicy`, preserved across `_clone_policy_with`. It is
   deliberately **not** part of `to_jsonable`/`from_jsonable`: it's
   parent-side only, and serializing it would risk leaking resolved

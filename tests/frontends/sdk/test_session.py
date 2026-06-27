@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from omnigent_client._events import (
+from goalrail_client._events import (
     MessageDone,
     ResponseCompleted,
     ResponseCreated,
@@ -20,8 +20,8 @@ from omnigent_client._events import (
     StreamEvent,
     TextDelta,
 )
-from omnigent_client._session import Session
-from omnigent_client._types import Response
+from goalrail_client._session import Session
+from goalrail_client._types import Response
 
 
 def _make_response(

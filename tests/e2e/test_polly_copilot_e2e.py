@@ -4,12 +4,12 @@ Unlike the mock-LLM smoke in ``test_polly_e2e.py`` (which swaps polly's brain to
 ``openai-agents`` against a fake server), the Copilot SDK talks only to GitHub's
 Copilot backend, so this exercises the REAL harness. It is **skipped** unless a
 Copilot-capable GitHub token is resolvable — the ``copilot:`` config block
-written by ``omnigent setup``, or an ambient ``COPILOT_GITHUB_TOKEN`` /
+written by ``goalrail setup``, or an ambient ``COPILOT_GITHUB_TOKEN`` /
 ``GH_TOKEN`` / ``GITHUB_TOKEN`` — so CI without a token skips it, mirroring how
 the harness probes skip when a CLI binary is absent from ``PATH``.
 
 It boots a throwaway local server from this working tree (which carries polly's
-in-tree ``omnigent.inner.nessie.policies`` guardrails, resolved server-side) and
+in-tree ``goalrail.inner.nessie.policies`` guardrails, resolved server-side) and
 runs the real ``examples/polly`` bundle with its orchestrator brain overridden
 to ``--harness copilot``. The committed assertion is a brain-only smoke (boots +
 coherent reply). The full dispatch→collect→synthesize orchestration loop on a
@@ -49,7 +49,7 @@ _COPILOT_RUN_TIMEOUT_SEC = 280
 def _copilot_token_available() -> bool:
     """Return whether a Copilot-capable GitHub token is resolvable on this host."""
     try:
-        from omnigent.onboarding.copilot_auth import (
+        from goalrail.onboarding.copilot_auth import (
             COPILOT_TOKEN_ENV_VARS,
             copilot_github_token_configured,
         )
@@ -71,7 +71,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def local_polly_server_real(tmp_path: Path) -> Iterator[str]:
-    """Boot a throwaway local ``omnigent server`` from this working tree.
+    """Boot a throwaway local ``goalrail server`` from this working tree.
 
     Unlike ``test_polly_e2e.local_polly_server`` this does NOT strip the
     developer's credentials — the Copilot harness needs the real GitHub token to
@@ -87,7 +87,7 @@ def local_polly_server_real(tmp_path: Path) -> Iterator[str]:
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "server",
             "--host",
             "127.0.0.1",
@@ -99,7 +99,7 @@ def local_polly_server_real(tmp_path: Path) -> Iterator[str]:
             str(tmp_path / "artifacts"),
         ],
         cwd=str(_REPO),
-        env={**os.environ, "OMNIGENT_SKIP_ONBOARD": "1", "OMNIGENT_NO_UPDATE_CHECK": "1"},
+        env={**os.environ, "GOALRAIL_SKIP_ONBOARD": "1", "GOALRAIL_NO_UPDATE_CHECK": "1"},
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -130,7 +130,7 @@ def test_polly_brain_on_copilot_boots_and_responds(local_polly_server_real: str)
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "run",
             str(_POLLY),
             "--server",
@@ -143,7 +143,7 @@ def test_polly_brain_on_copilot_boots_and_responds(local_polly_server_real: str)
             "In one short sentence, what are you and how do you handle a coding task?",
         ],
         cwd=str(_REPO),
-        env={**os.environ, "OMNIGENT_SKIP_ONBOARD": "1", "OMNIGENT_NO_UPDATE_CHECK": "1"},
+        env={**os.environ, "GOALRAIL_SKIP_ONBOARD": "1", "GOALRAIL_NO_UPDATE_CHECK": "1"},
         capture_output=True,
         text=True,
         timeout=_COPILOT_RUN_TIMEOUT_SEC,

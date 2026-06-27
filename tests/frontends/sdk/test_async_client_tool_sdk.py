@@ -29,8 +29,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from omnigent_client._events import ClientTaskCancel, ToolCall, ToolResult
-from omnigent_client._sse import parse_sse_stream
+from goalrail_client._events import ClientTaskCancel, ToolCall, ToolResult
+from goalrail_client._sse import parse_sse_stream
 
 
 async def _bytes(*frames: bytes) -> AsyncIterator[bytes]:

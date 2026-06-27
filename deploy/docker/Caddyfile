@@ -1,8 +1,8 @@
 # Caddy config for the docker-compose.https.yaml overlay.
 #
-# Caddy auto-provisions a Let's Encrypt cert for {$OMNIGENT_DOMAIN}
-# (HTTP-01 challenge) and reverse-proxies to the omnigent service
-# over the internal docker network — the omnigent container is no
+# Caddy auto-provisions a Let's Encrypt cert for {$GOALRAIL_DOMAIN}
+# (HTTP-01 challenge) and reverse-proxies to the goalrail service
+# over the internal docker network — the goalrail container is no
 # longer directly exposed to the host.
 #
 # No ACME email is required: Let's Encrypt allows anonymous account
@@ -13,11 +13,11 @@
 #       email you@example.com
 #   }
 #
-# (Earlier versions had `{ email {$OMNIGENT_ACME_EMAIL} }` here, which
+# (Earlier versions had `{ email {$GOALRAIL_ACME_EMAIL} }` here, which
 # hard-failed at startup when the var was unset — `email` with no
 # argument is a Caddyfile parse error. Omitting the block avoids that.)
 
-{$OMNIGENT_DOMAIN} {
+{$GOALRAIL_DOMAIN} {
 	encode zstd gzip
-	reverse_proxy omnigent:8000
+	reverse_proxy goalrail:8000
 }

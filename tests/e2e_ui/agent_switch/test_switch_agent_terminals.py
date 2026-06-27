@@ -30,9 +30,9 @@ from playwright.sync_api import Page, expect
 # var is the opt-in to re-run once the affordance returns (and to drop
 # this gate again).
 pytestmark = pytest.mark.skipif(
-    not os.environ.get("OMNIGENT_E2E_SWITCH_AGENT_UI"),
+    not os.environ.get("GOALRAIL_E2E_SWITCH_AGENT_UI"),
     reason="Switch-agent has no UI entry point (header button removed); "
-    "set OMNIGENT_E2E_SWITCH_AGENT_UI=1 once the affordance returns.",
+    "set GOALRAIL_E2E_SWITCH_AGENT_UI=1 once the affordance returns.",
 )
 
 # Generous budget for the switch's background runner reset: the server

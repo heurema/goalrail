@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.tools.builtins.export_agent`."""
+"""Unit tests for :mod:`goalrail.tools.builtins.export_agent`."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.export_agent import ExportAgentTool
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.export_agent import ExportAgentTool
 
 
 @pytest.fixture()

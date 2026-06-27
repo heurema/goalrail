@@ -13,7 +13,7 @@ running Goalrail hosts, two ways:
 > [!IMPORTANT]
 > **E2B boots from a pre-built *template*, not a registry image.** Unlike
 > the Modal / Daytona / CoreWeave launchers — which pull
-> `ghcr.io/omnigent-ai/omnigent-host` directly — E2B cannot start an
+> `ghcr.io/heurema/goalrail-host` directly — E2B cannot start an
 > arbitrary registry image at create time. You must first build the
 > Goalrail host image into an E2B template (a one-time step, below); the
 > launcher's `template` field then names *that template*, not a
@@ -23,7 +23,7 @@ running Goalrail hosts, two ways:
 ## Prerequisites
 
 ```bash
-pip install 'omnigent[e2b]'   # installs the e2b SDK extra
+pip install 'goalrail[e2b]'   # installs the e2b SDK extra
 npm i -g @e2b/cli             # the E2B CLI, for building the template
 ```
 
@@ -43,7 +43,7 @@ e2b auth login                # one-time, authenticates the E2B CLI too
 > maximum at creation, but E2B **rejects** (does not clamp) a request above
 > the account cap, so `provision` automatically **retries clamped to the
 > account's maximum** (e.g. 1 h on Hobby) — verified live. Set
-> `OMNIGENT_E2B_MAX_LIFETIME_S` to request a specific lifetime and skip the
+> `GOALRAIL_E2B_MAX_LIFETIME_S` to request a specific lifetime and skip the
 > retry. A managed session outliving the cap relies on the dead-sandbox
 > relaunch path (same posture as Modal's 24 h limit), so a **Pro account**
 > is recommended for anything beyond short demos.
@@ -56,22 +56,22 @@ E2B builds a template from a Dockerfile whose base image must be
 one-liner that layers nothing on top of the published image:
 
 ```bash
-mkdir -p omnigent-e2b && cd omnigent-e2b
+mkdir -p goalrail-e2b && cd goalrail-e2b
 cat > e2b.Dockerfile <<'EOF'
 # Single-stage, Debian-based — both E2B requirements. The host image
-# already bakes the full omnigent install plus git / tmux / curl, so
+# already bakes the full goalrail install plus git / tmux / curl, so
 # nothing else is needed here.
-FROM ghcr.io/omnigent-ai/omnigent-host:latest
+FROM ghcr.io/heurema/goalrail-host:latest
 EOF
 
-e2b template build --name omnigent-host --dockerfile e2b.Dockerfile
+e2b template build --name goalrail-host --dockerfile e2b.Dockerfile
 ```
 
-`omnigent-host` is the default template name the launcher looks for
-([`DEFAULT_E2B_TEMPLATE`](../../omnigent/onboarding/sandboxes/e2b.py)), so
+`goalrail-host` is the default template name the launcher looks for
+([`DEFAULT_E2B_TEMPLATE`](../../goalrail/onboarding/sandboxes/e2b.py)), so
 a deployment that uses that name needs no further config. Use a different
 name (or pin a `:sha-<short>` host image) and point the launcher at it
-with `sandbox.e2b.template` / `OMNIGENT_E2B_TEMPLATE`.
+with `sandbox.e2b.template` / `GOALRAIL_E2B_TEMPLATE`.
 
 To run your own host image, build the `host` target of
 [`deploy/docker/Dockerfile`](../docker/Dockerfile)
@@ -89,7 +89,7 @@ Provision a sandbox and ship your local checkout into it:
 goalrail sandbox create --provider e2b
 ```
 
-This starts a sandbox from the `omnigent-host` template, builds wheels
+This starts a sandbox from the `goalrail-host` template, builds wheels
 from your local checkout, and overlays them on top — so the sandbox runs
 *your* code, not whatever the template was built from. Then register it
 as a host with your server:
@@ -115,7 +115,7 @@ delete the old one (via the [dashboard](https://e2b.dev/dashboard) or
 timeout.
 
 To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNIGENT_E2B_SANDBOX_ENV` in your shell to a comma-separated list of
+`GOALRAIL_E2B_SANDBOX_ENV` in your shell to a comma-separated list of
 variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
 `create` — the named variables are copied from your environment into the
 sandbox at provision time.
@@ -153,14 +153,14 @@ sandbox:
   provider: e2b
   server_url: https://your-host
   e2b:
-    template: omnigent-host          # E2B template NAME (default: omnigent-host)
+    template: goalrail-host          # E2B template NAME (default: goalrail-host)
     env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]
 ```
 
 > [!NOTE]
 > `sandbox.e2b.template` is an **E2B template name** (built above), not a
 > registry image reference — the field that holds a `ghcr.io/...` ref on
-> the other providers. Omit it to use the default `omnigent-host`
+> the other providers. Omit it to use the default `goalrail-host`
 > template.
 
 ## Credentials for the sandbox (LLM keys, git tokens)
@@ -192,7 +192,7 @@ identical to Modal; see the [variable table and per-plan
 recipes](../modal/README.md#llm-credentials-for-managed-sandboxes) and
 [git credentials](../modal/README.md#git-credentials-private-repositories).
 The in-sandbox host forwards the same standard set to its runners, and
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH` (as an injected variable) names any
+`GOALRAIL_RUNNER_ENV_PASSTHROUGH` (as an injected variable) names any
 extras.
 
 The same env-injection also carries **credentials for connecting to the
@@ -201,7 +201,7 @@ credentials instead of a launch token. Managed launches never need this:
 the server injects a per-launch host token automatically. But a
 [CLI-launched](#cli-launched-sandboxes) host does when the server requires
 authentication — name the keys (e.g. `DATABRICKS_HOST` +
-`DATABRICKS_TOKEN`) in `OMNIGENT_E2B_SANDBOX_ENV` before `create`. See
+`DATABRICKS_TOKEN`) in `GOALRAIL_E2B_SANDBOX_ENV` before `create`. See
 [Connecting to an authenticated
 server](../modal/README.md#connecting-to-an-authenticated-server) in the
 Modal guide.
@@ -222,12 +222,12 @@ Modal guide.
 - **The launch token's lifetime is ~25 h, derived from the *requested*
   lifetime.** E2B sandboxes share Modal's 24 h hard cap, so the per-launch
   host token outlives the sandbox by an hour to re-authenticate the tunnel
-  across reconnects. The TTL is computed from `OMNIGENT_E2B_MAX_LIFETIME_S`
+  across reconnects. The TTL is computed from `GOALRAIL_E2B_MAX_LIFETIME_S`
   (default 24 h) at server start, so it bounds the *longest possible*
   sandbox. On a capped account where `provision` clamps the sandbox shorter
   (e.g. Hobby's 1 h), the token over-covers the now-shorter sandbox — safe
   for re-auth, but a leaked token is replayable for the full window. To
-  tighten this, **set `OMNIGENT_E2B_MAX_LIFETIME_S` to your account cap** so
+  tighten this, **set `GOALRAIL_E2B_MAX_LIFETIME_S` to your account cap** so
   the token TTL tracks the granted lifetime (or set a shorter `token_ttl_s`
   on a directly-constructed `ManagedSandboxConfig`). A relaunch mints a
   fresh token.
@@ -241,11 +241,11 @@ Modal guide.
 - **"E2B sandbox creation failed: template '…' is unavailable"** — the
   host image was never built into an E2B template, or the name doesn't
   match. Run the [template build](#build-the-host-template-one-time) with
-  `--name omnigent-host` (or set `sandbox.e2b.template` to your name).
+  `--name goalrail-host` (or set `sandbox.e2b.template` to your name).
 - **"managed host did not come online within 120s"** — the sandbox
   couldn't dial back to `server_url`. Confirm it's a public HTTPS URL
   reachable from E2B's cloud (not `localhost`), and check
-  `/tmp/omnigent-host.log` inside the sandbox.
+  `/tmp/goalrail-host.log` inside the sandbox.
 - **Sandbox stops after ~1 hour** — you're on a Hobby account (1 h cap);
   `provision` auto-clamps to it (you'll see a one-line warning). Upgrade
   to Pro for the 24 h maximum, or expect the dead-sandbox relaunch path to
@@ -254,7 +254,7 @@ Modal guide.
 ## Lifecycle notes
 
 - **Hard lifetime cap, no idle-stop disable.** `provision` requests
-  `OMNIGENT_E2B_MAX_LIFETIME_S` (default the 24 h Pro maximum); E2B rejects
+  `GOALRAIL_E2B_MAX_LIFETIME_S` (default the 24 h Pro maximum); E2B rejects
   a request above the account cap, so creation retries clamped to it (e.g.
   1 h on Hobby). `keep_alive` re-extends a live sandbox on reconnect, but
   there is no never-expire option — a managed session past the cap is
@@ -266,13 +266,13 @@ Modal guide.
   create time.
 - **Custom images** require rebuilding the template: `FROM` your image in
   `e2b.Dockerfile` and `e2b template build` it, then set
-  `sandbox.e2b.template` / `OMNIGENT_E2B_TEMPLATE`.
+  `sandbox.e2b.template` / `GOALRAIL_E2B_TEMPLATE`.
 
 ## Environment variable reference
 
 | Variable | Where it's read | Purpose |
 |---|---|---|
 | `E2B_API_KEY` | CLI machine / server | E2B API credentials (required) |
-| `OMNIGENT_E2B_TEMPLATE` | CLI machine / server | E2B template name to provision from (`sandbox.e2b.template` takes precedence; default `omnigent-host`) |
-| `OMNIGENT_E2B_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.e2b.env` takes precedence for managed) |
-| `OMNIGENT_E2B_MAX_LIFETIME_S` | CLI machine / server | Requested sandbox lifetime in seconds (default 24 h); creation auto-clamps to the account cap if exceeded |
+| `GOALRAIL_E2B_TEMPLATE` | CLI machine / server | E2B template name to provision from (`sandbox.e2b.template` takes precedence; default `goalrail-host`) |
+| `GOALRAIL_E2B_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.e2b.env` takes precedence for managed) |
+| `GOALRAIL_E2B_MAX_LIFETIME_S` | CLI machine / server | Requested sandbox lifetime in seconds (default 24 h); creation auto-clamps to the account cap if exceeded |

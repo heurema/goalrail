@@ -18,18 +18,18 @@ from typing import NoReturn
 
 import pytest
 
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.artifact_store.s3 import S3ArtifactStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.artifact_store.s3 import S3ArtifactStore
 
 _ENTRYPOINT_MODULE = "deploy.docker.entrypoint"
 _BOOT_MODULES = (
     "fastapi",
-    "omnigent.db.utils",
-    "omnigent.runtime",
-    "omnigent.server.app",
-    "omnigent.server.server_config",
-    "omnigent.stores.agent_store.sqlalchemy_store",
-    "omnigent.stores.artifact_store.local",
+    "goalrail.db.utils",
+    "goalrail.runtime",
+    "goalrail.server.app",
+    "goalrail.server.server_config",
+    "goalrail.stores.agent_store.sqlalchemy_store",
+    "goalrail.stores.artifact_store.local",
     "uvicorn",
 )
 
@@ -86,7 +86,7 @@ def test_entrypoint_imports_without_side_effects(
 
 
 # ── artifact-store resolution + selection ────────────────────────────────
-# OMNIGENT_ARTIFACT_URI=s3://… selects the remote S3ArtifactStore (durable on an
+# GOALRAIL_ARTIFACT_URI=s3://… selects the remote S3ArtifactStore (durable on an
 # ephemeral/multi-replica deploy); anything else falls back to local. The URI is
 # validated up front (must be s3://), mirroring how DATABASE_URL picks the DB.
 
@@ -97,14 +97,14 @@ def _entrypoint_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     auth disabled so it doesn't mint accounts secrets, and no ambient
     artifact-store URI (each test sets it as needed)."""
     # Point config at an empty file so the resolver doesn't read the developer's
-    # ambient ~/.omnigent/config.yaml (keeps the test hermetic; CI has none).
+    # ambient ~/.goalrail/config.yaml (keeps the test hermetic; CI has none).
     config_file = tmp_path / "config.yaml"
     config_file.write_text("{}\n")
-    monkeypatch.setenv("OMNIGENT_CONFIG", str(config_file))
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/omnigent")
+    monkeypatch.setenv("GOALRAIL_CONFIG", str(config_file))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@localhost:5432/goalrail")
     monkeypatch.setenv("ARTIFACT_DIR", str(tmp_path / "artifacts"))
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "0")
-    monkeypatch.delenv("OMNIGENT_ARTIFACT_URI", raising=False)
+    monkeypatch.setenv("GOALRAIL_AUTH_ENABLED", "0")
+    monkeypatch.delenv("GOALRAIL_ARTIFACT_URI", raising=False)
 
 
 def test_resolve_config_captures_s3_artifact_uri(
@@ -112,7 +112,7 @@ def test_resolve_config_captures_s3_artifact_uri(
 ) -> None:
     from deploy.docker.entrypoint import _resolve_config
 
-    monkeypatch.setenv("OMNIGENT_ARTIFACT_URI", "s3://my-bucket/artifacts")
+    monkeypatch.setenv("GOALRAIL_ARTIFACT_URI", "s3://my-bucket/artifacts")
     assert _resolve_config().artifact_store_uri == "s3://my-bucket/artifacts"
 
 
@@ -127,7 +127,7 @@ def test_resolve_config_rejects_non_s3_artifact_uri(
 ) -> None:
     from deploy.docker.entrypoint import _resolve_config
 
-    monkeypatch.setenv("OMNIGENT_ARTIFACT_URI", "gs://my-bucket")
+    monkeypatch.setenv("GOALRAIL_ARTIFACT_URI", "gs://my-bucket")
     with pytest.raises(RuntimeError, match="s3://"):
         _resolve_config()
 
@@ -146,7 +146,7 @@ def test_select_artifact_store(
 
     resolved = _ResolvedConfig(
         cfg={},
-        database_url="postgresql://u:p@localhost/omnigent",
+        database_url="postgresql://u:p@localhost/goalrail",
         artifact_dir=tmp_path,
         artifact_store_uri=artifact_store_uri,
         host="0.0.0.0",

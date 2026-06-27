@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from omnigent.entities import (
+from goalrail.entities import (
     NON_CONTENT_ITEM_TYPES,
     Conversation,
     ConversationItem,

@@ -25,7 +25,7 @@ A spike found agy exposes a **structured connect-RPC surface** that replaces all
 connect-RPC service `exa.language_server_pb.LanguageServerService`, TLS HTTP/2 on a loopback port, self-signed (`verify=False`), JSON accepted (`Content-Type: application/json`). All of the following are live-verified except where noted.
 
 - **Identity:** `cascadeId == conversationId == brain-dir UUID` (one id). `GetCascadeId`/`GetCascadeStatus`/`ListCascadeIds` do **not** exist (404).
-- **Port discovery:** reuse `omnigent/antigravity_native_rpc.py` — `discover_language_server_port(pid)` / `_candidate_agy_rpc_ports()` + `_conversation_matches` (Heartbeat → 200; `GetConversationMetadata` echoes `rootConversationId`).
+- **Port discovery:** reuse `goalrail/antigravity_native_rpc.py` — `discover_language_server_port(pid)` / `_candidate_agy_rpc_ports()` + `_conversation_matches` (Heartbeat → 200; `GetConversationMetadata` echoes `rootConversationId`).
 - **Read / detect:**
   - `GetCascadeTrajectorySteps {cascadeId}` (unary) → `steps[]` — one-shot.
   - `StreamAgentStateUpdates {conversationId}` (connect server-stream, `application/connect+json`, 5-byte `[flag][BE-len]` framing) → first frame `update.mainTrajectoryUpdate.stepsUpdate.steps[]`, then long-polls — live.

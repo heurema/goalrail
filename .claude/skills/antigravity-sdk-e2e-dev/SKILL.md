@@ -1,20 +1,20 @@
 ---
 name: antigravity-sdk-e2e-dev
-description: Spin up a live local Omnigent server and exercise the Antigravity (Gemini) SDK harness end-to-end — build antigravity agents, run real turns, smoke-test, and bug-bash. Load when developing, testing, or debugging the antigravity harness (omnigent/inner/antigravity_executor.py, antigravity_harness.py, omnigent/onboarding/antigravity_auth.py) or its auth / model / tool-bridge behavior.
+description: Spin up a live local Goalrail server and exercise the Antigravity (Gemini) SDK harness end-to-end — build antigravity agents, run real turns, smoke-test, and bug-bash. Load when developing, testing, or debugging the antigravity harness (goalrail/inner/antigravity_executor.py, antigravity_harness.py, goalrail/onboarding/antigravity_auth.py) or its auth / model / tool-bridge behavior.
 ---
 
 # Antigravity SDK harness: end-to-end dev & testing
 
 The `antigravity` harness drives Google's **Antigravity Python SDK**
 (`google-antigravity`, an in-process `Agent`/`Conversation`) and bridges
-Omnigent's `sys_*` tools into the SDK as `custom_tools`. It is **Gemini-native**:
+Goalrail's `sys_*` tools into the SDK as `custom_tools`. It is **Gemini-native**:
 it authenticates with a Gemini / Antigravity API key (or Vertex AI) and has **no
 OpenAI-compatible gateway / Databricks path**. This skill is the proven recipe
 for running it **for real** against a live local server — not just the unit
 tests.
 
 > The harness runs as a **local runner** from your current checkout, so
-> `omni run <bundle> --server <url>` exercises exactly the code you're on.
+> `goalrail run <bundle> --server <url>` exercises exactly the code you're on.
 
 ## Prerequisites (check these first)
 
@@ -23,12 +23,12 @@ tests.
 2. **A Gemini API key is configured.** The SDK *requires* one (`AIza…`); there
    is no login flow. Verify (booleans only — never print the key):
    ```bash
-   .venv/bin/python -c "from omnigent.onboarding.antigravity_auth import antigravity_api_key_configured as c; import os; print('config:', c(), 'env:', bool(os.environ.get('GEMINI_API_KEY') or os.environ.get('ANTIGRAVITY_API_KEY')))"
+   .venv/bin/python -c "from goalrail.onboarding.antigravity_auth import antigravity_api_key_configured as c; import os; print('config:', c(), 'env:', bool(os.environ.get('GEMINI_API_KEY') or os.environ.get('ANTIGRAVITY_API_KEY')))"
    ```
-   If both are `False`, run `omni setup` → **Antigravity** and paste a key, or
+   If both are `False`, run `goalrail setup` → **Antigravity** and paste a key, or
    `export GEMINI_API_KEY=AIza…`.
 3. **`google-antigravity` is installed** (the `antigravity` extra —
-   `pip install "omnigent[antigravity]"`):
+   `pip install "goalrail[antigravity]"`):
    `.venv/bin/python -c "import google.antigravity as a; print(a.__file__)"`.
 4. **glibc ≥ ~2.36.** The SDK spawns a **native `localharness` binary** that
    needs a recent glibc (`GLIBC_ABI_DT_RELR`). Check `ldd --version | head -1`.
@@ -46,13 +46,13 @@ tests.
 ## Step 1 — start a local server
 
 ```bash
-cd /path/to/omnigent
-.venv/bin/omni server start          # spawns a detached server on a free loopback port
-.venv/bin/omni server status         # prints the URL, e.g. http://127.0.0.1:6767
+cd /path/to/goalrail
+.venv/bin/goalrail server start          # spawns a detached server on a free loopback port
+.venv/bin/goalrail server status         # prints the URL, e.g. http://127.0.0.1:6767
 ```
 
 Use the **printed URL** below as `$SERVER`. (You can also run a foreground
-server on a fixed port with `omnigent server --port 7777 --no-open`.)
+server on a fixed port with `goalrail server --port 7777 --no-open`.)
 
 ## Step 2 — build an antigravity agent bundle
 
@@ -67,7 +67,7 @@ spec_version: 1
 name: agy-dev
 description: Antigravity SDK dev/test agent.
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: antigravity
     model: gemini-3.5-flash      # default; gemini-3-pro 404s on a plain AI-Studio key
@@ -82,8 +82,8 @@ For sub-agents, tools, guardrails/policies, copy the field shapes from
 ## Step 3 — run a turn (and smoke-test)
 
 ```bash
-SERVER=http://127.0.0.1:6767   # the URL from `omni server status`
-timeout 280 .venv/bin/omni run /tmp/agy-dev \
+SERVER=http://127.0.0.1:6767   # the URL from `goalrail server status`
+timeout 280 .venv/bin/goalrail run /tmp/agy-dev \
   -p "Reply with exactly the single word: PONG" \
   --server "$SERVER" 2>&1
 ```
@@ -105,7 +105,7 @@ streaming, harness.
 | Vertex AI auth | set `executor.config.vertex: true` + `project`/`location` and use GCP application-default creds instead of an API key |
 | Policy / guardrail | add a guardrail that denies a keyword; confirm it blocks (see the **sharp edges** below — LLM-phase + tool-call enforcement was incomplete at merge) |
 | Per-session brain override | run a bundle agent (polly/debby) and select `antigravity` as the brain harness (it's in `BRAIN_HARNESS_LABELS`) |
-| Concurrency / leaks | fire several `omni run … &` at once; then `pgrep -af localharness` to check for orphaned native subprocesses |
+| Concurrency / leaks | fire several `goalrail run … &` at once; then `pgrep -af localharness` to check for orphaned native subprocesses |
 
 ## Gotchas (these cost real time)
 
@@ -113,13 +113,13 @@ streaming, harness.
    `--server` sends your turn to that remote deploy — which may be **stale** and
    reject the antigravity harness with `executor.config.harness: must be one of
    […], got 'antigravity'`. **Always pass `--server http://127.0.0.1:<port>`**
-   for local testing. (That allowlist is `omnigent/spec/_omnigent_compat.py`; if
+   for local testing. (That allowlist is `goalrail/spec/_goalrail_compat.py`; if
    a *local* server rejects `antigravity`, it's running stale code — restart it
    from your checkout.)
 2. **A spec with `spec_version` must be a directory + `config.yaml`**, never a
    single `.yaml` file.
 3. **Antigravity needs a Gemini key** (no login). Resolution precedence: spec
-   `executor.auth` (api_key) > stored `antigravity:` config block (`omni setup`)
+   `executor.auth` (api_key) > stored `antigravity:` config block (`goalrail setup`)
    > ambient `GEMINI_API_KEY` / `ANTIGRAVITY_API_KEY`. Vertex AI is opt-in via
    `executor.config` `vertex`/`project`/`location`.
 4. **No OpenAI gateway / Databricks.** The SDK has no `base_url`; a `databricks`
@@ -132,17 +132,17 @@ streaming, harness.
 6. **The native binary needs glibc ≥ ~2.36** (see Prereq 4). This is the most
    common "it won't even start" cause; check it before assuming a harness bug.
 7. **Turns take ~10–60s** — always wrap in `timeout 280`.
-8. **Local-runner topology:** `omni run <bundle> --server <url>` runs the
+8. **Local-runner topology:** `goalrail run <bundle> --server <url>` runs the
    harness from your **current checkout**; the server only holds state. The
-   managed `omni server start` server runs from whatever venv launched it.
+   managed `goalrail server start` server runs from whatever venv launched it.
 9. **Never print/echo the Gemini key** in logs or commands.
 
 ## Code & tests
 
-- **Executor (SDK driver):** `omnigent/inner/antigravity_executor.py`
-- **Wrap (HARNESS_ANTIGRAVITY_* env → executor):** `omnigent/inner/antigravity_harness.py`
-- **Auth / key resolution:** `omnigent/onboarding/antigravity_auth.py`
-- **Spawn env:** `_build_antigravity_spawn_env` in `omnigent/runtime/workflow.py`
+- **Executor (SDK driver):** `goalrail/inner/antigravity_executor.py`
+- **Wrap (HARNESS_ANTIGRAVITY_* env → executor):** `goalrail/inner/antigravity_harness.py`
+- **Auth / key resolution:** `goalrail/onboarding/antigravity_auth.py`
+- **Spawn env:** `_build_antigravity_spawn_env` in `goalrail/runtime/workflow.py`
 
 ```bash
 # Unit tests (use --frozen; the cwsandbox extra is unsatisfiable on public PyPI here)
@@ -156,7 +156,7 @@ uv run --frozen --extra dev python -m pytest \
 
 There is no gated per-harness antigravity e2e test yet (it is deliberately
 excluded from the live no-AGENT harness matrix in
-`tests/e2e/omnigent/test_run_harness_without_agent_e2e.py`, because that matrix
+`tests/e2e/goalrail/test_run_harness_without_agent_e2e.py`, because that matrix
 authenticates through the Databricks gateway and antigravity is Gemini-native).
 This skill IS the live coverage.
 
@@ -197,7 +197,7 @@ against your checkout:
 ## Cleanup
 
 ```bash
-.venv/bin/omni server stop      # stop the managed background server
+.venv/bin/goalrail server stop      # stop the managed background server
 rm -rf /tmp/agy-dev             # remove scratch bundles
 pgrep -af "localharness"        # confirm no orphaned native subprocesses linger
 ```

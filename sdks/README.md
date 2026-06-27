@@ -8,23 +8,23 @@ Python packages for integrating with Goalrail.
 sdks/
   python-client/           # Headless HTTP/SSE client
     pyproject.toml
-    omnigent_client/    # import omnigent_client
+    goalrail_client/    # import goalrail_client
   ui/                      # Terminal UI layer (Rich + prompt_toolkit)
     pyproject.toml
-    omnigent_ui_sdk/    # import omnigent_ui_sdk
+    goalrail_ui_sdk/    # import goalrail_ui_sdk
       terminal/
 ```
 
 Claude Code skills for SDK development live under `.claude/skills/`.
 
-## `omnigent_client` — the headless Goalrail client
+## `goalrail_client` — the headless Goalrail client
 
 Pure HTTP/SSE client. No Rich, no prompt_toolkit, no terminal
 dependencies. Use this for:
 
 - Scripts that invoke an agent and collect output.
 - Web frontends, Slack bots, test harnesses — anything non-terminal.
-- As the foundation layer for `omnigent_ui_sdk` below.
+- As the foundation layer for `goalrail_ui_sdk` below.
 
 Three levels of abstraction are available:
 
@@ -46,10 +46,10 @@ pip install -e sdks/python-client
 
 ```python
 import asyncio
-from omnigent_client import OmnigentClient
+from goalrail_client import GoalrailClient
 
 async def main():
-    async with OmnigentClient(base_url="http://localhost:8080") as client:
+    async with GoalrailClient(base_url="http://localhost:8080") as client:
         session = client.session(model="archer")
         async for event in session.send("hello"):
             print(event)
@@ -60,7 +60,7 @@ asyncio.run(main())
 ### Using semantic blocks (web, Slack, or any custom UI)
 
 ```python
-from omnigent_client import (
+from goalrail_client import (
     BlockStream, TextChunk, ToolGroup, ResponseEndBlock,
     pipe, skip_intermediate_ends,
 )
@@ -82,9 +82,9 @@ async def handle(websocket, session, text):
                 await websocket.send_json({"type": "done", "status": s})
 ```
 
-## `omnigent_ui_sdk` — the terminal frontend
+## `goalrail_ui_sdk` — the terminal frontend
 
-Thin layer on top of `omnigent_client` for building Goalrail terminal REPLs.
+Thin layer on top of `goalrail_client` for building Goalrail terminal REPLs.
 Provides:
 
 - **RichBlockFormatter** — converts `StreamBlock` values to Rich
@@ -98,17 +98,17 @@ Provides:
 pip install -e sdks/ui
 ```
 
-(Pulls in `omnigent-client` as a dependency.)
+(Pulls in `goalrail-client` as a dependency.)
 
 ### Minimal REPL
 
 ```python
 import asyncio
-from omnigent_client import (
-    OmnigentClient, LocalServer, BlockStream,
+from goalrail_client import (
+    GoalrailClient, LocalServer, BlockStream,
     pipe, skip_intermediate_ends,
 )
-from omnigent_ui_sdk import RichBlockFormatter, TerminalHost
+from goalrail_ui_sdk import RichBlockFormatter, TerminalHost
 
 async def main():
     async with LocalServer(agent_path="./my-agent/") as server:
@@ -152,7 +152,7 @@ class MyFormatter(RichBlockFormatter):
 Use transforms to reshape the block stream:
 
 ```python
-from omnigent_client import pipe, skip_blocks, ReasoningBlock
+from goalrail_client import pipe, skip_blocks, ReasoningBlock
 
 stream = pipe(
     block_stream.stream(session, text),
@@ -162,6 +162,6 @@ stream = pipe(
 
 ## Reference Implementation
 
-The built-in Goalrail REPL at `omnigent/repl/` demonstrates all features:
+The built-in Goalrail REPL at `goalrail/repl/` demonstrates all features:
 streaming, tool calls, reasoning, slash commands, conversation
-switching, elapsed timer. See `omnigent/repl/_repl.py`.
+switching, elapsed timer. See `goalrail/repl/_repl.py`.

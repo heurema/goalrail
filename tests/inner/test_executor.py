@@ -1,13 +1,9 @@
 """Tests for the Executor interface and MockExecutor."""
 
 import asyncio
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from omnigent.inner.executor import (
+from goalrail.inner.executor import (
     MockExecutor,
     TextChunk,
     ToolCallRequest,

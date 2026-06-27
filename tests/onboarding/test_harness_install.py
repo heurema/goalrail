@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.harness_install`."""
+"""Tests for :mod:`goalrail.onboarding.harness_install`."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import subprocess
 
 import pytest
 
-from omnigent.onboarding import harness_install as hi
-from omnigent.onboarding.provider_config import ANTHROPIC_FAMILY, GEMINI_FAMILY, OPENAI_FAMILY
+from goalrail.onboarding import harness_install as hi
+from goalrail.onboarding.provider_config import ANTHROPIC_FAMILY, GEMINI_FAMILY, OPENAI_FAMILY
 
 
 @pytest.mark.parametrize(
@@ -350,7 +350,7 @@ def test_harness_login_skips_when_already_logged_in(monkeypatch: pytest.MonkeyPa
     """
     monkeypatch.setattr(hi.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in", lambda key: True
+        "goalrail.onboarding.harness_install.harness_cli_logged_in", lambda key: True
     )
 
     def _explode(*a: object, **k: object) -> None:
@@ -383,7 +383,7 @@ def test_harness_login_runs_cli_login_then_verifies(
     calls: list[list[str]] = []
     state = {"logged_in": False}
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in",
+        "goalrail.onboarding.harness_install.harness_cli_logged_in",
         lambda k: state["logged_in"],
     )
 
@@ -412,7 +412,7 @@ def test_harness_login_wires_dev_tty_when_stdin_not_a_tty(
     monkeypatch.setattr(hi.sys.stdin, "isatty", lambda: False)
     state = {"logged_in": False}
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in",
+        "goalrail.onboarding.harness_install.harness_cli_logged_in",
         lambda k: state["logged_in"],
     )
 
@@ -449,7 +449,7 @@ def test_harness_login_falls_back_when_dev_tty_unavailable(
     monkeypatch.setattr(hi.sys.stdin, "isatty", lambda: False)
     state = {"logged_in": False}
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in",
+        "goalrail.onboarding.harness_install.harness_cli_logged_in",
         lambda k: state["logged_in"],
     )
 
@@ -480,7 +480,7 @@ def test_harness_login_false_when_login_not_completed(monkeypatch: pytest.Monkey
     """
     monkeypatch.setattr(hi.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in", lambda k: False
+        "goalrail.onboarding.harness_install.harness_cli_logged_in", lambda k: False
     )
     monkeypatch.setattr(
         hi.subprocess,
@@ -527,7 +527,7 @@ def test_harness_logout_runs_cli_logout_then_verifies(
     calls: list[list[str]] = []
     state = {"logged_in": True}
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_logged_in",
+        "goalrail.onboarding.harness_install.harness_cli_logged_in",
         lambda k: state["logged_in"],
     )
 

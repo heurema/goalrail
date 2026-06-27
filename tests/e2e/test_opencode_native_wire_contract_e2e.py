@@ -1,23 +1,23 @@
 """End-to-end test: the OpenCode-native client speaks to a REAL ``opencode serve``.
 
-The opencode-native harness's HTTP+SSE client (``omnigent.opencode_native_client``)
+The opencode-native harness's HTTP+SSE client (``goalrail.opencode_native_client``)
 is hand-shaped from the pinned OpenCode OpenAPI (vendored at
-``omnigent/opencode/openapi-1.17.7.json``), so the rest of the suite exercises it
+``goalrail/opencode/openapi-1.17.7.json``), so the rest of the suite exercises it
 only against in-process fakes. This test boots a real ``opencode serve`` via the
-PR's own :class:`~omnigent.opencode_native_app_server.OpenCodeNativeServer` and
+PR's own :class:`~goalrail.opencode_native_app_server.OpenCodeNativeServer` and
 drives the provider-independent endpoints the harness relies on, validating the
 wire contract against the actual binary — the one thing the fakes cannot prove.
 
 Environment requirements (why this is opt-in, not pure-CI)
 ----------------------------------------------------------
-* **Opt-in only**: set ``OMNIGENT_E2E_OPENCODE_NATIVE=1`` and have a pinned
+* **Opt-in only**: set ``GOALRAIL_E2E_OPENCODE_NATIVE=1`` and have a pinned
   ``opencode`` (>=1.17.7,<1.18.0) on ``PATH``. Unlike the codex/claude native
   e2es this needs **no** interactive login or model credential — session
   create/list, the SSE ``/event`` stream, permissions, fork and abort are all
   provider-independent. The gate just keeps it off CI runners without the binary.
 * Run it with::
 
-    OMNIGENT_E2E_OPENCODE_NATIVE=1 \
+    GOALRAIL_E2E_OPENCODE_NATIVE=1 \
     .venv/bin/python -m pytest \
         tests/e2e/test_opencode_native_wire_contract_e2e.py -v
 """
@@ -32,16 +32,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.opencode_native_app_server import (
+from goalrail.opencode_native_app_server import (
     OpenCodeNativeServer,
     OpenCodeVersionError,
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_OPENCODE_NATIVE") != "1" or shutil.which("opencode") is None,
+    os.environ.get("GOALRAIL_E2E_OPENCODE_NATIVE") != "1" or shutil.which("opencode") is None,
     reason=(
         "opencode-native wire-contract e2e needs a pinned `opencode` binary on PATH; "
-        "set OMNIGENT_E2E_OPENCODE_NATIVE=1 (and `npm i -g opencode-ai@1.17.7`) to run"
+        "set GOALRAIL_E2E_OPENCODE_NATIVE=1 (and `npm i -g opencode-ai@1.17.7`) to run"
     ),
 )
 
@@ -74,7 +74,7 @@ async def test_opencode_native_wire_contract_against_real_server() -> None:
         client = server.client()
         try:
             # create_session — and the parsed shape the forwarder relies on.
-            session = await client.create_session({"title": "omnigent-e2e"})
+            session = await client.create_session({"title": "goalrail-e2e"})
             assert session.id, "created session has no id"
             assert set(session.raw) >= _REQUIRED_SESSION_KEYS, (
                 f"server session payload missing keys the client parses: "

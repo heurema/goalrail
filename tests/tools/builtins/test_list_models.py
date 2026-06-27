@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.tools.builtins.list_models`."""
+"""Unit tests for :mod:`goalrail.tools.builtins.list_models`."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import json
 from typing import Any
 from unittest.mock import patch
 
-from omnigent.spec.types import AgentSpec
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.list_models import SysListModelsTool
+from goalrail.spec.types import AgentSpec
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.list_models import SysListModelsTool
 
 
 def _make_spec() -> AgentSpec:
@@ -58,7 +58,7 @@ def test_invoke_returns_catalog(
         },
     }
     with patch(
-        "omnigent.model_catalog.catalog_for_spec",
+        "goalrail.model_catalog.catalog_for_spec",
         return_value=fake_catalog,
     ) as mock_catalog:
         tool = SysListModelsTool(spec=_make_spec())

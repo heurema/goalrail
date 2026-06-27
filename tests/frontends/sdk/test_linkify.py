@@ -1,6 +1,6 @@
 """
 Tests for the OSC 8 URL-linkification helper used by
-:class:`omnigent_ui_sdk.terminal.TerminalHost`.
+:class:`goalrail_ui_sdk.terminal.TerminalHost`.
 
 Covers:
 
@@ -23,7 +23,7 @@ unambiguous and catches a subtle regex break in one shot.
 
 from __future__ import annotations
 
-from omnigent_ui_sdk.terminal._linkify import linkify_ansi
+from goalrail_ui_sdk.terminal._linkify import linkify_ansi
 
 # OSC 8 escape components — duplicated here from the module
 # (deliberately) so the test fails loudly if the module's

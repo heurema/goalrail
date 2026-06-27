@@ -11,7 +11,7 @@ port-forward` (see [Verify the deployment](#verify-the-deployment)).
 ## What gets provisioned
 
 - **Deployment** — single-replica pod running
-  `ghcr.io/omnigent-ai/omnigent-server`, served on port 8000.
+  `ghcr.io/heurema/goalrail-server`, served on port 8000.
 - **Service** — ClusterIP on port 80 → 8000.
 - **Ingress** *(optional)* — serves the app over HTTPS at a public web address,
   using cert-manager for the certificate. Skip it if the server isn't going on
@@ -100,12 +100,12 @@ Use this path when you have a managed Postgres (RDS, Cloud SQL, Neon, etc.).
 
    ```bash
    # deploy/kubernetes/base/secret.yaml
-   DATABASE_URL: "postgresql+psycopg://user:pass@your-db-host:5432/omnigent"
-   OMNIGENT_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
+   DATABASE_URL: "postgresql+psycopg://user:pass@your-db-host:5432/goalrail"
+   GOALRAIL_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
    ```
 
 2. **Set your domain** *(skip if you're not using the Ingress)* — replace
-   `omnigent.example.com` in `base/ingress.yaml` with your domain, and make sure
+   `goalrail.example.com` in `base/ingress.yaml` with your domain, and make sure
    the `letsencrypt-prod` ClusterIssuer exists (see
    [Create a cert-manager issuer](#create-a-cert-manager-issuer)).
 
@@ -131,8 +131,8 @@ with its own 10 Gi PVC. Good for dev/testing clusters.
 
    ```bash
    POSTGRES_PASSWORD: "<strong-password>"
-   DATABASE_URL: "postgresql+psycopg://omnigent:<strong-password>@postgres:5432/omnigent"
-   OMNIGENT_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
+   DATABASE_URL: "postgresql+psycopg://goalrail:<strong-password>@postgres:5432/goalrail"
+   GOALRAIL_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
    ```
 
 2. **Set your domain** *(skip if you're not using the Ingress)* — edit the
@@ -154,13 +154,13 @@ sessions, and includes RBAC for the
 [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
 CRD when the gateway uses a Kubernetes compute driver.
 
-1. **Edit the configmap patch** — set `OMNIGENT_SANDBOX_SERVER_URL` to the
+1. **Edit the configmap patch** — set `GOALRAIL_SANDBOX_SERVER_URL` to the
    public URL sandboxes will dial back to, and optionally set `OPENSHELL_GATEWAY`
    to a specific gateway name:
 
    ```bash
    # deploy/kubernetes/overlays/openshell/configmap-patch.yaml
-   OMNIGENT_SANDBOX_SERVER_URL: "https://omnigent.example.com"
+   GOALRAIL_SANDBOX_SERVER_URL: "https://goalrail.example.com"
    OPENSHELL_GATEWAY: "my-gateway"
    ```
 
@@ -168,8 +168,8 @@ CRD when the gateway uses a Kubernetes compute driver.
    database URL, cookie secret, and the LLM API keys your harness needs:
 
    ```bash
-   DATABASE_URL: "postgresql+psycopg://omnigent:<password>@your-db-host:5432/omnigent"
-   OMNIGENT_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
+   DATABASE_URL: "postgresql+psycopg://goalrail:<password>@your-db-host:5432/goalrail"
+   GOALRAIL_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
    ANTHROPIC_API_KEY: "sk-ant-..."
    ```
 
@@ -177,7 +177,7 @@ CRD when the gateway uses a Kubernetes compute driver.
    gRPC endpoint. If the gateway runs in-cluster, make sure the NetworkPolicy
    allows it (the included policy allows all egress on 443 — tighten to taste).
    If the gateway stores its config/TLS material in a Secret, create
-   `openshell-gateway-config` in the `omnigent` namespace and the deployment
+   `openshell-gateway-config` in the `goalrail` namespace and the deployment
    mounts it at `~/.config/openshell`.
 
 4. **Install the agent-sandbox CRD** *(optional)* — if the OpenShell gateway
@@ -210,7 +210,7 @@ by default — compatible with OpenShift's `restricted-v2` SCC out of the box.
 
 ```bash
 # from the repo root
-docker build -t omnigent-server:ubi -f deploy/docker/Dockerfile.ubi .
+docker build -t goalrail-server:ubi -f deploy/docker/Dockerfile.ubi .
 ```
 
 Then reference the image in the OpenShift overlay by patching the Deployment
@@ -225,7 +225,7 @@ SecurityContext. No ingress controller or cert-manager add-ons needed.
 1. **Edit the secret** in `base/secret.yaml` (same as the external-database
    path above).
 
-2. **Set your route hostname** — replace `omnigent.apps.example.com` in
+2. **Set your route hostname** — replace `goalrail.apps.example.com` in
    `overlays/openshift/route.yaml` with your cluster's apps domain.
 
 3. **Apply:**
@@ -251,13 +251,13 @@ sandbox provider: a `host_type: managed` session spawns one runner Pod that runs
 adds a dedicated runner namespace, a least-privilege server SA (scoped Pod +
 Secret rights, **no `pods/exec`**), and the `sandbox:` server config. The server
 image must be built with the `kubernetes` extra
-(`--build-arg OMNIGENT_EXTRAS=kubernetes`). See
+(`--build-arg GOALRAIL_EXTRAS=kubernetes`). See
 `overlays/sandbox-runners/README.md` for the full guide.
 
 ```bash
 # set the server image in overlays/sandbox-runners/kustomization.yaml first
 kubectl apply -k deploy/kubernetes/overlays/sandbox-runners
-# then create the omnigent-creds harness Secret (see the overlay README)
+# then create the goalrail-creds harness Secret (see the overlay README)
 ```
 
 **Credentials & auth** — two separate concerns, don't conflate:
@@ -266,7 +266,7 @@ kubectl apply -k deploy/kubernetes/overlays/sandbox-runners
   the built-in `accounts` mode refuses the per-session runner dial-back (`403`),
   a framework-level limit shared by all sandbox providers — see [Auth](../README.md#auth).
 - **Model keys** (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY`
-  / `GIT_TOKEN` / …) ride the `omnigent-creds` Secret projected into every runner Pod.
+  / `GIT_TOKEN` / …) ride the `goalrail-creds` Secret projected into every runner Pod.
 
 Both are detailed in
 [`overlays/sandbox-runners/README.md`](overlays/sandbox-runners/README.md#server-auth-managed-hosts).
@@ -276,12 +276,12 @@ Both are detailed in
 Check the rollout and reach the server without a public domain:
 
 ```bash
-kubectl get pods -n omnigent          # omnigent (and, with the overlay, postgres) → Running
-kubectl rollout status deploy/omnigent -n omnigent
-kubectl logs -n omnigent deploy/omnigent          # server logs
+kubectl get pods -n goalrail          # goalrail (and, with the overlay, postgres) → Running
+kubectl rollout status deploy/goalrail -n goalrail
+kubectl logs -n goalrail deploy/goalrail          # server logs
 
 # Port-forward the Service and open the app locally:
-kubectl port-forward -n omnigent svc/omnigent 8000:80
+kubectl port-forward -n goalrail svc/goalrail 8000:80
 # → http://localhost:8000   (health check: curl localhost:8000/health → {"status":"ok"})
 ```
 
@@ -290,7 +290,7 @@ pod may restart once if the liveness probe fires during that window (see
 [Resource sizing](#resource-sizing)).
 
 To test the Ingress itself instead of port-forwarding, point its hostname at a
-domain that already resolves to localhost — `omnigent.localtest.me` or
+domain that already resolves to localhost — `goalrail.localtest.me` or
 `<node-ip>.sslip.io` — use the self-signed issuer above, and reach it through the
 ingress controller's published port.
 
@@ -300,8 +300,8 @@ The server is the control plane — agents run on **hosts** that register with i
 A brand-new deployment has none, so connect at least one machine:
 
 ```bash
-goalrail login https://omnigent.example.com          # authenticate the CLI
-goalrail host  --server https://omnigent.example.com # register this machine
+goalrail login https://goalrail.example.com          # authenticate the CLI
+goalrail host  --server https://goalrail.example.com # register this machine
 ```
 
 The host then appears in the web UI when you start a new chat. See the
@@ -314,17 +314,17 @@ box; use this only to delegate authentication to an external OIDC provider. Add
 OIDC env vars to the secret:
 
 ```bash
-kubectl create secret generic omnigent-oidc -n omnigent \
-  --from-literal=OMNIGENT_AUTH_PROVIDER=oidc \
-  --from-literal=OMNIGENT_OIDC_ISSUER=https://github.com \
-  --from-literal=OMNIGENT_OIDC_CLIENT_ID=<client-id> \
-  --from-literal=OMNIGENT_OIDC_CLIENT_SECRET=<client-secret> \
-  --from-literal=OMNIGENT_OIDC_REDIRECT_URI=https://omnigent.example.com/auth/callback \
-  --from-literal=OMNIGENT_OIDC_COOKIE_SECRET=$(openssl rand -hex 32)
+kubectl create secret generic goalrail-oidc -n goalrail \
+  --from-literal=GOALRAIL_AUTH_PROVIDER=oidc \
+  --from-literal=GOALRAIL_OIDC_ISSUER=https://github.com \
+  --from-literal=GOALRAIL_OIDC_CLIENT_ID=<client-id> \
+  --from-literal=GOALRAIL_OIDC_CLIENT_SECRET=<client-secret> \
+  --from-literal=GOALRAIL_OIDC_REDIRECT_URI=https://goalrail.example.com/auth/callback \
+  --from-literal=GOALRAIL_OIDC_COOKIE_SECRET=$(openssl rand -hex 32)
 ```
 
-Then add `envFrom: [{secretRef: {name: omnigent-oidc}}]` to the Deployment
-container spec (or merge the values into `omnigent-secrets`).
+Then add `envFrom: [{secretRef: {name: goalrail-oidc}}]` to the Deployment
+container spec (or merge the values into `goalrail-secrets`).
 
 ## Resource sizing
 

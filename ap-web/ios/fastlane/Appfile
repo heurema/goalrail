@@ -1,4 +1,4 @@
-app_identifier("ai.omnigent.ios")  # The bundle identifier of the app
+app_identifier("dev.goalrail.ios")  # The bundle identifier of the app
 team_id("8RMX4WU6F8")               # Apple Developer Portal team (Databricks, Inc.)
 
 # App Store Connect team — only needed if the Apple ID belongs to multiple teams.

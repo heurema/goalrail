@@ -15,8 +15,8 @@ import psutil
 import pytest
 from click.testing import CliRunner
 
-from omnigent.cli import _ensure_host_daemon, _host_daemon_alive, cli
-from omnigent.host.local_server import LocalServerStartup
+from goalrail.cli import _ensure_host_daemon, _host_daemon_alive, cli
+from goalrail.host.local_server import LocalServerStartup
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ def test_host_command_registered() -> None:
     Verify that ``host`` is a registered subcommand.
 
     If the command is missing, the CLI wiring in cli.py is broken
-    and users can't run ``omnigent host``.
+    and users can't run ``goalrail host``.
     """
     runner = CliRunner()
     result = runner.invoke(cli, ["host", "--help"])
@@ -65,13 +65,13 @@ def test_host_no_server_starts_local_backend(
     """
     Verify that ``host`` with no --server starts a local Goalrail server.
 
-    Under the daemon model, ``omnigent host`` (no URL, no config) is
+    Under the daemon model, ``goalrail host`` (no URL, no config) is
     valid: it starts (or reuses) a persistent local Goalrail server and connects
     the foreground daemon to it — it no longer errors. We mock the local
     server spawn and the (blocking) daemon loop so the command returns.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     captured_url: list[str] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
@@ -81,10 +81,10 @@ def test_host_no_server_starts_local_backend(
         # spawned=False: this test only checks URL resolution; reused keeps
         # the Ctrl-C stop-server prompt out of the picture (it has its own tests).
         patch(
-            "omnigent.cli.ensure_local_omnigent_server",
+            "goalrail.cli.ensure_local_goalrail_server",
             lambda: LocalServerStartup(url="http://127.0.0.1:8123", spawned=False),
         ),
-        patch("omnigent.host.connect.run_host_process", _fake_run),
+        patch("goalrail.host.connect.run_host_process", _fake_run),
     ):
         runner = CliRunner()
         result = runner.invoke(cli, ["host"])
@@ -103,18 +103,18 @@ def test_host_reads_server_from_global_config(
     when --server is not passed on the CLI.
 
     If it doesn't, users must always pass --server even when
-    ``~/.omnigent/config.yaml`` has a ``server:`` key.
+    ``~/.goalrail/config.yaml`` has a ``server:`` key.
     """
     (tmp_path / "config.yaml").write_text("server: https://from-config.example.com\n")
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
 
     captured_url: list[str] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
         captured_url.append(server_url)
 
-    with patch("omnigent.host.connect.run_host_process", _fake_run):
+    with patch("goalrail.host.connect.run_host_process", _fake_run):
         runner = CliRunner()
         result = runner.invoke(cli, ["host"])
 
@@ -136,14 +136,14 @@ def test_host_accepts_server_as_positional(
     handling regresses, Click treats the URL as an unknown subcommand
     and the command exits non-zero — so this test fails loud.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     runs: list[_HostRun] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
         runs.append(_HostRun(server_url=server_url))
 
-    with patch("omnigent.host.connect.run_host_process", _fake_run):
+    with patch("goalrail.host.connect.run_host_process", _fake_run):
         runner = CliRunner()
         result = runner.invoke(cli, ["host", "https://from-arg.example.com"])
 
@@ -168,8 +168,8 @@ def test_host_accepts_empty_positional_as_local_marker(
     overrides configured remote defaults and starts the local Goalrail server.
     """
     (tmp_path / "config.yaml").write_text("server: https://from-config.example.com\n")
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     runs: list[_HostRun] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
@@ -179,10 +179,10 @@ def test_host_accepts_empty_positional_as_local_marker(
         # spawned=False: this test only checks the empty-string local-mode URL
         # resolution; reused keeps the Ctrl-C stop-server prompt out of scope.
         patch(
-            "omnigent.cli.ensure_local_omnigent_server",
+            "goalrail.cli.ensure_local_goalrail_server",
             lambda: LocalServerStartup(url="http://127.0.0.1:8123", spawned=False),
         ),
-        patch("omnigent.host.connect.run_host_process", _fake_run),
+        patch("goalrail.host.connect.run_host_process", _fake_run),
     ):
         runner = CliRunner()
         result = runner.invoke(cli, ["host", ""])
@@ -205,8 +205,8 @@ def test_host_status_subcommand_still_dispatches(
     invoked with ``server_url="status"``; this test asserts the daemon
     loop is never called and the status path is taken instead.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     runs: list[_HostRun] = []
     selected_calls: list[dict[str, object]] = []
 
@@ -218,8 +218,8 @@ def test_host_status_subcommand_still_dispatches(
         return []
 
     with (
-        patch("omnigent.host.connect.run_host_process", _fake_run),
-        patch("omnigent.cli._selected_daemon_records", _fake_selected),
+        patch("goalrail.host.connect.run_host_process", _fake_run),
+        patch("goalrail.cli._selected_daemon_records", _fake_selected),
     ):
         runner = CliRunner()
         result = runner.invoke(cli, ["host", "status"])
@@ -251,14 +251,14 @@ def test_host_rejects_unknown_plain_token_as_subcommand(
     subcommand, so Click must report it as an unknown command instead of
     starting the foreground daemon with ``server_url="sessions"``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     runs: list[_HostRun] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
         runs.append(_HostRun(server_url=server_url))
 
-    with patch("omnigent.host.connect.run_host_process", _fake_run):
+    with patch("goalrail.host.connect.run_host_process", _fake_run):
         runner = CliRunner()
         result = runner.invoke(cli, ["host", "sessions"])
 
@@ -278,14 +278,14 @@ def test_host_rejects_positional_and_server_option_together(
     a usage error rather than silently picking one. If the guard
     regresses, one value would silently win and this test fails.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
     runs: list[_HostRun] = []
 
     def _fake_run(server_url: str, **kwargs: object) -> None:
         runs.append(_HostRun(server_url=server_url))
 
-    with patch("omnigent.host.connect.run_host_process", _fake_run):
+    with patch("goalrail.host.connect.run_host_process", _fake_run):
         runner = CliRunner()
         result = runner.invoke(
             cli,
@@ -309,7 +309,7 @@ def test_host_daemon_alive_returns_false_when_no_pid_file(
     If it returns True, the auto-launch would skip spawning a
     daemon even on a fresh machine.
     """
-    with patch("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid"):
+    with patch("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid"):
         assert _host_daemon_alive() is False
 
 
@@ -326,7 +326,7 @@ def test_host_daemon_alive_returns_false_for_dead_pid(
     pid_path = tmp_path / "host.pid"
     # PID 99999999 almost certainly doesn't exist.
     pid_path.write_text("99999999\nhttp://localhost:8000\n")
-    with patch("omnigent.cli._HOST_PID_PATH", pid_path):
+    with patch("goalrail.cli._HOST_PID_PATH", pid_path):
         assert _host_daemon_alive() is False
 
 
@@ -335,14 +335,13 @@ def test_ensure_host_daemon_uses_goalrail_data_dir_for_runtime_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Host daemon pid, registry, and log files follow the runtime data home."""
-    import omnigent.cli as cli_mod
+    import goalrail.cli as cli_mod
 
     data_home = tmp_path / "goalrail-data"
     legacy_home = tmp_path / "home"
-    legacy_pid_path = legacy_home / ".omnigent" / "host.pid"
+    legacy_pid_path = legacy_home / ".goalrail" / "host.pid"
 
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
     monkeypatch.setenv("HOME", str(legacy_home))
     monkeypatch.setattr(cli_mod, "_HOST_PID_PATH", legacy_pid_path)
     monkeypatch.setattr(cli_mod, "_load_existing_host_id", lambda: "host_abc")
@@ -366,7 +365,7 @@ def test_ensure_host_daemon_uses_goalrail_data_dir_for_runtime_files(
 
     log_name = str(record["log_path"])
     assert log_name.startswith(str(data_home / "logs" / "host-daemon"))
-    assert not (legacy_home / ".omnigent").exists()
+    assert not (legacy_home / ".goalrail").exists()
 
 
 def test_ensure_host_daemon_writes_pid_file(
@@ -403,8 +402,8 @@ def test_ensure_host_daemon_writes_pid_file(
         return proc
 
     with (
-        patch("omnigent.cli._HOST_PID_PATH", pid_path),
-        patch("omnigent.cli.subprocess.Popen", side_effect=_fake_popen),
+        patch("goalrail.cli._HOST_PID_PATH", pid_path),
+        patch("goalrail.cli.subprocess.Popen", side_effect=_fake_popen),
     ):
         _ensure_host_daemon("http://localhost:8000")
 
@@ -454,10 +453,10 @@ def test_ensure_host_daemon_keeps_old_for_different_server(
         return _SpawnedDaemon(pid=spawned_pids.pop(0))
 
     with (
-        patch("omnigent.cli._HOST_PID_PATH", pid_path),
-        patch("omnigent.cli._pid_alive", lambda pid: pid in {4242, 4243}),
-        patch("omnigent.cli.os.kill", lambda pid, sig: killed.append(pid)),
-        patch("omnigent.cli.subprocess.Popen", side_effect=_fake_popen),
+        patch("goalrail.cli._HOST_PID_PATH", pid_path),
+        patch("goalrail.cli._pid_alive", lambda pid: pid in {4242, 4243}),
+        patch("goalrail.cli.os.kill", lambda pid, sig: killed.append(pid)),
+        patch("goalrail.cli.subprocess.Popen", side_effect=_fake_popen),
     ):
         _ensure_host_daemon("http://old-server:8000")
         _ensure_host_daemon("http://new-server:9000")
@@ -508,8 +507,8 @@ def test_ensure_host_daemon_skips_if_alive(
         return original_popen(args, **kwargs)
 
     with (
-        patch("omnigent.cli._HOST_PID_PATH", pid_path),
-        patch("omnigent.cli.subprocess.Popen", side_effect=_counting_popen),
+        patch("goalrail.cli._HOST_PID_PATH", pid_path),
+        patch("goalrail.cli.subprocess.Popen", side_effect=_counting_popen),
     ):
         _ensure_host_daemon("http://localhost:8000")
 
@@ -530,7 +529,7 @@ def test_host_stop_treats_zombie_daemon_as_dead(
     with ``--force``) fail forever with "did not exit" and blocks every
     subsequent ``host`` start with "already running".
     """
-    monkeypatch.setattr("omnigent.cli._HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr("goalrail.cli._HOST_PID_PATH", tmp_path / "host.pid")
 
     zombie_pid = os.fork()
     if zombie_pid == 0:

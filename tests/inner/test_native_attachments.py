@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.native_attachments import (
+from goalrail.inner.native_attachments import (
     DataUri,
     materialize_attachment,
     parse_data_uri,

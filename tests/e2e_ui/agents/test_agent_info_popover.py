@@ -192,7 +192,7 @@ def test_agent_info_policy_integer_params_validate_and_submit(
     base_url, session_id = seeded_session
     entry = _registry_policy_by_handler(
         base_url,
-        "omnigent.policies.builtins.safety.max_tool_calls_per_session",
+        "goalrail.policies.builtins.safety.max_tool_calls_per_session",
     )
     registry_name = entry["name"]
     stored_name = re.sub(r"\s+", "_", registry_name.lower())

@@ -9,18 +9,18 @@ leak or mutate out-of-root content.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.entities import DEFAULT_ENVIRONMENT_ID
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import create_os_environment
-from omnigent.runner import create_runner_app
-from omnigent.runner.resource_registry import SessionResourceRegistry
+from goalrail.entities import DEFAULT_ENVIRONMENT_ID
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.os_env import create_os_environment
+from goalrail.runner import create_runner_app
+from goalrail.runner.resource_registry import SessionResourceRegistry
 from tests.runner.helpers import NullServerClient
 
 _SECRET = "TOP-SECRET-CREDENTIAL-do-not-leak"
@@ -58,7 +58,7 @@ def planted(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def app(planted: Path) -> FastAPI:
+def app(planted: Path) -> Iterator[FastAPI]:
     """Runner app rooted at the planted workspace.
 
     ``sandbox=none`` is deliberate: it proves isolation holds without any
@@ -75,11 +75,15 @@ def app(planted: Path) -> FastAPI:
     assert os_env is not None
     reg = SessionResourceRegistry()
     reg._primary_envs["conv_iso"] = os_env
-    return create_runner_app(
+    app = create_runner_app(
         resource_registry=reg,
         runner_workspace=workspace,
         server_client=NullServerClient(),  # type: ignore[arg-type]
     )
+    try:
+        yield app
+    finally:
+        os_env.close()
 
 
 @pytest.fixture

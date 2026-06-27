@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from omnigent.host.frames import HostHelloFrame
-from omnigent.server.host_registry import HostRegistry, RunnerExitReports
+from goalrail.host.frames import HostHelloFrame
+from goalrail.server.host_registry import HostRegistry, RunnerExitReports
 
 
 @dataclass

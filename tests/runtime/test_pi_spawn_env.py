@@ -1,5 +1,5 @@
 """
-Tests for ``_build_pi_spawn_env`` in ``omnigent/runtime/workflow.py``.
+Tests for ``_build_pi_spawn_env`` in ``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec.executor`` fields to ``HARNESS_PI_*``
 env vars that the pi harness wrap reads at executor-construction time.
@@ -15,21 +15,21 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.workflow import _build_pi_spawn_env
-from omnigent.spec.types import AgentSpec, ExecutorSpec, LLMConfig
+from goalrail.runtime.workflow import _build_pi_spawn_env
+from goalrail.spec.types import AgentSpec, ExecutorSpec, LLMConfig
 
 
 @pytest.fixture(autouse=True)
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
-    Point OMNIGENT_CONFIG_HOME at an empty temp dir for every test in
-    this file so the developer's real ``~/.omnigent/config.yaml`` (e.g.
+    Point GOALRAIL_CONFIG_HOME at an empty temp dir for every test in
+    this file so the developer's real ``~/.goalrail/config.yaml`` (e.g.
     a default provider) cannot hijack the legacy-profile path under test.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory for the isolated config.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
 
 def _make_spec(*, model: str | None = None, profile: str | None = None) -> AgentSpec:
@@ -52,7 +52,7 @@ def _make_spec(*, model: str | None = None, profile: str | None = None) -> Agent
         spec_version=1,
         name="test-pi",
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model),
+        executor=ExecutorSpec(type="goalrail", config=config, model=model),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 
@@ -92,7 +92,7 @@ def _ucode_state_for_pi(
         entry at all, exercising the early-return in
         ``configure_agent_harness_with_ucode``.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     agents = (
         {
@@ -113,11 +113,11 @@ def _ucode_state_for_pi(
         agents=agents,
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.get_workspace_url_for_profile",
+        "goalrail.runtime.workflow.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.read_ucode_state",
+        "goalrail.runtime.workflow.read_ucode_state",
         lambda workspace_url: state,
     )
 

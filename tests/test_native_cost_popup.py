@@ -1,12 +1,12 @@
 """
 Unit tests for the native-terminal cost-approval popup script.
 
-Covers :mod:`omnigent.native_cost_popup` — the program that runs inside
+Covers :mod:`goalrail.native_cost_popup` — the program that runs inside
 a ``tmux display-popup`` on a native harness pane, reads an
-approve/decline answer, and POSTs the verdict to the Omnigent elicitation-
+approve/decline answer, and POSTs the verdict to the Goalrail elicitation-
 resolve endpoint (the same endpoint the web ApprovalCard uses).
 
-The tests drive the public :func:`omnigent.native_cost_popup.main`
+The tests drive the public :func:`goalrail.native_cost_popup.main`
 entry point and assert on the exact HTTP request it issues (URL, method,
 JSON body) and on the no-request invariant when the popup is dismissed.
 """
@@ -22,7 +22,7 @@ from urllib import request
 
 import pytest
 
-from omnigent import native_cost_popup
+from goalrail import native_cost_popup
 
 _AP_URL = "http://127.0.0.1:8787"
 _SESSION_ID = "conv_abc123"
@@ -89,7 +89,7 @@ def _install_popup_harness(
     """
     Wire ``input`` and ``urlopen`` so ``main`` runs offline and is observable.
 
-    Writes a real AP-routing config file (so ``_read_omnigent_routing`` exercises
+    Writes a real AP-routing config file (so ``_read_goalrail_routing`` exercises
     its real parse), stubs ``input`` to return *answer* (or raise EOF for a
     dismissal), and replaces the module's ``request`` binding with a
     namespace whose ``urlopen`` records the outgoing request — scoped to
@@ -284,14 +284,14 @@ def test_prompt_header_falls_back_when_no_policy_name(
     assert "Cost budget checkpoint" not in out
 
 
-def test_main_missing_omnigent_server_url_fails_loud(
+def test_main_missing_goalrail_server_url_fails_loud(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """
     A config file without ``ap_server_url`` aborts via ``SystemExit``.
 
-    There is no safe default for "where is the Omnigent server", so the script
+    There is no safe default for "where is the Goalrail server", so the script
     fails loud (the popup just closes; the web card remains answerable)
     rather than POSTing to a guessed URL.
     """

@@ -9,13 +9,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from omnigent.runtime.tool_retry import (
+from goalrail.runtime.tool_retry import (
     call_tool_with_timeout,
     execute_tool_with_retry,
     resolve_tool_retry,
     resolve_tool_timeout,
 )
-from omnigent.spec.types import RetryPolicy, ToolsConfig
+from goalrail.spec.types import RetryPolicy, ToolsConfig
 
 
 @pytest.fixture()
@@ -173,7 +173,7 @@ def test_execute_tool_with_retry_retries_on_timeout(
 ) -> None:
     """A timeout on the first attempt triggers a retry that then succeeds."""
     # Patch time.sleep inside the retry module to avoid real delays.
-    monkeypatch.setattr("omnigent.runtime.tool_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.tool_retry.time.sleep", lambda _: None)
 
     call_count = 0
 
@@ -191,7 +191,7 @@ def test_execute_tool_with_retry_retries_on_timeout(
 
     # Patch call_tool_with_timeout so we control failures without real threads.
     monkeypatch.setattr(
-        "omnigent.runtime.tool_retry.call_tool_with_timeout",
+        "goalrail.runtime.tool_retry.call_tool_with_timeout",
         lambda call_fn, timeout, cancel_fn=None: flaky_tool(),
     )
 
@@ -220,13 +220,13 @@ def test_execute_tool_with_retry_returns_error_string_on_exhaustion(
 ) -> None:
     """When all attempts time out, an error string is returned (not raised)."""
     # Patch time.sleep inside the retry module to avoid real delays.
-    monkeypatch.setattr("omnigent.runtime.tool_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.tool_retry.time.sleep", lambda _: None)
 
     retry_config = RetryPolicy(max_retries=2, backoff_base_s=1.0, backoff_max_s=10.0)
 
     # Patch call_tool_with_timeout so every call raises TimeoutError.
     monkeypatch.setattr(
-        "omnigent.runtime.tool_retry.call_tool_with_timeout",
+        "goalrail.runtime.tool_retry.call_tool_with_timeout",
         lambda call_fn, timeout, cancel_fn=None: (_ for _ in ()).throw(
             TimeoutError("Tool execution timed out after 5s")
         ),
@@ -271,13 +271,13 @@ def test_tool_retry_event_has_correct_fields(
     :param captured_events: List accumulating events for inspection.
     """
     # Patch time.sleep to avoid real delays.
-    monkeypatch.setattr("omnigent.runtime.tool_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.tool_retry.time.sleep", lambda _: None)
     # Fix random.uniform to 1.0 so delay is deterministic.
     # ``compute_backoff_delay`` lives on ``RetryPolicy`` (in
-    # ``omnigent.spec.types``) and uses a function-local
+    # ``goalrail.spec.types``) and uses a function-local
     # ``import random`` — patching either
-    # ``omnigent.runtime.tool_retry.random`` or
-    # ``omnigent.spec.types.random`` won't catch the local
+    # ``goalrail.runtime.tool_retry.random`` or
+    # ``goalrail.spec.types.random`` won't catch the local
     # binding. Patch the global ``random.uniform`` instead.
     import random as _random_module
 
@@ -306,7 +306,7 @@ def test_tool_retry_event_has_correct_fields(
         return "ok"
 
     monkeypatch.setattr(
-        "omnigent.runtime.tool_retry.call_tool_with_timeout",
+        "goalrail.runtime.tool_retry.call_tool_with_timeout",
         timeout_then_succeed,
     )
 
@@ -388,11 +388,11 @@ def test_tool_error_event_has_correct_fields(
     :param captured_events: List accumulating events for inspection.
     """
     # Patch time.sleep to avoid real delays.
-    monkeypatch.setattr("omnigent.runtime.tool_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.tool_retry.time.sleep", lambda _: None)
 
     # Every call raises TimeoutError to exhaust all attempts.
     monkeypatch.setattr(
-        "omnigent.runtime.tool_retry.call_tool_with_timeout",
+        "goalrail.runtime.tool_retry.call_tool_with_timeout",
         lambda call_fn, timeout, cancel_fn=None: (_ for _ in ()).throw(
             TimeoutError("Tool execution timed out after 5s")
         ),
@@ -474,7 +474,7 @@ def test_tool_retry_non_timeout_exception_no_retry(
         raise ValueError("bad input")
 
     monkeypatch.setattr(
-        "omnigent.runtime.tool_retry.call_tool_with_timeout",
+        "goalrail.runtime.tool_retry.call_tool_with_timeout",
         raise_value_error,
     )
 

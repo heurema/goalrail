@@ -8,23 +8,23 @@ engine evaluation alongside spec-declared policies.
 
 from __future__ import annotations
 
-from omnigent.entities import Policy as StoredPolicy
-from omnigent.policies.function import FunctionPolicy
-from omnigent.runtime.policies.builder import (
+from goalrail.entities import Policy as StoredPolicy
+from goalrail.policies.function import FunctionPolicy
+from goalrail.runtime.policies.builder import (
     _load_session_policy_specs,
     _stored_policy_to_spec,
     build_policy_engine,
 )
-from omnigent.spec.types import (
+from goalrail.spec.types import (
     AgentSpec,
     FunctionPolicySpec,
     FunctionRef,
     GuardrailsSpec,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from goalrail.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 
 # ── _stored_policy_to_spec ──────────────────────────────────────────────────
 

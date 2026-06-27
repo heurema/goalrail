@@ -3,7 +3,7 @@
 Debby's "GPT" sub-agent must run on the ``codex`` harness, not
 ``openai-agents``. The openai-agents harness treats an unpinned model as a
 Databricks model (``is_databricks_model = model is None`` in
-``omnigent/inner/openai_agents_sdk_executor.py``) and, with no
+``goalrail/inner/openai_agents_sdk_executor.py``) and, with no
 ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` in the environment, silently falls
 back to ambient Databricks credentials — routing the "GPT" head through the
 Databricks gateway instead of OpenAI. The ``codex`` harness is GPT-only, uses
@@ -18,12 +18,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from omnigent.spec.parser import parse
-from omnigent.spec.types import DatabricksAuth
+from goalrail.spec.parser import parse
+from goalrail.spec.types import DatabricksAuth
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEBBY_DIR = _REPO_ROOT / "examples" / "debby"
-_PACKAGED_DEBBY_DIR = _REPO_ROOT / "omnigent" / "resources" / "examples" / "debby"
+_PACKAGED_DEBBY_DIR = _REPO_ROOT / "goalrail" / "resources" / "examples" / "debby"
+
+
+def _relative_files(root: Path) -> set[Path]:
+    return {path.relative_to(root) for path in root.rglob("*") if path.is_file()}
 
 
 def test_debby_gpt_head_uses_codex_not_openai_agents() -> None:
@@ -58,17 +62,23 @@ def test_debby_gpt_head_uses_codex_not_openai_agents() -> None:
 
 
 def test_packaged_debby_resource_stays_in_sync_with_source_example() -> None:
-    """The bundled Debby resource resolves to the updated source example.
+    """The bundled Debby resource matches the updated source example.
 
-    ``omnigent debby`` launches the packaged resource path, not
+    ``goalrail debby`` launches the packaged resource path, not
     ``examples/debby`` directly. Keep this guard so the resource copy cannot
     drift back to ``openai-agents`` while the source example remains fixed.
     """
     assert _PACKAGED_DEBBY_DIR.exists(), "Debby's packaged resource should exist."
-    assert _PACKAGED_DEBBY_DIR.resolve() == _DEBBY_DIR.resolve(), (
-        "Debby's packaged resource must resolve to examples/debby so bundled "
-        "launches use the same GPT-head config as the source example."
+    source_files = _relative_files(_DEBBY_DIR)
+    packaged_files = _relative_files(_PACKAGED_DEBBY_DIR)
+    assert packaged_files == source_files, (
+        "Debby's packaged resource must contain the same files as examples/debby "
+        "so bundled launches use the same GPT-head config as the source example."
     )
+    for rel_path in sorted(source_files):
+        assert (_PACKAGED_DEBBY_DIR / rel_path).read_bytes() == (
+            _DEBBY_DIR / rel_path
+        ).read_bytes(), f"Packaged Debby file drifted from source: {rel_path}"
 
     spec = parse(_PACKAGED_DEBBY_DIR)
     by_name = {sub.name: sub for sub in spec.sub_agents}

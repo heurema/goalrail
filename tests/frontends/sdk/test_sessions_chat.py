@@ -1,4 +1,4 @@
-"""Unit tests for :class:`omnigent_client._sessions_chat.SessionsChat`.
+"""Unit tests for :class:`goalrail_client._sessions_chat.SessionsChat`.
 
 These exercise the chat helper end-to-end through a fake
 :class:`SessionsNamespace`. We use a real stub class (not MagicMock)
@@ -32,16 +32,16 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from omnigent_client._query import QueryResult, QueryStream
-from omnigent_client._sessions import Session, SessionsNamespace
-from omnigent_client._sessions_chat import (
+from goalrail_client._query import QueryResult, QueryStream
+from goalrail_client._sessions import Session, SessionsNamespace
+from goalrail_client._sessions_chat import (
     SessionsChat,
     SessionToolCallInfo,
 )
-from omnigent_client._tool_handler import StreamHooks
-from omnigent_client._types import File
+from goalrail_client._tool_handler import StreamHooks
+from goalrail_client._types import File
 
-from omnigent.server.schemas import (
+from goalrail.server.schemas import (
     CompletedEvent,
     CreatedEvent,
     ElicitationRequestEvent,
@@ -705,12 +705,12 @@ async def test_send_raises_on_failed_status_with_error_message() -> None:
     LLM stream starts, so no ``response.failed`` / ``FailedEvent`` is ever
     emitted — the only terminal signal is ``session.status: failed``
     carrying the error. ``send()`` must treat that as terminal and raise
-    :class:`OmnigentError` with the carried message, instead of
+    :class:`GoalrailError` with the carried message, instead of
     blocking until the stream closes and returning empty text.
     """
-    from omnigent_client._errors import OmnigentError
+    from goalrail_client._errors import GoalrailError
 
-    from omnigent.server.schemas import ErrorDetail
+    from goalrail.server.schemas import ErrorDetail
 
     session = _make_session()
     failed = SessionStatusEvent(
@@ -734,7 +734,7 @@ async def test_send_raises_on_failed_status_with_error_message() -> None:
         session=session,
     )
 
-    with pytest.raises(OmnigentError) as excinfo:
+    with pytest.raises(GoalrailError) as excinfo:
         async for _ in chat.send("hi"):
             pass
 
@@ -755,7 +755,7 @@ async def test_send_raises_generic_on_failed_status_without_error() -> None:
     hangs) with a non-empty fallback message rather than crashing on the
     missing field.
     """
-    from omnigent_client._errors import OmnigentError
+    from goalrail_client._errors import GoalrailError
 
     session = _make_session()
     failed = SessionStatusEvent(
@@ -776,7 +776,7 @@ async def test_send_raises_generic_on_failed_status_without_error() -> None:
         session=session,
     )
 
-    with pytest.raises(OmnigentError) as excinfo:
+    with pytest.raises(GoalrailError) as excinfo:
         async for _ in chat.send("hi"):
             pass
 
@@ -954,7 +954,7 @@ async def test_query_uses_final_message_item_when_deltas_absent() -> None:
     """
     Some harnesses produce no ``response.output_text.delta`` events
     but do include assistant text in ``response.output_item.done``.
-    ``query()`` must surface that text so headless ``omnigent run
+    ``query()`` must surface that text so headless ``goalrail run
     -p`` prints the answer instead of returning an empty string.
     """
     session = _make_session()

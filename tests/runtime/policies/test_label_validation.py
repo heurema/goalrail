@@ -9,11 +9,11 @@ Silent-drop semantics:
 - Unknown key (no LabelDef) → set freely.
 - Valid write → persisted via the store.
 
-The drop path is silent by design (matches omnigent) —
+The drop path is silent by design (matches goalrail) —
 a runtime validation failure does NOT raise. The surviving
 writes still land atomically.
 
-Ports omnigent ``test_labels_and_policies.py``:
+Ports goalrail ``test_labels_and_policies.py``:
 - test_engine_enforces_root_label_schema_monotonicity
 - test_invalid_initial_label_value_rejected_by_schema
   (handled at spec-load in parser tests — this file covers
@@ -22,13 +22,13 @@ Ports omnigent ``test_labels_and_policies.py``:
 
 from __future__ import annotations
 
-from omnigent.runtime.policies.engine import (
+from goalrail.runtime.policies.engine import (
     PolicyEngine,
     _merge_monotonic_writes,
     _monotonic_ok,
 )
-from omnigent.spec.types import LabelDef
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.spec.types import LabelDef
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -194,7 +194,7 @@ def test_apply_label_writes_schemaless_keys_pass_freely(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """Keys with no LabelDef are set freely — the
-    omnigent-parity behavior that lets policies write
+    goalrail-parity behavior that lets policies write
     ad-hoc labels without declaring a schema first
     (POLICIES.md §10)."""
     engine = _build_engine_with_defs(

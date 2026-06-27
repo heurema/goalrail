@@ -19,7 +19,7 @@ import pytest
 from fastapi import FastAPI, WebSocket
 from websockets.exceptions import ConnectionClosed
 
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     WSCloseFrame,
     WSFrame,
@@ -27,13 +27,13 @@ from omnigent.runner.transports.ws_tunnel.frames import (
     decode_frame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
-from omnigent.runner.transports.ws_tunnel.serve import (
+from goalrail.runner.transports.ws_tunnel.registry import TunnelRegistry
+from goalrail.runner.transports.ws_tunnel.serve import (
     _cancel_ws_channels,
     _handle_tunnel_frame,
     _RunnerWSChannel,
 )
-from omnigent.server._runner_ws_tunnel import _TunneledWSConn
+from goalrail.server._runner_ws_tunnel import _TunneledWSConn
 
 
 class _FakeWS:

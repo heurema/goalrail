@@ -1,6 +1,6 @@
 """
 Tests for ``_build_antigravity_spawn_env`` in
-``omnigent/runtime/workflow.py``.
+``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec.executor`` fields to ``HARNESS_ANTIGRAVITY_*``
 env vars the antigravity harness wrap reads at first-turn time. Auth is
@@ -20,13 +20,13 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from omnigent.errors import ErrorCode, OmnigentError
-from omnigent.runtime import workflow as wf
-from omnigent.runtime.workflow import (
+from goalrail.errors import ErrorCode, GoalrailError
+from goalrail.runtime import workflow as wf
+from goalrail.runtime.workflow import (
     _build_antigravity_spawn_env,
     configure_agent_harness_with_provider,
 )
-from omnigent.spec.types import (
+from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
     DatabricksAuth,
@@ -39,14 +39,14 @@ from omnigent.spec.types import (
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Isolate config + secrets to a tmp dir and clear ambient Gemini env.
 
-    Empty OMNIGENT_CONFIG_HOME + file secret backend + cleared
+    Empty GOALRAIL_CONFIG_HOME + file secret backend + cleared
     ``GEMINI_API_KEY`` / ``ANTIGRAVITY_API_KEY`` so the no-auth fallback tests
     start clean (a test that wants one sets it).
 
     :returns: The tmp config-home dir, so a test can write a ``config.yaml``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("ANTIGRAVITY_API_KEY", raising=False)
     return tmp_path
@@ -55,7 +55,7 @@ def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> P
 def _write_antigravity_config(tmp_path: Path, ref: str) -> None:
     """Write an ``antigravity:`` block referencing *ref* into the isolated config.
 
-    :param tmp_path: The isolated ``OMNIGENT_CONFIG_HOME`` (see the autouse
+    :param tmp_path: The isolated ``GOALRAIL_CONFIG_HOME`` (see the autouse
         fixture).
     :param ref: The secret reference to record, e.g. ``"env:GEMINI_KEY_SRC"``.
     """
@@ -81,7 +81,7 @@ def _make_spec(
         spec_version=1,
         name="test-antigravity",
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model, auth=auth),
+        executor=ExecutorSpec(type="goalrail", config=config, model=model, auth=auth),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 
@@ -197,7 +197,7 @@ def test_provider_routing_for_antigravity_fails_loud() -> None:
     # A stand-in entry: the antigravity guard raises before the entry is ever
     # inspected, so its concrete type is irrelevant (hence the arg-type ignore).
     entry = SimpleNamespace(kind="key", name="some-openai-provider")
-    with pytest.raises(OmnigentError) as exc_info:
+    with pytest.raises(GoalrailError) as exc_info:
         configure_agent_harness_with_provider(env, entry, harness_type="antigravity")  # type: ignore[arg-type]
     assert exc_info.value.code == ErrorCode.INVALID_INPUT
     # The guard fires first, so nothing is written to env before the raise.
@@ -207,7 +207,7 @@ def test_provider_routing_for_antigravity_fails_loud() -> None:
 def test_stored_gemini_key_used_when_spec_has_no_auth(
     monkeypatch: pytest.MonkeyPatch, _isolate_global_config: Path
 ) -> None:
-    """A Gemini key registered via ``omnigent setup`` (the ``antigravity:``
+    """A Gemini key registered via ``goalrail setup`` (the ``antigravity:``
     block) flows when the spec declares no auth — so a user need not export it
     in every shell."""
     monkeypatch.setenv("GEMINI_KEY_SRC", "AIza_stored_123")

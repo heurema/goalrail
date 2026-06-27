@@ -1,5 +1,5 @@
 """
-Unit tests for the REPL's sub-agent tree plumbing in ``omnigent.repl._repl``.
+Unit tests for the REPL's sub-agent tree plumbing in ``goalrail.repl._repl``.
 
 Covers the two testable seams of the ``↓`` sub-agents feature:
 
@@ -22,12 +22,12 @@ import inspect
 from typing import Any
 
 import pytest
-from omnigent_client._sessions import SessionsNamespace
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from goalrail_client._sessions import SessionsNamespace
+from goalrail_ui_sdk.terminal._host import TerminalHost
 
-from omnigent.repl import _repl
-from omnigent.repl._repl import _apply_child_session_event, _refresh_subagent_tree
-from omnigent.server.schemas import (
+from goalrail.repl import _repl
+from goalrail.repl._repl import _apply_child_session_event, _refresh_subagent_tree
+from goalrail.server.schemas import (
     SessionChildSessionUpdatedEvent,
     SessionCreatedEvent,
 )

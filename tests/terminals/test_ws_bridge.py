@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.terminals.ws_bridge`.
+Unit tests for :mod:`goalrail.terminals.ws_bridge`.
 
 Covers ``_write_all_nonblocking`` (retry-on-backpressure / short-write
 semantics over a real ``os.pipe``), the tmux-attach child reaper, the
@@ -22,14 +22,16 @@ import signal
 import stat
 import struct
 import subprocess
+import tempfile
 import termios
 import tty
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-import omnigent.terminals.ws_bridge as ws_bridge
-from omnigent.terminals.ws_bridge import (
+import goalrail.terminals.ws_bridge as ws_bridge
+from goalrail.terminals.ws_bridge import (
     WS_CLOSE_TERMINAL_DETACHED,
     _forward_pty_to_ws,
     _reap_tmux_attach_child,
@@ -39,6 +41,13 @@ from omnigent.terminals.ws_bridge import (
 )
 
 _HAS_TMUX = shutil.which("tmux") is not None
+
+
+@contextlib.contextmanager
+def _short_tmux_socket() -> Iterator[Path]:
+    # macOS rejects long Unix-domain socket paths; pytest tmp_path can exceed it.
+    with tempfile.TemporaryDirectory(prefix="gr-ws-", dir="/tmp") as tmp_dir:
+        yield Path(tmp_dir) / "tmux.sock"
 
 
 @pytest.mark.asyncio
@@ -344,7 +353,7 @@ def _new_tmux_session(socket_path: Path, target: str = "main") -> list[str]:
 
 @pytest.mark.skipif(not _HAS_TMUX, reason="tmux required")
 @pytest.mark.asyncio
-async def test_tmux_session_alive_tracks_real_session(tmp_path: Path) -> None:
+async def test_tmux_session_alive_tracks_real_session() -> None:
     """
     ``_tmux_session_alive`` is ``True`` for a live session, ``False``
     once the server is killed, and ``False`` for an unknown socket.
@@ -352,26 +361,28 @@ async def test_tmux_session_alive_tracks_real_session(tmp_path: Path) -> None:
     This is the signal the bridge uses to tell a detach (session alive)
     apart from a session exit.
 
-    :param tmp_path: Pytest tmp directory for the private socket.
+    Uses a short ``/tmp`` socket path because tmux rejects long Unix socket paths.
     """
-    socket_path = tmp_path / "tmux.sock"
-    base = _new_tmux_session(socket_path)
-    try:
-        assert await _tmux_session_alive(str(socket_path), "main") is True
-        # A different target on a live server is still "not this session".
-        assert await _tmux_session_alive(str(socket_path), "nope") is False
-    finally:
-        subprocess.run([*base, "kill-server"], capture_output=True, check=False)
+    with _short_tmux_socket() as socket_path:
+        base = _new_tmux_session(socket_path)
+        try:
+            assert await _tmux_session_alive(str(socket_path), "main") is True
+            # A different target on a live server is still "not this session".
+            assert await _tmux_session_alive(str(socket_path), "nope") is False
+        finally:
+            subprocess.run([*base, "kill-server"], capture_output=True, check=False)
 
-    # Server gone → probe must report dead, not raise.
-    assert await _tmux_session_alive(str(socket_path), "main") is False
-    # Never-existed socket → probe reports dead (conservative).
-    assert await _tmux_session_alive(str(tmp_path / "absent.sock"), "main") is False
+        # Server gone → probe must report dead, not raise.
+        assert await _tmux_session_alive(str(socket_path), "main") is False
+        # Never-existed socket → probe reports dead (conservative).
+        assert (
+            await _tmux_session_alive(str(socket_path.with_name("absent.sock")), "main") is False
+        )
 
 
 @pytest.mark.skipif(not _HAS_TMUX, reason="tmux required")
 @pytest.mark.asyncio
-async def test_tmux_session_alive_false_for_dead_pane(tmp_path: Path) -> None:
+async def test_tmux_session_alive_false_for_dead_pane() -> None:
     """
     A kept-alive session whose pane process exited reads as not-alive.
 
@@ -381,43 +392,43 @@ async def test_tmux_session_alive_false_for_dead_pane(tmp_path: Path) -> None:
     would treat the crash as a mere detach and the web client would reconnect
     to a dead pane forever instead of closing.
 
-    :param tmp_path: Pytest tmp directory for the private socket.
+    Uses a short ``/tmp`` socket path because tmux rejects long Unix socket paths.
     """
-    socket_path = tmp_path / "tmux.sock"
-    base = ["tmux", "-S", str(socket_path), "-f", "/dev/null"]
-    # One command sequence on a fresh server (";" separates tmux commands):
-    # set remain-on-exit globally BEFORE new-session so the session inherits it
-    # and survives the inner process exiting. A bare set-option can't run first
-    # on its own — no server exists yet to connect to.
-    subprocess.run(
-        [
-            *base,
-            "set-option",
-            "-g",
-            "remain-on-exit",
-            "on",
-            ";",
-            "new-session",
-            "-d",
-            "-s",
-            "main",
-            "sh -c 'exit 0'",
-        ],
-        check=True,
-    )
-    try:
-        for _ in range(250):
-            if await _tmux_session_alive(str(socket_path), "main") is False:
-                break
-            await asyncio.sleep(0.02)
-        else:  # pragma: no cover - only on a hang/regression
-            raise AssertionError("dead pane was never reported as not-alive")
-        # The session itself is still present (remain-on-exit), proving the
-        # not-alive verdict came from the dead pane, not a vanished session.
-        has = subprocess.run([*base, "has-session", "-t", "main"], capture_output=True)
-        assert has.returncode == 0, "session vanished; remain-on-exit was not honored"
-    finally:
-        subprocess.run([*base, "kill-server"], capture_output=True, check=False)
+    with _short_tmux_socket() as socket_path:
+        base = ["tmux", "-S", str(socket_path), "-f", "/dev/null"]
+        # One command sequence on a fresh server (";" separates tmux commands):
+        # set remain-on-exit globally BEFORE new-session so the session inherits it
+        # and survives the inner process exiting. A bare set-option can't run first
+        # on its own — no server exists yet to connect to.
+        subprocess.run(
+            [
+                *base,
+                "set-option",
+                "-g",
+                "remain-on-exit",
+                "on",
+                ";",
+                "new-session",
+                "-d",
+                "-s",
+                "main",
+                "sh -c 'exit 0'",
+            ],
+            check=True,
+        )
+        try:
+            for _ in range(250):
+                if await _tmux_session_alive(str(socket_path), "main") is False:
+                    break
+                await asyncio.sleep(0.02)
+            else:  # pragma: no cover - only on a hang/regression
+                raise AssertionError("dead pane was never reported as not-alive")
+            # The session itself is still present (remain-on-exit), proving the
+            # not-alive verdict came from the dead pane, not a vanished session.
+            has = subprocess.run([*base, "has-session", "-t", "main"], capture_output=True)
+            assert has.returncode == 0, "session vanished; remain-on-exit was not honored"
+        finally:
+            subprocess.run([*base, "kill-server"], capture_output=True, check=False)
 
 
 class _ParkingFakeWebSocket:
@@ -455,9 +466,7 @@ class _ParkingFakeWebSocket:
 
 @pytest.mark.skipif(not _HAS_TMUX, reason="tmux required")
 @pytest.mark.asyncio
-async def test_bridge_detach_closes_4405_and_leaves_session_alive(
-    tmp_path: Path,
-) -> None:
+async def test_bridge_detach_closes_4405_and_leaves_session_alive() -> None:
     """
     A tmux detach closes the attach WS with 4405, not 4404, and leaves
     the session running.
@@ -474,54 +483,54 @@ async def test_bridge_detach_closes_4405_and_leaves_session_alive(
     retry ``detach-client`` until the bridge actually ends, polling the
     external tmux server's client state rather than guessing a delay.
 
-    :param tmp_path: Pytest tmp directory for the private socket.
+    Uses a short ``/tmp`` socket path because tmux rejects long Unix socket paths.
     """
-    socket_path = tmp_path / "tmux.sock"
-    base = _new_tmux_session(socket_path)
-    ws = _ParkingFakeWebSocket()
-    bridge_task = asyncio.create_task(
-        bridge_tmux_pty_to_websocket(
-            ws,  # type: ignore[arg-type]  # structural WS fake
-            socket_path=str(socket_path),
-            tmux_target="main",
-            read_only=False,
-        )
-    )
-
-    async def _drive_detach_until_done() -> None:
-        """Retry ``detach-client`` until the bridge's attach child exits."""
-        while not bridge_task.done():
-            # check=False: returns non-zero until a client is attached.
-            subprocess.run(
-                [*base, "detach-client", "-s", "main"],
-                capture_output=True,
-                check=False,
+    with _short_tmux_socket() as socket_path:
+        base = _new_tmux_session(socket_path)
+        ws = _ParkingFakeWebSocket()
+        bridge_task = asyncio.create_task(
+            bridge_tmux_pty_to_websocket(
+                ws,  # type: ignore[arg-type]  # structural WS fake
+                socket_path=str(socket_path),
+                tmux_target="main",
+                read_only=False,
             )
-            await asyncio.sleep(0.1)
+        )
 
-    try:
-        # Gate on first PTY output (attach is drawing), then drive detach.
-        await asyncio.wait_for(ws.first_output.wait(), timeout=10.0)
-        driver = asyncio.create_task(_drive_detach_until_done())
+        async def _drive_detach_until_done() -> None:
+            """Retry ``detach-client`` until the bridge's attach child exits."""
+            while not bridge_task.done():
+                # check=False: returns non-zero until a client is attached.
+                subprocess.run(
+                    [*base, "detach-client", "-s", "main"],
+                    capture_output=True,
+                    check=False,
+                )
+                await asyncio.sleep(0.1)
+
         try:
-            await asyncio.wait_for(bridge_task, timeout=10.0)
-        finally:
-            driver.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await driver
+            # Gate on first PTY output (attach is drawing), then drive detach.
+            await asyncio.wait_for(ws.first_output.wait(), timeout=10.0)
+            driver = asyncio.create_task(_drive_detach_until_done())
+            try:
+                await asyncio.wait_for(bridge_task, timeout=10.0)
+            finally:
+                driver.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await driver
 
-        assert ws.close_code == WS_CLOSE_TERMINAL_DETACHED, (
-            f"detach should close with 4405, got {ws.close_code}; a 4404 here "
-            "makes the client end the session and kill the still-live runner"
-        )
-        assert await _tmux_session_alive(str(socket_path), "main") is True, (
-            "detach must leave the tmux session (and Claude) running"
-        )
-    finally:
-        bridge_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await bridge_task
-        subprocess.run([*base, "kill-server"], capture_output=True, check=False)
+            assert ws.close_code == WS_CLOSE_TERMINAL_DETACHED, (
+                f"detach should close with 4405, got {ws.close_code}; a 4404 here "
+                "makes the client end the session and kill the still-live runner"
+            )
+            assert await _tmux_session_alive(str(socket_path), "main") is True, (
+                "detach must leave the tmux session (and Claude) running"
+            )
+        finally:
+            bridge_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await bridge_task
+            subprocess.run([*base, "kill-server"], capture_output=True, check=False)
 
 
 class _CollectingFakeWebSocket(_ParkingFakeWebSocket):
@@ -550,7 +559,6 @@ class _CollectingFakeWebSocket(_ParkingFakeWebSocket):
 @pytest.mark.skipif(not _HAS_TMUX, reason="tmux required")
 @pytest.mark.asyncio
 async def test_bridge_attach_renders_pane_with_dumb_ambient_term(
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
@@ -571,57 +579,65 @@ async def test_bridge_attach_renders_pane_with_dumb_ambient_term(
     "open terminal failed" error and exits — the marker never arrives
     and this test times out at the wait below.
 
-    :param tmp_path: Pytest tmp directory for the private socket.
+    Uses a short ``/tmp`` socket path because tmux rejects long Unix socket paths.
     :param monkeypatch: Used to set the ambient ``TERM=dumb``.
     """
     # The sandbox condition: every process in the chain (including the
     # tmux server about to be spawned) sees a dumb TERM.
     monkeypatch.setenv("TERM", "dumb")
 
-    socket_path = tmp_path / "tmux.sock"
-    base = ["tmux", "-S", str(socket_path), "-f", "/dev/null"]
-    marker = "BRIDGE_TERM_PIN_OK"
-    subprocess.run(
-        [*base, "new-session", "-d", "-s", "main", f"echo {marker}; sleep 100000"],
-        check=True,
-    )
-
-    ws = _CollectingFakeWebSocket()
-    bridge_task = asyncio.create_task(
-        bridge_tmux_pty_to_websocket(
-            ws,  # type: ignore[arg-type]  # structural WS fake
-            socket_path=str(socket_path),
-            tmux_target="main",
-            read_only=False,
+    with _short_tmux_socket() as socket_path:
+        base = ["tmux", "-S", str(socket_path), "-f", "/dev/null"]
+        marker = "BRIDGE_TERM_PIN_OK"
+        subprocess.run(
+            [
+                *base,
+                "new-session",
+                "-d",
+                "-s",
+                "main",
+                f"echo {marker}; sleep 100000",
+            ],
+            check=True,
         )
-    )
-    try:
 
-        async def _wait_for_marker() -> None:
-            """Wait until the pane marker shows up in the WS output."""
-            while marker.encode() not in ws.output:
-                ws.output_changed.clear()
-                await ws.output_changed.wait()
+        ws = _CollectingFakeWebSocket()
+        bridge_task = asyncio.create_task(
+            bridge_tmux_pty_to_websocket(
+                ws,  # type: ignore[arg-type]  # structural WS fake
+                socket_path=str(socket_path),
+                tmux_target="main",
+                read_only=False,
+            )
+        )
 
-        # Marker in the attach redraw proves a usable client TERM: with
-        # the pin regressed, tmux rejects the dumb terminal and the only
-        # output is its "open terminal failed" error before PTY EOF.
-        await asyncio.wait_for(_wait_for_marker(), timeout=10.0)
-        assert b"open terminal failed" not in ws.output, (
-            "tmux rejected the attach client's terminal type — the bridge "
-            "leaked the ambient dumb TERM instead of pinning xterm-256color"
-        )
-        # The attach client is still alive (the bridge ends on PTY EOF,
-        # which is what the pre-fix failure produced immediately).
-        assert not bridge_task.done(), (
-            "attach child exited right after drawing — with a usable TERM "
-            "it stays attached until detach/kill"
-        )
-    finally:
-        bridge_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await bridge_task
-        subprocess.run([*base, "kill-server"], capture_output=True, check=False)
+        try:
+
+            async def _wait_for_marker() -> None:
+                """Wait until the pane marker shows up in the WS output."""
+                while marker.encode() not in ws.output:
+                    ws.output_changed.clear()
+                    await ws.output_changed.wait()
+
+            # Marker in the attach redraw proves a usable client TERM: with
+            # the pin regressed, tmux rejects the dumb terminal and the only
+            # output is its "open terminal failed" error before PTY EOF.
+            await asyncio.wait_for(_wait_for_marker(), timeout=10.0)
+            assert b"open terminal failed" not in ws.output, (
+                "tmux rejected the attach client's terminal type — the bridge "
+                "leaked the ambient dumb TERM instead of pinning xterm-256color"
+            )
+            # The attach client is still alive (the bridge ends on PTY EOF,
+            # which is what the pre-fix failure produced immediately).
+            assert not bridge_task.done(), (
+                "attach child exited right after drawing — with a usable TERM "
+                "it stays attached until detach/kill"
+            )
+        finally:
+            bridge_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await bridge_task
+            subprocess.run([*base, "kill-server"], capture_output=True, check=False)
 
 
 # ── read_only input gating ────────────────────────────────────────
@@ -951,7 +967,7 @@ async def test_bridge_splits_pty_redraw_after_control_key_input(
     )
     try:
         await asyncio.wait_for(ws.exhausted.wait(), timeout=5.0)
-        os.write(slave_fd, redraw)
+        await _write_all_nonblocking(asyncio.get_running_loop(), slave_fd, redraw)
         await asyncio.wait_for(_wait_for_sent_bytes(ws, len(redraw)), timeout=5.0)
 
         assert all(
@@ -1237,7 +1253,7 @@ def test_current_coalesce_limit_static_value() -> None:
     ``_current_coalesce_limit`` returns the integer unchanged when
     given a static cap.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from goalrail.terminals.ws_bridge import _current_coalesce_limit
 
     assert _current_coalesce_limit(4096) == 4096
 
@@ -1247,7 +1263,7 @@ def test_current_coalesce_limit_callable_invoked() -> None:
     ``_current_coalesce_limit`` calls the callable and returns its
     result when given a dynamic cap.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from goalrail.terminals.ws_bridge import _current_coalesce_limit
 
     assert _current_coalesce_limit(lambda: 2048) == 2048
 
@@ -1257,7 +1273,7 @@ def test_current_coalesce_limit_rejects_zero() -> None:
     A zero cap raises ``ValueError`` — a zero cap would make the
     frame-splitting loop infinite.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from goalrail.terminals.ws_bridge import _current_coalesce_limit
 
     with pytest.raises(ValueError, match="must be positive"):
         _current_coalesce_limit(0)
@@ -1267,7 +1283,7 @@ def test_current_coalesce_limit_rejects_negative_callable() -> None:
     """
     A callable returning a negative value raises ``ValueError``.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from goalrail.terminals.ws_bridge import _current_coalesce_limit
 
     with pytest.raises(ValueError, match="must be positive"):
         _current_coalesce_limit(lambda: -5)
@@ -1279,7 +1295,7 @@ def test_coalesce_limit_after_input_returns_large_cap_with_no_input() -> None:
     coalesce cap is the full flood cap — output should stream
     efficiently without the interactive constraint.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from goalrail.terminals.ws_bridge import _coalesce_limit_after_input
 
     assert _coalesce_limit_after_input(None) == ws_bridge._WS_COALESCE_MAX_BYTES
 
@@ -1293,7 +1309,7 @@ def test_coalesce_limit_after_input_returns_small_cap_within_window(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from goalrail.terminals.ws_bridge import _coalesce_limit_after_input
 
     monkeypatch.setattr(ws_bridge, "_monotonic", lambda: 100.5)
     # Input was 0.3s ago (within the 0.75s window).
@@ -1309,7 +1325,7 @@ def test_coalesce_limit_after_input_returns_large_cap_after_window(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from goalrail.terminals.ws_bridge import _coalesce_limit_after_input
 
     monkeypatch.setattr(ws_bridge, "_monotonic", lambda: 102.0)
     # Input was 2s ago (well past the 0.75s window).
@@ -1459,7 +1475,7 @@ def test_monotonic_returns_float() -> None:
     returns a float. This seems trivial but the wrapper exists as
     a test seam — verify it works as documented.
     """
-    from omnigent.terminals.ws_bridge import _monotonic
+    from goalrail.terminals.ws_bridge import _monotonic
 
     val = _monotonic()
     assert isinstance(val, float)

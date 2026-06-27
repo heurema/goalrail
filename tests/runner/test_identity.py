@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runner import identity as identity_mod
-from omnigent.runner.identity import (
+from goalrail.runner import identity as identity_mod
+from goalrail.runner.identity import (
     RUNNER_AUTH_SECRET_ENV_VARS,
     RUNNER_ID_ENV_VAR,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
@@ -27,7 +27,6 @@ def test_default_runner_id_path_uses_goalrail_data_dir(
     """The default runner id cache follows the effective runtime data home."""
     data_home = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
 
     assert identity_mod._default_runner_id_path() == data_home / "runners" / "runner_id"
 
@@ -40,7 +39,6 @@ def test_get_stable_runner_id_writes_goalrail_data_dir(
     data_home = tmp_path / "goalrail-data"
     legacy_home = tmp_path / "home"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
     monkeypatch.delenv(RUNNER_ID_ENV_VAR, raising=False)
     monkeypatch.setenv("HOME", str(legacy_home))
 
@@ -48,7 +46,7 @@ def test_get_stable_runner_id_writes_goalrail_data_dir(
 
     assert runner_id.startswith("runner_")
     assert (data_home / "runners" / "runner_id").read_text() == runner_id
-    assert not (legacy_home / ".omnigent" / "runners" / "runner_id").exists()
+    assert not (legacy_home / ".goalrail" / "runners" / "runner_id").exists()
 
 
 def test_token_bound_runner_id_is_stable_and_token_scoped() -> None:
@@ -138,7 +136,7 @@ def test_strip_runner_auth_secrets_does_not_mutate_input() -> None:
 
 
 def test_importing_identity_does_not_pull_in_fastapi() -> None:
-    """``import omnigent.runner.identity`` stays free of the FastAPI stack.
+    """``import goalrail.runner.identity`` stays free of the FastAPI stack.
 
     The helper is imported at every runner→child spawn boundary —
     including the sandbox launcher, which re-execs a fresh interpreter
@@ -146,7 +144,7 @@ def test_importing_identity_does_not_pull_in_fastapi() -> None:
     ``create_runner_app`` lazily (PEP 562) precisely so this stdlib-only
     submodule import does not drag in ``runner.app`` and ~0.5s of
     FastAPI import on that hot path. If someone reinstates an eager
-    ``from omnigent.runner.app import create_runner_app`` in the package
+    ``from goalrail.runner.app import create_runner_app`` in the package
     ``__init__``, this fails.
 
     Runs in a fresh subprocess so an unrelated test in the same session
@@ -156,13 +154,13 @@ def test_importing_identity_does_not_pull_in_fastapi() -> None:
     """
     probe = (
         "import sys\n"
-        "import omnigent.runner.identity\n"
+        "import goalrail.runner.identity\n"
         "assert 'fastapi' not in sys.modules, 'fastapi loaded via identity import'\n"
-        "assert 'omnigent.runner.app' not in sys.modules, "
+        "assert 'goalrail.runner.app' not in sys.modules, "
         "'runner.app loaded via identity import'\n"
     )
     # Hand the child the same import roots as this process so it resolves
-    # ``omnigent`` to the code under test (worktree or installed package).
+    # ``goalrail`` to the code under test (worktree or installed package).
     child_env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
 
     result = subprocess.run(

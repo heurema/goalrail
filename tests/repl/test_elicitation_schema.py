@@ -1,5 +1,5 @@
 """Tests for ``build_accept_content_from_schema`` in
-``omnigent.tools._elicitation_schema``.
+``goalrail.tools._elicitation_schema``.
 
 Covers auto-fill logic for MCP elicitation ``requestedSchema`` objects:
 booleans, oneOf enums, plain enums, defaults, free-form fields, and
@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.tools._elicitation_schema import (
+from goalrail.tools._elicitation_schema import (
     build_accept_content_from_schema as _build_elicitation_content_from_schema,
 )
 

@@ -7,7 +7,7 @@ write). This file checks the path real agents use for file output — the
 ``sys_os_write`` MCP builtin — gated by the ``worktree_guard`` policy on the
 **openai-agents** harness, which DOES surface tool results.
 
-``worktree_guard`` (omnigent/inner/nessie/policies.py) denies
+``worktree_guard`` (goalrail/inner/nessie/policies.py) denies
 ``sys_os_write`` / ``sys_os_edit`` whose path is absolute or contains a ``..``
 segment (an escape), and ALLOWS relative in-tree paths. Because the deny is a
 TOOL_CALL-phase policy verdict, it surfaces as an error tool result even under
@@ -55,7 +55,7 @@ _WORKTREE_GUARD_CONFIG: dict[str, Any] = {
     "policies": {
         "confine_writes_to_workspace": {
             "type": "function",
-            "handler": "omnigent.inner.nessie.policies.worktree_guard",
+            "handler": "goalrail.inner.nessie.policies.worktree_guard",
             "factory_params": {
                 "allowed_root": "workspace",
                 "deny_reason": "Writes must stay inside the workspace.",

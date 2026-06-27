@@ -6,9 +6,9 @@ in the parent — e.g. polly — chat sees it) stamped with
 ``params.target_session_id`` (the child that owns the parked Future),
 and resolving against that CHILD session id must release the worker.
 
-This drives the REAL stack — a local ``omnigent server`` booted from
+This drives the REAL stack — a local ``goalrail server`` booted from
 this working tree, a local runner + the native ``claude``/``codex``
-CLIs spawned by ``omnigent run --server``, and a real LLM brain. The
+CLIs spawned by ``goalrail run --server``, and a real LLM brain. The
 ``ask-mode-supervisor`` fixture agent's ``claude_code`` (claude-native,
 ``--permission-mode default``) and ``codex`` (codex-native, default
 approval policy — no ``yolo``) sub-agents run in PROMPTING mode, so a
@@ -18,9 +18,9 @@ must be forwarded and answered from the parent.
 OPT-IN. Like ``test_polly_e2e.py`` this needs the dev-box toolset CI
 runners lack (a logged-in ``oss`` Databricks OAuth profile + the
 ``claude``/``codex`` binaries), so it is gated behind
-``OMNIGENT_E2E_SUBAGENT_ELICIT=1`` and is not collected by default::
+``GOALRAIL_E2E_SUBAGENT_ELICIT=1`` and is not collected by default::
 
-    OMNIGENT_E2E_SUBAGENT_ELICIT=1 \\
+    GOALRAIL_E2E_SUBAGENT_ELICIT=1 \\
     .venv/bin/python -m pytest \\
         tests/e2e/test_subagent_elicitation_forwarding_e2e.py \\
         --profile oss \\
@@ -70,7 +70,7 @@ description: >-
 # delegates; the substantive command-running work is done by the native
 # sub-agents, which run in their own terminal and prompt for approval.
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: claude-sdk
 
@@ -116,7 +116,7 @@ name: claude_code
 description: Claude Code coding sub-agent in PROMPTING mode (asks before running commands).
 
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: claude-native
     # PROMPTING (not bypass): the server translates this into
@@ -144,7 +144,7 @@ name: codex
 description: Codex coding sub-agent in PROMPTING mode (asks before running commands).
 
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: codex-native
     # PROMPTING (not yolo): with ``yolo`` omitted the server adds NO
@@ -176,11 +176,11 @@ _CHILD_SPAWN_TIMEOUT_SEC = 180
 _ELICIT_TIMEOUT_SEC = 180
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_SUBAGENT_ELICIT") != "1",
+    os.environ.get("GOALRAIL_E2E_SUBAGENT_ELICIT") != "1",
     reason=(
         "sub-agent elicitation e2e needs the dev-box toolset (oss OAuth + "
         "claude/codex CLIs) absent on CI — set "
-        "OMNIGENT_E2E_SUBAGENT_ELICIT=1 to opt in."
+        "GOALRAIL_E2E_SUBAGENT_ELICIT=1 to opt in."
     ),
 )
 
@@ -191,19 +191,19 @@ def _clean_env(profile: str = _PROFILE) -> dict[str, str]:
 
     The native harnesses resolve the profile's OAuth via the global
     config's ``auth:`` block, written into an isolated
-    ``OMNIGENT_CONFIG_HOME`` here (the supported replacement for the
+    ``GOALRAIL_CONFIG_HOME`` here (the supported replacement for the
     removed ``--profile`` CLI flag); a stray ``DATABRICKS_TOKEN`` /
     ``ANTHROPIC_API_KEY`` / ``CLAUDE_CODE`` from the outer coding-agent
     process would shadow it.
-    ``PYTHONPATH`` is dropped so the child imports omnigent from
+    ``PYTHONPATH`` is dropped so the child imports goalrail from
     ``--code-dir`` (this worktree), not a sibling editable install.
 
     :param profile: Databricks profile for the auth block, e.g. ``"oss"``.
     :returns: A sanitized copy of ``os.environ``.
     """
     env = dict(os.environ)
-    env["OMNIGENT_SKIP_ONBOARD"] = "1"
-    env["OMNIGENT_NO_UPDATE_CHECK"] = "1"
+    env["GOALRAIL_SKIP_ONBOARD"] = "1"
+    env["GOALRAIL_NO_UPDATE_CHECK"] = "1"
     for stale in (
         "DATABRICKS_TOKEN",
         "ANTHROPIC_API_KEY",
@@ -214,12 +214,12 @@ def _clean_env(profile: str = _PROFILE) -> dict[str, str]:
         "PYTHONPATH",
     ):
         env.pop(stale, None)
-    config_home = Path(tempfile.mkdtemp(prefix="omnigent-elicit-config-"))
+    config_home = Path(tempfile.mkdtemp(prefix="goalrail-elicit-config-"))
     (config_home / "config.yaml").write_text(
         f"auth:\n  type: databricks\n  profile: {profile}\n",
         encoding="utf-8",
     )
-    env["OMNIGENT_CONFIG_HOME"] = str(config_home)
+    env["GOALRAIL_CONFIG_HOME"] = str(config_home)
     env["DATABRICKS_CONFIG_PROFILE"] = profile
     return env
 
@@ -298,12 +298,12 @@ def _kill_tree(pid: int, conv_ids: set[str]) -> None:
     """
     SIGTERM-then-SIGKILL a run subprocess tree + leaked harness runners.
 
-    ``omnigent run`` spawns a detached daemon → runner → per-conversation
+    ``goalrail run`` spawns a detached daemon → runner → per-conversation
     harness chain plus (for claude-native) a tmux server, which outlive the
     run process. We additionally kill any ``harnesses._runner`` whose
     cmdline names one of this run's conversation ids.
 
-    :param pid: The ``omnigent run`` subprocess pid.
+    :param pid: The ``goalrail run`` subprocess pid.
     :param conv_ids: Conversation ids of this run (parent + sub-agents) used
         to find leaked harness runners.
     """
@@ -315,7 +315,7 @@ def _kill_tree(pid: int, conv_ids: set[str]) -> None:
         except subprocess.CalledProcessError:
             ps = ""
         for line in ps.splitlines():
-            if "omnigent.runtime.harnesses._runner" in line and any(c in line for c in conv_ids):
+            if "goalrail.runtime.harnesses._runner" in line and any(c in line for c in conv_ids):
                 toks = line.split()
                 with contextlib.suppress(ValueError, IndexError):
                     pids.add(int(toks[0]))
@@ -333,8 +333,8 @@ def _kill_native_terminals(conv_ids: set[str]) -> None:
     Kill leaked native-worker tmux panes for a run's conversation ids.
 
     claude-native / codex-native sub-agents launch their CLI inside a tmux
-    server (``/tmp/omnigent-terminal-*/tmux.sock``). When the parent's
-    one-shot ``omnigent run`` exits, the detached worker's pane can outlive
+    server (``/tmp/goalrail-terminal-*/tmux.sock``). When the parent's
+    one-shot ``goalrail run`` exits, the detached worker's pane can outlive
     it. The pane's ``new-session`` command line embeds the session URL
     (``/c/<conv_id>``) and the worker's bridge dir, so match on the conv id
     and SIGKILL the owning processes. Best-effort; failures are ignored.
@@ -365,9 +365,9 @@ def _kill_native_terminals(conv_ids: set[str]) -> None:
 @pytest.fixture(scope="module")
 def local_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
     """
-    Boot a throwaway ``omnigent server`` from this working tree.
+    Boot a throwaway ``goalrail server`` from this working tree.
 
-    A bare ``omnigent run`` would route to the developer's configured
+    A bare ``goalrail run`` would route to the developer's configured
     default (shared) server, which need not carry this branch's code; a
     local server from ``_REPO`` carries it. The server uses a throwaway
     sqlite DB + artifact dir under a temp path and is killed on teardown.
@@ -384,7 +384,7 @@ def local_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "server",
             "--host",
             "127.0.0.1",
@@ -444,7 +444,7 @@ def _force_codex_prompting(config_path: Path) -> str | None:
 
     The caller MUST restore the file with :func:`_restore_file` in a
     ``finally``. This whole test is gated behind
-    ``OMNIGENT_E2E_SUBAGENT_ELICIT=1`` (a deliberate, human-invoked opt-in,
+    ``GOALRAIL_E2E_SUBAGENT_ELICIT=1`` (a deliberate, human-invoked opt-in,
     never CI/unattended), so briefly toggling the invoking developer's own
     codex approval policy is acceptable; the restore bounds the window.
 
@@ -536,12 +536,12 @@ def agent_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Materialize the ask-mode-supervisor agent bundle into a tmp dir.
 
     Writes the inlined supervisor + sub-agent specs in the on-disk bundle
-    layout ``omnigent run`` expects (``config.yaml`` at the root,
+    layout ``goalrail run`` expects (``config.yaml`` at the root,
     ``agents/<name>/config.yaml`` per sub-agent).
 
     :param tmp_path_factory: Pytest tmp-dir factory (module-scoped so all
         parametrized cases share one bundle).
-    :returns: Path of the bundle root to pass to ``omnigent run``.
+    :returns: Path of the bundle root to pass to ``goalrail run``.
     """
     root = tmp_path_factory.mktemp("ask-mode-supervisor")
     (root / "config.yaml").write_text(_SUPERVISOR_CONFIG_YAML)
@@ -593,7 +593,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
     """
     A prompting sub-agent's approval is forwarded to the parent and answered there.
 
-    Drives ``omnigent run ask-mode-supervisor --server <local> -p "..."``
+    Drives ``goalrail run ask-mode-supervisor --server <local> -p "..."``
     telling the orchestrator to delegate a shell command to ``sub_agent``
     (claude_code or codex). That worker runs in prompting mode, so it
     raises an approval before executing. The test then asserts the
@@ -650,7 +650,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
     # relevant config to a prompting policy for the run and ALWAYS restore it
     # in ``finally`` (the toggle is the first statement in the ``try`` so a
     # failure anywhere after it still restores). Safe because this whole test
-    # is opt-in (OMNIGENT_E2E_SUBAGENT_ELICIT=1), never CI.
+    # is opt-in (GOALRAIL_E2E_SUBAGENT_ELICIT=1), never CI.
     codex_config = (
         Path(os.environ.get("CODEX_HOME") or str(Path.home() / ".codex")) / "config.toml"
     )
@@ -710,7 +710,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
             [
                 sys.executable,
                 "-m",
-                "omnigent",
+                "goalrail",
                 "run",
                 str(agent_dir),
                 "--server",
@@ -851,7 +851,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
         # when the toggle never ran (original is ``None``).
         _restore_file(codex_config, codex_config_original)
         _restore_file(claude_settings, claude_settings_original)
-        # ``omnigent run`` exits after the parent's one-shot turn, but its
+        # ``goalrail run`` exits after the parent's one-shot turn, but its
         # detached daemon/worker tree (and any native tmux pane) keeps
         # running, so always sweep leaked workers by conv id regardless of
         # whether the run process itself is still alive.

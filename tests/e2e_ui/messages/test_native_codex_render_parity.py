@@ -11,7 +11,7 @@ properties the claude native forwarder is pinned against.
 
 The LLM calls are served by the in-process mock LLM server rather than a real
 OpenAI endpoint. Before each test run a mock ``openai`` provider config is
-written to ``~/.omnigent/config.yaml`` (see ``native_codex_mock_session`` in
+written to ``~/.goalrail/config.yaml`` (see ``native_codex_mock_session`` in
 ``conftest.py``), redirecting the runner's ``OPENAI_BASE_URL`` to the mock
 server. Tokens are pre-generated and queued via content-based routing so the
 mock returns the expected assistant token for each turn regardless of how many

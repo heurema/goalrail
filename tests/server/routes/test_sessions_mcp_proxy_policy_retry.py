@@ -18,15 +18,15 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.conversation import Conversation
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.server.routes import sessions as sessions_mod
-from omnigent.server.routes.sessions import (
+from goalrail.entities.conversation import Conversation
+from goalrail.policies.types import EvaluationContext, PolicyResult
+from goalrail.server.routes import sessions as sessions_mod
+from goalrail.server.routes.sessions import (
     _handle_mcp_tools_call,
     _pending_policy_ask_writes,
     _PendingPolicyAskWrites,
 )
-from omnigent.spec.types import PolicyAction
+from goalrail.spec.types import PolicyAction
 
 # ---------------------------------------------------------------------------
 # Stubs — real types, no MagicMock
@@ -479,7 +479,7 @@ async def test_from_mcp_entry_survives_events_handler_accept() -> None:
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.server.routes.sessions import _apply_pending_policy_ask_writes
+    from goalrail.server.routes.sessions import _apply_pending_policy_ask_writes
 
     eid = "elicit_MCP_owned"
     _pending_policy_ask_writes[eid] = _PendingPolicyAskWrites(
@@ -516,7 +516,7 @@ async def test_non_mcp_entry_popped_by_events_handler_on_accept(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.server.routes.sessions import _apply_pending_policy_ask_writes
+    from goalrail.server.routes.sessions import _apply_pending_policy_ask_writes
 
     eid = "elicit_RELAY_owned"
     _pending_policy_ask_writes[eid] = _PendingPolicyAskWrites(

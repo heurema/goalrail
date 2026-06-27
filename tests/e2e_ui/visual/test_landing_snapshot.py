@@ -73,7 +73,7 @@ def test_empty_landing_matches_baseline(
 
     :param snapshot_page: page pinned to a fixed viewport + light palette (see
         the suite ``conftest.py``).
-    :param live_server: Base URL of the spawned ``omnigent server`` serving the
+    :param live_server: Base URL of the spawned ``goalrail server`` serving the
         built SPA. The landing's data calls are stubbed below, so no real agent
         catalog / host / session state (or LLM credentials) is involved.
     :param fulfill_json: 200-JSON route helper (suite ``conftest.py``).
@@ -94,7 +94,7 @@ def test_empty_landing_matches_baseline(
     # auto-fills to a fixed value ("repo") without hitting the file browser. Set
     # before the SPA boots so the composer reads it on mount.
     page.add_init_script(
-        f'window.localStorage.setItem("omnigent:recent-workspaces",'
+        f'window.localStorage.setItem("goalrail:recent-workspaces",'
         f' JSON.stringify({{"{_HOST_ID}": ["/work/repo"]}}));'
     )
 

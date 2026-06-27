@@ -14,7 +14,7 @@ tests pin the gating and URL-parsing edge cases directly.
 
 from __future__ import annotations
 
-from omnigent.server.routes.sessions import (
+from goalrail.server.routes.sessions import (
     _allow_remember_eligible,
     _claude_native_remember_host,
 )

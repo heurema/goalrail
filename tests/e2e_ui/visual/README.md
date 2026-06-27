@@ -85,7 +85,7 @@ byte-for-byte untouched. Review each changed image before committing.
    (or are missing) — passing ones are left untouched — and commits the changed
    PNGs back to your branch, then removes the label and comments the result.
 3. **Review the committed PNG(s)** in the bot's commit.
-4. The bot pushes with the `OMNIGENT_BOT_APP` token, so the push re-fires the
+4. The bot pushes with the `GOALRAIL_BOT_APP` token, so the push re-fires the
    PR's checks automatically — no manual re-run. (If the App isn't configured it
    falls back to `GITHUB_TOKEN`, which won't re-trigger CI; the bot's comment
    says so and you push any commit to re-run.)

@@ -8,7 +8,7 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("omnigentFind", {
+contextBridge.exposeInMainWorld("goalrailFind", {
   /**
    * Run / continue a search in the parent window.
    * @param {string} text The query; empty clears the current highlight.
@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld("omnigentFind", {
    *   current query instead of starting a fresh search.
    */
   query: (text, opts) => {
-    ipcRenderer.send("omnigent:find-query", {
+    ipcRenderer.send("goalrail:find-query", {
       text: String(text ?? ""),
       forward: opts?.forward !== false,
       findNext: opts?.findNext === true,
@@ -25,17 +25,17 @@ contextBridge.exposeInMainWorld("omnigentFind", {
   },
   /** Dismiss the find bar (clears highlights, refocuses the parent). */
   close: () => {
-    ipcRenderer.send("omnigent:find-close");
+    ipcRenderer.send("goalrail:find-close");
   },
   /**
    * Subscribe to match-count updates.
    * @param {(result: {active: number, matches: number}) => void} callback
    */
   onResult: (callback) => {
-    ipcRenderer.on("omnigent:find-result", (_event, result) => callback(result));
+    ipcRenderer.on("goalrail:find-result", (_event, result) => callback(result));
   },
   /** Fires when Cmd/Ctrl+F re-activates an already-open bar. */
   onActivate: (callback) => {
-    ipcRenderer.on("omnigent:find-activate", () => callback());
+    ipcRenderer.on("goalrail:find-activate", () => callback());
   },
 });

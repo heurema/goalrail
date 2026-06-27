@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.spec.types`.
+Unit tests for :mod:`goalrail.spec.types`.
 
 Currently focused on :class:`RetryPolicy` behaviors that the
 parser tests don't cover — JSON round-trip (Phase 1f wire
@@ -13,19 +13,19 @@ import json
 
 import pytest
 
-from omnigent.spec.types import ExecutorSpec, RetryPolicy
+from goalrail.spec.types import ExecutorSpec, RetryPolicy
 
 
 @pytest.mark.parametrize(
     ("executor", "expected"),
     [
-        # omnigent-type agents carry the kind in config.harness.
-        (ExecutorSpec(type="omnigent", config={"harness": "codex"}), "codex"),
+        # goalrail-type agents carry the kind in config.harness.
+        (ExecutorSpec(type="goalrail", config={"harness": "codex"}), "codex"),
         (
-            ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+            ExecutorSpec(type="goalrail", config={"harness": "claude-native"}),
             "claude-native",
         ),
-        # Non-omnigent executors carry their kind in `type` and have no
+        # Non-goalrail executors carry their kind in `type` and have no
         # config.harness — this is the `or self.type` fallback branch.
         # build_agent_bundle always injects config.harness, so only a
         # directly-constructed spec exercises this path.
@@ -90,7 +90,7 @@ def test_retry_policy_from_json_drops_unknown_keys_for_forwards_compat() -> None
     """Unknown keys in the JSON payload are silently dropped.
 
     Pin: a future spec adds a field to :class:`RetryPolicy`,
-    Omnigent serializes it, an older harness wrap (still on the
+    Goalrail serializes it, an older harness wrap (still on the
     previous version) reads the env var. The older wrap must
     NOT crash on the unknown key — instead it ignores it and
     uses the subset it understands.
@@ -122,7 +122,7 @@ def test_retry_policy_from_json_drops_unknown_keys_for_forwards_compat() -> None
 def test_retry_policy_from_json_uses_defaults_for_missing_fields() -> None:
     """Missing fields in the JSON payload fall back to dataclass defaults.
 
-    Pin: backwards compat — an older Omnigent serializing a partial
+    Pin: backwards compat — an older Goalrail serializing a partial
     payload (e.g. only ``max_retries``) is consumed by a
     newer wrap. The new fields take their dataclass defaults.
     """
@@ -155,7 +155,7 @@ def test_retry_policy_from_json_rejects_invalid_json() -> None:
 def test_retry_policy_from_json_rejects_non_dict_payload() -> None:
     """A JSON list / scalar / string raises ``ValueError``.
 
-    Pin: defensive against Omnigent regressions that might
+    Pin: defensive against Goalrail regressions that might
     accidentally serialize a list of policies or a single
     field. The wrap's fallback-to-default path handles the
     raise.
@@ -183,7 +183,7 @@ def test_retry_policy_from_json_propagates_validator_errors() -> None:
 def test_retry_policy_from_json_rejects_non_list_status_codes() -> None:
     """``retryable_status_codes`` must be a JSON list.
 
-    Defensive: if Omnigent serialized it as a string or dict
+    Defensive: if Goalrail serialized it as a string or dict
     (regression in the serializer), the wrap fails loud
     rather than silently treating a string as iterable.
     """

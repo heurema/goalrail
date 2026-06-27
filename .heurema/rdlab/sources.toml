@@ -1,5 +1,5 @@
 [[sources]]
-id = "omnigent-readme"
+id = "goalrail-readme"
 type = "local_file"
 path = "README.md"
 watch = true
@@ -7,7 +7,7 @@ mode = "internal_doc"
 trust = "A"
 
 [[sources]]
-id = "omnigent-installer"
+id = "goalrail-installer"
 type = "local_file"
 path = "scripts/install_oss.sh"
 watch = true
@@ -15,7 +15,7 @@ mode = "installer"
 trust = "A"
 
 [[sources]]
-id = "omnigent-package-config"
+id = "goalrail-package-config"
 type = "local_file"
 path = "pyproject.toml"
 watch = true
@@ -23,25 +23,25 @@ mode = "package_config"
 trust = "A"
 
 [[sources]]
-id = "omnigent-cli"
+id = "goalrail-cli"
 type = "local_file"
-path = "omnigent/cli.py"
+path = "goalrail/cli.py"
 watch = true
 mode = "runtime_code"
 trust = "A"
 
 [[sources]]
-id = "omnigent-sandbox-base"
+id = "goalrail-sandbox-base"
 type = "local_file"
-path = "omnigent/onboarding/sandboxes/base.py"
+path = "goalrail/onboarding/sandboxes/base.py"
 watch = true
 mode = "remote_host_image_boundary"
 trust = "A"
 
 [[sources]]
-id = "omnigent-upstream"
+id = "goalrail-upstream"
 type = "github_repo"
-url = "https://github.com/omnigent-ai/omnigent"
+url = "https://github.com/heurema/goalrail"
 watch = false
 mode = "upstream_code_repo"
 trust = "B"

@@ -21,15 +21,15 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies import build_policy_engine
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.parser import parse
-from omnigent.spec.types import (
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies import build_policy_engine
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.parser import parse
+from goalrail.spec.types import (
     Phase,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -113,7 +113,7 @@ guardrails:
       type: function
       on: [request]
       function:
-        path: omnigent.policies.function.make_fixed_action_callable
+        path: goalrail.policies.function.make_fixed_action_callable
         arguments:
           action: allow
           set_labels:
@@ -157,7 +157,7 @@ guardrails:
       type: function
       on: [request]
       function:
-        path: omnigent.policies.function.make_fixed_action_callable
+        path: goalrail.policies.function.make_fixed_action_callable
         arguments:
           action: deny
           reason: "nope"
@@ -245,18 +245,18 @@ guardrails:
       type: function
       on: [request]
       function:
-        path: omnigent.policies.builtins.prompt.prompt_policy
+        path: goalrail.policies.builtins.prompt.prompt_policy
         arguments:
           prompt: "Deny if mentions Canada."
 """,
     )
-    from omnigent.spec.types import FunctionPolicySpec
+    from goalrail.spec.types import FunctionPolicySpec
 
     check_spec = engine.spec_for("check")
     assert check_spec is not None
     assert isinstance(check_spec, FunctionPolicySpec)
     assert check_spec.function is not None
-    assert check_spec.function.path == "omnigent.policies.builtins.prompt.prompt_policy"
+    assert check_spec.function.path == "goalrail.policies.builtins.prompt.prompt_policy"
     assert check_spec.function.arguments is not None
     assert check_spec.function.arguments["prompt"] == "Deny if mentions Canada."
 
@@ -270,7 +270,7 @@ async def test_yaml_on_key_stays_string(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """YAML 1.1 parses `on:` as boolean True by default.
-    Omnigent' custom loader keeps it as a string. If
+    Goalrail' custom loader keeps it as a string. If
     this regresses, every policy's `on:` key disappears
     and all policies silently stop firing.
 
@@ -289,7 +289,7 @@ guardrails:
       type: function
       on: [request]
       function:
-        path: omnigent.policies.function.make_fixed_action_callable
+        path: goalrail.policies.function.make_fixed_action_callable
         arguments:
           action: deny
 """,
@@ -326,7 +326,7 @@ guardrails:
       type: function
       on: [tool_call:web]
       function:
-        path: omnigent.policies.function.make_fixed_action_callable
+        path: goalrail.policies.function.make_fixed_action_callable
         arguments:
           action: allow
           set_labels:
@@ -340,7 +340,7 @@ guardrails:
       type: function
       on: [request]
       function:
-        path: omnigent.policies.builtins.prompt.prompt_policy
+        path: goalrail.policies.builtins.prompt.prompt_policy
         arguments:
           prompt: "check"
 """,
@@ -349,10 +349,10 @@ guardrails:
     names = [p.spec.name for p in engine.policies]
     assert names == ["label_taint", "function_rate", "prompt_check", "__ask_on_add_policy"]
 
-    from omnigent.spec.types import FunctionPolicySpec
+    from goalrail.spec.types import FunctionPolicySpec
 
     # prompt_check is a FunctionPolicySpec backed by the builtin.
     prompt_spec = engine.spec_for("prompt_check")
     assert isinstance(prompt_spec, FunctionPolicySpec)
     assert prompt_spec.function is not None
-    assert prompt_spec.function.path == "omnigent.policies.builtins.prompt.prompt_policy"
+    assert prompt_spec.function.path == "goalrail.policies.builtins.prompt.prompt_policy"

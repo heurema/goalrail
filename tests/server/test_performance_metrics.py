@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from opentelemetry.util.types import Attributes
 from starlette.types import Scope
 
-from omnigent.server.performance_metrics import (
+from goalrail.server.performance_metrics import (
     RequestDurationAccessFormatter,
     ServerMetricsOtelPublisher,
     ServerMetricsSnapshot,
@@ -106,7 +106,7 @@ class _FakeCounter:
     Fake OpenTelemetry counter that records ``add`` calls.
 
     :param name: Instrument name, e.g.
-        ``"omnigent.server.http.requests.started"``.
+        ``"goalrail.server.http.requests.started"``.
     :param records: Values added to the counter.
     """
 
@@ -129,7 +129,7 @@ class _FakeGauge:
     Fake OpenTelemetry gauge that records ``set`` calls.
 
     :param name: Instrument name, e.g.
-        ``"omnigent.server.http.requests.in_flight"``.
+        ``"goalrail.server.http.requests.in_flight"``.
     :param records: Values set on the gauge.
     """
 
@@ -152,7 +152,7 @@ class _FakeHistogram:
     Fake OpenTelemetry histogram that records ``record`` calls.
 
     :param name: Instrument name, e.g.
-        ``"omnigent.server.http.request.duration"``.
+        ``"goalrail.server.http.request.duration"``.
     :param records: Values recorded in the histogram.
     """
 
@@ -446,24 +446,24 @@ def test_otel_publisher_emits_snapshot_values_and_counter_deltas() -> None:
     publisher.publish(second)
 
     assert [
-        record.amount for record in meter.counters["omnigent.server.http.requests.started"].records
+        record.amount for record in meter.counters["goalrail.server.http.requests.started"].records
     ] == [9, 2]
     assert [
         record.amount
-        for record in meter.counters["omnigent.server.http.requests.completed"].records
+        for record in meter.counters["goalrail.server.http.requests.completed"].records
     ] == [7, 3]
     assert [
-        record.amount for record in meter.counters["omnigent.server.http.requests.failed"].records
+        record.amount for record in meter.counters["goalrail.server.http.requests.failed"].records
     ] == [1]
-    assert meter.gauges["omnigent.server.http.requests.in_flight"].records[-1].amount == 1
-    assert meter.gauges["omnigent.server.http.requests.last_1s"].records[-1].amount == 2
-    assert meter.gauges["omnigent.server.http.requests.last_10s"].records[-1].amount == 4
-    assert meter.gauges["omnigent.server.http.requests.last_30s"].records[-1].amount == 6
-    assert meter.gauges["omnigent.server.websocket.connections.active"].records[-1].amount == 3
-    assert meter.gauges["omnigent.server.http.request.processing.avg"].records[-1].amount == 222.0
-    assert meter.gauges["omnigent.server.process.cpu.percent"].records[-1].amount == 50.0
-    assert meter.gauges["omnigent.server.system.load_average.1m"].records[-1].amount == 1.25
-    assert meter.gauges["omnigent.server.process.memory.rss"].records[-1].amount == (
+    assert meter.gauges["goalrail.server.http.requests.in_flight"].records[-1].amount == 1
+    assert meter.gauges["goalrail.server.http.requests.last_1s"].records[-1].amount == 2
+    assert meter.gauges["goalrail.server.http.requests.last_10s"].records[-1].amount == 4
+    assert meter.gauges["goalrail.server.http.requests.last_30s"].records[-1].amount == 6
+    assert meter.gauges["goalrail.server.websocket.connections.active"].records[-1].amount == 3
+    assert meter.gauges["goalrail.server.http.request.processing.avg"].records[-1].amount == 222.0
+    assert meter.gauges["goalrail.server.process.cpu.percent"].records[-1].amount == 50.0
+    assert meter.gauges["goalrail.server.system.load_average.1m"].records[-1].amount == 1.25
+    assert meter.gauges["goalrail.server.process.memory.rss"].records[-1].amount == (
         32 * 1024 * 1024
     )
 
@@ -483,7 +483,7 @@ def test_otel_publisher_records_request_duration_histogram() -> None:
         status_code=500,
     )
 
-    records = meter.histograms["omnigent.server.http.request.duration"].records
+    records = meter.histograms["goalrail.server.http.request.duration"].records
     assert records == [
         _MetricRecord(
             amount=0.125,
@@ -523,7 +523,7 @@ async def test_publish_server_metrics_periodically_exports_until_cancelled() -> 
         """
         Wait until the fake OTEL started counter receives a record.
         """
-        while not meter.counters["omnigent.server.http.requests.started"].records:
+        while not meter.counters["goalrail.server.http.requests.started"].records:
             await asyncio.sleep(0.01)
 
     try:
@@ -534,9 +534,9 @@ async def test_publish_server_metrics_periodically_exports_until_cancelled() -> 
             await task
 
     assert [
-        record.amount for record in meter.counters["omnigent.server.http.requests.started"].records
+        record.amount for record in meter.counters["goalrail.server.http.requests.started"].records
     ] == [1]
-    assert meter.gauges["omnigent.server.http.requests.in_flight"].records[-1].amount == 1
+    assert meter.gauges["goalrail.server.http.requests.in_flight"].records[-1].amount == 1
 
 
 @pytest.mark.asyncio
@@ -552,7 +552,7 @@ async def test_create_app_metrics_middleware_counts_http_requests(
     same middleware path production requests use, then checks the
     app-owned tracker rather than a test-local stand-in.
     """
-    from omnigent.server import app as server_app
+    from goalrail.server import app as server_app
 
     before = app.state.server_metrics.snapshot()
 
@@ -608,7 +608,7 @@ def test_request_route_template_for_metrics_uses_sentinel_for_unmatched_routes()
     cardinality regression where scanner paths or probe IDs leak into the
     ``http.route`` OTEL attribute.
     """
-    from omnigent.server.app import request_route_template_for_metrics
+    from goalrail.server.app import request_route_template_for_metrics
 
     scope: Scope = {
         "type": "http",

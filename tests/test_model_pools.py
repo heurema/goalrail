@@ -8,7 +8,7 @@ import pytest
 
 from tests import _model_pools
 
-_SPREAD_ENV = "OMNIGENT_TEST_MODEL_SPREAD"
+_SPREAD_ENV = "GOALRAIL_TEST_MODEL_SPREAD"
 _GPT_POOL = ("databricks-gpt-5-4", "databricks-gpt-5-5")
 _CLAUDE_POOL = ("databricks-claude-sonnet-4-6", "databricks-claude-opus-4-6")
 
@@ -58,7 +58,7 @@ def test_spread_distributes_across_pool(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_env_override_replaces_pool(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(_SPREAD_ENV, "1")
-    monkeypatch.setenv("OMNIGENT_TEST_MODEL_POOL_GPT", "databricks-gpt-9-test")
+    monkeypatch.setenv("GOALRAIL_TEST_MODEL_POOL_GPT", "databricks-gpt-9-test")
     # Single-member env override captures every gpt-family resolution.
     assert _model_pools.resolve_model("databricks-gpt-5-4", key="any") == "databricks-gpt-9-test"
 
@@ -132,7 +132,7 @@ def test_env_pool_member_outside_static_chain_still_rotates(
 ) -> None:
     monkeypatch.setenv(_SPREAD_ENV, "1")
     monkeypatch.setenv(
-        "OMNIGENT_TEST_MODEL_POOL_CLAUDE",
+        "GOALRAIL_TEST_MODEL_POOL_CLAUDE",
         "databricks-claude-sonnet-4-6,databricks-claude-haiku-4-5",
     )
     resolved = {
@@ -149,7 +149,7 @@ def test_drained_model_excluded_from_spread_and_retry_rotation(
     monkeypatch.setenv(_SPREAD_ENV, "1")
     # gpt-5-4 removed from the pool (e.g. rate-limited endpoint).
     monkeypatch.setenv(
-        "OMNIGENT_TEST_MODEL_POOL_GPT",
+        "GOALRAIL_TEST_MODEL_POOL_GPT",
         "databricks-gpt-5-5,databricks-gpt-5-4-mini",
     )
     resolved = {
@@ -166,7 +166,7 @@ def test_drained_model_kept_when_it_is_the_pinned_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(_SPREAD_ENV, "1")
-    monkeypatch.setenv("OMNIGENT_TEST_MODEL_POOL_GPT", "databricks-gpt-5-5")
+    monkeypatch.setenv("GOALRAIL_TEST_MODEL_POOL_GPT", "databricks-gpt-5-5")
     # spread=False (explicit pin): attempt 0 still honors the drained
     # model exactly, and reruns rotate away from it without crashing.
     assert (

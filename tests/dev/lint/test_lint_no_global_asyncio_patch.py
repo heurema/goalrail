@@ -19,9 +19,9 @@ from dev.lint.lint_no_global_asyncio_patch import main, scan
 @pytest.mark.parametrize(
     "line",
     [
-        'patch("omnigent.tools.mcp.asyncio.sleep")',
-        'mock.patch("omnigent.tools.mcp.asyncio.sleep", new_callable=AsyncMock)',
-        'monkeypatch.setattr("omnigent.llms.client.asyncio.sleep", _fake)',
+        'patch("goalrail.tools.mcp.asyncio.sleep")',
+        'mock.patch("goalrail.tools.mcp.asyncio.sleep", new_callable=AsyncMock)',
+        'monkeypatch.setattr("goalrail.llms.client.asyncio.sleep", _fake)',
     ],
 )
 def test_scan_flags_global_asyncio_patch(tmp_path: Path, line: str) -> None:
@@ -35,7 +35,7 @@ def test_scan_flags_global_asyncio_patch(tmp_path: Path, line: str) -> None:
     "line",
     [
         # Thin-helper indirection — the sanctioned alternative.
-        'patch("omnigent.tools.mcp._sleep", new_callable=AsyncMock)',
+        'patch("goalrail.tools.mcp._sleep", new_callable=AsyncMock)',
         # 2+ segments after .asyncio. → a subpackage, not the stdlib module.
         'patch("websockets.asyncio.client.connect")',
     ],
@@ -50,8 +50,8 @@ def test_scan_ignores_helper_and_subpackage(tmp_path: Path, line: str) -> None:
 def test_main_exit_codes(tmp_path: Path) -> None:
     """``main`` returns 1 on a global asyncio patch, 0 on the helper form."""
     dirty = tmp_path / "test_dirty.py"
-    dirty.write_text('patch("omnigent.x.asyncio.sleep")\n')
+    dirty.write_text('patch("goalrail.x.asyncio.sleep")\n')
     clean = tmp_path / "test_clean.py"
-    clean.write_text('patch("omnigent.x._sleep")\n')
+    clean.write_text('patch("goalrail.x._sleep")\n')
     assert main(["lint_no_global_asyncio_patch.py", str(dirty)]) == 1
     assert main(["lint_no_global_asyncio_patch.py", str(clean)]) == 0

@@ -157,10 +157,10 @@
     <div class="card">
       <picture>
         <source
-          srcset="../../platform-assets/logos/omnigents-logo-reverse.svg"
+          srcset="../../platform-assets/logos/goalrail-logo-reverse.svg"
           media="(prefers-color-scheme: dark)"
         />
-        <img class="logo" src="../../platform-assets/logos/omnigents-logo.svg" alt="Goalrail" />
+        <img class="logo" src="../../platform-assets/logos/goalrail-logo.svg" alt="Goalrail" />
       </picture>
       <p class="sub">
         Enter the URL of the Goalrail server. The desktop app loads its web UI directly.
@@ -182,11 +182,11 @@
     </div>
     <script src="../src/url.js"></script>
     <script>
-      // Shared URL helpers (electron/src/url.js), exposed as window.omnigentUrl
+      // Shared URL helpers (electron/src/url.js), exposed as window.goalrailUrl
       // — the same module the main process uses, so the two never drift.
-      const { isPlainHttpRemote } = window.omnigentUrl;
+      const { isPlainHttpRemote } = window.goalrailUrl;
       // Uses the Electron preload bridge (electron/src/preload.js).
-      const setup = window.omnigentSetup;
+      const setup = window.goalrailSetup;
       const input = document.getElementById("url");
       const button = document.getElementById("connect");
       const err = document.getElementById("err");

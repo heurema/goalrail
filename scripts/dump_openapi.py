@@ -10,7 +10,7 @@ correctly to consuming SDK / docs tooling.
 
 This script:
 
-1. Imports :func:`omnigent.server.app.create_app` and instantiates
+1. Imports :func:`goalrail.server.app.create_app` and instantiates
    it against in-memory store stubs (no DB needed).
 2. Calls ``app.openapi()`` to get the FastAPI-generated 3.1 dict.
 3. Bumps the top-level ``openapi`` field to ``"3.2.0"``.
@@ -101,7 +101,7 @@ _SSE_ROUTES: list[tuple[str, str]] = [
 
 # Self-hosted base URL. ``goalrail server`` binds 127.0.0.1:6767 by
 # default (see ``_DEFAULT_LOCAL_PORT`` in
-# ``omnigent/host/local_server.py``).
+# ``goalrail/host/local_server.py``).
 _SERVERS: list[dict[str, str]] = [
     {
         "url": "http://127.0.0.1:6767",
@@ -112,7 +112,7 @@ _SERVERS: list[dict[str, str]] = [
 # Markdown prose shown at the top of the rendered reference. Covers
 # what the API is, the self-hosted base URL, and the deployment-driven
 # auth model (there is no bearer/API-key scheme — see
-# ``omnigent/server/auth.py``).
+# ``goalrail/server/auth.py``).
 _INFO_DESCRIPTION: str = """\
 Goalrail is an open-source meta-harness for building and running AI \
 agents. This is the REST API exposed by the Goalrail server: use it to \
@@ -129,7 +129,7 @@ default (`goalrail server`); point the base URL at your own deployment.
 ## Authentication
 
 There is no API-key or bearer-token scheme. Identity is supplied by the \
-deployment's configured auth provider (`OMNIGENT_AUTH_PROVIDER`):
+deployment's configured auth provider (`GOALRAIL_AUTH_PROVIDER`):
 
 - **Trusted proxy header** (default) — an upstream proxy injects an \
 identity header (`X-Forwarded-Email`, configurable). Single-user local \
@@ -151,7 +151,7 @@ schema documented below.
 
 # Auth representations. Goalrail has no bearer/API-key scheme — identity
 # arrives via a trusted-proxy header or a signed session cookie,
-# selected by ``OMNIGENT_AUTH_PROVIDER``. We model both as OpenAPI
+# selected by ``GOALRAIL_AUTH_PROVIDER``. We model both as OpenAPI
 # ``apiKey`` schemes so SDK generators and the reference can surface
 # them. We deliberately do NOT assert a top-level ``security``
 # requirement: the active scheme is deployment-specific, and public
@@ -165,7 +165,7 @@ _SECURITY_SCHEMES: dict[str, dict[str, str]] = {
         "description": (
             "Trusted-proxy identity header (header-auth mode, the "
             "default). The header name is configurable via "
-            "``OMNIGENT_AUTH_HEADER``."
+            "``GOALRAIL_AUTH_HEADER``."
         ),
     },
     "sessionCookieAuth": {
@@ -318,17 +318,17 @@ def _build_app_with_stub_stores() -> Any:
     """
     import tempfile
 
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.server.app import create_app
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
-    from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from goalrail.runtime.agent_cache import AgentCache
+    from goalrail.server.app import create_app
+    from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from goalrail.stores.artifact_store.local import LocalArtifactStore
+    from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+    from goalrail.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
-    from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+    from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from goalrail.stores.host_store import HostStore
+    from goalrail.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 
     # On-disk SQLite (mkdtemp ensures uniqueness so concurrent
     # invocations don't collide).
@@ -370,7 +370,7 @@ def _server_stream_event_schema() -> dict[str, Any]:
         * ``"definitions"`` — the per-variant component schemas
           (merged into ``components.schemas``).
     """
-    from omnigent.server.schemas import ServerStreamEvent
+    from goalrail.server.schemas import ServerStreamEvent
 
     adapter: TypeAdapter[ServerStreamEvent] = TypeAdapter(ServerStreamEvent)
     schema = adapter.json_schema(ref_template="#/components/schemas/{model}")

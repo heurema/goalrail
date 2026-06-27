@@ -273,7 +273,7 @@ trade-offs; one is inherent to the embedded-terminal UX.
 
 | Con | Status | How we address it |
 |---|---|---|
-| Two extra files to manage | **Solved** | Reuse the existing bridge-dir pattern (`/tmp/omnigent-<uid>/qwen-native/<hash>`, `0700`) and the runner's session-close hook (goose-native already has stop/cleanup sites). Make **OUT a FIFO** (qwen's `--json-file` accepts a FIFO / `/dev/fd/N`) so it streams and never grows on disk; IN stays a small append-only file rotated/cleared on close. |
+| Two extra files to manage | **Solved** | Reuse the existing bridge-dir pattern (`/tmp/goalrail-<uid>/qwen-native/<hash>`, `0700`) and the runner's session-close hook (goose-native already has stop/cleanup sites). Make **OUT a FIFO** (qwen's `--json-file` accepts a FIFO / `/dev/fd/N`) so it streams and never grows on disk; IN stays a small append-only file rotated/cleared on close. |
 | Interrupt not in the protocol | **Acceptable** | `Escape` via the tmux pane is reliable and we keep tmux for display anyway, so this costs nothing extra. Optional follow-up: upstream an `interrupt` command to qwen's `RemoteInputWatcher` so Stop becomes fully file-based too. |
 | Coupled to qwen's dual-output schema | **Solved (defense in depth)** | (1) **Graceful degradation** — detect `qwen --version`/flag support at launch; if `--input-file`/`--json-file` are absent on an older qwen, fall back to the goose-style `tmux send-keys` bridge. We support both; file-based is just the default when available. (2) Defensive parser that ignores unknown event types (like the existing forwarders). (3) A CI **smoke test** that launches the real binary and asserts the protocol shape, so a version bump that breaks it fails loudly. |
 | Diverges from other native harnesses | **Solved (design)** | Define a small shared native-bridge contract (`inject` / `interrupt` / `kill`) that both the file-based (qwen) and send-keys (goose/cursor) bridges implement, so reviewers see one shape with two backends. The win (gating + usage) is documented so the divergence reads as intentional. |
@@ -283,20 +283,20 @@ trade-offs; one is inherent to the embedded-terminal UX.
 
 | New file | Role |
 |---|---|
-| `omnigent/inner/qwen_native_executor.py` | `submit` via input-file; `supports_streaming=False`, `supports_live_message_queue=True` |
-| `omnigent/inner/qwen_native_harness.py` | `create_app()` factory |
-| `omnigent/qwen_native_bridge.py` | input-file append (`submit` / `confirmation_response`), tmux.json, `inject_interrupt` (Escape), `kill_session`, `build_qwen_native_spawn_env` |
-| `omnigent/qwen_native_forwarder.py` | tail `--json-file`, mirror transcript, drive the permission gate |
-| `omnigent/qwen_native.py` | `goalrail qwen` wrapper (clone `goose_native.py`) |
+| `goalrail/inner/qwen_native_executor.py` | `submit` via input-file; `supports_streaming=False`, `supports_live_message_queue=True` |
+| `goalrail/inner/qwen_native_harness.py` | `create_app()` factory |
+| `goalrail/qwen_native_bridge.py` | input-file append (`submit` / `confirmation_response`), tmux.json, `inject_interrupt` (Escape), `kill_session`, `build_qwen_native_spawn_env` |
+| `goalrail/qwen_native_forwarder.py` | tail `--json-file`, mirror transcript, drive the permission gate |
+| `goalrail/qwen_native.py` | `goalrail qwen` wrapper (clone `goose_native.py`) |
 
 ## Registration touch-points (one-liners, beside the goose entries)
 
-- `omnigent/runtime/harnesses/__init__.py` → `"qwen-native": "omnigent.inner.qwen_native_harness"`
-- `omnigent/harness_aliases.py` → add `qwen-native` + `native-qwen` to `NATIVE_HARNESSES`
-- `omnigent/native_coding_agents.py` + `omnigent/_wrapper_labels.py` → `QWEN_NATIVE_*`
-- `omnigent/onboarding/harness_install.py` → `_HARNESS_NAME_TO_KEY` → existing `QWEN_KEY`
-- `omnigent/runner/app.py` → `_auto_create_qwen_terminal` + the ~7 goose-native dispatch sites
-- `omnigent/cli.py` → `goalrail qwen` command
+- `goalrail/runtime/harnesses/__init__.py` → `"qwen-native": "goalrail.inner.qwen_native_harness"`
+- `goalrail/harness_aliases.py` → add `qwen-native` + `native-qwen` to `NATIVE_HARNESSES`
+- `goalrail/native_coding_agents.py` + `goalrail/_wrapper_labels.py` → `QWEN_NATIVE_*`
+- `goalrail/onboarding/harness_install.py` → `_HARNESS_NAME_TO_KEY` → existing `QWEN_KEY`
+- `goalrail/runner/app.py` → `_auto_create_qwen_terminal` + the ~7 goose-native dispatch sites
+- `goalrail/cli.py` → `goalrail qwen` command
 
 > Naming: keep `qwen` = ACP (piped); add `qwen-native` / `native-qwen` for the TUI,
 > mirroring how `goose` and `goose-native` coexist. The default can be flipped later.
@@ -392,7 +392,7 @@ and fork-capable:
   Goalrail session via `external_session_id` (`_persist_qwen_external_session_id`
   → `PATCH /v1/sessions/{id}`), read back from the snapshot on the next launch
   (`launch_config.external_session_id`), and stamped as
-  `omnigent.fork.source_external_session_id` so a fork carries history — exactly
+  `goalrail.fork.source_external_session_id` so a fork carries history — exactly
   like the other resuming native harnesses.
 - **Minting the id.** qwen is cleaner than claude/codex here: it lets us *assign*
   the id via `--session-id`, so instead of capturing a vendor-generated id off the

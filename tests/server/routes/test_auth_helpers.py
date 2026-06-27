@@ -12,18 +12,18 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.errors import ErrorCode, OmnigentError
-from omnigent.server.auth import (
+from goalrail.errors import ErrorCode, GoalrailError
+from goalrail.server.auth import (
     LEVEL_EDIT,
     LEVEL_OWNER,
     LEVEL_READ,
     RESERVED_USER_PUBLIC,
 )
-from omnigent.server.routes._auth_helpers import require_access_and_level
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.server.routes._auth_helpers import require_access_and_level
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.permission_store.sqlalchemy_store import (
+from goalrail.stores.permission_store.sqlalchemy_store import (
     SqlAlchemyPermissionStore,
 )
 
@@ -89,7 +89,7 @@ async def test_no_access_raises_404_not_403(
     perm_store.ensure_user(BOB)
     perm_store.grant(ALICE, conv.id, LEVEL_OWNER)
 
-    with pytest.raises(OmnigentError) as exc:
+    with pytest.raises(GoalrailError) as exc:
         await require_access_and_level(BOB, conv.id, LEVEL_READ, perm_store, conv_store)
 
     assert exc.value.code == ErrorCode.NOT_FOUND, f"no-access must be 404, got {exc.value.code}"
@@ -104,7 +104,7 @@ async def test_insufficient_level_raises_403(
     perm_store.ensure_user(BOB)
     perm_store.grant(BOB, conv.id, LEVEL_READ)
 
-    with pytest.raises(OmnigentError) as exc:
+    with pytest.raises(GoalrailError) as exc:
         await require_access_and_level(BOB, conv.id, LEVEL_EDIT, perm_store, conv_store)
 
     assert exc.value.code == ErrorCode.FORBIDDEN, (
@@ -207,7 +207,7 @@ async def test_unauthenticated_with_store_raises_401(
     """An anonymous caller against an enabled store is rejected with 401."""
     conv = conv_store.create_conversation()
 
-    with pytest.raises(OmnigentError) as exc:
+    with pytest.raises(GoalrailError) as exc:
         await require_access_and_level(None, conv.id, LEVEL_READ, perm_store, conv_store)
 
     assert exc.value.code == ErrorCode.UNAUTHORIZED
@@ -220,7 +220,7 @@ async def test_missing_conversation_raises_404(
     """A non-admin asking for a conversation that does not exist gets 404."""
     perm_store.ensure_user(ALICE)
 
-    with pytest.raises(OmnigentError) as exc:
+    with pytest.raises(GoalrailError) as exc:
         await require_access_and_level(
             ALICE, "conv_does_not_exist", LEVEL_READ, perm_store, conv_store
         )

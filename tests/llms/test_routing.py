@@ -2,8 +2,8 @@
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.llms.routing import RoutedModel, infer_harness_from_model, parse_model_string
+from goalrail.errors import GoalrailError
+from goalrail.llms.routing import RoutedModel, infer_harness_from_model, parse_model_string
 
 
 @pytest.mark.parametrize(
@@ -75,7 +75,7 @@ def test_parse_without_prefix_defaults_to_openai() -> None:
 
 
 def test_unknown_provider_raises() -> None:
-    with pytest.raises(OmnigentError, match="Unknown provider 'foobar'"):
+    with pytest.raises(GoalrailError, match="Unknown provider 'foobar'"):
         parse_model_string("foobar/some-model")
 
 
@@ -114,5 +114,5 @@ def test_infer_harness_from_model(model: str, expected_harness: str) -> None:
     assert infer_harness_from_model(model) == expected_harness, (
         f"Model {model!r}: expected harness {expected_harness!r}, "
         f"got {infer_harness_from_model(model)!r}. "
-        "Check _HARNESS_FOR_MODEL_PREFIX in omnigent/llms/routing.py."
+        "Check _HARNESS_FOR_MODEL_PREFIX in goalrail/llms/routing.py."
     )

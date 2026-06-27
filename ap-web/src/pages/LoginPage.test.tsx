@@ -70,7 +70,7 @@ describe("LoginPage sanitizeReturnTo open-redirect defense", () => {
     renderLoginAt("%2F");
 
     expect(screen.getByText(/Goalrail stores a copy/i)).toBeInTheDocument();
-    expect(screen.getByText("~/.omnigent/admin-credentials")).toBeInTheDocument();
+    expect(screen.getByText("~/.goalrail/admin-credentials")).toBeInTheDocument();
     expect(
       screen.queryByText(/On a fresh install the initial admin password/i),
     ).not.toBeInTheDocument();

@@ -3,7 +3,7 @@
 The web-UI ``/compact`` command and compact button POST
 ``{"type": "compact"}`` to ``POST /v1/sessions/{id}/events``. Per
 ``designs/CLAUDE_NATIVE.md`` ("Control events dispatch on the runner"),
-the Omnigent server stays harness-agnostic: it forwards the control to the
+the Goalrail server stays harness-agnostic: it forwards the control to the
 bound runner and only runs its own in-process compaction
 (``_run_compact_locked`` → ``compact_conversation_now``) when the
 runner did NOT handle it.
@@ -13,10 +13,10 @@ The runner's dispatch contract (verified in
 
 * claude-native injects ``/compact`` into the tmux pane and returns
   **200** — Claude Code compacts its own context.
-* other harnesses **204** no-op — the Omnigent server owns the operation.
+* other harnesses **204** no-op — the Goalrail server owns the operation.
 * a failed injection (pane not attached) returns **503**.
 
-These tests pin the Omnigent side of that contract by stubbing the runner's
+These tests pin the Goalrail side of that contract by stubbing the runner's
 HTTP response and asserting whether the AP-side compaction ran.
 """
 
@@ -28,7 +28,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime.compaction import CompactionResult
+from goalrail.runtime.compaction import CompactionResult
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -55,7 +55,7 @@ def _fake_runner_returning(compact_status: int) -> tuple[httpx.AsyncClient, list
     Build a mock runner client that returns *compact_status* for compact.
 
     The transport records every ``{"type": "compact"}`` body it sees so
-    the test can assert the Omnigent server actually forwarded the control,
+    the test can assert the Goalrail server actually forwarded the control,
     and returns *compact_status* for those POSTs (204 for any other
     runner POST so unrelated session traffic passes through).
 
@@ -90,31 +90,31 @@ def _fake_runner_returning(compact_status: int) -> tuple[httpx.AsyncClient, list
     return runner, captured
 
 
-async def test_compact_skips_omnigent_compaction_when_runner_handles_it(
+async def test_compact_skips_goalrail_compaction_when_runner_handles_it(
     client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     A 200 from the runner (claude-native injected ``/compact``) makes
-    the Omnigent server skip its own compaction.
+    the Goalrail server skip its own compaction.
 
     This is the fix for the original bug: claude-native sessions bind
     to an LLM-less pseudo-agent, so ``_run_compact_locked`` would 400.
-    When the runner reports it handled the control (200), the Omnigent server
+    When the runner reports it handled the control (200), the Goalrail server
     must NOT run ``compact_conversation_now`` at all.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     async def _must_not_run(**_: Any) -> CompactionResult:
         """Fail loudly if AP-side compaction is reached on the 200 path."""
         raise AssertionError(
             "compact_conversation_now must not run when the runner "
-            "reported it handled /compact (200). The Omnigent server fell "
+            "reported it handled /compact (200). The Goalrail server fell "
             "through to its own compaction instead of skipping."
         )
 
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.compact_conversation_now",
+        "goalrail.runtime.workflow.compact_conversation_now",
         _must_not_run,
     )
 
@@ -132,32 +132,32 @@ async def test_compact_skips_omnigent_compaction_when_runner_handles_it(
         set_runner_client(None)
 
     # 202 (route default) with queued=False: control forwarded, runner
-    # handled it, Omnigent returned without running (or raising from) its own
+    # handled it, Goalrail returned without running (or raising from) its own
     # compaction.
     assert resp.status_code == 202, resp.text
     assert resp.json() == {"queued": False}, resp.text
     # Exactly one compact control was forwarded to the runner. 0 = the
-    # Omnigent server never forwarded (it would have run _run_compact_locked
+    # Goalrail server never forwarded (it would have run _run_compact_locked
     # directly — the pre-fix behavior); 2+ = duplicate forward.
     assert captured == [{"type": "compact"}], (
         f"AP server must forward exactly one compact control to the runner; got {captured!r}."
     )
 
 
-async def test_compact_runs_omnigent_compaction_when_runner_noops(
+async def test_compact_runs_goalrail_compaction_when_runner_noops(
     client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A 204 from the runner (in-process harness) makes the Omnigent server run
+    A 204 from the runner (in-process harness) makes the Goalrail server run
     its own ``compact_conversation_now``.
 
     In-process harnesses have no terminal to inject into — explicit
     compaction is an AP-side LLM summarisation. The 204 no-op tells the
-    Omnigent server it owns the operation, so it must still forward the
+    Goalrail server it owns the operation, so it must still forward the
     control (harness-agnostic) AND then run the compaction.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     calls: list[dict[str, Any]] = []
 
@@ -167,7 +167,7 @@ async def test_compact_runs_omnigent_compaction_when_runner_noops(
         return CompactionResult(messages=[], summary_metadata=None, total_tokens=1234)
 
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.compact_conversation_now",
+        "goalrail.runtime.workflow.compact_conversation_now",
         _record,
     )
 
@@ -187,7 +187,7 @@ async def test_compact_runs_omnigent_compaction_when_runner_noops(
     assert resp.status_code == 202, resp.text
     assert resp.json() == {"queued": False}, resp.text
     # Control was still forwarded even though the runner no-ops — the
-    # Omnigent server is harness-agnostic and forwards for every harness.
+    # Goalrail server is harness-agnostic and forwards for every harness.
     assert captured == [{"type": "compact"}], (
         f"AP server must forward compact to the runner even on the "
         f"in-process path; got {captured!r}."
@@ -214,21 +214,21 @@ async def test_compact_errors_when_runner_injection_fails(
 
     A claude-native session whose tmux pane is gone cannot compact, and
     AP-side compaction would be both broken (no LLM) and semantically
-    wrong (summarising the mirror). The Omnigent server must surface the
+    wrong (summarising the mirror). The Goalrail server must surface the
     failure rather than silently running its own compaction.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     async def _must_not_run(**_: Any) -> CompactionResult:
         """Fail loudly if AP-side compaction is reached on the error path."""
         raise AssertionError(
             "compact_conversation_now must not run when the runner "
-            "returned a non-200/204 status — Omnigent fell through to its "
+            "returned a non-200/204 status — Goalrail fell through to its "
             "own compaction instead of surfacing the runner failure."
         )
 
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.compact_conversation_now",
+        "goalrail.runtime.workflow.compact_conversation_now",
         _must_not_run,
     )
 
@@ -282,7 +282,7 @@ async def test_external_compaction_status_publishes_compaction_sse(
     external_compaction_status republishes the matching compaction SSE.
 
     The forwarder posts this from Claude's PreCompact (in_progress) and
-    post-compaction SessionStart (completed) hooks. Omnigent must translate it
+    post-compaction SessionStart (completed) hooks. Goalrail must translate it
     into the same response.compaction.* SSE the web client already
     renders, otherwise the spinner never appears for claude-native
     sessions (the gap the user reported: summary flushes with no
@@ -295,7 +295,7 @@ async def test_external_compaction_status_publishes_compaction_sse(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)

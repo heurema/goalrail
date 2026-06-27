@@ -4,10 +4,10 @@ The native ``kiro-native`` ("Kiro") wrapper is terminal-first: the ``kiro-cli``
 TUI runs in the session terminal, the SPA's **Terminal** view attaches to that
 live TUI over a WebSocket, and the SPA's **Chat** view renders the SAME canonical
 transcript the TUI prints. A native forwarder
-(:mod:`omnigent.kiro_native_session_forwarder`) tails Kiro's structured session
+(:mod:`goalrail.kiro_native_session_forwarder`) tails Kiro's structured session
 JSONL and mirrors the transcript back OUT as conversation items; web-composer
 messages are injected INTO the TUI's tmux pane by
-:class:`omnigent.inner.kiro_native_executor.KiroNativeExecutor`. This suite is the
+:class:`goalrail.inner.kiro_native_executor.KiroNativeExecutor`. This suite is the
 kiro sibling of ``test_native_goose_render_parity`` / ``test_native_cursor_render_parity``
 and asserts the same three properties:
 
@@ -62,7 +62,7 @@ def _kiro_unavailable_reason() -> str | None:
 
     kiro-native needs the ``kiro-cli`` binary + ``tmux`` on PATH and a signed-in
     Kiro account (``kiro`` authenticates against its own backend; there is no
-    Omnigent-managed credential). CI provisions no Kiro account, so any missing
+    Goalrail-managed credential). CI provisions no Kiro account, so any missing
     prerequisite → a clean skip (not a failure), matching the cursor/goose suites.
 
     :returns: A human-readable skip reason, or ``None`` when prerequisites exist.

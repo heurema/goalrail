@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import codex_native_process_registry as registry
+from goalrail import codex_native_process_registry as registry
 
 fcntl = pytest.importorskip("fcntl")
 
@@ -30,7 +30,7 @@ def test_registry_add_remove_round_trip(tmp_path: Path) -> None:
     registry.register_codex_native_process(
         pid=123,
         pgid=456,
-        tmux_session_name="omnigent-codex-123",
+        tmux_session_name="goalrail-codex-123",
         session_tag="tag-123",
         owner_lock_path=tmp_path / "owner.lock",
         registry_path=path,
@@ -40,7 +40,7 @@ def test_registry_add_remove_round_trip(tmp_path: Path) -> None:
         {
             "pid": 123,
             "pgid": 456,
-            "tmux_session_name": "omnigent-codex-123",
+            "tmux_session_name": "goalrail-codex-123",
             "session_tag": "tag-123",
             "owner_lock_path": str(tmp_path / "owner.lock"),
         }
@@ -66,7 +66,7 @@ def test_reconciliation_reaps_alive_tagged_process(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(
         registry,
         "_process_cmdline",
-        lambda _pid: "codex omnigent_crash_teardown_tag=tag-123 app-server",
+        lambda _pid: "codex goalrail_crash_teardown_tag=tag-123 app-server",
     )
     monkeypatch.setattr(registry.os, "killpg", lambda pgid, sig: killed.append((pgid, sig)))
 
@@ -116,7 +116,7 @@ def test_reconciliation_skips_live_sibling_when_owner_lock_is_held(
     monkeypatch.setattr(
         registry,
         "_process_cmdline",
-        lambda _pid: "codex omnigent_crash_teardown_tag=tag-123 app-server",
+        lambda _pid: "codex goalrail_crash_teardown_tag=tag-123 app-server",
     )
     monkeypatch.setattr(registry.os, "killpg", lambda pgid, sig: killed.append((pgid, sig)))
 
@@ -151,7 +151,7 @@ def test_reconciliation_reaps_when_owner_lock_is_not_held(tmp_path: Path, monkey
     monkeypatch.setattr(
         registry,
         "_process_cmdline",
-        lambda _pid: "codex omnigent_crash_teardown_tag=tag-123 app-server",
+        lambda _pid: "codex goalrail_crash_teardown_tag=tag-123 app-server",
     )
     monkeypatch.setattr(registry.os, "killpg", lambda pgid, sig: killed.append((pgid, sig)))
 
@@ -187,7 +187,7 @@ def test_tmux_session_reaped_only_when_recorded_name_exists(tmp_path: Path, monk
     registry.register_codex_native_process(
         pid=123,
         pgid=456,
-        tmux_session_name="omnigent-codex-live",
+        tmux_session_name="goalrail-codex-live",
         session_tag="tag-live",
         owner_lock_path=None,
         registry_path=path,
@@ -195,7 +195,7 @@ def test_tmux_session_reaped_only_when_recorded_name_exists(tmp_path: Path, monk
     registry.register_codex_native_process(
         pid=124,
         pgid=457,
-        tmux_session_name="omnigent-codex-missing",
+        tmux_session_name="goalrail-codex-missing",
         session_tag="tag-missing",
         owner_lock_path=None,
         registry_path=path,
@@ -207,7 +207,7 @@ def test_tmux_session_reaped_only_when_recorded_name_exists(tmp_path: Path, monk
         "_process_cmdline",
         lambda pid: (
             "codex "
-            f"omnigent_crash_teardown_tag=tag-{'live' if pid == 123 else 'missing'} "
+            f"goalrail_crash_teardown_tag=tag-{'live' if pid == 123 else 'missing'} "
             "app-server"
         ),
     )
@@ -215,13 +215,13 @@ def test_tmux_session_reaped_only_when_recorded_name_exists(tmp_path: Path, monk
     monkeypatch.setattr(
         registry,
         "_tmux_session_exists",
-        lambda name: name == "omnigent-codex-live",
+        lambda name: name == "goalrail-codex-live",
     )
     monkeypatch.setattr(registry, "_kill_tmux_session", lambda name: killed_tmux.append(name))
 
     registry.reconcile_codex_native_process_registry(registry_path=path)
 
-    assert killed_tmux == ["omnigent-codex-live"]
+    assert killed_tmux == ["goalrail-codex-live"]
     assert _registry_payload(path) == []
 
 

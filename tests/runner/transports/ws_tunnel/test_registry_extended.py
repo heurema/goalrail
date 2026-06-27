@@ -10,13 +10,13 @@ import base64
 
 import pytest
 
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     ResponseHeadFrame,
     WSCloseFrame,
     WSFrame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import (
+from goalrail.runner.transports.ws_tunnel.registry import (
     TunnelRegistry,
     WSChannelState,
 )

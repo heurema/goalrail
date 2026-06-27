@@ -1,4 +1,4 @@
-"""Tests for entity <-> ORM row converters (omnigent/db/converters.py).
+"""Tests for entity <-> ORM row converters (goalrail/db/converters.py).
 
 The converter layer currently provides ``sql_agent_to_entity``.
 Tests verify round-trip fidelity: entity -> ORM row -> entity, and
@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import time
 
-from omnigent.db.converters import sql_agent_to_entity
-from omnigent.db.db_models import SqlAgent
-from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
-from omnigent.entities import Agent
+from goalrail.db.converters import sql_agent_to_entity
+from goalrail.db.db_models import SqlAgent
+from goalrail.db.utils import get_or_create_engine, make_managed_session_maker
+from goalrail.entities import Agent
 
 
 def _now() -> int:

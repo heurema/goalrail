@@ -1,6 +1,6 @@
 """
 Tests for ``_build_claude_sdk_spawn_env`` in
-``omnigent/runtime/workflow.py``.
+``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec.executor`` fields to
 ``HARNESS_CLAUDE_SDK_*`` env vars that the claude-sdk harness wrap reads
@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 import yaml as _yaml
 
-from omnigent.runtime.workflow import _build_claude_sdk_spawn_env
-from omnigent.spec.types import (
+from goalrail.runtime.workflow import _build_claude_sdk_spawn_env
+from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
     DatabricksAuth,
@@ -30,14 +30,14 @@ from omnigent.spec.types import (
 @pytest.fixture(autouse=True)
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
-    Point OMNIGENT_CONFIG_HOME at an empty temp dir for every test in
+    Point GOALRAIL_CONFIG_HOME at an empty temp dir for every test in
     this file so tests that don't explicitly set up a global config are
-    not affected by the developer's real ``~/.omnigent/config.yaml``.
+    not affected by the developer's real ``~/.goalrail/config.yaml``.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory for the isolated config.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
 
 def _make_spec(
@@ -66,7 +66,7 @@ def _make_spec(
         spec_version=1,
         name="test-claude-sdk",
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model, auth=auth),
+        executor=ExecutorSpec(type="goalrail", config=config, model=model, auth=auth),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 
@@ -132,13 +132,13 @@ def test_global_config_databricks_auth_applied_when_spec_has_no_auth(
     When the spec declares no auth, ``_load_global_auth()`` is consulted
     and a global ``auth: {type: databricks, profile: …}`` is applied.
 
-    Failure means ``omnigent setup`` auth configuration is silently
+    Failure means ``goalrail setup`` auth configuration is silently
     ignored for claude-sdk agents (it was applied to openai-agents but
     not claude-sdk before this fix).
     """
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(_yaml.dump({"auth": {"type": "databricks", "profile": "global-profile"}}))
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
     spec = _make_spec(auth=None, profile=None)
     env = _build_claude_sdk_spawn_env(spec, workdir=None)
@@ -160,7 +160,7 @@ def test_global_config_not_applied_when_spec_has_legacy_profile(
     """
     cfg_path = tmp_path / "config.yaml"
     cfg_path.write_text(_yaml.dump({"auth": {"type": "api_key", "api_key": "sk-global"}}))
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
     spec = _make_spec(auth=None, profile="oss-from-spec")
     env = _build_claude_sdk_spawn_env(spec, workdir=None)
@@ -183,7 +183,7 @@ def _ucode_state_without_model(monkeypatch: pytest.MonkeyPatch, *, model: str | 
     :param model: Per-agent ucode model, e.g. ``None`` to simulate a
         workspace that caches no model, or ``"databricks-claude-sonnet-4-6"``.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -197,11 +197,11 @@ def _ucode_state_without_model(monkeypatch: pytest.MonkeyPatch, *, model: str | 
         },
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.get_workspace_url_for_profile",
+        "goalrail.runtime.workflow.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.read_ucode_state",
+        "goalrail.runtime.workflow.read_ucode_state",
         lambda workspace_url: state,
     )
 

@@ -5,7 +5,7 @@ Verifies that PolicyEngine instances bound to different
 conversations keep their label state separate — no
 cross-conversation leakage via the store.
 
-Load-bearing: omnigent runs multiple concurrent
+Load-bearing: goalrail runs multiple concurrent
 conversations against the same database. A bug that
 leaked label state across conversations would break every
 per-user IFC guarantee.
@@ -27,16 +27,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies import build_policy_engine
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec import load
-from omnigent.spec.types import (
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies import build_policy_engine
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec import load
+from goalrail.spec.types import (
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy
@@ -217,7 +217,7 @@ async def test_parallel_conversations_with_different_specs(
     one spec's schema doesn't impose constraints on the
     other's writes (labels are conversation-scoped; schemas
     are spec-scoped)."""
-    from omnigent.spec.types import LabelDef
+    from goalrail.spec.types import LabelDef
 
     # Spec A: has a schema for `integrity` with monotonic.
     policy_a = make_fixed_policy(

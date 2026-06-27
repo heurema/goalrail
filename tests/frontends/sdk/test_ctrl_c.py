@@ -1,6 +1,6 @@
 """
 E2E regression test: two-press Ctrl+C exit with clear-input
-semantics in the ``omnigent chat`` REPL.
+semantics in the ``goalrail chat`` REPL.
 
 Behavior contract (see
 ``TerminalHost.__init__::_on_ctrl_c``):

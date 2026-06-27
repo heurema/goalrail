@@ -1412,7 +1412,7 @@ describe("BlockStream — status events", () => {
       {
         type: "native_tool_call",
         toolType: "web_search_call",
-        data: { action: { type: "search", query: "omnigent framework" } },
+        data: { action: { type: "search", query: "goalrail framework" } },
         itemId: "",
         responseId: "",
       },
@@ -1423,7 +1423,7 @@ describe("BlockStream — status events", () => {
     expect(native).toBeDefined();
     if (native && native.type === "native_tool") {
       expect(native.toolType).toBe("web_search_call");
-      expect(native.label).toBe("web search: omnigent framework");
+      expect(native.label).toBe("web search: goalrail framework");
     }
   });
 

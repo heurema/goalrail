@@ -6,7 +6,7 @@ import pytest
 
 cel = pytest.importorskip("cel_expr_python", reason="cel-expr-python not installed")
 
-from omnigent.policies.builtins.cel import cel_policy  # noqa: E402
+from goalrail.policies.builtins.cel import cel_policy  # noqa: E402
 
 # ── Map return: DENY ────────────────────────────────────────────
 

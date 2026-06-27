@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from omnigent.runner.transports.ws_tunnel.limits import RUNNER_TUNNEL_MAX_MESSAGE_BYTES
+from goalrail.runner.transports.ws_tunnel.limits import RUNNER_TUNNEL_MAX_MESSAGE_BYTES
 
 
 def test_max_message_bytes_is_100mb() -> None:

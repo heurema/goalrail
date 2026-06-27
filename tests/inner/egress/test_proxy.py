@@ -1,4 +1,4 @@
-"""Tests for omnigent.inner.egress.proxy — MITM proxy with rule enforcement."""
+"""Tests for goalrail.inner.egress.proxy — MITM proxy with rule enforcement."""
 
 from __future__ import annotations
 
@@ -7,19 +7,20 @@ import base64
 import contextlib
 import socket
 import ssl
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 
-from omnigent.inner.credential_proxy import (
+from goalrail.inner.credential_proxy import (
     SYNTHETIC_CREDENTIAL_PREFIX,
     CredentialRewriteRule,
 )
-from omnigent.inner.egress.ca import ensure_ca, ensure_ca_bundle
-from omnigent.inner.egress.certs import HostCertCache
-from omnigent.inner.egress.proxy import EgressProxy
-from omnigent.inner.egress.rules import parse_rules
+from goalrail.inner.egress.ca import ensure_ca, ensure_ca_bundle
+from goalrail.inner.egress.certs import HostCertCache
+from goalrail.inner.egress.proxy import EgressProxy
+from goalrail.inner.egress.rules import parse_rules
 
 
 @pytest.fixture()
@@ -51,18 +52,19 @@ async def test_proxy_start_stop_tcp(
 
 
 @pytest.mark.asyncio
-async def test_proxy_start_unix(ca_paths: tuple[Path, Path, Path], tmp_path: Path) -> None:
+async def test_proxy_start_unix(ca_paths: tuple[Path, Path, Path]) -> None:
     """Proxy can listen on a Unix socket."""
     cert_path, key_path, _ = ca_paths
     rules = parse_rules(["GET example.com/**"])
     proxy = EgressProxy(rules, cert_path, key_path)
 
-    sock_path = tmp_path / "test.sock"
-    await proxy.start_unix(sock_path)
+    with tempfile.TemporaryDirectory(prefix="gr-uds-", dir="/tmp") as sock_dir:
+        sock_path = Path(sock_dir) / "test.sock"
+        await proxy.start_unix(sock_path)
 
-    # Socket file is created
-    assert sock_path.exists()
-    await proxy.stop()
+        # Socket file is created
+        assert sock_path.exists()
+        await proxy.stop()
 
 
 @pytest.mark.asyncio
@@ -495,11 +497,11 @@ async def test_s2_dns_rebinding_fail_then_loopback_is_blocked_e2e(
 
 def _basic_auth_header_bytes(token: str) -> bytes:
     """Construct the header bytes a well-behaved HTTP client emits
-    when the proxy URL is ``http://omnigent:<token>@host:port``.
+    when the proxy URL is ``http://goalrail:<token>@host:port``.
     """
     import base64
 
-    return b"Basic " + base64.b64encode(f"omnigent:{token}".encode())
+    return b"Basic " + base64.b64encode(f"goalrail:{token}".encode())
 
 
 @pytest.mark.asyncio
@@ -535,7 +537,7 @@ async def test_s4_proxy_returns_407_without_proxy_authorization(
             f"request. Got: {response[:200]!r}. Regression: a "
             f"same-UID attacker can now use the proxy."
         )
-        assert b'Proxy-Authenticate: Basic realm="omnigent"' in response
+        assert b'Proxy-Authenticate: Basic realm="goalrail"' in response
     finally:
         await proxy.stop()
 
@@ -681,9 +683,9 @@ def test_s4_check_proxy_auth_is_case_insensitive_on_header_name() -> None:
     proxy._auth_token = "tok"
     import base64
 
-    proxy._expected_auth_value = b"Basic " + base64.b64encode(b"omnigent:tok")
+    proxy._expected_auth_value = b"Basic " + base64.b64encode(b"goalrail:tok")
 
-    expected = b"Basic " + base64.b64encode(b"omnigent:tok")
+    expected = b"Basic " + base64.b64encode(b"goalrail:tok")
     lower = b"proxy-authorization: " + expected + b"\r\n\r\n"
     mixed = b"Proxy-Authorization: " + expected + b"\r\n\r\n"
     upper = b"PROXY-AUTHORIZATION: " + expected + b"\r\n\r\n"

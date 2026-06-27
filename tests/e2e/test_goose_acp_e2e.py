@@ -2,9 +2,9 @@
 
 The chat-first sibling of ``test_goose_native_cli_e2e``. The ``goose`` harness
 runs Block's Goose over the Agent Client Protocol (``goose acp``):
-:class:`omnigent.inner.goose_executor.GooseExecutor` spawns the subprocess,
+:class:`goalrail.inner.goose_executor.GooseExecutor` spawns the subprocess,
 streams ``agent_message_chunk`` updates as chat text, and routes Goose's mid-turn
-``session/request_permission`` through Omnigent's TOOL_CALL policy + human-consent
+``session/request_permission`` through Goalrail's TOOL_CALL policy + human-consent
 elicitation (the same bridges the runner's ExecutorAdapter installs). This test
 drives the executor directly against a *real* ``goose acp`` process and asserts
 the full round-trip: streaming text, a tool-call permission surfaced to the
@@ -12,14 +12,14 @@ elicitation handler, the tool running on approval, and token usage on completion
 
 Environment requirements (why this is opt-in, not pure-CI)
 ----------------------------------------------------------
-* **Opt-in only**: set ``OMNIGENT_E2E_GOOSE=1`` to run. Needs a configured Goose
+* **Opt-in only**: set ``GOALRAIL_E2E_GOOSE=1`` to run. Needs a configured Goose
   provider — ``GOOSE_PROVIDER`` + ``GOOSE_MODEL`` and the provider's key in the
   environment (e.g. ``ANTHROPIC_API_KEY``) — plus the ``goose`` binary on PATH.
   The test runs in an isolated ``$HOME`` so it never reads or writes the
   developer's real ``~/.config/goose`` (provider comes from env; the per-tool
   grant Goose may persist lands in the temp HOME and is discarded).
 
-    OMNIGENT_E2E_GOOSE=1 \
+    GOALRAIL_E2E_GOOSE=1 \
     GOOSE_PROVIDER=anthropic GOOSE_MODEL=claude-haiku-4-5-20251001 \
     ANTHROPIC_API_KEY=... \
     .venv/bin/python -m pytest tests/e2e/test_goose_acp_e2e.py -v
@@ -33,16 +33,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.executor import ExecutorError, TextChunk, TurnComplete
-from omnigent.inner.goose_executor import GooseExecutor
+from goalrail.inner.executor import ExecutorError, TextChunk, TurnComplete
+from goalrail.inner.goose_executor import GooseExecutor
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_GOOSE") != "1"
+    os.environ.get("GOALRAIL_E2E_GOOSE") != "1"
     or shutil.which("goose") is None
     or not os.environ.get("GOOSE_PROVIDER")
     or not os.environ.get("GOOSE_MODEL"),
     reason=(
-        "headless goose ACP e2e is opt-in: set OMNIGENT_E2E_GOOSE=1 with a "
+        "headless goose ACP e2e is opt-in: set GOALRAIL_E2E_GOOSE=1 with a "
         "configured Goose provider (GOOSE_PROVIDER + GOOSE_MODEL + a provider key "
         "in the env) and the `goose` binary on PATH."
     ),

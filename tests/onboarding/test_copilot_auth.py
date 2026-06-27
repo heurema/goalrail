@@ -1,7 +1,7 @@
-"""Tests for ``omnigent/onboarding/copilot_auth.py`` — the Copilot token store.
+"""Tests for ``goalrail/onboarding/copilot_auth.py`` — the Copilot token store.
 
 Copilot's GitHub token lives in a dedicated top-level ``copilot:`` config block
-(not the shared global ``auth:``) and the omnigent secret store, resolved with
+(not the shared global ``auth:``) and the goalrail secret store, resolved with
 the same ``resolve_secret`` resolver the provider families use. These tests
 isolate the config + secret store to a tmp dir (file backend, no OS keychain)
 and assert the read/resolve/configured helpers behave — including the **soft**
@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.onboarding import copilot_auth
-from omnigent.onboarding import secrets as secret_store
-from omnigent.onboarding.copilot_auth import (
+from goalrail.onboarding import copilot_auth
+from goalrail.onboarding import secrets as secret_store
+from goalrail.onboarding.copilot_auth import (
     COPILOT_EXTRA_INSTALL_COMMAND,
     COPILOT_SECRET_NAME,
     copilot_github_token_configured,
@@ -39,8 +39,8 @@ def _isolate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
     :returns: The tmp config-home dir, so a test can write a ``config.yaml``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     return tmp_path
@@ -145,7 +145,7 @@ def test_settings_shape() -> None:
 
 def test_copilot_extra_install_command_shape() -> None:
     """The surfaced install command targets the optional ``copilot`` extra."""
-    assert COPILOT_EXTRA_INSTALL_COMMAND == 'pip install "omnigent[copilot]"'
+    assert COPILOT_EXTRA_INSTALL_COMMAND == 'pip install "goalrail[copilot]"'
 
 
 def test_copilot_sdk_installed_true_when_spec_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,7 +180,7 @@ def test_copilot_install_command_prefers_uv(monkeypatch: pytest.MonkeyPatch) -> 
     """With ``uv`` on PATH, the install runs ``uv pip install`` — no index URL."""
     monkeypatch.setattr(copilot_auth.shutil, "which", lambda name: "/usr/bin/uv")
     cmd = copilot_install_command()
-    assert cmd == ["uv", "pip", "install", "omnigent[copilot]"]
+    assert cmd == ["uv", "pip", "install", "goalrail[copilot]"]
     # No hardcoded index / proxy leaks into committed code.
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -194,7 +194,7 @@ def test_copilot_install_command_falls_back_to_pip(monkeypatch: pytest.MonkeyPat
         "-m",
         "pip",
         "install",
-        "omnigent[copilot]",
+        "goalrail[copilot]",
     ]
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -222,7 +222,7 @@ def test_install_copilot_sdk_runs_command_then_rechecks(
     monkeypatch.setattr(copilot_auth, "copilot_sdk_installed", lambda: state["installed"])
 
     assert install_copilot_sdk() is True
-    assert calls == [[copilot_auth.sys.executable, "-m", "pip", "install", "omnigent[copilot]"]]
+    assert calls == [[copilot_auth.sys.executable, "-m", "pip", "install", "goalrail[copilot]"]]
 
 
 def test_install_copilot_sdk_false_on_spawn_failure(monkeypatch: pytest.MonkeyPatch) -> None:

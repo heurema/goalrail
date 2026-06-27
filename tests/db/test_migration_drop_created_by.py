@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import command as alembic_command
 from alembic.config import Config
 
-from omnigent.db.utils import clear_engine_cache, get_or_create_engine
+from goalrail.db.utils import clear_engine_cache, get_or_create_engine
 
 
 def _column_names(conn: sa.Connection, table: str) -> list[str]:
@@ -22,7 +22,7 @@ def _column_names(conn: sa.Connection, table: str) -> list[str]:
 
 def _alembic_cfg(uri: str) -> Config:
     cfg = Config()
-    cfg.set_main_option("script_location", "omnigent/db/migrations")
+    cfg.set_main_option("script_location", "goalrail/db/migrations")
     cfg.set_main_option("sqlalchemy.url", uri)
     return cfg
 

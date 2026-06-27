@@ -16,28 +16,28 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.entities import DEFAULT_ENVIRONMENT_ID
-from omnigent.entities.session_resources import (
+from goalrail.entities import DEFAULT_ENVIRONMENT_ID
+from goalrail.entities.session_resources import (
     SessionResourceView,
     default_environment_resource,
     environment_safety_metadata,
     terminal_resource_id,
     terminal_resource_view,
 )
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
-from omnigent.inner.os_env import EditEntry, OpResult, OSEnvironment
-from omnigent.inner.terminal import TerminalInstance
-from omnigent.runner import create_runner_app
-from omnigent.runner import resource_registry as resource_registry_mod
-from omnigent.runner.resource_registry import (
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
+from goalrail.inner.os_env import EditEntry, OpResult, OSEnvironment
+from goalrail.inner.terminal import TerminalInstance
+from goalrail.runner import create_runner_app
+from goalrail.runner import resource_registry as resource_registry_mod
+from goalrail.runner.resource_registry import (
     _CLAUDE_NATIVE_STATUS_IDLE_THRESHOLD_SECONDS,
     _CLAUDE_NATIVE_STATUS_POLL_INTERVAL_SECONDS,
     _TERMINAL_ACTIVITY_EMIT_MIN_INTERVAL_SECONDS,
     CLAUDE_NATIVE_TERMINAL_ROLE,
     SessionResourceRegistry,
 )
-from omnigent.spec.types import AgentSpec, ExecutorSpec
-from omnigent.terminals import TerminalListEntry, TerminalRegistry
+from goalrail.spec.types import AgentSpec, ExecutorSpec
+from goalrail.terminals import TerminalListEntry, TerminalRegistry
 from tests.runner.helpers import NullServerClient, make_test_terminal_instance
 
 
@@ -621,7 +621,7 @@ async def test_reset_state_closes_terminals_and_publishes_deleted(tmp_path: Path
     dead terminal, and attaching to it failed with "terminal resource
     not found or not running".
     """
-    from omnigent.runner.app import _session_event_queues_ref
+    from goalrail.runner.app import _session_event_queues_ref
 
     conv_id = "conv_switch_term_teardown"
     workspace = tmp_path / "workspace"
@@ -767,7 +767,7 @@ async def test_get_terminal_by_id_returns_404_when_tmux_exited(
     """
     GET verifies live tmux state instead of trusting a stale flag.
 
-    This is the signal ``omnigent claude`` uses after its attach
+    This is the signal ``goalrail claude`` uses after its attach
     WebSocket closes cleanly. If this endpoint returns 200 after the
     command's tmux server has exited, the native wrapper treats normal
     Claude exit as a server bounce and reconnects forever.
@@ -804,7 +804,7 @@ async def test_transfer_terminal_moves_resource_without_closing(
 
     This catches the ``/clear`` bug class where moving ownership would
     accidentally close tmux or leave the runner registry keyed under
-    the old conversation, making the new Omnigent conversation unable to
+    the old conversation, making the new Goalrail conversation unable to
     attach to the still-running Claude pane.
     """
     source = registry.get("conv_abc", "bash", "s1")
@@ -928,7 +928,7 @@ async def test_create_terminal_uses_runner_workspace_as_default_cwd(
     """
     Runner-created terminals default to the local runner workspace.
 
-    This is the resource endpoint used by ``omnigent claude``. The
+    This is the resource endpoint used by ``goalrail claude``. The
     request body intentionally avoids embedding the client's cwd, so
     the runner must supply its own workspace default before launching
     tmux.
@@ -1024,10 +1024,10 @@ async def test_create_terminal_threads_agent_parent_os_env_through(
     ``TerminalEnvSpec`` from the body with **no** sandbox at all,
     so every REST-launched terminal ran completely outside the
     agent's configured sandbox — operator/API callers (e.g. the
-    ``omnigent claude`` wrapper) could spawn an unsandboxed
+    ``goalrail claude`` wrapper) could spawn an unsandboxed
     terminal in a session whose YAML declared an egress allow-list.
     """
-    from omnigent.inner.datamodel import AgentDef, OSEnvSandboxSpec, OSEnvSpec
+    from goalrail.inner.datamodel import AgentDef, OSEnvSandboxSpec, OSEnvSpec
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1104,7 +1104,7 @@ async def test_create_terminal_uses_declared_terminal_spec_over_body(
     could spawn the YAML-declared terminal name with a completely
     different command.
     """
-    from omnigent.inner.datamodel import (
+    from goalrail.inner.datamodel import (
         AgentDef,
         OSEnvSandboxSpec,
         OSEnvSpec,
@@ -1188,8 +1188,8 @@ async def test_create_terminal_publishes_bridge_tmux_target(
     the terminal existed, but the launch request failed with a 500
     while trying to write ``tmux.json``.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
 
     resp = await client.post(
         "/v1/sessions/conv_abc/resources/terminals",
@@ -1205,7 +1205,7 @@ async def test_create_terminal_publishes_bridge_tmux_target(
     )
 
     assert resp.status_code == 200
-    from omnigent.claude_native_bridge import bridge_dir_for_conversation_id
+    from goalrail.claude_native_bridge import bridge_dir_for_conversation_id
 
     derived = bridge_dir_for_conversation_id("conv_abc")
     payload = json.loads((derived / "tmux.json").read_text(encoding="utf-8"))
@@ -1227,8 +1227,8 @@ async def test_create_terminal_ignores_client_supplied_bridge_path(
     below win, and ``tmux.json`` (which carries a live tmux socket)
     would land under it instead of the session-derived directory.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
 
     attacker_path = tmp_path / "attacker-controlled-dir"
     attacker_path.mkdir()
@@ -1248,7 +1248,7 @@ async def test_create_terminal_ignores_client_supplied_bridge_path(
 
     assert resp.status_code == 200
     assert not (attacker_path / "tmux.json").exists()
-    from omnigent.claude_native_bridge import bridge_dir_for_conversation_id
+    from goalrail.claude_native_bridge import bridge_dir_for_conversation_id
 
     derived = bridge_dir_for_conversation_id("conv_abc")
     assert (derived / "tmux.json").exists()
@@ -1739,7 +1739,7 @@ async def test_concurrent_resource_reads_share_one_session_snapshot(
 ) -> None:
     """A startup burst of concurrent resource reads resolves the
     session's spec through one ``GET /v1/sessions/{id}`` and one bundle
-    resolution, instead of each request stampeding the Omnigent server.
+    resolution, instead of each request stampeding the Goalrail server.
 
     Reproduces the observed runner-startup burst: dozens of paired
     ``GET /sessions/{id}`` + ``agent/contents`` requests in one second.
@@ -1769,7 +1769,7 @@ async def test_concurrent_resource_reads_share_one_session_snapshot(
 
     async def _server_handler(request: httpx.Request) -> httpx.Response:
         """
-        Stub Omnigent server that blocks + counts the session snapshot fetch.
+        Stub Goalrail server that blocks + counts the session snapshot fetch.
 
         :param request: Outbound request from the runner.
         :returns: The session snapshot (after release) for the session
@@ -1804,7 +1804,7 @@ async def test_concurrent_resource_reads_share_one_session_snapshot(
         return AgentSpec(
             spec_version=1,
             name="burst-agent",
-            executor=ExecutorSpec(type="omnigent", config={"harness": "runner-test-default"}),
+            executor=ExecutorSpec(type="goalrail", config={"harness": "runner-test-default"}),
         )
 
     server_client = httpx.AsyncClient(
@@ -1874,7 +1874,7 @@ async def test_failed_session_snapshot_is_not_cached_and_retries(
 
     async def _server_handler(request: httpx.Request) -> httpx.Response:
         """
-        Stub Omnigent server: fail the first snapshot, succeed afterward.
+        Stub Goalrail server: fail the first snapshot, succeed afterward.
 
         :param request: Outbound request from the runner.
         :returns: 503 on the first session GET, then the real snapshot.
@@ -1904,7 +1904,7 @@ async def test_failed_session_snapshot_is_not_cached_and_retries(
         return AgentSpec(
             spec_version=1,
             name="retry-agent",
-            executor=ExecutorSpec(type="omnigent", config={"harness": "runner-test-default"}),
+            executor=ExecutorSpec(type="goalrail", config={"harness": "runner-test-default"}),
         )
 
     server_client = httpx.AsyncClient(
@@ -1925,7 +1925,7 @@ async def test_failed_session_snapshot_is_not_cached_and_retries(
         await server_client.aclose()
 
     # First read hit the 503 snapshot → spec resolution raised
-    # OmnigentError → the endpoint returned a non-200 error response.
+    # GoalrailError → the endpoint returned a non-200 error response.
     assert first.status_code != 200
     # Second read refetched the (now 200) snapshot and resolved → 200.
     assert second.status_code == 200
@@ -1967,7 +1967,7 @@ async def test_unbound_agent_snapshot_is_not_cached_and_retries(
 
     async def _server_handler(request: httpx.Request) -> httpx.Response:
         """
-        Stub Omnigent server: 200 with no agent_id first, then the bound one.
+        Stub Goalrail server: 200 with no agent_id first, then the bound one.
 
         :param request: Outbound request from the runner.
         :returns: A 200 snapshot lacking ``agent_id`` on the first
@@ -2000,7 +2000,7 @@ async def test_unbound_agent_snapshot_is_not_cached_and_retries(
         return AgentSpec(
             spec_version=1,
             name="late-bind-agent",
-            executor=ExecutorSpec(type="omnigent", config={"harness": "runner-test-default"}),
+            executor=ExecutorSpec(type="goalrail", config={"harness": "runner-test-default"}),
         )
 
     server_client = httpx.AsyncClient(
@@ -2116,7 +2116,7 @@ async def test_claude_terminal_ensure_concurrent_calls_create_once(
         terminal_ready = True
         return fake_view
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_claude_terminal", fake_auto_create)
+    monkeypatch.setattr("goalrail.runner.app._auto_create_claude_terminal", fake_auto_create)
 
     async def fake_get_terminal_resource(
         self: Any,

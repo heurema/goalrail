@@ -1,5 +1,5 @@
 """Unit tests for the canonical sub-agent busy predicate
-(:mod:`omnigent_client._child_status`).
+(:mod:`goalrail_client._child_status`).
 
 This predicate is the single source of truth shared by the CLI ``state: N
 agents running`` badge (via the terminal host) and the SDK rollups
@@ -13,7 +13,7 @@ when a driver decides "nothing is working" — exactly the bug #444 reports.
 from __future__ import annotations
 
 import pytest
-from omnigent_client import child_session_busy, child_summary_busy
+from goalrail_client import child_session_busy, child_summary_busy
 
 
 @pytest.mark.parametrize(

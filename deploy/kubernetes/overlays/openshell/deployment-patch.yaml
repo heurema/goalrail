@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: omnigent
+  name: goalrail
 spec:
   template:
     spec:
-      serviceAccountName: omnigent
+      serviceAccountName: goalrail
       containers:
-        - name: omnigent
+        - name: goalrail
           volumeMounts:
             - name: openshell-gateway
-              mountPath: /home/omnigent/.config/openshell
+              mountPath: /home/goalrail/.config/openshell
               readOnly: true
             - name: server-config
               mountPath: /data/server-config.yaml
@@ -23,4 +23,4 @@ spec:
             optional: true
         - name: server-config
           configMap:
-            name: omnigent-server-config
+            name: goalrail-server-config

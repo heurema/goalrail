@@ -29,7 +29,7 @@ from typing import Any
 
 import httpx
 import pytest
-from omnigent_client._sessions import SessionsNamespace
+from goalrail_client._sessions import SessionsNamespace
 
 from tests.e2e.conftest import (
     create_runner_bound_session,

@@ -1,4 +1,4 @@
-"""Unit tests for ``omnigent/model_override.py``.
+"""Unit tests for ``goalrail/model_override.py``.
 
 The validator guards a spawn boundary: a model override is persisted on
 the session row and later becomes a ``--model`` argv element (native
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.model_override import (
+from goalrail.model_override import (
     MODEL_OVERRIDE_MAX_LEN,
     canonical_model_spelling,
     harness_supports_model_override,

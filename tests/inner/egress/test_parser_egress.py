@@ -1,10 +1,10 @@
-"""Tests for egress_rules parser validation in omnigent.spec.parser."""
+"""Tests for egress_rules parser validation in goalrail.spec.parser."""
 
 from __future__ import annotations
 
 import pytest
 
-from omnigent.spec.parser import _parse_egress_rules, _parse_os_env_sandbox
+from goalrail.spec.parser import _parse_egress_rules, _parse_os_env_sandbox
 
 # ------------------------------------------------------------------
 # _parse_egress_rules — unit tests
@@ -29,26 +29,26 @@ def test_parse_egress_rules_valid() -> None:
 
 
 def test_parse_egress_rules_not_a_list() -> None:
-    """Non-list input raises OmnigentError."""
-    from omnigent.errors import OmnigentError
+    """Non-list input raises GoalrailError."""
+    from goalrail.errors import GoalrailError
 
-    with pytest.raises(OmnigentError, match="must be a list"):
+    with pytest.raises(GoalrailError, match="must be a list"):
         _parse_egress_rules("GET api.github.com/**")
 
 
 def test_parse_egress_rules_non_string_entry() -> None:
-    """Non-string entry raises OmnigentError."""
-    from omnigent.errors import OmnigentError
+    """Non-string entry raises GoalrailError."""
+    from goalrail.errors import GoalrailError
 
-    with pytest.raises(OmnigentError, match="must be strings"):
+    with pytest.raises(GoalrailError, match="must be strings"):
         _parse_egress_rules([123])
 
 
 def test_parse_egress_rules_invalid_syntax() -> None:
-    """Invalid rule syntax raises OmnigentError."""
-    from omnigent.errors import OmnigentError
+    """Invalid rule syntax raises GoalrailError."""
+    from goalrail.errors import GoalrailError
 
-    with pytest.raises(OmnigentError, match="is invalid"):
+    with pytest.raises(GoalrailError, match="is invalid"):
         _parse_egress_rules(["BADMETHOD api.github.com/**"])
 
 
@@ -68,13 +68,13 @@ def test_sandbox_egress_rules_rejected_for_non_filtering_backends() -> None:
     ``darwin_seatbelt`` so a macOS spec author sees the correct
     option without having to scan platform docs.
     """
-    from omnigent.errors import OmnigentError
+    from goalrail.errors import GoalrailError
 
     raw = {
         "type": "none",
         "egress_rules": ["GET api.github.com/**"],
     }
-    with pytest.raises(OmnigentError, match=r"linux_bwrap.*darwin_seatbelt") as excinfo:
+    with pytest.raises(GoalrailError, match=r"linux_bwrap.*darwin_seatbelt") as excinfo:
         _parse_os_env_sandbox(raw)
     # Both backend names must appear in the error so the user knows
     # which spec change unblocks them.
@@ -162,11 +162,11 @@ def test_s2_sandbox_egress_allow_private_destinations_rejects_non_bool() -> None
     """
     import pytest
 
-    from omnigent.errors import OmnigentError
+    from goalrail.errors import GoalrailError
 
     raw = {
         "type": "linux_bwrap",
         "egress_allow_private_destinations": "true",
     }
-    with pytest.raises(OmnigentError, match=r"must be a boolean"):
+    with pytest.raises(GoalrailError, match=r"must be a boolean"):
         _parse_os_env_sandbox(raw)

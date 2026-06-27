@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.tools.builtins.agents`.
+"""Unit tests for :mod:`goalrail.tools.builtins.agents`.
 
 These tools are runner-dispatched (schema-only); tests verify schema
 shapes, name/description class methods, and that the base-class
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.agents import (
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.agents import (
     SysAgentDownloadTool,
     SysAgentGetTool,
     SysAgentListTool,

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import opencode_native_bridge as bridge
-from omnigent.opencode_native_bridge import (
+from goalrail import opencode_native_bridge as bridge
+from goalrail.opencode_native_bridge import (
     OpenCodeNativeBridgeState,
     auth_headers_for_secret,
     bridge_dir_for_bridge_id,
@@ -38,7 +38,7 @@ def test_bridge_root_honors_goalrail_data_dir(
     tmp_path: Path,
 ) -> None:
     """Goalrail data-dir override moves the default opencode-native bridge root."""
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     data_dir = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
 

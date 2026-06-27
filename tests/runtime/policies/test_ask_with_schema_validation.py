@@ -8,7 +8,7 @@ the ASK cycle. Without this, a policy could "launder" an
 invalid label write by emitting it only on ASK (where the
 engine defers the write to post-approval apply).
 
-Load-bearing: the omnigent parity promise is that the
+Load-bearing: the goalrail parity promise is that the
 same label write rules apply regardless of which path
 (direct ALLOW vs approved ASK) carries the write.
 """
@@ -19,16 +19,16 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies import _await_elicitation
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies import _await_elicitation
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     LabelDef,
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy

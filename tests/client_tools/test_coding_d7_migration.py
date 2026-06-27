@@ -1,12 +1,12 @@
 """
-Unit tests for the D7 migration of ``omnigent.client_tools.coding``
+Unit tests for the D7 migration of ``goalrail.client_tools.coding``
 from raw ``TOOLS`` dict + ``execute_tool`` dispatcher to
 ``@tool``-decorated functions.
 
 The migration's contract:
 
 1. Eight ``@tool``-decorated functions are exported via the
-   module-level ``_TOOL_FNS`` list (so ``omnigent chat`` /
+   module-level ``_TOOL_FNS`` list (so ``goalrail chat`` /
    ``build_tool_handler`` consumers can pick them up).
 2. The legacy ``TOOLS`` list still exposes OpenAI-format
    schemas — derived from the ``@tool`` metadata, not
@@ -27,7 +27,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from omnigent.client_tools.coding import (
+from goalrail.client_tools.coding import (
     _TOOL_FNS,
     LSP,
     TOOLS,
@@ -58,7 +58,7 @@ def test_tool_fns_lists_all_eight_tools() -> None:
     ``_TOOL_FNS`` must list every tool the module exports as a
     function. Catches a regression where a new tool is added
     but not appended to the list — its schema would silently
-    not appear in ``TOOLS`` and ``omnigent chat`` consumers would
+    not appear in ``TOOLS`` and ``goalrail chat`` consumers would
     miss it.
     """
     names = [fn.__name__ for fn in _TOOL_FNS]

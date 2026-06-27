@@ -6,9 +6,9 @@ description: >-
   report. Never edits files.
 
 # Read-only explorer on the Claude Agent SDK. No model is pinned, so it runs on
-# whatever Claude provider you configured (`omnigent setup`).
+# whatever Claude provider you configured (`goalrail setup`).
 executor:
-  type: omnigent
+  type: goalrail
   config:
     harness: claude-sdk
 
@@ -29,7 +29,7 @@ guardrails:
       type: function
       on: [tool_call]
       function:
-        path: omnigent.inner.nessie.policies.blast_radius
+        path: goalrail.inner.nessie.policies.blast_radius
         arguments:
           gate_pushes: false
 

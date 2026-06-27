@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.db.utils import now_epoch, utc_day
-from omnigent.policies.builtins.cost import user_daily_cost_budget
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.schema import USER_DAILY_ASK_APPROVED_STATE_KEY
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.db.utils import now_epoch, utc_day
+from goalrail.policies.builtins.cost import user_daily_cost_budget
+from goalrail.policies.function import FunctionPolicy
+from goalrail.policies.schema import USER_DAILY_ASK_APPROVED_STATE_KEY
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
@@ -27,10 +27,10 @@ from omnigent.spec.types import (
     StateUpdate,
     StateUpdateAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 
 def _engine_with_owner(
@@ -126,7 +126,7 @@ async def test_approval_updates_in_memory_so_same_engine_does_not_reask(
         FunctionPolicySpec(
             name="daily",
             on=[PhaseSelector(phase=Phase.TOOL_CALL, tool_name=None)],
-            function=FunctionRef(path="omnigent.policies.builtins.cost.user_daily_cost_budget"),
+            function=FunctionRef(path="goalrail.policies.builtins.cost.user_daily_cost_budget"),
         ),
         user_daily_cost_budget(max_cost_usd=5.0, ask_thresholds_usd=[2.0]),
     )

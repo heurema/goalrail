@@ -5,12 +5,12 @@ version-lock together**:
 
 | Package | What it is |
 | --- | --- |
-| `omnigent` | core wheel (bundles the `ap-web` web UI) |
-| `omnigent-client` | Python client SDK |
-| `omnigent-ui-sdk` | terminal UI SDK |
+| `goalrail` | core wheel (bundles the `ap-web` web UI) |
+| `goalrail-client` | Python client SDK |
+| `goalrail-ui-sdk` | terminal UI SDK |
 
-`pip install omnigent==X` must resolve `omnigent-client==X` and
-`omnigent-ui-sdk==X`. The pins are **lockstep** (the three packages co-version and
+`pip install goalrail==X` must resolve `goalrail-client==X` and
+`goalrail-ui-sdk==X`. The pins are **lockstep** (the three packages co-version and
 pin each other with `==`), so every release builds and publishes **all three at
 one identical version**.
 
@@ -20,7 +20,7 @@ one identical version**.
   — use the **OSS GitHub account** (the personal account with push/release rights
   on the public repo).
 - **Publishing to PyPI**: the central **secure-release repo**
-  **`databricks/secure-public-registry-releases-eng`**, `omnigent` workflow —
+  **`databricks/secure-public-registry-releases-eng`**, `goalrail` workflow —
   use the **Databricks EMU account**. Publishing runs on hardened runner
   groups with **OIDC Trusted Publishing (no stored secrets)** and a **mandatory
   dependency scan**. This is why we don't publish from `heurema/goalrail`.
@@ -30,11 +30,11 @@ one identical version**.
 > Substitute your own handles for `<oss-account>` / `<emu-account>` in the
 > `gh auth switch --user …` commands below.
 
-The legacy `.github/workflows/release-omnigent.yml` in this repo is a
+The legacy `.github/workflows/release-goalrail.yml` in this repo is a
 **deprecated manual fallback only** — its tag-push trigger was removed so a tag
 never double-publishes. Use the secure repo for real releases.
 
-> The secure `omnigent` workflow is **manual `workflow_dispatch`** — it can't see
+> The secure `goalrail` workflow is **manual `workflow_dispatch`** — it can't see
 > this repo's tag pushes. You bump + tag here, then dispatch it with that tag.
 
 ## Versioning model
@@ -67,12 +67,12 @@ Set the release version in **all three** `pyproject.toml` files — the
 `version` field **and** the cross-package `==` pins — plus `uv.lock`
 (`0.2.0.dev0` → `0.2.0`):
 
-- `pyproject.toml` (`version`, `omnigent-client==`, `omnigent-ui-sdk==`)
-- `sdks/python-client/pyproject.toml` (`version`, `omnigent==`)
-- `sdks/ui/pyproject.toml` (`version`, `omnigent-client==`)
-- `uv.lock` — **hand-edit** the three `version = "…"` lines (omnigent,
-  omnigent-client, omnigent-ui-sdk) and the one cross-pin `specifier = "==…"`
-  (`omnigent-ui-sdk`'s dep on `omnigent-client`). The three packages are
+- `pyproject.toml` (`version`, `goalrail-client==`, `goalrail-ui-sdk==`)
+- `sdks/python-client/pyproject.toml` (`version`, `goalrail==`)
+- `sdks/ui/pyproject.toml` (`version`, `goalrail-client==`)
+- `uv.lock` — **hand-edit** the three `version = "…"` lines (goalrail,
+  goalrail-client, goalrail-ui-sdk) and the one cross-pin `specifier = "==…"`
+  (`goalrail-ui-sdk`'s dep on `goalrail-client`). The three packages are
   **editable workspace members** (`source = { editable = … }`), so uv records
   **no wheel `hash` entries** for them, and the other two cross-deps appear as
   `editable = "…"` with no `==` specifier — so only those version/specifier
@@ -106,7 +106,7 @@ git push
 
 ```bash
 gh auth switch --user <emu-account>
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=true
 ```
 
@@ -116,49 +116,49 @@ Runs build + dependency scan + the gates (lockstep version/pins, web-UI-in-wheel
 ### 3. Publish to TestPyPI + validate
 
 ```bash
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=false
 ```
 
 Validate in a clean venv. **Don't** use `--extra-index-url` with TestPyPI: pip
 resolves each name across *both* indexes and picks the highest version, so anyone
-squatting `omnigent` / `omnigent-client` / `omnigent-ui-sdk` on real PyPI at a
+squatting `goalrail` / `goalrail-client` / `goalrail-ui-sdk` on real PyPI at a
 higher version wins the resolution (dependency confusion). Instead, take **deps
 from real PyPI only** and the **candidates from TestPyPI only**, exact-pinned with
 `--no-deps`:
 
 ```bash
-python -m venv /tmp/omni-rc
-# 1) seed the dependency closure from REAL PyPI (the last released omnigent):
-/tmp/omni-rc/bin/pip install --index-url https://pypi.org/simple/ omnigent
+python -m venv /tmp/goalrail-rc
+# 1) seed the dependency closure from REAL PyPI (the last released goalrail):
+/tmp/goalrail-rc/bin/pip install --index-url https://pypi.org/simple/ goalrail
 # 2) overlay the candidates from TestPyPI ONLY, exact-pinned, no deps:
-/tmp/omni-rc/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
-  omnigent==0.2.0 omnigent-client==0.2.0 omnigent-ui-sdk==0.2.0
-/tmp/omni-rc/bin/omnigent --version    # expect 0.2.0
+/tmp/goalrail-rc/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
+  goalrail==0.2.0 goalrail-client==0.2.0 goalrail-ui-sdk==0.2.0
+/tmp/goalrail-rc/bin/goalrail --version    # expect 0.2.0
 ```
 
 > If this release **adds a new runtime dependency** the previous release didn't
 > have, install it explicitly from real PyPI first
-> (`/tmp/omni-rc/bin/pip install --index-url https://pypi.org/simple/ <dep>`) —
+> (`/tmp/goalrail-rc/bin/pip install --index-url https://pypi.org/simple/ <dep>`) —
 > never let a `--no-deps` TestPyPI install pull third-party deps from TestPyPI.
 
 ### 4. Publish to PyPI (prod)
 
 Requires **admin/maintain** on the secure repo (if you hit a 403, request access
 via the secure-release owning team / internal release wiki before proceeding);
-binds the per-package `pypi-omnigent`, `pypi-omnigent-client`,
-`pypi-omnigent-ui-sdk` Trusted-Publisher environments (may gate on reviewer
+binds the per-package `pypi-goalrail`, `pypi-goalrail-client`,
+`pypi-goalrail-ui-sdk` Trusted-Publisher environments (may gate on reviewer
 approval). The prod path also re-verifies that
 `ref` is exactly the `vX.Y.Z` tag and that the tag points at the built commit.
 
 ```bash
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=pypi -f dry-run=false
 
-uv tool install omnigent==0.2.0        # final sanity from real PyPI
+uv tool install goalrail==0.2.0        # final sanity from real PyPI
 ```
 
-> Note: the dispatch's `-f ref=v0.2.0` is the **omnigent source ref**; it is
+> Note: the dispatch's `-f ref=v0.2.0` is the **goalrail source ref**; it is
 > distinct from `gh workflow run --ref`, which selects the branch the *workflow
 > definition* runs from (the secure repo's default).
 

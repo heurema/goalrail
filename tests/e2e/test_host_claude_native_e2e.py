@@ -12,7 +12,7 @@ pending terminal input when its TUI initializes. So a first message
 typed into that gap is silently dropped — the UI shows "Working…"
 forever and nothing is persisted. ``inject_user_message`` now waits for
 Claude's input prompt to render before typing (see
-``omnigent.claude_native_bridge._wait_for_claude_prompt_ready``).
+``goalrail.claude_native_bridge._wait_for_claude_prompt_ready``).
 
 Making the race deterministic
 -----------------------------
@@ -33,7 +33,7 @@ Verified red→green by toggling the gate.
 
 Environment requirements (why this is opt-in, not pure-CI):
 
-* **Opt-in only**: set ``OMNIGENT_E2E_CLAUDE_NATIVE=1`` to run. claude-native
+* **Opt-in only**: set ``GOALRAIL_E2E_CLAUDE_NATIVE=1`` to run. claude-native
   needs an *interactive* Claude login (OAuth/Enterprise) anchored to the
   real ``$HOME`` — it cannot be relocated into CI (verified: a copied
   ``~/.claude.json`` reports "Not logged in"). The ``claude`` binary IS
@@ -46,7 +46,7 @@ Environment requirements (why this is opt-in, not pure-CI):
 * The workspace folder must be trusted in ``~/.claude.json`` or Claude
   shows its folder-trust dialog, which blocks (and confounds) the gate.
   The test trusts a temp workspace and restores the original config on
-  teardown. It does NOT touch ``~/.omnigent/config.yaml``: the test
+  teardown. It does NOT touch ``~/.goalrail/config.yaml``: the test
   server is a fresh random-port instance, so the daemon's real host
   identity registers there with no collision.
 
@@ -54,7 +54,7 @@ claude-native authenticates through the Claude CLI's own session, so
 ``--llm-api-key`` only satisfies the server fixture. Derive it from the
 oss profile::
 
-    OMNIGENT_E2E_CLAUDE_NATIVE=1 \
+    GOALRAIL_E2E_CLAUDE_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_claude_native_e2e.py \
         --profile oss \
         --llm-api-key "$(databricks auth token -p oss \
@@ -90,10 +90,10 @@ from tests.e2e.helpers import POLL_INTERVAL_S
 # presence is therefore NOT a sufficient gate — require an explicit
 # opt-in env var that only a developer with a logged-in Claude sets.
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
+    os.environ.get("GOALRAIL_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
     reason=(
         "claude-native e2e needs an interactive Claude login; set "
-        "OMNIGENT_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
+        "GOALRAIL_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
     ),
 )
 
@@ -179,7 +179,7 @@ def _spawn_host_daemon(
     extra_path_dir: Path | None = None,
 ) -> subprocess.Popen[bytes]:
     """
-    Spawn an ``omnigent host`` daemon under the real ``$HOME``.
+    Spawn an ``goalrail host`` daemon under the real ``$HOME``.
 
     claude-native needs the real Claude login (auth can't be relocated),
     so this inherits the real environment. The daemon registers the
@@ -202,7 +202,7 @@ def _spawn_host_daemon(
     with open(daemon_log, "w") as log_fh:
         return subprocess.Popen(
             # Compat-aware: pinned OLD host venv in runner compat mode (Config 2).
-            [runner_executable(), "-m", "omnigent.host._daemon_entry", "--server", live_server],
+            [runner_executable(), "-m", "goalrail.host._daemon_entry", "--server", live_server],
             env=apply_runner_env(env),
             cwd=compat_runner_cwd(),
             stdout=subprocess.DEVNULL,
@@ -407,17 +407,17 @@ def test_claude_native_first_message_survives_terminal_boot(
                 daemon.wait()
 
 
-def _plant_poisoned_omnigent_package(workspace: Path) -> None:
+def _plant_poisoned_goalrail_package(workspace: Path) -> None:
     """
-    Write a booby-trapped ``omnigent/`` package inside *workspace*.
+    Write a booby-trapped ``goalrail/`` package inside *workspace*.
 
     Claude Code runs its hook subprocesses (and the relay MCP server)
     with the cwd set to the session's workspace. Absent ``python -I``,
-    Python prepends that cwd to ``sys.path[0]``, so ``import omnigent``
-    in the hook resolves to whatever ``omnigent/`` lives in the
+    Python prepends that cwd to ``sys.path[0]``, so ``import goalrail``
+    in the hook resolves to whatever ``goalrail/`` lives in the
     workspace -- not the installed package. This plants a copy whose
     ``__init__`` raises on import, faithfully modeling the real failure
-    mode: a git worktree checked out in the workspace whose ``omnigent``
+    mode: a git worktree checked out in the workspace whose ``goalrail``
     is on a branch lacking the expected hook handlers.
 
     With the ``-I`` fix the cwd is excluded from ``sys.path``, the real
@@ -427,29 +427,29 @@ def _plant_poisoned_omnigent_package(workspace: Path) -> None:
     recorded, and the assistant marker never appears.
 
     :param workspace: Absolute workspace path the session starts in; the
-        package is written as ``workspace/omnigent/__init__.py``.
+        package is written as ``workspace/goalrail/__init__.py``.
     :returns: None.
     """
-    pkg_dir = workspace / "omnigent"
+    pkg_dir = workspace / "goalrail"
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text(
         "raise RuntimeError(\n"
-        '    "POISONED omnigent package imported from the session cwd -- "\n'
+        '    "POISONED goalrail package imported from the session cwd -- "\n'
         '    "python -I should have excluded the workspace from sys.path"\n'
         ")\n"
     )
 
 
-def test_claude_native_hooks_ignore_workspace_omnigent_package(
+def test_claude_native_hooks_ignore_workspace_goalrail_package(
     live_server: str,
     http_client: httpx.Client,
     tmp_path: Path,
 ) -> None:
     """
-    Hooks import the installed ``omnigent``, not a workspace shadow.
+    Hooks import the installed ``goalrail``, not a workspace shadow.
 
     Regression for the ``python -I`` fix (cwd import shadowing). The
-    workspace contains a poisoned ``omnigent/`` package that raises on
+    workspace contains a poisoned ``goalrail/`` package that raises on
     import. Claude Code runs hook subprocesses with cwd set to that
     workspace, so without ``-I`` the hook imports the poisoned copy and
     crashes -- ``record_hook_event`` never runs, the forwarder never
@@ -463,7 +463,7 @@ def test_claude_native_hooks_ignore_workspace_omnigent_package(
     """
     workspace = tmp_path / "cn_shadow_ws"
     workspace.mkdir()
-    _plant_poisoned_omnigent_package(workspace)
+    _plant_poisoned_goalrail_package(workspace)
     marker = f"NOSHADOW_{uuid.uuid4().hex[:6].upper()}"
 
     with _workspace_trusted_in_claude_config(workspace):

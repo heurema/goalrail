@@ -134,7 +134,7 @@ describe("useIdleNotifications turn-end transitions", () => {
     expect(showMock.mock.calls[0][0]).toMatchObject({
       title: "a",
       body: "Agent finished and is ready for your input.",
-      tag: "omnigent:session:a",
+      tag: "goalrail:session:a",
     });
   });
 
@@ -222,7 +222,7 @@ describe("useIdleNotifications elicitation transitions", () => {
     expect(showMock.mock.calls[0][0]).toMatchObject({
       title: "a",
       body: "Agent is asking for your input.",
-      tag: "omnigent:session:a",
+      tag: "goalrail:session:a",
     });
   });
 

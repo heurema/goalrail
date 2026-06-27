@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.runner.pending_approvals`.
+"""Unit tests for :mod:`goalrail.runner.pending_approvals`.
 
 The runner's pending-approvals registry routes policy-ASK verdicts
 between two coroutines in the same process: the dispatch path
@@ -15,7 +15,7 @@ Future). Tests here pin the contract directly:
 * :func:`wait_for_user_approval` is the single sequence every
   ASK-escalation site uses; it must publish
   ``response.elicitation_resolved`` on every exit path so the
-  Omnigent server's sidebar index decrements in lockstep.
+  Goalrail server's sidebar index decrements in lockstep.
 
 These invariants drive the cross-session sidebar badge — a
 regression in any of them leaves stuck or phantom prompts in the
@@ -29,7 +29,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.runner import pending_approvals
+from goalrail.runner import pending_approvals
 
 
 @pytest.fixture(autouse=True)

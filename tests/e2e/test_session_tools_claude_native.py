@@ -5,7 +5,7 @@ to Claude Code when running in a Goalrail claude-native session.
 These tools are advertised via the MCP tool relay
 (``tool_relay.json``) that the runner writes before Claude Code
 starts. The test launches Claude Code in a headless tmux window,
-sends a prompt asking it to list its omnigent MCP tools, and
+sends a prompt asking it to list its goalrail MCP tools, and
 asserts that the response mentions ``sys_session_get_history``.
 
 Requirements
@@ -15,7 +15,7 @@ Requirements
 
 Usage::
 
-    OMNIGENT_E2E_CLAUDE_NATIVE_SESSION_TOOLS=1 \\
+    GOALRAIL_E2E_CLAUDE_NATIVE_SESSION_TOOLS=1 \\
         pytest tests/e2e/test_session_tools_claude_native.py \\
             --llm-api-key $LLM_API_KEY -v
 """
@@ -38,7 +38,7 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.claude_native_bridge import (
+from goalrail.claude_native_bridge import (
     augment_claude_args,
     bridge_dir_for_bridge_id,
     prepare_bridge_dir,
@@ -59,7 +59,7 @@ _RESPONSE_POLL_INTERVAL_S = 3.0
 
 _NESTED_SESSION_ENV = "CLAUDECODE"
 
-_RUN_GATE_ENV = "OMNIGENT_E2E_CLAUDE_NATIVE_SESSION_TOOLS"
+_RUN_GATE_ENV = "GOALRAIL_E2E_CLAUDE_NATIVE_SESSION_TOOLS"
 
 
 @pytest.fixture(scope="module")
@@ -69,7 +69,7 @@ def claude_native_ui_agent(
     """
     Upload the ``claude-native-ui`` agent spec and return its name.
 
-    Mirrors what ``omnigent claude`` materialises at runtime (harness
+    Mirrors what ``goalrail claude`` materialises at runtime (harness
     ``claude-native``, ``os_env.type: caller_process`` with no sandbox)
     EXCEPT that it deliberately omits the wrapper's ``spawn: true``
     opt-in — this module's relay test pins the no-opt-in gate (spawn
@@ -131,7 +131,7 @@ def _claude_code_session(
     bridge_dir = bridge_dir_for_bridge_id(session_id)
     prepare_bridge_dir(session_id, workspace=Path.cwd())
 
-    tmp = tempfile.mkdtemp(prefix="omnigent-e2e-session-tools-")
+    tmp = tempfile.mkdtemp(prefix="goalrail-e2e-session-tools-")
     tmux_socket = Path(tmp) / "tmux.sock"
     tmux_session = f"stool-{session_id[:8]}"
     tmux_target = f"{tmux_session}:0.0"
@@ -140,10 +140,10 @@ def _claude_code_session(
         "--dangerously-skip-permissions",
         "--allowedTools",
         (
-            "mcp__omnigent__list_comments,"
-            "mcp__omnigent__update_comment,"
-            "mcp__omnigent__sys_session_list,"
-            "mcp__omnigent__sys_session_get_history"
+            "mcp__goalrail__list_comments,"
+            "mcp__goalrail__update_comment,"
+            "mcp__goalrail__sys_session_list,"
+            "mcp__goalrail__sys_session_get_history"
         ),
     )
     if model:
@@ -270,7 +270,7 @@ def test_claude_native_session_tools_visible(
     2. Create a runner-bound session with ``claude-native-ui``.
     3. Launch Claude Code in a private tmux window with mock LLM routing.
     4. Verify ``tool_relay.json`` contains ``sys_session_get_history``.
-    5. Send a prompt asking Claude to list its omnigent MCP tools.
+    5. Send a prompt asking Claude to list its goalrail MCP tools.
     6. Poll session items until Claude's response mentions
        ``sys_session_get_history``.
     7. Assert the response text contains ``sys_session_get_history``.
@@ -359,13 +359,13 @@ def test_claude_native_session_tools_visible(
             f"tool_relay.json does not advertise sys_session_list. Found tools: {relay_tools}."
         )
 
-        # ── Step 5: Ask Claude to list its omnigent MCP tools ──────────
+        # ── Step 5: Ask Claude to list its goalrail MCP tools ──────────
         send_user_message_to_session(
             http_client,
             session_id=session_id,
             content=(
                 "List the names of ALL tools available to you from the "
-                "'omnigent' MCP server. Just list the tool names, one per "
+                "'goalrail' MCP server. Just list the tool names, one per "
                 "line, nothing else. Be complete — include every tool."
             ),
         )
@@ -394,7 +394,7 @@ def test_claude_native_session_tools_visible(
             f"Assistant text: {assistant_text[:500]!r}"
         )
         # sys_session_list should also be mentioned since we asked for
-        # ALL omnigent tools.
+        # ALL goalrail tools.
         assert "sys_session_list" in assistant_text, (
             f"Claude's response does not mention sys_session_list. "
             f"Assistant text: {assistant_text[:500]!r}"
@@ -434,7 +434,7 @@ def test_claude_native_relay_advertises_broadened_orchestrator_surface(
     arm (no ``tools.agents``, no top-level ``spawn: true``), so the
     gated spawn-writes (``sys_session_create`` / ``send`` / ``close``)
     must be ABSENT — proving native honours the same gate as
-    ``request.tools`` on non-native harnesses. (The real ``omnigent
+    ``request.tools`` on non-native harnesses. (The real ``goalrail
     claude`` wrapper spec sets ``spawn: true`` and DOES get them.)
 
     :param http_client: HTTP client pointed at the live server.

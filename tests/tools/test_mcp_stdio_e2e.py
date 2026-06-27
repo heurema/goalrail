@@ -1,7 +1,7 @@
 """End-to-end test for the stdio MCP transport on the runner.
 
 Spawns a real FastMCP subprocess (``tests/tools/fixtures/echo_stdio_mcp_server.py``)
-through :class:`omnigent.runner.mcp_manager.RunnerMcpManager`, discovers
+through :class:`goalrail.runner.mcp_manager.RunnerMcpManager`, discovers
 its tool via real MCP stdio, and invokes the tool over the live subprocess.
 
 Post designs/RUNNER_MCP.md the runner owns MCP lifecycle, so this is
@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
-from omnigent.runner.mcp_manager import RunnerMcpManager
-from omnigent.spec.types import AgentSpec, MCPServerConfig
+from goalrail.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
+from goalrail.runner.mcp_manager import RunnerMcpManager
+from goalrail.spec.types import AgentSpec, MCPServerConfig
 
 _ECHO_SERVER = str(Path(__file__).parent / "fixtures" / "echo_stdio_mcp_server.py")
 _ENV_PROBE_SERVER = str(Path(__file__).parent / "fixtures" / "env_probe_stdio_mcp_server.py")
@@ -101,7 +101,7 @@ async def test_stdio_mcp_shutdown_does_not_log_cancel_scope_error(
     "Attempted to exit cancel scope in a different task than it was
     entered in" during shutdown.
     """
-    caplog.set_level(logging.ERROR, logger="omnigent.runner.mcp_manager")
+    caplog.set_level(logging.ERROR, logger="goalrail.runner.mcp_manager")
     manager = RunnerMcpManager()
     result = await manager.schemas_for(echo_mcp_spec)
     # Sanity: connect actually succeeded, so there is something to close.

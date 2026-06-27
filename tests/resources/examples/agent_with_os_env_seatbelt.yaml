@@ -72,19 +72,19 @@
 # Usage:
 #   # Read-only cwd should let the agent inspect this repo but reject
 #   # any write attempt:
-#   uv run omnigent run examples/agent_with_os_env_seatbelt.yaml \
+#   uv run goalrail run examples/agent_with_os_env_seatbelt.yaml \
 #       --profile <profile> \
 #       --prompt "List files in cwd with ls -la, then try to write 'x' to a file named blocked.txt and report what happens."
 #
 #   # Dotfile masking smoke test — even with shell access the agent
 #   # cannot read host secrets that live behind dotfiles:
-#   uv run omnigent run examples/agent_with_os_env_seatbelt.yaml \
+#   uv run goalrail run examples/agent_with_os_env_seatbelt.yaml \
 #       --profile <profile> \
 #       --prompt "Try to cat .env, .git/config, and ~/.aws/credentials. Report exactly what each command prints."
 #
 #   # Writable scratch tmpdir — the agent can build artifacts under
 #   # $TMPDIR even though cwd is read-only:
-#   uv run omnigent run examples/agent_with_os_env_seatbelt.yaml \
+#   uv run goalrail run examples/agent_with_os_env_seatbelt.yaml \
 #       --profile <profile> \
 #       --prompt "Use sys_os_shell to write 'hello' to \$TMPDIR/note.txt, then read it back."
 #

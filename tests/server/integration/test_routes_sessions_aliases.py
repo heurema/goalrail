@@ -185,8 +185,8 @@ async def test_delete_session_when_runner_offline(client: httpx.AsyncClient) -> 
     server-owned state (tasks, files, the conversation row) so the
     chat actually disappears from the UI.
     """
-    from omnigent.errors import ErrorCode, OmnigentError
-    from omnigent.runtime import _globals, set_runner_router
+    from goalrail.errors import ErrorCode, GoalrailError
+    from goalrail.runtime import _globals, set_runner_router
 
     snapshot = await create_test_session(client)
     conv_id = snapshot["id"]
@@ -194,7 +194,7 @@ async def test_delete_session_when_runner_offline(client: httpx.AsyncClient) -> 
     class _OfflineRunnerRouter:
         def client_for_session_resources(self, session_id: str) -> object:
             del session_id
-            raise OmnigentError(
+            raise GoalrailError(
                 "runner 'runner_token_offline' is offline",
                 code=ErrorCode.RUNNER_UNAVAILABLE,
             )

@@ -90,7 +90,7 @@ def test_check_detects_missing_pin(repo_copy: Path) -> None:
     update_versions.set_version(repo_copy, "9.9.9")
     # Break the sibling pin while leaving the version intact.
     client = repo_copy / "sdks/python-client/pyproject.toml"
-    client.write_text(client.read_text().replace('"omnigent==9.9.9"', '"omnigent==9.9.8"'))
+    client.write_text(client.read_text().replace('"goalrail==9.9.9"', '"goalrail==9.9.8"'))
     with pytest.raises(ValueError, match="missing exact pin"):
         update_versions.check(repo_copy)
 
@@ -100,7 +100,7 @@ def test_set_version_fails_loud_when_line_absent(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     (root / "sdks/python-client").mkdir(parents=True)
     (root / "sdks/ui").mkdir(parents=True)
-    (root / "pyproject.toml").write_text('[project]\nname = "omnigent"\n')
+    (root / "pyproject.toml").write_text('[project]\nname = "goalrail"\n')
     (root / "sdks/python-client/pyproject.toml").write_text("[project]\n")
     (root / "sdks/ui/pyproject.toml").write_text("[project]\n")
     with pytest.raises(ValueError, match="expected exactly 1 match"):

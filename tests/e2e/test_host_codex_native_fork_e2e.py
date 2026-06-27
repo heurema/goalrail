@@ -11,7 +11,7 @@ recall it. Both resume shapes are exercised:
    off the source repo.
 
 The regression these guard against: codex forks used to resume *fresh* —
-they got the copied Omnigent transcript as context but not Codex's
+they got the copied Goalrail transcript as context but not Codex's
 internal thread / rollout state. The current path clones the source
 rollout into the clone's own ``CODEX_HOME`` under a freshly minted thread
 id (``_clone_codex_rollout``) and launches ``codex resume
@@ -23,9 +23,9 @@ source thread id to clone).
 
 Opt-in (same rationale as ``test_host_codex_native_e2e``): codex-native
 needs ``codex`` on PATH and real model credentials. Set
-``OMNIGENT_E2E_CODEX_NATIVE=1`` to run::
+``GOALRAIL_E2E_CODEX_NATIVE=1`` to run::
 
-    OMNIGENT_E2E_CODEX_NATIVE=1 \
+    GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_codex_native_fork_e2e.py \
         --profile oss \
         --llm-api-key "$(databricks auth token -p oss \
@@ -64,15 +64,15 @@ from tests.e2e.test_host_codex_native_e2e import (
 
 # Opt-in only — see module docstring and test_host_codex_native_e2e.
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
-    reason=("codex-native fork e2e needs `codex` on PATH and OMNIGENT_E2E_CODEX_NATIVE=1 to run"),
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    reason=("codex-native fork e2e needs `codex` on PATH and GOALRAIL_E2E_CODEX_NATIVE=1 to run"),
 )
 
 
 @contextmanager
 def _host_daemon(tmp_path: Path, live_server: str) -> Iterator[None]:
     """
-    Spawn a codex-native ``omnigent connect`` daemon for the test.
+    Spawn a codex-native ``goalrail connect`` daemon for the test.
 
     :param tmp_path: Per-test temp dir for the daemon log.
     :param live_server: Test server URL the daemon registers with.

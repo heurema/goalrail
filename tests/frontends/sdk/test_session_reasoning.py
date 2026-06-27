@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from omnigent_client._events import ResponseCompleted, ResponseCreated
-from omnigent_client._session import Session
-from omnigent_client._types import Response
+from goalrail_client._events import ResponseCompleted, ResponseCreated
+from goalrail_client._session import Session
+from goalrail_client._types import Response
 
 
 class _ResponsesStub:

@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.modal`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.modal`."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 import pytest
 
-from omnigent.onboarding.sandboxes.base import SandboxCapabilityError
-from omnigent.onboarding.sandboxes.modal import (
+from goalrail.onboarding.sandboxes.base import SandboxCapabilityError
+from goalrail.onboarding.sandboxes.modal import (
     DEFAULT_HOST_IMAGE,
     HOST_IMAGE_ENV_VAR,
     MAX_SANDBOX_LIFETIME_S,
@@ -214,7 +214,7 @@ class _FakeImage:
     Recorder for a ``modal.Image.from_registry`` definition.
 
     :param tag: The registry image reference, e.g.
-        ``"ghcr.io/omnigent-ai/omnigent-host:latest"``.
+        ``"ghcr.io/heurema/goalrail-host:latest"``.
     :param secret: Registry-credentials secret, or ``None`` for an
         anonymous pull.
     """
@@ -356,7 +356,7 @@ def test_prepare_raises_with_install_hint_when_sdk_missing(
     monkeypatch.setitem(sys.modules, "modal", None)
     with pytest.raises(click.ClickException) as exc:
         ModalSandboxLauncher().prepare()
-    assert "omnigent[modal]" in str(exc.value)
+    assert "goalrail[modal]" in str(exc.value)
     assert "modal token new" in str(exc.value)
 
 
@@ -422,33 +422,33 @@ def test_provision_creates_max_lifetime_sandbox_under_shared_app(
     assert create.timeout == MAX_SANDBOX_LIFETIME_S
     # The app handle from lookup must flow into create.
     assert create.app is state.app
-    # Image: the official prebaked host image (omnigent + git/tmux
+    # Image: the official prebaked host image (goalrail + git/tmux
     # baked in — sandbox creation must not pay an in-sandbox dependency
     # install), pulled anonymously by default.
     assert create.image.tag == DEFAULT_HOST_IMAGE
     assert create.image.secret is None
     assert sandbox_id == "sb-new-1"
-    assert state.sandboxes[sandbox_id].tags == {"omnigent-name": "my-host"}
+    assert state.sandboxes[sandbox_id].tags == {"goalrail-name": "my-host"}
 
 
 def test_provision_honors_image_override_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    OMNIGENT_MODAL_HOST_IMAGE must replace the default image ref —
+    GOALRAIL_MODAL_HOST_IMAGE must replace the default image ref —
     it's the escape hatch for org-internal copies of the host image.
     """
     state = _install_fake_modal(monkeypatch)
-    monkeypatch.setenv(HOST_IMAGE_ENV_VAR, "ghcr.io/acme/omnigent-host:sha-abc1234")
+    monkeypatch.setenv(HOST_IMAGE_ENV_VAR, "ghcr.io/acme/goalrail-host:sha-abc1234")
     monkeypatch.delenv(REGISTRY_SECRET_ENV_VAR, raising=False)
     ModalSandboxLauncher().provision("my-host")
 
-    assert state.create_calls[0].image.tag == "ghcr.io/acme/omnigent-host:sha-abc1234"
+    assert state.create_calls[0].image.tag == "ghcr.io/acme/goalrail-host:sha-abc1234"
 
 
 def test_provision_passes_registry_secret_for_private_pulls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    OMNIGENT_MODAL_REGISTRY_SECRET must thread the named Modal secret
+    GOALRAIL_MODAL_REGISTRY_SECRET must thread the named Modal secret
     into the image pull — without it, a private host image fails with
     an unauthorized pull at sandbox start.
     """
@@ -612,7 +612,7 @@ def test_exec_foreground_records_pid_and_streams_output(
     sandbox = _seed_sandbox(state)
     sandbox.exec_queue.append(_FakeProcess(stdout="host-output\n"))
 
-    returncode = ModalSandboxLauncher().exec_foreground("sb-1", "omnigent host --server u")
+    returncode = ModalSandboxLauncher().exec_foreground("sb-1", "goalrail host --server u")
 
     assert returncode == 0
     call = sandbox.exec_calls[0]
@@ -621,7 +621,7 @@ def test_exec_foreground_records_pid_and_streams_output(
     assert "echo $$ > /tmp/oa-foreground.pid" in remote
     assert "TERM=xterm-256color" in remote
     # `exec` keeps the recorded pid across the swap to the real command.
-    assert "exec omnigent host --server u" in remote
+    assert "exec goalrail host --server u" in remote
     # Output reached the local terminal.
     assert "host-output" in capsys.readouterr().out
 
@@ -637,7 +637,7 @@ def test_exec_foreground_kills_remote_on_interrupt(monkeypatch: pytest.MonkeyPat
     sandbox.exec_queue.append(_FakeProcess(wait_raises=KeyboardInterrupt()))
 
     with pytest.raises(KeyboardInterrupt):
-        ModalSandboxLauncher().exec_foreground("sb-1", "omnigent host --server u")
+        ModalSandboxLauncher().exec_foreground("sb-1", "goalrail host --server u")
 
     # Second exec is the kill, addressed via the recorded pidfile.
     assert len(sandbox.exec_calls) == 2
@@ -649,7 +649,7 @@ def test_exec_foreground_kills_remote_on_interrupt(monkeypatch: pytest.MonkeyPat
 
 def test_wheel_install_command_overlays_baked_install() -> None:
     """
-    The prebaked host image carries omnigent at the same 0.1.0
+    The prebaked host image carries goalrail at the same 0.1.0
     version, so the overlay must --force-reinstall (pip would otherwise
     see the version satisfied and silently keep the baked code) and
     --no-deps (the dependency tree is baked; reinstalling it would
@@ -672,7 +672,7 @@ def test_provision_explicit_image_overrides_env_and_gets_secret(
     not silently fall back to an anonymous pull.
     """
     state = _install_fake_modal(monkeypatch)
-    monkeypatch.setenv(HOST_IMAGE_ENV_VAR, "ghcr.io/acme/omnigent-host:env")
+    monkeypatch.setenv(HOST_IMAGE_ENV_VAR, "ghcr.io/acme/goalrail-host:env")
     monkeypatch.setenv(REGISTRY_SECRET_ENV_VAR, "ghcr-pull")
     ModalSandboxLauncher(image="docker.io/me/custom-host:latest").provision("my-host")
 
@@ -692,10 +692,10 @@ def test_provision_injects_configured_sandbox_secrets(
     """
     state = _install_fake_modal(monkeypatch)
     monkeypatch.delenv(SANDBOX_SECRETS_ENV_VAR, raising=False)
-    ModalSandboxLauncher(secrets=["omnigent-llm", "gateway-extras"]).provision("my-host")
+    ModalSandboxLauncher(secrets=["goalrail-llm", "gateway-extras"]).provision("my-host")
 
     assert state.create_calls[0].secrets == [
-        _FakeSecret(name="omnigent-llm"),
+        _FakeSecret(name="goalrail-llm"),
         _FakeSecret(name="gateway-extras"),
     ]
 
@@ -704,16 +704,16 @@ def test_provision_resolves_sandbox_secrets_env_var(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Without constructor names, OMNIGENT_MODAL_SANDBOX_SECRETS
+    Without constructor names, GOALRAIL_MODAL_SANDBOX_SECRETS
     (comma-separated, whitespace tolerated) supplies the workload
     secrets — the CLI flow's path to the same feature.
     """
     state = _install_fake_modal(monkeypatch)
-    monkeypatch.setenv(SANDBOX_SECRETS_ENV_VAR, "omnigent-llm, extra-creds")
+    monkeypatch.setenv(SANDBOX_SECRETS_ENV_VAR, "goalrail-llm, extra-creds")
     ModalSandboxLauncher().provision("my-host")
 
     assert state.create_calls[0].secrets == [
-        _FakeSecret(name="omnigent-llm"),
+        _FakeSecret(name="goalrail-llm"),
         _FakeSecret(name="extra-creds"),
     ]
 

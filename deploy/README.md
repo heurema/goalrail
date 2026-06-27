@@ -28,7 +28,7 @@ Both provision a managed Postgres database automatically and default to the
 built-in `accounts` auth provider, so a fresh deploy is multi-user with no
 external IdP. First boot auto-creates an admin (password in the service
 logs); invite teammates from the web UI. Prefer your own IdP? Switch to OIDC
-after deploy by setting the `OMNIGENT_OIDC_*` vars (auth stays enabled; the
+after deploy by setting the `GOALRAIL_OIDC_*` vars (auth stays enabled; the
 issuer is what flips the mode); see the platform README for both
 walkthroughs.
 
@@ -98,7 +98,7 @@ deploy/
 │
 └── docker/            ← common Docker image + compose stack
     ├── Dockerfile         multi-stage slim image (node web build → python builder → runtime)
-    ├── docker-compose.yaml   omnigent + postgres for any Docker host
+    ├── docker-compose.yaml   goalrail + postgres for any Docker host
     ├── entrypoint.py
     ├── .env.example
     ├── README.md
@@ -222,8 +222,8 @@ goalrail run path/to/agent.yaml --server https://your-host
 Don't want a laptop to be the host? Run the host in a cloud sandbox instead.
 
 **From the CLI (Modal, Daytona, Islo, or E2B).** Install the provider extra when
-needed (`pip install 'omnigent[modal]'`, `'omnigent[daytona]'`, or
-`'omnigent[e2b]'`; Islo uses the built-in HTTP client), authenticate
+needed (`pip install 'goalrail[modal]'`, `'goalrail[daytona]'`, or
+`'goalrail[e2b]'`; Islo uses the built-in HTTP client), authenticate
 (`modal token new`, `DAYTONA_API_KEY`, `ISLO_API_KEY`, or `E2B_API_KEY`), then:
 
 ```bash
@@ -262,7 +262,7 @@ Each sandbox authenticates back with a server-minted, per-launch token, so
 no user credentials ever enter the sandbox.
 
 **The host image.** Sandboxes boot from the official prebaked host image
-(`ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI from the `host`
+(`ghcr.io/heurema/goalrail-host:latest`, published by CI from the `host`
 target of [`docker/Dockerfile`](docker/Dockerfile)), so the host starts in
 seconds instead of installing Goalrail at boot. The image ships the
 coding-harness CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run
@@ -272,8 +272,8 @@ target and point the config at it:
 
 ```bash
 docker build -f docker/Dockerfile --target host \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/goalrail-host:latest .
+docker push docker.io/<you>/goalrail-host:latest
 ```
 
 ```yaml
@@ -281,13 +281,13 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    image: docker.io/<you>/omnigent-host:latest
+    image: docker.io/<you>/goalrail-host:latest
 ```
 
-For private registries, set `OMNIGENT_MODAL_REGISTRY_SECRET` on the server
+For private registries, set `GOALRAIL_MODAL_REGISTRY_SECRET` on the server
 to the name of a Modal secret holding `REGISTRY_USERNAME` /
-`REGISTRY_PASSWORD`; for CLI-launched sandboxes, `OMNIGENT_MODAL_HOST_IMAGE`
-(or `OMNIGENT_DAYTONA_HOST_IMAGE` / `OMNIGENT_ISLO_HOST_IMAGE`) overrides the
+`REGISTRY_PASSWORD`; for CLI-launched sandboxes, `GOALRAIL_MODAL_HOST_IMAGE`
+(or `GOALRAIL_DAYTONA_HOST_IMAGE` / `GOALRAIL_ISLO_HOST_IMAGE`) overrides the
 image ref.
 
 **LLM credentials for managed sessions.** A fresh sandbox has no API keys.
@@ -299,7 +299,7 @@ vars (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
 `OPENAI_BASE_URL`, `GEMINI_API_KEY`) to its runners:
 
 ```bash
-modal secret create omnigent-llm \
+modal secret create goalrail-llm \
   ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
 ```
 
@@ -308,7 +308,7 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    secrets: [omnigent-llm]
+    secrets: [goalrail-llm]
 ```
 
 For Daytona and Islo, list server environment variable names under
@@ -329,7 +329,7 @@ token as `CLAUDE_CODE_OAUTH_TOKEN` in the secret. A **ChatGPT
 Business/Enterprise plan** works the same way via a
 [Codex access token](https://developers.openai.com/codex/enterprise/access-tokens)
 stored as `CODEX_ACCESS_TOKEN`. For gateway setups or other env vars beyond
-the standard set, add `OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the
+the standard set, add `GOALRAIL_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the
 secret to name the extra vars the host should forward to runners.
 
 **Private repositories.** Managed sessions can clone a repository as the
@@ -346,22 +346,22 @@ guide lives at [`daytona/README.md`](daytona/README.md); the Islo guide
 
 ## Auth
 
-Auth is driven by a single switch, `OMNIGENT_AUTH_ENABLED`. The framework
+Auth is driven by a single switch, `GOALRAIL_AUTH_ENABLED`. The framework
 default (a bare local `goalrail server`) leaves it off: single-user
 `header` mode, no login. The containerized deploys here (Docker / HF / Render /
-Railway / Modal / Fly) set `OMNIGENT_AUTH_ENABLED=1` by default in their
+Railway / Modal / Fly) set `GOALRAIL_AUTH_ENABLED=1` by default in their
 entrypoints,
 since a network-exposed instance should be authenticated. With the switch on,
-the mode is chosen by your config: supply the `OMNIGENT_OIDC_*` vars and you
+the mode is chosen by your config: supply the `GOALRAIL_OIDC_*` vars and you
 get `oidc`, otherwise you get the built-in `accounts` flow.
-`OMNIGENT_AUTH_PROVIDER` is an explicit escape hatch that pins the mode and
+`GOALRAIL_AUTH_PROVIDER` is an explicit escape hatch that pins the mode and
 overrides this auto-selection.
 
 | Mode | When to use | What's needed |
 |---|---|---|
-| `accounts` (deploy default) | Standalone deploy, no external IdP: built-in username/password with first-user-is-admin bootstrap and UI-based invites. Opt in with `OMNIGENT_AUTH_ENABLED=1` (and no OIDC vars). | Set `OMNIGENT_ACCOUNTS_COOKIE_SECRET` (or let `bootstrap.sh` mint it) and `OMNIGENT_ACCOUNTS_BASE_URL` (public URL). On first boot, set the admin password via the web Create-admin form, the terminal prompt, or `--admin-password` / `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
-| `oidc` | Standalone deploy with your own IdP: server handles the full login flow | Set `OMNIGENT_AUTH_ENABLED=1` and the `OMNIGENT_OIDC_*` env vars; the presence of `OMNIGENT_OIDC_ISSUER` selects OIDC (or pin `OMNIGENT_AUTH_PROVIDER=oidc`). Requires HTTPS (the session cookie uses the `__Host-` prefix). |
-| `header` | Behind an existing SSO proxy (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) that injects an identity header | The default when `OMNIGENT_AUTH_ENABLED` is off; or pin `OMNIGENT_AUTH_PROVIDER=header`. Reads `X-Forwarded-Email` by default; set `OMNIGENT_AUTH_HEADER` for proxies that use another name (e.g. `Cf-Access-Authenticated-User-Email`), and `OMNIGENT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` for Google IAP. Proxy MUST strip any inbound copy of the header from clients. Missing headers are always rejected. |
+| `accounts` (deploy default) | Standalone deploy, no external IdP: built-in username/password with first-user-is-admin bootstrap and UI-based invites. Opt in with `GOALRAIL_AUTH_ENABLED=1` (and no OIDC vars). | Set `GOALRAIL_ACCOUNTS_COOKIE_SECRET` (or let `bootstrap.sh` mint it) and `GOALRAIL_ACCOUNTS_BASE_URL` (public URL). On first boot, set the admin password via the web Create-admin form, the terminal prompt, or `--admin-password` / `GOALRAIL_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
+| `oidc` | Standalone deploy with your own IdP: server handles the full login flow | Set `GOALRAIL_AUTH_ENABLED=1` and the `GOALRAIL_OIDC_*` env vars; the presence of `GOALRAIL_OIDC_ISSUER` selects OIDC (or pin `GOALRAIL_AUTH_PROVIDER=oidc`). Requires HTTPS (the session cookie uses the `__Host-` prefix). |
+| `header` | Behind an existing SSO proxy (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) that injects an identity header | The default when `GOALRAIL_AUTH_ENABLED` is off; or pin `GOALRAIL_AUTH_PROVIDER=header`. Reads `X-Forwarded-Email` by default; set `GOALRAIL_AUTH_HEADER` for proxies that use another name (e.g. `Cf-Access-Authenticated-User-Email`), and `GOALRAIL_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` for Google IAP. Proxy MUST strip any inbound copy of the header from clients. Missing headers are always rejected. |
 
 > [!NOTE]
 > **Managed sandboxes need `header`/`oidc` or single-user auth.** Each session's
@@ -378,12 +378,12 @@ Microsoft), point the server at your identity provider. In `docker/.env` (or
 your platform's env settings):
 
 ```dotenv
-# Auth is already on (OMNIGENT_AUTH_ENABLED=1) by default in the deploys here.
+# Auth is already on (GOALRAIL_AUTH_ENABLED=1) by default in the deploys here.
 # Adding an OIDC issuer flips the mode to single sign-on. No extra flag.
-OMNIGENT_OIDC_ISSUER=https://accounts.google.com     # or https://github.com / your Okta / Entra URL
-OMNIGENT_DOMAIN=agents.yourcompany.com               # your server's domain
-OMNIGENT_OIDC_CLIENT_ID=…
-OMNIGENT_OIDC_CLIENT_SECRET=…
+GOALRAIL_OIDC_ISSUER=https://accounts.google.com     # or https://github.com / your Okta / Entra URL
+GOALRAIL_DOMAIN=agents.yourcompany.com               # your server's domain
+GOALRAIL_OIDC_CLIENT_ID=…
+GOALRAIL_OIDC_CLIENT_SECRET=…
 ```
 
 ```bash
@@ -407,14 +407,14 @@ admins: [you@yourcompany.com]         # who can manage members
 
 > [!TIP]
 > Need to let in one outsider, say a contractor on a personal account? Set
-> `OMNIGENT_OIDC_ALLOW_INVITES=1` and send them a one-time invite link,
+> `GOALRAIL_OIDC_ALLOW_INVITES=1` and send them a one-time invite link,
 > instead of opening up the whole allowlist.
 
 **Already have a team on built-in accounts?** One command brings everyone
 across when you switch, so they keep their sessions and admin rights:
 
 ```bash
-omnigent debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
+goalrail debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
 ```
 
 For the provider-specific walkthroughs (GitHub OAuth, Google Workspace,
@@ -427,32 +427,32 @@ generic OIDC), see
 > Don't deploy a shared server in header-auth mode unless you run a trusted
 > reverse proxy.
 
-`header` mode (`OMNIGENT_AUTH_PROVIDER=header`) takes the caller's identity
+`header` mode (`GOALRAIL_AUTH_PROVIDER=header`) takes the caller's identity
 from a trusted request header — `X-Forwarded-Email` by default. It exists for
 deployments that sit behind an SSO proxy (oauth2-proxy, Cloudflare Access, an
 ALB/OIDC listener, Databricks Apps) that authenticates the user and injects
 that header on every request.
 
 Proxies that authenticate with a different header name set
-`OMNIGENT_AUTH_HEADER` to that name instead of standing up an extra hop to
+`GOALRAIL_AUTH_HEADER` to that name instead of standing up an extra hop to
 rename it. For example, behind **Cloudflare Access** (which provides the
 authenticated email in `Cf-Access-Authenticated-User-Email`):
 
 ```dotenv
-OMNIGENT_AUTH_PROVIDER=header
-OMNIGENT_AUTH_HEADER=Cf-Access-Authenticated-User-Email
+GOALRAIL_AUTH_PROVIDER=header
+GOALRAIL_AUTH_HEADER=Cf-Access-Authenticated-User-Email
 ```
 
 Some proxies namespace the identity they inject. **Google IAP** forwards the
 email in `X-Goog-Authenticated-User-Email` prefixed with `accounts.google.com:`
 (e.g. `accounts.google.com:user@example.com`). Set
-`OMNIGENT_AUTH_HEADER_STRIP_PREFIX` to drop that prefix and recover the bare
+`GOALRAIL_AUTH_HEADER_STRIP_PREFIX` to drop that prefix and recover the bare
 email:
 
 ```dotenv
-OMNIGENT_AUTH_PROVIDER=header
-OMNIGENT_AUTH_HEADER=X-Goog-Authenticated-User-Email
-OMNIGENT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
+GOALRAIL_AUTH_PROVIDER=header
+GOALRAIL_AUTH_HEADER=X-Goog-Authenticated-User-Email
+GOALRAIL_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
 ```
 
 In header mode **the server trusts whatever that header says**. If no proxy

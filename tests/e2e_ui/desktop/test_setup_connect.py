@@ -2,17 +2,17 @@
 
 The desktop shell's setup page (``ap-web/electron/setup/index.html``) is the
 user-facing "connect to a server" screen. This exercises it in a real browser:
-the scheme-defaulting this change added means a bare (or ``/omnigent``)
+the scheme-defaulting this change added means a bare (or ``/goalrail``)
 Databricks workspace URL now connects over https on the first click instead of
 tripping the unencrypted-http warning that the old http:// default produced.
 
 The setup page and the Electron main process share one module
-(``ap-web/electron/src/url.js``), loaded here as ``window.omnigentUrl``, so the
+(``ap-web/electron/src/url.js``), loaded here as ``window.goalrailUrl``, so the
 same ``normalizeUrl`` the main process navigates with is also verified in the
 browser — coverage the web-only harness cannot otherwise reach.
 
 These tests drive only the static page plus that shared module; they do not need
-the ``live_server`` omnigent backend.
+the ``live_server`` goalrail backend.
 """
 
 from __future__ import annotations
@@ -23,17 +23,17 @@ from playwright.sync_api import Page, expect
 
 # Repo-root-relative path to the Electron setup page. Loading it via file://
 # resolves the page's relative ``<script src="../src/url.js">`` against
-# ap-web/electron/src/url.js, so window.omnigentUrl is the real shared module.
+# ap-web/electron/src/url.js, so window.goalrailUrl is the real shared module.
 _SETUP_PAGE = Path(__file__).resolve().parents[3] / "ap-web" / "electron" / "setup" / "index.html"
 
-# The setup page expects the Electron preload bridge (window.omnigentSetup),
+# The setup page expects the Electron preload bridge (window.goalrailSetup),
 # which is absent in a plain browser. Stub it: getServerUrl/getRecentServers
 # feed page load, and setServerUrl records the value the page would hand the
 # main process while resolving WITHOUT navigating, so the page stays put for
 # assertions.
 _PRELOAD_STUB = """
   window.__connectCalls = [];
-  window.omnigentSetup = {
+  window.goalrailSetup = {
     getServerUrl: () => Promise.resolve(""),
     getRecentServers: () => Promise.resolve([]),
     setServerUrl: (value) => { window.__connectCalls.push(value); return Promise.resolve(); },
@@ -58,7 +58,7 @@ def _open_setup_page(page: Page) -> None:
 
 
 def test_bare_workspace_url_connects_without_http_warning(page: Page) -> None:
-    """A schemeless ``<ws>/omnigent`` connects on the first click, no warning.
+    """A schemeless ``<ws>/goalrail`` connects on the first click, no warning.
 
     Before the scheme default, a schemeless remote host was treated as
     ``http://`` and tripped the unencrypted-remote warning, forcing a second
@@ -66,11 +66,11 @@ def test_bare_workspace_url_connects_without_http_warning(page: Page) -> None:
     """
     _open_setup_page(page)
 
-    page.fill("#url", "dbc-x.cloud.databricks.com/omnigent")
+    page.fill("#url", "dbc-x.cloud.databricks.com/goalrail")
     page.click("#connect")
 
     page.wait_for_function("() => window.__connectCalls.length === 1")
-    assert page.evaluate("() => window.__connectCalls") == ["dbc-x.cloud.databricks.com/omnigent"]
+    assert page.evaluate("() => window.__connectCalls") == ["dbc-x.cloud.databricks.com/goalrail"]
     expect(page.locator("#err")).to_have_text("")
 
 
@@ -116,21 +116,21 @@ def test_shared_url_module_defaults_scheme_in_browser(page: Page) -> None:
     """The shared url.js (also used by the main process) defaults the scheme.
 
     The setup page loads ``ap-web/electron/src/url.js`` as
-    ``window.omnigentUrl`` — the exact module the Electron main process uses to
+    ``window.goalrailUrl`` — the exact module the Electron main process uses to
     normalize the URL it navigates to. Exercising it here covers the
     main-process scheme logic the web-only e2e harness cannot otherwise reach.
     """
     _open_setup_page(page)
 
-    # Remote host → https; the guide's /omnigent suffix is preserved.
+    # Remote host → https; the guide's /goalrail suffix is preserved.
     assert (
         page.evaluate(
-            "() => window.omnigentUrl.normalizeUrl('dbc-x.cloud.databricks.com/omnigent')"
+            "() => window.goalrailUrl.normalizeUrl('dbc-x.cloud.databricks.com/goalrail')"
         )
-        == "https://dbc-x.cloud.databricks.com/omnigent"
+        == "https://dbc-x.cloud.databricks.com/goalrail"
     )
     # Loopback stays http for local dev.
     assert (
-        page.evaluate("() => window.omnigentUrl.normalizeUrl('localhost:6767')")
+        page.evaluate("() => window.goalrailUrl.normalizeUrl('localhost:6767')")
         == "http://localhost:6767/"
     )

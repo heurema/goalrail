@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from omnigent.llms.adapters.bedrock import (
+from goalrail.llms.adapters.bedrock import (
     _build_converse_kwargs,
     _converse_to_chat,
     _convert_tools,
@@ -325,7 +325,7 @@ def test_bedrock_document_format_maps_known_mimes(mime: str, expected_format: st
     these went through ``media_type.split("/")[-1]`` and produced
     ``"plain"`` / ``"markdown"``, both rejected by the Converse API.
     """
-    from omnigent.llms.adapters.bedrock import _bedrock_document_format
+    from goalrail.llms.adapters.bedrock import _bedrock_document_format
 
     assert _bedrock_document_format(mime) == expected_format
 
@@ -337,7 +337,7 @@ def test_bedrock_document_format_unknown_non_text_keeps_legacy_split() -> None:
     accept (e.g. ``"json"``) — that's the same outcome as before this
     fix, not a regression introduced here.
     """
-    from omnigent.llms.adapters.bedrock import _bedrock_document_format
+    from goalrail.llms.adapters.bedrock import _bedrock_document_format
 
     assert _bedrock_document_format("application/json") == "json"
     assert _bedrock_document_format("application/zip") == "zip"
@@ -403,7 +403,7 @@ def test_string_user_content_becomes_text_block() -> None:
 
 def test_stream_text_chunk_structure() -> None:
     """_stream_text_chunk builds a valid Chat Completions text delta chunk."""
-    from omnigent.llms.adapters.bedrock import _stream_text_chunk
+    from goalrail.llms.adapters.bedrock import _stream_text_chunk
 
     chunk = _stream_text_chunk("bedrock-model", "Hello")
     assert chunk["model"] == "bedrock-model"
@@ -414,7 +414,7 @@ def test_stream_text_chunk_structure() -> None:
 
 def test_stream_stop_chunk_structure() -> None:
     """_stream_stop_chunk builds a valid stop chunk."""
-    from omnigent.llms.adapters.bedrock import _stream_stop_chunk
+    from goalrail.llms.adapters.bedrock import _stream_stop_chunk
 
     chunk = _stream_stop_chunk("bedrock-model", "stop")
     assert chunk["choices"][0]["finish_reason"] == "stop"
@@ -423,7 +423,7 @@ def test_stream_stop_chunk_structure() -> None:
 
 def test_stream_stop_chunk_tool_calls() -> None:
     """_stream_stop_chunk for tool_use produces tool_calls finish reason."""
-    from omnigent.llms.adapters.bedrock import _stream_stop_chunk
+    from goalrail.llms.adapters.bedrock import _stream_stop_chunk
 
     chunk = _stream_stop_chunk("bedrock-model", "tool_calls")
     assert chunk["choices"][0]["finish_reason"] == "tool_calls"
@@ -431,7 +431,7 @@ def test_stream_stop_chunk_tool_calls() -> None:
 
 def test_stream_usage_chunk_structure() -> None:
     """_stream_usage_chunk builds a valid usage chunk."""
-    from omnigent.llms.adapters.bedrock import _stream_usage_chunk
+    from goalrail.llms.adapters.bedrock import _stream_usage_chunk
 
     usage = {"inputTokens": 10, "outputTokens": 5, "totalTokens": 15}
     chunk = _stream_usage_chunk("bedrock-model", usage)
@@ -445,7 +445,7 @@ def test_stream_usage_chunk_structure() -> None:
 
 def test_none_content_becomes_empty_blocks() -> None:
     """None content yields empty content block list."""
-    from omnigent.llms.adapters.bedrock import _content_to_converse_blocks
+    from goalrail.llms.adapters.bedrock import _content_to_converse_blocks
 
     assert _content_to_converse_blocks(None) == []
 

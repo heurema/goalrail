@@ -1,6 +1,6 @@
 """Tests for llms.types — dataclass construction and edge cases."""
 
-from omnigent.llms.types import (
+from goalrail.llms.types import (
     NATIVE_TOOL_OUTPUT_TYPES,
     FunctionCallOutput,
     MessageOutput,

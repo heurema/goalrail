@@ -1,7 +1,7 @@
 """
 Driver for the double-render regression test (test_double_render.py).
 
-Boots a real :class:`omnigent_ui_sdk.terminal.TerminalHost` running
+Boots a real :class:`goalrail_ui_sdk.terminal.TerminalHost` running
 ``host.run(handler)`` (the same entry point the REPL uses), simulates
 the formatter's chunk-by-chunk output for a markdown response, and
 exits cleanly. Assertions run in the parent process against the
@@ -18,8 +18,8 @@ import asyncio
 import contextlib
 import sys
 
-from omnigent_ui_sdk.terminal._formatter import StreamingText, StreamReplace
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from goalrail_ui_sdk.terminal._formatter import StreamingText, StreamReplace
+from goalrail_ui_sdk.terminal._host import TerminalHost
 from prompt_toolkit.application import get_app
 from rich.markdown import Markdown
 from rich.padding import Padding

@@ -1,14 +1,14 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: omnigent
+  name: goalrail
   labels:
-    app: omnigent
+    app: goalrail
 spec:
-  host: omnigent.apps.example.com
+  host: goalrail.apps.example.com
   to:
     kind: Service
-    name: omnigent
+    name: goalrail
     weight: 100
   port:
     targetPort: http

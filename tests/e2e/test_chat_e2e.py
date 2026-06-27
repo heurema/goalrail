@@ -1,6 +1,6 @@
-"""E2E test for ``omnigent chat`` — local mode with mock LLM.
+"""E2E test for ``goalrail chat`` — local mode with mock LLM.
 
-Verifies that ``omnigent chat ./agent-dir/`` starts a server, opens the
+Verifies that ``goalrail chat ./agent-dir/`` starts a server, opens the
 REPL, and the agent responds. Since the REPL is interactive, we
 test by directly calling the local mode components rather than
 launching the full CLI.
@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 import yaml as _yaml
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
 from tests.e2e.conftest import (
     configure_mock_llm,
     find_free_port,
@@ -77,7 +77,7 @@ def _create_runner_bound_session_for_builtin(
     resp = client.post(
         "/v1/sessions",
         json={"agent_id": agent_id},
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     resp.raise_for_status()
     session_id = str(resp.json()["id"])
@@ -132,11 +132,11 @@ def test_chat_local_starts_server_and_agent_responds(
     tmp_path: Path,
 ) -> None:
     """
-    ``omnigent chat ./agent-dir/`` starts a local server with the agent
+    ``goalrail chat ./agent-dir/`` starts a local server with the agent
     and the agent can respond to messages.
 
     Tests the server startup and agent registration path used by
-    ``omnigent chat`` in local mode. Since the REPL itself is interactive,
+    ``goalrail chat`` in local mode. Since the REPL itself is interactive,
     we verify the underlying server works by sending a direct HTTP
     request through the sessions API.
 
@@ -145,7 +145,7 @@ def test_chat_local_starts_server_and_agent_responds(
     - Agent bundle not registered → agent lookup in GET /v1/agents fails.
     - Agent config invalid → session turn fails.
     """
-    from omnigent.chat import (
+    from goalrail.chat import (
         _start_local_server,
         _stop_local_server,
         _wait_for_server,
@@ -206,33 +206,33 @@ def test_chat_local_starts_server_and_agent_responds(
         _stop_local_server(server)
 
 
-def test_chat_local_accepts_omnigent_yaml_file(
+def test_chat_local_accepts_goalrail_yaml_file(
     mock_llm_server_url: str | None,
     tmp_path: Path,
 ) -> None:
     """
-    ``omnigent chat examples/coding_supervisor.yaml`` (or any
-    standalone omnigent YAML) now starts the local server and
+    ``goalrail chat examples/coding_supervisor.yaml`` (or any
+    standalone goalrail YAML) now starts the local server and
     registers the agent under its spec-declared name.
 
     The YAML path exercises the new ``materialize_bundle`` code
     path in :func:`_preregister_agent`: a file source wraps into
     a bundle directory, gets tarred, and the stored tarball
-    round-trips through :func:`omnigent.spec.load` to a
+    round-trips through :func:`goalrail.spec.load` to a
     validated :class:`AgentSpec`.
 
     **What breaks if this fails:**
     - ``_preregister_agent`` regresses to directory-only.
     - ``materialize_bundle``'s file branch produces the wrong
-      dir shape and ``_find_omnigent_yaml_in_dir`` misses the
+      dir shape and ``_find_goalrail_yaml_in_dir`` misses the
       YAML.
-    - Agent-plane's spec dispatch stops routing omnigent YAMLs
-      through ``load_omnigent_yaml``.
+    - Agent-plane's spec dispatch stops routing goalrail YAMLs
+      through ``load_goalrail_yaml``.
 
     :param mock_llm_server_url: Mock LLM server base URL.
     :param tmp_path: Per-test temp dir for the YAML fixture.
     """
-    from omnigent.chat import (
+    from goalrail.chat import (
         _start_local_server,
         _stop_local_server,
         _wait_for_server,
@@ -242,7 +242,7 @@ def test_chat_local_accepts_omnigent_yaml_file(
     model = f"mock-chat-yaml-{uuid.uuid4().hex[:6]}"
     agent_name = "yaml-e2e-probe"
 
-    # Inline fixture: minimal omnigent YAML with the openai-agents harness
+    # Inline fixture: minimal goalrail YAML with the openai-agents harness
     # wired to the mock server. Self-contained so an edit to the real
     # ``examples/hello_world.yaml`` can't flake this test.
     yaml_path = tmp_path / "yaml-e2e-probe.yaml"
@@ -330,7 +330,7 @@ def test_chat_remote_pick_agent(
     - _pick_agent can't parse server agent listing response.
     - Agent name extraction broken.
     """
-    from omnigent.chat import (
+    from goalrail.chat import (
         _pick_agent,
         _start_local_server,
         _stop_local_server,

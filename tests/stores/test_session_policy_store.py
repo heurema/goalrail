@@ -9,10 +9,10 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.policy_store.sqlalchemy_store import (
+from goalrail.stores.policy_store.sqlalchemy_store import (
     SqlAlchemyPolicyStore,
 )
 

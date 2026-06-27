@@ -3,7 +3,7 @@ name: archer
 description: A sharp, resourceful research assistant that investigates topics and explains concepts.
 
 executor:
-  type: omnigent
+  type: goalrail
   model: databricks-gpt-5-4
   config:
     harness: openai-agents
@@ -54,7 +54,7 @@ tools:
     type: agent
     description: Verifies claims by searching for corroborating or contradicting evidence.
     executor:
-      type: omnigent
+      type: goalrail
       model: databricks-gpt-5-4
       config:
         harness: openai-agents
@@ -68,7 +68,7 @@ tools:
     type: agent
     description: Condenses long content into concise, structured summaries.
     executor:
-      type: omnigent
+      type: goalrail
       model: databricks-gpt-5-4
       config:
         harness: openai-agents

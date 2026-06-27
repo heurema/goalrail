@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from omnigent_ui_sdk import Overlay, OverlayTarget, TerminalHost
+from goalrail_ui_sdk import Overlay, OverlayTarget, TerminalHost
 
 # Shared counter — incremented on every builder call. The test
 # opens the overlay and waits for a sentinel carrying ``tick >= 2``

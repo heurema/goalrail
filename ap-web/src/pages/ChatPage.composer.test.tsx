@@ -140,13 +140,13 @@ describe("Composer slash-command menu", () => {
     const onSend = vi.fn();
     render(<Composer {...composerProps({ onSend })} />);
     const ta = textarea();
-    fireEvent.change(ta, { target: { value: "omnigent" } });
+    fireEvent.change(ta, { target: { value: "goalrail" } });
 
     fireEvent.keyDown(ta, { key: "Enter", keyCode: 229 });
     expect(onSend).not.toHaveBeenCalled();
 
     fireEvent.keyDown(ta, { key: "Enter" });
-    expect(onSend).toHaveBeenCalledWith("omnigent", undefined);
+    expect(onSend).toHaveBeenCalledWith("goalrail", undefined);
   });
 
   it("ArrowDown moves the highlight to the next match", () => {

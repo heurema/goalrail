@@ -13,7 +13,7 @@ from playwright.sync_api import Page, expect
 
 
 def _publish_status(base_url: str, session_id: str, status: str) -> None:
-    """Publish a session status through the same Omnigent route native harnesses use.
+    """Publish a session status through the same Goalrail route native harnesses use.
 
     :param base_url: Base URL of the local e2e server, e.g.
         ``"http://127.0.0.1:51234"``.

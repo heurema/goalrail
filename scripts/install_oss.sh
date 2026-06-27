@@ -2,7 +2,7 @@
 
 # Goalrail installer.
 #
-# Installs the published `omnigent` wheel from PyPI with uv, verifies the
+# Installs the published `goalrail` wheel from PyPI with uv, verifies the
 # public `goalrail` CLI entry point, wires up PATH, and points you at
 # first-run. The wheel bundles the prebuilt web UI, so the default install
 # needs no Node/npm and runs no build.
@@ -24,7 +24,7 @@
 set -eu
 
 # Published PyPI package, the default install. --version pins a release.
-PACKAGE_NAME="omnigent"
+PACKAGE_NAME="goalrail"
 VERSION=
 # Comma-separated optional-dependency extras to install with the package
 # (e.g. "databricks"), accumulated from one or more --extra flags. Empty =>
@@ -57,7 +57,7 @@ init_style() {
     BOLD="${ESC}[1m"
     DIM="${ESC}[2m"
     # Brand accent — magenta-pink (#F43BA6), matching the Python CLI palette
-    # in omnigent/inner/ui.py so the installer and the tool agree.
+    # in goalrail/inner/ui.py so the installer and the tool agree.
     MAGENTA="${ESC}[38;2;244;59;166m"
     GREEN="${ESC}[32m"
     YELLOW="${ESC}[33m"
@@ -467,7 +467,7 @@ check_bubblewrap() {
 }
 
 install_goalrail() {
-  # Default: the published PyPI wheel (`omnigent`, optionally `omnigent==X`).
+  # Default: the published PyPI wheel (`goalrail`, optionally `goalrail==X`).
   # The wheel ships the prebuilt web UI, so there is no npm/Node step and no
   # source build — the fast, reliable path. `--repo` switches INSTALL_URL to a
   # git ref, which builds from source (and needs npm, checked above).
@@ -480,7 +480,7 @@ install_goalrail() {
   fi
   if building_from_source; then
     # A PEP 508 direct reference attaches extras to a git source install:
-    # "omnigent[databricks] @ git+https://...". Without extras, keep the bare
+    # "goalrail[databricks] @ git+https://...". Without extras, keep the bare
     # URL (the long-standing form uv accepts directly).
     if [ -n "$extras_suffix" ]; then
       target="${PACKAGE_NAME}${extras_suffix} @ ${INSTALL_URL}"
@@ -581,7 +581,7 @@ maybe_add_bin_to_path() {
   profile="$(pick_profile)"
   begin_marker="# >>> Goalrail installer >>>"
   end_marker="# <<< Goalrail installer <<<"
-  legacy_begin_marker="# >>> Omnigent installer >>>"
+  legacy_begin_marker="# >>> Goalrail installer >>>"
 
   warn "$bin_dir is not on PATH."
   if [ "$NON_INTERACTIVE" = true ]; then
@@ -594,7 +594,7 @@ maybe_add_bin_to_path() {
       step "PATH is already configured in $profile"
       return
     fi
-    fail "$profile already has a Goalrail/Omnigent installer block. Update it manually to: $path_line"
+    fail "$profile already has a Goalrail installer block. Update it manually to: $path_line"
   fi
 
   if ! prompt_yes_no "Add $bin_dir to PATH in $profile?"; then
@@ -626,13 +626,6 @@ verify_goalrail() {
   "$cli_path" --help >/dev/null
   step "Verified $cli_path"
 
-  # Compatibility aliases are installed alongside `goalrail`; check them so a
-  # packaging regression that drops one surfaces here rather than later.
-  for alias_cmd in omnigent omni; do
-    if [ ! -x "$bin_dir/$alias_cmd" ] && ! command -v "$alias_cmd" >/dev/null 2>&1; then
-      warn "the $alias_cmd compatibility alias was not installed (expected a console-script entry point alongside goalrail)."
-    fi
-  done
 }
 
 # No setup step here by design: the first `goalrail` run configures a model

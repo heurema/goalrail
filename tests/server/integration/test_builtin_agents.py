@@ -20,10 +20,10 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.routes.builtin_agents import create_builtin_agents_router
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.routes.builtin_agents import create_builtin_agents_router
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
 from tests.server.helpers import build_agent_bundle
 
 pytestmark = pytest.mark.asyncio
@@ -151,7 +151,7 @@ async def test_list_builtin_agents_exposes_harness_from_spec(
     """
     bundle = build_agent_bundle(
         name="custom-reviewer",
-        executor={"type": "omnigent", "config": {"harness": harness}},
+        executor={"type": "goalrail", "config": {"harness": harness}},
     )
     _register_builtin_agent(
         agent_store,
@@ -287,7 +287,7 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
         name="claude-native-ui",
         bundle=build_agent_bundle(
             name="claude-native-ui",
-            executor={"type": "omnigent", "config": {"harness": "claude-sdk"}},
+            executor={"type": "goalrail", "config": {"harness": "claude-sdk"}},
         ),
     )
     _register_builtin_agent(
@@ -297,7 +297,7 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
         name="codex-native-ui",
         bundle=build_agent_bundle(
             name="codex-native-ui",
-            executor={"type": "omnigent", "config": {"harness": "codex"}},
+            executor={"type": "goalrail", "config": {"harness": "codex"}},
         ),
     )
     _register_builtin_agent(
@@ -308,7 +308,7 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
         description="Custom coding agent",
         bundle=build_agent_bundle(
             name="databricks-coding-agent",
-            executor={"type": "omnigent", "config": {"harness": "openai-agents"}},
+            executor={"type": "goalrail", "config": {"harness": "openai-agents"}},
         ),
     )
 
@@ -373,7 +373,7 @@ async def test_catalog_entry_exposes_availability_and_reason(
     """
     bundle = build_agent_bundle(
         name="codex-reviewer",
-        executor={"type": "omnigent", "config": {"harness": "codex"}},
+        executor={"type": "goalrail", "config": {"harness": "codex"}},
     )
     _register_builtin_agent(
         agent_store,

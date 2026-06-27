@@ -1,4 +1,4 @@
-"""Tests for omnigent.runtime.credentials.databricks."""
+"""Tests for goalrail.runtime.credentials.databricks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.credentials.databricks import (
+from goalrail.runtime.credentials.databricks import (
     WorkspaceCreds,
     resolve_databricks_workspace,
 )
@@ -154,7 +154,7 @@ def test_absent_named_profile_raises_not_falls_back_to_default(
 def test_databricks_config_profile_env_var_typo_raises_not_falls_back_to_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Simulates: `omnigent run foo.yaml --profile typo-profile --model databricks/m`
+    # Simulates: `goalrail run foo.yaml --profile typo-profile --model databricks/m`
     # _propagate_profile_to_environment sets DATABRICKS_CONFIG_PROFILE="typo-profile".
     # DatabricksAdapter calls resolve_databricks_workspace(None).
     # Without the effective_profile fix, the configparser path receives profile=None,
@@ -351,11 +351,11 @@ def test_sdk_value_error_does_not_emit_warning(
     )
     monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg))
 
-    with caplog.at_level(logging.DEBUG, logger="omnigent.runtime.credentials.databricks"):
+    with caplog.at_level(logging.DEBUG, logger="goalrail.runtime.credentials.databricks"):
         resolve_databricks_workspace(profile="dev")
 
     module_records = [
-        r for r in caplog.records if r.name == "omnigent.runtime.credentials.databricks"
+        r for r in caplog.records if r.name == "goalrail.runtime.credentials.databricks"
     ]
     # WARNING+ would re-introduce the stderr traceback.
     warnings_or_louder = [r for r in module_records if r.levelno >= logging.WARNING]

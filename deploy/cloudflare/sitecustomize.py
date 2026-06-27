@@ -1,4 +1,4 @@
-"""Auto-loaded shim that makes Omnigent work against Cloudflare D1.
+"""Auto-loaded shim that makes Goalrail work against Cloudflare D1.
 
 D1 is SQLite reached over an HTTP REST API. The third-party
 ``sqlalchemy-cloudflare-d1`` dialect subclasses the *generic* ``DefaultDialect``
@@ -16,7 +16,7 @@ DDL compiler, type compiler, identifier quoting, and full reflection — is then
 inherited from SQLite, correctly. This is the change that belongs upstream in
 the dialect package (just change its base class); until it ships, sitecustomize
 re-registers a corrected dialect here. Python imports ``sitecustomize`` at
-interpreter startup, so it runs before Omnigent builds an engine.
+interpreter startup, so it runs before Goalrail builds an engine.
 
 Two small adaptations remain, both expressing facts about D1 rather than SQLite
 shortcomings:

@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.tools.base`.
+"""Unit tests for :mod:`goalrail.tools.base`.
 
 Covers ``ToolContext`` construction, ``Tool`` ABC contract, and the
 ``is_valid_tool_name`` validator.
@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.tools.base import Tool, ToolContext, is_valid_tool_name
+from goalrail.tools.base import Tool, ToolContext, is_valid_tool_name
 
 # ── is_valid_tool_name ───────────────────────────────────
 

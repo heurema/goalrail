@@ -1,4 +1,4 @@
-"""Tests for omnigent.spec.load()."""
+"""Tests for goalrail.spec.load()."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.errors import OmnigentError
-from omnigent.spec import load, materialize_bundle
-from omnigent.spec._omnigent_compat import load_omnigent_yaml
+from goalrail.errors import GoalrailError
+from goalrail.spec import load, materialize_bundle
+from goalrail.spec._goalrail_compat import load_goalrail_yaml
 
 
 @pytest.fixture()
@@ -21,7 +21,7 @@ def agent_dir(tmp_path: Path) -> Path:
     config = {
         "spec_version": 1,
         "name": "test-agent",
-        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+        "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
     return tmp_path
@@ -50,7 +50,7 @@ def test_load_from_tarball(tmp_path: Path) -> None:
         {
             "spec_version": 1,
             "name": "tarball-agent",
-            "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+            "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
         }
     )
     tar_path = _make_tarball(tmp_path, {"config.yaml": config})
@@ -68,19 +68,19 @@ def test_load_tarball_without_dest_raises(tmp_path: Path) -> None:
         {
             "spec_version": 1,
             "name": "x",
-            "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+            "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
         }
     )
     tar_path = _make_tarball(tmp_path, {"config.yaml": config})
 
-    with pytest.raises(OmnigentError, match="dest is required"):
+    with pytest.raises(GoalrailError, match="dest is required"):
         load(tar_path)
 
 
 def test_load_yaml_missing_prompt_raises_actionable_error(tmp_path: Path) -> None:
     """
     A ``.yaml`` file that's missing the ``prompt`` key fails the
-    omnigent-YAML check. Without the diagnostic dispatch in
+    goalrail-YAML check. Without the diagnostic dispatch in
     ``load()``, the caller would see ``"dest is required when
     loading from a tarball"`` — the file's a YAML, not a tarball.
     The fix surfaces the specific reason instead.
@@ -92,7 +92,7 @@ def test_load_yaml_missing_prompt_raises_actionable_error(tmp_path: Path) -> Non
     yaml_path = tmp_path / "config.yaml"
     yaml_path.write_text(yaml.dump({"name": "x"}))  # missing 'prompt'
 
-    with pytest.raises(OmnigentError) as excinfo:
+    with pytest.raises(GoalrailError) as excinfo:
         load(yaml_path)
     msg = str(excinfo.value)
     # Must NOT show the misleading tarball error.
@@ -110,15 +110,15 @@ def test_load_yaml_missing_prompt_raises_actionable_error(tmp_path: Path) -> Non
 def test_load_yaml_with_spec_version_raises_actionable_error(tmp_path: Path) -> None:
     """
     A ``.yaml`` file with ``spec_version`` set looks like an
-    omnigent spec but is sitting alone (no ``config.yaml``
-    bundle dir). The omnigent check rejects it. The error
+    goalrail spec but is sitting alone (no ``config.yaml``
+    bundle dir). The goalrail check rejects it. The error
     should explain the bundle-vs-single-file distinction, not
     the misleading tarball message.
     """
     yaml_path = tmp_path / "agent.yaml"
     yaml_path.write_text(yaml.dump({"spec_version": 1, "name": "x", "prompt": "hi"}))
 
-    with pytest.raises(OmnigentError) as excinfo:
+    with pytest.raises(GoalrailError) as excinfo:
         load(yaml_path)
     msg = str(excinfo.value)
     assert "tarball" not in msg
@@ -128,14 +128,14 @@ def test_load_yaml_with_spec_version_raises_actionable_error(tmp_path: Path) -> 
 def test_load_yaml_with_parse_error_raises_actionable_error(tmp_path: Path) -> None:
     """
     A ``.yaml`` file that PyYAML can't parse (e.g. an unquoted
-    colon in a value) falls through ``is_omnigent_yaml`` and,
+    colon in a value) falls through ``is_goalrail_yaml`` and,
     without the diagnostic dispatch, would surface as the bare
     "tarball" error. The fix forwards PyYAML's location info.
     """
     yaml_path = tmp_path / "config.yaml"
     yaml_path.write_text("name: x\nprompt: Tell me: a story\n")  # unquoted colon
 
-    with pytest.raises(OmnigentError) as excinfo:
+    with pytest.raises(GoalrailError) as excinfo:
         load(yaml_path)
     msg = str(excinfo.value)
     assert "tarball" not in msg
@@ -146,7 +146,7 @@ def test_load_invalid_spec_raises(tmp_path: Path) -> None:
     config = {"spec_version": 99, "name": "bad"}
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
 
-    with pytest.raises(OmnigentError, match="invalid agent spec"):
+    with pytest.raises(GoalrailError, match="invalid agent spec"):
         load(tmp_path)
 
 
@@ -160,7 +160,7 @@ def test_load_from_bytes(tmp_path: Path) -> None:
         {
             "spec_version": 1,
             "name": "bytes-agent",
-            "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+            "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
         }
     )
     tar_path = _make_tarball(tmp_path, {"config.yaml": config})
@@ -173,7 +173,7 @@ def test_load_from_bytes(tmp_path: Path) -> None:
 
 
 def test_load_bytes_without_dest_raises() -> None:
-    with pytest.raises(OmnigentError, match="dest is required"):
+    with pytest.raises(GoalrailError, match="dest is required"):
         load(b"fake-tarball-bytes")
 
 
@@ -183,12 +183,12 @@ def test_load_bytes_without_dest_raises() -> None:
 def test_materialize_bundle_copies_directory_recursively(tmp_path: Path) -> None:
     """
     A directory source is copied recursively into *dest*. This is
-    the path taken by native omnigent agent-image directories
+    the path taken by native goalrail agent-image directories
     (``config.yaml`` + bundled assets). Every file at any depth
     must survive the copy so ``spec.load(bundle_dir)`` sees the
     full spec tree.
 
-    What breaks if this fails: ``omnigent server --agent my-agent/``
+    What breaks if this fails: ``goalrail server --agent my-agent/``
     ends up tarballing a partial bundle — the server-side
     extraction would either fail or produce an incomplete spec
     the LLM runs with.
@@ -214,7 +214,7 @@ def test_materialize_bundle_wraps_yaml_file_in_dest(tmp_path: Path) -> None:
     """
     A single-file YAML source is placed at the root of *dest*
     with its original basename preserved. This is the shape
-    ``_find_omnigent_yaml_in_dir`` expects — it scans the
+    ``_find_goalrail_yaml_in_dir`` expects — it scans the
     directory for exactly one YAML not named ``config.yaml``.
     Wrong placement (nested directory, renamed file) would fall
     through the dispatch and the load would fail.
@@ -227,8 +227,8 @@ def test_materialize_bundle_wraps_yaml_file_in_dest(tmp_path: Path) -> None:
 
     assert returned == dest
     assert dest.is_dir()
-    # Basename preserved — Omnigent' dispatch uses
-    # ``is_omnigent_yaml`` on the exact file (not a synthesized
+    # Basename preserved — Goalrail' dispatch uses
+    # ``is_goalrail_yaml`` on the exact file (not a synthesized
     # ``config.yaml``), so the original name must carry through.
     assert (dest / "coding_supervisor.yaml").read_text() == source.read_text()
 
@@ -271,7 +271,7 @@ def test_materialize_bundle_then_load_roundtrip_directory(tmp_path: Path) -> Non
     the caller would have gotten from ``load(source)`` directly.
     Proves the helper's output is the canonical input to
     :func:`load` — which is the contract all three consumers
-    (``_preregister_agent``, ``_prepare_omnigent_yaml_bundle``,
+    (``_preregister_agent``, ``_prepare_goalrail_yaml_bundle``,
     ``_chat_local``) rely on.
     """
     source = tmp_path / "source"
@@ -281,7 +281,7 @@ def test_materialize_bundle_then_load_roundtrip_directory(tmp_path: Path) -> Non
             {
                 "spec_version": 1,
                 "name": "roundtrip-agent",
-                "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+                "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
             }
         )
     )
@@ -295,17 +295,17 @@ def test_materialize_bundle_then_load_roundtrip_directory(tmp_path: Path) -> Non
 def test_materialize_bundle_then_load_roundtrip_yaml(tmp_path: Path) -> None:
     """
     Same end-to-end sanity for the YAML-file branch: materializing
-    a standalone omnigent YAML must produce a directory
-    :func:`load` can dispatch through ``_find_omnigent_yaml_in_dir``.
+    a standalone goalrail YAML must produce a directory
+    :func:`load` can dispatch through ``_find_goalrail_yaml_in_dir``.
     Gate against regressions that would make the wrap-a-file path
     yield a directory ``load`` rejects.
     """
     source = tmp_path / "hello.yaml"
     # Include an executor block with a harness — the adapter's
-    # validator requires one for executor.type='omnigent'. The
+    # validator requires one for executor.type='goalrail'. The
     # roundtrip shape we want to prove is "path goes through, spec
     # loads" — not harness-selection logic, which has its own
-    # tests in test_omnigent_adapter.py.
+    # tests in test_goalrail_adapter.py.
     source.write_text(
         yaml.dump(
             {
@@ -322,14 +322,14 @@ def test_materialize_bundle_then_load_roundtrip_yaml(tmp_path: Path) -> None:
     bundle_dir = materialize_bundle(source, tmp_path / "bundle")
     spec = load(bundle_dir)
 
-    # Omnigent-sourced spec — translator sets executor.type.
+    # Goalrail-sourced spec — translator sets executor.type.
     assert spec.name == "hello-from-yaml"
-    assert spec.executor.type == "omnigent"
+    assert spec.executor.type == "goalrail"
 
 
-def test_load_omnigent_yaml_preserves_use_responses_bool(tmp_path: Path) -> None:
+def test_load_goalrail_yaml_preserves_use_responses_bool(tmp_path: Path) -> None:
     """
-    ``use_responses: false`` in an omnigent YAML must land as Python ``False``
+    ``use_responses: false`` in an goalrail YAML must land as Python ``False``
     on ``spec.executor.config["use_responses"]``, not the string ``"false"``.
 
     What breaks if this fails: ``_build_openai_agents_sdk_spawn_env`` encodes the
@@ -338,11 +338,11 @@ def test_load_omnigent_yaml_preserves_use_responses_bool(tmp_path: Path) -> None
     ``HARNESS_OPENAI_AGENTS_USE_RESPONSES=true``, causing silent API failures for
     models that require ``use_responses=False`` (e.g. Kimi K2 via Databricks).
 
-    Root cause guarded: ``_omnigent_compat.load_omnigent_yaml`` previously used
+    Root cause guarded: ``_goalrail_compat.load_goalrail_yaml`` previously used
     ``yaml.safe_load`` to read the raw YAML, but importing ``load_agent_def`` mutates
     ``yaml.SafeLoader``'s implicit resolvers as a side effect, causing ``safe_load`` to
     return string ``"false"`` for unquoted ``false`` values.  The fix is to use
-    ``_OmnigentYamlLoader`` directly (which owns its resolvers and is unaffected by
+    ``_GoalrailYamlLoader`` directly (which owns its resolvers and is unaffected by
     the mutation).
     """
     yaml_text = textwrap.dedent("""\
@@ -355,17 +355,17 @@ def test_load_omnigent_yaml_preserves_use_responses_bool(tmp_path: Path) -> None
           use_responses: false
     """)
     (tmp_path / "kimi-test.yaml").write_text(yaml_text)
-    spec = load_omnigent_yaml(tmp_path / "kimi-test.yaml")
+    spec = load_goalrail_yaml(tmp_path / "kimi-test.yaml")
     assert spec.executor.config.get("use_responses") is False
 
 
-def test_load_omnigent_yaml_threads_executor_extra_max_tokens_to_llm_extra(
+def test_load_goalrail_yaml_threads_executor_extra_max_tokens_to_llm_extra(
     tmp_path: Path,
 ) -> None:
     """
-    Omnigent-compatible YAML carries generation kwargs under
-    ``executor.extra``; the Omnigent compatibility loader must translate
-    those into ``spec.llm.extra`` so harness-backed Omnigent execution can
+    Goalrail-compatible YAML carries generation kwargs under
+    ``executor.extra``; the Goalrail compatibility loader must translate
+    those into ``spec.llm.extra`` so harness-backed Goalrail execution can
     forward them to the inner LLM executor.
     """
     yaml_text = textwrap.dedent("""\
@@ -381,13 +381,13 @@ def test_load_omnigent_yaml_threads_executor_extra_max_tokens_to_llm_extra(
     """)
     (tmp_path / "kimi-test.yaml").write_text(yaml_text)
 
-    spec = load_omnigent_yaml(tmp_path / "kimi-test.yaml")
+    spec = load_goalrail_yaml(tmp_path / "kimi-test.yaml")
 
     assert spec.llm is not None
     assert spec.llm.extra["max_tokens"] == 65536
 
 
-def test_load_omnigent_yaml_unknown_harness_hints_at_version_skew(
+def test_load_goalrail_yaml_unknown_harness_hints_at_version_skew(
     tmp_path: Path,
 ) -> None:
     """
@@ -406,15 +406,15 @@ def test_load_omnigent_yaml_unknown_harness_hints_at_version_skew(
     """)
     (tmp_path / "skew-test.yaml").write_text(yaml_text)
 
-    with pytest.raises(OmnigentError) as excinfo:
-        load_omnigent_yaml(tmp_path / "skew-test.yaml")
+    with pytest.raises(GoalrailError) as excinfo:
+        load_goalrail_yaml(tmp_path / "skew-test.yaml")
 
     message = str(excinfo.value)
     assert "executor.config.harness" in message
     assert "this client (runner) may be older than the server" in message
 
 
-def test_load_omnigent_yaml_missing_harness_omits_version_skew_hint(
+def test_load_goalrail_yaml_missing_harness_omits_version_skew_hint(
     tmp_path: Path,
 ) -> None:
     """
@@ -430,8 +430,8 @@ def test_load_omnigent_yaml_missing_harness_omits_version_skew_hint(
     """)
     (tmp_path / "no-harness-test.yaml").write_text(yaml_text)
 
-    with pytest.raises(OmnigentError) as excinfo:
-        load_omnigent_yaml(tmp_path / "no-harness-test.yaml")
+    with pytest.raises(GoalrailError) as excinfo:
+        load_goalrail_yaml(tmp_path / "no-harness-test.yaml")
 
     message = str(excinfo.value)
     # Assert the exact "required when ..." variant (not just the field path):
@@ -471,7 +471,7 @@ def _write_parent_with_sub_agents(
     parent = {
         "spec_version": 1,
         "name": "parent",
-        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+        "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
         "tools": {"agents": parent_agents},
     }
     (root / "config.yaml").write_text(yaml.dump(parent))
@@ -498,14 +498,14 @@ def test_load_drops_invalid_sub_agent_when_pruning(tmp_path: Path) -> None:
                 "spec_version": 1,
                 "name": "newcomer",
                 "executor": {
-                    "type": "omnigent",
+                    "type": "goalrail",
                     "config": {"harness": _UNKNOWN_HARNESS},
                 },
             },
             "helper": {
                 "spec_version": 1,
                 "name": "helper",
-                "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+                "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
             },
         },
     )
@@ -529,14 +529,14 @@ def test_load_without_pruning_still_fails_on_invalid_sub_agent(tmp_path: Path) -
                 "spec_version": 1,
                 "name": "newcomer",
                 "executor": {
-                    "type": "omnigent",
+                    "type": "goalrail",
                     "config": {"harness": _UNKNOWN_HARNESS},
                 },
             },
         },
     )
 
-    with pytest.raises(OmnigentError, match="invalid agent spec"):
+    with pytest.raises(GoalrailError, match="invalid agent spec"):
         load(tmp_path)
 
 
@@ -545,7 +545,7 @@ def test_load_pruning_still_fails_on_invalid_root(tmp_path: Path) -> None:
     config = {"spec_version": 99, "name": "bad-root"}
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
 
-    with pytest.raises(OmnigentError, match="invalid agent spec"):
+    with pytest.raises(GoalrailError, match="invalid agent spec"):
         load(tmp_path, prune_invalid_sub_agents=True)
 
 
@@ -558,7 +558,7 @@ def test_load_pruning_keeps_valid_sub_agents_intact(tmp_path: Path) -> None:
             "helper": {
                 "spec_version": 1,
                 "name": "helper",
-                "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+                "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
             },
         },
     )
@@ -580,14 +580,14 @@ def test_load_pruning_logs_warning_for_dropped_sub_agent(
                 "spec_version": 1,
                 "name": "newcomer",
                 "executor": {
-                    "type": "omnigent",
+                    "type": "goalrail",
                     "config": {"harness": _UNKNOWN_HARNESS},
                 },
             },
         },
     )
 
-    with caplog.at_level("WARNING", logger="omnigent.spec"):
+    with caplog.at_level("WARNING", logger="goalrail.spec"):
         load(tmp_path, prune_invalid_sub_agents=True)
 
     assert any("newcomer" in rec.message and rec.levelname == "WARNING" for rec in caplog.records)
@@ -606,7 +606,7 @@ def test_load_pruning_drops_grandchild_but_keeps_valid_child(tmp_path: Path) -> 
             {
                 "spec_version": 1,
                 "name": "parent",
-                "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+                "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
                 "tools": {"agents": ["child"]},
             }
         )
@@ -619,7 +619,7 @@ def test_load_pruning_drops_grandchild_but_keeps_valid_child(tmp_path: Path) -> 
             {
                 "spec_version": 1,
                 "name": "child",
-                "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+                "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
                 "tools": {"agents": ["grandchild"]},
             }
         )
@@ -632,7 +632,7 @@ def test_load_pruning_drops_grandchild_but_keeps_valid_child(tmp_path: Path) -> 
             {
                 "spec_version": 1,
                 "name": "grandchild",
-                "executor": {"type": "omnigent", "config": {"harness": _UNKNOWN_HARNESS}},
+                "executor": {"type": "goalrail", "config": {"harness": _UNKNOWN_HARNESS}},
             }
         )
     )

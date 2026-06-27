@@ -26,9 +26,9 @@ from typing import Any
 import pytest
 from mcp.types import Tool as McpToolDef
 
-from omnigent.server import mcp_pool as _mcp_pool_module
-from omnigent.server.mcp_pool import McpToolEntry, ServerMcpPool
-from omnigent.spec.types import AgentSpec, MCPServerConfig
+from goalrail.server import mcp_pool as _mcp_pool_module
+from goalrail.server.mcp_pool import McpToolEntry, ServerMcpPool
+from goalrail.spec.types import AgentSpec, MCPServerConfig
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ def patch_mcp_connection(
             return await conns[self._name].call_tool(name, arguments)
 
     monkeypatch.setattr(
-        "omnigent.server.mcp_pool.McpServerConnection",
+        "goalrail.server.mcp_pool.McpServerConnection",
         _FakeMcpServerConnection,
     )
     return conns
@@ -433,7 +433,7 @@ async def test_shutdown_all_closes_all_entries(
 ) -> None:
     """``shutdown_all`` must close every live connection and empty the pool.
 
-    Failure means the Omnigent server shutdown leaks MCP connections, blocking
+    Failure means the Goalrail server shutdown leaks MCP connections, blocking
     graceful process exit.
     """
     patch_mcp_connection["gh"] = _FakeConn(tools=[_make_tool("search")])

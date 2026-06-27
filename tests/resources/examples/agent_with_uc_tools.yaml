@@ -7,7 +7,7 @@
 #   export DATABRICKS_CONFIG_PROFILE=<your-profile>
 #   export DATABRICKS_WAREHOUSE_ID=<your-sql-warehouse-id>
 #
-#   python -m omnigent tests/resources/examples/agent_with_uc_tools.yaml \
+#   python -m goalrail tests/resources/examples/agent_with_uc_tools.yaml \
 #       --prompt "Use ask_llm to summarize: Databricks Unity Catalog is great"
 #
 # The runner executes UC functions via the SQL Statement Execution API.

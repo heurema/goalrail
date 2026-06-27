@@ -33,7 +33,7 @@ pulls it, which can take a few minutes).
 ## Prerequisites
 
 ```bash
-pip install 'omnigent[boxlite]'   # installs the boxlite SDK extra
+pip install 'goalrail[boxlite]'   # installs the boxlite SDK extra
 ```
 
 **Local mode** additionally needs hardware virtualization on the
@@ -49,14 +49,14 @@ host needs no virtualization.
 ## Server configuration
 
 Add a `sandbox:` block to your server config (`goalrail server -c …` /
-`OMNIGENT_CONFIG` / `<data_dir>/config.yaml`).
+`GOALRAIL_CONFIG` / `<data_dir>/config.yaml`).
 
 ### Local micro-VMs (no cloud account)
 
 ```yaml
 sandbox:
   provider: boxlite
-  server_url: https://omnigent.example.com   # the in-box host dials this back
+  server_url: https://goalrail.example.com   # the in-box host dials this back
 ```
 
 `provider` + `server_url` is a complete config: the image defaults to
@@ -67,9 +67,9 @@ the official prebaked host image and boxes run locally.
 ```yaml
 sandbox:
   provider: boxlite
-  server_url: https://omnigent.example.com
+  server_url: https://goalrail.example.com
   boxlite:
-    image: docker.io/me/omnigent-host:latest     # optional, shared; default: official
+    image: docker.io/me/goalrail-host:latest     # optional, shared; default: official
     env: [OPENAI_API_KEY, GIT_TOKEN]             # optional, shared; SERVER env var NAMES
     cloud:
       endpoint: https://boxlite.example.com:8100 # selects CLOUD mode
@@ -88,9 +88,9 @@ data directory and give it credentials to pull a **private** host image
 ```yaml
 sandbox:
   provider: boxlite
-  server_url: https://omnigent.example.com
+  server_url: https://goalrail.example.com
   boxlite:
-    image: ghcr.io/acme/omnigent-host:latest   # shared
+    image: ghcr.io/acme/goalrail-host:latest   # shared
     local:                           # LOCAL mode block (mutually exclusive with `cloud`)
       home_dir: /data/boxlite        # runtime state + image cache (default ~/.boxlite)
       registry:
@@ -119,8 +119,8 @@ env vars at provision time — values never live in the config file.
 | Variable | Purpose |
 |----------|---------|
 | `BOXLITE_API_KEY` | API key for the remote `boxlite serve` (cloud mode only). |
-| `OMNIGENT_BOXLITE_HOST_IMAGE` | Override the host image (alternative to `sandbox.boxlite.image`). |
-| `OMNIGENT_BOXLITE_SANDBOX_ENV` | Comma-separated SERVER env var names to inject into boxes (alternative to `sandbox.boxlite.env`). |
+| `GOALRAIL_BOXLITE_HOST_IMAGE` | Override the host image (alternative to `sandbox.boxlite.image`). |
+| `GOALRAIL_BOXLITE_SANDBOX_ENV` | Comma-separated SERVER env var names to inject into boxes (alternative to `sandbox.boxlite.env`). |
 
 The `env` names resolve to their values from the **server's own
 environment** at provision time — typically the harness LLM credentials
@@ -145,7 +145,7 @@ values never live in the config file.
    generation.
 
 Inspect running boxes with the CLI (`boxlite list`, `boxlite logs <id>`);
-the in-box host logs to `/tmp/omnigent-host.log`.
+the in-box host logs to `/tmp/goalrail-host.log`.
 
 ## Limitations
 

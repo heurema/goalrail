@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import claude_native_status
+from goalrail import claude_native_status
 
 
 def _run(
@@ -83,7 +83,7 @@ def test_status_wrapper_captures_cost(tmp_path: Path, monkeypatch: pytest.Monkey
 
     Claude Code's statusLine stdin carries a top-level ``cost`` block with its
     own session billing. claude-native never produces a ``response.completed``
-    event, so the Omnigent relay's cost accumulation never runs for it — capturing
+    event, so the Goalrail relay's cost accumulation never runs for it — capturing
     this is the only way native session cost reaches ``session_usage``. A
     failure here means native Cost-Ask policies always see $0.
     """

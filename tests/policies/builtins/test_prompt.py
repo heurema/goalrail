@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from omnigent.policies.builtins.prompt import prompt_policy
+from goalrail.policies.builtins.prompt import prompt_policy
 
 
 def _make_event(

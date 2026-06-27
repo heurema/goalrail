@@ -25,10 +25,10 @@ def test_delivery_cap_drops_followup_without_failed_session_status(
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "goalrail"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "goalrail_pi_native_extension.js"
     )
 
     script = r"""
@@ -50,14 +50,14 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://goalrail.test",
     sessionId: "session-1",
     inboxDir,
     authHeaders: { authorization: "Bearer test" },
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.GOALRAIL_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {

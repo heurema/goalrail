@@ -125,7 +125,7 @@ _TERM = "xterm-256color"
 _ROWS = 40
 _COLS = 120
 
-# PTY boot: importing omnigent_ui_sdk + booting a prompt-toolkit
+# PTY boot: importing goalrail_ui_sdk + booting a prompt-toolkit
 # Application takes a second or two on a cold Python process.
 _BOOT_TIMEOUT = 10.0
 # Post-keystroke expects: prompt-toolkit's redraw cycle is bounded

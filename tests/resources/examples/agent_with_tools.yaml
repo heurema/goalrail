@@ -3,11 +3,11 @@
 # Usage:
 #   export DATABRICKS_CONFIG_PROFILE=<your-profile>
 #
-#   python -m omnigent examples/agent_with_tools.yaml \
+#   python -m goalrail examples/agent_with_tools.yaml \
 #       --prompt "What is the current time in Tokyo?"
 #
 #   # Example blocked tool call
-#   python -m omnigent examples/agent_with_tools.yaml \
+#   python -m goalrail examples/agent_with_tools.yaml \
 #       --prompt "Use the sleep tool to sleep for 8 seconds."
 
 name: assistant_with_tools

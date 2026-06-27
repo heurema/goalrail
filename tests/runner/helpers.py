@@ -5,17 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from omnigent.inner.os_env import OSEnvironment
-from omnigent.inner.terminal import TerminalInstance
+from goalrail.inner.os_env import OSEnvironment
+from goalrail.inner.terminal import TerminalInstance
 
 
 class NullServerClient:
-    """Minimal fake Omnigent server client for tests that do not exercise Omnigent interactions.
+    """Minimal fake Goalrail server client for tests that do not exercise Goalrail interactions.
 
-    Returns empty/204 responses to all requests so the runner's Omnigent calls
+    Returns empty/204 responses to all requests so the runner's Goalrail calls
     (session fetch, label patch, history load, etc.) succeed silently.
     Used wherever ``create_runner_app`` is called in tests that only
-    exercise runner-local behavior with no real Omnigent server.
+    exercise runner-local behavior with no real Goalrail server.
     """
 
     class _Response:

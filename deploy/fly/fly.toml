@@ -1,14 +1,14 @@
-# Fly.io config for Omnigent. Deploy with the CLI from this directory:
+# Fly.io config for Goalrail. Deploy with the CLI from this directory:
 #   fly deploy -c deploy/fly/fly.toml
 # Pulls the prebuilt image directly (the fast CLI path). Pairs with SQLite on a
 # persistent volume by default — no separate database app. Full walkthrough
 # (volume, memory, and the web-UI Launch path): deploy/fly/README.md.
 
-app = "omnigent"           # change to your app name
+app = "goalrail"           # change to your app name
 primary_region = "iad"       # pick a region: fly platform regions
 
 [build]
-  image = "ghcr.io/omnigent-ai/omnigent-server:latest"
+  image = "ghcr.io/heurema/goalrail-server:latest"
   # For the Fly web-UI Launch (which always builds + pushes to registry.fly.io
   # and has no external-image mode), swap the line above for:
   #   dockerfile = "deploy/docker/Dockerfile.prebuilt"
@@ -17,8 +17,8 @@ primary_region = "iad"       # pick a region: fly platform regions
   HOST = "0.0.0.0"
   PORT = "8000"
   ARTIFACT_DIR = "/data/artifacts"
-  OMNIGENT_ADMIN_CREDENTIALS_PATH = "/data/admin-credentials"
-  OMNIGENT_AUTH_PROVIDER = "accounts"
+  GOALRAIL_ADMIN_CREDENTIALS_PATH = "/data/admin-credentials"
+  GOALRAIL_AUTH_PROVIDER = "accounts"
   # SQLite on the persistent volume — no separate Postgres app needed. For
   # multi-instance, point DATABASE_URL at a Postgres URL (here or via
   # `fly secrets set`); the entrypoint normalizes postgres:// automatically.

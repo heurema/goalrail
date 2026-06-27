@@ -1,5 +1,5 @@
 """
-Tests for ``_build_cursor_spawn_env`` in ``omnigent/runtime/workflow.py``.
+Tests for ``_build_cursor_spawn_env`` in ``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec`` fields to the ``HARNESS_CURSOR_*`` env
 vars the cursor harness wrap reads at first-turn time. Unlike the
@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.runtime.workflow import _build_cursor_spawn_env
-from omnigent.spec.types import (
+from goalrail.runtime.workflow import _build_cursor_spawn_env
+from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
     DatabricksAuth,
@@ -31,11 +31,11 @@ from omnigent.spec.types import (
 
 @pytest.fixture(autouse=True)
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Point OMNIGENT_CONFIG_HOME at an empty temp dir so the developer's real
-    ``~/.omnigent/config.yaml`` can't leak in, and clear any ambient
+    """Point GOALRAIL_CONFIG_HOME at an empty temp dir so the developer's real
+    ``~/.goalrail/config.yaml`` can't leak in, and clear any ambient
     ``CURSOR_API_KEY`` so the no-auth / DatabricksAuth cases are deterministic
     (the builder falls back to an ambient key — see the ambient-fallback test)."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("CURSOR_API_KEY", raising=False)
 
 
@@ -53,7 +53,7 @@ def _make_spec(
         spec_version=1,
         name=name,
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model, auth=auth),
+        executor=ExecutorSpec(type="goalrail", config=config, model=model, auth=auth),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 
@@ -146,7 +146,7 @@ def test_no_workdir_omits_bundle_dir_env_var() -> None:
 def _write_cursor_config(tmp_path: Path, ref: str) -> None:
     """Write a ``cursor:`` block referencing *ref* into the isolated config.
 
-    :param tmp_path: The isolated ``OMNIGENT_CONFIG_HOME`` (see the autouse
+    :param tmp_path: The isolated ``GOALRAIL_CONFIG_HOME`` (see the autouse
         fixture).
     :param ref: The secret reference to record, e.g. ``"env:CURSOR_KEY_SRC"``.
     """
@@ -156,7 +156,7 @@ def _write_cursor_config(tmp_path: Path, ref: str) -> None:
 def test_stored_cursor_key_used_when_spec_has_no_auth(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A CURSOR_API_KEY registered via ``omnigent setup`` flows when the spec
+    """A CURSOR_API_KEY registered via ``goalrail setup`` flows when the spec
     declares no auth — so a user need not export it in every shell."""
     monkeypatch.setenv("CURSOR_KEY_SRC", "crsr_stored_123")
     _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
@@ -177,7 +177,7 @@ def test_stored_env_cursor_key_stripped_before_forwarding(
 def test_stored_cursor_key_wins_over_ambient_when_both_set(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """With no spec auth, the stored ``cursor:`` key (registered via ``omnigent
+    """With no spec auth, the stored ``cursor:`` key (registered via ``goalrail
     setup``) wins over an ambient ``CURSOR_API_KEY`` when BOTH are present.
 
     This pins the middle rung of the precedence chain (spec auth > stored >

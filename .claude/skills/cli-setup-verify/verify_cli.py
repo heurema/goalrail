@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Drive the Omnigent CLI through a PTY in a throwaway sandbox and verify it.
+"""Drive the Goalrail CLI through a PTY in a throwaway sandbox and verify it.
 
 This is the reusable engine behind the ``cli-setup-verify`` skill (see
 ``SKILL.md`` next to this file for the playbook and CUJ catalog). One run:
 
 1. Builds an **isolated config/data sandbox** so nothing the CLI writes ever
-   lands in the real ``~/.omnigent`` — it sets the purpose-built
-   ``OMNIGENT_CONFIG_HOME`` / ``OMNIGENT_DATA_DIR`` knobs (``omnigent/cli.py``
+   lands in the real ``~/.goalrail`` — it sets the purpose-built
+   ``GOALRAIL_CONFIG_HOME`` / ``GOALRAIL_DATA_DIR`` knobs (``goalrail/cli.py``
    ``_CONFIG_HOME_ENV_VAR`` / ``_DATA_DIR_ENV_VAR``), strips leaked model
    credentials from the child env, and (optionally) points ``HOME`` and a
    minimal ``PATH`` at the sandbox to simulate a brand-new machine.
-2. Drives the real ``omnigent`` binary through ``pexpect`` (a real PTY with a
+2. Drives the real ``goalrail`` binary through ``pexpect`` (a real PTY with a
    sane ``TERM`` so prompt-toolkit / the raw-termios pickers actually render).
 3. Captures ANSI-stripped frames into an artifacts dir for UX inspection.
 4. Runs the named scenario's assertions and prints a single machine-readable
    ``SUMMARY {json}`` line; exits non-zero on failure.
-5. Proves it left the real ``~/.omnigent`` byte-for-byte unchanged.
+5. Proves it left the real ``~/.goalrail`` byte-for-byte unchanged.
 
 The point is a **verifiable loop**: run a scenario on the *unfixed* code
 (``--label before``) to capture the baseline, make the change, run the same
@@ -45,13 +45,13 @@ try:
     import pexpect
 except ImportError:  # pragma: no cover - guidance, not logic
     sys.stderr.write(
-        "verify_cli.py needs `pexpect`. Run it with the omnigent project's "
+        "verify_cli.py needs `pexpect`. Run it with the goalrail project's "
         "venv python (it bundles pexpect), e.g.\n"
         "  <repo>/.venv/bin/python verify_cli.py ...\n"
     )
     raise
 
-# --- PTY constants (mirrors tests/e2e/omnigent/_pexpect_harness.py) ---------
+# --- PTY constants (mirrors tests/e2e/goalrail/_pexpect_harness.py) ---------
 
 # prompt-toolkit refuses to draw on TERM=dumb; this is what the REPL tests use.
 TERM = "xterm-256color"
@@ -63,7 +63,7 @@ DEFAULT_ROWS = 24
 
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
 
-# Stable onboarding anchors (omnigent/cli.py:520, :10064, :10300).
+# Stable onboarding anchors (goalrail/cli.py:520, :10064, :10300).
 ANCHOR_SEARCHING = "Searching for existing credentials"
 ANCHOR_CONFIGURE = "Configure harnesses"
 ANCHOR_NO_HARNESS = "Found no harnesses configured"
@@ -124,15 +124,15 @@ def build_sandbox(
     keep_env_creds: bool,
     inherit_home: bool,
     strip_path: bool,
-    omnigent_bin: Path,
+    goalrail_bin: Path,
 ) -> Sandbox:
-    """Create an isolated sandbox env that cannot touch the real ``~/.omnigent``.
+    """Create an isolated sandbox env that cannot touch the real ``~/.goalrail``.
 
     ``HOME`` is redirected into the sandbox **by default**. This is load-bearing,
     not cosmetic: the CLI's diagnostics logger writes a per-invocation
     ``cli-*.log`` under ``state_dir()`` which is hardcoded to ``Path.home() /
-    ".omnigent"`` (``omnigent_ui_sdk/terminal/_config.py``) and ignores
-    ``OMNIGENT_CONFIG_HOME`` / ``OMNIGENT_DATA_DIR``. So redirecting ``HOME`` is
+    ".goalrail"`` (``goalrail_ui_sdk/terminal/_config.py``) and ignores
+    ``GOALRAIL_CONFIG_HOME`` / ``GOALRAIL_DATA_DIR``. So redirecting ``HOME`` is
     the *only* thing that keeps non-help commands (``config list``, the setup
     PTY spawns, ``server stop`` teardown) from writing into the real home.
 
@@ -142,14 +142,14 @@ def build_sandbox(
         thus its ambient ``~/.claude`` / ``~/.databrickscfg`` auth). Needed to
         reach a real credentialed REPL, but **relaxes the safety guarantee**:
         non-help commands will then write ``cli-*.log`` into the real
-        ``~/.omnigent/logs`` (the broadened fingerprint catches this).
-    :param strip_path: Reduce ``PATH`` to just the omnigent binary's dir + an
+        ``~/.goalrail/logs`` (the broadened fingerprint catches this).
+    :param strip_path: Reduce ``PATH`` to just the goalrail binary's dir + an
         empty dir, so node/npm/tmux/claude/codex read as "not installed" — i.e.
         a brand-new machine.
-    :param omnigent_bin: Path to the ``omnigent`` console script being driven.
+    :param goalrail_bin: Path to the ``goalrail`` console script being driven.
     :returns: A :class:`Sandbox`.
     """
-    root = Path(mkdtemp(prefix="omnigent-verify-"))
+    root = Path(mkdtemp(prefix="goalrail-verify-"))
     (root / "config").mkdir()
     (root / "data").mkdir()
 
@@ -158,9 +158,9 @@ def build_sandbox(
         for var in LEAKED_CRED_VARS:
             env.pop(var, None)
 
-    env["OMNIGENT_CONFIG_HOME"] = str(root / "config")
-    env["OMNIGENT_DATA_DIR"] = str(root / "data")
-    env["OMNIGENT_NO_UPDATE_CHECK"] = "1"  # keep the update nag out of frames
+    env["GOALRAIL_CONFIG_HOME"] = str(root / "config")
+    env["GOALRAIL_DATA_DIR"] = str(root / "data")
+    env["GOALRAIL_NO_UPDATE_CHECK"] = "1"  # keep the update nag out of frames
     env["TERM"] = TERM
     env["COLUMNS"] = str(DEFAULT_COLS)
     env["LINES"] = str(DEFAULT_ROWS)
@@ -173,13 +173,13 @@ def build_sandbox(
     if strip_path:
         empty = root / "emptybin"
         empty.mkdir()
-        env["PATH"] = f"{omnigent_bin.parent}:{empty}"
+        env["PATH"] = f"{goalrail_bin.parent}:{empty}"
 
     return Sandbox(root=root, env=env, home_isolated=not inherit_home)
 
 
 def fingerprint_real_config() -> dict[str, str]:
-    """Fingerprint the real ``~/.omnigent`` so we can prove we never wrote to it.
+    """Fingerprint the real ``~/.goalrail`` so we can prove we never wrote to it.
 
     Stat-only (size + mtime, no content reads). It captures two things, both
     cheap:
@@ -187,21 +187,21 @@ def fingerprint_real_config() -> dict[str, str]:
     * the top-level config files (``*.yaml`` / ``*.json`` / ``*.toml`` plus the
       known names) — what onboarding writes; and
     * the set of ``logs/cli-*.log`` diagnostic files — what *any* non-help CLI
-      invocation writes via the hardcoded ``Path.home()/.omnigent`` state dir.
+      invocation writes via the hardcoded ``Path.home()/.goalrail`` state dir.
       A new ``cli-*.log`` basename after the run means we wrote into the real
-      home (the precise violation that slips through ``OMNIGENT_CONFIG_HOME`` /
-      ``OMNIGENT_DATA_DIR``). With home isolation on (the default) none appear;
+      home (the precise violation that slips through ``GOALRAIL_CONFIG_HOME`` /
+      ``GOALRAIL_DATA_DIR``). With home isolation on (the default) none appear;
       under ``--inherit-home`` they do — and this is what trips the guard.
 
     It deliberately does **not** read the multi-GB ``logs/*.log`` bodies,
     ``db-backups/`` or native-state dirs (reading them would hang, and other
-    running omnigent daemons churn them → false alarms). The single ``logs/``
+    running goalrail daemons churn them → false alarms). The single ``logs/``
     glob is bounded by the diagnostics log cap.
 
     :returns: Mapping of relative path → ``"<size>:<mtime_ns>"`` (config files)
         or ``"<mtime_ns>"`` (cli logs). Empty if the directory does not exist.
     """
-    base = Path.home() / ".omnigent"
+    base = Path.home() / ".goalrail"
     out: dict[str, str] = {}
     if not base.exists():
         return out
@@ -299,13 +299,13 @@ def save_frame(result: Result, artifacts: Path, name: str, raw: str) -> None:
 def scenario_check_isolation(args, sandbox: Sandbox, result: Result) -> None:
     """Smoke-test the sandbox: a read-only CLI call must not touch real config.
 
-    Runs ``omnigent config list`` inside the sandbox (no PTY needed) and
+    Runs ``goalrail config list`` inside the sandbox (no PTY needed) and
     asserts (a) it executed, (b) the sandbox config home is now used, (c) the
-    real ``~/.omnigent`` fingerprint is unchanged. This is the first thing to
+    real ``~/.goalrail`` fingerprint is unchanged. This is the first thing to
     run to trust every other scenario.
     """
     proc = subprocess.run(
-        [str(args.omnigent), "config", "list"],
+        [str(args.goalrail), "config", "list"],
         env=sandbox.env,
         cwd=str(args.repo),
         capture_output=True,
@@ -318,8 +318,8 @@ def scenario_check_isolation(args, sandbox: Sandbox, result: Result) -> None:
     # main() via the before/after fingerprint.
     result.add(
         "sandbox_config_home_used",
-        Path(sandbox.env["OMNIGENT_CONFIG_HOME"]).exists(),
-        sandbox.env["OMNIGENT_CONFIG_HOME"],
+        Path(sandbox.env["GOALRAIL_CONFIG_HOME"]).exists(),
+        sandbox.env["GOALRAIL_CONFIG_HOME"],
     )
 
 
@@ -333,7 +333,7 @@ def scenario_cold_start(args, sandbox: Sandbox, result: Result) -> None:
     then aborts cleanly.
     """
     child = pexpect.spawn(
-        str(args.omnigent),
+        str(args.goalrail),
         ["setup"],
         env=sandbox.env,
         cwd=str(args.repo),
@@ -386,7 +386,7 @@ def scenario_setup_snapshot(args, sandbox: Sandbox, result: Result) -> None:
     Use ``--nav-down N`` to step down N rows capturing a frame each time.
     """
     child = pexpect.spawn(
-        str(args.omnigent),
+        str(args.goalrail),
         ["setup"],
         env=sandbox.env,
         cwd=str(args.repo),
@@ -414,7 +414,7 @@ def scenario_setup_snapshot(args, sandbox: Sandbox, result: Result) -> None:
 
 
 def scenario_help_snapshot(args, sandbox: Sandbox, result: Result) -> None:
-    """Render ``omnigent [SUBCOMMAND] --help`` and lint it for known UX issues.
+    """Render ``goalrail [SUBCOMMAND] --help`` and lint it for known UX issues.
 
     No PTY needed. The lint checks map directly to top-20 findings, so a fix is
     verifiable as a before/after flip:
@@ -422,7 +422,7 @@ def scenario_help_snapshot(args, sandbox: Sandbox, result: Result) -> None:
       * ``no_update_dup``    — top-level help doesn't list both update & upgrade (X2)
     Use ``--subcommand server`` (etc.) to lint a specific command's help.
     """
-    cmd = [str(args.omnigent)]
+    cmd = [str(args.goalrail)]
     if args.subcommand:
         cmd.append(args.subcommand)
     cmd.append("--help")
@@ -480,7 +480,7 @@ def scenario_repl_commands(args, sandbox: Sandbox, result: Result) -> None:
     if args.model:
         spawn_args += ["--model", args.model]
     child = pexpect.spawn(
-        str(args.omnigent),
+        str(args.goalrail),
         spawn_args,
         env=sandbox.env,
         cwd=str(args.repo),
@@ -577,7 +577,7 @@ def stop_sandbox_server(args, sandbox: Sandbox) -> None:
     """Best-effort: stop any background server bound to the sandbox data dir."""
     with contextlib.suppress(Exception):
         subprocess.run(
-            [str(args.omnigent), "server", "stop"],
+            [str(args.goalrail), "server", "stop"],
             env=sandbox.env,
             cwd=str(args.repo),
             capture_output=True,
@@ -589,17 +589,17 @@ def stop_sandbox_server(args, sandbox: Sandbox) -> None:
 # --- main -------------------------------------------------------------------
 
 
-def resolve_omnigent(repo: Path, explicit: str | None) -> Path:
-    """Find the ``omnigent`` console script to drive."""
+def resolve_goalrail(repo: Path, explicit: str | None) -> Path:
+    """Find the ``goalrail`` console script to drive."""
     if explicit:
         return Path(explicit).resolve()
-    venv = repo / ".venv" / "bin" / "omnigent"
+    venv = repo / ".venv" / "bin" / "goalrail"
     if venv.exists():
         return venv.resolve()
-    found = shutil.which("omnigent")
+    found = shutil.which("goalrail")
     if found:
         return Path(found).resolve()
-    sys.exit("Could not find an `omnigent` binary; pass --omnigent <path>.")
+    sys.exit("Could not find an `goalrail` binary; pass --goalrail <path>.")
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -616,8 +616,8 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Repo root (child cwd).",
     )
     p.add_argument(
-        "--omnigent",
-        help="Path to the omnigent binary (default: <repo>/.venv/bin/omnigent or PATH).",
+        "--goalrail",
+        help="Path to the goalrail binary (default: <repo>/.venv/bin/goalrail or PATH).",
     )
     p.add_argument(
         "--label",
@@ -633,7 +633,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Opt out of HOME isolation (use real HOME + ambient auth). "
         "Less safe: non-help commands then write cli-*.log into the real "
-        "~/.omnigent/logs. Use only to reach a real credentialed REPL.",
+        "~/.goalrail/logs. Use only to reach a real credentialed REPL.",
     )
     p.add_argument(
         "--strip-path",
@@ -675,12 +675,12 @@ def main(argv: Sequence[str]) -> int:
     if not args.scenario:
         sys.exit("Pass --scenario <name> (or --list-scenarios).")
 
-    args.omnigent = resolve_omnigent(args.repo, args.omnigent)
+    args.goalrail = resolve_goalrail(args.repo, args.goalrail)
     sandbox = build_sandbox(
         keep_env_creds=args.keep_env_creds,
         inherit_home=args.inherit_home,
         strip_path=args.strip_path,
-        omnigent_bin=args.omnigent,
+        goalrail_bin=args.goalrail,
     )
     if not args.artifacts:
         args.artifacts = str(sandbox.root / "artifacts")
@@ -699,7 +699,7 @@ def main(argv: Sequence[str]) -> int:
     result.add(
         "real_config_untouched",
         untouched,
-        "~/.omnigent unchanged" if untouched else "REAL CONFIG MUTATED — investigate",
+        "~/.goalrail unchanged" if untouched else "REAL CONFIG MUTATED — investigate",
     )
 
     if not args.keep_sandbox:

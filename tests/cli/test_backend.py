@@ -22,13 +22,13 @@ from click.testing import CliRunner
 from rich.console import Console
 
 # Import the daemon's module chain eagerly: ``_ensure_host_daemon`` imports
-# ``omnigent.host.connect`` lazily, and the daemon-spawn tests below patch
+# ``goalrail.host.connect`` lazily, and the daemon-spawn tests below patch
 # the process-wide ``subprocess.Popen``. Running that import for the first
 # time *while* Popen is patched would evaluate ``subprocess.Popen[...]``
 # generic aliases in the import chain against the stub (not subscriptable).
-import omnigent.host.connect  # noqa: F401
-from omnigent import cli
-from omnigent.cli import (
+import goalrail.host.connect  # noqa: F401
+from goalrail import cli
+from goalrail.cli import (
     _build_host_daemon_env,
     _discover_local_server_url,
     _ensure_backend,
@@ -36,10 +36,10 @@ from omnigent.cli import (
     _resolve_attach_server,
     _resolve_host_server,
 )
-from omnigent.cli import (
+from goalrail.cli import (
     cli as cli_group,
 )
-from omnigent.host.local_server import LocalServerStartup
+from goalrail.host.local_server import LocalServerStartup
 
 
 @pytest.fixture(autouse=True)
@@ -193,15 +193,15 @@ def test_ensure_host_daemon_local_inherits_data_dir_and_db_uri(
     """
     captured: dict[str, object] = {}
     _patch_daemon_spawn(monkeypatch, tmp_path, captured)
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "iso"))
-    monkeypatch.setenv("OMNIGENT_DATABASE_URI", "postgresql://u:pw@h/db")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path / "iso"))
+    monkeypatch.setenv("GOALRAIL_DATABASE_URI", "postgresql://u:pw@h/db")
 
     _ensure_host_daemon(None)
 
     env = captured["env"]
     assert isinstance(env, dict)
-    assert env["OMNIGENT_CONFIG_HOME"] == str(tmp_path / "iso")
-    assert env["OMNIGENT_DATABASE_URI"] == "postgresql://u:pw@h/db"
+    assert env["GOALRAIL_CONFIG_HOME"] == str(tmp_path / "iso")
+    assert env["GOALRAIL_DATABASE_URI"] == "postgresql://u:pw@h/db"
 
 
 def test_build_host_daemon_env_local_preserves_server_credentials(
@@ -210,14 +210,14 @@ def test_build_host_daemon_env_local_preserves_server_credentials(
     """Local daemon env carries credentials needed by its Goalrail server.
 
     The daemon's local server is the process that performs LLM calls, so
-    stripping ``OPENAI_*`` here makes default persistent ``omnigent run``
+    stripping ``OPENAI_*`` here makes default persistent ``goalrail run``
     invocations hang or fail after booting a credential-less server.
     """
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://example.databricks.com/serving-endpoints")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
-    monkeypatch.setenv("OMNIGENT_DATABASE_URI", "postgresql://u:pw@h/db")
+    monkeypatch.setenv("GOALRAIL_DATABASE_URI", "postgresql://u:pw@h/db")
     monkeypatch.setenv("GITHUB_TOKEN", "unrelated-github-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "unrelated-aws-secret")
 
@@ -227,7 +227,7 @@ def test_build_host_daemon_env_local_preserves_server_credentials(
     assert env["OPENAI_API_KEY"] == "test-key"
     assert env["OPENAI_BASE_URL"] == "https://example.databricks.com/serving-endpoints"
     assert env["ANTHROPIC_API_KEY"] == "test-anthropic-key"
-    assert env["OMNIGENT_DATABASE_URI"] == "postgresql://u:pw@h/db"
+    assert env["GOALRAIL_DATABASE_URI"] == "postgresql://u:pw@h/db"
     assert "GITHUB_TOKEN" not in env
     assert "AWS_SECRET_ACCESS_KEY" not in env
     assert empty_string_env["OPENAI_API_KEY"] == "test-key"
@@ -395,7 +395,7 @@ def test_ensure_host_daemon_respawns_on_config_drift(
 
     The auth-drift fix at the daemon layer: when the running daemon's
     stamped config signature differs from this invocation's (e.g. the user
-    flipped ``OMNIGENT_AUTH_ENABLED``), the unit is torn down and a
+    flipped ``GOALRAIL_AUTH_ENABLED``), the unit is torn down and a
     fresh daemon spawned so the new auth mode takes effect.
     """
     captured: dict[str, object] = {}
@@ -679,7 +679,7 @@ def test_foreground_connect_registers_status_record(
         observed.extend(cli._list_daemon_records(include_legacy=False))
         assert server_url == "https://server.example.com"
 
-    monkeypatch.setattr("omnigent.host.connect.run_host_process", _fake_run_host_process)
+    monkeypatch.setattr("goalrail.host.connect.run_host_process", _fake_run_host_process)
 
     result = CliRunner().invoke(
         cli_group,
@@ -715,7 +715,7 @@ def test_foreground_connect_refuses_duplicate_live_daemon(
         raise AssertionError(f"unexpected foreground connect: {server_url}")
 
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "goalrail.host.connect.run_host_process",
         _unexpected_run_host_process,
     )
 
@@ -743,7 +743,7 @@ def _patch_foreground_host_local(
     :param run_host_process: Stub for ``run_host_process`` controlling how
         the daemon "exits" (clean return, ``KeyboardInterrupt``, or
         ``SystemExit``).
-    :param spawned: Whether ``ensure_local_omnigent_server`` reports it spawned a
+    :param spawned: Whether ``ensure_local_goalrail_server`` reports it spawned a
         new server (``True``) or reused an existing one (``False``). The
         Ctrl-C stop-server prompt only fires when ``True``.
     """
@@ -752,10 +752,10 @@ def _patch_foreground_host_local(
     monkeypatch.setattr(cli, "_load_or_create_host_id", lambda: "host_abc")
     monkeypatch.setattr(
         cli,
-        "ensure_local_omnigent_server",
+        "ensure_local_goalrail_server",
         lambda: LocalServerStartup(url="http://127.0.0.1:8000", spawned=spawned),
     )
-    monkeypatch.setattr("omnigent.host.connect.run_host_process", run_host_process)
+    monkeypatch.setattr("goalrail.host.connect.run_host_process", run_host_process)
 
 
 def test_foreground_connect_local_prompts_and_stops_server_on_yes(
@@ -765,7 +765,7 @@ def test_foreground_connect_local_prompts_and_stops_server_on_yes(
     _patch_foreground_host_local(monkeypatch, tmp_path, run_host_process=lambda server_url: None)
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     stopped: list[bool] = []
-    monkeypatch.setattr(cli, "stop_local_omnigent_server", lambda: stopped.append(True))
+    monkeypatch.setattr(cli, "stop_local_goalrail_server", lambda: stopped.append(True))
 
     result = CliRunner().invoke(cli_group, ["host", ""], input="y\n")
 
@@ -783,7 +783,7 @@ def test_foreground_connect_local_prompt_declined_leaves_server(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_goalrail_server",
         lambda: pytest.fail("declining must not stop the server"),
     )
 
@@ -806,7 +806,7 @@ def test_foreground_connect_local_prompt_aborted_leaves_server(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_goalrail_server",
         lambda: pytest.fail("an aborted prompt must not stop the server"),
     )
 
@@ -839,7 +839,7 @@ def test_foreground_connect_local_prompts_after_keyboard_interrupt(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_goalrail_server",
         lambda: pytest.fail("declining must not stop the server"),
     )
 
@@ -857,7 +857,7 @@ def test_foreground_connect_local_no_prompt_when_server_absent(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_goalrail_server",
         lambda: pytest.fail("nothing to stop when no server is running"),
     )
 
@@ -870,7 +870,7 @@ def test_foreground_connect_local_no_prompt_when_server_absent(
 def test_foreground_connect_reused_server_omits_prompt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Reusing a server we didn't spawn (e.g. ``omnigent server``) skips the prompt.
+    """Reusing a server we didn't spawn (e.g. ``goalrail server``) skips the prompt.
 
     Local mode connecting to a server that was already running must NOT offer
     to stop it on Ctrl-C — the user started it independently, so killing it
@@ -891,7 +891,7 @@ def test_foreground_connect_reused_server_omits_prompt(
     )
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_goalrail_server",
         lambda: pytest.fail("must never stop a server we did not spawn"),
     )
 
@@ -935,7 +935,7 @@ def test_foreground_connect_remote_omits_local_server_prompt(
         lambda: pytest.fail("remote mode must not probe the local server"),
     )
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "goalrail.host.connect.run_host_process",
         lambda server_url: None,
     )
 
@@ -1209,7 +1209,6 @@ def test_host_stop_session_without_server_uses_goalrail_error(
 
     assert result.exit_code != 0
     assert "local Goalrail server is reachable" in result.output
-    assert "local Omnigent server" not in result.output
 
 
 def test_ensure_backend_remote_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1256,11 +1255,11 @@ def test_ensure_backend_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     monkeypatch.setattr(cli, "_ensure_databricks_server_auth", lambda server: None)
 
-    result = _ensure_backend("dbc-x.cloud.databricks.com/omnigent")
+    result = _ensure_backend("dbc-x.cloud.databricks.com/goalrail")
 
     # Scheme defaulted to https before the workspace expansion ran.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/goalrail"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/goalrail")
 
 
 def test_discover_local_server_url_returns_when_healthy(
@@ -1277,9 +1276,8 @@ def test_discover_local_server_url_raises_when_daemon_dead(
     """If the daemon exits before its server is ready, fail loud (not hang)."""
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(cli, "_host_daemon_alive", lambda: False)
-    with pytest.raises(click.ClickException, match="Goalrail server") as excinfo:
+    with pytest.raises(click.ClickException, match="Goalrail server"):
         _discover_local_server_url(timeout=5.0)
-    assert "Omnigent server" not in str(excinfo.value)
 
 
 def test_discover_local_server_url_dead_daemon_reports_effective_log_dirs(
@@ -1298,7 +1296,7 @@ def test_discover_local_server_url_dead_daemon_reports_effective_log_dirs(
     message = str(excinfo.value)
     assert str(data_home / "logs" / "host-daemon") in message
     assert str(data_home / "logs" / "server") in message
-    assert "~/.omnigent/logs" not in message
+    assert "~/.goalrail/logs" not in message
 
 
 def test_discover_local_server_url_timeout_uses_goalrail(
@@ -1308,9 +1306,8 @@ def test_discover_local_server_url_timeout_uses_goalrail(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(cli, "_host_daemon_alive", lambda: True)
 
-    with pytest.raises(click.ClickException, match="local Goalrail server") as excinfo:
+    with pytest.raises(click.ClickException, match="local Goalrail server"):
         _discover_local_server_url(timeout=0.0)
-    assert "local Omnigent server" not in str(excinfo.value)
 
 
 def test_discover_local_server_url_timeout_reports_effective_log_dir(
@@ -1328,7 +1325,7 @@ def test_discover_local_server_url_timeout_reports_effective_log_dir(
 
     message = str(excinfo.value)
     assert str(data_home / "logs" / "server") in message
-    assert "~/.omnigent/logs" not in message
+    assert "~/.goalrail/logs" not in message
 
 
 def _fake_run_claude_native_capture(captured: dict[str, object]) -> Any:
@@ -1347,19 +1344,19 @@ def _fake_run_claude_native_capture(captured: dict[str, object]) -> Any:
 def test_claude_command_routes_server_through_ensure_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``omnigent claude --server ""`` resolves via ``_ensure_backend``.
+    """``goalrail claude --server ""`` resolves via ``_ensure_backend``.
 
     The empty/local value must be turned into the concrete daemon-backed URL
     and passed to ``run_claude_native`` — never forwarded raw.
     """
-    monkeypatch.setattr("omnigent.cli._load_effective_config", dict)
+    monkeypatch.setattr("goalrail.cli._load_effective_config", dict)
     monkeypatch.setattr(
-        "omnigent.cli._ensure_backend",
+        "goalrail.cli._ensure_backend",
         lambda server: "http://127.0.0.1:8123",
     )
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.claude_native.run_claude_native",
+        "goalrail.claude_native.run_claude_native",
         _fake_run_claude_native_capture(captured),
     )
 
@@ -1380,7 +1377,7 @@ def _capture_run_chat(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     def _stub(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.chat.run_chat", _stub)
+    monkeypatch.setattr("goalrail.chat.run_chat", _stub)
     return captured
 
 
@@ -1393,7 +1390,7 @@ def test_run_reads_server_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     reach ``run_chat`` as ``server_url``.
     """
     monkeypatch.setattr(
-        "omnigent.cli._load_effective_config",
+        "goalrail.cli._load_effective_config",
         lambda: {
             "server": "https://config-default.example.com",
             "model": "databricks-claude-sonnet-4-6",
@@ -1411,7 +1408,7 @@ def test_run_reads_server_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_explicit_server_overrides_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """An explicit ``--server`` wins over the configured default."""
     monkeypatch.setattr(
-        "omnigent.cli._load_effective_config",
+        "goalrail.cli._load_effective_config",
         lambda: {"server": "https://config-default.example.com"},
     )
     captured = _capture_run_chat(monkeypatch)
@@ -1472,7 +1469,7 @@ def _patch_auth_preflight(
     import httpx
 
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "goalrail.chat._remote_headers",
         lambda server_url=None: {},
     )
     monkeypatch.setattr(httpx, "get", lambda url, **kw: _databricks_probe_response(probe_status))
@@ -1539,7 +1536,7 @@ def test_ensure_backend_databricks_preflight_skips_when_authenticated(
 # ── Workspace-URL expansion for attach / resume / host ──────────────
 #
 # ``run`` / ``claude`` / ``codex`` expand a bare Databricks workspace URL to
-# its ``/api/2.0/omnigent`` mount via ``_ensure_backend`` (covered above);
+# its ``/api/2.0/goalrail`` mount via ``_ensure_backend`` (covered above);
 # ``attach``, ``resume``, and the ``host`` subcommands resolve ``--server``
 # on their own paths and must route through the same expansion. The
 # expansion itself probes the network and is tested in
@@ -1554,7 +1551,7 @@ def _expand_marker(server: str) -> str:
     :returns: ``server`` with the API mount appended, so a test can tell
         an expanded result apart from a passed-through one.
     """
-    return f"{server.rstrip('/')}/api/2.0/omnigent"
+    return f"{server.rstrip('/')}/api/2.0/goalrail"
 
 
 def _recording_expander(seen: list[str]) -> Callable[[str], str]:
@@ -1578,14 +1575,14 @@ def test_resolve_attach_server_expands_explicit_workspace_url(
     """An explicit ``--server`` workspace URL is expanded to its API mount.
 
     Regression: ``attach`` returned the bare URL, so ``/v1/sessions/{id}``
-    hit the workspace web app and 404'd instead of the omnigent API.
+    hit the workspace web app and 404'd instead of the goalrail API.
     """
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
     result = _resolve_attach_server("https://ws.example.net/", configured_server=None)
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/goalrail"
     assert seen == ["https://ws.example.net"]
 
 
@@ -1597,7 +1594,7 @@ def test_resolve_attach_server_expands_configured_workspace_url(
 
     result = _resolve_attach_server(None, configured_server="https://ws.example.net")
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/goalrail"
 
 
 def test_resolve_attach_server_local_fallback_not_expanded(
@@ -1619,14 +1616,14 @@ def test_resolve_attach_server_local_fallback_not_expanded(
 
 
 def test_resolve_attach_server_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``attach --server <ws>/omnigent`` (no scheme) is defaulted to https."""
+    """``attach --server <ws>/goalrail`` (no scheme) is defaulted to https."""
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
-    result = _resolve_attach_server("dbc-x.cloud.databricks.com/omnigent", configured_server=None)
+    result = _resolve_attach_server("dbc-x.cloud.databricks.com/goalrail", configured_server=None)
 
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/goalrail"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/goalrail")
 
 
 def test_resolve_host_server_expands_explicit_workspace_url(
@@ -1634,7 +1631,7 @@ def test_resolve_host_server_expands_explicit_workspace_url(
 ) -> None:
     """``host`` subcommands expand a bare ``--server`` workspace URL.
 
-    The daemon is registered under the expanded ``/api/2.0/omnigent`` URL,
+    The daemon is registered under the expanded ``/api/2.0/goalrail`` URL,
     so the registry lookup must expand too or it never matches a daemon
     that ``run`` / ``host`` started.
     """
@@ -1643,7 +1640,7 @@ def test_resolve_host_server_expands_explicit_workspace_url(
 
     result = _resolve_host_server("https://ws.example.net/")
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/goalrail"
     assert seen == ["https://ws.example.net"]
 
 
@@ -1656,7 +1653,7 @@ def test_resolve_host_server_reads_config_and_expands(
     )
     monkeypatch.setattr(cli, "_workspace_api_server_url", _expand_marker)
 
-    assert _resolve_host_server(None) == "https://ws.example.net/api/2.0/omnigent"
+    assert _resolve_host_server(None) == "https://ws.example.net/api/2.0/goalrail"
 
 
 def test_resolve_host_server_none_stays_local(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1669,31 +1666,31 @@ def test_resolve_host_server_none_stays_local(monkeypatch: pytest.MonkeyPatch) -
     assert _resolve_host_server(None) is None
 
 
-def test_resolve_host_server_defaults_scheme_and_accepts_omnigent(
+def test_resolve_host_server_defaults_scheme_and_accepts_goalrail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``host`` subcommands accept a schemeless ``/omnigent`` workspace URL.
+    """``host`` subcommands accept a schemeless ``/goalrail`` workspace URL.
 
     The internal user guide's web URL omits the scheme and ends in
-    ``/omnigent``; host must default it to https before expansion, just
-    like ``omnigent login``.
+    ``/goalrail``; host must default it to https before expansion, just
+    like ``goalrail login``.
     """
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
-    result = _resolve_host_server("dbc-x.cloud.databricks.com/omnigent")
+    result = _resolve_host_server("dbc-x.cloud.databricks.com/goalrail")
 
     # Scheme defaulted to https before the expansion saw the URL.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/goalrail"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/goalrail")
 
 
-def test_host_command_defaults_scheme_and_accepts_omnigent_web_url(
+def test_host_command_defaults_scheme_and_accepts_goalrail_web_url(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``omnigent host --server <ws>/omnigent`` (no scheme) normalizes before connect.
+    """``goalrail host --server <ws>/goalrail`` (no scheme) normalizes before connect.
 
-    Pasting the guide's web URL (schemeless, ``/omnigent`` suffix) must
+    Pasting the guide's web URL (schemeless, ``/goalrail`` suffix) must
     default to https and expand to the API mount, not connect to the raw
     input.
     """
@@ -1704,23 +1701,23 @@ def test_host_command_defaults_scheme_and_accepts_omnigent_web_url(
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     observed: list[str] = []
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "goalrail.host.connect.run_host_process",
         lambda server_url: observed.append(server_url),
     )
 
     result = CliRunner().invoke(
-        cli_group, ["host", "--server", "dbc-x.cloud.databricks.com/omnigent"]
+        cli_group, ["host", "--server", "dbc-x.cloud.databricks.com/goalrail"]
     )
 
     assert result.exit_code == 0, result.output
     # Scheme defaulted to https before the workspace expansion ran.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
+    assert seen == ["https://dbc-x.cloud.databricks.com/goalrail"]
     # The foreground connect targeted the expanded API-mount URL.
-    assert observed == [_expand_marker("https://dbc-x.cloud.databricks.com/omnigent")]
+    assert observed == [_expand_marker("https://dbc-x.cloud.databricks.com/goalrail")]
 
 
 def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnigent resume <id> --server <workspace>`` expands before dispatch.
+    """``goalrail resume <id> --server <workspace>`` expands before dispatch.
 
     Regression: ``resume`` forwarded the bare URL, so its remote picker
     and wrapper-label lookups 404'd against the workspace web app.
@@ -1728,7 +1725,7 @@ def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(cli, "_workspace_api_server_url", _expand_marker)
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "goalrail.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
@@ -1739,7 +1736,7 @@ def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code == 0, result.output
     assert captured == {
         "target": "conv_abc123",
-        "server": "https://ws.example.net/api/2.0/omnigent",
+        "server": "https://ws.example.net/api/2.0/goalrail",
     }
 
 
@@ -1752,7 +1749,7 @@ def test_resume_command_without_server_skips_expansion(
     )
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "goalrail.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
@@ -1763,20 +1760,20 @@ def test_resume_command_without_server_skips_expansion(
 
 
 def test_resume_command_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnigent resume --server <ws>/omnigent`` (no scheme) is defaulted to https."""
+    """``goalrail resume --server <ws>/goalrail`` (no scheme) is defaulted to https."""
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "goalrail.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
     result = CliRunner().invoke(
         cli_group,
-        ["resume", "conv_abc123", "--server", "dbc-x.cloud.databricks.com/omnigent"],
+        ["resume", "conv_abc123", "--server", "dbc-x.cloud.databricks.com/goalrail"],
     )
 
     assert result.exit_code == 0, result.output
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert captured["server"] == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/goalrail"]
+    assert captured["server"] == _expand_marker("https://dbc-x.cloud.databricks.com/goalrail")

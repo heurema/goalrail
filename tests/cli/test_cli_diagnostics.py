@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import cli_diagnostics
+from goalrail import cli_diagnostics
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ def _capture_logger_snapshots() -> dict[str, _LoggerSnapshot]:
     :returns: Snapshot keyed by logger name.
     """
     snapshots: dict[str, _LoggerSnapshot] = {}
-    for name in ("", "omnigent", "omnigent_ui_sdk", "databricks.sdk"):
+    for name in ("", "goalrail", "goalrail_ui_sdk", "databricks.sdk"):
         logger = logging.getLogger(name)
         snapshots[name] = _LoggerSnapshot(
             handlers=list(logger.handlers),
@@ -361,14 +361,14 @@ def test_main_logs_click_exceptions(
     :returns: ``None``.
     """
     del isolated_cli_diagnostics
-    from omnigent import cli as cli_module
+    from goalrail import cli as cli_module
 
     # An unsupported --harness is a deterministic ClickException trigger that
-    # raises before any daemon/network work. (A bare `omnigent run` no longer
+    # raises before any daemon/network work. (A bare `goalrail run` no longer
     # errors — it drops into first-run `configure harnesses` — so it can't be
     # the trigger here.)
-    monkeypatch.setattr(sys, "argv", ["omnigent", "run", "--harness", "not-a-real-harness"])
-    # Isolate from any real ~/.omnigent/config.yaml on the developer's machine.
+    monkeypatch.setattr(sys, "argv", ["goalrail", "run", "--harness", "not-a-real-harness"])
+    # Isolate from any real ~/.goalrail/config.yaml on the developer's machine.
     monkeypatch.setattr(cli_module, "_load_global_config", dict)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -405,9 +405,9 @@ async def test_slash_command_exceptions_reach_cli_log(
     :returns: ``None``.
     """
     del isolated_cli_diagnostics
-    from omnigent_ui_sdk import RichBlockFormatter
+    from goalrail_ui_sdk import RichBlockFormatter
 
-    from omnigent.repl._repl import handle_slash_command
+    from goalrail.repl._repl import handle_slash_command
     from tests.repl.helpers import CapturingHost
 
     class _SessionWithoutModelSetter:
@@ -461,7 +461,7 @@ def test_safe_mtime_returns_zero_for_vanished_file(tmp_path: Path) -> None:
 def test_prune_old_logs_survives_file_vanishing_mid_sort(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Concurrent ``omnigent run`` launches race to prune the same logs; a file
+    """Concurrent ``goalrail run`` launches race to prune the same logs; a file
     globbed by one but deleted by the other must not crash the sort (previously a
     FileNotFoundError in the stat sort key aborted CLI startup)."""
     real = [tmp_path / f"cli-{i:03d}.log" for i in range(cli_diagnostics.MAX_LOG_FILES + 3)]

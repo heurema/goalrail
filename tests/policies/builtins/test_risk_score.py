@@ -1,6 +1,6 @@
 """
 Tests for the built-in session-risk-score policy
-(:mod:`omnigent.policies.builtins.risk_score`) — the single configurable
+(:mod:`goalrail.policies.builtins.risk_score`) — the single configurable
 factory ``risk_score_policy``.
 
 Layers:
@@ -23,21 +23,21 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.risk_score import (
+from goalrail.policies.builtins.risk_score import (
     DEFAULT_RISK_STATE_KEY,
     risk_score_policy,
 )
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.policies.function import FunctionPolicy, resolve_function_policy
+from goalrail.policies.registry import get_registry, load_registry, validate_factory_params
+from goalrail.policies.schema import PolicyEvent
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
 from tests.policies.builtins.helpers import tool_call_event as tc
 from tests.policies.builtins.helpers import tool_result_event as tr
 
-_HANDLER = "omnigent.policies.builtins.risk_score.risk_score_policy"
+_HANDLER = "goalrail.policies.builtins.risk_score.risk_score_policy"
 
 
 def _tc_actor(tool: str, run_as: str, session_state: dict[str, Any] | None = None) -> PolicyEvent:

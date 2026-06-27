@@ -1,6 +1,6 @@
 """Tests for the post-hoc Antigravity (agy) policy-audit helpers.
 
-Pure unit tests for :mod:`omnigent.antigravity_native_audit` — the
+Pure unit tests for :mod:`goalrail.antigravity_native_audit` — the
 classification/rendering layer of the audit-only governance path. No I/O; the
 async POST + interrupt (in the forwarder) are covered separately.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from omnigent.antigravity_native_audit import (
+from goalrail.antigravity_native_audit import (
     DEGRADE_NOTICE_TEXT,
     HARNESS_NAME,
     audit_verdict_is_violation,
@@ -130,15 +130,15 @@ def test_audit_request_omits_model_when_none() -> None:
     assert event["context"]["harness"] == HARNESS_NAME
 
 
-def test_audit_request_skips_omnigent_mcp_tools() -> None:
-    """``mcp__omnigent__*`` tools are relay-enforced; the audit returns None.
+def test_audit_request_skips_goalrail_mcp_tools() -> None:
+    """``mcp__goalrail__*`` tools are relay-enforced; the audit returns None.
 
-    Only the Omnigent MCP tools are double-counted by the relay path, so
+    Only the Goalrail MCP tools are double-counted by the relay path, so
     :func:`build_audit_evaluation_request` (delegating to
     ``hook_payload_to_evaluation_request``) skips exactly those.
     """
     request = build_audit_evaluation_request(
-        tool_name="mcp__omnigent__sys_call", tool_input={}, model=None
+        tool_name="mcp__goalrail__sys_call", tool_input={}, model=None
     )
     assert request is None
 
@@ -146,7 +146,7 @@ def test_audit_request_skips_omnigent_mcp_tools() -> None:
 def test_audit_request_evaluates_connector_mcp_tools() -> None:
     """Connector-native MCP tools (e.g. ``mcp__github__*``) still need the gate.
 
-    Unlike ``mcp__omnigent__*`` (relay-enforced), connector MCP tools are not
+    Unlike ``mcp__goalrail__*`` (relay-enforced), connector MCP tools are not
     policy-checked elsewhere, so the audit must produce a request for them.
     """
     request = build_audit_evaluation_request(

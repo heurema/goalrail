@@ -1,8 +1,8 @@
-"""Tests for omnigent.tools._pep723 (PEP 723 inline metadata parser)."""
+"""Tests for goalrail.tools._pep723 (PEP 723 inline metadata parser)."""
 
 from __future__ import annotations
 
-from omnigent.tools._pep723 import InlineMetadata, parse_inline_metadata
+from goalrail.tools._pep723 import InlineMetadata, parse_inline_metadata
 
 
 def test_parse_with_dependencies() -> None:

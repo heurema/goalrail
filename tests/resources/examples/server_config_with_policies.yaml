@@ -1,10 +1,10 @@
 # Test server config with policies for PreToolUse/PostToolUse enforcement.
 #
 # Usage:
-#   omnigent server --config tests/resources/examples/server_config_with_policies.yaml
+#   goalrail server --config tests/resources/examples/server_config_with_policies.yaml
 #
 # Then in another terminal:
-#   omnigent claude <your-agent.yaml>
+#   goalrail claude <your-agent.yaml>
 #
 # Try:
 #   - Ask Claude to run "rm -rf /tmp/test" → should be DENIED by block_bash_rm

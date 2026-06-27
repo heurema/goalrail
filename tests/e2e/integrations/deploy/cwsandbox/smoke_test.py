@@ -79,7 +79,7 @@ class Client:
             "resources": {"cpu": "1", "memory": "1Gi"},
             "maxLifetimeSeconds": MAX_LIFETIME_S,
             "network": {"egressMode": "internet"},  # egress defaults to none
-            "tags": ["omnigent-smoke", name],
+            "tags": ["goalrail-smoke", name],
         }
         return self._request("POST", "/v1beta2/sandboxes", "provision", body)["sandboxId"]
 
@@ -183,7 +183,7 @@ def main() -> int:
         _check(failures, out.strip() != "", "exec returned $HOME")
 
         print("\n[3/6] AddFile (+ read-back via exec)")
-        marker = b"cwsandbox-omnigent-smoke\n"
+        marker = b"cwsandbox-goalrail-smoke\n"
         client.put_file(sandbox_id, "/tmp/oa-smoke.txt", marker)
         _, out, _ = client.exec(sandbox_id, "cat /tmp/oa-smoke.txt")
         _check(failures, out.encode() == marker, "file readable via exec after AddFile")

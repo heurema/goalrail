@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities import Conversation
-from omnigent.errors import ErrorCode, OmnigentError
-from omnigent.runner.routing import RunnerRouter, runner_dispatch_harness
-from omnigent.runner.transports.ws_tunnel.frames import HelloFrame
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
-from omnigent.spec import AgentSpec, ExecutorSpec, LLMConfig
+from goalrail.entities import Conversation
+from goalrail.errors import ErrorCode, GoalrailError
+from goalrail.runner.routing import RunnerRouter, runner_dispatch_harness
+from goalrail.runner.transports.ws_tunnel.frames import HelloFrame
+from goalrail.runner.transports.ws_tunnel.registry import TunnelRegistry
+from goalrail.spec import AgentSpec, ExecutorSpec, LLMConfig
 
 
 class _FakeWebSocket:
@@ -91,13 +91,13 @@ def _hello(*, harnesses: list[str]) -> HelloFrame:
     )
 
 
-def _assert_omnigent_error(
-    excinfo: pytest.ExceptionInfo[OmnigentError],
+def _assert_goalrail_error(
+    excinfo: pytest.ExceptionInfo[GoalrailError],
     *,
     code: str,
 ) -> None:
     """
-    Assert a structured Omnigent error code.
+    Assert a structured Goalrail error code.
 
     :param excinfo: Captured pytest exception info.
     :param code: Expected :class:`ErrorCode` value.
@@ -135,7 +135,7 @@ def test_runner_dispatch_harness_reads_explicit_harness() -> None:
     """Explicit harness-backed specs dispatch through the runner."""
     spec = _agent_spec(
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "codex"},
         ),
     )
@@ -147,7 +147,7 @@ def test_runner_dispatch_harness_ignores_unmapped_harness() -> None:
     """Specs with a harness not in the runner module table return None."""
     spec = _agent_spec(
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "open-responses"},
         ),
     )
@@ -164,10 +164,10 @@ async def test_runner_router_requires_existing_runner_binding() -> None:
     store = _ConversationStore({"conv_test": conversation})
     router = RunnerRouter(registry=registry, conversation_store=store)  # type: ignore[arg-type]
     try:
-        with pytest.raises(OmnigentError) as excinfo:
+        with pytest.raises(GoalrailError) as excinfo:
             router.client_for_conversation(conversation_id="conv_test", harness="codex")
 
-        _assert_omnigent_error(excinfo, code=ErrorCode.CONFLICT)
+        _assert_goalrail_error(excinfo, code=ErrorCode.CONFLICT)
         assert conversation.runner_id is None
     finally:
         await router.aclose()
@@ -181,10 +181,10 @@ async def test_runner_router_requires_pinned_runner_to_be_online() -> None:
     store = _ConversationStore({"conv_test": _conversation(runner_id="runner_missing")})
     router = RunnerRouter(registry=registry, conversation_store=store)  # type: ignore[arg-type]
     try:
-        with pytest.raises(OmnigentError) as excinfo:
+        with pytest.raises(GoalrailError) as excinfo:
             router.client_for_conversation(conversation_id="conv_test", harness="codex")
 
-        _assert_omnigent_error(excinfo, code=ErrorCode.RUNNER_UNAVAILABLE)
+        _assert_goalrail_error(excinfo, code=ErrorCode.RUNNER_UNAVAILABLE)
     finally:
         await router.aclose()
 
@@ -213,10 +213,10 @@ async def test_runner_router_fails_when_no_runner_supports_harness() -> None:
     store = _ConversationStore({"conv_test": _conversation(runner_id="runner_one")})
     router = RunnerRouter(registry=registry, conversation_store=store)  # type: ignore[arg-type]
     try:
-        with pytest.raises(OmnigentError) as excinfo:
+        with pytest.raises(GoalrailError) as excinfo:
             router.client_for_conversation(conversation_id="conv_test", harness="codex")
 
-        _assert_omnigent_error(excinfo, code=ErrorCode.RUNNER_CAPABILITY_MISMATCH)
+        _assert_goalrail_error(excinfo, code=ErrorCode.RUNNER_CAPABILITY_MISMATCH)
     finally:
         await router.aclose()
 
@@ -230,10 +230,10 @@ async def test_runner_router_resources_require_existing_runner_binding() -> None
     store = _ConversationStore({"conv_test": conversation})
     router = RunnerRouter(registry=registry, conversation_store=store)  # type: ignore[arg-type]
     try:
-        with pytest.raises(OmnigentError) as excinfo:
+        with pytest.raises(GoalrailError) as excinfo:
             router.client_for_session_resources("conv_test")
 
-        _assert_omnigent_error(excinfo, code=ErrorCode.CONFLICT)
+        _assert_goalrail_error(excinfo, code=ErrorCode.CONFLICT)
         assert conversation.runner_id is None
     finally:
         await router.aclose()

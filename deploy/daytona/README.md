@@ -25,7 +25,7 @@ Daytona pulls and snapshots it.
 ## Prerequisites
 
 ```bash
-pip install 'omnigent[daytona]'   # installs the daytona SDK extra
+pip install 'goalrail[daytona]'   # installs the daytona SDK extra
 ```
 
 > [!IMPORTANT]
@@ -115,7 +115,7 @@ billing until removed via the
 > [relay setup](#free-tier-relay-setup-tier-12).
 
 To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNIGENT_DAYTONA_SANDBOX_ENV` in your shell to a comma-separated list
+`GOALRAIL_DAYTONA_SANDBOX_ENV` in your shell to a comma-separated list
 of variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
 `create` — the named variables are copied from your environment into
 the sandbox at provision time.
@@ -147,7 +147,7 @@ sandbox:
   provider: daytona
   server_url: https://your-host
   daytona:
-    image: docker.io/<you>/omnigent-host:latest  # default: official image
+    image: docker.io/<you>/goalrail-host:latest  # default: official image
     env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]
 ```
 
@@ -181,7 +181,7 @@ is identical to Modal; see the [variable table and per-plan
 recipes](../modal/README.md#llm-credentials-for-managed-sandboxes) and
 [git credentials](../modal/README.md#git-credentials-private-repositories).
 The in-sandbox host forwards the same standard set to its runners, and
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH` (as an injected variable) names any
+`GOALRAIL_RUNNER_ENV_PASSTHROUGH` (as an injected variable) names any
 extras.
 
 The same env-injection also carries **credentials for connecting to
@@ -193,7 +193,7 @@ server requires authentication — inject the keys for the relevant
 server, e.g. `DATABRICKS_HOST` + `DATABRICKS_TOKEN` (or
 `DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`) for a
 Databricks-fronted server, by naming them in
-`OMNIGENT_DAYTONA_SANDBOX_ENV` before `create` — and the in-sandbox
+`GOALRAIL_DAYTONA_SANDBOX_ENV` before `create` — and the in-sandbox
 host mints fresh bearer tokens from them on every reconnect. See
 [Connecting to an authenticated
 server](../modal/README.md#connecting-to-an-authenticated-server) in
@@ -220,13 +220,13 @@ plain HTTP) reaches the server through the firewall.
 npm i -g wrangler          # or use npx
 wrangler login             # one-time, free, no credit card
 cd deploy/daytona
-wrangler deploy --var UPSTREAM_URL:https://your-omnigent-server
-# → https://omnigent-daytona-relay.<your-subdomain>.workers.dev
+wrangler deploy --var UPSTREAM_URL:https://your-goalrail-server
+# → https://goalrail-daytona-relay.<your-subdomain>.workers.dev
 ```
 
 Point `sandbox.daytona.server_url` at the printed `*.workers.dev` URL.
 For a non-allowlisted model endpoint, deploy a second copy
-(`name = "omnigent-llm-relay"`, `UPSTREAM_URL` = your gateway) and
+(`name = "goalrail-llm-relay"`, `UPSTREAM_URL` = your gateway) and
 inject its URL as `OPENAI_BASE_URL` via `sandbox.daytona.env`.
 
 **This path is verified end-to-end on a real Daytona Tier 1 org**
@@ -274,7 +274,7 @@ it.
   organizations this is almost always the egress firewall blocking the
   host's dial-back to `server_url` (see the tier note above). Verify
   with `curl <server_url>/health` inside a sandbox. On Tier 3+, check
-  `/tmp/omnigent-host.log` inside the sandbox.
+  `/tmp/goalrail-host.log` inside the sandbox.
 - **Slow first launch** — the initial create from a new image builds a
   Daytona snapshot (minutes); subsequent launches are seconds.
 - **"Organization is suspended: Please verify your email address"** —
@@ -297,7 +297,7 @@ it.
   [`deploy/docker/Dockerfile`](../docker/Dockerfile)
   (`--platform linux/amd64`) and push it to any registry Daytona can
   pull from, then set `sandbox.daytona.image` or
-  `OMNIGENT_DAYTONA_HOST_IMAGE`.
+  `GOALRAIL_DAYTONA_HOST_IMAGE`.
 
 ## Environment variable reference
 
@@ -306,5 +306,5 @@ it.
 | `DAYTONA_API_KEY` | CLI machine / server | Daytona API credentials (required) |
 | `DAYTONA_API_URL` | CLI machine / server | Non-default Daytona API endpoint |
 | `DAYTONA_TARGET` | CLI machine / server | Target region for new sandboxes |
-| `OMNIGENT_DAYTONA_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.daytona.image` takes precedence) |
-| `OMNIGENT_DAYTONA_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.daytona.env` takes precedence for managed) |
+| `GOALRAIL_DAYTONA_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.daytona.image` takes precedence) |
+| `GOALRAIL_DAYTONA_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.daytona.env` takes precedence for managed) |

@@ -3,7 +3,7 @@
  * large each type may be.
  *
  * This mirrors the authoritative server-side checks in
- * omnigent/runtime/content_resolver.py (`attachment_upload_limit`) and the
+ * goalrail/runtime/content_resolver.py (`attachment_upload_limit`) and the
  * upload route (415 for unsupported types, 413 for oversized). Keeping a
  * copy here lets us reject a bad file at paste/drop/pick time — before a
  * slow upload — with a friendly message. The server still enforces; this is

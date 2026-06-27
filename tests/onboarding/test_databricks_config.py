@@ -1,4 +1,4 @@
-"""Unit tests for omnigent.onboarding.databricks_config."""
+"""Unit tests for goalrail.onboarding.databricks_config."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.onboarding.databricks_config import (
+from goalrail.onboarding.databricks_config import (
     databricks_sdk_installed,
     get_workspace_url_for_profile,
     normalize_workspace_url,
@@ -25,7 +25,7 @@ def test_get_workspace_url_for_profile_reads_databrickscfg(tmp_path: Path) -> No
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         url = get_workspace_url_for_profile("test-profile")
 
     assert url == _WORKSPACE_URL
@@ -39,7 +39,7 @@ def test_get_workspace_url_for_profile_strips_trailing_slash(tmp_path: Path) -> 
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         url = get_workspace_url_for_profile("test-profile")
 
     assert url == _WORKSPACE_URL
@@ -50,7 +50,7 @@ def test_get_workspace_url_for_profile_returns_none_when_file_absent(
 ) -> None:
     """Returns None when ~/.databrickscfg does not exist."""
     with patch(
-        "omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH",
+        "goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH",
         tmp_path / "nonexistent",
     ):
         assert get_workspace_url_for_profile("test-profile") is None
@@ -66,7 +66,7 @@ def test_get_workspace_url_for_profile_returns_none_for_missing_profile(
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         assert get_workspace_url_for_profile("test-profile") is None
 
 
@@ -81,7 +81,7 @@ def test_get_workspace_url_for_profile_does_not_use_default_for_missing_profile(
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         assert get_workspace_url_for_profile("test-profile") is None
 
 
@@ -95,7 +95,7 @@ def test_get_workspace_url_for_profile_reads_explicit_default_profile(
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         url = get_workspace_url_for_profile("DEFAULT")
 
     assert url == _WORKSPACE_URL
@@ -111,7 +111,7 @@ def test_get_workspace_url_for_profile_reads_lowercase_default_profile(
     with open(cfg_path, "w") as f:
         cfg.write(f)
 
-    with patch("omnigent.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
+    with patch("goalrail.onboarding.databricks_config._DATABRICKSCFG_PATH", cfg_path):
         url = get_workspace_url_for_profile("default")
 
     assert url == _WORKSPACE_URL

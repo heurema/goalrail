@@ -3,7 +3,7 @@
 Stock ``subprocess.run(timeout=N)`` only kills the immediate child.
 Grandchildren that inherited stdout/stderr keep the captured pipes
 open, so the caller can wedge for many minutes past N. E2E tests
-spawn ``omnigent run`` (AP server + runner + harness as
+spawn ``goalrail run`` (AP server + runner + harness as
 grandchildren) and hit this in CI.
 """
 

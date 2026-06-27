@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from omnigent.onboarding import goose_auth
+from goalrail.onboarding import goose_auth
 
 # Realistic ``goose info -v`` stdout: the "goose Configuration:" block lists
 # GOOSE_MODEL / GOOSE_PROVIDER (2-space indented) followed by extensions.

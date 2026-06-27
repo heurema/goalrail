@@ -13,12 +13,12 @@ import logging
 
 import pytest
 
-from omnigent.runner.app import (
+from goalrail.runner.app import (
     _cursor_fork_history_preamble,
     _cursor_message_item_text,
     _cursor_native_model_from_spec,
 )
-from omnigent.spec.types import AgentSpec, ExecutorSpec
+from goalrail.spec.types import AgentSpec, ExecutorSpec
 
 
 def _spec(model: str | None) -> AgentSpec:

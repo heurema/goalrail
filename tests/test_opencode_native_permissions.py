@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from omnigent.opencode_native_permissions import (
+from goalrail.opencode_native_permissions import (
     OPENCODE_NATIVE_HARNESS,
     decision_to_reply,
     map_verdict_to_decision,
@@ -50,13 +50,13 @@ def test_normalize_for_policy_extracts_command_and_path() -> None:
         }
     )
     assert req is not None
-    normalized = normalize_for_policy(req, omnigent_session_id="conv_1", workspace="/repo")
+    normalized = normalize_for_policy(req, goalrail_session_id="conv_1", workspace="/repo")
     assert normalized["harness"] == OPENCODE_NATIVE_HARNESS
     assert normalized["action"] == "bash"
     assert normalized["command"] == "ls"
     assert normalized["path"] == "/repo/x"
     assert normalized["working_directory"] == "/repo"
-    assert normalized["omnigent_session_id"] == "conv_1"
+    assert normalized["goalrail_session_id"] == "conv_1"
     assert normalized["opencode_session_id"] == "ses_1"
 
 

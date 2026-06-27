@@ -4,7 +4,7 @@
 // long-lived connection: the client tells the server which session ids it's
 // displaying (the "watch-set"), and the server pushes a snapshot followed by
 // diffs whenever those sessions change. See the server endpoint docstring in
-// `omnigent/server/routes/sessions.py` for the wire protocol.
+// `goalrail/server/routes/sessions.py` for the wire protocol.
 //
 // This module owns only the transport (connect, reconnect, send watch-set,
 // dispatch frames). SessionUpdatesProvider wires the parsed frames into the

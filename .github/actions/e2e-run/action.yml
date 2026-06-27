@@ -1,7 +1,7 @@
 name: "Run e2e suite"
 description: >
   Run the tests/e2e suite exactly as the e2e.yml gate does (mock LLM,
-  sharded). When `server_version` is set, the omnigent SERVER subprocess is
+  sharded). When `server_version` is set, the goalrail SERVER subprocess is
   pinned to that released tag (built into an isolated venv) while the client,
   runner, and tests stay on the checked-out ref — the server-version
   backwards-compat configuration. Shared verbatim by e2e.yml (normal gate) and
@@ -58,7 +58,7 @@ runs:
         # serves the bundle); blank provider keys so a spawned server can't
         # pick up the runner's own credentials.
         {
-          echo "OMNIGENT_SKIP_WEB_UI=true"
+          echo "GOALRAIL_SKIP_WEB_UI=true"
           echo "ANTHROPIC_API_KEY="
           echo "OPENAI_API_KEY="
           echo "CODEX="
@@ -108,7 +108,7 @@ runs:
       # Only runs when server_version is set. Builds the released tag into an
       # isolated venv (all three packages editable so the old ==<old> SDK
       # cross-pins resolve without an index) and points the server subprocess
-      # at it via OMNIGENT_COMPAT_SERVER_PYTHON. The redirect also drops the
+      # at it via GOALRAIL_COMPAT_SERVER_PYTHON. The redirect also drops the
       # worktree PYTHONPATH/CWD shadow (see tests/_helpers/compat.py) so the
       # pinned install actually resolves. Requires fetch-depth 0 in the caller.
       if: ${{ inputs.server_version != '' }}
@@ -126,14 +126,14 @@ runs:
         uv venv --python 3.12 "$venv"
         uv pip install --python "$venv/bin/python" \
           -e "$src" -e "$src/sdks/python-client" -e "$src/sdks/ui"
-        "$venv/bin/omnigent" --version
-        echo "OMNIGENT_COMPAT_SERVER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
-        echo "OMNIGENT_COMPAT_SERVER_VERSION=${tag#v}" >> "$GITHUB_ENV"
+        "$venv/bin/goalrail" --version
+        echo "GOALRAIL_COMPAT_SERVER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+        echo "GOALRAIL_COMPAT_SERVER_VERSION=${tag#v}" >> "$GITHUB_ENV"
 
     - name: Build pinned old runner/host (backwards-compat only)
       # Only runs when runner_version is set (Config 2). Builds the released tag
       # into an isolated venv and points the runner + host-daemon subprocesses
-      # at it via OMNIGENT_COMPAT_RUNNER_PYTHON (apply_runner_env drops the
+      # at it via GOALRAIL_COMPAT_RUNNER_PYTHON (apply_runner_env drops the
       # worktree PYTHONPATH/CWD shadow). Distinct paths from the server build so
       # both can coexist. Requires fetch-depth 0 in the caller.
       if: ${{ inputs.runner_version != '' }}
@@ -151,9 +151,9 @@ runs:
         uv venv --python 3.12 "$venv"
         uv pip install --python "$venv/bin/python" \
           -e "$src" -e "$src/sdks/python-client" -e "$src/sdks/ui"
-        "$venv/bin/omnigent" --version
-        echo "OMNIGENT_COMPAT_RUNNER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
-        echo "OMNIGENT_COMPAT_RUNNER_VERSION=${tag#v}" >> "$GITHUB_ENV"
+        "$venv/bin/goalrail" --version
+        echo "GOALRAIL_COMPAT_RUNNER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+        echo "GOALRAIL_COMPAT_RUNNER_VERSION=${tag#v}" >> "$GITHUB_ENV"
 
     - name: Run e2e tests
       shell: bash
@@ -162,9 +162,9 @@ runs:
         SHARD_ID: ${{ inputs.shard_id }}
         NUM_SHARDS: ${{ inputs.num_shards }}
         NIGHTLY_FULL: ${{ inputs.nightly_full }}
-        E2E_TMP_BASE: /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}
-        PYTEST_PROGRESS_LOG_DIR: /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/progress
-        OMNIGENT_TOKEN_USAGE_JSON: /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/tokens.json
+        E2E_TMP_BASE: /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}
+        PYTEST_PROGRESS_LOG_DIR: /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/progress
+        GOALRAIL_TOKEN_USAGE_JSON: /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/tokens.json
       run: |
         # Validate parallelism (untrusted input -- bind to env, never
         # interpolate a GitHub expression into the shell).
@@ -207,11 +207,11 @@ runs:
       with:
         name: e2e-server-logs-${{ github.run_id }}-shard${{ inputs.shard_id }}${{ inputs.artifact_suffix }}
         path: |
-          /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/server.log
-          /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/runner.log
-          /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/.omnigent/logs/**/*.log
-          /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/junit.xml
-          /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/progress/progress-*.log
+          /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/server.log
+          /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/runner.log
+          /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/**/.goalrail/logs/**/*.log
+          /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/junit.xml
+          /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/progress/progress-*.log
         retention-days: 7
         if-no-files-found: warn
         include-hidden-files: true
@@ -221,6 +221,6 @@ runs:
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
       with:
         name: e2e-tokens-${{ github.run_id }}-shard${{ inputs.shard_id }}${{ inputs.artifact_suffix }}
-        path: /tmp/omnigent-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/tokens*.json
+        path: /tmp/goalrail-e2e-${{ github.run_id }}-shard${{ inputs.shard_id }}/tokens*.json
         retention-days: 14
         if-no-files-found: warn

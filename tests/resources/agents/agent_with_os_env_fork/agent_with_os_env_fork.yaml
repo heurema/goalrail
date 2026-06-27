@@ -21,7 +21,7 @@
 #   mkdir -p /tmp/fork-demo && echo "original content" > /tmp/fork-demo/notes.txt
 #
 #   # Run the agent — it will modify notes.txt inside the fork:
-#   python -m omnigent examples/agent_with_os_env_fork.yaml \
+#   python -m goalrail examples/agent_with_os_env_fork.yaml \
 #       --prompt "Read notes.txt, then overwrite it with 'agent was here', then read it again."
 #
 #   # Verify the original is untouched:

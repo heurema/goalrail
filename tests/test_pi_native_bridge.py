@@ -1,4 +1,4 @@
-"""Tests for omnigent.pi_native_bridge inbox enqueue contract."""
+"""Tests for goalrail.pi_native_bridge inbox enqueue contract."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import pi_native_bridge
+from goalrail import pi_native_bridge
 
 
 def test_bridge_root_honors_goalrail_data_dir(
@@ -16,7 +16,7 @@ def test_bridge_root_honors_goalrail_data_dir(
     tmp_path: Path,
 ) -> None:
     """Goalrail data-dir override moves the default pi-native bridge root."""
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     data_dir = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
 

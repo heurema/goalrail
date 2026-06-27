@@ -28,11 +28,11 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.entities import Conversation
-from omnigent.entities.conversation import MessageData, NewConversationItem
-from omnigent.server.routes import sessions as sessions_module
-from omnigent.session_lifecycle import CLOSED_LABEL_KEY, CLOSED_LABEL_VALUE
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.entities import Conversation
+from goalrail.entities.conversation import MessageData, NewConversationItem
+from goalrail.server.routes import sessions as sessions_module
+from goalrail.session_lifecycle import CLOSED_LABEL_KEY, CLOSED_LABEL_VALUE
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.server.helpers import build_agent_bundle, create_test_agent
@@ -49,7 +49,7 @@ def _clean_pending_elicitations_index() -> Any:
     this index. Without a reset, an entry recorded by one test would
     inflate another's count (the ``== 0`` assertions would break).
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     yield
@@ -92,7 +92,7 @@ def _seed_child(
     """
     Create a child sub-agent conversation.
 
-    Mirrors what :func:`omnigent.tools.builtins.spawn._spawn_one` does,
+    Mirrors what :func:`goalrail.tools.builtins.spawn._spawn_one` does,
     minus the workflow start and SSE publish. The tasks table has been
     removed — ``current_task_id``, ``current_task_status``, and
     ``agent_name`` fields in the summary are always ``None``.
@@ -283,7 +283,7 @@ async def test_child_sessions_surfaces_pending_elicitation_count(
     :param client: The test HTTP client.
     :param db_uri: Per-test SQLite database URI.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     session = await _create_parent_session(client)
     conv_store = SqlAlchemyConversationStore(db_uri)
@@ -327,7 +327,7 @@ async def test_parent_session_snapshot_replays_child_pending_elicitation(
     :param client: The test HTTP client.
     :param db_uri: Per-test SQLite database URI.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     session = await _create_parent_session(client, agent_name="snapshot-child-pending")
     conv_store = SqlAlchemyConversationStore(db_uri)
@@ -588,7 +588,7 @@ async def test_child_sessions_busy_reflects_relay_status_cache(
     :param cached_status: Status value to inject into the cache.
     :param expected_busy: Expected ``busy`` field value in the summary.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     session = await _create_parent_session(client)
     conv_store = SqlAlchemyConversationStore(db_uri)
@@ -891,7 +891,7 @@ async def test_closed_child_session_display_is_sanitized_and_read_only(
 
     Legacy closed rows only have a ``:closed:<id>`` title suffix. The
     API must strip that suffix from display fields, synthesize the
-    ``omnigent.closed=true`` label for clients, and reject new user
+    ``goalrail.closed=true`` label for clients, and reject new user
     messages sent directly to the child session.
 
     :param client: The test HTTP client.
@@ -965,7 +965,7 @@ async def test_child_sessions_per_child_fields_isolated_across_fanout(
     :param monkeypatch: Pytest monkeypatch fixture used to reject the
         old per-child item-listing path.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     session = await _create_parent_session(client)
     conv_store = SqlAlchemyConversationStore(db_uri)
@@ -1181,7 +1181,7 @@ async def test_native_subagent_session_stamps_terminal_ui_labels(
     """
     A sub-agent whose spec uses a native terminal harness gets the
     terminal-first wrapper labels at create time, so the web UI renders
-    the Chat/Terminal pill (gated on ``omnigent.ui == "terminal"``).
+    the Chat/Terminal pill (gated on ``goalrail.ui == "terminal"``).
 
     Without the stamping, the child row's labels are empty and the pill
     never shows for nessie-style native implementer sub-agents.
@@ -1202,8 +1202,8 @@ async def test_native_subagent_session_stamps_terminal_ui_labels(
     )
     assert resp.status_code == 201, resp.text
     labels = resp.json()["labels"]
-    assert labels.get("omnigent.wrapper") == expected_wrapper
-    assert labels.get("omnigent.ui") == "terminal"
+    assert labels.get("goalrail.wrapper") == expected_wrapper
+    assert labels.get("goalrail.ui") == "terminal"
 
 
 @pytest.mark.parametrize(
@@ -1373,7 +1373,7 @@ async def test_native_subagent_message_uses_native_terminal_forward(
 
     A ``sys_session_send`` call creates a child session and then posts a
     user message to that child. If the child sub-agent uses
-    ``claude-native`` or ``codex-native``, Omnigent must forward the prompt to
+    ``claude-native`` or ``codex-native``, Goalrail must forward the prompt to
     the runner's native terminal event shape and must not persist its
     own AP-side copy; the native transcript forwarder is the single
     writer for conversation items.
@@ -1405,13 +1405,13 @@ async def test_native_subagent_message_uses_native_terminal_forward(
     )
     assert child_resp.status_code == 201, child_resp.text
     child = child_resp.json()
-    assert child["labels"].get("omnigent.wrapper") == expected_wrapper
+    assert child["labels"].get("goalrail.wrapper") == expected_wrapper
 
     forwarded: list[dict[str, Any]] = []
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """
-        Capture the event Omnigent forwards to the fake runner.
+        Capture the event Goalrail forwards to the fake runner.
 
         :param request: HTTP request sent to the fake runner.
         :returns: Accepted response.
@@ -1520,8 +1520,8 @@ async def test_non_native_subagent_session_has_no_terminal_ui_labels(
     )
     assert resp.status_code == 201, resp.text
     labels = resp.json()["labels"]
-    assert "omnigent.wrapper" not in labels
-    assert "omnigent.ui" not in labels
+    assert "goalrail.wrapper" not in labels
+    assert "goalrail.ui" not in labels
 
 
 # ── Multipart (bundled) child creates ────────────────────

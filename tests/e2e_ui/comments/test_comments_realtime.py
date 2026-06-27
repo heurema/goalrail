@@ -17,7 +17,7 @@ If this goes red, the likely regressions are:
 
 - the session-list builders stopped folding the comments fingerprint
   into list items (``_comments_fingerprints_for`` in
-  ``omnigent/server/routes/sessions.py``), or
+  ``goalrail/server/routes/sessions.py``), or
 - ``SessionUpdatesProvider`` stopped invalidating ``["comments", id]``
   on fingerprint movement (``syncCommentsFingerprints``), or
 - the comment store stopped bumping ``updated_at`` on status changes

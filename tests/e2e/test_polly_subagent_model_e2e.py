@@ -98,7 +98,7 @@ def _api(base_url: str, path: str) -> dict[str, Any]:
 @pytest.fixture
 def local_polly_server(tmp_path: Path) -> Iterator[str]:
     """
-    Start a throwaway local ``omnigent server`` from this working tree.
+    Start a throwaway local ``goalrail server`` from this working tree.
 
     Mirrors ``test_polly_e2e.local_polly_server`` (own sqlite DB + artifact
     dir under ``tmp_path``); duplicated as a fixture because pytest fixtures
@@ -114,14 +114,14 @@ def local_polly_server(tmp_path: Path) -> Iterator[str]:
 
     env = {
         **os.environ,
-        "OMNIGENT_SKIP_ONBOARD": "1",
-        "OMNIGENT_NO_UPDATE_CHECK": "1",
+        "GOALRAIL_SKIP_ONBOARD": "1",
+        "GOALRAIL_NO_UPDATE_CHECK": "1",
     }
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "server",
             "--host",
             "127.0.0.1",
@@ -163,13 +163,13 @@ def _run_polly_turn(
     :param prompt: The ``-p`` one-shot prompt.
     :param mock_llm_server_url: Mock LLM server base URL for env injection.
     :param polly_dir: The polly bundle to run.
-    :returns: The completed ``omnigent run`` process.
+    :returns: The completed ``goalrail run`` process.
     """
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "goalrail",
             "run",
             str(polly_dir),
             "--server",

@@ -10,9 +10,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import kimi_native_hook
-from omnigent.kimi_native_bridge import APPROVE_KEY, DENY_KEY, write_hook_config
-from omnigent.native_policy_hook import _EVAL_UNAVAILABLE_REASON
+from goalrail import kimi_native_hook
+from goalrail.kimi_native_bridge import APPROVE_KEY, DENY_KEY, write_hook_config
+from goalrail.native_policy_hook import _EVAL_UNAVAILABLE_REASON
 
 
 def _governed_bridge(tmp_path: Path, *, server: str = "http://127.0.0.1:8787") -> Path:

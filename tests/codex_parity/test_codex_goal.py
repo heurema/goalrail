@@ -9,11 +9,11 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from omnigent.entities import Conversation
-from omnigent.errors import OmnigentError
-from omnigent.inner.codex_executor import CodexExecutor
-from omnigent.server import app as app_module
-from omnigent.server.routes.sessions import create_sessions_router
+from goalrail.entities import Conversation
+from goalrail.errors import GoalrailError
+from goalrail.inner.codex_executor import CodexExecutor
+from goalrail.server import app as app_module
+from goalrail.server.routes.sessions import create_sessions_router
 from tests.codex_parity.helpers import (
     assert_completed as _assert_completed,
 )
@@ -49,8 +49,8 @@ class _CodexGoalConversationStore:
                 root_conversation_id="conv_codex",
                 agent_id="ag_codex",
                 labels={
-                    "omnigent.ui": "terminal",
-                    "omnigent.wrapper": "codex-native-ui",
+                    "goalrail.ui": "terminal",
+                    "goalrail.wrapper": "codex-native-ui",
                 },
             ),
             "conv_codex_no_runner": Conversation(
@@ -60,8 +60,8 @@ class _CodexGoalConversationStore:
                 root_conversation_id="conv_codex_no_runner",
                 agent_id="ag_codex",
                 labels={
-                    "omnigent.ui": "terminal",
-                    "omnigent.wrapper": "codex-native-ui",
+                    "goalrail.ui": "terminal",
+                    "goalrail.wrapper": "codex-native-ui",
                 },
             ),
         }
@@ -149,10 +149,10 @@ class _CodexGoalRunnerRouter:
 def _codex_goal_api_app(runner_client: _CodexGoalRunnerClient | None) -> FastAPI:
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle_omnigent_error(
+    @app.exception_handler(GoalrailError)
+    async def _handle_goalrail_error(
         request: Request,
-        exc: OmnigentError,
+        exc: GoalrailError,
     ) -> JSONResponse:
         del request
         return JSONResponse(
@@ -263,7 +263,7 @@ async def test_real_codex_goal_set_get_clear_round_trip(
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_set_api_forwards_mode_configuration() -> None:
+async def test_goalrail_codex_goal_set_api_forwards_mode_configuration() -> None:
     runner_client = _CodexGoalRunnerClient()
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -294,7 +294,7 @@ async def test_omnigent_codex_goal_set_api_forwards_mode_configuration() -> None
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_get_without_live_runner_returns_empty_read_only() -> None:
+async def test_goalrail_codex_goal_get_without_live_runner_returns_empty_read_only() -> None:
     app = _codex_goal_api_app(None)
     transport = httpx.ASGITransport(app=app)
 
@@ -306,7 +306,7 @@ async def test_omnigent_codex_goal_get_without_live_runner_returns_empty_read_on
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_put_without_live_runner_returns_503() -> None:
+async def test_goalrail_codex_goal_put_without_live_runner_returns_503() -> None:
     app = _codex_goal_api_app(None)
     transport = httpx.ASGITransport(app=app)
 
@@ -322,7 +322,7 @@ async def test_omnigent_codex_goal_put_without_live_runner_returns_503() -> None
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_set_api_rejects_boolean_token_budget() -> None:
+async def test_goalrail_codex_goal_set_api_rejects_boolean_token_budget() -> None:
     runner_client = _CodexGoalRunnerClient()
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -338,7 +338,7 @@ async def test_omnigent_codex_goal_set_api_rejects_boolean_token_budget() -> Non
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_api_preserves_runner_4xx_error_payload() -> None:
+async def test_goalrail_codex_goal_api_preserves_runner_4xx_error_payload() -> None:
     runner_client = _CodexGoalRunnerClient(
         status_code=400,
         response_body={"error": "invalid_input", "detail": "harness mismatch"},
@@ -357,7 +357,7 @@ async def test_omnigent_codex_goal_api_preserves_runner_4xx_error_payload() -> N
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_api_maps_malformed_runner_body_to_502() -> None:
+async def test_goalrail_codex_goal_api_maps_malformed_runner_body_to_502() -> None:
     runner_client = _CodexGoalRunnerClient(response_body="not-json")
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -374,7 +374,7 @@ async def test_omnigent_codex_goal_api_maps_malformed_runner_body_to_502() -> No
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_api_maps_partial_goal_to_502() -> None:
+async def test_goalrail_codex_goal_api_maps_partial_goal_to_502() -> None:
     runner_client = _CodexGoalRunnerClient(
         response_body={
             "goal": {
@@ -396,7 +396,7 @@ async def test_omnigent_codex_goal_api_maps_partial_goal_to_502() -> None:
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_status_api_forwards_pause_resume() -> None:
+async def test_goalrail_codex_goal_status_api_forwards_pause_resume() -> None:
     runner_client = _CodexGoalRunnerClient()
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -422,7 +422,7 @@ async def test_omnigent_codex_goal_status_api_forwards_pause_resume() -> None:
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_status_api_rejects_codex_owned_statuses() -> None:
+async def test_goalrail_codex_goal_status_api_rejects_codex_owned_statuses() -> None:
     runner_client = _CodexGoalRunnerClient()
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -438,7 +438,7 @@ async def test_omnigent_codex_goal_status_api_rejects_codex_owned_statuses() -> 
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_set_api_rejects_codex_owned_statuses() -> None:
+async def test_goalrail_codex_goal_set_api_rejects_codex_owned_statuses() -> None:
     runner_client = _CodexGoalRunnerClient()
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)
@@ -457,7 +457,7 @@ async def test_omnigent_codex_goal_set_api_rejects_codex_owned_statuses() -> Non
 
 
 @pytest.mark.asyncio
-async def test_omnigent_codex_goal_api_preserves_codex_owned_response_statuses() -> None:
+async def test_goalrail_codex_goal_api_preserves_codex_owned_response_statuses() -> None:
     runner_client = _CodexGoalRunnerClient(response_status="budgetLimited")
     app = _codex_goal_api_app(runner_client)
     transport = httpx.ASGITransport(app=app)

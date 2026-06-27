@@ -216,7 +216,7 @@ async def test_fork_coding_session_stamps_fork_source_label(
     The source binds a ``workspace`` (no host needed — only ``git``
     requires one). The fork deliberately drops the workspace, so the
     clone is unbound; ``fork_conversation`` records provenance via the
-    ``omnigent.fork.source_id`` label (value = source id). That label
+    ``goalrail.fork.source_id`` label (value = source id). That label
     is what later makes the online dot report the clone offline and the
     UI open the directory picker. Without it, typing into the clone
     silently drops the message against a runner that can't start.
@@ -241,9 +241,9 @@ async def test_fork_coding_session_stamps_fork_source_label(
     # original host/dir/branch. A missing key means fork_conversation
     # didn't detect source.workspace; a wrong value means it stamped the
     # wrong source.
-    assert fork["labels"].get("omnigent.fork.source_id") == source["id"], (
+    assert fork["labels"].get("goalrail.fork.source_id") == source["id"], (
         f"Expected fork-source label = {source['id']!r}, got "
-        f"{fork['labels'].get('omnigent.fork.source_id')!r}."
+        f"{fork['labels'].get('goalrail.fork.source_id')!r}."
     )
     # The workspace itself must NOT be carried over — the clone rebinds
     # its own. If this is set, the clone would look bound and skip the
@@ -262,7 +262,7 @@ async def test_fork_chat_session_has_no_fork_source_label(
 
     CUJ 2: a session that never bound a directory has a self-contained
     transcript. Its fork must stay in-process-resumable, so the online
-    dot keeps reading it reachable — i.e. the ``omnigent.fork.source_id``
+    dot keeps reading it reachable — i.e. the ``goalrail.fork.source_id``
     label must be absent. Stamping it here would wrongly force the clone
     offline and pop a directory picker the session doesn't need.
     """
@@ -275,7 +275,7 @@ async def test_fork_chat_session_has_no_fork_source_label(
 
     # Absent key — presence would route a chat-only clone into the
     # coding-resume path it doesn't belong in.
-    assert "omnigent.fork.source_id" not in fork["labels"], (
+    assert "goalrail.fork.source_id" not in fork["labels"], (
         f"Chat-only fork must not carry the fork-source label, got labels {fork['labels']!r}."
     )
 

@@ -27,7 +27,7 @@ from playwright.sync_api import Page, expect
 def _find_runner_pids() -> list[int]:
     """
     Find all PIDs running the runner entry point
-    (``omnigent.runner._entry``).
+    (``goalrail.runner._entry``).
 
     The runner is a sibling subprocess of the server (both spawned
     by the test fixture), so we search by command-line pattern
@@ -36,7 +36,7 @@ def _find_runner_pids() -> list[int]:
     :returns: List of runner PIDs (may be empty).
     """
     result = subprocess.run(
-        ["pgrep", "-f", "omnigent.runner._entry"],
+        ["pgrep", "-f", "goalrail.runner._entry"],
         capture_output=True,
         text=True,
     )

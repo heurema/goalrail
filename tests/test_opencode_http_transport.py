@@ -1,4 +1,4 @@
-"""Unit tests for :class:`omnigent.opencode_http_transport.OpenCodeHttpTransport`.
+"""Unit tests for :class:`goalrail.opencode_http_transport.OpenCodeHttpTransport`.
 
 Covers the payload builder + every transport method over an injected fake
 ``OpenCodeClient`` (the documented ``client_factory`` test seam), so the
@@ -12,12 +12,12 @@ from typing import Any
 
 import pytest
 
-from omnigent.native_server_transport import (
+from goalrail.native_server_transport import (
     NativeLaunchConfig,
     NativePermissionDecision,
     NativePrompt,
 )
-from omnigent.opencode_http_transport import OpenCodeHttpTransport, build_prompt_payload
+from goalrail.opencode_http_transport import OpenCodeHttpTransport, build_prompt_payload
 
 # ── build_prompt_payload + part/model helpers ──────────────────────────────
 
@@ -118,7 +118,7 @@ def _transport(client: _FakeClient) -> OpenCodeHttpTransport:
 
 
 def _launch(**kwargs: Any) -> NativeLaunchConfig:
-    return NativeLaunchConfig(omnigent_session_id="conv_1", workspace="/w", **kwargs)
+    return NativeLaunchConfig(goalrail_session_id="conv_1", workspace="/w", **kwargs)
 
 
 async def test_create_session_when_no_external_id() -> None:

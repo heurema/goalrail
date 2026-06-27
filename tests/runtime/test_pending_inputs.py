@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.runtime.pending_inputs`.
+Unit tests for :mod:`goalrail.runtime.pending_inputs`.
 
 The pending-inputs index holds web-composer user messages on
 native-terminal sessions that haven't yet round-tripped back through
@@ -29,7 +29,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from omnigent.runtime import pending_inputs
+from goalrail.runtime import pending_inputs
 
 
 @pytest.fixture(autouse=True)

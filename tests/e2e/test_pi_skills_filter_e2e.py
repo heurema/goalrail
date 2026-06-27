@@ -262,7 +262,7 @@ def test_pi_skills_filter_e2e(
     offending skill, so triage can jump straight to the right layer.
 
     :param http_client: The session-scoped ``httpx.Client`` from
-        ``tests.e2e.conftest``, pointed at a live Omnigent server.
+        ``tests.e2e.conftest``, pointed at a live Goalrail server.
     :param pi_profile: Databricks profile name from ``--profile``.
     :param live_runner_id: Id of the live runner the session binds to.
     :param fixture: Name of the fixture agent dir under

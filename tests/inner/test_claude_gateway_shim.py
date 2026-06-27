@@ -17,7 +17,7 @@ import httpx
 import pytest
 import uvicorn
 
-from omnigent.inner.claude_gateway_shim import (
+from goalrail.inner.claude_gateway_shim import (
     ClaudeGatewayShim,
     restore_thinking_display,
 )
@@ -341,11 +341,11 @@ async def test_gateway_executor_routes_new_client_through_shim(monkeypatch) -> N
     ``_get_or_create_client`` (the seam where ``options.env`` is
     consumed); spawning the real CLI is infeasible in unit tests.
     """
-    from omnigent.inner.claude_sdk_executor import ClaudeSDKExecutor
-    from omnigent.inner.databricks_executor import DatabricksCredentials
+    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+    from goalrail.inner.databricks_executor import DatabricksCredentials
 
     monkeypatch.setattr(
-        "omnigent.inner.databricks_executor._read_databrickscfg",
+        "goalrail.inner.databricks_executor._read_databrickscfg",
         lambda profile=None: DatabricksCredentials(
             host="https://example.databricks.com", token="dapi_test_token"
         ),

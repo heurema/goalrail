@@ -9,8 +9,8 @@ import pytest
 from tests import _model_pools
 from tests.integration.model_selection import resolve_default_model
 
-_SPREAD_ENV = "OMNIGENT_TEST_MODEL_SPREAD"
-_GPT_POOL_ENV = "OMNIGENT_TEST_MODEL_POOL_GPT"
+_SPREAD_ENV = "GOALRAIL_TEST_MODEL_SPREAD"
+_GPT_POOL_ENV = "GOALRAIL_TEST_MODEL_POOL_GPT"
 
 
 @pytest.fixture(autouse=True)

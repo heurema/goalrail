@@ -22,7 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from omnigent_ui_sdk import Overlay, OverlayTarget, TerminalHost
+from goalrail_ui_sdk import Overlay, OverlayTarget, TerminalHost
 
 # Sentinels the pexpect test anchors on. Must be uncommon enough
 # that they can't appear incidentally anywhere in the SDK's own

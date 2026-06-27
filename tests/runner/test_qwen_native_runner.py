@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from omnigent.runner.app import _persist_qwen_external_session_id
+from goalrail.runner.app import _persist_qwen_external_session_id
 
 
 class _RecordingClient:

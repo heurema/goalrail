@@ -1,7 +1,7 @@
 """
 Tests for :class:`FunctionPolicy` (Phase 4).
 
-Ports and extends these omnigent cases:
+Ports and extends these goalrail cases:
 
 From ``test_policies.py``:
 - ``test_allow_by_default`` — empty FunctionPolicy → ALLOW
@@ -35,20 +35,20 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.function import (
+from goalrail.policies.function import (
     FunctionPolicy,
     resolve_function_policy,
 )
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.policies.types import EvaluationContext, PolicyResult
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy
@@ -130,7 +130,7 @@ def _build_engine(
 
 @pytest.mark.asyncio
 async def test_sync_callable_allow() -> None:
-    """Ports omnigent ``test_sync_callable_allow``. A sync
+    """Ports goalrail ``test_sync_callable_allow``. A sync
     lambda that returns PolicyResult(ALLOW) produces ALLOW."""
 
     def fn(event: dict) -> PolicyResult:
@@ -146,7 +146,7 @@ async def test_sync_callable_allow() -> None:
 
 @pytest.mark.asyncio
 async def test_sync_callable_block() -> None:
-    """Ports omnigent ``test_sync_callable_block``. A sync
+    """Ports goalrail ``test_sync_callable_block``. A sync
     function that returns DENY blocks."""
 
     def fn(event: dict) -> PolicyResult:
@@ -165,7 +165,7 @@ async def test_sync_callable_block() -> None:
 
 @pytest.mark.asyncio
 async def test_async_callable() -> None:
-    """Ports omnigent ``test_async_callable``. An async
+    """Ports goalrail ``test_async_callable``. An async
     def evaluator works identically to sync."""
 
     async def fn(event: dict) -> PolicyResult:
@@ -181,7 +181,7 @@ async def test_async_callable() -> None:
 
 @pytest.mark.asyncio
 async def test_callable_returns_dict_allow() -> None:
-    """Ports omnigent ``test_callable_returns_dict``. A
+    """Ports goalrail ``test_callable_returns_dict``. A
     V0 dict return with string result parses into PolicyResult."""
     policy = FunctionPolicy(
         _spec(),
@@ -196,7 +196,7 @@ async def test_callable_returns_dict_allow() -> None:
 
 @pytest.mark.asyncio
 async def test_callable_returns_dict_deny_with_reason() -> None:
-    """Ports omnigent ``test_deny_action_from_dict``. A
+    """Ports goalrail ``test_deny_action_from_dict``. A
     V0 dict return with explicit deny and reason."""
     policy = FunctionPolicy(
         _spec(),
@@ -246,12 +246,12 @@ async def test_callable_returns_foreign_policy_result_shape() -> None:
     coercion, regardless of its class identity. This pins the
     regression reported against
     ``examples/rate_limit_policy.py``, which imports
-    ``PolicyResult`` from ``omnigent.policies`` — a different
-    module than the engine's ``omnigent.policies.types`` so
+    ``PolicyResult`` from ``goalrail.policies`` — a different
+    module than the engine's ``goalrail.policies.types`` so
     ``isinstance`` fails.
 
     Uses a local stand-in dataclass so the test doesn't
-    depend on whether omnigent is installed in this
+    depend on whether goalrail is installed in this
     environment. The failure signature would be:
     ``PolicyDecisionError: FunctionPolicy 'p' failed:
     FunctionPolicy 'p' returned unsupported type
@@ -262,8 +262,8 @@ async def test_callable_returns_foreign_policy_result_shape() -> None:
 
     class _ForeignAction(enum.Enum):
         """
-        Mimics ``omnigent.policies.PolicyAction`` — wire
-        values match Omnigent', but the enum class is
+        Mimics ``goalrail.policies.PolicyAction`` — wire
+        values match Goalrail', but the enum class is
         distinct so ``isinstance(x, PolicyAction)`` fails.
         """
 
@@ -273,7 +273,7 @@ async def test_callable_returns_foreign_policy_result_shape() -> None:
     @dataclass
     class _ForeignPolicyResult:
         """
-        Mimics ``omnigent.policies.PolicyResult`` — same
+        Mimics ``goalrail.policies.PolicyResult`` — same
         attributes, different class identity.
         """
 
@@ -305,7 +305,7 @@ async def test_callable_returns_foreign_policy_result_shape() -> None:
 
 @pytest.mark.asyncio
 async def test_two_arg_callable_receives_config() -> None:
-    """Ports omnigent
+    """Ports goalrail
     ``test_three_arg_callable_receives_context`` (ours is 2-arg
     because we fold content+phase into the V0 event dict). Under
     the V0 contract the second arg is the spec's static ``config``
@@ -337,7 +337,7 @@ async def test_two_arg_callable_receives_config() -> None:
 async def test_two_arg_callable_reads_config_for_decision(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
-    """Ports omnigent ``test_three_arg_callable_reads_labels_for_decision``.
+    """Ports goalrail ``test_three_arg_callable_reads_labels_for_decision``.
     Under V0, labels are NOT passed to the callable — decisions
     that once depended on the runtime label state should instead
     use the spec's static ``config`` thresholds. This test verifies
@@ -391,7 +391,7 @@ async def test_two_arg_callable_reads_config_for_decision(
 
 @pytest.mark.asyncio
 async def test_async_two_arg_callable() -> None:
-    """Ports omnigent ``test_three_arg_async_callable``.
+    """Ports goalrail ``test_three_arg_async_callable``.
     Async two-arg callables receive the spec's static config as
     the second argument. Verifies async dispatch works correctly
     for the two-arg V0 signature."""
@@ -420,7 +420,7 @@ async def test_async_two_arg_callable() -> None:
 
 @pytest.mark.asyncio
 async def test_rate_limit_closure_counts() -> None:
-    """Ports omnigent ``test_tool_call_rate_limit``. A
+    """Ports goalrail ``test_tool_call_rate_limit``. A
     closure counter ticks across evaluations in the same
     workflow. Without this, stateful FunctionPolicies are
     useless."""
@@ -477,9 +477,9 @@ def test_resolve_function_policy_short_form(tmp_path: Path) -> None:
         tmp_path,
         "probe",
         """
-        from omnigent.policies.types import PolicyResult
+        from goalrail.policies.types import PolicyResult
 
-        from omnigent.spec.types import PolicyAction
+        from goalrail.spec.types import PolicyAction
 
         def noop(event):
             return PolicyResult(action=PolicyAction.ALLOW)
@@ -504,9 +504,9 @@ def test_resolve_function_policy_factory_form(tmp_path: Path) -> None:
         tmp_path,
         "probe_factory",
         """
-        from omnigent.policies.types import PolicyResult
+        from goalrail.policies.types import PolicyResult
 
-        from omnigent.spec.types import PolicyAction
+        from goalrail.spec.types import PolicyAction
 
         def make(limit):
             calls = 0
@@ -546,8 +546,8 @@ def test_resolve_function_policy_empty_arguments_invokes_factory(
         tmp_path,
         "probe_empty_args",
         """
-        from omnigent.policies.types import PolicyResult
-        from omnigent.spec.types import PolicyAction
+        from goalrail.policies.types import PolicyResult
+        from goalrail.spec.types import PolicyAction
 
         def make(limit=5):
             def _eval(event):
@@ -584,8 +584,8 @@ def test_resolve_function_policy_none_arguments_auto_detects_factory(
         tmp_path,
         "probe_auto",
         """
-        from omnigent.policies.types import PolicyResult
-        from omnigent.spec.types import PolicyAction
+        from goalrail.policies.types import PolicyResult
+        from goalrail.spec.types import PolicyAction
 
         def factory_all_defaults(limit=10, action="ALLOW"):
             def _eval(event):
@@ -629,7 +629,7 @@ def test_resolve_function_policy_none_arguments_auto_detects_factory(
 async def test_factory_closure_counter_isolated_per_build(
     tmp_path: Path,
 ) -> None:
-    """Ports omnigent ``test_rate_limit_counter_isolated``.
+    """Ports goalrail ``test_rate_limit_counter_isolated``.
     Two separate FunctionPolicy builds from the same factory
     have independent closure state — if this regresses,
     rate limits for different agents (or different workflows
@@ -638,9 +638,9 @@ async def test_factory_closure_counter_isolated_per_build(
         tmp_path,
         "probe_iso",
         """
-        from omnigent.policies.types import PolicyResult
+        from goalrail.policies.types import PolicyResult
 
-        from omnigent.spec.types import PolicyAction
+        from goalrail.spec.types import PolicyAction
 
         def make(limit):
             calls = 0
@@ -773,7 +773,7 @@ async def test_function_policy_without_whitelist_writes_freely(
 ) -> None:
     """When the spec does NOT declare `set_labels`, every
     key the callable writes lands (schemaless semantics,
-    matches omnigent parity)."""
+    matches goalrail parity)."""
 
     def fn(event: dict) -> PolicyResult:
         return PolicyResult(
@@ -874,9 +874,9 @@ def test_function_policy_reset_turn_invokes_callable_attribute(
     """
     ``FunctionPolicy.reset_turn`` must look up ``reset_turn``
     on the wrapped callable and invoke it. This is how legacy
-    omnigent policies like ``max_tool_calls_per_turn`` clear
+    goalrail policies like ``max_tool_calls_per_turn`` clear
     per-turn accumulators between turns — see
-    :meth:`omnigent.runtime.policies.engine.PolicyEngine.reset_turn`
+    :meth:`goalrail.runtime.policies.engine.PolicyEngine.reset_turn`
     for the native implementation we mirror.
 
     What breaks if this fails: the rate-limit factory in
@@ -1217,8 +1217,8 @@ def test_resolve_function_policy_modern_callable_not_wrapped(tmp_path: Path) -> 
         tmp_path,
         "probe_modern",
         """
-        from omnigent.policies.types import PolicyResult
-        from omnigent.spec.types import PolicyAction
+        from goalrail.policies.types import PolicyResult
+        from goalrail.spec.types import PolicyAction
 
         def modern_allow(event):
             return PolicyResult(action=PolicyAction.ALLOW)

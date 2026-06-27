@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.gemini_auth`.
+"""Tests for :mod:`goalrail.onboarding.gemini_auth`.
 
 Covers both real ``agy`` token formats — macOS ``oauth_creds.json``
 (``access_token`` / ``refresh_token``) and Linux
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.onboarding import gemini_auth as ga
+from goalrail.onboarding import gemini_auth as ga
 
 
 def _write(path: Path, payload: object) -> Path:

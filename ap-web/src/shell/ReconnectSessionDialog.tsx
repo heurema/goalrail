@@ -100,7 +100,7 @@ export function buildReconnectCommand({
  * The default tab is Reconnect, except for the non-owner `host_offline`
  * case where reconnecting is impossible and Clone is the only action.
  *
- * @param wrapper - The conversation's `omnigent.wrapper` label
+ * @param wrapper - The conversation's `goalrail.wrapper` label
  *   (`"claude-code-native-ui"` for `goalrail claude` sessions). Picks
  *   the `local_stranded` command form.
  * @param state - Which unreachable state we're reconnecting from.

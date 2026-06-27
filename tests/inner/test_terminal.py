@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.inner.terminal`."""
+"""Unit tests for :mod:`goalrail.inner.terminal`."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,13 +14,13 @@ from types import SimpleNamespace
 
 import pytest
 
-import omnigent.inner.terminal as terminal_mod
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
-from omnigent.inner.terminal import (
+import goalrail.inner.terminal as terminal_mod
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
+from goalrail.inner.terminal import (
     TerminalInstance,
     create_terminal_instance,
 )
-from omnigent.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
+from goalrail.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
 
 
 @dataclass
@@ -259,7 +260,7 @@ async def test_is_alive_true_when_pane_live(
 
 @pytest.mark.skipif(shutil.which("tmux") is None, reason="requires a real tmux binary")
 @pytest.mark.asyncio
-async def test_server_survives_inner_process_exit_real_tmux(tmp_path: Path) -> None:
+async def test_server_survives_inner_process_exit_real_tmux() -> None:
     """
     The private tmux server outlives an inner-process exit (issue #540).
 
@@ -270,51 +271,52 @@ async def test_server_survives_inner_process_exit_real_tmux(tmp_path: Path) -> N
     up (so control commands keep working and the dead pane stays capturable)
     while ``is_alive`` still reports the inner process as gone.
 
-    :param tmp_path: Temporary directory for the real tmux socket.
     """
-    instance = TerminalInstance(
-        name="bash",
-        session_key="s1",
-        socket_path=tmp_path / "tmux.sock",
-        private_dir=tmp_path,
-        command="sh",
-        args=["-c", "exit 0"],
-        keep_alive_after_exit=True,
-    )
-    try:
-        await instance.launch(cwd=tmp_path)
-
-        # Wait for the inner `sh` to exit. is_alive() flips running -> False
-        # once the pane is dead.
-        for _ in range(250):
-            if not await instance.is_alive():
-                break
-            await asyncio.sleep(0.02)
-        else:  # pragma: no cover - only on a hang/regression
-            raise AssertionError("inner process never reported as exited")
-
-        # The crux: the private tmux SERVER must still be reachable after the
-        # inner process exited — has-session succeeds rather than failing with
-        # "no server running on <socket>".
-        probe = subprocess.run(
-            [
-                "tmux",
-                "-S",
-                str(instance.socket_path),
-                "has-session",
-                "-t",
-                instance.tmux_target,
-            ],
-            capture_output=True,
-            timeout=5,
+    with tempfile.TemporaryDirectory(prefix="gr-tmux-", dir="/tmp") as work_dir_raw:
+        work_dir = Path(work_dir_raw)
+        instance = TerminalInstance(
+            name="bash",
+            session_key="s1",
+            socket_path=work_dir / "tmux.sock",
+            private_dir=work_dir,
+            command="sh",
+            args=["-c", "exit 0"],
+            keep_alive_after_exit=True,
         )
-        assert probe.returncode == 0, (
-            "tmux server/session died when the inner process exited — "
-            "exit-empty/remain-on-exit were not applied: "
-            f"{probe.stderr.decode().strip()!r}"
-        )
-    finally:
-        await instance.close()
+        try:
+            await instance.launch(cwd=work_dir)
+
+            # Wait for the inner `sh` to exit. is_alive() flips running -> False
+            # once the pane is dead.
+            for _ in range(250):
+                if not await instance.is_alive():
+                    break
+                await asyncio.sleep(0.02)
+            else:  # pragma: no cover - only on a hang/regression
+                raise AssertionError("inner process never reported as exited")
+
+            # The crux: the private tmux SERVER must still be reachable after the
+            # inner process exited — has-session succeeds rather than failing with
+            # "no server running on <socket>".
+            probe = subprocess.run(
+                [
+                    "tmux",
+                    "-S",
+                    str(instance.socket_path),
+                    "has-session",
+                    "-t",
+                    instance.tmux_target,
+                ],
+                capture_output=True,
+                timeout=5,
+            )
+            assert probe.returncode == 0, (
+                "tmux server/session died when the inner process exited — "
+                "exit-empty/remain-on-exit were not applied: "
+                f"{probe.stderr.decode().strip()!r}"
+            )
+        finally:
+            await instance.close()
 
 
 async def _capture_launch_argv(
@@ -570,7 +572,7 @@ async def test_launch_disables_tmux_pane_and_window_creation_controls(
 
     The launcher should not leave tmux's default prefix table or
     right-click menus available, because those let an attached user
-    create extra panes, windows, or sessions outside Omnigent' terminal
+    create extra panes, windows, or sessions outside Goalrail' terminal
     registry.
 
     :param tmp_path: Temporary directory used for the fake tmux socket.
@@ -699,14 +701,14 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "ambient-host-profile")
     # A benign ambient var that is NOT in env_unset — proves the strip
     # is surgical rather than a wholesale wipe. (We can't use
-    # ``OMNIGENT_TMUX_SOCK`` for this any more: the sandbox hardening
+    # ``GOALRAIL_TMUX_SOCK`` for this any more: the sandbox hardening
     # stopped ``launch`` from advertising the control-socket path to the pane.)
-    monkeypatch.setenv("OMNIGENT_BENIGN_SENTINEL", "keep-me")
-    # Seed an inherited OMNIGENT_TMUX_SOCK so the negative assertion
+    monkeypatch.setenv("GOALRAIL_BENIGN_SENTINEL", "keep-me")
+    # Seed an inherited GOALRAIL_TMUX_SOCK so the negative assertion
     # below exercises ``launch``'s explicit ``env.pop`` of any ambient
     # value — not merely the fact that launch stopped *setting* it
     # (``launch`` strips both the self-set and any inherited value).
-    monkeypatch.setenv("OMNIGENT_TMUX_SOCK", "/leaked/from/parent.sock")
+    monkeypatch.setenv("GOALRAIL_TMUX_SOCK", "/leaked/from/parent.sock")
 
     instance = TerminalInstance(
         name="bash",
@@ -745,15 +747,15 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     # Sanity check that ordinary env still flows through — the strip
     # must be surgical, not a wholesale wipe. The benign ambient var
     # set above must survive since it is not in ``env_unset``.
-    assert spawned_env.get("OMNIGENT_BENIGN_SENTINEL") == "keep-me", (
+    assert spawned_env.get("GOALRAIL_BENIGN_SENTINEL") == "keep-me", (
         "benign ambient var missing from tmux env — env_unset "
         "must remove only the listed keys, not the entire env."
     )
     # And the control-socket path must NOT be advertised to the pane
     # the tmux server is unsandboxed, so a pane that knows
     # the socket path could ``tmux -S <sock> run-shell`` out of the box.
-    assert "OMNIGENT_TMUX_SOCK" not in spawned_env, (
-        "OMNIGENT_TMUX_SOCK leaked into the tmux child env — the pane "
+    assert "GOALRAIL_TMUX_SOCK" not in spawned_env, (
+        "GOALRAIL_TMUX_SOCK leaked into the tmux child env — the pane "
         "must not be told the unsandboxed control socket's path."
     )
 
@@ -922,7 +924,7 @@ async def test_launch_strips_runner_binding_token_from_tmux_child(
     # The control-socket path must not be advertised to the
     # pane — the unsandboxed tmux server's run-shell would otherwise be
     # one ``tmux -S <sock>`` away for the agent payload in the pane.
-    assert "OMNIGENT_TMUX_SOCK" not in spawned_env
+    assert "GOALRAIL_TMUX_SOCK" not in spawned_env
 
 
 @pytest.mark.asyncio
@@ -1084,7 +1086,7 @@ def _write_instance_dir(root: Path, name: str, owner_pid: int | None) -> Path:
     Create a fake terminal instance dir under the sweep root.
 
     :param root: Fake temp root the sweep scans.
-    :param name: Directory name, e.g. ``"omnigent-terminal-dead1"``.
+    :param name: Directory name, e.g. ``"goalrail-terminal-dead1"``.
     :param owner_pid: Owner pid to record, or ``None`` for no marker
         (an unrelated / pre-marker dir the sweep must not touch).
     :returns: The created directory path.
@@ -1146,9 +1148,9 @@ def test_reap_orphaned_terminals_reaps_only_dead_owner_dirs(
         "subprocess",
         SimpleNamespace(run=_raise_if_called, TimeoutExpired=TimeoutError),
     )
-    dead_dir = _write_instance_dir(tmp_path, "omnigent-terminal-dead1", _dead_pid())
-    live_dir = _write_instance_dir(tmp_path, "omnigent-terminal-live1", os.getpid())
-    unmarked_dir = _write_instance_dir(tmp_path, "omnigent-terminal-old1", None)
+    dead_dir = _write_instance_dir(tmp_path, "goalrail-terminal-dead1", _dead_pid())
+    live_dir = _write_instance_dir(tmp_path, "goalrail-terminal-live1", os.getpid())
+    unmarked_dir = _write_instance_dir(tmp_path, "goalrail-terminal-old1", None)
 
     reaped = terminal_mod.reap_orphaned_terminals()
 
@@ -1190,7 +1192,7 @@ def test_reap_orphaned_terminals_kills_server_for_dead_owner_socket(
         "subprocess",
         SimpleNamespace(run=_record_run, TimeoutExpired=TimeoutError),
     )
-    dead_dir = _write_instance_dir(tmp_path, "omnigent-terminal-dead2", _dead_pid())
+    dead_dir = _write_instance_dir(tmp_path, "goalrail-terminal-dead2", _dead_pid())
     socket_path = dead_dir / "tmux.sock"
     socket_path.touch()
 

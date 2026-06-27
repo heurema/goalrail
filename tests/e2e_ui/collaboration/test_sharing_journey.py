@@ -43,7 +43,7 @@ _READONLY_PLACEHOLDER = "You have read-only access to this session"
 _ASSISTANT = '[data-testid="message-bubble"][data-role="assistant"]'
 _BUBBLE = '[data-testid="message-bubble"]'
 
-# Permission levels mirrored from omnigent/server/auth.py.
+# Permission levels mirrored from goalrail/server/auth.py.
 _LEVEL_READ = 1
 _LEVEL_EDIT = 2
 

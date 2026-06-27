@@ -261,7 +261,7 @@ def test_codex_skills_filter_e2e(
     straight to the right layer.
 
     :param http_client: The session-scoped ``httpx.Client`` from
-        ``tests.e2e.conftest``, pointed at a live Omnigent server.
+        ``tests.e2e.conftest``, pointed at a live Goalrail server.
     :param fixture: Name of the fixture agent dir under
         ``tests/resources/agents/`` whose ``skills:`` value
         determines what the agent is allowed to see.

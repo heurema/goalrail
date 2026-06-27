@@ -2,7 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSeenCommentIds, markCommentsSeen, useSeenCommentIds } from "./useSeenComments";
 
-const STORAGE_KEY = "omnigent:seen-comment-ids";
+const STORAGE_KEY = "goalrail:seen-comment-ids";
 
 beforeEach(() => {
   localStorage.clear();

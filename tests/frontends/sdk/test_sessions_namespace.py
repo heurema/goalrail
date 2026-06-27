@@ -1,4 +1,4 @@
-"""Unit tests for :class:`omnigent_client._sessions.SessionsNamespace`.
+"""Unit tests for :class:`goalrail_client._sessions.SessionsNamespace`.
 
 Mocks at the HTTP transport boundary via :class:`httpx.MockTransport`,
 using real types (``Session``, ``SessionEventInput``, the typed
@@ -25,7 +25,7 @@ What each test claims to prove (and what failure indicates):
   :data:`ServerStreamEvent` instances and that malformed/unknown
   payloads are skipped without aborting iteration. Failure means a
   schema drift between server and SDK silently drops events.
-* ``test_*_404``: that the namespace propagates :class:`OmnigentError`
+* ``test_*_404``: that the namespace propagates :class:`GoalrailError`
   for non-2xx responses; failure means errors are silently swallowed.
 """
 
@@ -37,13 +37,13 @@ from typing import Any
 
 import httpx
 import pytest
-from omnigent_client._errors import OmnigentError
-from omnigent_client._sessions import (
+from goalrail_client._errors import GoalrailError
+from goalrail_client._sessions import (
     Session,
     SessionsNamespace,
 )
 
-from omnigent.server.schemas import (
+from goalrail.server.schemas import (
     CompletedEvent,
     OutputTextDeltaEvent,
     SessionInputConsumedEvent,
@@ -199,7 +199,7 @@ async def test_create_with_empty_metadata_sends_json_object() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_404_raises_omnigent_error() -> None:
+async def test_create_404_raises_goalrail_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             404,
@@ -208,7 +208,7 @@ async def test_create_404_raises_omnigent_error() -> None:
 
     ns, client = _make_namespace(handler)
     try:
-        with pytest.raises(OmnigentError) as exc_info:
+        with pytest.raises(GoalrailError) as exc_info:
             await ns.create(b"bundle-bytes")
     finally:
         await client.aclose()
@@ -316,7 +316,7 @@ async def test_bind_runner_patches_runner_id_and_returns_snapshot() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bind_runner_400_raises_omnigent_error() -> None:
+async def test_bind_runner_400_raises_goalrail_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             400,
@@ -325,7 +325,7 @@ async def test_bind_runner_400_raises_omnigent_error() -> None:
 
     ns, client = _make_namespace(handler)
     try:
-        with pytest.raises(OmnigentError) as exc_info:
+        with pytest.raises(GoalrailError) as exc_info:
             await ns.bind_runner("conv_abc", runner_id="runner_offline")
     finally:
         await client.aclose()
@@ -525,7 +525,7 @@ async def test_post_event_404_raises() -> None:
 
     ns, client = _make_namespace(handler)
     try:
-        with pytest.raises(OmnigentError):
+        with pytest.raises(GoalrailError):
             await ns.post_event("conv_x", {"type": "message", "data": {}})
     finally:
         await client.aclose()
@@ -668,7 +668,7 @@ async def test_stream_404_raises_before_first_yield() -> None:
 
     ns, client = _make_namespace(handler)
     try:
-        with pytest.raises(OmnigentError):
+        with pytest.raises(GoalrailError):
             async for _ in ns.stream("conv_missing"):
                 pytest.fail("Should have raised before yielding any event")
     finally:
@@ -1139,7 +1139,7 @@ async def test_fork_omits_title_when_none() -> None:
 
 @pytest.mark.asyncio
 async def test_fork_404_raises() -> None:
-    """``fork()`` raises ``OmnigentError`` when the source session is missing.
+    """``fork()`` raises ``GoalrailError`` when the source session is missing.
 
     Failure to raise means the SDK is swallowing server errors.
     """
@@ -1152,7 +1152,7 @@ async def test_fork_404_raises() -> None:
 
     ns, client = _make_namespace(_handler)
     try:
-        with pytest.raises(OmnigentError):
+        with pytest.raises(GoalrailError):
             await ns.fork("conv_nonexistent")
     finally:
         await client.aclose()

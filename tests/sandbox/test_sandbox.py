@@ -2,7 +2,7 @@
 Tests for the sandbox wrapper package.
 
 The wrapper is pure re-exports of the existing
-``omnigent.inner.sandbox`` surface, so the tests only verify two
+``goalrail.inner.sandbox`` surface, so the tests only verify two
 properties: every name the ``__all__`` lists is importable, and the
 wrapped names are the same Python objects as their inner
 counterparts. Behavioral tests for the underlying implementation live
@@ -12,29 +12,29 @@ directly.
 
 from __future__ import annotations
 
-import omnigent.inner.bwrap_sandbox as inner_bwrap
-import omnigent.inner.sandbox as inner_sandbox
-from omnigent import sandbox
-from omnigent.sandbox import bwrap
+import goalrail.inner.bwrap_sandbox as inner_bwrap
+import goalrail.inner.sandbox as inner_sandbox
+from goalrail import sandbox
+from goalrail.sandbox import bwrap
 
 
 def test_sandbox_all_symbols_importable() -> None:
     """
-    Every name in ``omnigent.sandbox.__all__`` resolves to an attribute on
+    Every name in ``goalrail.sandbox.__all__`` resolves to an attribute on
     the wrapper module.
 
     Catches accidental drift between the ``__all__`` list and the actual
     re-export — the failure mode is "looks fine in the source, breaks at
-    `from omnigent.sandbox import X`".
+    `from goalrail.sandbox import X`".
     """
     for name in sandbox.__all__:
-        assert hasattr(sandbox, name), f"omnigent.sandbox missing re-export {name!r}"
+        assert hasattr(sandbox, name), f"goalrail.sandbox missing re-export {name!r}"
 
 
 def test_sandbox_reexports_are_inner_objects() -> None:
     """
     The re-exported symbols are the same Python objects as the originals
-    in ``omnigent.inner.sandbox``.
+    in ``goalrail.inner.sandbox``.
 
     Identity (``is``) — not equality — because anything else means the
     wrapper has accidentally introduced a parallel definition. Drift here
@@ -58,7 +58,7 @@ def test_sandbox_reexports_are_inner_objects() -> None:
 
 def test_bwrap_all_symbols_importable() -> None:
     """
-    Every name in ``omnigent.sandbox.bwrap.__all__`` resolves on the
+    Every name in ``goalrail.sandbox.bwrap.__all__`` resolves on the
     submodule.
 
     The bwrap wrapper exists for re-export + side-effecting
@@ -66,13 +66,13 @@ def test_bwrap_all_symbols_importable() -> None:
     consumers.
     """
     for name in bwrap.__all__:
-        assert hasattr(bwrap, name), f"omnigent.sandbox.bwrap missing re-export {name!r}"
+        assert hasattr(bwrap, name), f"goalrail.sandbox.bwrap missing re-export {name!r}"
 
 
 def test_bwrap_reexports_are_inner_objects() -> None:
     """
     ``BwrapSandboxBackend`` re-exports the same identity as
-    ``omnigent.inner.bwrap_sandbox``.
+    ``goalrail.inner.bwrap_sandbox``.
 
     ``isinstance`` checks against the wrapper class must succeed for
     the registration side effect to be observable through the
@@ -114,11 +114,11 @@ def test_default_sandbox_for_platform_is_bwrap_on_linux_regardless_of_binary() -
     import sys
     from unittest.mock import patch
 
-    from omnigent.inner.datamodel import OSEnvSandboxSpec
+    from goalrail.inner.datamodel import OSEnvSandboxSpec
 
     with (
         patch.object(sys, "platform", "linux"),
-        patch("omnigent.inner.sandbox.shutil.which", return_value=None),
+        patch("goalrail.inner.sandbox.shutil.which", return_value=None),
     ):
         spec = inner_sandbox._default_sandbox_for_platform()
     assert isinstance(spec, OSEnvSandboxSpec)
@@ -138,11 +138,11 @@ def test_default_sandbox_for_platform_is_seatbelt_on_macos_regardless_of_binary(
     import sys
     from unittest.mock import patch
 
-    from omnigent.inner.datamodel import OSEnvSandboxSpec
+    from goalrail.inner.datamodel import OSEnvSandboxSpec
 
     with (
         patch.object(sys, "platform", "darwin"),
-        patch("omnigent.inner.sandbox.shutil.which", return_value=None),
+        patch("goalrail.inner.sandbox.shutil.which", return_value=None),
     ):
         spec = inner_sandbox._default_sandbox_for_platform()
     assert isinstance(spec, OSEnvSandboxSpec)

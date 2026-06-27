@@ -1,6 +1,6 @@
 """Unit tests for UDS transport helper functions (no subprocess spawning).
 
-Tests the pure-logic helpers in ``omnigent.runner.transports.uds``:
+Tests the pure-logic helpers in ``goalrail.runner.transports.uds``:
 socket probing, client factory, path construction, and subprocess
 configuration — all without launching real uvicorn.
 """
@@ -15,7 +15,7 @@ import tempfile
 import httpx
 import pytest
 
-from omnigent.runner.transports.uds import (
+from goalrail.runner.transports.uds import (
     RunnerSubprocess,
     _is_socket_listening,
     create_uds_client,

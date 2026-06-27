@@ -12,12 +12,12 @@ from typing_extensions import Unpack
 from websockets.exceptions import InvalidStatus, InvalidURI, WebSocketException
 from websockets.http11 import Response
 
-from omnigent.runner.identity import (
-    OMNIGENT_INTERNAL_WS_ORIGIN,
+from goalrail.runner.identity import (
+    GOALRAIL_INTERNAL_WS_ORIGIN,
     RUNNER_TUNNEL_TOKEN_HEADER,
 )
-from omnigent.runner.transports.ws_tunnel import serve as serve_module
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.runner.transports.ws_tunnel import serve as serve_module
+from goalrail.runner.transports.ws_tunnel.frames import (
     PingFrame,
     RequestCancelFrame,
     RequestFrame,
@@ -26,7 +26,7 @@ from omnigent.runner.transports.ws_tunnel.frames import (
     WSOpenFrame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.serve import (
+from goalrail.runner.transports.ws_tunnel.serve import (
     _handle_tunnel_frame,
     _serve_tunnel_once,
     _websocket_auth_redirect_url,
@@ -553,7 +553,7 @@ async def test_serve_tunnel_once_sends_bearer_header(
     # addition to the bearer and tunnel-binding token.
     assert captured["kwargs"] == {
         "additional_headers": {
-            "Origin": OMNIGENT_INTERNAL_WS_ORIGIN,
+            "Origin": GOALRAIL_INTERNAL_WS_ORIGIN,
             "Authorization": "Bearer tok-auth",
             RUNNER_TUNNEL_TOKEN_HEADER: "bind-token",
         },

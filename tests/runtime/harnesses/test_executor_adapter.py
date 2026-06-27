@@ -1,9 +1,9 @@
 """
-Tests for :class:`omnigent.runtime.harnesses._executor_adapter.ExecutorAdapter`.
+Tests for :class:`goalrail.runtime.harnesses._executor_adapter.ExecutorAdapter`.
 
 End-to-end through real subprocesses spawned via the same
 :class:`HarnessProcessManager` used in production. Uses
-:class:`omnigent.inner.executor.MockExecutor` as the inner
+:class:`goalrail.inner.executor.MockExecutor` as the inner
 executor — no real LLM SDK required. The adapter's per-event
 translation contract is what's under test; per-harness
 configuration (Claude SDK CLI discovery, Codex subprocess setup,
@@ -25,9 +25,9 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.inner.executor import Executor
-from omnigent.runtime.harnesses import _HARNESS_MODULES
-from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+from goalrail.inner.executor import Executor
+from goalrail.runtime.harnesses import _HARNESS_MODULES
+from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
 _TEST_HARNESS_NAME = "executor_adapter_fixture"
 _TEST_HARNESS_MODULE = "tests.runtime.harnesses._test_executor_adapter_harness"
@@ -102,7 +102,7 @@ def register_fixture_harness() -> Iterator[None]:
 @pytest.fixture
 def short_tmp_parent() -> Iterator[Path]:
     """Per-test parent directory under /tmp with a short path."""
-    parent = Path("/tmp") / f"omni-ia-{uuid.uuid4().hex[:8]}"
+    parent = Path("/tmp") / f"goalrail-ia-{uuid.uuid4().hex[:8]}"
     parent.mkdir(mode=0o700)
     try:
         yield parent
@@ -431,9 +431,9 @@ async def test_turn_cancelled_terminates_with_response_cancelled(
 # ── Error-code classification ──────────────────────────────────
 
 
-def test_build_error_detail_uses_omnigent_error_code() -> None:
+def test_build_error_detail_uses_goalrail_error_code() -> None:
     """
-    :class:`OmnigentError` (and its
+    :class:`GoalrailError` (and its
     :class:`RetryableLLMError` / :class:`PermanentLLMError`
     subclasses) carry a semantic ``code`` field; the adapter's
     override uses it verbatim instead of the exception class
@@ -446,9 +446,9 @@ def test_build_error_detail_uses_omnigent_error_code() -> None:
     timeout as permanent. The whole point of step 5j is the
     structured ``code + retryable`` flowing through.
     """
-    from omnigent.llms.errors import LLMErrorDetail, RetryableLLMError
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.runtime.harnesses._scaffold import HarnessApp
+    from goalrail.llms.errors import LLMErrorDetail, RetryableLLMError
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._scaffold import HarnessApp
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     error = RetryableLLMError(
@@ -458,10 +458,10 @@ def test_build_error_detail_uses_omnigent_error_code() -> None:
     )
     detail = adapter._build_error_detail(error)
 
-    # Code preserved verbatim — the Omnigent allowlist matches this and
+    # Code preserved verbatim — the Goalrail allowlist matches this and
     # marks the failure retryable. Class-name fallback (which the
     # base HarnessApp implementation would have used) gives
-    # ``"RetryableLLMError"`` instead, which Omnigent would NOT match.
+    # ``"RetryableLLMError"`` instead, which Goalrail would NOT match.
     assert detail.code == "rate_limit_exceeded"
     assert "rate-limited by gateway" in detail.message
     # Sanity: the base class fallback would NOT have produced this
@@ -487,7 +487,7 @@ def test_classify_openai_exception_maps_known_types() -> None:
     """
     import openai
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_openai_exception,
     )
 
@@ -535,7 +535,7 @@ def test_classify_openai_exception_context_length_exceeded_direct() -> None:
     """
     import openai
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_openai_exception,
     )
 
@@ -559,7 +559,7 @@ def test_classify_openai_exception_context_length_exceeded_wrapped() -> None:
     """
     import openai
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_openai_exception,
     )
 
@@ -590,7 +590,7 @@ def test_classify_claude_sdk_exception_maps_connection_error() -> None:
     """
     import claude_agent_sdk
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_claude_sdk_exception,
     )
 
@@ -616,7 +616,7 @@ def test_classify_httpx_exception_maps_timeout_and_connect() -> None:
     httpx layer (rather than inside the SDK's wrapper) would
     not be retryable.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_httpx_exception,
     )
 
@@ -643,7 +643,7 @@ def test_classify_anthropic_exception_returns_none_when_sdk_not_installed() -> N
     error in environments that don't ship the SDK (e.g. the
     openai-agents wrap deployment).
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_anthropic_exception,
     )
 
@@ -710,7 +710,7 @@ def test_classify_anthropic_exception_maps_known_types(
     fake_anthropic.InternalServerError = _InternalServer  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _classify_anthropic_exception,
     )
 
@@ -747,7 +747,7 @@ def test_classify_inner_exception_dispatches_across_sdks(
 
     import openai
 
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         classify_inner_exception,
     )
 
@@ -827,7 +827,7 @@ def test_translate_input_to_messages_reconstructs_full_history() -> None:
     context and answers "What?" the way the user reported
     against ``--resume``.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _translate_input_to_messages,
     )
 
@@ -872,12 +872,12 @@ def test_translate_input_to_messages_string_input_fallback() -> None:
     Plain-string ``input`` → single user message.
 
     Backwards-compat fallback for any caller that still sends
-    the original shape (a bare string is the Omnigent API's shorthand
+    the original shape (a bare string is the Goalrail API's shorthand
     for a single ``input_text`` block from the user). One
     user-role :class:`Message` so the inner executor's
     single-turn path keeps working.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _translate_input_to_messages,
     )
 
@@ -890,14 +890,14 @@ def test_translate_input_to_messages_legacy_content_blocks_fallback() -> None:
     """
     Bare content-block list (no role wrappers) → single user message.
 
-    The pre-history-fix wire format. Omnigent clients that haven't
+    The pre-history-fix wire format. Goalrail clients that haven't
     been migrated still send this, and the harness must keep
     handling it the same way (concat all ``text`` fields into
     a single user message). This test pins the fallback so a
     future cleanup doesn't accidentally drop bare-block
     callers.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _translate_input_to_messages,
     )
 
@@ -927,7 +927,7 @@ def test_translate_input_to_messages_drops_empty_message_blocks() -> None:
     serialized "Conversation so far:" prefix focused on the
     parts the LLM actually benefits from.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         _translate_input_to_messages,
     )
 
@@ -1011,26 +1011,26 @@ def test_translate_event_mcp_tool_call_request_emits_observed_with_bare_name() -
     """
     A ``ToolCallRequest`` carrying an MCP-prefixed name emits
     an observed ``function_call`` event with the BARE tool
-    name (no ``mcp__omnigent__`` prefix), inline.
+    name (no ``mcp__goalrail__`` prefix), inline.
 
     What this proves: the user sees ``⏵ sys_terminal_launch`` in
-    the REPL, not ``⏵ mcp__omnigent__sys_terminal_launch`` — the
-    Omnigent wire shape and persisted store items carry the bare name
-    (per ``omnigent/runtime/workflow.py``'s
+    the REPL, not ``⏵ mcp__goalrail__sys_terminal_launch`` — the
+    Goalrail wire shape and persisted store items carry the bare name
+    (per ``goalrail/runtime/workflow.py``'s
     ``_observed_tool_call_sse_dicts``); a regression that
     surfaced the MCP-prefixed name in the SSE event would
     cause the REPL's `⏵` line to display the noisy prefix.
     Pinning the bare-name contract here keeps the adapter's
-    emission consistent with the rest of the Omnigent wire path.
+    emission consistent with the rest of the Goalrail wire path.
     """
-    from omnigent.inner.executor import ToolCallRequest
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext(response_id="resp_test")
 
     event = ToolCallRequest(
-        name="mcp__omnigent__sys_terminal_launch",
+        name="mcp__goalrail__sys_terminal_launch",
         args={"terminal": "shell", "session": "probe"},
         metadata={"call_id": "tool_use_abc123"},
     )
@@ -1055,9 +1055,9 @@ def test_translate_event_mcp_tool_call_request_emits_observed_with_bare_name() -
     )
     assert item["name"] == "sys_terminal_launch", (
         f"Tool name in the observed emit must be bare (no "
-        f"``mcp__omnigent__`` prefix); got {item['name']!r}. "
+        f"``mcp__goalrail__`` prefix); got {item['name']!r}. "
         f"If the prefix leaked through, the REPL would render "
-        f"``⏵ mcp__omnigent__sys_terminal_launch`` instead of "
+        f"``⏵ mcp__goalrail__sys_terminal_launch`` instead of "
         f"``⏵ sys_terminal_launch``."
     )
     assert item["call_id"] == "tool_use_abc123", (
@@ -1074,8 +1074,8 @@ def test_tool_call_complete_suppressed_for_dispatched_executor() -> None:
     """A normal internally-handling executor's ``ToolCallComplete`` is
     suppressed mid-turn (its tools round-trip through dispatch_tool, which
     emits the output) — the existing dedup contract."""
-    from omnigent.inner.executor import ToolCallComplete, ToolCallStatus
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallComplete, ToolCallStatus
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     adapter._executor = _StubExecutor()  # type: ignore[assignment]
@@ -1103,8 +1103,8 @@ def test_translate_event_mcp_request_queues_tool_use_id_for_dispatch() -> None:
     observed call_id — and the SDK client can't dedupe, so the
     REPL renders ``⏵ tool_name`` twice.
     """
-    from omnigent.inner.executor import ToolCallRequest
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1115,7 +1115,7 @@ def test_translate_event_mcp_request_queues_tool_use_id_for_dispatch() -> None:
     for tool_use_id in ("id_1", "id_2", "id_3"):
         adapter._translate_event(  # type: ignore[arg-type]
             ToolCallRequest(
-                name="mcp__omnigent__sys_terminal_launch",
+                name="mcp__goalrail__sys_terminal_launch",
                 args={"x": tool_use_id},
                 metadata={"call_id": tool_use_id},
             ),
@@ -1140,7 +1140,7 @@ def test_translate_event_non_mcp_request_queues_tool_use_id() -> None:
     wrapped harness whose tools round-trip through
     :meth:`_stable_tool_executor` needs the same correlation
     so the dispatch's action_required event reuses the
-    observed event's call_id and the Omnigent REPL can dedupe.
+    observed event's call_id and the Goalrail REPL can dedupe.
 
     Originally, the queue gated on the MCP prefix
     because only claude-sdk-via-MCP went through dispatch.
@@ -1148,7 +1148,7 @@ def test_translate_event_non_mcp_request_queues_tool_use_id() -> None:
     on_invoke_tool callback ALSO routes through
     :meth:`_stable_tool_executor` (no MCP prefix). With the
     old gate, openai-agents tools fell through to a fresh
-    uuid in :func:`_bridge_one_dispatch`, the Omnigent client saw
+    uuid in :func:`_bridge_one_dispatch`, the Goalrail client saw
     two function_call events with different call_ids, and
     the REPL rendered ``⏵ tool_name`` twice plus an empty
     result panel for the orphan call (the 2026-04-29
@@ -1159,8 +1159,8 @@ def test_translate_event_non_mcp_request_queues_tool_use_id() -> None:
     that call), the push is harmless — the queue entry just
     sits there until a real bridged-tool call drains it.
     """
-    from omnigent.inner.executor import ToolCallRequest
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1180,7 +1180,7 @@ def test_translate_event_non_mcp_request_queues_tool_use_id() -> None:
         f"tool_use_id so the dispatch's action_required emit "
         f"reuses the same call_id as the inline observed emit. "
         f"Got {list(adapter._pending_mcp_call_ids)!r} — without "
-        f"this, the Omnigent client receives two function_call events "
+        f"this, the Goalrail client receives two function_call events "
         f"with different call_ids and the REPL double-renders "
         f"the ⏵ line."
     )
@@ -1196,8 +1196,8 @@ def test_translate_event_request_without_tool_use_id_does_not_queue() -> None:
     to correlate, and pushing ``None`` (or any sentinel)
     would mis-pair a later dispatch against a non-existent id.
     """
-    from omnigent.inner.executor import ToolCallRequest
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1239,7 +1239,7 @@ def test_run_turn_clears_mcp_queue_at_turn_start() -> None:
     state-check is more decisive than threading a complete
     turn through HarnessProcessManager.
     """
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     # Simulate stale state from a prior turn that never drained.
@@ -1265,10 +1265,10 @@ async def test_stable_tool_executor_pops_queue_for_bare_tool_name() -> None:
     form.
 
     What this proves and why it matters: the Claude SDK's MCP
-    server wrapper strips the ``mcp__omnigent__`` prefix
+    server wrapper strips the ``mcp__goalrail__`` prefix
     before invoking the tool callback. So
     ``_stable_tool_executor`` receives ``"sys_terminal_launch"``,
-    NOT ``"mcp__omnigent__sys_terminal_launch"``. An earlier
+    NOT ``"mcp__goalrail__sys_terminal_launch"``. An earlier
     iteration of this fix gated the queue pop on
     ``tool_name.startswith("mcp__")`` — that guard NEVER fired
     in production because the prefix was already stripped, the
@@ -1284,7 +1284,7 @@ async def test_stable_tool_executor_pops_queue_for_bare_tool_name() -> None:
     callback receives the bare name, so the pop must NOT gate
     on the prefix.
     """
-    from omnigent.runtime.harnesses._executor_adapter import (
+    from goalrail.runtime.harnesses._executor_adapter import (
         ExecutorAdapter,
         _bridge_one_dispatch,
     )
@@ -1374,20 +1374,20 @@ async def test_observed_and_dispatched_call_ids_match_for_openai_agents() -> Non
     - Dispatch fires with call_id = B (fresh uuid because
       ``_pending_mcp_call_ids`` was empty — the pre-fix gate
       restricted pushes to MCP-prefixed names)
-    - Omnigent client sees A != B → no dedup → REPL renders ⏵ twice
+    - Goalrail client sees A != B → no dedup → REPL renders ⏵ twice
       and orphan-flushes A with empty result at response.completed
       (the empty result panel)
 
     With the gate removed, the queue gets the tool_use_id at
     ToolCallRequest time, ``_stable_tool_executor`` pops it, and
-    the dispatch reuses A → Omnigent client dedupes → single ⏵ render.
+    the dispatch reuses A → Goalrail client dedupes → single ⏵ render.
 
     Failure mode this catches: anyone who reintroduces the
     MCP-prefix gate on the queue push will fail this test
     immediately.
     """
-    from omnigent.inner.executor import ToolCallRequest
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1464,7 +1464,7 @@ async def test_observed_and_dispatched_call_ids_match_for_openai_agents() -> Non
     # Step 3 — the dispatched call_id MUST match the observed one.
     assert captured_dispatched_call_ids == [sdk_call_id], (
         f"Dispatch must reuse the observed event's call_id so "
-        f"the Omnigent client can dedupe. Observed call_id was "
+        f"the Goalrail client can dedupe. Observed call_id was "
         f"{observed_call_id!r}; dispatched call_ids were "
         f"{captured_dispatched_call_ids!r}. A mismatch here is "
         f"the exact 2026-04-29 user-reported regression — the "
@@ -1476,10 +1476,10 @@ async def test_observed_and_dispatched_call_ids_match_for_openai_agents() -> Non
 @pytest.mark.asyncio
 async def test_executor_adapter_builds_config_from_request() -> None:
     """Forwards request controls but not agent name as executor model."""
-    from omnigent.inner.executor import Executor, ExecutorConfig, Message, ToolSpec, TurnComplete
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.runtime.harnesses._scaffold import TurnContext
-    from omnigent.server.schemas import CreateResponseRequest
+    from goalrail.inner.executor import Executor, ExecutorConfig, Message, ToolSpec, TurnComplete
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._scaffold import TurnContext
+    from goalrail.server.schemas import CreateResponseRequest
 
     captured: dict[str, object] = {}
 
@@ -1514,6 +1514,54 @@ async def test_executor_adapter_builds_config_from_request() -> None:
 
 
 @pytest.mark.asyncio
+async def test_executor_adapter_invalid_trace_id_falls_back_when_tracing_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid test response ids must not break turns when tracing is on."""
+    import asyncio
+
+    from goalrail.inner.executor import Executor, ExecutorConfig, Message, ToolSpec, TurnComplete
+    from goalrail.runtime.harnesses import _executor_adapter as executor_adapter_mod
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._scaffold import TurnContext
+    from goalrail.server.schemas import CreateResponseRequest
+
+    captured: dict[str, bool] = {}
+
+    class _FakeTracingContext:
+        _current_span = None
+
+        def start_agent_span(self, **_: object) -> object:
+            return object()
+
+        def end_agent_span(self, *_: object, **__: object) -> None:
+            pass
+
+    class _CaptureExecutor(Executor):
+        async def run_turn(
+            self,
+            messages: list[Message],
+            tools: list[ToolSpec],
+            system_prompt: str,
+            config: ExecutorConfig | None = None,
+        ):
+            del messages, tools, system_prompt, config
+            captured["ran"] = True
+            yield TurnComplete(response="ok")
+
+    monkeypatch.setattr(executor_adapter_mod, "is_tracing_enabled", lambda: True)
+    monkeypatch.setattr(executor_adapter_mod, "TracingContext", _FakeTracingContext)
+
+    adapter = ExecutorAdapter(executor_factory=lambda: _CaptureExecutor())
+    ctx = TurnContext(
+        response_id="resp_reason", event_queue=asyncio.Queue(), cancelled=asyncio.Event()
+    )
+    await adapter.run_turn(CreateResponseRequest(model="my_coding_agent", input="hi"), ctx)
+
+    assert captured["ran"] is True
+
+
+@pytest.mark.asyncio
 async def test_executor_adapter_forwards_model_override_to_config() -> None:
     """``request.model_override`` is threaded into ``ExecutorConfig.model``.
 
@@ -1527,10 +1575,10 @@ async def test_executor_adapter_forwards_model_override_to_config() -> None:
     Without this, every harness-backed agent silently ignores
     ``/model``.
     """
-    from omnigent.inner.executor import Executor, ExecutorConfig, Message, ToolSpec, TurnComplete
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.runtime.harnesses._scaffold import TurnContext
-    from omnigent.server.schemas import CreateResponseRequest
+    from goalrail.inner.executor import Executor, ExecutorConfig, Message, ToolSpec, TurnComplete
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._scaffold import TurnContext
+    from goalrail.server.schemas import CreateResponseRequest
 
     captured: dict[str, object] = {}
 
@@ -1637,8 +1685,8 @@ async def test_watch_injections_emits_consumed_marker_on_accept() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.server.schemas import CreateResponseRequest, InjectionConsumedEvent
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.server.schemas import CreateResponseRequest, InjectionConsumedEvent
 
     executor = _AcceptingInjectionExecutor()
     adapter = ExecutorAdapter(executor_factory=lambda: executor, session_key="sk")
@@ -1681,8 +1729,8 @@ async def test_watch_injections_drops_injection_when_turn_cancelled() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.server.schemas import CreateResponseRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.server.schemas import CreateResponseRequest
 
     executor = _AcceptingInjectionExecutor()
     adapter = ExecutorAdapter(executor_factory=lambda: executor, session_key="sk")
@@ -1712,8 +1760,8 @@ async def test_watch_injections_no_marker_without_injection_id() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.server.schemas import CreateResponseRequest
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.server.schemas import CreateResponseRequest
 
     executor = _AcceptingInjectionExecutor()
     adapter = ExecutorAdapter(executor_factory=lambda: executor, session_key="sk")
@@ -1769,8 +1817,8 @@ async def test_interrupt_drops_inner_session_synchronously() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
-    from omnigent.runtime.harnesses._scaffold import TurnContext
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.runtime.harnesses._scaffold import TurnContext
 
     executor = _InterruptTrackingExecutor()
     adapter = ExecutorAdapter(executor_factory=lambda: executor, session_key="sk")
@@ -1810,8 +1858,8 @@ def test_internal_errored_tool_complete_emits_output_with_real_call_id() -> None
     id and is NEVER ``call_id == ""`` (the pre-fix coercion that orphaned the
     result and left the call a perpetual in-progress card).
     """
-    from omnigent.inner.executor import ToolCallComplete, ToolCallRequest, ToolCallStatus
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallComplete, ToolCallRequest, ToolCallStatus
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1881,8 +1929,8 @@ def test_dispatched_id_tool_complete_is_suppressed() -> None:
     stream and produce a ghost "Waiting for output" card in the Web UI. So a
     ``ToolCallComplete`` carrying a dispatched id must produce NO emit.
     """
-    from omnigent.inner.executor import ToolCallComplete, ToolCallStatus
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallComplete, ToolCallStatus
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1918,8 +1966,8 @@ def test_non_dispatched_id_tool_complete_emits_output() -> None:
     ``dispatch_tool`` round-trip) has its completion as the ONLY output source, so
     it must surface a paired ``function_call_output``.
     """
-    from omnigent.inner.executor import ToolCallComplete, ToolCallStatus
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallComplete, ToolCallStatus
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()
@@ -1957,8 +2005,8 @@ def test_idless_tool_complete_is_suppressed() -> None:
     id-scoped suppression must keep doing so (the ``or ""`` coercion alone left
     this path unguarded).
     """
-    from omnigent.inner.executor import ToolCallComplete, ToolCallStatus
-    from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+    from goalrail.inner.executor import ToolCallComplete, ToolCallStatus
+    from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
     adapter = ExecutorAdapter(executor_factory=lambda: _StubExecutor())
     ctx = _RecordingTurnContext()

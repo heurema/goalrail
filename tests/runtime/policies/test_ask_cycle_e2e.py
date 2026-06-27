@@ -24,16 +24,16 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.runtime.policies import _await_elicitation
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.policies.function import FunctionPolicy
+from goalrail.policies.types import EvaluationContext, PolicyResult
+from goalrail.runtime.policies import _await_elicitation
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy
@@ -462,7 +462,7 @@ async def test_emitted_elicitation_request_matches_mcp_shape(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """Emitted SSE event matches MCP's elicitation primitive
-    byte-for-byte. See ``omnigent/runtime/policies/approval.py``
+    byte-for-byte. See ``goalrail/runtime/policies/approval.py``
     ``_elicitation_request_event`` and
     ``designs/SERVER_HARNESS_CONTRACT.md`` §"Universal API
     additions"."""

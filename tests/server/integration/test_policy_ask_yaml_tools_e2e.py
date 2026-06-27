@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime import pending_elicitations, session_stream
+from goalrail.runtime import pending_elicitations, session_stream
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -35,7 +35,7 @@ _INPUT_ASK_GUARDRAILS: dict[str, Any] = {
             "type": "function",
             "on": ["request"],
             "function": {
-                "path": "omnigent.policies.function.make_fixed_action_callable",
+                "path": "goalrail.policies.function.make_fixed_action_callable",
                 "arguments": {
                     "action": "ask",
                     "reason": "Confirm this message before processing.",
@@ -52,7 +52,7 @@ _TOOL_CALL_ASK_GUARDRAILS: dict[str, Any] = {
             "type": "function",
             "on": ["tool_call"],
             "function": {
-                "path": "omnigent.policies.function.make_fixed_action_callable",
+                "path": "goalrail.policies.function.make_fixed_action_callable",
                 "arguments": {
                     "action": "ask",
                     "reason": "Approve this tool call.",

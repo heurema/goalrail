@@ -1,7 +1,7 @@
 """Tests for native-Codex provider routing (configure harnesses parity).
 
-Covers :func:`omnigent.inner.codex_executor._provider_codex_config_overrides`
-and :func:`omnigent.codex_native_app_server.resolve_native_codex_launch` —
+Covers :func:`goalrail.inner.codex_executor._provider_codex_config_overrides`
+and :func:`goalrail.codex_native_app_server.resolve_native_codex_launch` —
 the path that makes a native Codex terminal route through a ``configure
 harness`` provider just like the in-process codex harness, instead of only
 the Databricks ucode profile. Providers are constructed via the real config
@@ -15,15 +15,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.codex_native_app_server import resolve_native_codex_launch
-from omnigent.inner.codex_executor import _provider_codex_config_overrides
+from goalrail.codex_native_app_server import resolve_native_codex_launch
+from goalrail.inner.codex_executor import _provider_codex_config_overrides
 
 
 @pytest.fixture()
 def _isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Isolate config + ambient so codex routing resolution is deterministic."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CODEX_HOME"):
         monkeypatch.delenv(var, raising=False)
@@ -72,7 +72,7 @@ def test_provider_codex_overrides_coerce_chat_wire_to_responses() -> None:
     )
     joined = "\n".join(overrides)
     assert 'model="qwen/qwen3.7-plus"' in joined
-    assert 'model_provider="omnigent_provider"' in joined
+    assert 'model_provider="goalrail_provider"' in joined
     assert 'base_url="https://openrouter.ai/api/v1"' in joined
     # chat is coerced to responses; codex >= 0.137 rejects a chat config.
     assert 'wire_api="responses"' in joined
@@ -102,7 +102,7 @@ def test_provider_codex_overrides_omit_model_line_when_none() -> None:
     )
     joined = "\n".join(overrides)
     assert "model=" not in joined.replace("model_provider=", "")  # no bare model= line
-    assert 'model_provider="omnigent_provider"' in joined
+    assert 'model_provider="goalrail_provider"' in joined
 
 
 def test_resolve_native_codex_launch_key_default_routes_via_overrides(
@@ -199,7 +199,7 @@ def test_resolve_native_codex_launch_subscription_ignores_private_inherited_home
     """
     A private inherited ``CODEX_HOME`` does not hide the real Codex login.
 
-    Nested Omnigent runs can inherit a per-session private Codex home from
+    Nested Goalrail runs can inherit a per-session private Codex home from
     the parent native terminal. Subscription routing must check the same real
     ``~/.codex`` source that the app-server launch will bridge from; otherwise
     it falls through to a key provider even though the Codex CLI is logged in.
@@ -223,7 +223,7 @@ def test_resolve_native_codex_launch_subscription_ignores_private_inherited_home
         },
     )
     _write_codex_login(_isolated, logged_in=True)
-    inherited = _isolated / ".omnigent" / "codex-native" / "abc123" / "codex-home"
+    inherited = _isolated / ".goalrail" / "codex-native" / "abc123" / "codex-home"
     inherited.mkdir(parents=True)
     monkeypatch.setenv("CODEX_HOME", str(inherited))
 
@@ -249,7 +249,7 @@ def test_resolve_native_codex_launch_subscription_no_login_falls_through_to_key(
     """
     # No ambient providers, so the fall-through target is unambiguously the
     # explicitly-configured key (not a detected env key / Ollama).
-    monkeypatch.setattr("omnigent.onboarding.ambient._ollama_reachable", lambda: False)
+    monkeypatch.setattr("goalrail.onboarding.ambient._ollama_reachable", lambda: False)
     _seed(
         _isolated,
         {
@@ -286,7 +286,7 @@ def test_resolve_native_codex_launch_subscription_no_login_no_alternative_uses_l
     user lands on is ChatGPT's, not a custom config.toml provider's. Failure
     with base_url/auth overrides would mean we fabricated a route from nothing.
     """
-    monkeypatch.setattr("omnigent.onboarding.ambient._ollama_reachable", lambda: False)
+    monkeypatch.setattr("goalrail.onboarding.ambient._ollama_reachable", lambda: False)
     _seed(
         _isolated,
         {"codex-subscription": {"kind": "subscription", "cli": "codex", "default": True}},
@@ -402,7 +402,7 @@ def test_resolve_native_codex_launch_dismissed_config_provider_pins_openai(
     codex kept answering through the gateway after Remove). The launch must
     pin codex's built-in ``openai`` provider instead.
     """
-    monkeypatch.setattr("omnigent.onboarding.ambient._ollama_reachable", lambda: False)
+    monkeypatch.setattr("goalrail.onboarding.ambient._ollama_reachable", lambda: False)
     codex_dir = _isolated / ".codex"
     codex_dir.mkdir()
     (codex_dir / "config.toml").write_text(_DISMISSIBLE_CODEX_CONFIG)
@@ -427,7 +427,7 @@ def test_resolve_native_codex_launch_undismissed_config_provider_routes_via_pin(
     ``openai``. Failure here means the no-provider neutralization fires too
     broadly and breaks the feature's golden path.
     """
-    monkeypatch.setattr("omnigent.onboarding.ambient._ollama_reachable", lambda: False)
+    monkeypatch.setattr("goalrail.onboarding.ambient._ollama_reachable", lambda: False)
     codex_dir = _isolated / ".codex"
     codex_dir.mkdir()
     (codex_dir / "config.toml").write_text(_DISMISSIBLE_CODEX_CONFIG)

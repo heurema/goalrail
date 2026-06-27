@@ -3,7 +3,7 @@ Cross-backend behavioral parity tests for the spawn-time sandboxes.
 
 These tests assert the observable contract every active sandbox
 backend must uphold, run through the live
-:func:`omnigent.inner.os_env.create_os_environment` path so they
+:func:`goalrail.inner.os_env.create_os_environment` path so they
 exercise the helper subprocess end-to-end. They are parametrized
 over the active backend on the current host
 (:func:`tests.inner.sandbox.conftest.active_sandbox_type`):
@@ -33,8 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import create_os_environment
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.os_env import create_os_environment
 from tests.inner.sandbox.conftest import run_async
 
 # ---------------------------------------------------------------------------
@@ -205,15 +205,15 @@ def test_sandbox_blocks_home_library_when_home_read_granted_without_optin(
     fake_home = tmp_path / "home"
     (fake_home / "Library" / "Preferences").mkdir(parents=True)
     (fake_home / "Library" / "Preferences" / "com.example.creds.plist").write_text(
-        "OMNI_S5_LIBRARY_SECRET=must-never-leak"
+        "GOALRAIL_S5_LIBRARY_SECRET=must-never-leak"
     )
     (fake_home / "Library" / "Cookies").mkdir()
     (fake_home / "Library" / "Cookies" / "Cookies.binarycookies").write_text(
-        "OMNI_S5_COOKIES_SECRET=must-never-leak"
+        "GOALRAIL_S5_COOKIES_SECRET=must-never-leak"
     )
     (fake_home / "Documents").mkdir()
     (fake_home / "Documents" / "report.txt").write_text(
-        "OMNI_S5_DOCUMENTS_OK=visible-control-string"
+        "GOALRAIL_S5_DOCUMENTS_OK=visible-control-string"
     )
     monkeypatch.setenv("HOME", str(fake_home))
 
@@ -240,20 +240,20 @@ def test_sandbox_blocks_home_library_when_home_read_granted_without_optin(
     finally:
         os_env.close()
 
-    assert "OMNI_S5_LIBRARY_SECRET=must-never-leak" not in (
+    assert "GOALRAIL_S5_LIBRARY_SECRET=must-never-leak" not in (
         preferences_read.get("stdout", "") + preferences_read.get("stderr", "")
     ), (
         "$HOME/Library/Preferences was readable despite the default-deny. "
         f"Helper saw: stdout={preferences_read.get('stdout')!r} "
         f"stderr={preferences_read.get('stderr')!r}"
     )
-    assert "OMNI_S5_COOKIES_SECRET=must-never-leak" not in (
+    assert "GOALRAIL_S5_COOKIES_SECRET=must-never-leak" not in (
         cookies_read.get("stdout", "") + cookies_read.get("stderr", "")
     ), (
         "$HOME/Library/Cookies was readable — the Library deny is too "
         "narrow (should cover all of Library, not specific subdirs)."
     )
-    assert "OMNI_S5_DOCUMENTS_OK=visible-control-string" in documents_read.get("stdout", ""), (
+    assert "GOALRAIL_S5_DOCUMENTS_OK=visible-control-string" in documents_read.get("stdout", ""), (
         "$HOME/Documents control read failed — the Library deny is too "
         "broad and locked down the rest of HOME as a side effect. "
         f"stdout={documents_read.get('stdout')!r} stderr={documents_read.get('stderr')!r}"
@@ -283,7 +283,7 @@ def test_sandbox_allows_home_library_when_explicit_optin(
     fake_home = tmp_path / "home"
     (fake_home / "Library" / "Logs").mkdir(parents=True)
     (fake_home / "Library" / "Logs" / "app.log").write_text(
-        "OMNI_S5_LOGS_VISIBLE=opted-in-content"
+        "GOALRAIL_S5_LOGS_VISIBLE=opted-in-content"
     )
     monkeypatch.setenv("HOME", str(fake_home))
 
@@ -302,7 +302,7 @@ def test_sandbox_allows_home_library_when_explicit_optin(
     finally:
         os_env.close()
 
-    assert "OMNI_S5_LOGS_VISIBLE=opted-in-content" in logs_read.get("stdout", ""), (
+    assert "GOALRAIL_S5_LOGS_VISIBLE=opted-in-content" in logs_read.get("stdout", ""), (
         "Explicit ~/Library opt-in didn't take effect. The helper should "
         "be able to read this file. "
         f"stdout={logs_read.get('stdout')!r} stderr={logs_read.get('stderr')!r}"
@@ -330,14 +330,14 @@ def test_sandbox_blocks_credential_dotfiles_under_granted_read_path(
     fake_tree = tmp_path / "tree"
     (fake_tree / ".aws").mkdir(parents=True)
     (fake_tree / ".aws" / "credentials").write_text(
-        "[default]\naws_access_key_id=OMNI_S5_AWS_SECRET_LEAK_CANARY"
+        "[default]\naws_access_key_id=GOALRAIL_S5_AWS_SECRET_LEAK_CANARY"
     )
     (fake_tree / ".ssh").mkdir()
     (fake_tree / ".ssh" / "id_ed25519").write_text(
-        "-----BEGIN OPENSSH PRIVATE KEY-----\nOMNI_S5_SSH_SECRET_LEAK_CANARY\n-----END"
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nGOALRAIL_S5_SSH_SECRET_LEAK_CANARY\n-----END"
     )
     (fake_tree / "code").mkdir()
-    (fake_tree / "code" / "app.py").write_text("OMNI_S5_NON_DOTFILE_OK=visible-control")
+    (fake_tree / "code" / "app.py").write_text("GOALRAIL_S5_NON_DOTFILE_OK=visible-control")
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -352,17 +352,17 @@ def test_sandbox_blocks_credential_dotfiles_under_granted_read_path(
     finally:
         os_env.close()
 
-    assert "OMNI_S5_AWS_SECRET_LEAK_CANARY" not in (
+    assert "GOALRAIL_S5_AWS_SECRET_LEAK_CANARY" not in (
         aws_read.get("stdout", "") + aws_read.get("stderr", "")
     ), (
         ".aws/credentials under a read_paths grant was readable — the "
         "dotfile masker did not walk the read_paths root. "
         f"stdout={aws_read.get('stdout')!r} stderr={aws_read.get('stderr')!r}"
     )
-    assert "OMNI_S5_SSH_SECRET_LEAK_CANARY" not in (
+    assert "GOALRAIL_S5_SSH_SECRET_LEAK_CANARY" not in (
         ssh_read.get("stdout", "") + ssh_read.get("stderr", "")
     ), ".ssh/id_ed25519 under a read_paths grant was readable — same regression as the .aws case."
-    assert "OMNI_S5_NON_DOTFILE_OK=visible-control" in code_read.get("stdout", ""), (
+    assert "GOALRAIL_S5_NON_DOTFILE_OK=visible-control" in code_read.get("stdout", ""), (
         "Non-dotfile under the granted read_paths root was unreadable — "
         "the dotfile masker is too broad and masked code/app.py too. "
         f"stdout={code_read.get('stdout')!r} stderr={code_read.get('stderr')!r}"
@@ -389,10 +389,10 @@ def test_sandbox_allows_dotfile_under_read_path_when_allowlisted(
     fake_tree = tmp_path / "tree"
     (fake_tree / ".aws").mkdir(parents=True)
     (fake_tree / ".aws" / "credentials").write_text(
-        "OMNI_S5_AWS_OPTIN_VISIBLE=allowlisted-content"
+        "GOALRAIL_S5_AWS_OPTIN_VISIBLE=allowlisted-content"
     )
     (fake_tree / ".ssh").mkdir()  # NOT on the allowlist; must stay masked
-    (fake_tree / ".ssh" / "id_ed25519").write_text("OMNI_S5_SSH_STILL_MASKED=must-never-leak")
+    (fake_tree / ".ssh" / "id_ed25519").write_text("GOALRAIL_S5_SSH_STILL_MASKED=must-never-leak")
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -414,13 +414,13 @@ def test_sandbox_allows_dotfile_under_read_path_when_allowlisted(
     finally:
         os_env.close()
 
-    assert "OMNI_S5_AWS_OPTIN_VISIBLE=allowlisted-content" in aws_read.get("stdout", ""), (
+    assert "GOALRAIL_S5_AWS_OPTIN_VISIBLE=allowlisted-content" in aws_read.get("stdout", ""), (
         ".aws was in cwd_allow_hidden but the helper couldn't read "
         ".aws/credentials. The allowlist is not being applied to "
         "read_paths roots — operator opt-in is broken. "
         f"stdout={aws_read.get('stdout')!r} stderr={aws_read.get('stderr')!r}"
     )
-    assert "OMNI_S5_SSH_STILL_MASKED=must-never-leak" not in (
+    assert "GOALRAIL_S5_SSH_STILL_MASKED=must-never-leak" not in (
         ssh_read.get("stdout", "") + ssh_read.get("stderr", "")
     ), (
         ".ssh was NOT on the allowlist but the helper could read it — "
@@ -447,7 +447,7 @@ def test_sandbox_hides_user_dotfiles_in_cwd(
     to surface. The assertion is on *content absence*, not on a
     specific error mode.
     """
-    (tmp_path / ".env").write_text("OMNI_TEST_SECRET=super-secret-value-12345")
+    (tmp_path / ".env").write_text("GOALRAIL_TEST_SECRET=super-secret-value-12345")
     (tmp_path / ".aws").mkdir()
     (tmp_path / ".aws" / "credentials").write_text(
         "[default]\naws_access_key_id=AKIA-PROBE-FAIL-IF-LEAKED"

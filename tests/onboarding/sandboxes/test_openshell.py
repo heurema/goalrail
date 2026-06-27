@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.openshell`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.openshell`."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from typing import Any
 import click
 import pytest
 
-from omnigent.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
-from omnigent.onboarding.sandboxes.openshell import (
+from goalrail.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
+from goalrail.onboarding.sandboxes.openshell import (
     HOST_IMAGE_ENV_VAR,
     SANDBOX_ENV_PASSTHROUGH_ENV_VAR,
     OpenShellSandboxLauncher,
@@ -222,7 +222,7 @@ def test_run_background_uses_exec_background(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(launcher, "_openshell", lambda: fake)
 
     result = launcher.run_background(
-        "sb-1", "ENV=val omnigent host --server https://s", log_path="/tmp/host.log"
+        "sb-1", "ENV=val goalrail host --server https://s", log_path="/tmp/host.log"
     )
 
     assert result.returncode == 0
@@ -230,7 +230,7 @@ def test_run_background_uses_exec_background(monkeypatch: pytest.MonkeyPatch) ->
     [(name, command)] = fake.background_calls
     assert name == "sb-1"
     assert command[:2] == ["bash", "-lc"]
-    assert "omnigent host --server https://s" in command[2]
+    assert "goalrail host --server https://s" in command[2]
     assert "> /tmp/host.log 2>&1 < /dev/null" in command[2]
     assert fake.exec_calls == []
 
@@ -305,14 +305,14 @@ def test_exec_foreground_returns_exit_code(monkeypatch: pytest.MonkeyPatch) -> N
     launcher = OpenShellSandboxLauncher()
     monkeypatch.setattr(launcher, "_openshell", lambda: fake)
 
-    rc = launcher.exec_foreground("sb-1", "omnigent host --server https://s")
+    rc = launcher.exec_foreground("sb-1", "goalrail host --server https://s")
 
     assert rc == 0
     [(name, command)] = fake.foreground_calls
     assert name == "sb-1"
     assert command[:2] == ["bash", "-lc"]
     assert command[2].startswith("echo $$ >")
-    assert "exec omnigent host --server https://s" in command[2]
+    assert "exec goalrail host --server https://s" in command[2]
 
 
 def test_exec_foreground_ctrl_c_kills_remote(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -322,7 +322,7 @@ def test_exec_foreground_ctrl_c_kills_remote(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(launcher, "_openshell", lambda: fake)
 
     with pytest.raises(KeyboardInterrupt):
-        launcher.exec_foreground("sb-1", "omnigent host --server https://s")
+        launcher.exec_foreground("sb-1", "goalrail host --server https://s")
 
     # The interrupt handler issued a best-effort kill of the recorded pid.
     assert any("kill $(cat" in command[2] for _name, command, _stdin in fake.exec_calls)
@@ -522,7 +522,7 @@ def test_client_execute_pins_sandbox_home(sdk: _SDKState) -> None:
     Execs run with cwd + ``$HOME`` set to the non-root sandbox user's home.
 
     OpenShell runs as the ``sandbox`` user; without this the host image's
-    ``/root`` cwd/home is unreadable to it and ``omnigent host`` crashes.
+    ``/root`` cwd/home is unreadable to it and ``goalrail host`` crashes.
     """
     client = _OpenShellClient()
 

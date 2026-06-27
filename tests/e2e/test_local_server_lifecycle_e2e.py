@@ -1,8 +1,8 @@
 """End-to-end tests for canonical local-server lifecycle.
 
-A foreground ``omnigent server`` registers itself in the machine-global
+A foreground ``goalrail server`` registers itself in the machine-global
 pidfile AND must stamp the config-signature sidecar, so a later
-``omnigent host`` / ``omnigent run`` reuses it instead of stopping
+``goalrail host`` / ``goalrail run`` reuses it instead of stopping
 and respawning it. These tests spawn the REAL CLI subprocesses and assert
 process survival across the three scenarios the bug report describes:
 
@@ -18,8 +18,8 @@ without ``--llm-api-key``::
     .venv/bin/python -m pytest tests/e2e/test_local_server_lifecycle_e2e.py -v
 
 Each test isolates ``$HOME`` to a tmp dir so the pidfile / sig / DB land
-under ``<home>/.omnigent`` and never touch the developer's real
-``~/.omnigent`` or a server on the real :8000 (a busy :8000 just makes
+under ``<home>/.goalrail`` and never touch the developer's real
+``~/.goalrail`` or a server on the real :8000 (a busy :8000 just makes
 the canonical server fall back to a free port, recorded in the isolated
 pidfile — discovery is via the pidfile, never the port).
 """
@@ -44,13 +44,13 @@ from tests.e2e.helpers import HEALTH_TIMEOUT_S, POLL_INTERVAL_S
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Server boot budget — shared with the e2e suite's live_server fixture: a
-# cold `omnigent server` imports the whole stack and runs SQLite
+# cold `goalrail server` imports the whole stack and runs SQLite
 # migrations before /health answers.
 _SERVER_BOOT_TIMEOUT_S = HEALTH_TIMEOUT_S
 _POLL_INTERVAL_S = POLL_INTERVAL_S
 # How long to let `connect` settle after reuse before we trust the verdict.
 # The bug (stop + respawn) fires within ~1-2s of connect calling
-# ensure_local_omnigent_server, so a host appearing online on the ORIGINAL port
+# ensure_local_goalrail_server, so a host appearing online on the ORIGINAL port
 # within this window is decisive.
 _HOST_ONLINE_TIMEOUT_S = 45.0
 # Env vars that would leak the coding-agent harness's own creds / config
@@ -62,21 +62,21 @@ _ENV_TO_CLEAR = (
     "OPENAI_API_KEY",
     "CLAUDE_CODE",
     "CODEX",
-    "OMNIGENT_DATA_DIR",
-    "OMNIGENT_CONFIG_HOME",
-    "OMNIGENT_AUTH_ENABLED",
-    # Pre-rename alias for OMNIGENT_AUTH_ENABLED — still honored, so strip
+    "GOALRAIL_DATA_DIR",
+    "GOALRAIL_CONFIG_HOME",
+    "GOALRAIL_AUTH_ENABLED",
+    # Pre-rename alias for GOALRAIL_AUTH_ENABLED — still honored, so strip
     # it too or a dev shell that exports it flips the server into accounts mode.
-    "OMNIGENT_ACCOUNTS_ENABLED",
+    "GOALRAIL_ACCOUNTS_ENABLED",
     # An ambient issuer would select oidc once auth is (accidentally) enabled.
-    "OMNIGENT_OIDC_ISSUER",
-    "OMNIGENT_AUTH_PROVIDER",
-    # ensure_local_omnigent_server honors OMNIGENT_DATABASE_URI over the isolated
-    # tmp sqlite db, and the server honors OMNIGENT_RUNNER_TUNNEL_TOKEN — if
+    "GOALRAIL_OIDC_ISSUER",
+    "GOALRAIL_AUTH_PROVIDER",
+    # ensure_local_goalrail_server honors GOALRAIL_DATABASE_URI over the isolated
+    # tmp sqlite db, and the server honors GOALRAIL_RUNNER_TUNNEL_TOKEN — if
     # either is set on the dev box / CI, the spawned server escapes the
     # isolated HOME (shared DB, tunnel-token allowlist) and the test flakes.
-    "OMNIGENT_DATABASE_URI",
-    "OMNIGENT_RUNNER_TUNNEL_TOKEN",
+    "GOALRAIL_DATABASE_URI",
+    "GOALRAIL_RUNNER_TUNNEL_TOKEN",
 )
 
 
@@ -120,7 +120,7 @@ def _isolated_env(home: Path) -> dict[str, str]:
     Databricks profile. PYTHONPATH pins the worktree checkout so the
     subprocess imports the branch under test, not a stale installed wheel.
 
-    :param home: The tmp home dir; ``<home>/.omnigent`` holds the pidfile,
+    :param home: The tmp home dir; ``<home>/.goalrail`` holds the pidfile,
         sig, DB, and artifacts for this test.
     :returns: The environment dict for ``subprocess.Popen``.
     """
@@ -136,9 +136,9 @@ def _pidfile_path(home: Path) -> Path:
     """Return the canonical local-server pidfile path under an isolated home.
 
     :param home: The isolated home dir.
-    :returns: ``<home>/.omnigent/local_server.pid``.
+    :returns: ``<home>/.goalrail/local_server.pid``.
     """
-    return home / ".omnigent" / "local_server.pid"
+    return home / ".goalrail" / "local_server.pid"
 
 
 def _read_pidfile(path: Path) -> tuple[int, int] | None:
@@ -270,16 +270,16 @@ def _respawned_server_pids(home: Path) -> set[int]:
 
     The single-server invariant for scenario 1: ``connect`` must REUSE the
     foreground server, not spawn a competitor. Any respawn goes through
-    :func:`ensure_local_omnigent_server`, which spawns a detached
-    ``omnigent server --database-uri sqlite:///<home>/.omnigent/chat.db
-    --artifact-location <home>/.omnigent/artifacts`` — so its argv carries
+    :func:`ensure_local_goalrail_server`, which spawns a detached
+    ``goalrail server --database-uri sqlite:///<home>/.goalrail/chat.db
+    --artifact-location <home>/.goalrail/artifacts`` — so its argv carries
     this isolated HOME path. The reused foreground server (spawned here as a
     bare ``["server"]``) does NOT, so every match is a respawned competitor,
     never the original. This is independent of the pidfile, so it catches a
     respawn that preserved the pidfile (e.g. a stray bound to a random port).
 
     :param home: The test's isolated home dir.
-    :returns: PIDs of live ``omnigent.cli ... server`` processes whose
+    :returns: PIDs of live ``goalrail.cli ... server`` processes whose
         command line references ``home``; empty when ``connect`` reused.
     """
     # ``ww`` disables ps's column-width truncation: the home path sits late in
@@ -292,13 +292,13 @@ def _respawned_server_pids(home: Path) -> set[int]:
         text=True,
         check=False,
     ).stdout
-    # Match the home as a directory PREFIX (``<home>/.omnigent/...`` always
+    # Match the home as a directory PREFIX (``<home>/.goalrail/...`` always
     # appears in a respawn's argv), not a bare substring — so a sibling home
     # sharing a prefix (``/tmp/x/home`` vs ``/tmp/x/home2``) can't false-match.
     home_prefix = f"{home}{os.sep}"
     pids: set[int] = set()
     for line in out.splitlines():
-        if "omnigent.cli" not in line or home_prefix not in line:
+        if "goalrail.cli" not in line or home_prefix not in line:
             continue
         if not re.search(r"\bserver\b", line):
             continue
@@ -340,7 +340,7 @@ class _Procs:
     ) -> subprocess.Popen[bytes]:
         """Spawn a CLI subprocess with output captured to ``log``.
 
-        :param args: CLI args after the ``python -m omnigent.cli`` prefix.
+        :param args: CLI args after the ``python -m goalrail.cli`` prefix.
         :param env: Subprocess environment.
         :param cwd: Working directory (an isolated home).
         :param log: File to capture combined stdout/stderr.
@@ -350,7 +350,7 @@ class _Procs:
         fh = open(log, "wb")  # noqa: SIM115
         self._logs.append(fh)
         proc = subprocess.Popen(
-            [sys.executable, "-m", "omnigent.cli", *args],
+            [sys.executable, "-m", "goalrail.cli", *args],
             env=env,
             cwd=str(cwd),
             stdout=fh,
@@ -472,7 +472,7 @@ def test_connect_reuses_foreground_server_without_killing_it(
     assert _health_ok(port1), "original server stopped answering /health"
     # Direct single-server invariant: the asserts above prove the
     # ORIGINAL survived but, on their own, only catch a respawn TRANSITIVELY —
-    # via the pidfile rewrite that `ensure_local_omnigent_server` happens to do. A
+    # via the pidfile rewrite that `ensure_local_goalrail_server` happens to do. A
     # respawn that left the pidfile pointing at the original (a stray bound to
     # a random port) would slip past them. Assert directly that connect spawned
     # no detached server for this isolated HOME, so exactly one server exists.
@@ -491,7 +491,7 @@ def test_foreground_server_reuses_connect_owned_server(
     """Scenario 2 (vice versa): ``connect`` then ``server`` — both survive.
 
     The connect-owned local server is already healthy in the pidfile, so a
-    second canonical ``omnigent server`` must reuse it (print "already
+    second canonical ``goalrail server`` must reuse it (print "already
     running — reusing it" and exit 0) rather than bind a competing server or
     tear the running one down.
     """
@@ -509,7 +509,7 @@ def test_foreground_server_reuses_connect_owned_server(
     rc = server2.wait(timeout=_SERVER_BOOT_TIMEOUT_S)
 
     assert rc == 0, (
-        f"second `omnigent server` exited non-zero (rc={rc}).\n"
+        f"second `goalrail server` exited non-zero (rc={rc}).\n"
         f"--- log ---\n{_tail(tmp_path / 'server2.log')}"
     )
     assert "reusing it" in _tail(tmp_path / "server2.log"), (

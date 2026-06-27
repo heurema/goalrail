@@ -37,7 +37,7 @@ def _spawn_prompt_driver(
     """
     code = f"""
 import asyncio
-from omnigent_ui_sdk import TerminalHost
+from goalrail_ui_sdk import TerminalHost
 
 async def handler(text, files):
     await asyncio.sleep(100)

@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.server.helpers import start_session_stream_collector
@@ -109,15 +109,15 @@ class _HeartbeatRunnerClient:
 @pytest.mark.asyncio
 async def test_runner_relay_ready_waits_for_runner_heartbeat() -> None:
     """
-    Omnigent relay readiness is set only after the runner stream heartbeat.
+    Goalrail relay readiness is set only after the runner stream heartbeat.
 
     Production breakage this catches: accepting a user message after
-    merely scheduling the relay task, before Omnigent has actually subscribed
+    merely scheduling the relay task, before Goalrail has actually subscribed
     to runner output. A fast harness can otherwise complete before the
     relay is listening, producing a successful CLI run with empty
     stdout.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     sessions_module._runner_relay_tasks.clear()
     release = asyncio.Event()
@@ -263,8 +263,8 @@ async def test_relay_text_flush_publishes_persisted_item(db_uri: str) -> None:
     reconciliation splices the persisted copy in next to it as a
     duplicate bubble (the fork-to-relay-agent duplicate-response bug).
     """
-    from omnigent.runtime import session_stream
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.runtime import session_stream
+    from goalrail.server.routes import sessions as sessions_module
 
     sessions_module._runner_relay_tasks.clear()
     store = SqlAlchemyConversationStore(db_uri)
@@ -427,8 +427,8 @@ async def test_relay_publishes_failed_status_on_tunnel_close() -> None:
     ``ConnectionError`` and exited silently, leaving the client's SSE
     stream truncated with no error event.
     """
-    from omnigent.runtime import session_stream
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.runtime import session_stream
+    from goalrail.server.routes import sessions as sessions_module
 
     sessions_module._runner_relay_tasks.clear()
     gate = asyncio.Event()

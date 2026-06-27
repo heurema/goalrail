@@ -28,16 +28,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.policies.builder import build_policy_engine
-from omnigent.spec.parser import parse
-from omnigent.spec.types import (
+from goalrail.runtime.policies.builder import build_policy_engine
+from goalrail.spec.parser import parse
+from goalrail.spec.types import (
     AgentSpec,
     GuardrailsSpec,
     LabelDef,
     Phase,
     PhaseSelector,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_function_policy_spec
@@ -593,7 +593,7 @@ def test_policy_seed_uses_policy_cost_while_display_uses_total_cost(
     that posts only ``total_cost_usd`` (codex/relay style) must still count
     toward the parent's enforcement total via fallback.
     """
-    from omnigent.runtime.policies.builder import load_session_usage
+    from goalrail.runtime.policies.builder import load_session_usage
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(
@@ -768,7 +768,7 @@ def test_load_session_usage_merges_by_model_across_subtree(
     subtree ``total_cost_usd`` (no double-count / drop), and the display-only
     ``by_model`` must not leak into the policy engine's usage seed.
     """
-    from omnigent.runtime.policies.builder import load_session_usage
+    from goalrail.runtime.policies.builder import load_session_usage
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(

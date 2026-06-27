@@ -27,8 +27,8 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.entities.conversation import MessageData, NewConversationItem
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.entities.conversation import MessageData, NewConversationItem
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.server.helpers import create_test_agent

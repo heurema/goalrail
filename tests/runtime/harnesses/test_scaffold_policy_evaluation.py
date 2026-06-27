@@ -19,12 +19,12 @@ from typing import Any
 
 import pytest
 
-from omnigent.runtime.harnesses._scaffold import (
+from goalrail.runtime.harnesses._scaffold import (
     PolicyVerdictEvent,
     PolicyVerdictPayload,
     TurnContext,
 )
-from omnigent.server.schemas import (
+from goalrail.server.schemas import (
     HarnessStreamEvent,
     PolicyEvaluationRequestEvent,
 )
@@ -78,7 +78,7 @@ async def test_evaluate_policy_round_trip(_turn_ctx: TurnContext) -> None:
         "The evaluate_policy method should emit an upstream SSE event."
     )
     # The event must carry the exact evaluation_id, phase, and data
-    # so the runner can route the request to the Omnigent server.
+    # so the runner can route the request to the Goalrail server.
     assert emitted.evaluation_id == eval_id
     assert emitted.phase == phase
     assert emitted.data == data
@@ -194,7 +194,7 @@ async def test_evaluate_policy_timeout_returns_allow(
     Fail-open prevents silent session hangs.
     """
     # Shrink timeout to 0.1s so the test runs fast.
-    import omnigent.runtime.harnesses._scaffold as _scaffold_mod
+    import goalrail.runtime.harnesses._scaffold as _scaffold_mod
 
     monkeypatch.setattr(_scaffold_mod, "_POLICY_EVAL_TIMEOUT_S", 0.1)
 
@@ -224,7 +224,7 @@ async def test_evaluate_policy_tool_call_timeout_fails_closed(
     the tool must be blocked, not allowed — the LLM-phase fail-open above
     must NOT extend to the tool *call*.
     """
-    import omnigent.runtime.harnesses._scaffold as _scaffold_mod
+    import goalrail.runtime.harnesses._scaffold as _scaffold_mod
 
     monkeypatch.setattr(_scaffold_mod, "_POLICY_EVAL_TIMEOUT_S", 0.1)
 
@@ -249,7 +249,7 @@ async def test_evaluate_policy_tool_result_timeout_fails_open(
     need not block — TOOL_RESULT fails OPEN like the advisory LLM phases,
     unlike TOOL_CALL. (Maintainer design decision — see PR review thread.)
     """
-    import omnigent.runtime.harnesses._scaffold as _scaffold_mod
+    import goalrail.runtime.harnesses._scaffold as _scaffold_mod
 
     monkeypatch.setattr(_scaffold_mod, "_POLICY_EVAL_TIMEOUT_S", 0.1)
 

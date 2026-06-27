@@ -1380,6 +1380,248 @@ wheels = [
 ]
 
 [[package]]
+name = "goalrail"
+version = "0.3.0.dev0"
+source = { editable = "." }
+dependencies = [
+    { name = "alembic" },
+    { name = "anyio" },
+    { name = "argon2-cffi" },
+    { name = "cachetools" },
+    { name = "cel-expr-python", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64') or (platform_machine != 'aarch64' and sys_platform != 'darwin')" },
+    { name = "claude-agent-sdk" },
+    { name = "click" },
+    { name = "fastapi" },
+    { name = "ftfy" },
+    { name = "goalrail-client" },
+    { name = "goalrail-ui-sdk" },
+    { name = "httpx" },
+    { name = "keyring" },
+    { name = "mcp" },
+    { name = "openai" },
+    { name = "openai-agents" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-instrumentation-fastapi" },
+    { name = "opentelemetry-instrumentation-httpx" },
+    { name = "packaging" },
+    { name = "pexpect", marker = "sys_platform != 'win32'" },
+    { name = "prompt-toolkit" },
+    { name = "psutil" },
+    { name = "pydantic" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "pyte", marker = "sys_platform != 'win32'" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "sqlalchemy" },
+    { name = "starlette" },
+    { name = "tiktoken" },
+    { name = "tomlkit" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+agents-sdk = [
+    { name = "openai-agents" },
+    { name = "opentelemetry-instrumentation-openai-agents-v2" },
+]
+all = [
+    { name = "databricks-sdk" },
+]
+antigravity = [
+    { name = "google-antigravity" },
+]
+bedrock = [
+    { name = "boto3" },
+    { name = "botocore" },
+]
+boxlite = [
+    { name = "boxlite" },
+]
+copilot = [
+    { name = "github-copilot-sdk" },
+]
+cursor = [
+    { name = "cursor-sdk" },
+]
+cwsandbox = [
+    { name = "cwsandbox" },
+]
+databricks = [
+    { name = "databricks-mcp" },
+    { name = "databricks-sdk" },
+    { name = "mlflow" },
+    { name = "opentelemetry-distro" },
+    { name = "psycopg", extra = ["binary"] },
+]
+daytona = [
+    { name = "daytona" },
+]
+dev = [
+    { name = "boto3" },
+    { name = "filelock" },
+    { name = "mlflow" },
+    { name = "moto", extra = ["s3"] },
+    { name = "mypy" },
+    { name = "pathspec" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-playwright" },
+    { name = "pytest-playwright-visual-snapshot" },
+    { name = "pytest-rerunfailures" },
+    { name = "pytest-shard" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+    { name = "respx" },
+    { name = "ruff" },
+    { name = "sqlalchemy-cloudflare-d1" },
+    { name = "types-pyyaml" },
+]
+e2b = [
+    { name = "e2b" },
+]
+kubernetes = [
+    { name = "kubernetes" },
+]
+modal = [
+    { name = "modal" },
+]
+openshell = [
+    { name = "openshell" },
+]
+s3 = [
+    { name = "boto3" },
+    { name = "botocore" },
+]
+tracing = [
+    { name = "mlflow" },
+]
+vertex = [
+    { name = "google-auth" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "alembic", specifier = ">=1.0,<2" },
+    { name = "anyio", specifier = ">=4.0,<5" },
+    { name = "argon2-cffi", specifier = ">=23.1,<24" },
+    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
+    { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.30,<2" },
+    { name = "boto3", marker = "extra == 's3'", specifier = ">=1.30,<2" },
+    { name = "botocore", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
+    { name = "botocore", marker = "extra == 's3'", specifier = ">=1.30,<2" },
+    { name = "boxlite", marker = "extra == 'boxlite'", specifier = ">=0.9.5,<1" },
+    { name = "cachetools", specifier = ">=5.0,<7" },
+    { name = "cel-expr-python", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64') or (platform_machine != 'aarch64' and sys_platform != 'darwin')", specifier = ">=0.1" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.62" },
+    { name = "click", specifier = ">=8.0,<8.2" },
+    { name = "cursor-sdk", marker = "extra == 'cursor'", specifier = ">=0.1.7" },
+    { name = "cwsandbox", marker = "extra == 'cwsandbox'", specifier = ">=0.24,<1" },
+    { name = "databricks-mcp", marker = "extra == 'databricks'", specifier = ">=0.1.0" },
+    { name = "databricks-sdk", marker = "extra == 'all'", specifier = ">=0.56.0,<1" },
+    { name = "databricks-sdk", marker = "extra == 'databricks'", specifier = ">=0.56.0,<1" },
+    { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.180,<1" },
+    { name = "e2b", marker = "extra == 'e2b'", specifier = ">=2.26,<3" },
+    { name = "fastapi", specifier = ">=0.100,<1" },
+    { name = "filelock", marker = "extra == 'dev'", specifier = ">=3.0" },
+    { name = "ftfy", specifier = ">=6.0" },
+    { name = "github-copilot-sdk", marker = "extra == 'copilot'", specifier = ">=1,<2" },
+    { name = "goalrail-client", editable = "sdks/python-client" },
+    { name = "goalrail-ui-sdk", editable = "sdks/ui" },
+    { name = "google-antigravity", marker = "extra == 'antigravity'", specifier = ">=0.1,<1" },
+    { name = "google-auth", marker = "extra == 'vertex'", specifier = ">=2.0,<3" },
+    { name = "httpx", specifier = ">=0.27,<1" },
+    { name = "keyring", specifier = ">=24,<26" },
+    { name = "kubernetes", marker = "extra == 'kubernetes'", specifier = ">=36,<37" },
+    { name = "mcp", specifier = ">=1.0,<2" },
+    { name = "mlflow", marker = "extra == 'databricks'", specifier = ">=3,<4" },
+    { name = "mlflow", marker = "extra == 'dev'", specifier = ">=3,<4" },
+    { name = "mlflow", marker = "extra == 'tracing'", specifier = ">=3,<4" },
+    { name = "modal", marker = "extra == 'modal'", specifier = ">=1.0,<2" },
+    { name = "moto", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=5,<6" },
+    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
+    { name = "openai", specifier = ">=1.0,<3" },
+    { name = "openai-agents", specifier = ">=0.0.17" },
+    { name = "openai-agents", marker = "extra == 'agents-sdk'", specifier = ">=0.1,<1" },
+    { name = "openshell", marker = "extra == 'openshell'", specifier = ">=0.0.7,<1" },
+    { name = "opentelemetry-distro", marker = "extra == 'databricks'", specifier = ">=0,<1" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20,<2" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.20,<2" },
+    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0,<1" },
+    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0,<1" },
+    { name = "opentelemetry-instrumentation-openai-agents-v2", marker = "extra == 'agents-sdk'", specifier = ">=0.1" },
+    { name = "packaging", specifier = ">=23,<26" },
+    { name = "pathspec", marker = "extra == 'dev'", specifier = ">=0.12" },
+    { name = "pexpect", marker = "sys_platform != 'win32'", specifier = ">=4.9,<5" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5" },
+    { name = "prompt-toolkit", specifier = ">=3.0,<4" },
+    { name = "psutil", specifier = ">=5.9,<8" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'databricks'", specifier = ">=3.1,<4" },
+    { name = "pydantic", specifier = ">=2.0,<3" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },
+    { name = "pyte", marker = "sys_platform != 'win32'", specifier = ">=0.8,<1" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5" },
+    { name = "pytest-playwright", marker = "extra == 'dev'", specifier = ">=0.7" },
+    { name = "pytest-playwright-visual-snapshot", marker = "extra == 'dev'", specifier = ">=0.5.1" },
+    { name = "pytest-rerunfailures", marker = "extra == 'dev'", specifier = "==16.3" },
+    { name = "pytest-shard", marker = "extra == 'dev'", specifier = "==0.1.2" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = "==2.4.0" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
+    { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21,<1" },
+    { name = "rich", specifier = ">=14,<15" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
+    { name = "sqlalchemy", specifier = ">=2.0,<3" },
+    { name = "sqlalchemy-cloudflare-d1", marker = "extra == 'dev'", specifier = "==0.3.10" },
+    { name = "starlette", specifier = ">=0.27,<1" },
+    { name = "tiktoken", specifier = ">=0.7,<1" },
+    { name = "tomlkit", specifier = ">=0.12,<1" },
+    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
+]
+provides-extras = ["claude-sdk", "openai-agents", "all", "bedrock", "s3", "vertex", "modal", "daytona", "boxlite", "cwsandbox", "e2b", "openshell", "kubernetes", "tracing", "agents-sdk", "antigravity", "copilot", "cursor", "databricks", "dev"]
+
+[[package]]
+name = "goalrail-client"
+version = "0.3.0.dev0"
+source = { editable = "sdks/python-client" }
+dependencies = [
+    { name = "goalrail" },
+    { name = "httpx" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "goalrail", editable = "." },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "pydantic", specifier = ">=2.0,<3" },
+]
+
+[[package]]
+name = "goalrail-ui-sdk"
+version = "0.3.0.dev0"
+source = { editable = "sdks/ui" }
+dependencies = [
+    { name = "goalrail-client" },
+    { name = "prompt-toolkit" },
+    { name = "pyyaml" },
+    { name = "rich" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "goalrail-client", specifier = "==0.3.0.dev0" },
+    { name = "prompt-toolkit", specifier = ">=3" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
+    { name = "rich", specifier = ">=13" },
+]
+
+[[package]]
 name = "google-antigravity"
 version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2769,248 +3011,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/74/3269a3a58347e0b019742d888612c4b765293c9c75efa44e144b1e884c0d/obstore-0.8.2-cp314-cp314-musllinux_1_2_armv7l.whl", hash = "sha256:329038c9645d6d1741e77fe1a53e28a14b1a5c1461cfe4086082ad39ebabf981", size = 3687307, upload-time = "2025-09-16T15:34:14.501Z" },
     { url = "https://files.pythonhosted.org/packages/01/f9/4fd4819ad6a49d2f462a45be453561f4caebded0dc40112deeffc34b89b1/obstore-0.8.2-cp314-cp314-musllinux_1_2_i686.whl", hash = "sha256:1e4df99b369790c97c752d126b286dc86484ea49bff5782843a265221406566f", size = 3776076, upload-time = "2025-09-16T15:34:16.207Z" },
     { url = "https://files.pythonhosted.org/packages/14/dd/7c4f958fa0b9fc4778fb3d232e38b37db8c6b260f641022fbba48b049d7e/obstore-0.8.2-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:9e1c65c65e20cc990414a8a9af88209b1bbc0dd9521b5f6b0293c60e19439bb7", size = 3947445, upload-time = "2025-09-16T15:34:17.423Z" },
-]
-
-[[package]]
-name = "omnigent"
-version = "0.3.0.dev0"
-source = { editable = "." }
-dependencies = [
-    { name = "alembic" },
-    { name = "anyio" },
-    { name = "argon2-cffi" },
-    { name = "cachetools" },
-    { name = "cel-expr-python", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64') or (platform_machine != 'aarch64' and sys_platform != 'darwin')" },
-    { name = "claude-agent-sdk" },
-    { name = "click" },
-    { name = "fastapi" },
-    { name = "ftfy" },
-    { name = "httpx" },
-    { name = "keyring" },
-    { name = "mcp" },
-    { name = "omnigent-client" },
-    { name = "omnigent-ui-sdk" },
-    { name = "openai" },
-    { name = "openai-agents" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc" },
-    { name = "opentelemetry-exporter-otlp-proto-http" },
-    { name = "opentelemetry-instrumentation-fastapi" },
-    { name = "opentelemetry-instrumentation-httpx" },
-    { name = "packaging" },
-    { name = "pexpect", marker = "sys_platform != 'win32'" },
-    { name = "prompt-toolkit" },
-    { name = "psutil" },
-    { name = "pydantic" },
-    { name = "pyjwt", extra = ["crypto"] },
-    { name = "pyte", marker = "sys_platform != 'win32'" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "sqlalchemy" },
-    { name = "starlette" },
-    { name = "tiktoken" },
-    { name = "tomlkit" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-agents-sdk = [
-    { name = "openai-agents" },
-    { name = "opentelemetry-instrumentation-openai-agents-v2" },
-]
-all = [
-    { name = "databricks-sdk" },
-]
-antigravity = [
-    { name = "google-antigravity" },
-]
-bedrock = [
-    { name = "boto3" },
-    { name = "botocore" },
-]
-boxlite = [
-    { name = "boxlite" },
-]
-copilot = [
-    { name = "github-copilot-sdk" },
-]
-cursor = [
-    { name = "cursor-sdk" },
-]
-cwsandbox = [
-    { name = "cwsandbox" },
-]
-databricks = [
-    { name = "databricks-mcp" },
-    { name = "databricks-sdk" },
-    { name = "mlflow" },
-    { name = "opentelemetry-distro" },
-    { name = "psycopg", extra = ["binary"] },
-]
-daytona = [
-    { name = "daytona" },
-]
-dev = [
-    { name = "boto3" },
-    { name = "filelock" },
-    { name = "mlflow" },
-    { name = "moto", extra = ["s3"] },
-    { name = "mypy" },
-    { name = "pathspec" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-playwright" },
-    { name = "pytest-playwright-visual-snapshot" },
-    { name = "pytest-rerunfailures" },
-    { name = "pytest-shard" },
-    { name = "pytest-timeout" },
-    { name = "pytest-xdist" },
-    { name = "respx" },
-    { name = "ruff" },
-    { name = "sqlalchemy-cloudflare-d1" },
-    { name = "types-pyyaml" },
-]
-e2b = [
-    { name = "e2b" },
-]
-kubernetes = [
-    { name = "kubernetes" },
-]
-modal = [
-    { name = "modal" },
-]
-openshell = [
-    { name = "openshell" },
-]
-s3 = [
-    { name = "boto3" },
-    { name = "botocore" },
-]
-tracing = [
-    { name = "mlflow" },
-]
-vertex = [
-    { name = "google-auth" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "alembic", specifier = ">=1.0,<2" },
-    { name = "anyio", specifier = ">=4.0,<5" },
-    { name = "argon2-cffi", specifier = ">=23.1,<24" },
-    { name = "boto3", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
-    { name = "boto3", marker = "extra == 'dev'", specifier = ">=1.30,<2" },
-    { name = "boto3", marker = "extra == 's3'", specifier = ">=1.30,<2" },
-    { name = "botocore", marker = "extra == 'bedrock'", specifier = ">=1.30,<2" },
-    { name = "botocore", marker = "extra == 's3'", specifier = ">=1.30,<2" },
-    { name = "boxlite", marker = "extra == 'boxlite'", specifier = ">=0.9.5,<1" },
-    { name = "cachetools", specifier = ">=5.0,<7" },
-    { name = "cel-expr-python", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64') or (platform_machine != 'aarch64' and sys_platform != 'darwin')", specifier = ">=0.1" },
-    { name = "claude-agent-sdk", specifier = ">=0.1.62" },
-    { name = "click", specifier = ">=8.0,<8.2" },
-    { name = "cursor-sdk", marker = "extra == 'cursor'", specifier = ">=0.1.7" },
-    { name = "cwsandbox", marker = "extra == 'cwsandbox'", specifier = ">=0.24,<1" },
-    { name = "databricks-mcp", marker = "extra == 'databricks'", specifier = ">=0.1.0" },
-    { name = "databricks-sdk", marker = "extra == 'all'", specifier = ">=0.56.0,<1" },
-    { name = "databricks-sdk", marker = "extra == 'databricks'", specifier = ">=0.56.0,<1" },
-    { name = "daytona", marker = "extra == 'daytona'", specifier = ">=0.180,<1" },
-    { name = "e2b", marker = "extra == 'e2b'", specifier = ">=2.26,<3" },
-    { name = "fastapi", specifier = ">=0.100,<1" },
-    { name = "filelock", marker = "extra == 'dev'", specifier = ">=3.0" },
-    { name = "ftfy", specifier = ">=6.0" },
-    { name = "github-copilot-sdk", marker = "extra == 'copilot'", specifier = ">=1,<2" },
-    { name = "google-antigravity", marker = "extra == 'antigravity'", specifier = ">=0.1,<1" },
-    { name = "google-auth", marker = "extra == 'vertex'", specifier = ">=2.0,<3" },
-    { name = "httpx", specifier = ">=0.27,<1" },
-    { name = "keyring", specifier = ">=24,<26" },
-    { name = "kubernetes", marker = "extra == 'kubernetes'", specifier = ">=36,<37" },
-    { name = "mcp", specifier = ">=1.0,<2" },
-    { name = "mlflow", marker = "extra == 'databricks'", specifier = ">=3,<4" },
-    { name = "mlflow", marker = "extra == 'dev'", specifier = ">=3,<4" },
-    { name = "mlflow", marker = "extra == 'tracing'", specifier = ">=3,<4" },
-    { name = "modal", marker = "extra == 'modal'", specifier = ">=1.0,<2" },
-    { name = "moto", extras = ["s3"], marker = "extra == 'dev'", specifier = ">=5,<6" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
-    { name = "omnigent-client", editable = "sdks/python-client" },
-    { name = "omnigent-ui-sdk", editable = "sdks/ui" },
-    { name = "openai", specifier = ">=1.0,<3" },
-    { name = "openai-agents", specifier = ">=0.0.17" },
-    { name = "openai-agents", marker = "extra == 'agents-sdk'", specifier = ">=0.1,<1" },
-    { name = "openshell", marker = "extra == 'openshell'", specifier = ">=0.0.7,<1" },
-    { name = "opentelemetry-distro", marker = "extra == 'databricks'", specifier = ">=0,<1" },
-    { name = "opentelemetry-exporter-otlp-proto-grpc", specifier = ">=1.20,<2" },
-    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.20,<2" },
-    { name = "opentelemetry-instrumentation-fastapi", specifier = ">=0,<1" },
-    { name = "opentelemetry-instrumentation-httpx", specifier = ">=0,<1" },
-    { name = "opentelemetry-instrumentation-openai-agents-v2", marker = "extra == 'agents-sdk'", specifier = ">=0.1" },
-    { name = "packaging", specifier = ">=23,<26" },
-    { name = "pathspec", marker = "extra == 'dev'", specifier = ">=0.12" },
-    { name = "pexpect", marker = "sys_platform != 'win32'", specifier = ">=4.9,<5" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5" },
-    { name = "prompt-toolkit", specifier = ">=3.0,<4" },
-    { name = "psutil", specifier = ">=5.9,<8" },
-    { name = "psycopg", extras = ["binary"], marker = "extra == 'databricks'", specifier = ">=3.1,<4" },
-    { name = "pydantic", specifier = ">=2.0,<3" },
-    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8,<3" },
-    { name = "pyte", marker = "sys_platform != 'win32'", specifier = ">=0.8,<1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.21" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5" },
-    { name = "pytest-playwright", marker = "extra == 'dev'", specifier = ">=0.7" },
-    { name = "pytest-playwright-visual-snapshot", marker = "extra == 'dev'", specifier = ">=0.5.1" },
-    { name = "pytest-rerunfailures", marker = "extra == 'dev'", specifier = "==16.3" },
-    { name = "pytest-shard", marker = "extra == 'dev'", specifier = "==0.1.2" },
-    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = "==2.4.0" },
-    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
-    { name = "pyyaml", specifier = ">=6.0,<7" },
-    { name = "respx", marker = "extra == 'dev'", specifier = ">=0.21,<1" },
-    { name = "rich", specifier = ">=14,<15" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
-    { name = "sqlalchemy", specifier = ">=2.0,<3" },
-    { name = "sqlalchemy-cloudflare-d1", marker = "extra == 'dev'", specifier = "==0.3.10" },
-    { name = "starlette", specifier = ">=0.27,<1" },
-    { name = "tiktoken", specifier = ">=0.7,<1" },
-    { name = "tomlkit", specifier = ">=0.12,<1" },
-    { name = "types-pyyaml", marker = "extra == 'dev'", specifier = ">=6.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
-]
-provides-extras = ["claude-sdk", "openai-agents", "all", "bedrock", "s3", "vertex", "modal", "daytona", "boxlite", "cwsandbox", "e2b", "openshell", "kubernetes", "tracing", "agents-sdk", "antigravity", "copilot", "cursor", "databricks", "dev"]
-
-[[package]]
-name = "omnigent-client"
-version = "0.3.0.dev0"
-source = { editable = "sdks/python-client" }
-dependencies = [
-    { name = "httpx" },
-    { name = "omnigent" },
-    { name = "pydantic" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "omnigent", editable = "." },
-    { name = "pydantic", specifier = ">=2.0,<3" },
-]
-
-[[package]]
-name = "omnigent-ui-sdk"
-version = "0.3.0.dev0"
-source = { editable = "sdks/ui" }
-dependencies = [
-    { name = "omnigent-client" },
-    { name = "prompt-toolkit" },
-    { name = "pyyaml" },
-    { name = "rich" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "omnigent-client", specifier = "==0.3.0.dev0" },
-    { name = "prompt-toolkit", specifier = ">=3" },
-    { name = "pyyaml", specifier = ">=6.0,<7" },
-    { name = "rich", specifier = ">=13" },
 ]
 
 [[package]]

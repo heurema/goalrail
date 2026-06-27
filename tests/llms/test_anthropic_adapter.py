@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from omnigent.llms.adapters.anthropic import (
+from goalrail.llms.adapters.anthropic import (
     _anthropic_to_chat,
     _chat_to_anthropic,
     _convert_tool_choice,
@@ -314,7 +314,7 @@ def test_string_user_content_passes_through() -> None:
 
 def test_build_headers_with_api_key() -> None:
     """API key is set in the x-api-key header."""
-    from omnigent.llms.adapters.anthropic import _build_headers
+    from goalrail.llms.adapters.anthropic import _build_headers
 
     headers = _build_headers(api_key_override="sk-test-123")
     assert headers["x-api-key"] == "sk-test-123"
@@ -323,20 +323,20 @@ def test_build_headers_with_api_key() -> None:
 
 
 def test_build_headers_raises_without_api_key() -> None:
-    """Missing API key raises OmnigentError."""
-    from omnigent.errors import OmnigentError
-    from omnigent.llms.adapters.anthropic import _build_headers
+    """Missing API key raises GoalrailError."""
+    from goalrail.errors import GoalrailError
+    from goalrail.llms.adapters.anthropic import _build_headers
 
-    with pytest.raises(OmnigentError, match="api_key"):
+    with pytest.raises(GoalrailError, match="api_key"):
         _build_headers(api_key_override=None)
 
 
 def test_build_headers_raises_for_empty_api_key() -> None:
-    """Empty string API key raises OmnigentError."""
-    from omnigent.errors import OmnigentError
-    from omnigent.llms.adapters.anthropic import _build_headers
+    """Empty string API key raises GoalrailError."""
+    from goalrail.errors import GoalrailError
+    from goalrail.llms.adapters.anthropic import _build_headers
 
-    with pytest.raises(OmnigentError, match="api_key"):
+    with pytest.raises(GoalrailError, match="api_key"):
         _build_headers(api_key_override="")
 
 
@@ -344,26 +344,26 @@ def test_build_headers_raises_for_empty_api_key() -> None:
 
 
 def test_effort_to_budget_low() -> None:
-    from omnigent.llms.adapters.anthropic import _effort_to_budget
+    from goalrail.llms.adapters.anthropic import _effort_to_budget
 
     assert _effort_to_budget("low", 16384) == 1024
 
 
 def test_effort_to_budget_medium() -> None:
-    from omnigent.llms.adapters.anthropic import _effort_to_budget
+    from goalrail.llms.adapters.anthropic import _effort_to_budget
 
     assert _effort_to_budget("medium", 16384) == 4096
 
 
 def test_effort_to_budget_high() -> None:
-    from omnigent.llms.adapters.anthropic import _effort_to_budget
+    from goalrail.llms.adapters.anthropic import _effort_to_budget
 
     assert _effort_to_budget("high", 16384) == 8192
 
 
 def test_effort_to_budget_low_clamped_to_max_tokens() -> None:
     """When max_tokens is less than the effort's budget, clamp to max_tokens."""
-    from omnigent.llms.adapters.anthropic import _effort_to_budget
+    from goalrail.llms.adapters.anthropic import _effort_to_budget
 
     assert _effort_to_budget("low", 512) == 512
 
@@ -399,7 +399,7 @@ def test_stop_list_passed_through() -> None:
 @pytest.mark.asyncio
 async def test_stream_to_chat_chunks_text_delta() -> None:
     """Text deltas in the SSE stream produce Chat Completions chunks."""
-    from omnigent.llms.adapters.anthropic import _stream_to_chat_chunks
+    from goalrail.llms.adapters.anthropic import _stream_to_chat_chunks
 
     lines = [
         "data: "
@@ -435,7 +435,7 @@ async def test_stream_to_chat_chunks_text_delta() -> None:
 @pytest.mark.asyncio
 async def test_stream_to_chat_chunks_tool_use() -> None:
     """Tool use blocks in the SSE stream produce tool_calls in chunks."""
-    from omnigent.llms.adapters.anthropic import _stream_to_chat_chunks
+    from goalrail.llms.adapters.anthropic import _stream_to_chat_chunks
 
     lines = [
         "data: "
@@ -475,7 +475,7 @@ async def test_stream_to_chat_chunks_tool_use() -> None:
 @pytest.mark.asyncio
 async def test_stream_skips_non_data_lines() -> None:
     """Non-data lines are silently skipped."""
-    from omnigent.llms.adapters.anthropic import _stream_to_chat_chunks
+    from goalrail.llms.adapters.anthropic import _stream_to_chat_chunks
 
     lines = [
         "event: message_start",

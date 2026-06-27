@@ -16,7 +16,7 @@ policies:
   deny_canada:
     type: function
     function:
-      path: omnigent.policies.builtins.prompt.prompt_policy
+      path: goalrail.policies.builtins.prompt.prompt_policy
       arguments:
         prompt: |
           You are a strict content filter. Look at the user's

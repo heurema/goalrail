@@ -41,7 +41,7 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
 from tests._helpers.compat import (
     apply_runner_env,
     apply_server_env,
@@ -99,7 +99,7 @@ def _enforce_min_server_version(request: pytest.FixtureRequest) -> None:
 
     Resolves :func:`server_version` (and thus requires a live server) when a
     test carries the marker OR when a compat run is active
-    (``OMNIGENT_COMPAT_SERVER_VERSION`` set). The latter makes the
+    (``GOALRAIL_COMPAT_SERVER_VERSION`` set). The latter makes the
     ``/api/version`` ↔ env cross-check (the PYTHONPATH/CWD-shadow tripwire in
     :func:`resolve_server_version`) fire once per session even before any
     feature has a marker. In normal runs with no marker, nothing is resolved,
@@ -112,7 +112,7 @@ def _enforce_min_server_version(request: pytest.FixtureRequest) -> None:
         resolve the ``server_version`` fixture.
     """
     marker = request.node.get_closest_marker("min_server_version")
-    compat_pinned = os.environ.get("OMNIGENT_COMPAT_SERVER_VERSION")
+    compat_pinned = os.environ.get("GOALRAIL_COMPAT_SERVER_VERSION")
     if marker is None and not compat_pinned:
         return
     # Resolving server_version cross-checks /api/version against the pinned
@@ -132,8 +132,8 @@ def _enforce_min_runner_version(request: pytest.FixtureRequest) -> None:
     """Skip tests marked ``@pytest.mark.min_runner_version(X)`` on older runners/hosts.
 
     The runner/host backwards-compat run (Config 2) pins the
-    ``omnigent.runner._entry`` / ``omnigent.host._daemon_entry`` subprocesses to
-    an older build and sets ``OMNIGENT_COMPAT_RUNNER_VERSION``. The runner/host
+    ``goalrail.runner._entry`` / ``goalrail.host._daemon_entry`` subprocesses to
+    an older build and sets ``GOALRAIL_COMPAT_RUNNER_VERSION``. The runner/host
     expose no ``/api/version`` endpoint, so — unlike the server skip — the
     version comes purely from that env backstop
     (:func:`tests._helpers.compat.pinned_runner_version`); ``None`` (normal
@@ -189,7 +189,7 @@ _OPENAI_CODER_DIR = _REPO_ROOT / "tests" / "resources" / "examples" / "openai-co
 _SANDBOX_DEPS_OS_ENV_DIR = _REPO_ROOT / "tests" / "resources" / "agents" / "sandbox-deps-os-env"
 _SYS_TERMINAL_TEST_DIR = _REPO_ROOT / "tests" / "resources" / "agents" / "sys-terminal-test"
 # A plain claude-sdk chat agent seeded as a BUILT-IN (via the server's
-# OMNIGENT_BUILTIN_AGENT_DIRS hook) so fork-switch e2e tests have a
+# GOALRAIL_BUILTIN_AGENT_DIRS hook) so fork-switch e2e tests have a
 # deterministic SDK target to switch INTO — built-in because the fork route
 # only binds built-in agents, and plain (not the polly supervisor) so a
 # recall assertion isn't flaky.
@@ -556,7 +556,7 @@ def live_runner_id() -> str:
     """
     import secrets as _secrets
 
-    from omnigent.runner.identity import token_bound_runner_id
+    from goalrail.runner.identity import token_bound_runner_id
 
     if "runner_id" not in _live_runner_state:
         token = _secrets.token_urlsafe(32)
@@ -576,7 +576,7 @@ def live_server(
     mock_llm_server_url: str | None,
 ) -> Iterator[str]:
     """
-    Start a real ``omnigent server`` subprocess and yield its base URL.
+    Start a real ``goalrail server`` subprocess and yield its base URL.
 
     The server runs on a random high port. The fixture waits
     for the health endpoint before yielding, and kills the
@@ -629,7 +629,7 @@ def live_server(
     env = {
         **os.environ,
         "OPENAI_API_KEY": llm_api_key,
-        "OMNIGENT_BUILTIN_AGENT_DIRS": str(builtin_sdk_chat_spec),
+        "GOALRAIL_BUILTIN_AGENT_DIRS": str(builtin_sdk_chat_spec),
     }
     # Prepend the worktree so the server imports the branch's source (see
     # comment above). Dropped in compat mode so the pinned older server in
@@ -649,7 +649,7 @@ def live_server(
     # The CLI exposes ``--database-uri`` but not an env var, so the
     # DB path must be on the command line. Absolute path prevents
     # the server from writing into the CWD (which was previously
-    # happening silently — each e2e run polluted ``omnigent.db``
+    # happening silently — each e2e run polluted ``goalrail.db``
     # in whatever dir pytest was invoked from).
     # Route server output to a file so DBOS/agent logs don't fill
     # a PIPE buffer (which would block the server after ~64KB —
@@ -678,7 +678,7 @@ def live_server(
         # sys.executable (it tracks the test process / client version).
         server_executable(),
         "-m",
-        "omnigent.cli",
+        "goalrail.cli",
         "server",
         "--port",
         str(port),
@@ -728,9 +728,9 @@ def live_server(
         server_args,
         env={
             **env,
-            "OMNIGENT_RUNNER_TUNNEL_TOKEN": binding_token,
+            "GOALRAIL_RUNNER_TUNNEL_TOKEN": binding_token,
         },
-        # Compat mode: neutral CWD so the worktree omnigent/ doesn't shadow
+        # Compat mode: neutral CWD so the worktree goalrail/ doesn't shadow
         # the pinned old install via sys.path[0]. None (inherit) otherwise.
         cwd=compat_server_cwd(),
         stdout=log_handle,
@@ -748,14 +748,14 @@ def live_server(
     runner_env = apply_runner_env(
         {
             **env,
-            "OMNIGENT_RUNNER_ID": runner_id,
-            "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-            "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+            "GOALRAIL_RUNNER_ID": runner_id,
+            "GOALRAIL_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+            "GOALRAIL_RUNNER_PARENT_PID": str(os.getpid()),
             "RUNNER_SERVER_URL": base_url,
         }
     )
     runner_proc = subprocess.Popen(
-        [runner_executable(), "-m", "omnigent.runner._entry"],
+        [runner_executable(), "-m", "goalrail.runner._entry"],
         env=runner_env,
         cwd=compat_runner_cwd(),
         stdout=runner_log_handle,
@@ -841,7 +841,7 @@ def http_client(live_server: str) -> Iterator[httpx.Client]:
     with httpx.Client(
         base_url=live_server,
         timeout=300,
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     ) as client:
         yield client
 
@@ -867,7 +867,7 @@ def upload_agent(
         :data:`_DATABRICKS_MODEL_MAP` before tarballing. Covers
         ``llm.model`` in ``config.yaml`` bundles and
         ``executor.model`` (including nested ``tools.<name>.executor.model``)
-        in single-file omnigent YAMLs.
+        in single-file goalrail YAMLs.
     :param databricks_profile: When set, stamp this profile onto
         every ``executor`` block that lacks one during the rewrite.
         Native (no-harness) agents otherwise reach the gateway with
@@ -895,7 +895,7 @@ def upload_agent(
         },
         # First-party sentinel Origin so the multipart create passes the
         # require_trusted_origin guard regardless of which client is passed.
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     if resp.status_code == 409:
         return agent_dir.name
@@ -919,7 +919,7 @@ def register_inline_agent(
     extra_config: dict[str, Any] | None = None,
 ) -> str:
     """
-    Register a single-file omnigent agent built in-memory.
+    Register a single-file goalrail agent built in-memory.
 
     Tarballs a minimal ``<name>.yaml`` (no directory on disk) and
     uploads it via multipart ``POST /v1/sessions``. Idempotent: a
@@ -991,7 +991,7 @@ def register_inline_agent(
         files={"bundle": ("agent.tar.gz", bundle, "application/gzip")},
         # First-party sentinel Origin so the multipart create passes the
         # require_trusted_origin guard regardless of which client is passed.
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     # 409 = already registered by a prior parametrize row against the
     # same session-scoped server; treat as success. Explicit raise (not
@@ -1070,7 +1070,7 @@ def register_dir_agent_with_mock_llm(
         "/v1/sessions",
         data={"metadata": _json.dumps({})},
         files={"bundle": ("agent.tar.gz", bundle, "application/gzip")},
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     if resp.status_code not in (200, 201, 409):
         raise RuntimeError(f"dir-agent register failed: {resp.status_code} {resp.text[:500]}")
@@ -1196,7 +1196,7 @@ def _materialize_builtin_sdk_chat_spec(
     Write a profile-aware copy of ``sdk-chat-builtin.yaml`` to seed as a built-in.
 
     The built-in fork/switch TARGET is seeded via
-    ``OMNIGENT_BUILTIN_AGENT_DIRS``, which reads the spec verbatim — it
+    ``GOALRAIL_BUILTIN_AGENT_DIRS``, which reads the spec verbatim — it
     does NOT pass through :func:`upload_agent`'s model rewrite. The on-disk
     spec (``model: claude-sonnet-4-20250514``, no profile) therefore
     authenticates via the ``claude`` CLI's OAuth session, which hosted CI
@@ -1351,7 +1351,7 @@ def sys_terminal_test_agent(
     http_client: httpx.Client, databricks_workspace_host: str | None
 ) -> str:
     """
-    Upload the ``sys-terminal-test`` agent (omnigent-flavored
+    Upload the ``sys-terminal-test`` agent (goalrail-flavored
     YAML with a ``terminals:`` block) and return its name.
 
     Used by ``test_sys_terminal_e2e.py``. The agent declares a
@@ -1507,7 +1507,7 @@ def create_runner_bound_session(
     resp = client.post(
         "/v1/sessions",
         json={"agent_id": agent_id},
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     resp.raise_for_status()
     session_id = str(resp.json()["id"])
@@ -1530,7 +1530,7 @@ def send_user_message_to_session(
     POST a user message to *session_id* and return the input response_id.
 
     The events endpoint returns ``{"queued": True, "item_id": "..."}``
-    but runner-native sessions do not create Omnigent DBOS task rows for
+    but runner-native sessions do not create Goalrail DBOS task rows for
     the turn. For session-dispatch tests, use this id only as the
     turn grouping key in ``conversation_items``; poll the session
     snapshot with :func:`poll_session_until_terminal` instead of
@@ -1643,7 +1643,7 @@ def poll_session_until_terminal(
     Poll a runner-native session snapshot until the turn is terminal.
 
     Session dispatch runs on the runner and therefore may not create a
-    pollable Omnigent ``Task`` for ``GET /v1/responses/{response_id}``. This
+    pollable Goalrail ``Task`` for ``GET /v1/responses/{response_id}``. This
     helper returns a Responses-like dict synthesized from the session
     snapshot: terminal status from ``session.status`` and output from
     non-user ``conversation_items`` sharing the turn ``response_id``.
@@ -1696,7 +1696,7 @@ def poll_for_pending_tool_calls(
 
     By default this uses ``GET /v1/responses/{response_id}`` for
     legacy/background response tests. Pass ``session_id`` for
-    runner-native session turns, which do not create Omnigent DBOS task rows
+    runner-native session turns, which do not create Goalrail DBOS task rows
     for ``response_id`` and must be observed through the session
     snapshot.
 
@@ -1749,14 +1749,14 @@ def resume_test_server(
     tmp_path: Path,
 ) -> Iterator[str]:
     """
-    Spawn a real ``omnigent server`` that accepts the CLI's own runner.
+    Spawn a real ``goalrail server`` that accepts the CLI's own runner.
 
     Used by the native-CLI resume e2e tests
     (``test_claude_native_cli_resume_e2e`` / ``test_codex_native_cli_resume_e2e``),
-    which drive the real ``omnigent claude/codex --server`` CLI. It differs
+    which drive the real ``goalrail claude/codex --server`` CLI. It differs
     from :func:`live_server` in two ways, both required for that:
 
-    * **No tunnel-token allow-list.** ``OMNIGENT_RUNNER_TUNNEL_TOKEN``
+    * **No tunnel-token allow-list.** ``GOALRAIL_RUNNER_TUNNEL_TOKEN``
       installs a binding-token allow-list (see
       ``runner_tunnel.create_runner_tunnel_router``) that rejects the runner
       the CLI spawns with its own per-run token. Omitting it selects the
@@ -1792,14 +1792,14 @@ def resume_test_server(
     if databricks_workspace_host is not None:
         env["OPENAI_BASE_URL"] = f"{databricks_workspace_host}/serving-endpoints"
     # See docstring: an allow-list would reject the CLI's own runner.
-    env.pop("OMNIGENT_RUNNER_TUNNEL_TOKEN", None)
+    env.pop("GOALRAIL_RUNNER_TUNNEL_TOKEN", None)
 
     log_handle = open(server_log, "w")  # noqa: SIM115 — lives for the Popen lifetime; closed in finally
     proc = subprocess.Popen(
         [
             server_executable(),
             "-m",
-            "omnigent.cli",
+            "goalrail.cli",
             "server",
             "--port",
             str(port),

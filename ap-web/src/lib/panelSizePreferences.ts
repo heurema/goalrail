@@ -17,7 +17,7 @@ export interface PanelSizePreferences {
 
 export type PanelSizePreferenceKey = keyof PanelSizePreferences;
 
-const STORAGE_KEY = "omnigent:panel-size-preferences";
+const STORAGE_KEY = "goalrail:panel-size-preferences";
 
 function isValidWidth(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;

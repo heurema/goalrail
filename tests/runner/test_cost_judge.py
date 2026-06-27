@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.runner.cost_judge` — the per-turn LLM judge.
+"""Tests for :mod:`goalrail.runner.cost_judge` — the per-turn LLM judge.
 
 Covers:
 
@@ -24,9 +24,9 @@ from typing import Any
 
 import pytest
 
-from omnigent.cost_plan import AdvisorVerdict
-from omnigent.llms.types import MessageOutput, OutputText, Response
-from omnigent.runner.cost_judge import (
+from goalrail.cost_plan import AdvisorVerdict
+from goalrail.llms.types import MessageOutput, OutputText, Response
+from goalrail.runner.cost_judge import (
     LLMJudge,
     build_llm_judge,
     resolve_advisor_mode,
@@ -361,7 +361,7 @@ async def test_bare_databricks_judge_model_routes_via_databricks_adapter(
     openai adapter (api.openai.com) and the judge 401s and fails open on
     EVERY turn — the live-run failure that motivated the routing.
     """
-    from omnigent.runtime.credentials.databricks import WorkspaceCreds
+    from goalrail.runtime.credentials.databricks import WorkspaceCreds
 
     client = _ScriptedClient('{"tier": null}')
     resolved_profiles: list[str | None] = []
@@ -370,10 +370,10 @@ async def test_bare_databricks_judge_model_routes_via_databricks_adapter(
         resolved_profiles.append(profile)
         return WorkspaceCreds(host="https://example.databricks.com", token="tok-123")
 
-    # The real-client path lazily does `from omnigent.llms.client import
+    # The real-client path lazily does `from goalrail.llms.client import
     # Client`; rebind that symbol so no real client is constructed.
-    monkeypatch.setattr("omnigent.llms.client.Client", lambda: client)
-    monkeypatch.setattr("omnigent.runner.cost_judge._resolve_workspace_creds", _fake_creds)
+    monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
+    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _fake_creds)
     judge = build_llm_judge(
         tiers=_TIERS,
         executor_config={"cost_optimize": {"tiers": {}}},
@@ -406,8 +406,8 @@ async def test_databricks_credential_failure_falls_back_to_adapter_defaults(
         raise OSError("no usable Databricks credentials")
 
     client = _ScriptedClient('{"tier": null}')
-    monkeypatch.setattr("omnigent.llms.client.Client", lambda: client)
-    monkeypatch.setattr("omnigent.runner.cost_judge._resolve_workspace_creds", _broken_creds)
+    monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
+    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _broken_creds)
     judge = build_llm_judge(
         tiers=_TIERS,
         executor_config={"cost_optimize": {"tiers": {}}},
@@ -432,8 +432,8 @@ async def test_non_databricks_judge_model_is_not_rerouted(
         raise AssertionError("credential resolution must not run for a non-Databricks model")
 
     client = _ScriptedClient('{"tier": null}')
-    monkeypatch.setattr("omnigent.llms.client.Client", lambda: client)
-    monkeypatch.setattr("omnigent.runner.cost_judge._resolve_workspace_creds", _must_not_resolve)
+    monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
+    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _must_not_resolve)
     judge = build_llm_judge(
         tiers=_TIERS,
         executor_config={"cost_optimize": {"advisor_model": "anthropic/claude-haiku-4-5"}},

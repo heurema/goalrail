@@ -31,7 +31,7 @@ jobs:
     # author-is-maintainer half of the guard needs the MAINTAINER file, so it
     # lives in the script.
     if: >-
-      github.repository == 'omnigent-ai/omnigent'
+      github.repository == 'heurema/goalrail'
       && !github.event.pull_request.draft
       && !endsWith(github.actor, '[bot]')
       && github.event.pull_request.head.repo.full_name != github.repository

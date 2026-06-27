@@ -1,6 +1,6 @@
 """
 Tests for ``_build_openai_agents_sdk_spawn_env`` in
-``omnigent/runtime/workflow.py``.
+``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec.executor`` fields to
 ``HARNESS_OPENAI_AGENTS_*`` env vars that the openai-agents harness
@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 import yaml as _yaml
 
-from omnigent.runtime.workflow import _build_openai_agents_sdk_spawn_env, _load_global_auth
-from omnigent.spec.types import (
+from goalrail.runtime.workflow import _build_openai_agents_sdk_spawn_env, _load_global_auth
+from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
     DatabricksAuth,
@@ -33,15 +33,15 @@ from omnigent.spec.types import (
 @pytest.fixture(autouse=True)
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
-    Point OMNIGENT_CONFIG_HOME at an empty temp dir for every test in
+    Point GOALRAIL_CONFIG_HOME at an empty temp dir for every test in
     this file so tests that don't explicitly set up a global config are
-    not affected by the developer's real ``~/.omnigent/config.yaml``.
+    not affected by the developer's real ``~/.goalrail/config.yaml``.
 
     Tests that need a specific global config write their own config.yaml
-    into a separate temp dir and set OMNIGENT_CONFIG_HOME themselves —
+    into a separate temp dir and set GOALRAIL_CONFIG_HOME themselves —
     that setenv call wins because monkeypatch applies in call order.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
 
 def _make_spec(
@@ -76,7 +76,7 @@ def _make_spec(
         spec_version=1,
         name="test-openai-agents",
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model, auth=auth),
+        executor=ExecutorSpec(type="goalrail", config=config, model=model, auth=auth),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 
@@ -137,7 +137,7 @@ def test_databricks_model_ignores_env_profile(
 ) -> None:
     """
     Ambient ``DATABRICKS_CONFIG_PROFILE`` does NOT steer the auto-Databricks
-    routing — credentials are controlled by the spec or by ``omnigent
+    routing — credentials are controlled by the spec or by ``goalrail
     setup`` provider config, never by shell environment. A databricks-*
     model with no spec profile routes via the SDK ``DEFAULT`` profile.
     """
@@ -196,7 +196,7 @@ def test_profile_injects_ucode_state(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -213,11 +213,11 @@ def test_profile_injects_ucode_state(
         },
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.get_workspace_url_for_profile",
+        "goalrail.runtime.workflow.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.runtime.workflow.read_ucode_state",
+        "goalrail.runtime.workflow.read_ucode_state",
         lambda workspace_url: state,
     )
 
@@ -290,7 +290,7 @@ def test_spec_auth_takes_precedence_over_global_config(
         cfg_path.write_text(
             _yaml.dump({"auth": {"type": "databricks", "profile": "global-profile"}})
         )
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
 
         spec = _make_spec(
             model="databricks-gpt-5-4-mini",
@@ -311,14 +311,14 @@ def test_global_config_auth_used_when_spec_auth_absent(
 
     Failure means users must declare auth in every agent YAML and
     cannot rely on the once-configured global default from
-    ``omnigent setup``.
+    ``goalrail setup``.
     """
     with tempfile.TemporaryDirectory() as td:
         cfg_path = Path(td) / "config.yaml"
         cfg_path.write_text(
             _yaml.dump({"auth": {"type": "databricks", "profile": "global-profile"}})
         )
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
 
         spec = _make_spec(model="databricks-gpt-5-4-mini", auth=None, profile=None)
@@ -337,7 +337,7 @@ def test_load_global_auth_databricks(
     with tempfile.TemporaryDirectory() as td:
         cfg_path = Path(td) / "config.yaml"
         cfg_path.write_text(_yaml.dump({"auth": {"type": "databricks", "profile": "my-profile"}}))
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         result = _load_global_auth()
 
     assert isinstance(result, DatabricksAuth)
@@ -356,7 +356,7 @@ def test_load_global_auth_api_key(
     with tempfile.TemporaryDirectory() as td:
         cfg_path = Path(td) / "config.yaml"
         cfg_path.write_text(_yaml.dump({"auth": {"type": "api_key", "api_key": "$MY_GLOBAL_KEY"}}))
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         result = _load_global_auth()
 
     assert isinstance(result, ApiKeyAuth)
@@ -379,10 +379,10 @@ def test_global_config_auth_not_applied_when_spec_has_legacy_profile(
         cfg_path = Path(td) / "config.yaml"
         # Global config has api_key auth — should NOT apply when spec has a profile.
         cfg_path.write_text(_yaml.dump({"auth": {"type": "api_key", "api_key": "sk-global"}}))
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
 
-        # Spec declares profile via the legacy config dict (omnigent compat path).
+        # Spec declares profile via the legacy config dict (goalrail compat path).
         spec = _make_spec(model="databricks-gpt-5-4-mini", profile="oss", auth=None)
         env = _build_openai_agents_sdk_spawn_env(spec)
 
@@ -396,7 +396,7 @@ def test_load_global_auth_missing_file(
 ) -> None:
     """``_load_global_auth()`` returns ``None`` when no config file exists."""
     with tempfile.TemporaryDirectory() as td:
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         result = _load_global_auth()
 
     assert result is None
@@ -410,7 +410,7 @@ def test_load_global_auth_api_key_with_base_url(
     and expands env-var references in it.
 
     Failure means a user who configures a custom endpoint in
-    ``~/.omnigent/config.yaml`` via an env-var reference has the
+    ``~/.goalrail/config.yaml`` via an env-var reference has the
     literal ``$VAR`` string passed as the base URL.
     """
     monkeypatch.setenv("MY_GLOBAL_KEY", "sk-global-abc")
@@ -428,7 +428,7 @@ def test_load_global_auth_api_key_with_base_url(
                 }
             )
         )
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
         result = _load_global_auth()
 
     assert isinstance(result, ApiKeyAuth)
@@ -447,15 +447,15 @@ def test_load_global_auth_unresolved_env_var_raises(
     the literal ``$MISSING_KEY`` string to the API, producing a confusing
     401 "invalid API key" error rather than a clear configuration error.
     """
-    from omnigent.errors import OmnigentError
+    from goalrail.errors import GoalrailError
 
     monkeypatch.delenv("MISSING_KEY", raising=False)
     with tempfile.TemporaryDirectory() as td:
         cfg_path = Path(td) / "config.yaml"
         cfg_path.write_text(_yaml.dump({"auth": {"type": "api_key", "api_key": "$MISSING_KEY"}}))
-        monkeypatch.setenv("OMNIGENT_CONFIG_HOME", td)
+        monkeypatch.setenv("GOALRAIL_CONFIG_HOME", td)
 
-        with pytest.raises(OmnigentError):
+        with pytest.raises(GoalrailError):
             _load_global_auth()
 
 

@@ -1,5 +1,5 @@
 # ============================================================
-# Omnigent example: SWE organization / engineering director
+# Goalrail example: SWE organization / engineering director
 # ============================================================
 #
 # This is a SINGLE-FILE example in the same spirit as:
@@ -9,9 +9,9 @@
 #   - examples/secure_research_agent.yaml
 #
 # Usage:
-#   omnigent examples/swe_org.yaml --profile <your-profile>
-#   omnigent examples/swe_org.yaml --profile <your-profile>
-#   omnigent examples/swe_org.yaml --profile <your-profile> -p "Audit this repo"
+#   goalrail examples/swe_org.yaml --profile <your-profile>
+#   goalrail examples/swe_org.yaml --profile <your-profile>
+#   goalrail examples/swe_org.yaml --profile <your-profile> -p "Audit this repo"
 #
 # `--profile` resolves a Databricks workspace from `~/.databrickscfg`
 # and exposes `databricks-*` model names through the workspace's serving

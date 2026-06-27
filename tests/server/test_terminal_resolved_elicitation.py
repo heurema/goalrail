@@ -35,16 +35,16 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.conversation import (
+from goalrail.entities.conversation import (
     ConversationItem,
     FunctionCallData,
     FunctionCallOutputData,
 )
-from omnigent.server._elicitation_registry import (
+from goalrail.server._elicitation_registry import (
     _harness_parked_elicitations,
     _ParkedHarnessElicitation,
 )
-from omnigent.server.routes import sessions as sessions_route
+from goalrail.server.routes import sessions as sessions_route
 
 SESSION = "conv_test"
 
@@ -165,7 +165,7 @@ def test_lone_same_name_prompt_with_different_input_is_not_resolved(
     """
     a = _park("e_a", "Bash", {"command": "ls"})
 
-    with caplog.at_level(logging.DEBUG, logger="omnigent.server.routes.sessions"):
+    with caplog.at_level(logging.DEBUG, logger="goalrail.server.routes.sessions"):
         sessions_route._signal_terminal_resolved_harness_elicitation(
             SESSION, "Bash", {"command": "pwd"}
         )

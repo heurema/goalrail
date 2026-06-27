@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import sqlalchemy as sa
 
-from omnigent.db.utils import get_or_create_engine
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.db.utils import get_or_create_engine
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
 
 
 def test_create_and_get(agent_store: SqlAlchemyAgentStore) -> None:

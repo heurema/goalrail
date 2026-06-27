@@ -26,23 +26,23 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from omnigent.entities import Conversation, SessionPermission
-from omnigent.inner.terminal import TerminalInstance
-from omnigent.runtime import (
+from goalrail.entities import Conversation, SessionPermission
+from goalrail.inner.terminal import TerminalInstance
+from goalrail.runtime import (
     _globals,
     set_runner_client,
     set_runner_router,
     set_runner_ws_factory,
 )
-from omnigent.server.auth import (
+from goalrail.server.auth import (
     LEVEL_EDIT,
     LEVEL_OWNER,
     LEVEL_READ,
     RESERVED_USER_PUBLIC,
     UnifiedAuthProvider,
 )
-from omnigent.server.routes.terminal_attach import create_terminal_attach_router
-from omnigent.terminals import TerminalRegistry
+from goalrail.server.routes.terminal_attach import create_terminal_attach_router
+from goalrail.terminals import TerminalRegistry
 from tests.runner.helpers import make_test_terminal_instance
 
 
@@ -150,7 +150,7 @@ def server_registry(tmp_path: Path) -> Iterator[TerminalRegistry]:
     Install a fresh :class:`TerminalRegistry` as the server's
     runtime singleton for the duration of the test.
 
-    The route reads via :func:`omnigent.runtime.get_terminal_registry`,
+    The route reads via :func:`goalrail.runtime.get_terminal_registry`,
     which dereferences the module-level singleton. Tests install
     their own registry and restore the prior value at teardown so
     they're isolated from each other and from any leftover state
@@ -672,13 +672,13 @@ async def test_attach_terminal_local_fallback_spawns_tmux(
         raise OSError("stop child path")
 
     exit_exc = RuntimeError("child exited")
-    monkeypatch.setattr("omnigent.terminals.ws_bridge.pty.fork", fake_fork)
+    monkeypatch.setattr("goalrail.terminals.ws_bridge.pty.fork", fake_fork)
     # Production resolves the absolute tmux path and builds the child env
     # in the parent; the child calls os.execve (no PATH search, explicit
     # env) — patch execve, not execv/execvp.
-    monkeypatch.setattr("omnigent.terminals.ws_bridge.os.execve", fake_execve)
+    monkeypatch.setattr("goalrail.terminals.ws_bridge.os.execve", fake_execve)
     monkeypatch.setattr(
-        "omnigent.terminals.ws_bridge.os._exit",
+        "goalrail.terminals.ws_bridge.os._exit",
         lambda code: (_ for _ in ()).throw(exit_exc),
     )
 

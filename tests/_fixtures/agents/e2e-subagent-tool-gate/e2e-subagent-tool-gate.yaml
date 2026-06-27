@@ -48,7 +48,7 @@ tools:
         type: function
         on: [tool_call:echo]
         function:
-          path: omnigent.policies.function.make_fixed_action_callable
+          path: goalrail.policies.function.make_fixed_action_callable
           arguments:
             action: ask
             reason: Confirm sub-agent may run the echo tool.

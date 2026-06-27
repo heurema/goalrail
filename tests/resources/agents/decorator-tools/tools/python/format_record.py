@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from omnigent_client.tools import tool
+from goalrail_client.tools import tool
 from pydantic import BaseModel
 
 

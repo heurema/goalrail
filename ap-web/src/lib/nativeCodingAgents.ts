@@ -1,7 +1,7 @@
 import type { AvailableAgent } from "@/hooks/useAvailableAgents";
 
-export const WRAPPER_LABEL_KEY = "omnigent.wrapper";
-export const UI_MODE_LABEL_KEY = "omnigent.ui";
+export const WRAPPER_LABEL_KEY = "goalrail.wrapper";
+export const UI_MODE_LABEL_KEY = "goalrail.ui";
 export const UI_MODE_TERMINAL_VALUE = "terminal";
 
 export type NativeCodingAgentIconKind =
@@ -159,7 +159,7 @@ const BY_WRAPPER: Map<string, NativeCodingAgentSpec> = new Map(
 );
 
 // Reversed harness spellings that fold to a canonical native `harness`.
-// Mirrors omnigent.harness_aliases.NATIVE_HARNESSES on the server, which
+// Mirrors goalrail.harness_aliases.NATIVE_HARNESSES on the server, which
 // accepts both the canonical and reversed native spellings (claude/codex
 // only use the canonical form, so they need no reversed entry here).
 const HARNESS_ALIASES: Record<string, string> = {

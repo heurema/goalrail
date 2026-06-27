@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { appendPromptHistoryEntry, usePromptHistory } from "./usePromptHistory";
 
-const STORAGE_PREFIX = "omnigent:prompt-history";
+const STORAGE_PREFIX = "goalrail:prompt-history";
 
 // History is keyed per conversation; tests must read the same scoped key the
 // production code writes, or they'd assert against an always-empty slot.

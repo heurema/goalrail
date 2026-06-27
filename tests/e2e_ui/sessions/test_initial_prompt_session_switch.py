@@ -219,7 +219,7 @@ async def _drive_initial_prompt_switch(base_url: str, session_a: str, session_b:
             # composer auto-selects from the stubbed /v1/hosts.
             await page.evaluate(
                 """() => localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "goalrail:recent-workspaces",
                     JSON.stringify({ host_e2e: ["/tmp"] }),
                 )"""
             )

@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.server.managed_hosts`."""
+"""Tests for :mod:`goalrail.server.managed_hosts`."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 
-from omnigent.db.utils import now_epoch
-from omnigent.onboarding.sandboxes.e2b import managed_token_ttl_s as e2b_managed_token_ttl_s
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.managed_hosts import (
+from goalrail.db.utils import now_epoch
+from goalrail.onboarding.sandboxes.e2b import managed_token_ttl_s as e2b_managed_token_ttl_s
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.app import create_app
+from goalrail.server.managed_hosts import (
     BOXLITE_MANAGED_TOKEN_TTL_S,
     DAYTONA_MANAGED_TOKEN_TTL_S,
     ISLO_MANAGED_TOKEN_TTL_S,
@@ -29,11 +29,11 @@ from omnigent.server.managed_hosts import (
     relaunch_managed_host,
     terminate_managed_host,
 )
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.host_store import HostStore
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.host_store import HostStore
 from tests.server.helpers import (
     FakeSandboxLauncher,
     HostStartInvocation,
@@ -93,9 +93,9 @@ def test_parse_valid_modal_config_builds_image_parameterized_factory(
         {
             "provider": "modal",
             # Trailing slash is normalized: the URL is interpolated into
-            # `omnigent host --server <url>` and double slashes break joins.
+            # `goalrail host --server <url>` and double slashes break joins.
             "server_url": "https://srv.example.com/",
-            "modal": {"image": "docker.io/me/omnigent-host:latest"},
+            "modal": {"image": "docker.io/me/goalrail-host:latest"},
         }
     )
     assert cfg is not None
@@ -112,7 +112,7 @@ def test_parse_valid_modal_config_builds_image_parameterized_factory(
     fake = FakeSandboxLauncher()
     install_fake_modal_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.image == "docker.io/me/omnigent-host:latest"
+    assert fake.image == "docker.io/me/goalrail-host:latest"
     # No secrets configured → None reaches the launcher (its env-var
     # fallback applies), not an empty list.
     assert fake.secrets is None
@@ -171,7 +171,7 @@ def test_parse_valid_daytona_config_builds_parameterized_factory(
             "provider": "daytona",
             "server_url": "https://srv.example.com/",
             "daytona": {
-                "image": "docker.io/me/omnigent-host:latest",
+                "image": "docker.io/me/goalrail-host:latest",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
             },
         }
@@ -183,7 +183,7 @@ def test_parse_valid_daytona_config_builds_parameterized_factory(
     fake = FakeSandboxLauncher()
     install_fake_daytona_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.image == "docker.io/me/omnigent-host:latest"
+    assert fake.image == "docker.io/me/goalrail-host:latest"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
 
 
@@ -218,7 +218,7 @@ def test_parse_valid_boxlite_cloud_config_builds_parameterized_factory(
             "provider": "boxlite",
             "server_url": "https://srv.example.com/",
             "boxlite": {
-                "image": "docker.io/me/omnigent-host:latest",
+                "image": "docker.io/me/goalrail-host:latest",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
                 "cloud": {"endpoint": "https://boxlite.example.com:8100"},
             },
@@ -233,7 +233,7 @@ def test_parse_valid_boxlite_cloud_config_builds_parameterized_factory(
     install_fake_boxlite_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
     assert fake.endpoint == "https://boxlite.example.com:8100"
-    assert fake.image == "docker.io/me/omnigent-host:latest"
+    assert fake.image == "docker.io/me/goalrail-host:latest"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
 
 
@@ -303,7 +303,7 @@ def test_parse_valid_islo_config_builds_parameterized_factory(
             "provider": "islo",
             "server_url": "https://srv.example.com/",
             "islo": {
-                "image": "docker.io/me/omnigent-host:latest",
+                "image": "docker.io/me/goalrail-host:latest",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
                 "base_url": "https://api.islo.dev/",
                 "gateway_profile": "default",
@@ -323,7 +323,7 @@ def test_parse_valid_islo_config_builds_parameterized_factory(
     fake = FakeSandboxLauncher()
     install_fake_islo_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.image == "docker.io/me/omnigent-host:latest"
+    assert fake.image == "docker.io/me/goalrail-host:latest"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
     assert fake.base_url == "https://api.islo.dev/"
     assert fake.gateway_profile == "default"
@@ -372,7 +372,7 @@ def test_parse_valid_e2b_config_builds_parameterized_factory(
             "provider": "e2b",
             "server_url": "https://srv.example.com/",
             "e2b": {
-                "template": "omnigent-host",
+                "template": "goalrail-host",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
             },
         }
@@ -385,7 +385,7 @@ def test_parse_valid_e2b_config_builds_parameterized_factory(
     fake = FakeSandboxLauncher()
     install_fake_e2b_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.template == "omnigent-host"
+    assert fake.template == "goalrail-host"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
 
 
@@ -431,7 +431,7 @@ def test_parse_valid_openshell_config_builds_parameterized_factory(
             "provider": "openshell",
             "server_url": "https://srv.example.com/",
             "openshell": {
-                "image": "docker.io/me/omnigent-host:latest",
+                "image": "docker.io/me/goalrail-host:latest",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
                 "cluster": "my-gateway",
             },
@@ -445,7 +445,7 @@ def test_parse_valid_openshell_config_builds_parameterized_factory(
     fake = FakeSandboxLauncher()
     install_fake_openshell_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.image == "docker.io/me/omnigent-host:latest"
+    assert fake.image == "docker.io/me/goalrail-host:latest"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
     assert fake.cluster == "my-gateway"
 
@@ -479,33 +479,33 @@ def test_parse_valid_kubernetes_config_builds_parameterized_factory(
     cfg = parse_sandbox_config(
         {
             "provider": "kubernetes",
-            "server_url": "http://omnigent.omnigent.svc.cluster.local/",
+            "server_url": "http://goalrail.goalrail.svc.cluster.local/",
             "kubernetes": {
-                "image": "ghcr.io/me/omnigent-host:latest",
+                "image": "ghcr.io/me/goalrail-host:latest",
                 "env": ["OPENAI_API_KEY", "GIT_TOKEN"],
-                "namespace": "omnigent-sandboxes",
-                "secret_name": "omnigent-creds",
-                "service_account": "omnigent-runner",
-                "node_selector": {"omnigent.ai/runner-ready": "true"},
+                "namespace": "goalrail-sandboxes",
+                "secret_name": "goalrail-creds",
+                "service_account": "goalrail-runner",
+                "node_selector": {"goalrail.dev/runner-ready": "true"},
                 "in_cluster": True,
                 "resources": {"requests": {"cpu": "500m"}, "limits": {"memory": "8Gi"}},
             },
         }
     )
     assert cfg is not None
-    assert cfg.server_url == "http://omnigent.omnigent.svc.cluster.local"
+    assert cfg.server_url == "http://goalrail.goalrail.svc.cluster.local"
     assert cfg.token_ttl_s == KUBERNETES_MANAGED_TOKEN_TTL_S
     assert cfg.managed_launch_supported is True
     assert cfg.provider == "kubernetes"
     fake = FakeSandboxLauncher()
     install_fake_kubernetes_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.image == "ghcr.io/me/omnigent-host:latest"
+    assert fake.image == "ghcr.io/me/goalrail-host:latest"
     assert fake.env == ["OPENAI_API_KEY", "GIT_TOKEN"]
-    assert fake.namespace == "omnigent-sandboxes"
-    assert fake.secret_name == "omnigent-creds"
-    assert fake.service_account == "omnigent-runner"
-    assert fake.node_selector == {"omnigent.ai/runner-ready": "true"}
+    assert fake.namespace == "goalrail-sandboxes"
+    assert fake.secret_name == "goalrail-creds"
+    assert fake.service_account == "goalrail-runner"
+    assert fake.node_selector == {"goalrail.dev/runner-ready": "true"}
     assert fake.in_cluster is True
     assert fake.resources == {"requests": {"cpu": "500m"}, "limits": {"memory": "8Gi"}}
 
@@ -532,7 +532,7 @@ def test_parse_kubernetes_without_section_defaults(monkeypatch: pytest.MonkeyPat
     ("kubernetes_block", "expected_fragment"),
     [
         ({"namespace": "Bad_NS"}, "sandbox.kubernetes.namespace"),
-        ({"node_selector": {"omnigent.ai/x": "Bad Value"}}, "node_selector"),
+        ({"node_selector": {"goalrail.dev/x": "Bad Value"}}, "node_selector"),
         ({"resources": {"requests": {"cpu": "not a quantity!"}}}, "valid Kubernetes quantity"),
         ({"resources": {"requests": {"disk": "1Gi"}}}, "unknown key"),
         ({"in_cluster": "yes"}, "must be a boolean"),
@@ -1132,8 +1132,8 @@ async def test_launch_online_timeout_terminates_and_deletes_host(
     # Shrink the polling budget so the timeout path runs in
     # milliseconds; production values are module constants read at
     # call time.
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 0.05)
-    monkeypatch.setattr("omnigent.server.managed_hosts._ONLINE_POLL_INTERVAL_S", 0.01)
+    monkeypatch.setattr("goalrail.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("goalrail.server.managed_hosts._ONLINE_POLL_INTERVAL_S", 0.01)
     host_store = HostStore(db_uri)
 
     with pytest.raises(HTTPException) as exc:
@@ -1187,7 +1187,7 @@ async def test_launch_with_repo_clones_into_workspace(db_uri: str) -> None:
     assert clone_cmd in fake.commands
     # Clone runs before the host starts — the workspace must be ready
     # by the time the runner can launch on the registered host.
-    host_start_index = next(i for i, c in enumerate(fake.commands) if "omnigent host" in c)
+    host_start_index = next(i for i, c in enumerate(fake.commands) if "goalrail host" in c)
     assert fake.commands.index(clone_cmd) < host_start_index
     assert fake.terminated == []
 
@@ -1240,7 +1240,7 @@ class _EntrypointFakeLauncher(FakeSandboxLauncher):
     def provision(self, name: str) -> str:
         """Reserve a sandbox id (no box created); recorded + deterministic."""
         self.provisioned_names.append(name)
-        return f"omnigent-pod-{len(self.provisioned_names)}"
+        return f"goalrail-pod-{len(self.provisioned_names)}"
 
     def run(self, sandbox_id: str, command: str, *, check: bool = True):
         """The entrypoint model never execs in — the base default is overridden."""
@@ -1274,7 +1274,7 @@ class _EntrypointFakeLauncher(FakeSandboxLauncher):
         self.token_resolved_at_start = self._host_store.resolve_launch_token(token) is not None
         # Simulate the host's entrypoint dialing back over the tunnel.
         self._host_store.upsert_on_connect(host_id=host_id, name=host_name, owner=_OWNER)
-        return f"/home/omnigent/workspace/{repo_name}" if repo_name else "/home/omnigent/workspace"
+        return f"/home/goalrail/workspace/{repo_name}" if repo_name else "/home/goalrail/workspace"
 
 
 async def test_launch_entrypoint_provider_arms_token_before_launch_host(db_uri: str) -> None:
@@ -1296,19 +1296,19 @@ async def test_launch_entrypoint_provider_arms_token_before_launch_host(db_uri: 
     # start_host ran once, with the reserved id and repo info.
     assert len(fake.start_calls) == 1
     call = fake.start_calls[0]
-    assert call["sandbox_id"] == "omnigent-pod-1"
+    assert call["sandbox_id"] == "goalrail-pod-1"
     assert call["server_url"] == "https://srv.example.com"
     assert call["repo_url"] == "https://github.com/org/repo.git"
     assert call["repo_name"] == "repo"
     # The token was already resolvable when start_host ran (no dial-back race).
     assert fake.token_resolved_at_start is True
     # The workspace (cloned dir) is returned and the host is online + bound.
-    assert result.workspace == "/home/omnigent/workspace/repo"
+    assert result.workspace == "/home/goalrail/workspace/repo"
     host = host_store.get_host(result.host_id)
     assert host is not None
     assert host.status == "online"
     assert host.sandbox_provider == "kubernetes"
-    assert host.sandbox_id == "omnigent-pod-1"
+    assert host.sandbox_id == "goalrail-pod-1"
 
 
 async def test_launch_entrypoint_provider_cleans_up_on_launch_failure(db_uri: str) -> None:
@@ -1330,7 +1330,7 @@ async def test_launch_entrypoint_provider_cleans_up_on_launch_failure(db_uri: st
     assert exc.value.status_code == 502
     assert "pod could not be scheduled" in exc.value.detail
     # The reserved sandbox was terminated and no host row survives.
-    assert fake.terminated == ["omnigent-pod-1"]
+    assert fake.terminated == ["goalrail-pod-1"]
     assert host_store.list_hosts(_OWNER) == []
 
 
@@ -1569,14 +1569,14 @@ def test_parse_modal_secrets_thread_to_launcher(monkeypatch: pytest.MonkeyPatch)
         {
             "provider": "modal",
             "server_url": "https://s.example.com",
-            "modal": {"secrets": ["omnigent-llm", "gateway-extras"]},
+            "modal": {"secrets": ["goalrail-llm", "gateway-extras"]},
         }
     )
     assert cfg is not None
     fake = FakeSandboxLauncher()
     install_fake_modal_launcher(monkeypatch, fake)
     assert cfg.launcher_factory() is fake
-    assert fake.secrets == ["omnigent-llm", "gateway-extras"]
+    assert fake.secrets == ["goalrail-llm", "gateway-extras"]
     # secrets without image: the official-image default still applies.
     assert fake.image is None
 
@@ -1584,8 +1584,8 @@ def test_parse_modal_secrets_thread_to_launcher(monkeypatch: pytest.MonkeyPatch)
 @pytest.mark.parametrize(
     "secrets",
     [
-        "omnigent-llm",  # scalar, not a list
-        ["omnigent-llm", 7],  # non-string entry
+        "goalrail-llm",  # scalar, not a list
+        ["goalrail-llm", 7],  # non-string entry
         ["  "],  # empty name
     ],
 )

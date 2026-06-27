@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.cursor_native_bridge import (
+from goalrail.cursor_native_bridge import (
     BRIDGE_DIR_ENV_VAR,
     FORK_HISTORY_CLOSE_TAG,
     FORK_HISTORY_OPEN_TAG,
@@ -35,13 +35,13 @@ from omnigent.cursor_native_bridge import (
     write_mcp_config,
     write_tmux_target,
 )
-from omnigent.inner import cursor_native_executor as cne
-from omnigent.inner.cursor_native_executor import (
+from goalrail.inner import cursor_native_executor as cne
+from goalrail.inner.cursor_native_executor import (
     CursorNativeExecutor,
     _content_to_text,
     _latest_user_text,
 )
-from omnigent.inner.executor import ExecutorError
+from goalrail.inner.executor import ExecutorError
 
 
 class TestContentExtraction:
@@ -126,7 +126,7 @@ class TestForkPreamble:
         assert wrapped.count(FORK_HISTORY_CLOSE_TAG) == 1
         assert wrapped.count(FORK_HISTORY_OPEN_TAG) == 1
         # The defanged form stays readable.
-        assert "[/omnigent_fork_history]" in wrapped
+        assert "[/goalrail_fork_history]" in wrapped
 
 
 class TestRunTurnPreambleInjection:
@@ -243,14 +243,14 @@ class TestBridge:
     def test_read_tmux_info_missing(self, tmp_path: Path) -> None:
         assert read_tmux_info(tmp_path) is None
 
-    def test_build_mcp_config_registers_omnigent_relay(self, tmp_path: Path) -> None:
+    def test_build_mcp_config_registers_goalrail_relay(self, tmp_path: Path) -> None:
         config = build_mcp_config(tmp_path, python_executable="python-test")
-        server = config["mcpServers"]["omnigent"]
+        server = config["mcpServers"]["goalrail"]
         assert server["command"] == "python-test"
         assert server["args"] == [
             "-I",
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(tmp_path),
@@ -264,14 +264,14 @@ class TestBridge:
         workspace = tmp_path / "workspace"
         bridge_dir = tmp_path / "bridge"
         monkeypatch.setattr(
-            "omnigent.cursor_native_bridge.approve_mcp_server_for_workspace",
+            "goalrail.cursor_native_bridge.approve_mcp_server_for_workspace",
             lambda _workspace: pytest.fail("approval must happen after tool relay starts"),
         )
         path = write_mcp_config(workspace, bridge_dir, python_executable="python-test")
 
         assert path == workspace / ".cursor" / "mcp.json"
         payload = json.loads(path.read_text(encoding="utf-8"))
-        assert payload["mcpServers"]["omnigent"]["command"] == "python-test"
+        assert payload["mcpServers"]["goalrail"]["command"] == "python-test"
         assert json.loads((bridge_dir / "bridge.json").read_text(encoding="utf-8"))["token"]
 
     def test_write_mcp_bridge_config_is_idempotent(self, tmp_path: Path) -> None:
@@ -291,7 +291,7 @@ class TestBridge:
             tmp_path / ".cursor" / "projects" / "Users-corey.zumar" / "mcp-disabled.json"
         )
         disabled_path.parent.mkdir(parents=True)
-        disabled_path.write_text('["omnigent", "other"]\n', encoding="utf-8")
+        disabled_path.write_text('["goalrail", "other"]\n', encoding="utf-8")
 
         enable_mcp_for_workspace(Path("/Users/corey.zumar"))
 
@@ -304,7 +304,7 @@ class TestBridge:
         config_path = tmp_path / ".cursor" / "cli-config.json"
         config_path.parent.mkdir(parents=True)
         config_path.write_text(
-            '{"permissions": {"allow": ["Shell(ls)", "Mcp(omnigent:sys_os_read)"]}}\n',
+            '{"permissions": {"allow": ["Shell(ls)", "Mcp(goalrail:sys_os_read)"]}}\n',
             encoding="utf-8",
         )
 
@@ -312,8 +312,8 @@ class TestBridge:
 
         allow = json.loads(config_path.read_text(encoding="utf-8"))["permissions"]["allow"]
         assert "Shell(ls)" in allow
-        assert allow.count("Mcp(omnigent:sys_os_read)") == 1
-        assert "Mcp(omnigent:sys_session_send)" in allow
+        assert allow.count("Mcp(goalrail:sys_os_read)") == 1
+        assert "Mcp(goalrail:sys_session_send)" in allow
 
     def test_approve_mcp_server_for_workspace_uses_cursor_cli(
         self, tmp_path: Path, monkeypatch
@@ -321,7 +321,7 @@ class TestBridge:
         calls: list[dict[str, object]] = []
 
         monkeypatch.setattr(
-            "omnigent.cursor_native.resolve_cursor_executable",
+            "goalrail.cursor_native.resolve_cursor_executable",
             lambda: "/bin/cursor-agent-test",
         )
 
@@ -335,7 +335,7 @@ class TestBridge:
 
         assert calls == [
             {
-                "args": (["/bin/cursor-agent-test", "mcp", "enable", "omnigent"],),
+                "args": (["/bin/cursor-agent-test", "mcp", "enable", "goalrail"],),
                 "kwargs": {
                     "cwd": tmp_path,
                     "stdin": subprocess.DEVNULL,
@@ -350,26 +350,26 @@ class TestBridge:
 
 class TestRegistration:
     def test_harness_is_registered(self) -> None:
-        from omnigent.runtime.harnesses import _HARNESS_MODULES
+        from goalrail.runtime.harnesses import _HARNESS_MODULES
 
-        assert _HARNESS_MODULES["cursor-native"] == "omnigent.inner.cursor_native_harness"
+        assert _HARNESS_MODULES["cursor-native"] == "goalrail.inner.cursor_native_harness"
 
     def test_harness_is_allowlisted(self) -> None:
-        from omnigent.spec._omnigent_compat import OMNIGENT_HARNESSES
+        from goalrail.spec._goalrail_compat import GOALRAIL_HARNESSES
 
-        assert "cursor-native" in OMNIGENT_HARNESSES
+        assert "cursor-native" in GOALRAIL_HARNESSES
 
     def test_cursor_native_is_terminal_native(self) -> None:
-        # cursor-native launches the cursor-agent TUI in an omnigent terminal
+        # cursor-native launches the cursor-agent TUI in an goalrail terminal
         # (like claude/codex/pi-native), so the runner must treat it as a native
         # terminal harness.
-        from omnigent.harness_aliases import is_native_harness
+        from goalrail.harness_aliases import is_native_harness
 
         assert is_native_harness("cursor-native") is True
         assert is_native_harness("native-cursor") is True
 
     def test_native_coding_agent_record(self) -> None:
-        from omnigent.native_coding_agents import native_coding_agent_for_harness
+        from goalrail.native_coding_agents import native_coding_agent_for_harness
 
         agent = native_coding_agent_for_harness("cursor-native")
         assert agent is not None

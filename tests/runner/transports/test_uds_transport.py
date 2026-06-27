@@ -18,7 +18,7 @@ import tempfile
 import httpx
 import pytest
 
-from omnigent.runner.transports.uds import (
+from goalrail.runner.transports.uds import (
     RunnerSubprocess,
     create_uds_client,
 )
@@ -31,7 +31,7 @@ _REQUIRES_UDS = pytest.mark.skipif(
 )
 
 # ``_entry:create_app`` requires RUNNER_SERVER_URL in the subprocess
-# environment. Tests don't need a real Omnigent server — the env var only
+# environment. Tests don't need a real Goalrail server — the env var only
 # needs to satisfy the non-empty check so the factory can build the
 # httpx client. The actual URL is never dialled during these transport
 # smoke tests.
@@ -157,7 +157,7 @@ def test_subprocess_with_bad_app_factory_raises() -> None:
     misleading — the subprocess died, it didn't time out.
     """
     with pytest.raises(RuntimeError, match="exited prematurely"):
-        with RunnerSubprocess(app_factory_path="omnigent.does.not.exist:app"):
+        with RunnerSubprocess(app_factory_path="goalrail.does.not.exist:app"):
             pass
 
 

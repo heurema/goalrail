@@ -29,11 +29,11 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime import get_caps, session_stream
-from omnigent.runtime.caps import RuntimeCaps
-from omnigent.server.routes import sessions as sessions_routes
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime import get_caps, session_stream
+from goalrail.runtime.caps import RuntimeCaps
+from goalrail.server.routes import sessions as sessions_routes
+from goalrail.spec.types import FunctionPolicySpec, FunctionRef
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.server.helpers import CapturingRunnerClient, create_test_agent
@@ -311,7 +311,7 @@ async def test_tool_call_deny_with_default_policy(
         default_policies=[deny_bash_policy],
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_caps",
+        "goalrail.server.routes.sessions.get_caps",
         lambda: patched_caps,
     )
 
@@ -358,7 +358,7 @@ async def test_tool_result_deny_with_default_policy(
         default_policies=[deny_sensitive],
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_caps",
+        "goalrail.server.routes.sessions.get_caps",
         lambda: patched_caps,
     )
 
@@ -455,7 +455,7 @@ def test_build_actor_with_user_id() -> None:
     authenticated. Without this, ``event.context.actor`` is always empty
     and policies that gate on identity are blind.
     """
-    from omnigent.server.routes.sessions import _build_actor
+    from goalrail.server.routes.sessions import _build_actor
 
     assert _build_actor("alice@example.com") == {"run_as": "alice@example.com"}
 
@@ -465,7 +465,7 @@ def test_build_actor_without_user_id() -> None:
     ``_build_actor`` returns ``None`` when no user is authenticated (tests,
     legacy callers). Policies should see an empty actor dict.
     """
-    from omnigent.server.routes.sessions import _build_actor
+    from goalrail.server.routes.sessions import _build_actor
 
     assert _build_actor(None) is None
 
@@ -494,12 +494,12 @@ async def test_evaluate_endpoint_passes_actor_to_policy(
         default_policies=[policy],
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_caps",
+        "goalrail.server.routes.sessions.get_caps",
         lambda: patched_caps,
     )
     # Patch _get_user_id to simulate an authenticated user.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._get_user_id",
+        "goalrail.server.routes.sessions._get_user_id",
         lambda _req, _auth: "blocked@test.com",
     )
 
@@ -556,7 +556,7 @@ def _patch_default_policies(monkeypatch: pytest.MonkeyPatch, fn_path: str) -> No
         default_policies=[policy],
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_caps",
+        "goalrail.server.routes.sessions.get_caps",
         lambda: patched_caps,
     )
 
@@ -660,7 +660,7 @@ async def test_tool_call_ask_forwards_popup_event_to_runner(
     # itself touches the runner snapshot path); the forward falls back to
     # the global runner client when no runner is bound for the session.
     capturing = CapturingRunnerClient()
-    monkeypatch.setattr("omnigent.runtime._globals._runner_client", capturing)
+    monkeypatch.setattr("goalrail.runtime._globals._runner_client", capturing)
 
     drain = asyncio.create_task(_drain_elicitation_id(session_id))
     await asyncio.sleep(0.05)
@@ -710,7 +710,7 @@ def test_native_ask_gate_lock_keys_by_session_and_policy() -> None:
     queue). If the helper ignored either key dimension, two of these
     asserts would see the same object and fail.
     """
-    from omnigent.server.routes.sessions import _native_ask_gate_lock
+    from goalrail.server.routes.sessions import _native_ask_gate_lock
 
     lock_a = _native_ask_gate_lock("conv_1", "session_cost_guard")
     # Same key → same lock: this is what makes parallel tool calls that
@@ -758,7 +758,7 @@ async def test_concurrent_cost_asks_serialize_and_collapse_sibling(
                 "session_cost_guard": {
                     "type": "function",
                     "function": {
-                        "path": "omnigent.policies.builtins.cost.cost_budget",
+                        "path": "goalrail.policies.builtins.cost.cost_budget",
                         "arguments": {
                             # Hard cap far above the seeded cost so only the
                             # soft warning (ASK) fires, never a DENY.

@@ -10,13 +10,13 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from omnigent.runner.transports.tcp import (
+from goalrail.runner.transports.tcp import (
     RunnerTCPSubprocess,
     create_tcp_client,
 )
 
 # ``_entry:create_app`` requires RUNNER_SERVER_URL in the subprocess
-# environment. Tests don't need a real Omnigent server — the env var only
+# environment. Tests don't need a real Goalrail server — the env var only
 # needs to satisfy the non-empty check so the factory can build the
 # httpx client. The actual URL is never dialled during these transport
 # smoke tests.
@@ -41,7 +41,7 @@ def test_runner_tcp_subprocess_with_explicit_port() -> None:
     actually used what we passed.
     """
     # Probe for a free port via the OS, then pass it explicitly.
-    from omnigent.runner.transports.tcp import _pick_free_port
+    from goalrail.runner.transports.tcp import _pick_free_port
 
     port = _pick_free_port()
     with RunnerTCPSubprocess(port=port, extra_env=_FAKE_SERVER_ENV) as runner:
@@ -94,7 +94,7 @@ async def test_post_session_events_stub_via_tcp() -> None:
 def test_tcp_subprocess_with_bad_app_factory_raises() -> None:
     """Bad import path → uvicorn crashes → __enter__ surfaces a useful error."""
     with pytest.raises(RuntimeError, match="exited prematurely"):
-        with RunnerTCPSubprocess(app_factory_path="omnigent.does.not.exist:app"):
+        with RunnerTCPSubprocess(app_factory_path="goalrail.does.not.exist:app"):
             pass
 
 

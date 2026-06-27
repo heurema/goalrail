@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities.comment import CommentsFingerprint
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.entities.comment import CommentsFingerprint
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
 
 
 @pytest.fixture()
@@ -637,7 +637,7 @@ def clock(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """
     state = {"now": 1_000}
     monkeypatch.setattr(
-        "omnigent.stores.comment_store.sqlalchemy_store.now_epoch_us",
+        "goalrail.stores.comment_store.sqlalchemy_store.now_epoch_us",
         lambda: state["now"] * _US,
     )
     return state

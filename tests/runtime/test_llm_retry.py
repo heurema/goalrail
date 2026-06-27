@@ -8,14 +8,14 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from omnigent.llms.errors import LLMErrorDetail, PermanentLLMError, RetryableLLMError
-from omnigent.runtime.llm_retry import (
+from goalrail.llms.errors import LLMErrorDetail, PermanentLLMError, RetryableLLMError
+from goalrail.runtime.llm_retry import (
     classify_llm_error,
     compute_backoff_delay,
     detail_to_dict,
     execute_with_retry,
 )
-from omnigent.spec.types import RetryPolicy
+from goalrail.spec.types import RetryPolicy
 
 
 @pytest.fixture()
@@ -221,7 +221,7 @@ def test_execute_with_retry_retries_on_timeout(
     Timeout on first call must trigger one retry; second success is returned.
     """
     # Patch time.sleep to avoid real delays in tests.
-    monkeypatch.setattr("omnigent.runtime.llm_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.llm_retry.time.sleep", lambda _: None)
 
     call_fn = MagicMock(side_effect=[httpx.TimeoutException("timeout"), "recovered"])
     on_retry = MagicMock()
@@ -271,7 +271,7 @@ def test_execute_with_retry_exhausted_raises(
     When all attempts fail with retryable errors, RetryableLLMError is raised.
     """
     # Patch time.sleep to avoid real delays in tests.
-    monkeypatch.setattr("omnigent.runtime.llm_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.llm_retry.time.sleep", lambda _: None)
 
     call_fn = MagicMock(
         side_effect=httpx.TimeoutException("timeout"),
@@ -307,7 +307,7 @@ def test_retry_event_structure_on_timeout(
     to ``on_retry`` when a timeout triggers a retry.
     """
     # Patch time.sleep to avoid real delays in tests.
-    monkeypatch.setattr("omnigent.runtime.llm_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.llm_retry.time.sleep", lambda _: None)
 
     call_fn = MagicMock(
         side_effect=[httpx.TimeoutException("timeout"), "ok"],
@@ -372,7 +372,7 @@ def test_retry_event_structure_on_http_429(
     rate-limit response triggers a retry.
     """
     # Patch time.sleep to avoid real delays in tests.
-    monkeypatch.setattr("omnigent.runtime.llm_retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("goalrail.runtime.llm_retry.time.sleep", lambda _: None)
 
     exc = _make_http_status_error(429, body="rate limited")
     call_fn = MagicMock(side_effect=[exc, "ok"])

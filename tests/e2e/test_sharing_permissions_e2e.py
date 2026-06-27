@@ -1,6 +1,6 @@
 """Cross-user sharing/permission e2e tests against the real server.
 
-The e2e ``live_server`` runs header auth (``OMNIGENT_AUTH_PROVIDER=header``
+The e2e ``live_server`` runs header auth (``GOALRAIL_AUTH_PROVIDER=header``
 pinned in tests/conftest.py) with a real permission store, so identity is
 just the ``X-Forwarded-Email`` header. Only one test here makes an LLM
 call; the rest pin the HTTP semantics of the permission model:
@@ -35,7 +35,7 @@ from tests.e2e.conftest import (
     send_user_message_to_session,
 )
 
-# Permission levels mirrored from omnigent/server/auth.py. Mirrored
+# Permission levels mirrored from goalrail/server/auth.py. Mirrored
 # rather than imported so a server-side renumbering fails these tests
 # loudly instead of silently tracking the change.
 _LEVEL_READ = 1

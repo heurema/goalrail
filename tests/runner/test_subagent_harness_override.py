@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from omnigent.runner.tool_dispatch import (
+from goalrail.runner.tool_dispatch import (
     _subagent_allowed_harnesses,
     _subagent_harness_override_from_args,
 )

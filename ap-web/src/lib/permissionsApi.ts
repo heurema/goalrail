@@ -1,6 +1,6 @@
 /**
  * Typed client for the `/v1/sessions/{id}/permissions` endpoints.
- * Mirrors `omnigent/server/routes/sessions.py` permission handlers.
+ * Mirrors `goalrail/server/routes/sessions.py` permission handlers.
  */
 
 import type { Conversation } from "@/hooks/useConversations";
@@ -9,7 +9,7 @@ import { authenticatedFetch } from "./identity";
 
 /**
  * Numeric permission level of the session owner. Mirrors
- * ``LEVEL_OWNER`` in ``omnigent/server/auth.py`` (READ=1, EDIT=2,
+ * ``LEVEL_OWNER`` in ``goalrail/server/auth.py`` (READ=1, EDIT=2,
  * MANAGE=3, OWNER=4).
  */
 export const LEVEL_OWNER = 4;

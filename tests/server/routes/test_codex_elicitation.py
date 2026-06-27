@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.server.routes._codex_elicitation import (
+from goalrail.errors import GoalrailError
+from goalrail.server.routes._codex_elicitation import (
     _codex_command_preview,
     _execpolicy_amendment,
     _json_preview,
@@ -23,27 +23,27 @@ class TestParseCodexElicitationRequest:
     """Tests for the top-level request parser."""
 
     def test_missing_method_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="non-empty method"):
+        with pytest.raises(GoalrailError, match="non-empty method"):
             parse_codex_elicitation_request({"id": 1, "params": {}})
 
     def test_empty_method_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="non-empty method"):
+        with pytest.raises(GoalrailError, match="non-empty method"):
             parse_codex_elicitation_request({"id": 1, "method": "", "params": {}})
 
     def test_non_dict_params_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="params must be an object"):
+        with pytest.raises(GoalrailError, match="params must be an object"):
             parse_codex_elicitation_request(
                 {"id": 1, "method": "mcpServer/elicitation/request", "params": "bad"}
             )
 
     def test_missing_id_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="string or integer id"):
+        with pytest.raises(GoalrailError, match="string or integer id"):
             parse_codex_elicitation_request(
                 {"method": "mcpServer/elicitation/request", "params": {}}
             )
 
     def test_unsupported_method_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="Unsupported"):
+        with pytest.raises(GoalrailError, match="Unsupported"):
             parse_codex_elicitation_request({"id": 1, "method": "unknown/method", "params": {}})
 
     def test_valid_mcp_form_request(self) -> None:
@@ -145,13 +145,13 @@ class TestExecpolicyAmendment:
         assert _execpolicy_amendment(["pytest", "-v"]) == ["pytest", "-v"]
 
     def test_empty_list_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="non-empty list"):
+        with pytest.raises(GoalrailError, match="non-empty list"):
             _execpolicy_amendment([])
 
     def test_non_list_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="non-empty list"):
+        with pytest.raises(GoalrailError, match="non-empty list"):
             _execpolicy_amendment("pytest")
 
     def test_list_with_non_strings_raises(self) -> None:
-        with pytest.raises(OmnigentError, match="non-empty list"):
+        with pytest.raises(GoalrailError, match="non-empty list"):
             _execpolicy_amendment(["pytest", 42])

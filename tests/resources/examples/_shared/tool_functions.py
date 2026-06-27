@@ -1,4 +1,4 @@
-"""Example tool functions for Omnigent agents.
+"""Example tool functions for Goalrail agents.
 
 These are plain Python functions that can be referenced from YAML agent
 definitions via the ``callable`` field on a FunctionTool.
@@ -7,7 +7,7 @@ definitions via the ``callable`` field on a FunctionTool.
 import time
 from datetime import datetime, timedelta, timezone
 
-from omnigent.policies.schema import PolicyEvent, PolicyResponse
+from goalrail.policies.schema import PolicyEvent, PolicyResponse
 
 
 def web_search(query: str) -> dict:
@@ -77,7 +77,7 @@ def run_shell(command: str) -> dict:
     """Return deterministic fake shell output for policy examples."""
     command_text = str(command).strip()
     if command_text == "ls":
-        return {"stdout": "README.md\nexamples\nomnigent\ntests", "stderr": "", "exit_code": 0}
+        return {"stdout": "README.md\nexamples\ngoalrail\ntests", "stderr": "", "exit_code": 0}
     return {
         "stdout": f"simulated shell output for: {command_text}",
         "stderr": "",
@@ -199,7 +199,7 @@ def block_division(event: PolicyEvent) -> PolicyResponse:
     field in the YAML.
 
     Used by ``agent_with_policies.yaml`` to verify that ``type: function``
-    handler tools go through Omnigent policy enforcement the same way MCP tools do.
+    handler tools go through Goalrail policy enforcement the same way MCP tools do.
 
     :param event: V0 event dict with ``type``, ``target``, ``data``,
         ``context`` keys.

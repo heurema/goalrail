@@ -1,4 +1,4 @@
-"""Tests for omnigent.inner.egress.certs — per-host certificate cache."""
+"""Tests for goalrail.inner.egress.certs — per-host certificate cache."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 from cryptography import x509
 
-from omnigent.inner.egress.ca import ensure_ca
-from omnigent.inner.egress.certs import HostCertCache
+from goalrail.inner.egress.ca import ensure_ca
+from goalrail.inner.egress.certs import HostCertCache
 
 
 def test_host_cert_cache_generates_valid_cert(tmp_path: Path) -> None:

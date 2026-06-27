@@ -2,12 +2,12 @@
 // switch targets preserve the source's conversation history.
 //
 // Two mechanisms carry a fork's history, both keyed off the TARGET harness:
-//   - SDK (non-native) harnesses replay the Omnigent transcript as LLM
+//   - SDK (non-native) harnesses replay the Goalrail transcript as LLM
 //     context, so they always carry history regardless of the source.
 //   - Native harnesses (Claude Code, Codex) do NOT replay the transcript;
 //     the runner rebuilds their on-disk transcript before launch — cloning
 //     the source's native transcript when the source is same-family native,
-//     else building one from the copied Omnigent items (a format-agnostic
+//     else building one from the copied Goalrail items (a format-agnostic
 //     conversion, so the source harness doesn't matter).
 //   - Cursor is native but server-backed: a synthesized local store is NOT
 //     loaded by `cursor-agent --resume`, so the runner replays the prior turns
@@ -19,8 +19,8 @@
 // writes the session_meta fields codex ≥ 0.133 requires (timestamp,
 // cli_version, model_provider) plus the event_msg mirrors codex rebuilds
 // visible turns from, so cross-family forks into codex-native rebuild the
-// rollout from the copied Omnigent items like claude-native always did
-// (see _codex_rollout_records_from_session_items in omnigent/codex_native.py
+// rollout from the copied Goalrail items like claude-native always did
+// (see _codex_rollout_records_from_session_items in goalrail/codex_native.py
 // and tests/e2e/test_host_cross_family_fork_e2e.py).
 
 /** Provider family a harness consumes, or null when unknown. */
@@ -56,7 +56,7 @@ export function harnessFamily(
 /**
  * Whether a harness is a native CLI harness (Claude Code / Codex / Cursor /
  * Pi / Antigravity). Mirrors Python `NATIVE_HARNESSES`
- * (`omnigent/harness_aliases.py`) — including both native-antigravity spellings
+ * (`goalrail/harness_aliases.py`) — including both native-antigravity spellings
  * (the in-process `antigravity` SDK harness is NOT native) — so both sides
  * classify the same set.
  */
@@ -83,7 +83,7 @@ export function isNativeHarness(harness: string | null | undefined): boolean {
  *   - an SDK target replays the transcript as context;
  *   - a native target clones the source's native transcript when the
  *     source is same-family native, else the runner rebuilds the target's
- *     on-disk transcript from the copied Omnigent items (a format-agnostic
+ *     on-disk transcript from the copied Goalrail items (a format-agnostic
  *     conversion; see the module comment).
  *
  * Returns false — conservatively — only for a target whose harness we

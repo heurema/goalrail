@@ -3,12 +3,12 @@ kind: Service
 metadata:
   name: postgres
   labels:
-    app: omnigent-postgres
+    app: goalrail-postgres
     component: postgres
 spec:
   type: ClusterIP
   selector:
-    app: omnigent-postgres
+    app: goalrail-postgres
     component: postgres
   ports:
     - port: 5432

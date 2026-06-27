@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.islo`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.islo`."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from typing import Any
 import click
 import pytest
 
-import omnigent.onboarding.sandboxes.islo as islo_mod
-from omnigent.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
-from omnigent.onboarding.sandboxes.islo import (
+import goalrail.onboarding.sandboxes.islo as islo_mod
+from goalrail.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
+from goalrail.onboarding.sandboxes.islo import (
     API_KEY_ENV_VAR,
     HOST_IMAGE_ENV_VAR,
     SANDBOX_ENV_PASSTHROUGH_ENV_VAR,
@@ -174,10 +174,10 @@ def test_provision_builds_islo_create_payload(monkeypatch: pytest.MonkeyPatch) -
     """
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.setenv("GIT_TOKEN", "ghp-test")
-    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "omnigent-fixed")
+    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "goalrail-fixed")
     fake = _FakeIsloAPI()
     launcher = IsloSandboxLauncher(
-        image="docker.io/me/omnigent-host:latest",
+        image="docker.io/me/goalrail-host:latest",
         env=["OPENAI_API_KEY", "GIT_TOKEN"],
         gateway_profile="default",
         snapshot_name="warm-host",
@@ -190,11 +190,11 @@ def test_provision_builds_islo_create_payload(monkeypatch: pytest.MonkeyPatch) -
 
     sandbox_id = launcher.provision("Managed Host")
 
-    assert sandbox_id == "omnigent-fixed"
+    assert sandbox_id == "goalrail-fixed"
     assert fake.create_payloads == [
         {
-            "name": "omnigent-fixed",
-            "image": "docker.io/me/omnigent-host:latest",
+            "name": "goalrail-fixed",
+            "image": "docker.io/me/goalrail-host:latest",
             "vcpus": 4,
             "memory_mb": 8192,
             "init": {"type": "minimal"},
@@ -215,7 +215,7 @@ def test_provision_uses_image_and_env_var_fallbacks(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv(HOST_IMAGE_ENV_VAR, "docker.io/env/host:1")
     monkeypatch.setenv(SANDBOX_ENV_PASSTHROUGH_ENV_VAR, "OPENAI_API_KEY")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "omnigent-env")
+    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "goalrail-env")
     fake = _FakeIsloAPI()
     launcher = IsloSandboxLauncher()
     monkeypatch.setattr(launcher, "_islo", lambda: fake)
@@ -263,7 +263,7 @@ def test_provision_clears_seeded_helper_when_user_injects_claude_cred(
     which share ``provision``).
     """
     monkeypatch.setenv(cred_var, "secret-value")
-    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "omnigent-byo")
+    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "goalrail-byo")
     fake = _FakeIsloAPI()
     launcher = IsloSandboxLauncher(env=[cred_var])
     monkeypatch.setattr(launcher, "_islo", lambda: fake)
@@ -272,7 +272,7 @@ def test_provision_clears_seeded_helper_when_user_injects_claude_cred(
 
     strip_calls = [call for call in fake.exec_calls if "apiKeyHelper" in call.command[-1]]
     assert len(strip_calls) == 1
-    assert strip_calls[0].sandbox_id == "omnigent-byo"
+    assert strip_calls[0].sandbox_id == "goalrail-byo"
     assert strip_calls[0].command[:2] == ["bash", "-lc"]
 
 
@@ -281,7 +281,7 @@ def test_provision_keeps_seeded_helper_without_user_claude_cred(
 ) -> None:
     """Gateway users (Option A) inject no Claude credential, so the seeded helper stays."""
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "omnigent-gw")
+    monkeypatch.setattr(islo_mod, "_new_sandbox_name", lambda label: "goalrail-gw")
     fake = _FakeIsloAPI()
     launcher = IsloSandboxLauncher(env=["OPENAI_API_KEY"])
     monkeypatch.setattr(launcher, "_islo", lambda: fake)

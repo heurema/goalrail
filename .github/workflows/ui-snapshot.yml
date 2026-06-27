@@ -60,10 +60,10 @@ concurrency:
 env:
   # No SPA build during `uv sync`: this workflow builds the bundle in a
   # dedicated step (mirrors e2e-ui.yml), so the setup.py build would be redundant.
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   # The pinned image runs as root, where Chromium needs --no-sandbox; the
   # e2e_ui conftest adds it (+ --disable-dev-shm-usage) when this is set.
-  OMNIGENT_PW_NO_SANDBOX: "1"
+  GOALRAIL_PW_NO_SANDBOX: "1"
   # Use the image's Python 3.12 (matches .python-version) instead of letting uv
   # download its own -- no setup-python step needed inside the container.
   UV_PYTHON_PREFERENCE: only-system

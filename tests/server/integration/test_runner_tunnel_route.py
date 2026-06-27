@@ -14,19 +14,19 @@ from asgiref.testing import ApplicationCommunicator
 from fastapi import FastAPI
 from starlette.requests import HTTPConnection
 
-from omnigent.runner import create_runner_app
-from omnigent.runner.identity import RUNNER_TUNNEL_TOKEN_HEADER, token_bound_runner_id
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.runner import create_runner_app
+from goalrail.runner.identity import RUNNER_TUNNEL_TOKEN_HEADER, token_bound_runner_id
+from goalrail.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     RequestFrame,
     decode_frame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
-from omnigent.runner.transports.ws_tunnel.serve import dispatch_via_asgi
-from omnigent.runner.transports.ws_tunnel.transport import WSTunnelTransport
-from omnigent.server.auth import RESERVED_USER_LOCAL, AuthProvider
-from omnigent.server.routes.runner_tunnel import create_runner_tunnel_router
+from goalrail.runner.transports.ws_tunnel.registry import TunnelRegistry
+from goalrail.runner.transports.ws_tunnel.serve import dispatch_via_asgi
+from goalrail.runner.transports.ws_tunnel.transport import WSTunnelTransport
+from goalrail.server.auth import RESERVED_USER_LOCAL, AuthProvider
+from goalrail.server.routes.runner_tunnel import create_runner_tunnel_router
 from tests.runner.helpers import NullServerClient
 
 pytestmark = pytest.mark.asyncio
@@ -856,7 +856,7 @@ async def test_ws_tunnel_registers_authenticated_non_loopback_owner() -> None:
 async def test_ws_tunnel_loopback_unauthenticated_registers_as_local() -> None:
     """Auth-enabled server still accepts the local loopback runner.
 
-    ``omnigent server`` starts an unauthenticated runner that connects
+    ``goalrail server`` starts an unauthenticated runner that connects
     over loopback with no credentials. The fail-closed gate
     applies only to non-loopback peers, so this runner must still
     register — owned by the reserved single-user identity, not rejected

@@ -40,7 +40,7 @@ function policy(overrides: Partial<Record<string, unknown>> = {}) {
     object: "default_policy",
     name: "block_canada",
     type: "python",
-    handler: "omnigent.policies.block_canada",
+    handler: "goalrail.policies.block_canada",
     factory_params: null,
     enabled: true,
     created_at: 1,
@@ -135,14 +135,14 @@ describe("PoliciesPage list", () => {
       policy({
         id: "p2",
         name: "rate_limit",
-        handler: "omnigent.policies.rate_limit",
+        handler: "goalrail.policies.rate_limit",
         factory_params: { max_per_min: 5 },
       }),
     ]);
     renderPage();
 
     expect(await screen.findByText("block_canada")).toBeInTheDocument();
-    expect(screen.getByText("omnigent.policies.block_canada")).toBeInTheDocument();
+    expect(screen.getByText("goalrail.policies.block_canada")).toBeInTheDocument();
     expect(screen.getByText("Disabled")).toBeInTheDocument(); // only the disabled one
     // factory_params render as a "Parameters" block.
     expect(screen.getByText("Parameters")).toBeInTheDocument();
@@ -178,7 +178,7 @@ describe("PoliciesPage actions", () => {
     vi.mocked(policies.usePolicyRegistry).mockReturnValue({
       data: [
         {
-          handler: "omnigent.policies.block_canada",
+          handler: "goalrail.policies.block_canada",
           kind: "callable",
           name: "Block Canada",
           description: "Deny anything mentioning Canada.",
@@ -195,7 +195,7 @@ describe("PoliciesPage actions", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^Add$/ }));
 
     expect(addMutate).toHaveBeenCalledWith(
-      { name: "block_canada", type: "python", handler: "omnigent.policies.block_canada" },
+      { name: "block_canada", type: "python", handler: "goalrail.policies.block_canada" },
       expect.anything(),
     );
   });

@@ -29,7 +29,7 @@ from collections.abc import AsyncIterator, Callable
 
 from fastapi import FastAPI
 
-from omnigent.inner.executor import (
+from goalrail.inner.executor import (
     Executor,
     ExecutorConfig,
     ExecutorError,
@@ -43,7 +43,7 @@ from omnigent.inner.executor import (
     TurnCancelled,
     TurnComplete,
 )
-from omnigent.runtime.harnesses._executor_adapter import ExecutorAdapter
+from goalrail.runtime.harnesses._executor_adapter import ExecutorAdapter
 
 _SCRIPT_ENV_VAR = "MOCK_EXECUTOR_SCRIPT"
 _CAPTURE_PATH_ENV_VAR = "MOCK_EXECUTOR_CAPTURE_PATH"

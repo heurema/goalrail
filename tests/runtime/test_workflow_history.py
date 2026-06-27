@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from omnigent.entities import ConversationItem, MessageData, PagedList, SlashCommandData
-from omnigent.entities.pagination import paginate_in_memory
-from omnigent.runtime.workflow import _load_initial_history
+from goalrail.entities import ConversationItem, MessageData, PagedList, SlashCommandData
+from goalrail.entities.pagination import paginate_in_memory
+from goalrail.runtime.workflow import _load_initial_history
 
 
 class _ConversationStore:

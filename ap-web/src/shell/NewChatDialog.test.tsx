@@ -25,7 +25,7 @@ import { useHostFilesystem, type HostFilesystemEntry } from "@/hooks/useHostFile
 import { useDirectorySessions } from "@/hooks/useDirectorySessions";
 import { useRunnerHealthRegistration } from "@/hooks/RunnerHealthProvider";
 import type { Conversation } from "@/hooks/useConversations";
-import { setOmnigentHostConfig } from "@/lib/host";
+import { setGoalrailHostConfig } from "@/lib/host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Only authenticatedFetch is stubbed (the create POST under test);
@@ -56,7 +56,7 @@ const useHostFilesystemMock = vi.mocked(useHostFilesystem);
 const useDirectorySessionsMock = vi.mocked(useDirectorySessions);
 const useRunnerHealthMock = vi.mocked(useRunnerHealthRegistration);
 
-const RECENT_KEY = "omnigent:recent-workspaces";
+const RECENT_KEY = "goalrail:recent-workspaces";
 
 /**
  * Build a minimal Conversation for the directory-conflict helpers/warning.
@@ -497,7 +497,7 @@ function setupLandingMocks() {
   useHostFilesystemMock.mockReset();
   useDirectorySessionsMock.mockReset();
   useRunnerHealthMock.mockReset();
-  setOmnigentHostConfig({});
+  setGoalrailHostConfig({});
   localStorage.clear();
   // host_1's most-recent workspace seeds the field (so submit can enable
   // without manual picks). Tests that exercise the home fallback clear this.
@@ -864,7 +864,7 @@ describe("NewChatLandingScreen", () => {
   });
 
   it("shows a disabled sandbox row with host-provided tooltip content when managed sandboxes are unavailable", async () => {
-    setOmnigentHostConfig({
+    setGoalrailHostConfig({
       docsLinks: { newSandbox: "Managed sandboxes are disabled in this workspace." },
     });
     renderLanding();
@@ -1005,7 +1005,7 @@ describe("NewChatLandingScreen", () => {
 
   it.each([
     {
-      name: "not-configured OmnigentError",
+      name: "not-configured GoalrailError",
       status: 400,
       body: { error: { message: "managed hosts are not configured on this server" } },
       expected: "managed hosts are not configured on this server",
@@ -1075,7 +1075,7 @@ describe("NewChatLandingScreen", () => {
   });
 
   it("shows host-provided git credentials tooltip content in the sandbox repo popover", async () => {
-    setOmnigentHostConfig({
+    setGoalrailHostConfig({
       docsLinks: { databricksGitCredentials: "Use Databricks Git credentials before cloning." },
     });
     renderLanding({ managed_sandboxes_enabled: true });

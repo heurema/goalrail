@@ -1,4 +1,4 @@
-"""Tests for omnigent.pi_native_credentials (native Pi provider wiring)."""
+"""Tests for goalrail.pi_native_credentials (native Pi provider wiring)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import pi_native_credentials as creds
+from goalrail import pi_native_credentials as creds
 
 
 def _databricks_config() -> dict[str, object]:
@@ -28,7 +28,7 @@ def test_resolves_databricks_default_to_anthropic_gateway(monkeypatch: pytest.Mo
     surface — which Pi speaks natively — and build a gateway provider with a
     bearer-token refresh command.
     """
-    from omnigent.inner import databricks_executor
+    from goalrail.inner import databricks_executor
 
     def _host(profile: str | None) -> str:
         return "https://wkspc.example.com/"
@@ -49,7 +49,7 @@ def test_resolves_databricks_default_to_anthropic_gateway(monkeypatch: pytest.Mo
 
 def test_databricks_unresolvable_host_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
     """No host for the profile → fall back to Pi's own login (None)."""
-    from omnigent.inner import databricks_executor
+    from goalrail.inner import databricks_executor
 
     def _no_host(profile: str | None) -> None:
         return None
@@ -131,7 +131,7 @@ def test_unresolvable_secret_falls_back_to_none(monkeypatch: pytest.MonkeyPatch)
 def test_to_models_config_shape() -> None:
     """The rendered models.json carries baseUrl/api/apiKey/models (+authHeader)."""
     provider = creds.PiProviderConfig(
-        provider_id="omnigent",
+        provider_id="goalrail",
         base_url="https://x/ai-gateway/anthropic",
         api="anthropic-messages",
         model="databricks-claude-sonnet-4-6",
@@ -139,7 +139,7 @@ def test_to_models_config_shape() -> None:
         auth_header=True,
     )
     cfg = provider.to_models_config()
-    entry = cfg["providers"]["omnigent"]
+    entry = cfg["providers"]["goalrail"]
     assert entry["baseUrl"] == "https://x/ai-gateway/anthropic"
     assert entry["api"] == "anthropic-messages"
     assert entry["apiKey"] == "!get-token"
@@ -150,7 +150,7 @@ def test_to_models_config_shape() -> None:
 def test_write_models_config_is_owner_only(tmp_path: Path) -> None:
     """models.json is written 0600 in a 0700 dir (it may hold a literal key)."""
     provider = creds.PiProviderConfig(
-        provider_id="omnigent",
+        provider_id="goalrail",
         base_url="https://api.anthropic.com",
         api="anthropic-messages",
         model="claude-sonnet-4-6",
@@ -164,13 +164,13 @@ def test_write_models_config_is_owner_only(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert stat.S_IMODE(agent_dir.stat().st_mode) == 0o700
     written = json.loads(path.read_text(encoding="utf-8"))
-    assert written["providers"]["omnigent"]["apiKey"] == "sk-secret"
+    assert written["providers"]["goalrail"]["apiKey"] == "sk-secret"
 
 
 def test_provider_launch_returns_env_and_args(tmp_path: Path) -> None:
     """pi_native_provider_launch writes config and returns the env + CLI args."""
     provider = creds.PiProviderConfig(
-        provider_id="omnigent",
+        provider_id="goalrail",
         base_url="https://api.anthropic.com",
         api="anthropic-messages",
         model="claude-sonnet-4-6",
@@ -181,7 +181,7 @@ def test_provider_launch_returns_env_and_args(tmp_path: Path) -> None:
     env, args = creds.pi_native_provider_launch(agent_dir, provider)
 
     assert env == {creds.PI_CODING_AGENT_DIR_ENV_VAR: str(agent_dir)}
-    assert args == ["--provider", "omnigent", "--model", "claude-sonnet-4-6"]
+    assert args == ["--provider", "goalrail", "--model", "claude-sonnet-4-6"]
     assert (agent_dir / "models.json").exists()
 
 

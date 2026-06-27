@@ -10,8 +10,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import codex_native_hook, native_policy_hook
-from omnigent.codex_native_bridge import (
+from goalrail import codex_native_hook, native_policy_hook
+from goalrail.codex_native_bridge import (
     CodexNativeBridgeState,
     codex_home_for_bridge_dir,
     prepare_bridge_dir,
@@ -65,7 +65,7 @@ class _DenyHttpxClient:
         """
         Record the outgoing request and return a DENY EvaluationResponse.
 
-        :param url: Target Omnigent URL.
+        :param url: Target Goalrail URL.
         :param json: Request body (the EvaluationRequest).
         :returns: A real 200 response carrying a DENY verdict.
         """
@@ -120,14 +120,14 @@ class _RaisesIfCalled:
         """
         Fail loudly — the hook should never reach the network here.
 
-        :param url: Target Omnigent URL (unused).
+        :param url: Target Goalrail URL (unused).
         :param json: Request body (unused).
         :returns: Never returns.
         :raises AssertionError: Always.
         """
         del url, json
         raise AssertionError(
-            "evaluate-policy POSTed to Omnigent when it should have short-circuited "
+            "evaluate-policy POSTed to Goalrail when it should have short-circuited "
             "(missing bridge state or policy_hook config)."
         )
 
@@ -138,14 +138,14 @@ def bridge_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     Create an isolated codex-native bridge directory with state.
 
     Redirects the bridge root under ``tmp_path`` so the test never
-    touches the real ``~/.omnigent`` tree, then writes a valid bridge
-    state whose ``session_id`` the hook reads to build the Omnigent URL.
+    touches the real ``~/.goalrail`` tree, then writes a valid bridge
+    state whose ``session_id`` the hook reads to build the Goalrail URL.
 
     :param tmp_path: pytest temp directory.
     :param monkeypatch: pytest monkeypatch fixture.
     :returns: Prepared bridge directory.
     """
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
     bdir = prepare_bridge_dir("bridge_test")
     write_bridge_state(
         bdir,
@@ -354,7 +354,7 @@ def test_missing_bridge_state_is_fail_open(
     block tools — the hook returns 0 with no verdict. ``_RaisesIfCalled``
     asserts the network was never reached.
     """
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
     empty_dir = prepare_bridge_dir("bridge_no_state")
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _RaisesIfCalled)
 
@@ -377,8 +377,8 @@ def test_missing_policy_config_is_fail_open(
     """
     With bridge state but no policy_hook config, the hook never POSTs.
 
-    The session has state but no Omnigent coordinates were written (e.g. a
-    local run with no Omnigent server), so there is nothing to enforce against.
+    The session has state but no Goalrail coordinates were written (e.g. a
+    local run with no Goalrail server), so there is nothing to enforce against.
     The hook returns 0 with no output and does not touch the network.
     """
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _RaisesIfCalled)

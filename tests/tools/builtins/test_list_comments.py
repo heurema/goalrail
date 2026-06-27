@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.comment import Comment, CommentsFingerprint
-from omnigent.stores.comment_store import CommentStore
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.list_comments import ListCommentsTool
+from goalrail.entities.comment import Comment, CommentsFingerprint
+from goalrail.stores.comment_store import CommentStore
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.list_comments import ListCommentsTool
 
 # ── In-memory store stub ──────────────────────────────────────────────────────
 
@@ -235,7 +235,7 @@ def tool(store: _InMemoryCommentStore, monkeypatch: pytest.MonkeyPatch) -> ListC
     """
     :class:`ListCommentsTool` wired to an in-memory comment store.
 
-    Patches ``omnigent.runtime.get_comment_store`` so that the tool
+    Patches ``goalrail.runtime.get_comment_store`` so that the tool
     uses *store* without needing the real runtime initialised.
     The import is lazy (inside ``invoke``), so we patch the source module.
 
@@ -243,7 +243,7 @@ def tool(store: _InMemoryCommentStore, monkeypatch: pytest.MonkeyPatch) -> ListC
     :param monkeypatch: pytest monkeypatching fixture.
     :returns: Configured :class:`ListCommentsTool` instance.
     """
-    import omnigent.runtime as _runtime
+    import goalrail.runtime as _runtime
 
     monkeypatch.setattr(_runtime, "get_comment_store", lambda: store)
     return ListCommentsTool()
@@ -298,7 +298,7 @@ def test_no_conversation_id(monkeypatch: pytest.MonkeyPatch) -> None:
     returning an error prevents the tool from leaking another session's
     comments or crashing on a ``None`` store key.
     """
-    import omnigent.runtime as _runtime
+    import goalrail.runtime as _runtime
 
     monkeypatch.setattr(_runtime, "get_comment_store", lambda: _InMemoryCommentStore())
     t = ListCommentsTool()
@@ -314,10 +314,10 @@ def test_no_store_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     Returns an error when ``get_comment_store()`` returns ``None``.
 
     This happens in deployments that don't initialise a comment store
-    (e.g. standalone REPL without Omnigent server). The tool must surface a
+    (e.g. standalone REPL without Goalrail server). The tool must surface a
     clear message rather than raising AttributeError.
     """
-    import omnigent.runtime as _runtime
+    import goalrail.runtime as _runtime
 
     monkeypatch.setattr(_runtime, "get_comment_store", lambda: None)
     t = ListCommentsTool()

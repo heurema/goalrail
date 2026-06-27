@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.runtime.policies.engine` helpers.
+Unit tests for :mod:`goalrail.runtime.policies.engine` helpers.
 
 Covers the ``_fail_closed`` and ``_dispatch_policy`` functions, with
 particular focus on the interaction between declared action lists and
@@ -13,9 +13,9 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.runtime.policies.engine import _dispatch_policy, _fail_closed
-from omnigent.spec.types import (
+from goalrail.policies.types import EvaluationContext, PolicyResult
+from goalrail.runtime.policies.engine import _dispatch_policy, _fail_closed
+from goalrail.spec.types import (
     FunctionPolicySpec,
     Phase,
     PolicyAction,

@@ -8,8 +8,8 @@ import logging
 import httpx
 import pytest
 
-from omnigent.runner.routing import RoutedRunner
-from omnigent.server.routes.sessions import _handle_mcp_tools_list
+from goalrail.runner.routing import RoutedRunner
+from goalrail.server.routes.sessions import _handle_mcp_tools_list
 
 
 class _RaisingRunnerClient:
@@ -61,7 +61,7 @@ async def test_mcp_tools_list_runner_failure_is_genericized(
 
     :param caplog: Pytest log capture fixture.
     """
-    with caplog.at_level(logging.WARNING, logger="omnigent.server.routes.sessions"):
+    with caplog.at_level(logging.WARNING, logger="goalrail.server.routes.sessions"):
         response = await _handle_mcp_tools_list(
             rpc_id=7,
             session_id="conv_test",

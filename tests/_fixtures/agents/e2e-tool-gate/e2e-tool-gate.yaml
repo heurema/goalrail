@@ -26,7 +26,7 @@ policies:
     type: function
     on: [tool_call:echo]
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: ask
         reason: Confirm the echo tool may run.

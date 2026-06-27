@@ -3,10 +3,10 @@
 // API via contextBridge rather than leaking `ipcRenderer` or Node into the
 // page. Two consumers:
 //
-//   1. window.omnigentDesktop — read by the web app's nativeBridge.ts
+//   1. window.goalrailDesktop — read by the web app's nativeBridge.ts
 //      (badge + notifications). Its `kind: "electron"` field is the
 //      feature-detection discriminator.
-//   2. window.omnigentSetup — used only by the bundled setup page to
+//   2. window.goalrailSetup — used only by the bundled setup page to
 //      persist/read the server URL.
 //
 // The same preload is attached to both the setup page and the remote SPA;
@@ -19,18 +19,18 @@ const { contextBridge, ipcRenderer } = require("electron");
 // Native integrations for the SPA: a dock/taskbar badge and OS notifications.
 // Numbers/strings only so the values survive contextBridge's structured-clone
 // boundary.
-contextBridge.exposeInMainWorld("omnigentDesktop", {
+contextBridge.exposeInMainWorld("goalrailDesktop", {
   kind: "electron",
   /** Paint the dock/taskbar badge; 0 clears it. Fire-and-forget. */
   setBadgeCount: (count) => {
-    ipcRenderer.send("omnigent:set-badge-count", count);
+    ipcRenderer.send("goalrail:set-badge-count", count);
   },
   /**
    * Fire an OS notification. Resolves true when shown, false otherwise.
    * @param {{title: string, body?: string, navigatePath?: string}} params
    */
   notify: (params) =>
-    ipcRenderer.invoke("omnigent:notify", {
+    ipcRenderer.invoke("goalrail:notify", {
       title: params?.title,
       body: params?.body,
       navigatePath: params?.navigatePath,
@@ -49,31 +49,31 @@ contextBridge.exposeInMainWorld("omnigentDesktop", {
       // the renderer routes on the value, even if main ever sends junk.
       if (typeof path === "string" && path.startsWith("/")) callback(path);
     };
-    ipcRenderer.on("omnigent:notification-activated", listener);
-    return () => ipcRenderer.removeListener("omnigent:notification-activated", listener);
+    ipcRenderer.on("goalrail:notification-activated", listener);
+    return () => ipcRenderer.removeListener("goalrail:notification-activated", listener);
   },
   /**
    * Title-bar server picker data: the window's current server origin and the
    * recently-connected server URLs (most recent first). Resolves null on
    * pages that aren't a connected server.
    */
-  getServerPicker: () => ipcRenderer.invoke("omnigent:get-server-picker"),
+  getServerPicker: () => ipcRenderer.invoke("goalrail:get-server-picker"),
   /**
    * Re-point this window to a previously-connected server URL (must come
    * from getServerPicker's recentServers list; anything else rejects).
    */
-  switchServer: (url) => ipcRenderer.invoke("omnigent:switch-server", url),
+  switchServer: (url) => ipcRenderer.invoke("goalrail:switch-server", url),
   /** Return this window to the bundled "connect to server" setup page. */
   openServerSetup: () => {
-    ipcRenderer.send("omnigent:open-server-setup");
+    ipcRenderer.send("goalrail:open-server-setup");
   },
 });
 
 // Setup-page bridge: persist + navigate to a server URL, and read the saved
 // one to pre-fill the form. Separate object so the SPA never sees it.
-contextBridge.exposeInMainWorld("omnigentSetup", {
-  getServerUrl: () => ipcRenderer.invoke("omnigent:get-server-url"),
-  setServerUrl: (url) => ipcRenderer.invoke("omnigent:set-server-url", url),
+contextBridge.exposeInMainWorld("goalrailSetup", {
+  getServerUrl: () => ipcRenderer.invoke("goalrail:get-server-url"),
+  setServerUrl: (url) => ipcRenderer.invoke("goalrail:set-server-url", url),
   /** Recently-connected server URLs, most recent first. */
-  getRecentServers: () => ipcRenderer.invoke("omnigent:get-recent-servers"),
+  getRecentServers: () => ipcRenderer.invoke("goalrail:get-recent-servers"),
 });

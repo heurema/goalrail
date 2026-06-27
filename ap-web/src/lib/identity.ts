@@ -16,7 +16,7 @@
  */
 
 import { getCachedServerInfo } from "./capabilities";
-import { getOmnigentHostConfig, hostFetch } from "./host";
+import { getGoalrailHostConfig, hostFetch } from "./host";
 
 // Single-user sentinel from `GET /v1/me` (server's RESERVED_USER_LOCAL);
 // not a real actor, so never used as an author label.
@@ -151,7 +151,7 @@ export async function authenticatedFetch(
     // When embedded, the host owns auth (e.g. cookie/session via
     // workspaceFetch) and a 401 should surface to the caller, not
     // trigger ap-web's standalone OIDC redirect.
-    !getOmnigentHostConfig().fetcher &&
+    !getGoalrailHostConfig().fetcher &&
     res.status === 401 &&
     !input.toString().includes("/v1/me") &&
     !input.toString().includes("/auth/") &&

@@ -1,6 +1,6 @@
 """Tests for host-side git worktree operations.
 
-Exercises ``omnigent.host.git_worktree`` against real ``git`` in a
+Exercises ``goalrail.host.git_worktree`` against real ``git`` in a
 temp repository — the operations run actual ``git worktree add`` /
 ``remove`` / ``branch -D`` so a regression in argv construction, repo-
 root resolution, or removal ordering fails loud here.
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.host.git_worktree import (
+from goalrail.host.git_worktree import (
     CreatedWorktree,
     WorktreeError,
     create_worktree,

@@ -1,7 +1,7 @@
 """End-to-end tests for ``sys_call_async`` dispatch of bundled
 local Python tools against a mock LLM.
 
-Verifies the full pipeline against a live ``omnigent server``
+Verifies the full pipeline against a live ``goalrail server``
 + mock LLM server:
 
 * The mock LLM dispatches a slow ``@tool``-decorated function via
@@ -20,7 +20,7 @@ Excluded from default ``pytest`` runs via
     pytest tests/e2e/test_async_tools_e2e.py -v
 
 **TUI verification** (mandatory per CLAUDE.md before merge):
-``omnigent run tests/_fixtures/agents/async-tools-test/``
+``goalrail run tests/_fixtures/agents/async-tools-test/``
 then ask "dispatch delayed_echo with label='alpha' via
 sys_call_async". The auto-delivered result must render as a dim
 ``... [System: task ...]`` line.

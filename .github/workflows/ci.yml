@@ -22,7 +22,7 @@ permissions:
 
 env:
   # No ap-web SPA build during `uv sync`; this job never serves the bundle.
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   UV_INDEX_URL: https://pypi.org/simple
   PIP_INDEX_URL: https://pypi.org/simple
 
@@ -161,11 +161,11 @@ jobs:
         env:
           PYTHONFAULTHANDLER: "1"
           PYTEST_PROGRESS_LOG_DIR: artifacts/progress
-          OMNIGENT_TOKEN_USAGE_JSON: artifacts/tokens-${{ matrix.group }}.json
+          GOALRAIL_TOKEN_USAGE_JSON: artifacts/tokens-${{ matrix.group }}.json
           # Outside the repo: coverage.py's transient `.coverage.*` files
           # under the ro-bound cwd raced the sandbox's dotfile masker. Staged
           # back into artifacts/ below for the coverage-report job.
-          COVERAGE_FILE: ${{ runner.temp }}/omnigent-coverage/.coverage.${{ matrix.group }}
+          COVERAGE_FILE: ${{ runner.temp }}/goalrail-coverage/.coverage.${{ matrix.group }}
           # sysmon: the default C-trace coverage backend pushed the heaviest
           # shard past its timeout; only line coverage is collected.
           COVERAGE_CORE: sysmon
@@ -180,7 +180,7 @@ jobs:
               --dist=${{ matrix.dist || 'loadfile' }} \
               --timeout=${{ matrix.timeout || '300' }} \
               --junitxml=artifacts/pytest-${{ matrix.group }}.xml \
-              --cov=omnigent --cov-report= \
+              --cov=goalrail --cov-report= \
               -v --tb=long --showlocals --log-level=INFO -r a \
               || { rc=$?; [ "$rc" -eq 5 ] && echo "::notice::No tests collected in this shard; treating as a pass." || exit "$rc"; }
 
@@ -188,7 +188,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          cov_file="${{ runner.temp }}/omnigent-coverage/.coverage.${{ matrix.group }}"
+          cov_file="${{ runner.temp }}/goalrail-coverage/.coverage.${{ matrix.group }}"
           if [[ -f "$cov_file" ]]; then
             cp "$cov_file" "artifacts/.coverage.${{ matrix.group }}"
           else

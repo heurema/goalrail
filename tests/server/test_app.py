@@ -1,7 +1,7 @@
 """Tests for utility endpoints on the FastAPI app (health + version).
 
 These endpoints are defined inline in ``create_app()`` in
-``omnigent/server/app.py`` rather than in a route sub-module, so
+``goalrail/server/app.py`` rather than in a route sub-module, so
 they live here following the source ↔ test directory mirroring rule.
 """
 
@@ -16,11 +16,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server import app as server_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server import app as server_app
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient) -> None:
 async def test_version_returns_installed_package_version(
     client: httpx.AsyncClient,
 ) -> None:
-    """GET /api/version returns the installed omnigent package version.
+    """GET /api/version returns the installed goalrail package version.
 
     Compares the endpoint response against ``importlib.metadata.version``
     directly — confirms the handler forwards the real installed version
@@ -51,9 +51,9 @@ async def test_version_returns_installed_package_version(
     # fetchVersion() falls back to "unknown" in every bug report.
     assert "version" in body
 
-    expected = _pkg_version("omnigent")
+    expected = _pkg_version("goalrail")
     # Exact match against the installed version — confirms the endpoint
-    # calls importlib.metadata.version("omnigent"), not a constant.
+    # calls importlib.metadata.version("goalrail"), not a constant.
     assert body["version"] == expected, (
         f"Expected version {expected!r} from importlib.metadata, "
         f"got {body['version']!r}. If the handler hard-codes a version, "
@@ -95,7 +95,7 @@ def _register_live_runner(app: FastAPI, runner_id: str) -> None:
         registry on ``app.state.tunnel_registry``).
     :param runner_id: Runner id to register, e.g. ``"rnr_live"``.
     """
-    from omnigent.runner.transports.ws_tunnel.frames import HelloFrame
+    from goalrail.runner.transports.ws_tunnel.frames import HelloFrame
 
     app.state.tunnel_registry.register(
         runner_id,
@@ -131,9 +131,9 @@ def _build_liveness_app(
     :returns: A :class:`_LivenessApp` carrying the app to drive
         ``/health`` against and the store to seed conversations in.
     """
-    from omnigent.server.app import create_app
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from goalrail.server.app import create_app
+    from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from goalrail.stores.host_store import HostStore
 
     conversation_store = SqlAlchemyConversationStore(db_uri)
     host_store = HostStore(db_uri)
@@ -208,7 +208,7 @@ async def test_health_batch_reports_strict_runner_and_host_liveness(
     stopped = conversation_store.create_conversation(
         runner_id="rnr_dead4", host_id="host_live", workspace="/tmp/ws"
     )
-    conversation_store.set_labels(stopped.id, {"omnigent.stopped": "true"})
+    conversation_store.set_labels(stopped.id, {"goalrail.stopped": "true"})
 
     ids = ",".join(
         [
@@ -314,7 +314,7 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     previously short-circuited to "online" unconditionally. The
     fork-source label (set when the source had a workspace) flips that:
 
-    - a fork carrying ``omnigent.fork.source_id`` reads offline, so the
+    - a fork carrying ``goalrail.fork.source_id`` reads offline, so the
       first message routes into the directory picker instead of dropping
       against a runner that can't start;
     - a fork without it (chat-only source, CUJ 2) stays online and
@@ -324,12 +324,12 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     ``_bulk_runner_online``: if that branch reverts to ``True`` for all
     unbound sessions, the coding-fork assertion fails.
     """
-    from omnigent.server.app import create_app
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from goalrail.server.app import create_app
+    from goalrail.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from goalrail.stores.host_store import HostStore
 
     conversation_store = SqlAlchemyConversationStore(db_uri)
     host_store = HostStore(db_uri)
@@ -338,7 +338,7 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     # Unbound forks: no runner_id, no host_id. The label is the only
     # difference between them.
     coding_fork = conversation_store.create_conversation()
-    conversation_store.set_labels(coding_fork.id, {"omnigent.fork.source_id": "conv_src"})
+    conversation_store.set_labels(coding_fork.id, {"goalrail.fork.source_id": "conv_src"})
     chat_fork = conversation_store.create_conversation()
 
     app = create_app(
@@ -428,7 +428,7 @@ def polly_src_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _independent_seed_stores(tmp_path: Path, label: str) -> _SeedStores:
     """A fresh, migrated, independent set of seed stores under ``tmp_path``."""
-    from omnigent.db.utils import get_or_create_engine
+    from goalrail.db.utils import get_or_create_engine
 
     uri = f"sqlite:///{tmp_path / f'{label}.db'}"
     get_or_create_engine(uri)  # run migrations, same path as production
@@ -447,7 +447,7 @@ def test_builtin_agent_id_is_stable_across_independent_stores(tmp_path: Path) ->
     """A built-in's id is identical across two independent fresh stores — the
     contract the multi-tenant deployment needs. A revert to the random
     ``generate_agent_id()`` makes the two ids differ and fails this test."""
-    from omnigent.db.utils import builtin_agent_id
+    from goalrail.db.utils import builtin_agent_id
 
     a = _independent_seed_stores(tmp_path, "a")
     b = _independent_seed_stores(tmp_path, "b")
@@ -465,7 +465,7 @@ def test_ensure_extra_builtin_agents_skips_bad_path_and_seeds_good(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bad entry in OMNIGENT_BUILTIN_AGENT_DIRS is logged + skipped, not fatal.
+    """A bad entry in GOALRAIL_BUILTIN_AGENT_DIRS is logged + skipped, not fatal.
 
     Operator-supplied paths may be wrong (typo, stale mount). One bad entry
     must not crash server startup nor block a valid entry from registering.
@@ -503,7 +503,7 @@ def test_ensure_default_qwen_agent_seeds_card(seed_stores: _SeedStores) -> None:
     Seeding registers qwen-native-ui as a built-in the picker can render.
 
     The new-session picker reads built-ins from ``GET /v1/agents``; without this
-    seeder Qwen Code only appears after the ``omnigent qwen`` CLI first registers
+    seeder Qwen Code only appears after the ``goalrail qwen`` CLI first registers
     it, so it was absent from the Web UI dropdown.
     """
     server_app._ensure_default_qwen_agent(

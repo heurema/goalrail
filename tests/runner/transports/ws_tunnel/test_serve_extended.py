@@ -11,15 +11,15 @@ from typing import Any
 
 import pytest
 
-from omnigent.runner.transports.ws_tunnel import serve as serve_module
-from omnigent.runner.transports.ws_tunnel.frames import (
+from goalrail.runner.transports.ws_tunnel import serve as serve_module
+from goalrail.runner.transports.ws_tunnel.frames import (
     RequestFrame,
     ResponseBodyFrame,
     ResponseEndFrame,
     ResponseHeadFrame,
     decode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.serve import (
+from goalrail.runner.transports.ws_tunnel.serve import (
     _refresh_auth_token,
     _tunnel_url,
     _websocket_auth_redirect_url,

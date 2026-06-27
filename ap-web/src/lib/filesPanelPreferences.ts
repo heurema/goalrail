@@ -24,7 +24,7 @@ export interface FilesPanelPreferences {
   collapsed: boolean;
 }
 
-const STORAGE_KEY = "omnigent:files-panel-preferences";
+const STORAGE_KEY = "goalrail:files-panel-preferences";
 
 // Default to the full folder tree ("All") — the panel opens on every file in
 // the working folder, not just the changed subset.

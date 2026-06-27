@@ -16,7 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-import omnigent.antigravity_native_rpc as rpc
+import goalrail.antigravity_native_rpc as rpc
 
 # Realistic two-port agy ``lsof`` output: the LOWER (52548) is the TLS
 # connect-RPC port; the higher (52549) is plain HTTP. Mirrors the verified
@@ -683,7 +683,7 @@ def test_candidate_agy_rpc_ports_falls_back_to_proc_net_tcp(
     monkeypatch.setattr(rpc, "_list_agy_pids", lambda: [72753])
     monkeypatch.setattr(rpc, "_run_lsof_listen_ports", lambda pid: "")  # lsof attributes nothing
     monkeypatch.setattr(rpc, "_list_loopback_listen_ports", lambda: [6767, 44955, 37479])
-    # Only agy's TLS connect-RPC port answers Heartbeat (6767=omnigent, 37479=agy plain-HTTP).
+    # Only agy's TLS connect-RPC port answers Heartbeat (6767=goalrail, 37479=agy plain-HTTP).
     monkeypatch.setattr(rpc, "_heartbeat_ok", lambda port: port == 44955)
     assert rpc._candidate_agy_rpc_ports() == [44955]
 
@@ -933,7 +933,7 @@ def test_send_user_cascade_message_posts_exact_nested_body(
     rpc.send_user_cascade_message(
         52548,
         "conv-uuid",
-        "hello from omnigent",
+        "hello from goalrail",
         plan_model="gemini-2.5-pro",
     )
     assert seen["url"] == (
@@ -943,7 +943,7 @@ def test_send_user_cascade_message_posts_exact_nested_body(
     assert seen["content_type"] == "application/json"
     assert seen["body"] == {
         "cascadeId": "conv-uuid",
-        "items": [{"text": "hello from omnigent"}],
+        "items": [{"text": "hello from goalrail"}],
         "cascadeConfig": {"plannerConfig": {"planModel": "gemini-2.5-pro"}},
     }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # First-run helper: ensures deploy/docker/.env exists with the two
-# required secrets (POSTGRES_PASSWORD, OMNIGENT_OIDC_COOKIE_SECRET)
+# required secrets (POSTGRES_PASSWORD, GOALRAIL_OIDC_COOKIE_SECRET)
 # generated for you, instead of making the user run `openssl rand -hex 32`
 # twice. Safe to re-run — never overwrites existing non-default values.
 #
@@ -13,7 +13,7 @@
 #   - If .env doesn't exist, copies .env.example → .env first.
 #   - If POSTGRES_PASSWORD is unset, empty, or still the example
 #     placeholder ("change-me-please"), mints a fresh random value.
-#   - If OMNIGENT_OIDC_COOKIE_SECRET is unset OR commented out,
+#   - If GOALRAIL_OIDC_COOKIE_SECRET is unset OR commented out,
 #     uncomments + sets it to a fresh 64-hex-char value. (Even if
 #     you're not using OIDC today, having the secret ready means
 #     enabling it later is a one-line edit.)
@@ -69,33 +69,33 @@ else
   echo "→ POSTGRES_PASSWORD already set, leaving alone"
 fi
 
-cookie_current=$(current_value OMNIGENT_OIDC_COOKIE_SECRET)
+cookie_current=$(current_value GOALRAIL_OIDC_COOKIE_SECRET)
 if [[ -z "$cookie_current" || "$cookie_current" == "<64-hex-chars>" ]]; then
-  set_or_replace_kv OMNIGENT_OIDC_COOKIE_SECRET "$(openssl rand -hex 32)"
-  echo "→ generated OMNIGENT_OIDC_COOKIE_SECRET"
+  set_or_replace_kv GOALRAIL_OIDC_COOKIE_SECRET "$(openssl rand -hex 32)"
+  echo "→ generated GOALRAIL_OIDC_COOKIE_SECRET"
 else
-  echo "→ OMNIGENT_OIDC_COOKIE_SECRET already set, leaving alone"
+  echo "→ GOALRAIL_OIDC_COOKIE_SECRET already set, leaving alone"
 fi
 
 # Same generation logic for the accounts cookie secret. The two
 # secrets are independent — OIDC and accounts modes are mutually
 # exclusive in a single deploy, but having both pre-minted means
-# the operator can switch modes by editing OMNIGENT_AUTH_PROVIDER
+# the operator can switch modes by editing GOALRAIL_AUTH_PROVIDER
 # without re-running bootstrap.
-accounts_cookie_current=$(current_value OMNIGENT_ACCOUNTS_COOKIE_SECRET)
+accounts_cookie_current=$(current_value GOALRAIL_ACCOUNTS_COOKIE_SECRET)
 if [[ -z "$accounts_cookie_current" || "$accounts_cookie_current" == "<64-hex-chars>" ]]; then
-  set_or_replace_kv OMNIGENT_ACCOUNTS_COOKIE_SECRET "$(openssl rand -hex 32)"
-  echo "→ generated OMNIGENT_ACCOUNTS_COOKIE_SECRET"
+  set_or_replace_kv GOALRAIL_ACCOUNTS_COOKIE_SECRET "$(openssl rand -hex 32)"
+  echo "→ generated GOALRAIL_ACCOUNTS_COOKIE_SECRET"
 else
-  echo "→ OMNIGENT_ACCOUNTS_COOKIE_SECRET already set, leaving alone"
+  echo "→ GOALRAIL_ACCOUNTS_COOKIE_SECRET already set, leaving alone"
 fi
 
 echo
 echo "✓ deploy/docker/.env is ready. Next:"
-echo "    docker compose up -d && docker compose logs omnigent"
+echo "    docker compose up -d && docker compose logs goalrail"
 echo
 echo "  Accounts mode is the default — the first-boot admin password"
 echo "  lands in the logs and in /data/admin-credentials on the"
 echo "  persistent volume. For any public-domain deploy also set:"
-echo "    OMNIGENT_ACCOUNTS_BASE_URL=<your public URL>"
+echo "    GOALRAIL_ACCOUNTS_BASE_URL=<your public URL>"
 echo "  in .env so invite links resolve to the right host."

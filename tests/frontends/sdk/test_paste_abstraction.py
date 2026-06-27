@@ -1,6 +1,6 @@
 """
 Unit tests for the bracketed-paste abstraction in
-:mod:`omnigent_ui_sdk.terminal._host`.
+:mod:`goalrail_ui_sdk.terminal._host`.
 
 Covers the pure threshold/format helpers, the host-level registry
 methods, the ``Keys.BracketedPaste`` key binding, and the
@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from omnigent_ui_sdk.terminal._host import (
+from goalrail_ui_sdk.terminal._host import (
     _PASTE_CHAR_THRESHOLD,
     _PASTE_LINE_THRESHOLD,
     TerminalHost,

@@ -23,9 +23,9 @@ from __future__ import annotations
 import asyncio
 
 import httpx
-from omnigent_client._sessions import SessionsNamespace
+from goalrail_client._sessions import SessionsNamespace
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
 from tests.e2e.conftest import create_runner_bound_session, lookup_agent_id
 
 
@@ -34,7 +34,7 @@ def _create_child(http_client: httpx.Client, *, agent_id: str, parent_id: str) -
     resp = http_client.post(
         "/v1/sessions",
         json={"agent_id": agent_id, "parent_session_id": parent_id},
-        headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+        headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
     )
     resp.raise_for_status()
     return str(resp.json()["id"])

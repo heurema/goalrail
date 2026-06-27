@@ -32,7 +32,7 @@ const SettingsPage = lazy(() =>
 
 interface AppProps {
   /**
-   * Mount prefix when embedded (e.g. `/ml/omnigent-embed`). The route table
+   * Mount prefix when embedded (e.g. `/ml/goalrail-embed`). The route table
    * matches the FULL pathname, so paths are declared as `${basename}/c/:id`.
    *
    * Why not rely on descendant-route prefix stripping? When embedded, ap-web's

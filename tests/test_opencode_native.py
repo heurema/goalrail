@@ -1,4 +1,4 @@
-"""Unit tests for the ``omni opencode`` launcher helpers (``opencode_native.py``).
+"""Unit tests for the ``goalrail opencode`` launcher helpers (``opencode_native.py``).
 
 Covers the pure spec/payload/tmux helpers plus the httpx-backed session and
 terminal helpers over a fake ``AsyncClient`` — the daemon/tmux attach plumbing
@@ -15,7 +15,7 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.opencode_native import (
+from goalrail.opencode_native import (
     LaunchedOpenCodeTerminal,
     PreparedOpenCodeTerminal,
     _create_opencode_session,
@@ -210,14 +210,14 @@ async def test_find_terminal_offline_runner_returns_none() -> None:
 
 
 def test_preflight_local_tools_ok(monkeypatch: pytest.MonkeyPatch) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     monkeypatch.setattr(on.shutil, "which", lambda _x: "/usr/bin/tmux")
     on._preflight_local_tools()  # tmux present → no raise
 
 
 def test_preflight_local_tools_missing_tmux_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     monkeypatch.setattr(on.shutil, "which", lambda _x: None)
     with pytest.raises(click.ClickException):
@@ -227,14 +227,14 @@ def test_preflight_local_tools_missing_tmux_raises(monkeypatch: pytest.MonkeyPat
 def test_update_startup_progress_handles_none_and_active() -> None:
     from unittest.mock import Mock
 
-    from omnigent.opencode_native import _update_startup_progress
+    from goalrail.opencode_native import _update_startup_progress
 
     _update_startup_progress(None, "boot")  # no renderer → no-op branch
     _update_startup_progress(Mock(), "boot")  # active renderer → update branch
 
 
 def test_tmux_reason_tmux_not_on_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     sock = tmp_path / "s.sock"
     sock.write_text("")
@@ -246,7 +246,7 @@ def test_tmux_reason_tmux_not_on_path(monkeypatch: pytest.MonkeyPatch, tmp_path:
 def test_tmux_reason_none_when_socket_and_tmux_present(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     sock = tmp_path / "s.sock"
     sock.write_text("")
@@ -255,7 +255,7 @@ def test_tmux_reason_none_when_socket_and_tmux_present(
 
 
 async def test_wait_for_terminal_returns_when_found(monkeypatch: pytest.MonkeyPatch) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     term = on.LaunchedOpenCodeTerminal(terminal_id="t", tmux_socket=None, tmux_target=None)
 
@@ -268,7 +268,7 @@ async def test_wait_for_terminal_returns_when_found(monkeypatch: pytest.MonkeyPa
 
 
 async def test_wait_for_terminal_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
-    import omnigent.opencode_native as on
+    import goalrail.opencode_native as on
 
     async def _never(_client: object, _sid: str) -> None:
         return None

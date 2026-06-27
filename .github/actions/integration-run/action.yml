@@ -2,7 +2,7 @@ name: "Run integration suite"
 description: >
   Run the tests/integration journey suite exactly as the integration.yml gate
   does (mock LLM, one wrapped harness per invocation). When `server_version`
-  is set, the omnigent SERVER subprocess is pinned to that released tag while
+  is set, the goalrail SERVER subprocess is pinned to that released tag while
   the client, runner, and tests stay on the checked-out ref — the
   server-version backwards-compat configuration. Shared verbatim by
   integration.yml (normal gate) and server-compat.yml (backcompat jobs) so the
@@ -48,7 +48,7 @@ runs:
       shell: bash
       run: |
         {
-          echo "OMNIGENT_SKIP_WEB_UI=true"
+          echo "GOALRAIL_SKIP_WEB_UI=true"
           echo "ANTHROPIC_API_KEY="
           echo "OPENAI_API_KEY="
           echo "CODEX="
@@ -107,13 +107,13 @@ runs:
         uv venv --python 3.12 "$venv"
         uv pip install --python "$venv/bin/python" \
           -e "$src" -e "$src/sdks/python-client" -e "$src/sdks/ui"
-        "$venv/bin/omnigent" --version
-        echo "OMNIGENT_COMPAT_SERVER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
-        echo "OMNIGENT_COMPAT_SERVER_VERSION=${tag#v}" >> "$GITHUB_ENV"
+        "$venv/bin/goalrail" --version
+        echo "GOALRAIL_COMPAT_SERVER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+        echo "GOALRAIL_COMPAT_SERVER_VERSION=${tag#v}" >> "$GITHUB_ENV"
 
     - name: Build pinned old runner (backwards-compat only)
       # Config 2: redirect the runner subprocess to the pinned old build via
-      # OMNIGENT_COMPAT_RUNNER_PYTHON. See e2e-run for the full rationale.
+      # GOALRAIL_COMPAT_RUNNER_PYTHON. See e2e-run for the full rationale.
       # Distinct paths from the server build. Requires fetch-depth 0 in the caller.
       if: ${{ inputs.runner_version != '' }}
       shell: bash
@@ -130,9 +130,9 @@ runs:
         uv venv --python 3.12 "$venv"
         uv pip install --python "$venv/bin/python" \
           -e "$src" -e "$src/sdks/python-client" -e "$src/sdks/ui"
-        "$venv/bin/omnigent" --version
-        echo "OMNIGENT_COMPAT_RUNNER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
-        echo "OMNIGENT_COMPAT_RUNNER_VERSION=${tag#v}" >> "$GITHUB_ENV"
+        "$venv/bin/goalrail" --version
+        echo "GOALRAIL_COMPAT_RUNNER_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+        echo "GOALRAIL_COMPAT_RUNNER_VERSION=${tag#v}" >> "$GITHUB_ENV"
 
     - name: Run integration tests
       shell: bash
@@ -140,13 +140,13 @@ runs:
         HARNESS: ${{ inputs.harness }}
         MODEL: ${{ inputs.model }}
         WORKERS: ${{ inputs.workers }}
-        INTEGRATION_TMP_BASE: /tmp/omnigent-integration-${{ github.run_id }}-${{ inputs.harness }}
+        INTEGRATION_TMP_BASE: /tmp/goalrail-integration-${{ github.run_id }}-${{ inputs.harness }}
         CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: "60000"
-        OMNIGENT_CLAUDE_SDK_NO_SANDBOX: ${{ inputs.harness == 'claude-sdk' && '1' || '' }}
+        GOALRAIL_CLAUDE_SDK_NO_SANDBOX: ${{ inputs.harness == 'claude-sdk' && '1' || '' }}
         PYTEST_PROGRESS_LOG_DIR: ${{ github.workspace }}/artifacts/progress-${{ inputs.harness }}
-        OMNIGENT_TOKEN_USAGE_JSON: ${{ github.workspace }}/artifacts/tokens-${{ inputs.harness }}.json
-        OMNIGENT_TEST_MODEL_SPREAD: "1"
-        OMNIGENT_TEST_MODEL_POOL_GPT: "databricks-gpt-5-5,databricks-gpt-5-4-mini"
+        GOALRAIL_TOKEN_USAGE_JSON: ${{ github.workspace }}/artifacts/tokens-${{ inputs.harness }}.json
+        GOALRAIL_TEST_MODEL_SPREAD: "1"
+        GOALRAIL_TEST_MODEL_POOL_GPT: "databricks-gpt-5-5,databricks-gpt-5-4-mini"
       run: |
         set -euo pipefail
         mkdir -p artifacts "$INTEGRATION_TMP_BASE"
@@ -172,8 +172,8 @@ runs:
       with:
         name: integration-server-logs-${{ inputs.harness }}-${{ github.run_id }}${{ inputs.artifact_suffix }}
         path: |
-          /tmp/omnigent-integration-${{ github.run_id }}-${{ inputs.harness }}/**/server.log
-          /tmp/omnigent-integration-${{ github.run_id }}-${{ inputs.harness }}/**/runner.log
+          /tmp/goalrail-integration-${{ github.run_id }}-${{ inputs.harness }}/**/server.log
+          /tmp/goalrail-integration-${{ github.run_id }}-${{ inputs.harness }}/**/runner.log
         retention-days: 7
         if-no-files-found: warn
 

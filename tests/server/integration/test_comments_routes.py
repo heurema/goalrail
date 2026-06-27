@@ -14,15 +14,15 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.auth import LEVEL_EDIT, LEVEL_READ
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.app import create_app
+from goalrail.server.auth import LEVEL_EDIT, LEVEL_READ
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 from tests.server.conftest import ControllableMockClient
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ def auth_app(
     :param tmp_path: Pytest temp dir for artifacts.
     :returns: A :class:`FastAPI` instance with ``UnifiedAuthProvider`` active.
     """
-    from omnigent.server.auth import UnifiedAuthProvider
+    from goalrail.server.auth import UnifiedAuthProvider
 
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
     return create_app(
@@ -101,8 +101,8 @@ async def auth_client(
     :param tmp_path: Pytest temp dir for the harness process manager.
     :yields: A ready-to-use :class:`httpx.AsyncClient`.
     """
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from goalrail.runtime import set_harness_process_manager
+    from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()
@@ -500,7 +500,7 @@ async def test_comment_api_serializes_updated_at(
     us = 1_000_000  # updated_at is epoch-µs; created_at stays seconds
     clock = {"now": 1_000}
     monkeypatch.setattr(
-        "omnigent.stores.comment_store.sqlalchemy_store.now_epoch_us",
+        "goalrail.stores.comment_store.sqlalchemy_store.now_epoch_us",
         lambda: clock["now"] * us,
     )
 

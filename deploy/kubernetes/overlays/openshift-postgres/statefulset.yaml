@@ -3,19 +3,19 @@ kind: StatefulSet
 metadata:
   name: postgres
   labels:
-    app: omnigent-postgres
+    app: goalrail-postgres
     component: postgres
 spec:
   serviceName: postgres
   replicas: 1
   selector:
     matchLabels:
-      app: omnigent-postgres
+      app: goalrail-postgres
       component: postgres
   template:
     metadata:
       labels:
-        app: omnigent-postgres
+        app: goalrail-postgres
         component: postgres
     spec:
       containers:
@@ -26,13 +26,13 @@ spec:
               name: postgres
           env:
             - name: POSTGRES_DB
-              value: omnigent
+              value: goalrail
             - name: POSTGRES_USER
-              value: omnigent
+              value: goalrail
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: omnigent-secrets
+                  name: goalrail-secrets
                   key: POSTGRES_PASSWORD
           volumeMounts:
             - name: postgres-data
@@ -46,12 +46,12 @@ spec:
               cpu: "500m"
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "omnigent"]
+              command: ["pg_isready", "-U", "goalrail"]
             periodSeconds: 10
             timeoutSeconds: 5
           livenessProbe:
             exec:
-              command: ["pg_isready", "-U", "omnigent"]
+              command: ["pg_isready", "-U", "goalrail"]
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5

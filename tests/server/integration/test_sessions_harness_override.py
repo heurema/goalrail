@@ -51,7 +51,7 @@ def _stub_runner_client(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     :returns: A dict the test inspects after the runner POST runs;
         contains ``path`` and ``body`` keys once the route fires.
     """
-    from omnigent.server.routes import sessions as sessions_mod
+    from goalrail.server.routes import sessions as sessions_mod
 
     captured: dict[str, Any] = {}
 
@@ -148,10 +148,10 @@ async def test_create_rejects_unknown_harness_override(
     assert "bogus" in resp.text
 
 
-async def test_create_rejects_harness_override_for_non_omnigent_agent(
+async def test_create_rejects_harness_override_for_non_goalrail_agent(
     client: httpx.AsyncClient,
 ) -> None:
-    """Non-omnigent executor types reject the override instead of no-opping.
+    """Non-goalrail executor types reject the override instead of no-opping.
 
     Mirrors the CLI's ``--harness`` rule: those executors have no
     ``config.harness``, so accepting the value would silently launch the
@@ -160,7 +160,7 @@ async def test_create_rejects_harness_override_for_non_omnigent_agent(
     agent = await create_test_agent(
         client,
         name="sdk-typed-agent",
-        # A non-omnigent executor type (claude_sdk rejects the helper's
+        # A non-goalrail executor type (claude_sdk rejects the helper's
         # executor.connection, so agents_sdk is the representative here);
         # the helper still injects config.harness, which this executor
         # type simply ignores.

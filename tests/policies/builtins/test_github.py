@@ -1,6 +1,6 @@
 """
 Tests for the built-in GitHub access policy
-(:mod:`omnigent.policies.builtins.github`) — the single ``github_policy``
+(:mod:`goalrail.policies.builtins.github`) — the single ``github_policy``
 factory covering both the MCP tool-call surface and the git/gh shell surface.
 
 Layers:
@@ -26,15 +26,15 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.github import github_policy
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent, PolicyResponse
-from omnigent.policies.types import EvaluationContext
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from goalrail.policies.builtins.github import github_policy
+from goalrail.policies.function import FunctionPolicy, resolve_function_policy
+from goalrail.policies.registry import get_registry, load_registry, validate_factory_params
+from goalrail.policies.schema import PolicyEvent, PolicyResponse
+from goalrail.policies.types import EvaluationContext
+from goalrail.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
 from tests.policies.builtins.helpers import tool_call_event as tc
 
-_HANDLER = "omnigent.policies.builtins.github.github_policy"
+_HANDLER = "goalrail.policies.builtins.github.github_policy"
 _REPO = "octo/hello"
 _REPO_URL = "https://github.com/octo/hello/pull/1"
 

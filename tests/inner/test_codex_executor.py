@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from omnigent.inner.codex_executor import (
+from goalrail.inner.codex_executor import (
     _TURN_EVENT_WARN_SECONDS,
     CodexExecutor,
     _build_initial_prompt,
@@ -23,8 +23,8 @@ from omnigent.inner.codex_executor import (
     _prompt_for_turn,
     _to_codex_input_items,
 )
-from omnigent.inner.databricks_executor import DatabricksCredentials
-from omnigent.inner.executor import (
+from goalrail.inner.databricks_executor import DatabricksCredentials
+from goalrail.inner.executor import (
     ExecutorError,
     ReasoningChunk,
     TextChunk,
@@ -140,7 +140,7 @@ class TestCodexExecutor(unittest.TestCase):
             auth_command=('databricks auth token --host "https://example.cloud.databricks.com"'),
         )
         self.assertIn('model="databricks-gpt-5-4-mini"', overrides)
-        self.assertIn('model_provider="omnigent_databricks"', overrides)
+        self.assertIn('model_provider="goalrail_databricks"', overrides)
         self.assertTrue(any("/ai-gateway/codex/v1" in item for item in overrides))
         self.assertFalse(any("/serving-endpoints" in item for item in overrides))
         self.assertTrue(any('auth={command="sh"' in item for item in overrides))
@@ -170,14 +170,14 @@ class TestCodexExecutor(unittest.TestCase):
         # The whole payload round-trips as the literal model name.
         self.assertEqual(parsed["model"], payload)
         # The injected auth command did not survive — the legit one did.
-        provider = parsed["model_providers"]["omnigent_databricks"]
+        provider = parsed["model_providers"]["goalrail_databricks"]
         self.assertEqual(provider["auth"]["args"], ["-c", real_auth])
 
     def test_constructor_databricks_flag_with_profile(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch(
-                "omnigent.inner.codex_executor._read_databrickscfg",
+                "goalrail.inner.codex_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -192,11 +192,11 @@ class TestCodexExecutor(unittest.TestCase):
         )
         self.assertNotIn("DATABRICKS_TOKEN", executor._env)
         self.assertIn("model=", executor._codex_config_overrides[0])
-        self.assertIn('model_provider="omnigent_databricks"', executor._codex_config_overrides[1])
+        self.assertIn('model_provider="goalrail_databricks"', executor._codex_config_overrides[1])
 
     def test_constructor_does_not_force_codex_debug_env_by_default(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
         ):
             executor = CodexExecutor()
@@ -206,10 +206,10 @@ class TestCodexExecutor(unittest.TestCase):
 
     def test_constructor_databricks_flag_with_profile_uses_profile_credentials(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnigent.inner.codex_executor._read_databrickscfg",
+                "goalrail.inner.codex_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example-profile-workspace.cloud.databricks.com",
                     token="profile_token",
@@ -252,9 +252,9 @@ class TestCodexExecutor(unittest.TestCase):
 
     def test_constructor_databricks_flag_with_host_override_skips_profile_lookup(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
-            patch("omnigent.inner.codex_executor._read_databrickscfg") as read_cfg,
+            patch("goalrail.inner.codex_executor._read_databrickscfg") as read_cfg,
         ):
             executor = CodexExecutor(
                 gateway=True,
@@ -282,7 +282,7 @@ class TestCodexExecutor(unittest.TestCase):
 
     def test_constructor_databricks_flag_with_host_override_requires_base_url(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
             self.assertRaisesRegex(OSError, "GATEWAY_BASE_URL"),
         ):
@@ -294,7 +294,7 @@ class TestCodexExecutor(unittest.TestCase):
 
     def test_constructor_databricks_flag_with_host_override_requires_auth_command(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
             self.assertRaisesRegex(OSError, "GATEWAY_AUTH_COMMAND"),
         ):
@@ -306,10 +306,10 @@ class TestCodexExecutor(unittest.TestCase):
 
     def test_constructor_databricks_flag_no_creds_raises(self):
         with (
-            patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
-            patch("omnigent.inner.codex_executor._read_databrickscfg", return_value=None),
-            patch("omnigent.inner.codex_executor._read_databrickscfg_host", return_value=None),
+            patch("goalrail.inner.codex_executor._read_databrickscfg", return_value=None),
+            patch("goalrail.inner.codex_executor._read_databrickscfg_host", return_value=None),
         ):
             with self.assertRaises(EnvironmentError):
                 CodexExecutor(gateway=True)
@@ -405,7 +405,7 @@ class TestCodexExecutor(unittest.TestCase):
         async def _t():
             fake_session = _FakeAppSession([[TurnComplete(response="done")]])
             with patch(
-                "omnigent.inner.codex_executor._read_databrickscfg",
+                "goalrail.inner.codex_executor._read_databrickscfg",
                 return_value=DatabricksCredentials(
                     host="https://example.cloud.databricks.com",
                     token="dapi_test_token",
@@ -658,7 +658,7 @@ class TestCodexExecutor(unittest.TestCase):
             session._proc = _FakeProcess()
             session._started = True
 
-            with patch("omnigent.inner.codex_executor._terminate_process_tree") as terminate_tree:
+            with patch("goalrail.inner.codex_executor._terminate_process_tree") as terminate_tree:
                 await session.close()
 
             terminate_tree.assert_called_once()
@@ -811,7 +811,7 @@ class TestCodexExecutor(unittest.TestCase):
                 session._request = AsyncMock(return_value={"result": {}})
 
                 with patch(
-                    "omnigent.inner.codex_executor._create_subprocess_exec",
+                    "goalrail.inner.codex_executor._create_subprocess_exec",
                     new=_fake_create_subprocess_exec,
                 ):
                     await session.start()
@@ -845,7 +845,7 @@ class TestCodexExecutor(unittest.TestCase):
                 session._request = AsyncMock(return_value={"result": {}})
 
                 with patch(
-                    "omnigent.inner.codex_executor._create_subprocess_exec",
+                    "goalrail.inner.codex_executor._create_subprocess_exec",
                     new=_fake_create_subprocess_exec,
                 ):
                     await session.start()
@@ -853,7 +853,7 @@ class TestCodexExecutor(unittest.TestCase):
                     self.assertIn("CODEX_HOME", recorded_env)
                     codex_home = Path(recorded_env["CODEX_HOME"])
                     self.assertTrue(codex_home.is_dir())
-                    self.assertTrue(codex_home.name.startswith("omnigent-codex-home-"))
+                    self.assertTrue(codex_home.name.startswith("goalrail-codex-home-"))
                     self.assertTrue(str(codex_home).startswith(tempfile.gettempdir()))
                     # Must not point at the user's real ~/.codex directory.
                     self.assertNotEqual(codex_home, Path.home() / ".codex")
@@ -929,7 +929,7 @@ class TestCodexExecutor(unittest.TestCase):
             session._request = AsyncMock(return_value={"result": {"turn": {"id": "turn-1"}}})
 
             original_warn = _TURN_EVENT_WARN_SECONDS
-            import omnigent.inner.codex_executor as codex_executor_module
+            import goalrail.inner.codex_executor as codex_executor_module
 
             codex_executor_module._TURN_EVENT_WARN_SECONDS = 0.05
             try:
@@ -953,7 +953,7 @@ class TestCodexExecutor(unittest.TestCase):
                     )
 
                 inject_task = asyncio.create_task(_inject_final_after_warning())
-                with self.assertLogs("omnigent.inner.codex_executor", level="WARNING") as cm:
+                with self.assertLogs("goalrail.inner.codex_executor", level="WARNING") as cm:
                     events = [
                         event
                         async for event in session.run_turn(
@@ -1116,7 +1116,7 @@ class TestCodexExecutor(unittest.TestCase):
         """The inner executor's ``TurnComplete`` yield site notifies the
         shared usage observer so integration tests that drive the codex
         executor directly populate the per-test token-usage artifact."""
-        from omnigent.llms import _usage_observer
+        from goalrail.llms import _usage_observer
 
         async def _t():
             session = _CodexAppServerSession(
@@ -1355,7 +1355,7 @@ class TestCodexExecutor(unittest.TestCase):
     def test_app_server_run_turn_reasoning_deltas_yield_reasoning_chunks(self):
         """item/reasoning/textDelta and item/reasoning/summaryTextDelta events
         yield ReasoningChunk events so the idle watchdog resets during long
-        think phases (regression guard for omnigent-ai/omnigent#738)."""
+        think phases (regression guard for heurema/goalrail#738)."""
 
         async def _t():
             session = _CodexAppServerSession(
@@ -1762,7 +1762,7 @@ def test_format_codex_error_params_extracts_provider_error_from_nested_error() -
     report was exactly this: codex+claude-opus-4-6 on Databricks
     surfaced as "Codex App Server error" with zero diagnostic info.
     """
-    from omnigent.inner.codex_executor import _format_codex_error_params
+    from goalrail.inner.codex_executor import _format_codex_error_params
 
     params = {
         "error": {
@@ -1799,7 +1799,7 @@ def test_format_codex_error_params_falls_back_to_raw_when_no_known_fields() -> N
     params dict. We never want the user to see a bare
     "Codex App Server error" with no hint about what went wrong.
     """
-    from omnigent.inner.codex_executor import _format_codex_error_params
+    from goalrail.inner.codex_executor import _format_codex_error_params
 
     params = {"someField": "someValue", "willRetry": False}
     result = _format_codex_error_params(params)
@@ -1812,7 +1812,7 @@ def test_format_codex_error_params_handles_missing_params() -> None:
     None / empty / non-dict params must produce a stable fallback
     string — never crash, never empty.
     """
-    from omnigent.inner.codex_executor import _format_codex_error_params
+    from goalrail.inner.codex_executor import _format_codex_error_params
 
     assert "no params" in _format_codex_error_params(None)
     assert "no params" in _format_codex_error_params({})
@@ -1828,7 +1828,7 @@ def test_extract_codex_last_turn_usage_splits_cached_out_of_input() -> None:
     tokens at the full input rate. If ``input_tokens`` came back as 7 (not 6)
     and there were no ``cache_read_input_tokens`` key, the split regressed.
     """
-    from omnigent.inner.codex_executor import _extract_codex_last_turn_usage
+    from goalrail.inner.codex_executor import _extract_codex_last_turn_usage
 
     params = {
         "threadId": "t1",
@@ -1858,7 +1858,7 @@ def test_extract_codex_last_turn_usage_no_cache_key_when_uncached() -> None:
     Guards against synthesizing a phantom cache bucket (which would shrink
     the non-cached input the server bills at the full rate).
     """
-    from omnigent.inner.codex_executor import _extract_codex_last_turn_usage
+    from goalrail.inner.codex_executor import _extract_codex_last_turn_usage
 
     params = {"tokenUsage": {"last": {"inputTokens": 7, "outputTokens": 3, "totalTokens": 10}}}
     assert _extract_codex_last_turn_usage(params) == {
@@ -1870,7 +1870,7 @@ def test_extract_codex_last_turn_usage_no_cache_key_when_uncached() -> None:
 
 def test_extract_codex_last_turn_usage_handles_missing_or_malformed() -> None:
     """Missing or non-dict shapes return None rather than raising."""
-    from omnigent.inner.codex_executor import _extract_codex_last_turn_usage
+    from goalrail.inner.codex_executor import _extract_codex_last_turn_usage
 
     assert _extract_codex_last_turn_usage(None) is None
     assert _extract_codex_last_turn_usage("not a dict") is None
@@ -1897,7 +1897,7 @@ def test_populate_codex_skills_all(tmp_path: Path) -> None:
     the per-conversation ``$CODEX_HOME/skills/`` so codex's
     auto-discovery surfaces them all.
     """
-    from omnigent.inner.codex_executor import _populate_codex_skills
+    from goalrail.inner.codex_executor import _populate_codex_skills
 
     host_skills = tmp_path / "host"
     bundle_skills = tmp_path / "bundle"
@@ -1924,11 +1924,11 @@ def test_populate_codex_skills_none(tmp_path: Path) -> None:
 
     Codex's discovery walks ``$CODEX_HOME/skills/`` — if the
     directory doesn't exist, no skills load. This is the
-    hermetic-agent regression-pin: Omnigent must produce no skill
+    hermetic-agent regression-pin: Goalrail must produce no skill
     surface for ``skills: none`` even when host
     ``~/.codex/skills/`` is populated.
     """
-    from omnigent.inner.codex_executor import _populate_codex_skills
+    from goalrail.inner.codex_executor import _populate_codex_skills
 
     host_skills = tmp_path / "host"
     target = tmp_path / "codex_home_skills"
@@ -1953,7 +1953,7 @@ def test_populate_codex_skills_named_subset(tmp_path: Path) -> None:
     first-listed source (so callers can express priority by
     ordering ``sources``).
     """
-    from omnigent.inner.codex_executor import _populate_codex_skills
+    from goalrail.inner.codex_executor import _populate_codex_skills
 
     host_skills = tmp_path / "host"
     bundle_skills = tmp_path / "bundle"
@@ -1992,7 +1992,7 @@ def test_populate_codex_skills_from_bundle_links_bundle_skills(tmp_path: Path) -
     populated no skills). Fails if the bundle source isn't scanned or the
     target isn't created under ``<codex_home>/skills``.
     """
-    from omnigent.inner.codex_executor import populate_codex_skills_from_bundle
+    from goalrail.inner.codex_executor import populate_codex_skills_from_bundle
 
     bundle = tmp_path / "bundle"
     _make_skill_dir(bundle / "skills", "authoring")
@@ -2010,7 +2010,7 @@ def test_populate_codex_skills_from_bundle_none_leaves_no_dir(tmp_path: Path) ->
     ``skills_filter="none"`` produces no ``skills/`` dir even when the
     bundle ships skills — the codex-native parity for a hermetic agent.
     """
-    from omnigent.inner.codex_executor import populate_codex_skills_from_bundle
+    from goalrail.inner.codex_executor import populate_codex_skills_from_bundle
 
     bundle = tmp_path / "bundle"
     _make_skill_dir(bundle / "skills", "authoring")
@@ -2034,7 +2034,7 @@ def test_populate_codex_home_config_symlinks_auth_and_config(tmp_path: Path) -> 
     in-TUI ``/model`` command writes only to the session's private copy and
     never mutates the shared ``~/.codex/config.toml``.
     """
-    from omnigent.inner.codex_executor import _populate_codex_home_config
+    from goalrail.inner.codex_executor import _populate_codex_home_config
 
     source = tmp_path / "real_codex_home"
     source.mkdir()
@@ -2061,7 +2061,7 @@ def test_populate_codex_home_config_config_toml_copy_is_isolated(tmp_path: Path)
     ``~/.codex/config.toml`` and silently change another session's model or
     cost-policy enforcement.
     """
-    from omnigent.inner.codex_executor import _populate_codex_home_config
+    from goalrail.inner.codex_executor import _populate_codex_home_config
 
     source = tmp_path / "real_codex_home"
     source.mkdir()
@@ -2085,7 +2085,7 @@ def test_populate_codex_home_config_missing_source_dir(tmp_path: Path) -> None:
     Handles the case where codex has never been run locally — the
     populator must no-op cleanly rather than raising on a missing path.
     """
-    from omnigent.inner.codex_executor import _populate_codex_home_config
+    from goalrail.inner.codex_executor import _populate_codex_home_config
 
     source = tmp_path / "nonexistent"
     target = tmp_path / "temp_codex_home"
@@ -2103,7 +2103,7 @@ def test_populate_codex_home_config_partial_files(tmp_path: Path) -> None:
     opt-in via ``codex auth``); ``config.toml`` is optional too. The
     populator must skip missing files silently.
     """
-    from omnigent.inner.codex_executor import _populate_codex_home_config
+    from goalrail.inner.codex_executor import _populate_codex_home_config
 
     source = tmp_path / "real_codex_home"
     source.mkdir()
@@ -2124,7 +2124,7 @@ def test_app_server_start_uses_real_home_for_private_inherited_codex_home(
     """
     Empty inherited ``CODEX_HOME`` does not hide the real user login at startup.
 
-    Omnigent itself can be launched from a Codex-managed environment
+    Goalrail itself can be launched from a Codex-managed environment
     where ``CODEX_HOME`` points at an isolated private home. If that
     inherited home lacks Codex auth/config files, app-server startup must
     bridge from the user's real ``~/.codex`` equivalent so Codex sessions
@@ -2137,7 +2137,7 @@ def test_app_server_start_uses_real_home_for_private_inherited_codex_home(
     """
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
-    inherited = home / ".omnigent" / "codex-native" / "abc123" / "codex-home"
+    inherited = home / ".goalrail" / "codex-native" / "abc123" / "codex-home"
     inherited.mkdir(parents=True)
     monkeypatch.setenv("CODEX_HOME", str(inherited))
     real_codex_home = home / ".codex"
@@ -2186,7 +2186,7 @@ def test_app_server_start_uses_real_home_for_private_inherited_codex_home(
         session._request = AsyncMock(return_value={"result": {}})
 
         with patch(
-            "omnigent.inner.codex_executor._create_subprocess_exec",
+            "goalrail.inner.codex_executor._create_subprocess_exec",
             new=_fake_create_subprocess_exec,
         ):
             await session.start()
@@ -2206,7 +2206,7 @@ def test_app_server_start_preserves_custom_home_from_inherited_private_symlink(
     Nested startup preserves a parent's custom Codex home source.
 
     A top-level launch may bridge auth/config from an explicit custom
-    ``CODEX_HOME`` into an Omnigent private home. A nested launch inherits
+    ``CODEX_HOME`` into an Goalrail private home. A nested launch inherits
     only that private path, so it must infer the original custom source from
     the existing symlink targets instead of falling back to ``~/.codex``.
 
@@ -2225,7 +2225,7 @@ def test_app_server_start_preserves_custom_home_from_inherited_private_symlink(
     default_home.mkdir(parents=True)
     (default_home / "auth.json").write_text('{"auth_mode": "default"}')
     (default_home / "config.toml").write_text('model_provider = "default"')
-    inherited = home / ".omnigent" / "codex-native" / "abc123" / "codex-home"
+    inherited = home / ".goalrail" / "codex-native" / "abc123" / "codex-home"
     inherited.mkdir(parents=True)
     (inherited / "auth.json").symlink_to(custom_home / "auth.json")
     (inherited / "config.toml").symlink_to(custom_home / "config.toml")
@@ -2263,7 +2263,7 @@ def test_app_server_start_preserves_custom_home_from_inherited_private_symlink(
         session._request = AsyncMock(return_value={"result": {}})
 
         with patch(
-            "omnigent.inner.codex_executor._create_subprocess_exec",
+            "goalrail.inner.codex_executor._create_subprocess_exec",
             new=_fake_create_subprocess_exec,
         ):
             await session.start()
@@ -2279,7 +2279,7 @@ def test_populate_codex_home_config_does_not_overwrite_existing(tmp_path: Path) 
     Guards against double-start races or manual overrides placed
     in the temp dir before the populator runs.
     """
-    from omnigent.inner.codex_executor import _populate_codex_home_config
+    from goalrail.inner.codex_executor import _populate_codex_home_config
 
     source = tmp_path / "real_codex_home"
     source.mkdir()
@@ -2308,7 +2308,7 @@ def test_clean_codex_env_excludes_openai_api_key(monkeypatch) -> None:
     ``OPENAI_API_KEY`` into the subprocess would charge the user's
     developer account instead of their subscription plan.
     """
-    from omnigent.inner.codex_executor import _clean_codex_env
+    from goalrail.inner.codex_executor import _clean_codex_env
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-secret")
     monkeypatch.setenv("OPENAI_MAX_RETRIES", "3")
@@ -2329,7 +2329,7 @@ def test_clean_codex_env_includes_databricks_bearer(monkeypatch) -> None:
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.inner.codex_executor import _clean_codex_env
+    from goalrail.inner.codex_executor import _clean_codex_env
 
     monkeypatch.setenv("DATABRICKS_BEARER", "ci-bearer")
     monkeypatch.setenv("DATABRICKS_TOKEN", "stale-token")
@@ -2340,26 +2340,26 @@ def test_clean_codex_env_includes_databricks_bearer(monkeypatch) -> None:
     assert "DATABRICKS_TOKEN" not in env
 
 
-def test_clean_codex_env_includes_omnigent_session_marker(monkeypatch) -> None:
-    """The ``OMNIGENT`` session marker survives the codex env scrub.
+def test_clean_codex_env_includes_goalrail_session_marker(monkeypatch) -> None:
+    """The ``GOALRAIL`` session marker survives the codex env scrub.
 
     The marker (set once on the runner) must reach the codex CLI so the
-    shell commands codex runs can detect they are inside an Omnigent
+    shell commands codex runs can detect they are inside an Goalrail
     session, like ``CLAUDE_CODE`` / ``CODEX``.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.inner.codex_executor import _clean_codex_env
-    from omnigent.runner.identity import (
-        OMNIGENT_SESSION_ENV_VALUE,
-        OMNIGENT_SESSION_ENV_VAR,
+    from goalrail.inner.codex_executor import _clean_codex_env
+    from goalrail.runner.identity import (
+        GOALRAIL_SESSION_ENV_VALUE,
+        GOALRAIL_SESSION_ENV_VAR,
     )
 
-    monkeypatch.setenv(OMNIGENT_SESSION_ENV_VAR, OMNIGENT_SESSION_ENV_VALUE)
+    monkeypatch.setenv(GOALRAIL_SESSION_ENV_VAR, GOALRAIL_SESSION_ENV_VALUE)
 
     env = _clean_codex_env()
 
-    assert env.get(OMNIGENT_SESSION_ENV_VAR) == OMNIGENT_SESSION_ENV_VALUE
+    assert env.get(GOALRAIL_SESSION_ENV_VAR) == GOALRAIL_SESSION_ENV_VALUE
 
 
 # ---------------------------------------------------------------------------
@@ -2521,7 +2521,7 @@ async def test_codex_cli_version_parses_output(
     async def _fake_exec(*_args: Any, **_kwargs: Any) -> _FakeVersionProcess:
         return _FakeVersionProcess(stdout=output)
 
-    monkeypatch.setattr("omnigent.inner.codex_executor._create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr("goalrail.inner.codex_executor._create_subprocess_exec", _fake_exec)
     assert await _codex_cli_version("/usr/local/bin/codex") == expected
 
 
@@ -2539,7 +2539,7 @@ async def test_codex_cli_version_returns_none_on_oserror(
     async def _boom(*_args: Any, **_kwargs: Any) -> None:
         raise OSError("no such binary")
 
-    monkeypatch.setattr("omnigent.inner.codex_executor._create_subprocess_exec", _boom)
+    monkeypatch.setattr("goalrail.inner.codex_executor._create_subprocess_exec", _boom)
     assert await _codex_cli_version("/usr/local/bin/codex") is None
 
 
@@ -2578,8 +2578,8 @@ async def test_codex_cli_version_times_out_and_kills_proc(
         return proc
 
     # Shrink the probe budget so the test does not actually wait the full 5s.
-    monkeypatch.setattr("omnigent.inner.codex_executor._CODEX_VERSION_PROBE_TIMEOUT_SECONDS", 0.05)
-    monkeypatch.setattr("omnigent.inner.codex_executor._create_subprocess_exec", _fake_exec)
+    monkeypatch.setattr("goalrail.inner.codex_executor._CODEX_VERSION_PROBE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("goalrail.inner.codex_executor._create_subprocess_exec", _fake_exec)
 
     assert await _codex_cli_version("/usr/local/bin/codex") is None
     # The stuck process was killed, not leaked.
@@ -2598,7 +2598,7 @@ def test_model_provider_override_appends_pin() -> None:
     reaches the codex CLI, so the bridged config.toml's default provider
     silently routes the session instead.
     """
-    with patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"):
+    with patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"):
         executor = CodexExecutor(model_provider_override="Databricks")
     assert executor._codex_config_overrides == ['model_provider="Databricks"']
 
@@ -2611,7 +2611,7 @@ def test_model_provider_override_with_gateway_raises() -> None:
     means a misconfigured AP producer ships an ambiguous launch.
     """
     with (
-        patch("omnigent.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
+        patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
         pytest.raises(OSError, match="mutually exclusive"),
     ):
         CodexExecutor(

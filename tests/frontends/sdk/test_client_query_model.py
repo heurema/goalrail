@@ -1,4 +1,4 @@
-"""Unit test: ``OmnigentClient.query(..., model_override=...)`` threads to Session.
+"""Unit test: ``GoalrailClient.query(..., model_override=...)`` threads to Session.
 
 Mirrors :mod:`tests.frontends.sdk.test_client_query_reasoning`. Confirms
 that the public one-shot SDK surface (``client.query``) honors the
@@ -11,7 +11,7 @@ constructs internally — same pattern Corey's effort PR used for the
 from __future__ import annotations
 
 import pytest
-from omnigent_client._client import OmnigentClient
+from goalrail_client._client import GoalrailClient
 
 
 @pytest.mark.asyncio
@@ -30,7 +30,7 @@ async def test_client_query_threads_model_override_to_temporary_session(
         """Concrete stub recording every setter call.
 
         Real class (not :class:`MagicMock`) so an unexpected attribute
-        access fails loudly — see ``.claude/skills/omnigent-testing``
+        access fails loudly — see ``.claude/skills/goalrail-testing``
         rule 3.
         """
 
@@ -52,7 +52,7 @@ async def test_client_query_threads_model_override_to_temporary_session(
             captured["stream"] = stream
             return "ok"
 
-    client = OmnigentClient("http://example.invalid")
+    client = GoalrailClient("http://example.invalid")
     fake_session = _FakeSession()
     monkeypatch.setattr(client, "session", lambda **kwargs: fake_session)
     try:
@@ -102,7 +102,7 @@ async def test_client_query_omits_model_override_when_unset(
         async def query(self, input: object, *, files: object = None, stream: bool = False) -> str:
             return "ok"
 
-    client = OmnigentClient("http://example.invalid")
+    client = GoalrailClient("http://example.invalid")
     fake_session = _FakeSession()
     monkeypatch.setattr(client, "session", lambda **kwargs: fake_session)
     try:

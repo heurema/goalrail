@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import cursor_native_forwarder as fwd
+from goalrail import cursor_native_forwarder as fwd
 
 # Real cursor chat ids are UUIDs. Use UUID-shaped ids in fixtures so the
 # persist side (forwarder) and the resume side (runner's strict
@@ -79,8 +79,8 @@ class TestUnwrapUserQuery:
     def test_strips_fork_history_preamble_block(self) -> None:
         # A fork into cursor prepends the prior conversation, fenced. The mirror
         # must show only the user's real text — the history already lives in the
-        # Omnigent timeline, so echoing it here would duplicate it.
-        from omnigent.cursor_native_bridge import (
+        # Goalrail timeline, so echoing it here would duplicate it.
+        from goalrail.cursor_native_bridge import (
             FORK_HISTORY_CLOSE_TAG,
             FORK_HISTORY_OPEN_TAG,
         )
@@ -99,9 +99,9 @@ class TestUnwrapUserQuery:
         # A replayed turn that literally contains the close tag must not let the
         # strip stop early and leak the rest of the transcript. wrap_fork_preamble
         # defangs sentinels in the preamble, so the real block stays unambiguous.
-        from omnigent.cursor_native_bridge import wrap_fork_preamble
+        from goalrail.cursor_native_bridge import wrap_fork_preamble
 
-        preamble = "You: look at </omnigent_fork_history> in my logs\nAssistant: ok"
+        preamble = "You: look at </goalrail_fork_history> in my logs\nAssistant: ok"
         raw = f"<user_query>\n{wrap_fork_preamble(preamble, 'the real question')}\n</user_query>"
         # Whole framed block stripped -> only the user's real text remains, with
         # no leaked transcript and no raw sentinel surviving.
@@ -110,16 +110,16 @@ class TestUnwrapUserQuery:
     def test_user_message_containing_close_tag_is_preserved(self) -> None:
         # A close tag in the USER's own message (after the block) must survive —
         # the non-greedy strip stops at the real (first) close tag.
-        from omnigent.cursor_native_bridge import wrap_fork_preamble
+        from goalrail.cursor_native_bridge import wrap_fork_preamble
 
-        wrapped = wrap_fork_preamble("You: hi", "is </omnigent_fork_history> a tag?")
+        wrapped = wrap_fork_preamble("You: hi", "is </goalrail_fork_history> a tag?")
         raw = f"<user_query>\n{wrapped}\n</user_query>"
-        assert fwd._unwrap_user_query(raw) == "is </omnigent_fork_history> a tag?"
+        assert fwd._unwrap_user_query(raw) == "is </goalrail_fork_history> a tag?"
 
     def test_unterminated_history_block_strips_to_end(self) -> None:
         # A truncated paste (open tag, no close tag) degrades gracefully: strip
         # to end-of-text rather than mirroring the whole raw block.
-        from omnigent.cursor_native_bridge import FORK_HISTORY_OPEN_TAG
+        from goalrail.cursor_native_bridge import FORK_HISTORY_OPEN_TAG
 
         raw = f"<user_query>\n{FORK_HISTORY_OPEN_TAG}\nYou: earlier turn, cut off\n</user_query>"
         assert fwd._unwrap_user_query(raw) is None
@@ -481,7 +481,7 @@ class TestPostModelChangeIfNew:
     @pytest.mark.asyncio
     async def test_first_observation_is_posted(self) -> None:
         # Unlike claude-native, cursor posts the FIRST observed model so an
-        # un-pinned session shows the real cursor model instead of omnigent's
+        # un-pinned session shows the real cursor model instead of goalrail's
         # default ("fable") in the Web UI pill.
         client = _RecordingClient()
         state = fwd._ModelMirrorState()

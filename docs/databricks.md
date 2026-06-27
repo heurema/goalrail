@@ -56,7 +56,7 @@ wired:
 
 The integration is layered. The Goalrail server runs on Databricks
 Apps. It exports OpenTelemetry traces (via the work landed in [PR
-#1050](https://github.com/omnigent-ai/omnigent/pull/1050)) to MLflow
+#1050](https://github.com/heurema/goalrail/pull/1050)) to MLflow
 Tracing's OTLP receiver. Agent runs make LLM calls through Mosaic AI
 Gateway, which proxies to either Mosaic AI Foundation Models or an
 external provider (OpenAI, Anthropic) configured as an External Model.
@@ -108,16 +108,16 @@ Apps) but wires up Foundation Models + Gateway + tracing to the
 workspace.
 
 ```bash
-pip install 'omnigent[tracing]' openai
+pip install 'goalrail[tracing]' openai
 
 export DATABRICKS_HOST=https://<your-workspace>.cloud.databricks.com
 export DATABRICKS_TOKEN=<personal-access-token>
 
-# Point omnigent at Mosaic AI Foundation Models as the LLM provider
+# Point goalrail at Mosaic AI Foundation Models as the LLM provider
 export OPENAI_BASE_URL=$DATABRICKS_HOST/serving-endpoints
 export OPENAI_API_KEY=$DATABRICKS_TOKEN
 
-# Point omnigent's OTel exporter at the MLflow OTLP receiver in UC
+# Point goalrail's OTel exporter at the MLflow OTLP receiver in UC
 export MLFLOW_TRACKING_URI=databricks
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_ENDPOINT=$DATABRICKS_HOST
@@ -174,13 +174,13 @@ to Apps backed by Lakebase. Use it as-is for a first deploy:
 
 ```bash
 git clone https://github.com/heurema/goalrail
-cd omnigent
+cd goalrail
 uv sync --extra databricks
 
 # Set targets.prod.workspace.host in deploy/databricks/databricks.yml, then run
 # the deploy orchestrator — it builds the wheels and runs `databricks bundle
 # deploy` + `bundle run` for you:
-#   uv run python deploy/databricks/deploy.py --app-name omnigent --profile <profile> ...
+#   uv run python deploy/databricks/deploy.py --app-name goalrail --profile <profile> ...
 # See deploy/databricks/README.md for the full command and required flags.
 ```
 
@@ -383,7 +383,7 @@ Gateway config included `usage_tracking_config.enabled=true` and a
 from openai import OpenAI
 client = OpenAI(base_url=f'{DATABRICKS_HOST}/serving-endpoints', api_key=DATABRICKS_TOKEN)
 resp = client.chat.completions.create(
-    model='omnigent-docs-test-gateway',   # the Gateway endpoint, not the backing model
+    model='goalrail-docs-test-gateway',   # the Gateway endpoint, not the backing model
     messages=[{'role':'user','content':'Reply with exactly two words: PROXY OK'}],
     max_tokens=10,
 )
@@ -399,7 +399,7 @@ Model:    global.anthropic.claude-sonnet-4-20250514-v1:0
 
 The `model` in the response is the backing model the Gateway forwarded
 to (Anthropic Claude Sonnet 4 via Bedrock). The Gateway endpoint name
-(`omnigent-docs-test-gateway`) is what Goalrail calls. Swapping the
+(`goalrail-docs-test-gateway`) is what Goalrail calls. Swapping the
 backing model is a Gateway config update, zero change in the agent.
 
 ### Auth tier compatibility (API key vs subscription / OAuth)
@@ -473,7 +473,7 @@ Goalrail emits OpenTelemetry spans for every agent turn, LLM call, and
 tool invocation. The spans follow the OpenTelemetry GenAI semantic
 conventions (`gen_ai.operation.name`, `gen_ai.agent.name`,
 `gen_ai.provider.name`, `gen_ai.request.model`, `tool.name`) shipped
-in [PR #1050](https://github.com/omnigent-ai/omnigent/pull/1050). Any
+in [PR #1050](https://github.com/heurema/goalrail/pull/1050). Any
 OTLP-compatible backend (Jaeger, Tempo, Datadog) can receive them.
 
 MLflow Tracing exposes an OTLP/HTTP receiver at the MLflow tracking
@@ -533,7 +533,7 @@ trace landed in UC and the spans carry the expected attributes:
 
 ```
 Tracking URI: databricks
-Experiment:   id=3163592711242134 path=/Users/.../omnigent-databricks-docs-verification
+Experiment:   id=3163592711242134 path=/Users/.../goalrail-databricks-docs-verification
 Trace ID:     tr-f13c03f61e44a0442c8865ab2c79e5a4
 Total traces found: 1
   trace_id: tr-f13c03f61e44a0442c8865ab2c79e5a4
@@ -564,7 +564,7 @@ expanded:
 Goalrail does not capture message bodies into traces by default. Set:
 
 ```bash
-export OMNIGENT_OTEL_CAPTURE_CONTENT=true
+export GOALRAIL_OTEL_CAPTURE_CONTENT=true
 ```
 
 to include user messages and tool arguments in `mlflow.spanInputs` /
@@ -596,7 +596,7 @@ explicit consent and PII handling in place.
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | Set to `http/protobuf` for the MLflow OTLP receiver | Apps env |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Workspace URL (same as `DATABRICKS_HOST`) | Apps env |
 | `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Bearer $DATABRICKS_TOKEN` | Apps env |
-| `OMNIGENT_OTEL_CAPTURE_CONTENT` | `true` to include message bodies in traces | Apps env (default off) |
+| `GOALRAIL_OTEL_CAPTURE_CONTENT` | `true` to include message bodies in traces | Apps env (default off) |
 
 ---
 
@@ -665,12 +665,12 @@ the endpoint config via `databricks serving-endpoints update`.
 This guide was authored by [Debu Sinha](https://github.com/debu-sinha)
 (Lead Applied AI/ML Engineer, Databricks Solutions Architecture).
 The MLflow Tracing integration section depends on the OTel
-observability series shipped in PRs [#1050](https://github.com/omnigent-ai/omnigent/pull/1050),
-[#1068](https://github.com/omnigent-ai/omnigent/pull/1068),
-[#1070](https://github.com/omnigent-ai/omnigent/pull/1070),
-[#1071](https://github.com/omnigent-ai/omnigent/pull/1071),
-[#1072](https://github.com/omnigent-ai/omnigent/pull/1072), and
-[#1083](https://github.com/omnigent-ai/omnigent/pull/1083).
+observability series shipped in PRs [#1050](https://github.com/heurema/goalrail/pull/1050),
+[#1068](https://github.com/heurema/goalrail/pull/1068),
+[#1070](https://github.com/heurema/goalrail/pull/1070),
+[#1071](https://github.com/heurema/goalrail/pull/1071),
+[#1072](https://github.com/heurema/goalrail/pull/1072), and
+[#1083](https://github.com/heurema/goalrail/pull/1083).
 
 Verified end-to-end against the e2-dogfood Databricks workspace
 (2026-06-24):
@@ -679,7 +679,7 @@ Verified end-to-end against the e2-dogfood Databricks workspace
   18 tokens in / 5 tokens out via CLI and 16 / 6 via OpenAI SDK)
 - OpenAI SDK pattern against `/serving-endpoints` with PAT auth
 - External Model (Gateway) endpoint created, called, and torn down:
-  `omnigent-docs-test-gateway` proxied to `databricks-claude-sonnet-4`
+  `goalrail-docs-test-gateway` proxied to `databricks-claude-sonnet-4`
   via `provider=databricks-model-serving`, with
   `ai_gateway.usage_tracking_config.enabled=true` and a
   `60 calls/minute/user` rate limit. CLI call returned `PROXY OK`,

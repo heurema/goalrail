@@ -8,7 +8,7 @@
 #
 # Usage:
 #   cd your-project/
-#   .venv/bin/python -m omnigent examples/coding_supervisor_with_forks.yaml
+#   .venv/bin/python -m goalrail examples/coding_supervisor_with_forks.yaml
 #
 # Example prompts:
 #

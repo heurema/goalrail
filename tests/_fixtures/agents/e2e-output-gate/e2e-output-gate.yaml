@@ -17,7 +17,7 @@ policies:
     type: function
     on: [response]
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: ask
         reason: Review assistant reply before releasing.

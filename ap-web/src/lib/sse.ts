@@ -1,4 +1,4 @@
-// Mirrors sdks/python-client/omnigent_client/_sse.py.
+// Mirrors sdks/python-client/goalrail_client/_sse.py.
 //
 // Parses raw `text/event-stream` bytes into typed `StreamEvent`
 // values. Output of this module is the input to `BlockStream.reduce()`.

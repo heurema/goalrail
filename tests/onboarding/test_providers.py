@@ -1,8 +1,8 @@
-"""Tests for omnigent.onboarding.providers — catalog loading and queries."""
+"""Tests for goalrail.onboarding.providers — catalog loading and queries."""
 
 from __future__ import annotations
 
-from omnigent.onboarding.providers import (
+from goalrail.onboarding.providers import (
     ModelInfo,
     ProviderConfig,
     default_chat_model,
@@ -38,7 +38,7 @@ def test_get_all_providers_contains_major_providers() -> None:
 
 def test_get_all_providers_popular_first() -> None:
     """Popular providers must appear before the rest."""
-    from omnigent.onboarding.providers import COMMON_PROVIDERS
+    from goalrail.onboarding.providers import COMMON_PROVIDERS
 
     providers = get_all_providers()
     # The first entries should be the popular providers (in order).
@@ -106,7 +106,7 @@ def test_get_chat_models_sorted_newest_first() -> None:
     # gpt-5.x models should appear before gpt-4.x models, which
     # should appear before gpt-3.5 models. Check that the first
     # model has a higher version than the last.
-    from omnigent.onboarding.providers import _extract_model_version
+    from goalrail.onboarding.providers import _extract_model_version
 
     first_version = _extract_model_version(chat_models[0].name)
     last_version = _extract_model_version(chat_models[-1].name)
@@ -163,7 +163,7 @@ def test_default_chat_model_dynamic_skips_specialty_variants() -> None:
     and choose a general-purpose ``gpt-*``. Guards the fallback used for any
     non-pinned provider.
     """
-    from omnigent.onboarding.providers import _SPECIALTY_MODEL_TOKENS
+    from goalrail.onboarding.providers import _SPECIALTY_MODEL_TOKENS
 
     general = [
         m.name

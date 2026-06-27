@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import command
 from sqlalchemy.engine import Engine
 
-from omnigent.db.utils import (
+from goalrail.db.utils import (
     _build_alembic_config,
     clear_engine_cache,
     get_or_create_engine,

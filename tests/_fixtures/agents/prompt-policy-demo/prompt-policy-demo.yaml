@@ -19,7 +19,7 @@ policies:
   block_canada_input:
     type: function
     function:
-      path: omnigent.policies.builtins.prompt.prompt_policy
+      path: goalrail.policies.builtins.prompt.prompt_policy
       arguments:
         prompt: |
           Deny if the user's request mentions Canada or a Canadian
@@ -28,7 +28,7 @@ policies:
   classify_doc_sensitivity:
     type: function
     function:
-      path: omnigent.policies.builtins.prompt.prompt_policy
+      path: goalrail.policies.builtins.prompt.prompt_policy
       arguments:
         prompt: |
           Classify the document's sensitivity level

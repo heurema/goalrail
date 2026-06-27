@@ -23,14 +23,14 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime import get_caps
-from omnigent.runtime.caps import RuntimeCaps
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef
+from goalrail.runtime import get_caps
+from goalrail.runtime.caps import RuntimeCaps
+from goalrail.spec.types import FunctionPolicySpec, FunctionRef
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
 
-_MAKE_FIXED = "omnigent.policies.function.make_fixed_action_callable"
+_MAKE_FIXED = "goalrail.policies.function.make_fixed_action_callable"
 
 
 def _deny_spec(name: str, reason: str) -> FunctionPolicySpec:
@@ -102,7 +102,7 @@ def _install_policies(
         default_policies=policies,
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_caps",
+        "goalrail.server.routes.sessions.get_caps",
         lambda: patched_caps,
     )
 

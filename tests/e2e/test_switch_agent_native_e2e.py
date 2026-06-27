@@ -3,23 +3,23 @@
 Companion to ``test_switch_agent_e2e.py`` (SDK→SDK). These exercise the two
 harness-crossing in-place switches, which hit code the SDK→SDK test does not:
 
-- **native → SDK**: the SDK target replays the Omnigent transcript as context
+- **native → SDK**: the SDK target replays the Goalrail transcript as context
   (and the source's terminal-first presentation labels must be dropped).
-- **SDK → native**: the native CLI ignores the Omnigent transcript, so the
+- **SDK → native**: the native CLI ignores the Goalrail transcript, so the
   runner must REBUILD the on-disk Claude transcript from the session's own AP
   items (``_ensure_local_claude_resume_transcript``) under a fresh uuid and
   ``--resume`` it — the same rebuild path the SDK→native *fork* uses, but
   triggered in place (no new session, no re-launch).
 
 Both run on a real host daemon via the Claude CLI's OAuth, so they're gated
-behind ``OMNIGENT_E2E_CLAUDE_NATIVE=1`` like the native fork e2e. Unlike a
+behind ``GOALRAIL_E2E_CLAUDE_NATIVE=1`` like the native fork e2e. Unlike a
 fork, an in-place switch keeps the session's host + workspace + runner, so
 there is no directory picker / ``_launch_runner`` step — the next turn simply
 cold-starts the switched-to harness on the bound runner.
 
 Usage::
 
-    OMNIGENT_E2E_CLAUDE_NATIVE=1 \
+    GOALRAIL_E2E_CLAUDE_NATIVE=1 \
       pytest tests/e2e/test_switch_agent_native_e2e.py --llm-api-key <key> -v
 """
 
@@ -54,10 +54,10 @@ from tests.e2e.test_host_claude_native_fork_e2e import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
+    os.environ.get("GOALRAIL_E2E_CLAUDE_NATIVE") != "1" or shutil.which("claude") is None,
     reason=(
         "claude-native e2e needs an interactive Claude login; set "
-        "OMNIGENT_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
+        "GOALRAIL_E2E_CLAUDE_NATIVE=1 (and have `claude` installed + logged in) to run"
     ),
 )
 
@@ -234,7 +234,7 @@ def test_switch_native_to_sdk_in_place_carries_history(
             assert switched["agent_id"] != original_agent_id, "switch must rebind the agent"
             # Switching to an SDK target must drop terminal-first mode.
             snap = http_client.get(f"/v1/sessions/{session_id}", timeout=30.0).json()
-            assert snap.get("labels", {}).get("omnigent.ui") != "terminal", (
+            assert snap.get("labels", {}).get("goalrail.ui") != "terminal", (
                 f"SDK target must drop terminal-first mode, got labels {snap.get('labels')!r}"
             )
 

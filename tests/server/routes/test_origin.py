@@ -2,7 +2,7 @@
 Unit tests for the ``require_trusted_origin`` CSRF guard dependency.
 
 The dependency adapts the shared, protocol-neutral
-:func:`omnigent.server.ws_origin.origin_allowed` policy into a FastAPI
+:func:`goalrail.server.ws_origin.origin_allowed` policy into a FastAPI
 dependency for HTTP routes that accept ``multipart/form-data`` (which the
 JSON Content-Type guard cannot protect, because multipart is
 CORS-safelisted).
@@ -19,8 +19,8 @@ dependency wires that policy into an HTTP route:
   already sends the sentinel ``Origin`` and so is unaffected;
 - it sources ``local_mode`` from ``local_single_user_enabled()`` and
   ``extra_allowed`` from ``parse_allowed_origins()`` (the env wiring) —
-  proven by flipping ``OMNIGENT_LOCAL_SINGLE_USER`` /
-  ``OMNIGENT_WS_ALLOWED_ORIGINS`` and watching the same Origin change verdict;
+  proven by flipping ``GOALRAIL_LOCAL_SINGLE_USER`` /
+  ``GOALRAIL_WS_ALLOWED_ORIGINS`` and watching the same Origin change verdict;
 - an allowed verdict returns ``None`` (request proceeds);
 - a denied verdict raises ``HTTPException`` with status ``403``.
 
@@ -35,11 +35,11 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
-from omnigent.server.routes._origin import require_trusted_origin
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
+from goalrail.server.routes._origin import require_trusted_origin
 
-_LOCAL_ENV = "OMNIGENT_LOCAL_SINGLE_USER"
-_ALLOWLIST_ENV = "OMNIGENT_WS_ALLOWED_ORIGINS"
+_LOCAL_ENV = "GOALRAIL_LOCAL_SINGLE_USER"
+_ALLOWLIST_ENV = "GOALRAIL_WS_ALLOWED_ORIGINS"
 
 # A concrete cross-site origin used as the attacker's page throughout.
 _EVIL_ORIGIN = "https://evil.example.com"
@@ -50,8 +50,8 @@ def _clean_origin_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Start every test from a known origin-env baseline.
 
-    ``require_trusted_origin`` reads ``OMNIGENT_LOCAL_SINGLE_USER`` and
-    ``OMNIGENT_WS_ALLOWED_ORIGINS`` per call (the test suite sets the
+    ``require_trusted_origin`` reads ``GOALRAIL_LOCAL_SINGLE_USER`` and
+    ``GOALRAIL_WS_ALLOWED_ORIGINS`` per call (the test suite sets the
     former to ``"1"`` globally, and a developer shell may set either), so
     a value inherited from the environment would flip the policy and make
     these tests pass or fail for the wrong reason. Each test sets only
@@ -136,7 +136,7 @@ def test_cross_origin_is_allowed_when_not_local_mode(monkeypatch: pytest.MonkeyP
     the env and hard-coding local-mode strictness — breaking deployed
     multi-user servers whose browser Origin is not loopback.
     """
-    # _clean_origin_env left OMNIGENT_LOCAL_SINGLE_USER unset → non-local.
+    # _clean_origin_env left GOALRAIL_LOCAL_SINGLE_USER unset → non-local.
     assert require_trusted_origin(_request_with_origin(_EVIL_ORIGIN)) is None
 
 
@@ -145,19 +145,19 @@ def test_sentinel_origin_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     The first-party sentinel ``Origin`` is allowed, even in local mode.
 
     The project's own non-browser clients may announce
-    ``OMNIGENT_INTERNAL_WS_ORIGIN``; the shared policy always admits it. A
+    ``GOALRAIL_INTERNAL_WS_ORIGIN``; the shared policy always admits it. A
     raise here would block first-party traffic that opts to send the
     sentinel.
     """
     monkeypatch.setenv(_LOCAL_ENV, "1")
-    assert require_trusted_origin(_request_with_origin(OMNIGENT_INTERNAL_WS_ORIGIN)) is None
+    assert require_trusted_origin(_request_with_origin(GOALRAIL_INTERNAL_WS_ORIGIN)) is None
 
 
 def test_allowlisted_origin_is_allowed_and_unlisted_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``OMNIGENT_WS_ALLOWED_ORIGINS`` wiring: listed passes, unlisted 403s.
+    ``GOALRAIL_WS_ALLOWED_ORIGINS`` wiring: listed passes, unlisted 403s.
 
     Proves the dependency sources ``extra_allowed`` from
     ``parse_allowed_origins()``. In non-local mode a configured allowlist

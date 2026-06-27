@@ -24,7 +24,7 @@ from tests.e2e.conftest import (
 )
 from tests.integration.helpers import all_message_text, failure_detail, run_turn
 
-# EDIT level mirrored from omnigent/server/auth.py (see the sharing
+# EDIT level mirrored from goalrail/server/auth.py (see the sharing
 # e2e suite for the full level semantics).
 _LEVEL_EDIT = 2
 

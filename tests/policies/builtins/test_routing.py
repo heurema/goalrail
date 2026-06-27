@@ -1,5 +1,5 @@
 """
-Tests for :mod:`omnigent.policies.builtins.routing`.
+Tests for :mod:`goalrail.policies.builtins.routing`.
 
 Covers:
 
@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from omnigent.policies.builtins.routing import (
+from goalrail.policies.builtins.routing import (
     _CACHE_KEY_PREFIX,
     _CLASSIFICATION_SCHEMA,
     POLICY_REGISTRY,
@@ -41,7 +41,7 @@ _EXPENSIVE = ["databricks-claude-opus-4-6", "openai/o3"]
 
 class _FakeResponse:
     """
-    Minimal stand-in for ``omnigent.llms.types.Response``.
+    Minimal stand-in for ``goalrail.llms.types.Response``.
 
     Exposes ``output_text`` which is what the routing policy reads.
     For structured output, the text is a JSON string.
@@ -492,7 +492,7 @@ def test_registry_entry_well_formed() -> None:
     assert len(POLICY_REGISTRY) == 1
     entry = POLICY_REGISTRY[0]
     assert entry["handler"] == (
-        "omnigent.policies.builtins.routing.deny_trivial_to_expensive_model"
+        "goalrail.policies.builtins.routing.deny_trivial_to_expensive_model"
     )
     assert entry["kind"] == "factory"
     schema = entry["params_schema"]

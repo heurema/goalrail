@@ -1,5 +1,5 @@
 """
-Unit tests for :class:`omnigent_ui_sdk.terminal._host.TerminalHost`.
+Unit tests for :class:`goalrail_ui_sdk.terminal._host.TerminalHost`.
 
 Focused on host-level state-management methods that don't need a
 real pty (overlays, key bindings, and rendering paths are covered
@@ -13,9 +13,9 @@ import sys
 from collections.abc import Iterable
 
 import pytest
-from omnigent_client import child_summary_busy
-from omnigent_ui_sdk.terminal._formatter import StreamingText
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from goalrail_client import child_summary_busy
+from goalrail_ui_sdk.terminal._formatter import StreamingText
+from goalrail_ui_sdk.terminal._host import TerminalHost
 from prompt_toolkit.output import DummyOutput
 from rich.text import Text
 
@@ -55,12 +55,12 @@ async def test_aenter_logs_stderr_redirect_failures(
         raise RuntimeError("redirect failed")
 
     monkeypatch.setattr(
-        "omnigent.cli_diagnostics.redirect_stderr_to_log",
+        "goalrail.cli_diagnostics.redirect_stderr_to_log",
         _raise_redirect_failure,
     )
     host = TerminalHost(model_name="test")
 
-    with caplog.at_level(logging.ERROR, logger="omnigent_ui_sdk.terminal._host"):
+    with caplog.at_level(logging.ERROR, logger="goalrail_ui_sdk.terminal._host"):
         async with host:
             pass
 
@@ -94,12 +94,12 @@ async def test_aexit_logs_stderr_restore_failures(
         raise RuntimeError("restore failed")
 
     monkeypatch.setattr(
-        "omnigent.cli_diagnostics.restore_stderr",
+        "goalrail.cli_diagnostics.restore_stderr",
         _raise_restore_failure,
     )
     host = TerminalHost(model_name="test")
 
-    with caplog.at_level(logging.ERROR, logger="omnigent_ui_sdk.terminal._host"):
+    with caplog.at_level(logging.ERROR, logger="goalrail_ui_sdk.terminal._host"):
         async with host:
             pass
 
@@ -424,7 +424,7 @@ def _patch_create_output(monkeypatch: pytest.MonkeyPatch, output: object) -> Non
         :class:`_TitleRecordingOutput` or similar stub.
     """
     monkeypatch.setattr(
-        "omnigent_ui_sdk.terminal._host.create_output",
+        "goalrail_ui_sdk.terminal._host.create_output",
         lambda: output,
     )
 
@@ -437,7 +437,7 @@ async def test_window_title_set_on_aenter_and_cleared_on_aexit(
     Entering the host's async context with ``window_title="X"``
     sets the terminal title to ``"X"``; exiting clears it.
 
-    What this proves: a user running ``omnigent run agent.yaml``
+    What this proves: a user running ``goalrail run agent.yaml``
     sees the agent name in their terminal tab bar instead
     of the generic shell name. If ``set_title`` isn't called on
     enter, the tab bar stays as ``"$SHELL"`` and concurrent
@@ -511,36 +511,36 @@ async def test_window_title_none_skips_title_calls(
     )
 
 
-def test_default_history_file_matches_legacy_omnigent_path() -> None:
+def test_default_history_file_matches_legacy_goalrail_path() -> None:
     """
     With no ``history_file`` override, the host's prompt session
-    persists input history to ``~/.omnigent_history`` — the
-    same path the legacy ``omnigent run`` CLI uses
-    (``omnigent/inner/cli.py:_cli_history_file_path``).
+    persists input history to ``~/.goalrail_history`` — the
+    same path the legacy ``goalrail run`` CLI uses
+    (``goalrail/inner/cli.py:_cli_history_file_path``).
 
     What this proves: a user who flips between
-    ``omnigent run agent.yaml`` (legacy) and
-    ``omnigent run agent.yaml`` sees the same ↑ / Ctrl+R
+    ``goalrail run agent.yaml`` (legacy) and
+    ``goalrail run agent.yaml`` sees the same ↑ / Ctrl+R
     recall in both, instead of two divergent histories. If the
-    default drifts (e.g. back to ``~/.omnigent-history``,
+    default drifts (e.g. back to ``~/.goalrail-history``,
     or to a fresh location), this test fails loud at the SDK
     boundary so the divergence doesn't ship silently. The
-    history file's location is part of the Omnigent mode-vs-legacy
+    history file's location is part of the Goalrail mode-vs-legacy
     parity contract documented in
-    ``designs/RUN_OMNIGENT_REPL_PARITY.md``.
+    ``designs/RUN_GOALRAIL_REPL_PARITY.md``.
     """
     import os
 
     host = TerminalHost(model_name="test")
 
-    expected = os.path.expanduser("~/.omnigent_history")
+    expected = os.path.expanduser("~/.goalrail_history")
     actual = host._prompt.history.filename
     assert actual == expected, (
         f"Default history_file resolved to {actual!r}; expected "
-        f"{expected!r}. If the path is ``~/.omnigent-history`` "
+        f"{expected!r}. If the path is ``~/.goalrail-history`` "
         f"(the SDK's pre-unification default), the unification "
         f"with the legacy CLI was reverted — users flipping "
-        f"between legacy and --omnigent would lose ↑ / Ctrl+R recall "
+        f"between legacy and --goalrail would lose ↑ / Ctrl+R recall "
         f"again."
     )
 
@@ -556,7 +556,7 @@ async def test_window_title_swallows_set_title_failure(
 
     What this proves: the documented "best-effort" contract
     holds. A future Output backend that doesn't support OSC 0
-    won't break ``omnigent run`` — the REPL still boots,
+    won't break ``goalrail run`` — the REPL still boots,
     just without the tab-label nicety.
     """
 
@@ -601,7 +601,7 @@ def test_output_dispatches_stream_replace_to_replace_live_region(
     ``_live_line_count`` and ``_streamed_line_count`` must both be 0
     (committed), and the renderable content must appear in stdout.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamReplace
+    from goalrail_ui_sdk.terminal._formatter import StreamReplace
 
     host = TerminalHost(model_name="test")
 
@@ -644,7 +644,7 @@ def test_output_wraps_urls_in_osc_8_hyperlink(
     etc.) render them as ⌘-clickable links.
 
     Pins the wiring between :meth:`TerminalHost.output` and
-    :func:`omnigent_ui_sdk.terminal._linkify.linkify_ansi`.
+    :func:`goalrail_ui_sdk.terminal._linkify.linkify_ansi`.
     The detection logic itself is tested in
     ``tests/frontends/sdk/test_linkify.py``; this test only
     confirms the post-render hook is actually called on the
@@ -689,7 +689,7 @@ def test_compute_sidebar_scroll_offset_no_change_when_selection_in_view() -> Non
     Tab even when the selection is already comfortably visible,
     which the user perceives as the sidebar twitching.
     """
-    from omnigent_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
+    from goalrail_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
 
     new_offset = _compute_sidebar_scroll_offset(
         selected_index=10,
@@ -723,7 +723,7 @@ def test_compute_sidebar_scroll_offset_snaps_down_when_past_bottom() -> None:
     current_offset unchanged, this test fails with
     ``new_offset == 0``, and the symptom returns.
     """
-    from omnigent_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
+    from goalrail_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
 
     new_offset = _compute_sidebar_scroll_offset(
         selected_index=35,
@@ -761,7 +761,7 @@ def test_compute_sidebar_scroll_offset_snaps_up_when_above_viewport() -> None:
     top — matching the user's expectation that wrapping returns
     to a top-anchored sidebar.
     """
-    from omnigent_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
+    from goalrail_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
 
     # Above-viewport case.
     above = _compute_sidebar_scroll_offset(
@@ -800,7 +800,7 @@ def test_compute_sidebar_scroll_offset_handles_short_viewport() -> None:
     and selection=0, the snap-down branch shouldn't fire because
     selection is already inside the [0, 1) window.
     """
-    from omnigent_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
+    from goalrail_ui_sdk.terminal._host import _compute_sidebar_scroll_offset
 
     # selection inside the 1-row viewport — no scroll.
     assert (
@@ -839,7 +839,7 @@ def test_output_stream_live_replaces_live_region(
     each token re-renders the unstable tail via ``StreamLive``,
     erasing the previous tail and painting the updated one.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive
+    from goalrail_ui_sdk.terminal._formatter import StreamLive
 
     host = TerminalHost(model_name="test")
 
@@ -888,7 +888,7 @@ def test_stream_live_then_replace_commits(
     boundary, it emits ``StreamReplace`` which clears the live
     region and commits the content permanently.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive, StreamReplace
+    from goalrail_ui_sdk.terminal._formatter import StreamLive, StreamReplace
 
     host = TerminalHost(model_name="test")
 
@@ -924,7 +924,7 @@ def test_live_line_count_tracks_rendered_height(
     Uses a multi-line renderable to verify the count isn't hardcoded
     to 1.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive
+    from goalrail_ui_sdk.terminal._formatter import StreamLive
 
     host = TerminalHost(model_name="test")
 
@@ -966,7 +966,7 @@ def test_live_region_capped_to_viewport_ceiling(
     reserved rows) and renders content taller than 5 lines. The cap
     must truncate to the ceiling.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive
+    from goalrail_ui_sdk.terminal._formatter import StreamLive
 
     host = TerminalHost(model_name="test")
 
@@ -974,7 +974,7 @@ def test_live_region_capped_to_viewport_ceiling(
     monkeypatch.setattr(sys.stdout, "flush", lambda: None)
     # Fake a tiny terminal: 10 rows → ceiling = 10 - 5 = 5.
     monkeypatch.setattr(
-        "omnigent_ui_sdk.terminal._host._term_height",
+        "goalrail_ui_sdk.terminal._host._term_height",
         lambda: 10,
     )
 
@@ -1017,7 +1017,7 @@ def test_growing_live_region_erase_count_matches_prior_render(
     Uses a fake 15-row terminal (ceiling=10) and grows the list
     from 2 to 20 lines across 10 steps.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive
+    from goalrail_ui_sdk.terminal._formatter import StreamLive
 
     host = TerminalHost(model_name="test")
 
@@ -1031,7 +1031,7 @@ def test_growing_live_region_erase_count_matches_prior_render(
     monkeypatch.setattr(sys.stdout, "flush", lambda: None)
     # Fake terminal: 15 rows → ceiling = 15 - 5 = 10.
     monkeypatch.setattr(
-        "omnigent_ui_sdk.terminal._host._term_height",
+        "goalrail_ui_sdk.terminal._host._term_height",
         lambda: 15,
     )
     ceiling = 10
@@ -1084,7 +1084,7 @@ def test_stream_replace_after_overflowing_live_region(
     a commit: the erase count must match ``_live_line_count`` (which
     was capped), and after commit both counters reset to 0.
     """
-    from omnigent_ui_sdk.terminal._formatter import StreamLive, StreamReplace
+    from goalrail_ui_sdk.terminal._formatter import StreamLive, StreamReplace
 
     host = TerminalHost(model_name="test")
 
@@ -1098,7 +1098,7 @@ def test_stream_replace_after_overflowing_live_region(
     monkeypatch.setattr(sys.stdout, "flush", lambda: None)
     # Tiny viewport: ceiling = 8 - 5 = 3.
     monkeypatch.setattr(
-        "omnigent_ui_sdk.terminal._host._term_height",
+        "goalrail_ui_sdk.terminal._host._term_height",
         lambda: 8,
     )
     ceiling = 3
@@ -1468,7 +1468,7 @@ def test_subagent_seed_keeps_finished_node_still_in_snapshot() -> None:
 
 def test_subagent_badge_spinner_animates() -> None:
     """The running badge carries a spinner frame so it animates."""
-    from omnigent_ui_sdk.terminal._host import _SPINNER_FRAMES
+    from goalrail_ui_sdk.terminal._host import _SPINNER_FRAMES
 
     host = TerminalHost(model_name="test")
     host.upsert_subagent("conv_c1", parent_id="conv_main", child=_busy())
@@ -1596,7 +1596,7 @@ def test_subagent_menu_opens_on_current_subagent_after_dive_in() -> None:
 def test_subagent_menu_caps_visible_rows_at_five() -> None:
     """Long trees scroll within a 5-row window so the input bar can't lift
     more than that many lines up the terminal."""
-    from omnigent_ui_sdk.terminal._host import _SUBAGENT_MENU_MAX_ROWS
+    from goalrail_ui_sdk.terminal._host import _SUBAGENT_MENU_MAX_ROWS
 
     host = TerminalHost(model_name="test")
     _seed_busy_tree(host, 10)  # 10 agents + the "main" row = 11 rows

@@ -1,4 +1,4 @@
-"""End-to-end regression test: ``omnigent codex --resume`` restores history.
+"""End-to-end regression test: ``goalrail codex --resume`` restores history.
 
 The codex-native sibling of ``test_claude_native_cli_resume_e2e``. Codex
 resumes by a different mechanism than Claude — it re-opens a thread via its
@@ -10,20 +10,20 @@ and confirm the model answers with the passphrase.
 
 Codex-native already gated its runner-side terminal auto-create on
 host-spawned sessions (the gate Claude was missing), so this test is a
-guard/confirmation rather than a fix — it pins that ``omnigent codex
+guard/confirmation rather than a fix — it pins that ``goalrail codex
 --resume`` keeps restoring history, parallel to the Claude regression test.
 The shared flow lives in :func:`assert_native_cli_resume_restores_history`
 (see ``tests/e2e/_native_resume_helpers.py``).
 
 Environment requirements (why this is opt-in, not pure-CI)
 ----------------------------------------------------------
-* **Opt-in only**: set ``OMNIGENT_E2E_CODEX_NATIVE=1`` to run. codex-native
+* **Opt-in only**: set ``GOALRAIL_E2E_CODEX_NATIVE=1`` to run. codex-native
   needs an interactive Codex login anchored to the real ``$HOME``; the binary
   may be present in CI but unauthenticated, which would hang the TUI. The
   env-var gate keeps it out of CI; a developer with a logged-in Codex opts in.
 * Run it like the host codex-native test::
 
-    OMNIGENT_E2E_CODEX_NATIVE=1 \
+    GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_codex_native_cli_resume_e2e.py \
         --profile oss \
         --llm-api-key "$(databricks auth token -p oss \
@@ -47,10 +47,10 @@ from tests.e2e._native_resume_helpers import assert_native_cli_resume_restores_h
 # Opt-in only — see module docstring. Binary presence is not a sufficient gate
 # (present-but-unauthenticated hangs the TUI), so require the explicit env var.
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
         "codex-native CLI resume e2e needs an interactive Codex login; set "
-        "OMNIGENT_E2E_CODEX_NATIVE=1 (and have `codex` installed + logged in) to run"
+        "GOALRAIL_E2E_CODEX_NATIVE=1 (and have `codex` installed + logged in) to run"
     ),
 )
 
@@ -63,7 +63,7 @@ def test_codex_native_cli_resume_restores_history(
     """
     Resuming a codex-native conversation via the CLI restores its history.
 
-    Drives ``omnigent codex --server …`` (gateway routing via the
+    Drives ``goalrail codex --server …`` (gateway routing via the
     config-home auth block from the pytest ``--profile``) to teach Codex a
     passphrase, resumes the conversation, sends a recall message through the
     server, and asserts Codex replies with the passphrase — proving the

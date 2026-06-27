@@ -22,20 +22,20 @@ from asgiref.testing import ApplicationCommunicator
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HostHelloFrame,
     HostListDirFrame,
     HostListDirResultFrame,
     decode_host_frame,
     encode_host_frame,
 )
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.routes.host_tunnel import create_host_tunnel_router
-from omnigent.server.routes.hosts import create_hosts_router
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.server.host_registry import HostRegistry
+from goalrail.server.routes.host_tunnel import create_host_tunnel_router
+from goalrail.server.routes.hosts import create_hosts_router
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
+from goalrail.stores.host_store import HostStore
 
 # Interim: any test using the ``fs_setup`` mock host tunnel can flake
 # with a 409 "host is offline" under parallel CI load (mock-WS starved
@@ -233,7 +233,7 @@ async def test_list_filesystem_returns_paginated_entries(
     response (different field names) and the picker would render
     no entries.
     """
-    from omnigent.host.frames import HostListDirEntry
+    from goalrail.host.frames import HostListDirEntry
 
     app, _reg, _comm, replies, _drain = fs_setup
     replies["/Users/corey/projects"] = {
@@ -287,7 +287,7 @@ async def test_list_filesystem_root_forwards_tilde(
     server sent, so a ``~`` key matching a successful response
     proves the forward.
     """
-    from omnigent.host.frames import HostListDirEntry
+    from goalrail.host.frames import HostListDirEntry
 
     app, _reg, _comm, replies, _drain = fs_setup
     replies["~"] = {
@@ -326,7 +326,7 @@ async def test_list_filesystem_tilde_path_forwards_unchanged(
     contract — covering both the empty-path-defaults-to-~ case
     and the explicit-tilde-in-path case.
     """
-    from omnigent.host.frames import HostListDirEntry
+    from goalrail.host.frames import HostListDirEntry
 
     app, _reg, _comm, replies, _drain = fs_setup
     replies["~/projects"] = {
@@ -480,7 +480,7 @@ async def test_list_filesystem_owner_check_blocks_other_users(
     users. This test pins that contract: a host owned by alice,
     accessed with bob's identity → 403.
     """
-    from omnigent.server.auth import AuthProvider
+    from goalrail.server.auth import AuthProvider
 
     _app, _reg, host_store, conv_store = fs_app
     # Re-mount routes with an auth provider that returns the
@@ -555,7 +555,7 @@ async def test_list_filesystem_forwards_pagination_params(
     UI's "next page" / "prev page" buttons would silently always
     return the first page.
     """
-    from omnigent.host.frames import HostListDirEntry
+    from goalrail.host.frames import HostListDirEntry
 
     app, registry, _comm, replies, _drain = fs_setup
 

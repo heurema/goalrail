@@ -1,50 +1,50 @@
 ---
 name: harness-integration-guide
-description: Reference guide for building new Omnigent harness integrations — covers SDK/subprocess harnesses and native harnesses as separate tracks, each with their own feature matrix, implementation patterns, and prioritized checklist.
+description: Reference guide for building new Goalrail harness integrations — covers SDK/subprocess harnesses and native harnesses as separate tracks, each with their own feature matrix, implementation patterns, and prioritized checklist.
 ---
 
 # Harness integration guide
 
-This skill describes the **feature matrix** every Omnigent harness must
+This skill describes the **feature matrix** every Goalrail harness must
 consider. Use it when planning, reviewing, or implementing a new harness.
 
-Omnigent has two distinct harness tracks with different architectures and
+Goalrail has two distinct harness tracks with different architectures and
 feature sets:
 
 - **SDK/subprocess harnesses** — run the vendor model directly (in-process SDK,
   CLI subprocess, or ACP subprocess). They own the model lifecycle.
 - **Native harnesses** — wrap a vendor's own TUI or server and mirror its
-  output into Omnigent. They observe and relay, rather than drive.
+  output into Goalrail. They observe and relay, rather than drive.
 
 ---
 
 ## Part 1 — SDK / subprocess harnesses
 
-These harnesses run the vendor model directly and bridge Omnigent tools into
+These harnesses run the vendor model directly and bridge Goalrail tools into
 the vendor's tool-calling interface.
 
 ### Capability matrix
 
 | Capability | What it means |
 |---|---|
-| **Connects to Omnigent MCP** | Harness exposes/consumes tools via the MCP protocol (in-proc SDK MCP server) |
+| **Connects to Goalrail MCP** | Harness exposes/consumes tools via the MCP protocol (in-proc SDK MCP server) |
 | **Model override** | User can select a model via `--model` / config; some harnesses are vendor-locked (e.g. Claude-only, GPT-only, Gemini-only) |
 | **Auth** | How credentials are obtained — API key, gateway token, vendor CLI login, OAuth, etc. |
-| **Streaming** | Harness forwards token-level or delta-level streaming to the Omnigent forwarder |
-| **Omnigent policies** | Harness enforces Omnigent-side tool policies — must support ALLOW, ASK, and DENY verdicts for both tool calls and tool results |
-| **Native elicitation** | When a policy verdict is ASK, the harness surfaces the approval request in the Omnigent web UI so the user can approve or deny |
+| **Streaming** | Harness forwards token-level or delta-level streaming to the Goalrail forwarder |
+| **Goalrail policies** | Harness enforces Goalrail-side tool policies — must support ALLOW, ASK, and DENY verdicts for both tool calls and tool results |
+| **Native elicitation** | When a policy verdict is ASK, the harness surfaces the approval request in the Goalrail web UI so the user can approve or deny |
 | **Interrupt** | User can cancel a running turn mid-stream |
 | **Live queue (concurrent)** | Multiple turns can be queued and processed concurrently |
-| **Tool-boundary steer** | Omnigent can inject steering text at tool-call boundaries |
-| **Resume/fork from Omnigent transcript** | Rebuild a conversation from a stored Omnigent transcript (replay history, seed prompt, or vendor session ID) |
+| **Tool-boundary steer** | Goalrail can inject steering text at tool-call boundaries |
+| **Resume/fork from Goalrail transcript** | Rebuild a conversation from a stored Goalrail transcript (replay history, seed prompt, or vendor session ID) |
 | **Compaction** | Long conversations are compacted; harness surfaces `CompactionComplete` events |
 | **Reasoning** | Model reasoning/thinking tokens are forwarded |
 | **Images** | Image content (screenshots, diagrams) is forwarded — full binary, path reference, or text-flattened |
-| **Cost tracking** | Harness reports token usage and cost data back to Omnigent for each turn |
+| **Cost tracking** | Harness reports token usage and cost data back to Goalrail for each turn |
 
 ### MCP connectivity
 
-The harness must bridge Omnigent's builtin MCP tools so the model can call
+The harness must bridge Goalrail's builtin MCP tools so the model can call
 them. These tools provide session management, agent orchestration, policy
 control, and web access:
 
@@ -57,9 +57,9 @@ control, and web access:
 - `list_comments`, `update_comment`
 - `web_fetch`, `web_search`
 
-### Omnigent policies
+### Goalrail policies
 
-The harness must support the Omnigent policy engine's three verdicts at two
+The harness must support the Goalrail policy engine's three verdicts at two
 checkpoints:
 
 | Checkpoint | ALLOW | ASK | DENY |
@@ -70,7 +70,7 @@ checkpoints:
 ### Native elicitation
 
 When a policy verdict is ASK, the harness must surface the pending tool call
-or tool result in the Omnigent web UI as an approval card, then relay the
+or tool result in the Goalrail web UI as an approval card, then relay the
 user's approve/deny decision back to the harness to continue or block
 execution.
 
@@ -82,7 +82,7 @@ execution.
 | History prefix replay | Replays a prefix of the history into a fresh session |
 | Text-prefix replay | Injects a text summary/prefix of prior history |
 | Prompt seeding | Seeds prior history into the system prompt on rebuild |
-| Vendor session ID | Relies on the vendor's own session persistence (no Omnigent-side rebuild) |
+| Vendor session ID | Relies on the vendor's own session persistence (no Goalrail-side rebuild) |
 
 ### Auth patterns
 
@@ -98,16 +98,16 @@ execution.
 
 All capabilities are **required** for a complete harness integration:
 
-- [ ] Connects to Omnigent MCP (in-proc SDK MCP server or vendor-specific bridge)
+- [ ] Connects to Goalrail MCP (in-proc SDK MCP server or vendor-specific bridge)
 - [ ] Model override works (or document vendor lock-in)
-- [ ] Auth is configured and documented (setup flow in `omni setup`)
-- [ ] Streaming forwards to the Omnigent forwarder
-- [ ] Omnigent policies enforce tool-use rules
+- [ ] Auth is configured and documented (setup flow in `goalrail setup`)
+- [ ] Streaming forwards to the Goalrail forwarder
+- [ ] Goalrail policies enforce tool-use rules
 - [ ] Native elicitation surfaces tool-approval requests to web UI
 - [ ] Interrupt cancels the running turn
 - [ ] Live queue supports concurrent turns
 - [ ] Tool-boundary steering injects correctly
-- [ ] Resume/fork rebuilds conversation from Omnigent transcript
+- [ ] Resume/fork rebuilds conversation from Goalrail transcript
 - [ ] Compaction is surfaced (`CompactionComplete` events)
 - [ ] Reasoning tokens are forwarded
 - [ ] Images are forwarded (full binary preferred; path or text-flattened acceptable)
@@ -120,43 +120,43 @@ All capabilities are **required** for a complete harness integration:
 ## Part 2 — Native harnesses
 
 Native harnesses wrap a vendor's own TUI or server and mirror output into
-Omnigent. They relay the vendor's conversation into the Omnigent session.
+Goalrail. They relay the vendor's conversation into the Goalrail session.
 
 ### Capability matrix
 
 | Capability | What it means |
 |---|---|
 | **Transport** | How the native harness communicates — tmux TUI, app server, HTTP/SSE, file-inject TUI |
-| **Connects to Omnigent MCP** | Whether the native harness connects to the Omnigent MCP server |
+| **Connects to Goalrail MCP** | Whether the native harness connects to the Goalrail MCP server |
 | **Model override** | User can select a model at launch or per-prompt |
 | **Auth** | Vendor login / config / token |
 | **Streaming (forwarder)** | `deltas` (token-level) vs `complete-only` (full response after completion) |
-| **Omnigent policies** | Whether the native harness enforces Omnigent-side tool policies — must support ALLOW, ASK, and DENY verdicts for both tool calls and tool results |
-| **Native elicitation** | When a policy verdict is ASK, the native harness surfaces the approval request in the Omnigent web UI so the user can approve or deny |
+| **Goalrail policies** | Whether the native harness enforces Goalrail-side tool policies — must support ALLOW, ASK, and DENY verdicts for both tool calls and tool results |
+| **Native elicitation** | When a policy verdict is ASK, the native harness surfaces the approval request in the Goalrail web UI so the user can approve or deny |
 | **Interrupt** | User can abort a running turn |
-| **Bidirectional sync (TUI->Omni)** | TUI output mirrors into the Omnigent conversation |
-| **In-harness session-cmd sync** | Supports `clear`, `fork`, `resume`, `switch` commands from Omnigent |
-| **Resume/fork from Omnigent transcript** | Can rebuild conversation from Omnigent transcript (native rebuild, or fresh launch) |
+| **Bidirectional sync (TUI->Goalrail)** | TUI output mirrors into the Goalrail conversation |
+| **In-harness session-cmd sync** | Supports `clear`, `fork`, `resume`, `switch` commands from Goalrail |
+| **Resume/fork from Goalrail transcript** | Can rebuild conversation from Goalrail transcript (native rebuild, or fresh launch) |
 | **Compaction** | Vendor-internal compaction status |
 | **Reasoning** | Model reasoning/thinking tokens are forwarded |
 | **Images** | Image content is forwarded — path reference, full binary, or text-flattened |
-| **Cost tracking** | Native harness reports token usage and cost data back to Omnigent for each turn |
+| **Cost tracking** | Native harness reports token usage and cost data back to Goalrail for each turn |
 
 ### Checklist for a new native harness
 
 All capabilities are **required** for a complete native harness integration:
 
 - [ ] Transport chosen and implemented (tmux TUI, app server, HTTP/SSE)
-- [ ] Connects to Omnigent MCP
+- [ ] Connects to Goalrail MCP
 - [ ] Model override works (or document vendor lock-in)
 - [ ] Auth configured (vendor login / config)
 - [ ] Streaming forwarder works (deltas preferred; complete-only acceptable)
-- [ ] Omnigent policies enforce tool-use rules
+- [ ] Goalrail policies enforce tool-use rules
 - [ ] Native elicitation surfaces tool-approval requests to web UI
 - [ ] Interrupt aborts the running turn
-- [ ] Bidirectional sync mirrors TUI output into Omnigent conversation
-- [ ] Session commands (clear, fork, resume) work from Omnigent
-- [ ] Resume/fork rebuilds from Omnigent transcript
+- [ ] Bidirectional sync mirrors TUI output into Goalrail conversation
+- [ ] Session commands (clear, fork, resume) work from Goalrail
+- [ ] Resume/fork rebuilds from Goalrail transcript
 - [ ] Compaction status is surfaced
 - [ ] Reasoning tokens are forwarded
 - [ ] Images are forwarded (path preferred; binary or text-flattened acceptable)

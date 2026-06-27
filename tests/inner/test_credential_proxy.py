@@ -1,4 +1,4 @@
-"""Unit tests for omnigent.inner.credential_proxy.
+"""Unit tests for goalrail.inner.credential_proxy.
 
 These cover the parent-side runtime: secret resolution from
 ``env`` / ``file`` / ``command`` sources, the default swap-on-access
@@ -16,11 +16,11 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.credential_proxy import (
+from goalrail.inner.credential_proxy import (
     SYNTHETIC_CREDENTIAL_PREFIX,
     prepare_credential_proxy_runtime,
 )
-from omnigent.inner.datamodel import (
+from goalrail.inner.datamodel import (
     CredentialProxyEntry,
     CredentialProxySpec,
     CredentialSourceSpec,

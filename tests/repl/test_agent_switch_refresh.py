@@ -18,11 +18,11 @@ is exercised — not a re-implementation of it.
 from __future__ import annotations
 
 import pytest
-from omnigent_client._sessions import Session as SessionSnapshot
-from omnigent_ui_sdk import RichBlockFormatter
+from goalrail_client._sessions import Session as SessionSnapshot
+from goalrail_ui_sdk import RichBlockFormatter
 from rich.text import Text
 
-from omnigent.repl._repl import _refresh_session_metadata, _SessionsChatReplAdapter
+from goalrail.repl._repl import _refresh_session_metadata, _SessionsChatReplAdapter
 
 
 class _SnapshotSessions:
@@ -49,7 +49,7 @@ class _SnapshotSessions:
 
 class _SnapshotClient:
     """
-    Omnigent client stub exposing only the ``sessions.get`` surface.
+    Goalrail client stub exposing only the ``sessions.get`` surface.
 
     :param snapshot: Snapshot served by ``sessions.get``.
     """
@@ -72,7 +72,7 @@ class _RaisingSessions:
 
 
 class _RaisingClient:
-    """Omnigent client stub whose ``sessions.get`` always fails."""
+    """Goalrail client stub whose ``sessions.get`` always fails."""
 
     def __init__(self) -> None:
         self.sessions = _RaisingSessions()
@@ -113,7 +113,7 @@ def _make_adapter(client: object, agent_name: str = "nessie") -> _SessionsChatRe
     """
     Build a real adapter attached to an existing session id.
 
-    :param client: Omnigent client (stub) handed to the adapter.
+    :param client: Goalrail client (stub) handed to the adapter.
     :param agent_name: Launch-time agent name, e.g. ``"nessie"``.
     :returns: Adapter with ``session_id`` pre-set (no HTTP issued).
     """
@@ -277,7 +277,7 @@ def test_both_triggers_spawn_metadata_refresh() -> None:
     import inspect
     import re
 
-    from omnigent.repl import _repl
+    from goalrail.repl import _repl
 
     src = inspect.getsource(_repl.run_repl)
     # The spawn helper must schedule the real refresh coroutine; without

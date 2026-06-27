@@ -6,7 +6,7 @@
 // server URL and, if present, load it directly so the user lands in the same
 // UI they'd see in a browser — now with OS-native notifications and a
 // dock/taskbar badge (wired up on the web side via `src/lib/nativeBridge.ts`,
-// which detects the Electron preload on `window.omnigentDesktop`).
+// which detects the Electron preload on `window.goalrailDesktop`).
 //
 // The "load the server's own SPA" model means there is ZERO UI duplication
 // here: change the web app and the desktop app changes with it on next launch.
@@ -123,7 +123,7 @@ const LNA_PERMISSIONS = new Set(["local-network-access", "loopback-network"]);
 
 /**
  * Keychain access group for the WebAuthn Touch ID platform authenticator
- * (`app.configureWebAuthn`), in the form ``"<TEAM_ID>.ai.omnigent.desktop"``.
+ * (`app.configureWebAuthn`), in the form ``"<TEAM_ID>.dev.goalrail.desktop"``.
  *
  * null disables the platform authenticator: the value only works in a
  * code-signed build whose `keychain-access-groups` entitlement
@@ -137,7 +137,7 @@ const LNA_PERMISSIONS = new Set(["local-network-access", "loopback-network"]);
  * app at launch. Details in signing/entitlements.mac.plist.
  * @type {string | null}
  */
-const WEBAUTHN_KEYCHAIN_ACCESS_GROUP = "8RMX4WU6F8.ai.omnigent.desktop";
+const WEBAUTHN_KEYCHAIN_ACCESS_GROUP = "8RMX4WU6F8.dev.goalrail.desktop";
 
 /**
  * Enable the macOS WebAuthn platform authenticator so passkey
@@ -162,12 +162,12 @@ const WEBAUTHN_KEYCHAIN_ACCESS_GROUP = "8RMX4WU6F8.ai.omnigent.desktop";
 function registerWebAuthn() {
   if (process.platform !== "darwin") return;
   if (typeof app.configureWebAuthn !== "function") {
-    console.log("[omnigent] webauthn: Electron too old for configureWebAuthn; skipping");
+    console.log("[goalrail] webauthn: Electron too old for configureWebAuthn; skipping");
     return;
   }
   if (WEBAUTHN_KEYCHAIN_ACCESS_GROUP === null) {
     console.log(
-      "[omnigent] webauthn: WEBAUTHN_KEYCHAIN_ACCESS_GROUP not set; " +
+      "[goalrail] webauthn: WEBAUTHN_KEYCHAIN_ACCESS_GROUP not set; " +
         "platform passkeys (Touch ID dialog) disabled — security keys still work",
     );
     return;
@@ -179,7 +179,7 @@ function registerWebAuthn() {
   // cleanly so dev keeps the silent security-key path.
   if (!app.isPackaged) {
     console.log(
-      "[omnigent] webauthn: dev run (unsigned, no keychain entitlement); " +
+      "[goalrail] webauthn: dev run (unsigned, no keychain entitlement); " +
         "platform passkeys disabled — security keys still work",
     );
     return;
@@ -452,7 +452,7 @@ function updateBadge() {
   let total = 0;
   for (const count of perOrigin.values()) total += count;
   const ok = app.setBadgeCount(total);
-  console.log(`[omnigent] setBadgeCount(${total}) -> ${ok}`);
+  console.log(`[goalrail] setBadgeCount(${total}) -> ${ok}`);
 }
 
 /**
@@ -604,16 +604,16 @@ function rememberRecentServer(settings, url) {
  * On a workspace the SPA is mounted as a workspace *page*, so Databricks wraps
  * it in its top-nav shell (the dark bar with the workspace switcher). In a
  * dedicated desktop window that chrome is just noise. We promote Goalrail's
- * own root — ``.omnigent-app``, the wrapper ap-web's embed entry sets
+ * own root — ``.goalrail-app``, the wrapper ap-web's embed entry sets
  * (``ap-web/src/embed.tsx``) — to a full-viewport overlay so it paints over
  * the workspace bar. Keying on Goalrail's wrapper (defined in THIS repo)
  * rather than the monolith-owned, unstable workspace nav markup keeps this
  * from silently breaking when Databricks reshuffles its chrome; on a
- * standalone (non-embed) build there is no ``.omnigent-app``, so the rule is
+ * standalone (non-embed) build there is no ``.goalrail-app``, so the rule is
  * a harmless no-op.
  */
 const WORKSPACE_CHROME_HIDE_CSS = `
-  .omnigent-app {
+  .goalrail-app {
     position: fixed !important;
     inset: 0 !important;
     z-index: 2147483647 !important;
@@ -996,7 +996,7 @@ function openFindBar(target) {
   const existing = findBars.get(target);
   if (existing && !existing.isDestroyed()) {
     existing.focus();
-    existing.webContents.send("omnigent:find-activate");
+    existing.webContents.send("goalrail:find-activate");
     return;
   }
   const bar = new BrowserWindow({
@@ -1022,7 +1022,7 @@ function openFindBar(target) {
   const reposition = () => positionFindBar(target, bar);
   const onFound = (_event, result) => {
     if (bar.isDestroyed()) return;
-    bar.webContents.send("omnigent:find-result", {
+    bar.webContents.send("goalrail:find-result", {
       active: result.activeMatchOrdinal,
       matches: result.matches,
     });
@@ -1187,7 +1187,7 @@ function signalForeground() {
       if (win && !win.isFocused()) win.flashFrame(true);
     }
   } catch (err) {
-    console.warn("[omnigent] signalForeground failed:", err);
+    console.warn("[goalrail] signalForeground failed:", err);
   }
 }
 
@@ -1315,7 +1315,7 @@ function buildMenu() {
 }
 
 // ---------------------------------------------------------------------------
-// IPC: the preload bridge (window.omnigentDesktop) forwards these from the
+// IPC: the preload bridge (window.goalrailDesktop) forwards these from the
 // renderer. Kept to the two OS integrations the web app needs.
 //
 // Trust model: navigation is unrestricted (auth-fronted servers redirect
@@ -1374,7 +1374,7 @@ function registerIpc() {
   // Setup page → persist URL and navigate the SENDING window to it. We target
   // the window that owns the setup page (via its webContents) rather than a
   // global, so connecting from one window doesn't hijack another.
-  ipcMain.handle("omnigent:set-server-url", async (event, url) => {
+  ipcMain.handle("goalrail:set-server-url", async (event, url) => {
     if (!isSetupPageSender(event)) {
       // A server page must never be able to re-point which server is saved.
       throw new Error("set-server-url is only available to the setup page");
@@ -1417,7 +1417,7 @@ function registerIpc() {
   });
 
   // Setup page → pre-fill the input with any saved URL.
-  ipcMain.handle("omnigent:get-server-url", (event) => {
+  ipcMain.handle("goalrail:get-server-url", (event) => {
     if (!isSetupPageSender(event)) {
       throw new Error("get-server-url is only available to the setup page");
     }
@@ -1426,7 +1426,7 @@ function registerIpc() {
 
   // Setup page → recently-connected servers, most recent first, for the
   // quick-pick list under the URL form.
-  ipcMain.handle("omnigent:get-recent-servers", (event) => {
+  ipcMain.handle("goalrail:get-recent-servers", (event) => {
     if (!isSetupPageSender(event)) {
       throw new Error("get-recent-servers is only available to the setup page");
     }
@@ -1438,9 +1438,9 @@ function registerIpc() {
   // SPA title-bar server picker → the sender window's pinned origin plus the
   // persisted recent-servers list, so the picker can render "current server"
   // and the switch targets. Foreign pages get null (nothing to fingerprint).
-  ipcMain.handle("omnigent:get-server-picker", (event) => {
+  ipcMain.handle("goalrail:get-server-picker", (event) => {
     if (!isPinnedOriginSender(event)) {
-      console.warn("[omnigent] get-server-picker from untrusted sender dropped");
+      console.warn("[goalrail] get-server-picker from untrusted sender dropped");
       return null;
     }
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -1458,7 +1458,7 @@ function registerIpc() {
   // grants), so a server page must never be able to pin a window to an
   // arbitrary origin of its choosing — only to servers the user previously
   // connected to by hand.
-  ipcMain.handle("omnigent:switch-server", (event, url) => {
+  ipcMain.handle("goalrail:switch-server", (event, url) => {
     if (!isPinnedOriginSender(event)) {
       throw new Error("switch-server is only available to a connected server page");
     }
@@ -1494,9 +1494,9 @@ function registerIpc() {
   // SENDING window to the bundled setup page. Unlike Change Server… this
   // keeps the saved default server (connecting from setup overwrites it
   // only when the user actually submits a URL).
-  ipcMain.on("omnigent:open-server-setup", (event) => {
+  ipcMain.on("goalrail:open-server-setup", (event) => {
     if (!isPinnedOriginSender(event)) {
-      console.warn("[omnigent] open-server-setup from untrusted sender dropped");
+      console.warn("[goalrail] open-server-setup from untrusted sender dropped");
       return;
     }
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -1509,9 +1509,9 @@ function registerIpc() {
   // Find bar → run/continue a search in its parent window. Empty text
   // clears the highlight and zeroes the counter (findInPage rejects empty
   // queries, so it never reaches it).
-  ipcMain.on("omnigent:find-query", (event, params) => {
+  ipcMain.on("goalrail:find-query", (event, params) => {
     if (!isFindBarSender(event)) {
-      console.warn("[omnigent] find-query from untrusted sender dropped");
+      console.warn("[goalrail] find-query from untrusted sender dropped");
       return;
     }
     const target = findBarTarget(event);
@@ -1519,7 +1519,7 @@ function registerIpc() {
     const text = String(params?.text ?? "");
     if (text === "") {
       target.webContents.stopFindInPage("clearSelection");
-      event.sender.send("omnigent:find-result", { active: 0, matches: 0 });
+      event.sender.send("goalrail:find-result", { active: 0, matches: 0 });
       return;
     }
     target.webContents.findInPage(text, {
@@ -1530,9 +1530,9 @@ function registerIpc() {
 
   // Find bar → dismiss itself (Esc / ✕). Cleanup (stop search, refocus the
   // parent) lives in the bar's "closed" handler in openFindBar.
-  ipcMain.on("omnigent:find-close", (event) => {
+  ipcMain.on("goalrail:find-close", (event) => {
     if (!isFindBarSender(event)) {
-      console.warn("[omnigent] find-close from untrusted sender dropped");
+      console.warn("[goalrail] find-close from untrusted sender dropped");
       return;
     }
     const bar = BrowserWindow.fromWebContents(event.sender);
@@ -1542,9 +1542,9 @@ function registerIpc() {
   // Dock/taskbar badge. Each window's SPA reports ITS unread count; the
   // app-wide badge shown is the sum across windows (see updateBadge), so two
   // windows on different servers don't clobber each other's counts.
-  ipcMain.on("omnigent:set-badge-count", (event, count) => {
+  ipcMain.on("goalrail:set-badge-count", (event, count) => {
     if (!isPinnedOriginSender(event)) {
-      console.warn("[omnigent] set-badge-count from untrusted sender dropped");
+      console.warn("[goalrail] set-badge-count from untrusted sender dropped");
       return;
     }
     // isPinnedOriginSender guarantees the sender window is tracked.
@@ -1564,11 +1564,11 @@ function registerIpc() {
   // window is focused we add an OS-level attention cue the frontmost app CAN
   // show: bounce the macOS dock icon / flash the taskbar frame. That makes a
   // non-open session's turn-end noticeable even with the app in front.
-  ipcMain.handle("omnigent:notify", (event, params) => {
+  ipcMain.handle("goalrail:notify", (event, params) => {
     if (!isPinnedOriginSender(event)) {
       // The contract is "resolves false when not shown" — a foreign page
       // gets a quiet false, not an exception it could fingerprint.
-      console.warn("[omnigent] notify from untrusted sender dropped");
+      console.warn("[goalrail] notify from untrusted sender dropped");
       return false;
     }
     if (!Notification.isSupported()) return false;
@@ -1601,7 +1601,7 @@ function registerIpc() {
       // throw instead of crashing the main process from this async callback.
       if (navigatePath && !event.sender.isDestroyed()) {
         try {
-          event.sender.send("omnigent:notification-activated", navigatePath);
+          event.sender.send("goalrail:notification-activated", navigatePath);
         } catch {
           // Sender went away after the notification was posted; nothing to do.
         }
@@ -1635,7 +1635,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     // App User Model ID so Windows attributes notifications/taskbar correctly.
-    if (process.platform === "win32") app.setAppUserModelId("ai.omnigent.desktop");
+    if (process.platform === "win32") app.setAppUserModelId("dev.goalrail.desktop");
     applyDockIcon();
     registerPermissions();
     registerLocalhostAccess();

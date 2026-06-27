@@ -52,7 +52,7 @@ interactive loop (a `-p`/headless run does **not** fire them — also verified).
 
 ```
 cursor-agent TUI  ── stop hook (per turn, JSON on stdin) ──▶
-  python -m omnigent.cursor_native_usage record-usage --bridge-dir <dir>
+  python -m goalrail.cursor_native_usage record-usage --bridge-dir <dir>
       └─ appends one normalized line to <bridge_dir>/cursor_usage.jsonl
           ▲
           │  (runner-owned poll loop, ~0.7s)
@@ -75,9 +75,9 @@ or frontend changes are required**.
 
 | File | Change |
 |---|---|
-| `omnigent/cursor_native_usage.py` | **New.** Hook recorder (`record-usage`, stdlib-only) + cumulative accumulator + runner-owned poller/supervisor + `clear_cursor_usage_state`. |
-| `omnigent/cursor_native_bridge.py` | `build_hooks_config` / `write_hooks_config` — write `<workspace>/.cursor/hooks.json` registering the `stop` hook (sibling of `write_mcp_config`). |
-| `omnigent/runner/app.py` | In the cursor terminal setup: `write_hooks_config(...)`, `clear_cursor_usage_state(...)`, and `supervise_cursor_usage_forwarder(...)` added to the existing `_supervise_cursor_native_bridges` gather. |
+| `goalrail/cursor_native_usage.py` | **New.** Hook recorder (`record-usage`, stdlib-only) + cumulative accumulator + runner-owned poller/supervisor + `clear_cursor_usage_state`. |
+| `goalrail/cursor_native_bridge.py` | `build_hooks_config` / `write_hooks_config` — write `<workspace>/.cursor/hooks.json` registering the `stop` hook (sibling of `write_mcp_config`). |
+| `goalrail/runner/app.py` | In the cursor terminal setup: `write_hooks_config(...)`, `clear_cursor_usage_state(...)`, and `supervise_cursor_usage_forwarder(...)` added to the existing `_supervise_cursor_native_bridges` gather. |
 
 ### Hook recorder (`record-usage`)
 - Reads the `stop` payload from stdin, normalizes to

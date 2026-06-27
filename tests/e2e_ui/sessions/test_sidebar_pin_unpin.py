@@ -1,7 +1,7 @@
 """Browser e2e for the sidebar's pin / unpin quick action.
 
 Pinning is a client-side navigation preference (persisted to
-``localStorage`` under ``omnigent:pinned-conversation-ids`` — see
+``localStorage`` under ``goalrail:pinned-conversation-ids`` — see
 ``sidebarNav.ts``), surfaced as a hover/focus-revealed button on every
 conversation row (``data-testid="quick-pin-conversation"``). Toggling it
 moves the row between the sidebar's grouped sections:

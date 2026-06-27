@@ -1,6 +1,6 @@
-"""Modal deploy glue for the Omnigent server.
+"""Modal deploy glue for the Goalrail server.
 
-Runs the standard server image (``ghcr.io/omnigent-ai/omnigent-server``)
+Runs the standard server image (``ghcr.io/heurema/goalrail-server``)
 as a single always-on Modal web server, proxying HTTP / SSE / WebSocket
 traffic to the same Docker entrypoint every other container platform
 uses (``deploy/docker/entrypoint.py``). See README.md for the
@@ -15,26 +15,26 @@ import modal
 # source build can't produce (same reason every other platform pulls it;
 # see deploy/docker/Dockerfile.prebuilt). Modal injects its client
 # runtime into the image's Python at image-build time.
-SERVER_IMAGE = "ghcr.io/omnigent-ai/omnigent-server:latest"
+SERVER_IMAGE = "ghcr.io/heurema/goalrail-server:latest"
 # The image's uvicorn port (deploy/docker/Dockerfile: EXPOSE 8000).
 SERVER_PORT = 8000
 # First boot runs DB migrations over the network (~1 minute on Neon);
 # 300 s leaves comfortable headroom before Modal declares startup failed.
 STARTUP_TIMEOUT_S = 300
 
-app = modal.App("omnigent")
+app = modal.App("goalrail")
 
 # Persists uploaded agent bundles / artifacts across container restarts
 # and redeploys — unlike Heroku / Cloudflare Containers, the artifact
 # store is durable here.
-artifacts = modal.Volume.from_name("omnigent-artifacts", create_if_missing=True)
+artifacts = modal.Volume.from_name("goalrail-artifacts", create_if_missing=True)
 
 
 @app.function(
     image=modal.Image.from_registry(SERVER_IMAGE),
-    # DATABASE_URL, OMNIGENT_ACCOUNTS_COOKIE_SECRET, and
-    # OMNIGENT_ACCOUNTS_BASE_URL — created in the README's step 1.
-    secrets=[modal.Secret.from_name("omnigent-deploy")],
+    # DATABASE_URL, GOALRAIL_ACCOUNTS_COOKIE_SECRET, and
+    # GOALRAIL_ACCOUNTS_BASE_URL — created in the README's step 1.
+    secrets=[modal.Secret.from_name("goalrail-deploy")],
     volumes={"/data/artifacts": artifacts},
     # One always-on container: the runner registry lives in server
     # memory, so traffic must not be spread across containers

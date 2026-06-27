@@ -1,4 +1,4 @@
-# AI-Native Community Issue Triage for omnigent
+# AI-Native Community Issue Triage for goalrail
 
 ## Goal
 
@@ -52,7 +52,7 @@ Triggered on every new issue. The bot classifies, deduplicates, resolves what it
 - Close issues (the lifecycle bot handles that)
 - Re-triage after initial classification (maintainers can override freely)
 
-**Tool:** `omnigent run .github/triage/` via GitHub Actions workflow, triggered `on: issues: [opened]`. The triage agent is a tool-less Claude SDK harness that outputs structured JSON; all GitHub mutations (labeling, assignment, comments) happen in trusted workflow steps that validate against allowlists. LLM credentials route through the Databricks gateway (`LLM_API_KEY` + `GATEWAY_BASE_URL`). Permissions: `issues: write` only.
+**Tool:** `goalrail run .github/triage/` via GitHub Actions workflow, triggered `on: issues: [opened]`. The triage agent is a tool-less Claude SDK harness that outputs structured JSON; all GitHub mutations (labeling, assignment, comments) happen in trusted workflow steps that validate against allowlists. LLM credentials route through the Databricks gateway (`LLM_API_KEY` + `GATEWAY_BASE_URL`). Permissions: `issues: write` only.
 
 **Most issues never need a maintainer.** The bot + lifecycle automation resolves them:
 
@@ -105,7 +105,7 @@ The bot applies labels but does NOT post comments (except for duplicate flagging
 
 ### Decision: Goalrail triage agent over `claude-code-action`
 
-Use `omnigent run .github/triage/` as the triage engine — a tool-less Claude SDK harness that outputs structured JSON, with all GitHub mutations in trusted workflow steps.
+Use `goalrail run .github/triage/` as the triage engine — a tool-less Claude SDK harness that outputs structured JSON, with all GitHub mutations in trusted workflow steps.
 
 **Why:** `claude-code-action` requires a direct Anthropic API key (`ANTHROPIC_API_KEY`), which we don't have — our LLM access routes through the Databricks gateway. More critically, `claude-code-action` gives the LLM shell access and a GitHub token, creating a prompt injection → secret exfiltration attack surface (a crafted issue body could trick the agent into running `printenv` → `gh issue comment`). The Goalrail approach eliminates this structurally: the LLM has no tools, no shell, and no `GH_TOKEN` — it only outputs JSON that is validated against allowlists before any GitHub mutation occurs.
 

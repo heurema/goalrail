@@ -1,11 +1,11 @@
-"""Unit tests for the omni hermes CLI-side helpers + harness wiring (no server)."""
+"""Unit tests for the goalrail hermes CLI-side helpers + harness wiring (no server)."""
 
 from __future__ import annotations
 
 import click
 import pytest
 
-from omnigent import hermes_native as hn
+from goalrail import hermes_native as hn
 
 
 def test_resolve_hermes_executable_found() -> None:
@@ -17,7 +17,7 @@ def test_resolve_hermes_executable_found() -> None:
 
 def test_resolve_hermes_executable_honors_path_override() -> None:
     resolved = hn.resolve_hermes_executable(
-        env={"OMNIGENT_HERMES_PATH": "/opt/hermes"},
+        env={"GOALRAIL_HERMES_PATH": "/opt/hermes"},
         which=lambda cmd: cmd if cmd == "/opt/hermes" else None,
     )
     assert resolved == "/opt/hermes"
@@ -44,13 +44,13 @@ def test_terminal_resource_id_stable() -> None:
 
 
 def test_harness_registry_has_hermes_native() -> None:
-    from omnigent.runtime.harnesses import _HARNESS_MODULES
+    from goalrail.runtime.harnesses import _HARNESS_MODULES
 
-    assert _HARNESS_MODULES["hermes-native"] == "omnigent.inner.hermes_native_harness"
+    assert _HARNESS_MODULES["hermes-native"] == "goalrail.inner.hermes_native_harness"
 
 
 def test_alias_and_native_membership() -> None:
-    from omnigent.harness_aliases import (
+    from goalrail.harness_aliases import (
         NATIVE_HARNESSES,
         canonicalize_harness,
         is_native_harness,
@@ -66,13 +66,13 @@ def test_alias_and_native_membership() -> None:
 
 
 def test_native_coding_agent_resolves() -> None:
-    from omnigent._wrapper_labels import (
+    from goalrail._wrapper_labels import (
         HERMES_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.native_coding_agents import (
+    from goalrail.native_coding_agents import (
         HERMES_NATIVE_CODING_AGENT,
         native_coding_agent_for_harness,
     )
@@ -89,7 +89,7 @@ def test_native_coding_agent_resolves() -> None:
 
 
 def test_create_app_builds() -> None:
-    from omnigent.inner.hermes_native_harness import create_app
+    from goalrail.inner.hermes_native_harness import create_app
 
     assert create_app() is not None
 
@@ -110,7 +110,7 @@ def test_materialize_agent_spec_is_terminal_first_hermes_native(tmp_path) -> Non
 
 def test_configured_hermes_command_default_and_override() -> None:
     assert hn._configured_hermes_command({}) == "hermes"
-    assert hn._configured_hermes_command({"OMNIGENT_HERMES_PATH": "/opt/hermes"}) == "/opt/hermes"
+    assert hn._configured_hermes_command({"GOALRAIL_HERMES_PATH": "/opt/hermes"}) == "/opt/hermes"
 
 
 def test_launched_terminal_from_payload_decodes_tmux_metadata() -> None:
@@ -218,7 +218,7 @@ async def test_create_hermes_session_returns_id_or_raises() -> None:
 
 
 async def test_fetch_hermes_session_handles_status() -> None:
-    payload = {"labels": {"omnigent.wrapper": "hermes-native-ui"}}
+    payload = {"labels": {"goalrail.wrapper": "hermes-native-ui"}}
     assert (
         await hn._fetch_hermes_session(_FakeAsyncClient(_FakeResp(200, payload)), "c") == payload
     )

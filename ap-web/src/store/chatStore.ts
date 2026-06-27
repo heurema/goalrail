@@ -239,7 +239,7 @@ export interface ChatState {
   sessionStatus: SessionStatus;
   /**
    * Whether the active session is a native-terminal wrapper
-   * (claude-native / codex-native), derived from the `omnigent.wrapper`
+   * (claude-native / codex-native), derived from the `goalrail.wrapper`
    * label on bind. Web messages on these sessions are NOT persisted at
    * POST time — they round-trip through the vendor TUI and reconcile via
    * the transcript forwarder's `session.input.consumed` event, which can
@@ -308,7 +308,7 @@ export interface ChatState {
   costControlModeOverride: "on" | "off" | null;
   /**
    * Per-session Codex collaboration-mode flag. Hydrated from
-   * ``omnigent.codex_native.collaboration_mode`` on bind and updated by the
+   * ``goalrail.codex_native.collaboration_mode`` on bind and updated by the
    * web toggle or native Codex TUI events. False for non-Codex sessions.
    */
   codexPlanMode: boolean;
@@ -544,8 +544,8 @@ const STREAM_RECONNECT_MAX_MS = 5_000;
 
 // Sticky picker prefs — persisted so a new chat inherits the user's
 // last pick across reloads and across sessions.
-const PICKER_PREF_EFFORT_KEY = "omnigent.picker.effort";
-const PICKER_PREF_MODEL_KEY = "omnigent.picker.model";
+const PICKER_PREF_EFFORT_KEY = "goalrail.picker.effort";
+const PICKER_PREF_MODEL_KEY = "goalrail.picker.model";
 
 function loadPickerPref(key: string): string | null {
   try {
@@ -1401,7 +1401,7 @@ type NativeModelFamily = "claude" | "codex";
  * :returns: ``"claude"`` / ``"codex"`` for native wrappers, else ``null``.
  */
 function nativeModelFamilyForSession(session: Pick<Session, "labels">): NativeModelFamily | null {
-  switch (session.labels?.["omnigent.wrapper"]) {
+  switch (session.labels?.["goalrail.wrapper"]) {
     case "claude-code-native-ui":
       return "claude";
     case "codex-native-ui":
@@ -1623,7 +1623,7 @@ function sessionBindingPatch(
   | "terminalPending"
   | "sandboxStatus"
 > {
-  const wrapper = session.labels?.["omnigent.wrapper"];
+  const wrapper = session.labels?.["goalrail.wrapper"];
   return {
     isNativeTerminalSession: isNativeWrapper(wrapper),
     // Native wrapper whose model lives in the vendor TUI (no Goalrail picker):
@@ -4032,7 +4032,7 @@ function finalizeActive(
   });
 }
 
-// Mirrors the server's ErrorCode.RUNNER_UNAVAILABLE (omnigent/errors.py) —
+// Mirrors the server's ErrorCode.RUNNER_UNAVAILABLE (goalrail/errors.py) —
 // the 503 returned by POST /events when a host-bound runner never connects
 // within the connect-grace + relaunch window.
 const RUNNER_UNAVAILABLE_CODE = "runner_unavailable";

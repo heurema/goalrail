@@ -28,7 +28,7 @@ import httpx
 import pytest
 
 # Load the coder tool set for client-side tool execution.
-from omnigent.client_tools import get_tool_set as _get_tool_set
+from goalrail.client_tools import get_tool_set as _get_tool_set
 from tests.e2e.conftest import (
     configure_mock_llm,
     create_runner_bound_session,
@@ -239,7 +239,7 @@ def test_coder_spawns_parallel_subagents(
     Scope: this test asserts durable delegation behavior, not the
     nondeterministic LLM scheduling detail of whether both
     ``sys_session_send`` calls are emitted in one response or across
-    sequential turns. Omnigent dispatches each ``sys_session_send``
+    sequential turns. Goalrail dispatches each ``sys_session_send``
     asynchronously; the meaningful invariant is that the completed root
     turn delegated to both requested sub-agents instead of doing the work
     directly or dropping one branch.

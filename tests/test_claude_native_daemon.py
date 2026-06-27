@@ -18,9 +18,9 @@ import click
 import httpx
 import pytest
 
-from omnigent import claude_native, codex_native, native_terminal
-from omnigent.claude_native_bridge import BRIDGE_ID_LABEL_KEY
-from omnigent.host import daemon_launch
+from goalrail import claude_native, codex_native, native_terminal
+from goalrail.claude_native_bridge import BRIDGE_ID_LABEL_KEY
+from goalrail.host import daemon_launch
 
 pytestmark = pytest.mark.asyncio
 
@@ -153,7 +153,7 @@ async def test_create_claude_session_persists_terminal_launch_args() -> None:
     The daemon-flow create persists pass-through args and omits the
     bridge-id label.
 
-    ``omnigent claude --server X <flags>`` must carry the flags to a
+    ``goalrail claude --server X <flags>`` must carry the flags to a
     daemon-spawned runner: they're written to the session's
     ``terminal_launch_args`` at create so the runner applies them when it
     auto-launches the terminal. The bridge-id label is omitted
@@ -214,15 +214,15 @@ def _install_daemon_seam_mocks(
         to.
     :returns: None.
     """
-    monkeypatch.setattr("omnigent.chat._remote_headers", lambda server_url=None, **k: {})
-    monkeypatch.setattr("omnigent.chat._server_auth", lambda server_url=None, **k: None)
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("goalrail.chat._remote_headers", lambda server_url=None, **k: {})
+    monkeypatch.setattr("goalrail.chat._server_auth", lambda server_url=None, **k: None)
+    monkeypatch.setattr("goalrail.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(
-        "omnigent.cli._ensure_host_daemon",
+        "goalrail.cli._ensure_host_daemon",
         lambda url: ensured.append(url),
     )
     monkeypatch.setattr(
-        "omnigent.host.identity.load_or_create_host_identity",
+        "goalrail.host.identity.load_or_create_host_identity",
         lambda *a, **k: SimpleNamespace(host_id="host_1", name="h"),
     )
     monkeypatch.setattr(
@@ -351,7 +351,7 @@ def test_run_with_remote_server_unreachable_server_raises_clean_error(
     tmp_path: Path,
 ) -> None:
     """
-    An unreachable Omnigent server fails with an actionable message, not a
+    An unreachable Goalrail server fails with an actionable message, not a
     raw httpx traceback.
 
     The daemon flow's first server contact is the session create; if the

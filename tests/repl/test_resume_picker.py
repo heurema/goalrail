@@ -1,5 +1,5 @@
 """
-Tests for :mod:`omnigent.repl._resume_picker` — the
+Tests for :mod:`goalrail.repl._resume_picker` — the
 stderr/stdin interactive picker that ports legacy ``--resume`` to
 AP mode.
 
@@ -30,8 +30,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.entities import ConversationItem, MessageData
-from omnigent.repl._resume_picker import (
+from goalrail.entities import ConversationItem, MessageData
+from goalrail.repl._resume_picker import (
     _extract_text_from_content_blocks,
     _last_message_preview_from_dicts,
     _last_message_preview_from_entities,
@@ -39,8 +39,8 @@ from omnigent.repl._resume_picker import (
     pick_conversation,
     pick_conversation_from_store,
 )
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -849,9 +849,9 @@ def test_runtime_badge_claude_native() -> None:
     server-side label — a typo here would silently route every
     session to ``[chat]`` in the cross-agent picker.
     """
-    from omnigent.repl._resume_picker import _runtime_badge
+    from goalrail.repl._resume_picker import _runtime_badge
 
-    row = _BadgeRow(labels={"omnigent.wrapper": "claude-code-native-ui"})
+    row = _BadgeRow(labels={"goalrail.wrapper": "claude-code-native-ui"})
     assert _runtime_badge(row) == "[claude]"
 
 
@@ -861,9 +861,9 @@ def test_runtime_badge_codex_native() -> None:
     ``[codex]`` so the cross-agent picker identifies the terminal UI
     owner before dispatch.
     """
-    from omnigent.repl._resume_picker import _runtime_badge
+    from goalrail.repl._resume_picker import _runtime_badge
 
-    row = _BadgeRow(labels={"omnigent.wrapper": "codex-native-ui"})
+    row = _BadgeRow(labels={"goalrail.wrapper": "codex-native-ui"})
     assert _runtime_badge(row) == "[codex]"
 
 
@@ -871,7 +871,7 @@ def test_runtime_badge_codex_native() -> None:
     "labels",
     [
         {},
-        {"omnigent.wrapper": "some-other-wrapper"},
+        {"goalrail.wrapper": "some-other-wrapper"},
         {"unrelated": "x"},
         # Defensive: legacy fakes without a ``labels`` attribute
         # surface as ``None`` (handled via ``getattr`` in production).
@@ -886,7 +886,7 @@ def test_runtime_badge_non_claude_native(labels: dict[str, str] | None) -> None:
     doesn't know about), and the no-labels-attribute case (legacy
     test rows). All three must NOT raise.
     """
-    from omnigent.repl._resume_picker import _runtime_badge
+    from goalrail.repl._resume_picker import _runtime_badge
 
     row = _BadgeRow(labels=labels)
     assert _runtime_badge(row) == "[chat]"
@@ -896,7 +896,7 @@ def test_runtime_badge_non_claude_native(labels: dict[str, str] | None) -> None:
 
 
 class _FakeSessionsNamespace:
-    """Stub mimicking :class:`omnigent_client.SessionsNamespace`.
+    """Stub mimicking :class:`goalrail_client.SessionsNamespace`.
 
     Picker switched to the Sessions API so wrapper-only sessions (no
     task rows) still appear. Captures the kwargs each ``list`` call
@@ -914,7 +914,7 @@ class _FakeSessionsNamespace:
 
 
 class _FakeConversationsNamespace:
-    """Stub mimicking :class:`omnigent_client.ConversationsNamespace`.
+    """Stub mimicking :class:`goalrail_client.ConversationsNamespace`.
 
     Only ``list_items`` is used (by the preview fetch); list lives on
     sessions now."""
@@ -934,7 +934,7 @@ class _FakeConversationsNamespace:
 
 
 class _FakeAPClient:
-    """Stub :class:`omnigent_client.OmnigentClient` exposing
+    """Stub :class:`goalrail_client.GoalrailClient` exposing
     ``.sessions`` (for list) and ``.conversations`` (for list_items)."""
 
     def __init__(self, rows: list[_BadgeRow]) -> None:
@@ -949,11 +949,11 @@ async def test_cross_agent_picker_lists_without_agent_id_filter() -> None:
     SDK list endpoint with ``agent_id=None`` so all runtimes are
     visible. A regression that scoped to a single agent would
     defeat the purpose of the cross-agent picker the top-level
-    ``omnigent resume`` depends on.
+    ``goalrail resume`` depends on.
     """
     import io
 
-    from omnigent.repl._resume_picker import pick_conversation_cross_agent_from_sdk
+    from goalrail.repl._resume_picker import pick_conversation_cross_agent_from_sdk
 
     client = _FakeAPClient(rows=[])  # empty list → picker prints "no prior"
     out = io.StringIO()
@@ -979,13 +979,13 @@ async def test_cross_agent_picker_selection_returns_id_with_runtime_badge_render
     """
     import io
 
-    from omnigent.repl._resume_picker import pick_conversation_cross_agent_from_sdk
+    from goalrail.repl._resume_picker import pick_conversation_cross_agent_from_sdk
 
     rows = [
         _BadgeRow(
             id="conv_one",
             title="claude session",
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
         ),
         _BadgeRow(id="conv_two", title="chat session", labels={}),
     ]
@@ -1013,20 +1013,20 @@ async def test_wrapper_label_picker_filters_and_lists_without_agent_filter(
     empty) and filter to only rows carrying the wrapper label."""
     import io
 
-    from omnigent.repl._resume_picker import pick_conversation_by_wrapper_label_from_sdk
+    from goalrail.repl._resume_picker import pick_conversation_by_wrapper_label_from_sdk
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
     rows = [
         _BadgeRow(
             id="conv_claude_1",
             title="claude one",
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
         ),
         _BadgeRow(id="conv_chat", title="chat one", labels={}),
         _BadgeRow(
             id="conv_claude_2",
             title="claude two",
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
         ),
     ]
     client = _FakeAPClient(rows=rows)
@@ -1069,10 +1069,10 @@ def test_render_workspace_cell_no_state_returns_none(
     metadata segment for legacy sessions / sessions created on
     another machine / non-wrapper sessions.
     """
-    from omnigent.repl._resume_picker import _render_workspace_cell
+    from goalrail.repl._resume_picker import _render_workspace_cell
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
-    row = _BadgeRow(id="conv_no_state", labels={"omnigent.wrapper": "x"})
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    row = _BadgeRow(id="conv_no_state", labels={"goalrail.wrapper": "x"})
     cell = _render_workspace_cell(row, current_cwd=tmp_path.resolve())
     assert cell is None
 
@@ -1089,13 +1089,13 @@ def test_render_workspace_cell_matching_cwd_no_flag(
     *where* the session was started; only the action-required
     hint is suppressed.
     """
-    from omnigent.claude_native_state import write_launch_state
-    from omnigent.repl._resume_picker import _render_workspace_cell
+    from goalrail.claude_native_state import write_launch_state
+    from goalrail.repl._resume_picker import _render_workspace_cell
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.chdir(tmp_path)
     write_launch_state("conv_match", str(tmp_path.resolve()))
-    row = _BadgeRow(id="conv_match", labels={"omnigent.wrapper": "claude-code-native-ui"})
+    row = _BadgeRow(id="conv_match", labels={"goalrail.wrapper": "claude-code-native-ui"})
 
     cell = _render_workspace_cell(row, current_cwd=tmp_path.resolve())
     assert cell is not None
@@ -1119,16 +1119,16 @@ def test_render_workspace_cell_mismatched_cwd_shows_cd_flag(
     this row is picked — without it the user has no way to
     anticipate the prompt.
     """
-    from omnigent.claude_native_state import write_launch_state
-    from omnigent.repl._resume_picker import _render_workspace_cell
+    from goalrail.claude_native_state import write_launch_state
+    from goalrail.repl._resume_picker import _render_workspace_cell
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
     recorded = tmp_path / "recorded"
     recorded.mkdir()
     current = tmp_path / "current"
     current.mkdir()
     write_launch_state("conv_mismatch", str(recorded.resolve()))
-    row = _BadgeRow(id="conv_mismatch", labels={"omnigent.wrapper": "claude-code-native-ui"})
+    row = _BadgeRow(id="conv_mismatch", labels={"goalrail.wrapper": "claude-code-native-ui"})
 
     cell = _render_workspace_cell(row, current_cwd=current.resolve())
     assert cell is not None
@@ -1157,10 +1157,10 @@ def test_workspace_metadata_appears_in_wrapper_picker_list(
     ``show_workspace=True`` somewhere between the wrapper picker
     entry point and item rendering is caught.
     """
-    from omnigent.claude_native_state import write_launch_state
-    from omnigent.repl._resume_picker import pick_conversation
+    from goalrail.claude_native_state import write_launch_state
+    from goalrail.repl._resume_picker import pick_conversation
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
     workspace = tmp_path / "ws-marker"
     workspace.mkdir()
     monkeypatch.chdir(workspace)
@@ -1168,7 +1168,7 @@ def test_workspace_metadata_appears_in_wrapper_picker_list(
     row = _BadgeRow(
         id="conv_ws",
         title="with ws",
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     out = io.StringIO()
@@ -1205,18 +1205,18 @@ def test_render_workspace_cell_codex_native_uses_codex_state(
     :param tmp_path: Temporary state root and workspace.
     :returns: None.
     """
-    from omnigent.codex_native_state import write_launch_state
-    from omnigent.repl._resume_picker import _render_workspace_cell
+    from goalrail.codex_native_state import write_launch_state
+    from goalrail.repl._resume_picker import _render_workspace_cell
 
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(tmp_path / "codex-state"))
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "claude-state"))
+    monkeypatch.setenv("GOALRAIL_CODEX_NATIVE_STATE_DIR", str(tmp_path / "codex-state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "claude-state"))
     workspace = tmp_path / "codex-workspace"
     workspace.mkdir()
     write_launch_state("conv_codex_ws", str(workspace.resolve()))
     row = _BadgeRow(
         id="conv_codex_ws",
         title="codex ws",
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
 
     cell = _render_workspace_cell(row, current_cwd=tmp_path.resolve())
@@ -1238,13 +1238,13 @@ def test_workspace_metadata_omits_unrecorded_workspace_segment(
     showing workspace metadata for rows where the wrapper actually
     recorded a cwd.
     """
-    from omnigent.repl._resume_picker import pick_conversation
+    from goalrail.repl._resume_picker import pick_conversation
 
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
+    monkeypatch.setenv("GOALRAIL_CLAUDE_NATIVE_STATE_DIR", str(tmp_path / "state"))
     row = _BadgeRow(
         id="conv_without_ws",
         title="without ws",
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     out = io.StringIO()

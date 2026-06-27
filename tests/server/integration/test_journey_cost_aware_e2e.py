@@ -28,8 +28,8 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runtime import session_stream
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime import session_stream
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.server.helpers import create_test_agent
@@ -178,7 +178,7 @@ async def test_cost_budget_ask_then_deny_lifecycle(
                 "session_cost_guard": {
                     "type": "function",
                     "function": {
-                        "path": "omnigent.policies.builtins.cost.cost_budget",
+                        "path": "goalrail.policies.builtins.cost.cost_budget",
                         "arguments": {
                             "max_cost_usd": 0.05,
                             "ask_thresholds_usd": [0.01],
@@ -278,7 +278,7 @@ async def test_cost_control_toggle_independent_of_policy_evaluation(
                 "session_cost_guard": {
                     "type": "function",
                     "function": {
-                        "path": "omnigent.policies.builtins.cost.cost_budget",
+                        "path": "goalrail.policies.builtins.cost.cost_budget",
                         "arguments": {
                             "max_cost_usd": 0.05,
                             "ask_thresholds_usd": [0.01],

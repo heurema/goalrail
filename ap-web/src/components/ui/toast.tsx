@@ -12,7 +12,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { XIcon } from "lucide-react";
 
-const TOAST_EVENT = "omnigent:toast";
+const TOAST_EVENT = "goalrail:toast";
 const DEFAULT_DURATION_MS = 6000;
 
 interface ToastItem {

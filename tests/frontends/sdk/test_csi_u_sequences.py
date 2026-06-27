@@ -1,7 +1,7 @@
 """
 Unit tests for the Kitty Keyboard Protocol (CSI-u) escape
 sequence registration in
-:mod:`omnigent_ui_sdk.terminal._host`.
+:mod:`goalrail_ui_sdk.terminal._host`.
 
 The host installs a set of ``\\x1b[<cp>;<modifier>u`` →
 :class:`prompt_toolkit.keys.Keys` translations at construction
@@ -24,7 +24,7 @@ These tests pin two contracts:
 
 from __future__ import annotations
 
-from omnigent_ui_sdk import TerminalHost
+from goalrail_ui_sdk import TerminalHost
 
 
 def _ansi_sequences() -> dict[str, object]:

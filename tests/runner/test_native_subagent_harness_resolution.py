@@ -39,8 +39,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.runner import create_runner_app
-from omnigent.spec.types import AgentSpec, ExecutorSpec
+from goalrail.runner import create_runner_app
+from goalrail.spec.types import AgentSpec, ExecutorSpec
 
 # Reuse the proven harness/process-manager/client stubs from the sessions-native
 # suite so this repro drives the exact same dispatch path the runner uses.
@@ -65,12 +65,12 @@ def _polly_spec_tree() -> AgentSpec:
     child = AgentSpec(
         spec_version=1,
         name=SUB_AGENT_NAME,
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "claude-native"}),
     )
     return AgentSpec(
         spec_version=1,
         name="polly",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-sdk"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "claude-sdk"}),
         sub_agents=[child],
     )
 
@@ -293,7 +293,7 @@ async def test_reconnect_catch_up_scan_keeps_child_native_harness() -> None:
     The fix recovers ``sub_agent_name`` from the server snapshot so the turn
     resolves ``claude-native`` instead.
     """
-    from omnigent.runner.app import _session_histories_ref
+    from goalrail.runner.app import _session_histories_ref
 
     pm = _FakeProcessManager(
         _ScriptedHarnessClient(

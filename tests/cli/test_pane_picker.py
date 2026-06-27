@@ -1,5 +1,5 @@
 """
-Unit tests for ``omnigent pane-picker``'s argv normalization.
+Unit tests for ``goalrail pane-picker``'s argv normalization.
 
 The picker is exec'd as the new tmux pane's initial command after a
 ``pane-split``. It reads the parent pane's launch context, strips
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.cli import _strip_one_shot_flags, _strip_resume_flags
+from goalrail.cli import _strip_one_shot_flags, _strip_resume_flags
 
 
 @pytest.mark.parametrize(
@@ -22,57 +22,57 @@ from omnigent.cli import _strip_one_shot_flags, _strip_resume_flags
     [
         # Bare ``--resume`` (picker mode): drop the single token.
         (
-            ["omnigent", "run", "a.yaml", "--profile", "prf", "--resume"],
-            ["omnigent", "run", "a.yaml", "--profile", "prf"],
+            ["goalrail", "run", "a.yaml", "--profile", "prf", "--resume"],
+            ["goalrail", "run", "a.yaml", "--profile", "prf"],
         ),
         # ``--resume`` with a conversation id: drop both tokens.
         (
-            ["omnigent", "run", "a.yaml", "--resume", "conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--resume", "conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``--resume=conv_id`` long-form: drop the combined token.
         (
-            ["omnigent", "run", "a.yaml", "--resume=conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--resume=conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``-r`` short form, no value: drop the single token.
         (
-            ["omnigent", "run", "a.yaml", "-r"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "-r"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``-r conv_id`` short form with value: drop both tokens.
         (
-            ["omnigent", "run", "a.yaml", "-r", "conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "-r", "conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # Continue forms (always boolean).
         (
-            ["omnigent", "run", "a.yaml", "-c"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "-c"],
+            ["goalrail", "run", "a.yaml"],
         ),
         (
-            ["omnigent", "run", "a.yaml", "--continue"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--continue"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # Legacy ``--session`` / ``-s`` shapes still strip cleanly so
         # a parent argv saved before the resume/session consolidation
         # sanitizes without errors.
         (
-            ["omnigent", "run", "a.yaml", "--session", "conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--session", "conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         (
-            ["omnigent", "run", "a.yaml", "-s", "conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "-s", "conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         (
-            ["omnigent", "run", "a.yaml", "--session=conv_abc"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--session=conv_abc"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # Multiple resume flags in one argv: all dropped.
         (
             [
-                "omnigent",
+                "goalrail",
                 "run",
                 "a.yaml",
                 "--profile",
@@ -82,14 +82,14 @@ from omnigent.cli import _strip_one_shot_flags, _strip_resume_flags
                 "--resume",
                 "conv_x",
             ],
-            ["omnigent", "run", "a.yaml", "--profile", "prf"],
+            ["goalrail", "run", "a.yaml", "--profile", "prf"],
         ),
         # Non-resume flags survive intact even when sandwiched
         # between resume flags. Bare ``--resume`` followed by
         # another flag must NOT swallow that flag as its value.
         (
             [
-                "omnigent",
+                "goalrail",
                 "run",
                 "a.yaml",
                 "--resume",
@@ -100,14 +100,14 @@ from omnigent.cli import _strip_one_shot_flags, _strip_resume_flags
                 "--model",
                 "m",
             ],
-            ["omnigent", "run", "a.yaml", "--profile", "prf", "--model", "m"],
+            ["goalrail", "run", "a.yaml", "--profile", "prf", "--model", "m"],
         ),
         # Empty argv → empty.
         ([], []),
         # Non-resume argv: identity.
         (
-            ["omnigent", "run", "a.yaml", "--model", "m", "--profile", "prf"],
-            ["omnigent", "run", "a.yaml", "--model", "m", "--profile", "prf"],
+            ["goalrail", "run", "a.yaml", "--model", "m", "--profile", "prf"],
+            ["goalrail", "run", "a.yaml", "--model", "m", "--profile", "prf"],
         ),
     ],
 )
@@ -136,25 +136,25 @@ def test_strip_resume_flags(argv: list[str], expected: list[str]) -> None:
     [
         # ``-p`` short form: drop the flag and its value.
         (
-            ["omnigent", "run", "a.yaml", "-p", "hello there"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "-p", "hello there"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``--prompt`` long form.
         (
-            ["omnigent", "run", "a.yaml", "--prompt", "hello"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--prompt", "hello"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``--prompt=value``.
         (
-            ["omnigent", "run", "a.yaml", "--prompt=hello"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--prompt=hello"],
+            ["goalrail", "run", "a.yaml"],
         ),
         # ``--system-prompt`` (note: spans both an arg-bearing flag
         # and a similarly named flag — make sure we don't strip
         # ``--system`` or ``--prompt-foo`` accidentally).
         (
-            ["omnigent", "run", "a.yaml", "--system-prompt", "be terse"],
-            ["omnigent", "run", "a.yaml"],
+            ["goalrail", "run", "a.yaml", "--system-prompt", "be terse"],
+            ["goalrail", "run", "a.yaml"],
         ),
     ],
 )

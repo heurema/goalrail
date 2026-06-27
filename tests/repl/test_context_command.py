@@ -1,7 +1,7 @@
 """Unit tests for the REPL's ``/context`` slash command.
 
 Mirrors :mod:`tests.repl.test_model_command`. Drives
-:func:`omnigent.repl._repl.handle_slash_command` against a host /
+:func:`goalrail.repl._repl.handle_slash_command` against a host /
 session stub and asserts on the rendered output for both the
 unknown-context-window and known-context-window paths.
 
@@ -22,9 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-from omnigent_ui_sdk import RichBlockFormatter
+from goalrail_ui_sdk import RichBlockFormatter
 
-from omnigent.repl._repl import (
+from goalrail.repl._repl import (
     COMMANDS,
     _items_for_context_token_count,
     _update_context_ring_estimate,
@@ -104,7 +104,7 @@ def _patch_count_tokens(
         e.g. ``35_000``.
     """
     monkeypatch.setattr(
-        "omnigent.runtime.compaction.count_tokens",
+        "goalrail.runtime.compaction.count_tokens",
         lambda messages, model: message_tokens,
     )
 
@@ -431,7 +431,7 @@ async def test_context_uses_host_tokens_used_when_set(
             "/context must use the cached value instead of recomputing."
         )
 
-    monkeypatch.setattr("omnigent.runtime.compaction.count_tokens", _should_not_count)
+    monkeypatch.setattr("goalrail.runtime.compaction.count_tokens", _should_not_count)
 
     # Patch _fetch_context_items to raise — no HTTP call should happen
     async def _should_not_fetch(*_args, **_kwargs):
@@ -440,7 +440,7 @@ async def test_context_uses_host_tokens_used_when_set(
             "/context must use the cached value instead of fetching items."
         )
 
-    monkeypatch.setattr("omnigent.repl._repl._fetch_context_items", _should_not_fetch)
+    monkeypatch.setattr("goalrail.repl._repl._fetch_context_items", _should_not_fetch)
 
     host = CapturingHost()
     # Simulate the idle-event fallback having set tokens_used after a completed turn.
@@ -483,7 +483,7 @@ def test_context_ring_state_initialized_to_false() -> None:
     """
     import inspect
 
-    from omnigent.repl import _repl
+    from goalrail.repl import _repl
 
     src = inspect.getsource(_repl.run_repl)
     # The initialiser line must set the flag to False (not True).
@@ -644,7 +644,7 @@ async def test_idle_ring_estimate_model_fallback(
     # count_tokens is imported with a local `from … import` inside the
     # helper, so patching the source module attribute takes effect.
     monkeypatch.setattr(
-        "omnigent.runtime.compaction.count_tokens",
+        "goalrail.runtime.compaction.count_tokens",
         _recording_count_tokens,
     )
 

@@ -27,7 +27,7 @@ policies:
     type: function
     on: [tool_call:web_search]
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: allow
         set_labels: {integrity: "0"}
@@ -39,7 +39,7 @@ policies:
     type: function
     on: [tool_call:read_confidential]
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: allow
         set_labels: {sensitivity: confidential}
@@ -65,7 +65,7 @@ policies:
       integrity: "0"
       sensitivity: confidential
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: deny
         reason: |

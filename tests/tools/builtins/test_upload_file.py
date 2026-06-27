@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.upload_file import UploadFileTool
+from goalrail.tools.base import ToolContext
+from goalrail.tools.builtins.upload_file import UploadFileTool
 
 
 @pytest.fixture()
@@ -106,14 +106,14 @@ def test_upload_file_stores_and_returns_file_id(
             """
             stored_artifacts.append((key, data))
 
-    # _upload() does: from omnigent.runtime import get_file_store, get_artifact_store
+    # _upload() does: from goalrail.runtime import get_file_store, get_artifact_store
     # The import resolves at call time, so patch the runtime module.
     monkeypatch.setattr(
-        "omnigent.runtime.get_file_store",
+        "goalrail.runtime.get_file_store",
         lambda: _FakeFileStore(),
     )
     monkeypatch.setattr(
-        "omnigent.runtime.get_artifact_store",
+        "goalrail.runtime.get_artifact_store",
         lambda: _FakeArtifactStore(),
     )
 

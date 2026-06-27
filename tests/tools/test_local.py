@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.local (LocalPythonTool subprocess execution)."""
+"""Tests for goalrail.tools.local (LocalPythonTool subprocess execution)."""
 
 from __future__ import annotations
 
@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
-from omnigent.spec.types import LocalToolInfo, SandboxConfig
-from omnigent.tools.base import ToolContext
-from omnigent.tools.local import (
+from goalrail.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
+from goalrail.spec.types import LocalToolInfo, SandboxConfig
+from goalrail.tools.base import ToolContext
+from goalrail.tools.local import (
     LocalPythonTool,
     LocalToolLoadError,
     load_local_python_tools,
@@ -56,7 +56,7 @@ def _write_decorated_tool(
     indented_body = "\n".join(f"    {line}" for line in body_lines)
     code = (
         '"""Test tool."""\n'
-        "from omnigent_client import tool\n"
+        "from goalrail_client import tool\n"
         "\n"
         "\n"
         f"@tool{extra_decoration}\n"
@@ -276,7 +276,7 @@ def test_load_multiple_tools_in_one_file(tmp_path: Path) -> None:
     multi = textwrap.dedent(
         '''\
         """Multi-tool file."""
-        from omnigent_client import tool
+        from goalrail_client import tool
 
 
         @tool
@@ -545,7 +545,7 @@ def test_tool_get_schema_uses_metadata_name_and_description(
         textwrap.dedent(
             '''\
             """Doctool file."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -583,7 +583,7 @@ def test_pep723_scanning_at_load_time(tmp_path: Path) -> None:
             # dependencies = ["requests>=2.0"]
             # ///
             """A tool with PEP 723 deps."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -611,7 +611,7 @@ def _run_runner_with_request(tool_path: Path, tool_name: str, arguments: dict) -
     Uses fd 3 protocol so the test mirrors the real production
     invocation path, not the Docker fallback.
     """
-    runner = Path(__file__).parent.parent.parent / "omnigent" / "tools" / "_runner.py"
+    runner = Path(__file__).parent.parent.parent / "goalrail" / "tools" / "_runner.py"
     request = json.dumps(
         {
             "module_path": str(tool_path),
@@ -649,7 +649,7 @@ def test_runner_dispatches_to_named_function(tmp_path: Path) -> None:
         textwrap.dedent(
             '''\
             """Multi-tool file."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -678,7 +678,7 @@ def test_runner_rejects_undecorated_function(tmp_path: Path) -> None:
         textwrap.dedent(
             '''\
             """Mixed file with both decorated and bare functions."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -717,7 +717,7 @@ def test_runner_runtime_error(tmp_path: Path) -> None:
         textwrap.dedent(
             '''\
             """Tool that always raises."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -743,7 +743,7 @@ def test_runner_serializes_dict_return(tmp_path: Path) -> None:
         textwrap.dedent(
             '''\
             """Returns a dict."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool
@@ -767,7 +767,7 @@ def test_runner_passes_string_return_unchanged(tmp_path: Path) -> None:
         textwrap.dedent(
             '''\
             """Returns a string."""
-            from omnigent_client import tool
+            from goalrail_client import tool
 
 
             @tool

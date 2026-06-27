@@ -1,5 +1,5 @@
 """
-Unit tests for :class:`omnigent_ui_sdk.OverlayAction` —
+Unit tests for :class:`goalrail_ui_sdk.OverlayAction` —
 per-target action keybindings registered on a sidebar
 overlay.
 
@@ -22,7 +22,7 @@ the live overlay).
 from __future__ import annotations
 
 import pytest
-from omnigent_ui_sdk import (
+from goalrail_ui_sdk import (
     Overlay,
     OverlayAction,
     OverlayTarget,

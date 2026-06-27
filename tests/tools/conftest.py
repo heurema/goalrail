@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.tools.base import ToolContext
+from goalrail.tools.base import ToolContext
 
 
 @pytest.fixture()

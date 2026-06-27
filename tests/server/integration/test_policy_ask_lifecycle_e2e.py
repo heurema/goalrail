@@ -33,17 +33,17 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime import pending_elicitations, session_stream
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime import pending_elicitations, session_stream
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.app import create_app
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 from tests.server.conftest import ControllableMockClient
 from tests.server.helpers import create_test_agent
 
@@ -107,8 +107,8 @@ async def client(
     :param db_uri: Test database URI.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from goalrail.runtime import set_harness_process_manager
+    from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()
@@ -116,7 +116,7 @@ async def client(
 
     # Wire the policy store into the runtime global so
     # ``get_policy_store()`` returns it during evaluate.
-    from omnigent.runtime import _globals
+    from goalrail.runtime import _globals
 
     monkeypatch.setattr(_globals, "_policy_store", SqlAlchemyPolicyStore(db_uri))
 
@@ -164,7 +164,7 @@ async def _attach_ask_policy(
         json={
             "name": "test_ask_policy",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
     )
     assert resp.status_code == 200, f"attach policy failed: {resp.status_code} {resp.text}"

@@ -58,7 +58,7 @@ export interface ServerInfo {
   sandbox_provider: string | null;
   /**
    * True when the server has a routing client configured
-   * (``OMNIGENT_SMART_ROUTING=1`` + ``llm:`` config). Hidden by default.
+   * (``GOALRAIL_SMART_ROUTING=1`` + ``llm:`` config). Hidden by default.
    */
   smart_routing_enabled: boolean;
 }
@@ -91,7 +91,7 @@ export async function resolveServerInfo(): Promise<ServerInfo> {
   _pending = (async () => {
     try {
       // Route through the host transport (`hostFetch`) so the embed hits the
-      // proxied omnigent API; standalone `hostFetch` falls back to plain
+      // proxied goalrail API; standalone `hostFetch` falls back to plain
       // `fetch("/v1/info")`, preserving the original behavior.
       const res = await hostFetch("/v1/info");
       if (res.ok) {

@@ -22,11 +22,11 @@ import { NewChatLandingScreen, sanitizeInitialPrompt } from "./NewChatDialog";
 const navigateMock = vi.fn();
 const setPendingInitialPromptMock = vi.fn();
 
-const RECENT_KEY = "omnigent:recent-workspaces";
+const RECENT_KEY = "goalrail:recent-workspaces";
 // Prompt history is scoped per conversation; the landing composer writes under
 // the newly created session id (``conv_new`` in these tests), so the recall
 // stack lives at the prefixed key, not the bare one.
-const PROMPT_HISTORY_KEY = "omnigent:prompt-history:conv_new";
+const PROMPT_HISTORY_KEY = "goalrail:prompt-history:conv_new";
 // The seeded working directory (from the host's persisted recent) that the
 // create body must carry through.
 const SEEDED_WORKSPACE = "/Users/corey/universe/src/foo";
@@ -249,7 +249,7 @@ describe("NewChatLandingScreen create flow", () => {
     renderLanding();
     await waitForWorkspaceSeed();
     const input = screen.getByTestId("new-chat-landing-input");
-    fireEvent.change(input, { target: { value: "omnigent" } });
+    fireEvent.change(input, { target: { value: "goalrail" } });
 
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
     expect(authenticatedFetch).not.toHaveBeenCalled();
@@ -463,8 +463,8 @@ describe("NewChatLandingScreen create flow", () => {
     // the UI keys off to render the terminal wrapper. Dropping them would make
     // a native Claude Code session render as a plain chat.
     expect(body.labels).toEqual({
-      "omnigent.ui": "terminal",
-      "omnigent.wrapper": "claude-code-native-ui",
+      "goalrail.ui": "terminal",
+      "goalrail.wrapper": "claude-code-native-ui",
     });
   });
 
@@ -490,8 +490,8 @@ describe("NewChatLandingScreen create flow", () => {
     // agent name (unlike claude, whose wrapper is "claude-code-native-ui").
     // The runner/server key off exactly this value to boot the agy terminal.
     expect(body.labels).toEqual({
-      "omnigent.ui": "terminal",
-      "omnigent.wrapper": "antigravity-native-ui",
+      "goalrail.ui": "terminal",
+      "goalrail.wrapper": "antigravity-native-ui",
     });
   });
 
@@ -546,7 +546,7 @@ describe("NewChatLandingScreen create flow", () => {
     const body = JSON.parse(init.body as string);
     // Anchor on the wrapper label so the absence check below isn't vacuous
     // against a malformed body.
-    expect(body.labels?.["omnigent.wrapper"]).toBe("claude-code-native-ui");
+    expect(body.labels?.["goalrail.wrapper"]).toBe("claude-code-native-ui");
     // "Default" → no flag persisted (undefined is dropped by JSON.stringify),
     // so the runner launches claude with its own default.
     expect(body.terminal_launch_args).toBeUndefined();
@@ -598,7 +598,7 @@ describe("NewChatLandingScreen create flow", () => {
     await waitFor(() => expect(authenticatedFetch).toHaveBeenCalledTimes(1));
     const [, init] = vi.mocked(authenticatedFetch).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
-    expect(body.labels?.["omnigent.wrapper"]).toBe("codex-native-ui");
+    expect(body.labels?.["goalrail.wrapper"]).toBe("codex-native-ui");
     expect(body.terminal_launch_args).toBeUndefined();
   });
 
@@ -834,7 +834,7 @@ describe("NewChatLandingScreen create flow", () => {
     fireEvent.click(screen.getByTestId("new-chat-landing-agent-ag_two"));
     // The explicit pick persists immediately — no session has to be created
     // for the preference to stick.
-    expect(localStorage.getItem("omnigent:last-agent-id")).toBe("ag_two");
+    expect(localStorage.getItem("goalrail:last-agent-id")).toBe("ag_two");
 
     // A fresh mount (the "next visit") must start on the remembered agent:
     // submitting without touching the picker posts ag_two, not the
@@ -858,7 +858,7 @@ describe("NewChatLandingScreen create flow", () => {
     // A persisted pick can outlive its agent (unregistered between visits).
     // The stale id must lose to the catalog default — not yield an unusable
     // composer or post a dangling agent_id.
-    localStorage.setItem("omnigent:last-agent-id", "ag_gone");
+    localStorage.setItem("goalrail:last-agent-id", "ag_gone");
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "conv_new" }),

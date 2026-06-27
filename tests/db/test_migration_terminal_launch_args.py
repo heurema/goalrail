@@ -17,7 +17,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 
-from omnigent.db.utils import clear_engine_cache, get_or_create_engine
+from goalrail.db.utils import clear_engine_cache, get_or_create_engine
 
 
 @pytest.fixture

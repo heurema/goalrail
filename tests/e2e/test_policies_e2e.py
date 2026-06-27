@@ -63,14 +63,14 @@ _LABEL_GATE_EXTRA_CONFIG: dict = {
     "policies": {
         "taint_on_banana": {
             "type": "function",
-            "handler": "omnigent._e2e_policy_callables.taint_on_banana",
+            "handler": "goalrail._e2e_policy_callables.taint_on_banana",
         },
         "deny_when_tainted": {
             "type": "function",
             "on": ["request"],
             "condition": {"tainted": "1"},
             "function": {
-                "path": "omnigent.policies.function.make_fixed_action_callable",
+                "path": "goalrail.policies.function.make_fixed_action_callable",
                 "arguments": {
                     "action": "deny",
                     "reason": "Conversation is tainted from a prior turn.",
@@ -191,7 +191,7 @@ def test_policy_gate_allows_clean_message(
             "policies": {
                 "block_sentinel": {
                     "type": "function",
-                    "handler": "omnigent._e2e_policy_callables.block_on_sentinel",
+                    "handler": "goalrail._e2e_policy_callables.block_on_sentinel",
                 },
             },
         },
@@ -535,7 +535,7 @@ _DENY_CANADA_POLICY_CONFIG = {
         "deny_canada": {
             "type": "function",
             "function": {
-                "path": "omnigent.policies.builtins.prompt.prompt_policy",
+                "path": "goalrail.policies.builtins.prompt.prompt_policy",
                 "arguments": {
                     "prompt": (
                         "You are a strict content filter. Look at the user's "

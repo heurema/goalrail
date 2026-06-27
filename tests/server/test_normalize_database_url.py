@@ -1,6 +1,6 @@
 import pytest
 
-from omnigent.db.utils import normalize_database_url
+from goalrail.db.utils import normalize_database_url
 
 
 @pytest.mark.parametrize(
@@ -23,8 +23,8 @@ from omnigent.db.utils import normalize_database_url
         ),
         # SQLite (local dev) — pass through unchanged
         (
-            "sqlite:///./omnigent.db",
-            "sqlite:///./omnigent.db",
+            "sqlite:///./goalrail.db",
+            "sqlite:///./goalrail.db",
         ),
         # Credentials with special characters survive the prefix rewrite
         (

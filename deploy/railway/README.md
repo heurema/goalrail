@@ -16,7 +16,7 @@ a managed Postgres, and serves it over HTTPS on `*.up.railway.app`.
 
 ## What gets provisioned
 
-- **omnigent** — web service that pulls `ghcr.io/omnigent-ai/omnigent-server`
+- **goalrail** — web service that pulls `ghcr.io/heurema/goalrail-server`
   via `deploy/docker/Dockerfile.prebuilt`, served on `https://<project>.up.railway.app`.
 - **Postgres** — Railway-managed PostgreSQL plugin you add to the project.
   Railway links its `DATABASE_URL` into the app as a reference to the database
@@ -64,9 +64,9 @@ steps below are validated end-to-end:
 > Settings → Networking and set the domain's target port to the `PORT` Railway
 > injected (shown in the boot log as `Uvicorn running on …:<port>`).
 
-> The cookie secret is auto-minted and `OMNIGENT_ACCOUNTS_BASE_URL` is
+> The cookie secret is auto-minted and `GOALRAIL_ACCOUNTS_BASE_URL` is
 > auto-detected from `RAILWAY_PUBLIC_DOMAIN`, so those don't need setting. To
-> pin a known admin password, set `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD`
+> pin a known admin password, set `GOALRAIL_ACCOUNTS_INIT_ADMIN_PASSWORD`
 > before first boot.
 
 ## Use your own IdP instead (OIDC)
@@ -83,17 +83,17 @@ your project before completing these steps.
    - Authorization callback URL: `https://<project>.up.railway.app/auth/callback`
    - Click **Register application**, then **Generate a new client secret**.
 
-2. In your Railway project, open the **omnigent** service → **Variables**
+2. In your Railway project, open the **goalrail** service → **Variables**
    and add:
 
    | Variable | Value |
    |---|---|
-   | `OMNIGENT_AUTH_PROVIDER` | `oidc` |
-   | `OMNIGENT_OIDC_ISSUER` | `https://github.com` |
-   | `OMNIGENT_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
-   | `OMNIGENT_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
-   | `OMNIGENT_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
-   | `OMNIGENT_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
+   | `GOALRAIL_AUTH_PROVIDER` | `oidc` |
+   | `GOALRAIL_OIDC_ISSUER` | `https://github.com` |
+   | `GOALRAIL_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
+   | `GOALRAIL_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
+   | `GOALRAIL_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
+   | `GOALRAIL_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
 
 3. Railway redeploys automatically. Visit the URL — you'll be redirected to
    GitHub to log in.
@@ -102,21 +102,21 @@ your project before completing these steps.
 
 | Variable | Value |
 |---|---|
-| `OMNIGENT_AUTH_PROVIDER` | `oidc` |
-| `OMNIGENT_OIDC_ISSUER` | `https://accounts.google.com` |
-| `OMNIGENT_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
-| `OMNIGENT_OIDC_CLIENT_SECRET` | your client secret |
-| `OMNIGENT_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
-| `OMNIGENT_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
-| `OMNIGENT_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
+| `GOALRAIL_AUTH_PROVIDER` | `oidc` |
+| `GOALRAIL_OIDC_ISSUER` | `https://accounts.google.com` |
+| `GOALRAIL_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
+| `GOALRAIL_OIDC_CLIENT_SECRET` | your client secret |
+| `GOALRAIL_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
+| `GOALRAIL_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
+| `GOALRAIL_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
 
-> **Important:** Without `OMNIGENT_OIDC_ALLOWED_DOMAINS`, any Google account
+> **Important:** Without `GOALRAIL_OIDC_ALLOWED_DOMAINS`, any Google account
 > can log in when the OAuth consent screen is "External." Always restrict to
 > your domain.
 
 ### Generic OIDC (Okta, Auth0, Keycloak, Entra ID)
 
-Set `OMNIGENT_OIDC_ISSUER` to your IdP's base URL (the one that publishes
+Set `GOALRAIL_OIDC_ISSUER` to your IdP's base URL (the one that publishes
 `/.well-known/openid-configuration`). The rest of the variables are the same
 as above.
 
@@ -126,7 +126,7 @@ In your Railway project, open **Settings** → **Domains** → **Add domain**.
 Point your DNS A/AAAA record at the Railway-assigned address. Railway
 provisions a Let's Encrypt cert automatically.
 
-Update `OMNIGENT_OIDC_REDIRECT_URI` to use the custom domain after DNS
+Update `GOALRAIL_OIDC_REDIRECT_URI` to use the custom domain after DNS
 propagates.
 
 ## Upgrading
@@ -134,7 +134,7 @@ propagates.
 Railway redeploys automatically when a new image tag is pushed to GHCR
 (if you've configured a webhook) or on demand:
 
-1. In the Railway dashboard, open the **omnigent** service.
+1. In the Railway dashboard, open the **goalrail** service.
 2. Click **Deploy** → **Latest** to pull the newest `:latest` image.
 
 ## Cost

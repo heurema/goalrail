@@ -99,11 +99,11 @@ def test_server_redirect_active_with_env(monkeypatch: pytest.MonkeyPatch) -> Non
     compat.apply_server_env(env, "/repo/root")
     assert "PYTHONPATH" not in env
     # Compat mode runs the server from a neutral dir that does NOT contain an
-    # omnigent/ package (else CWD on sys.path[0] would shadow the old install).
+    # goalrail/ package (else CWD on sys.path[0] would shadow the old install).
     cwd = compat.compat_server_cwd()
     assert cwd is not None
     assert os.path.isdir(cwd)
-    assert not os.path.exists(os.path.join(cwd, "omnigent"))
+    assert not os.path.exists(os.path.join(cwd, "goalrail"))
 
 
 # ── Runner / host redirect (Config 2) ──────────────────────────────────
@@ -155,11 +155,11 @@ def test_runner_redirect_active_with_env(monkeypatch: pytest.MonkeyPatch) -> Non
     env = {"PYTHONPATH": "/repo/root:/x"}
     compat.apply_runner_env(env)
     assert "PYTHONPATH" not in env
-    # Neutral CWD with no omnigent/ package (mirrors the server cwd guard).
+    # Neutral CWD with no goalrail/ package (mirrors the server cwd guard).
     cwd = compat.compat_runner_cwd()
     assert cwd is not None
     assert os.path.isdir(cwd)
-    assert not os.path.exists(os.path.join(cwd, "omnigent"))
+    assert not os.path.exists(os.path.join(cwd, "goalrail"))
 
 
 def test_server_and_runner_cwds_are_distinct(monkeypatch: pytest.MonkeyPatch) -> None:

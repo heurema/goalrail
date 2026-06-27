@@ -18,8 +18,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-import omnigent.claude_native_forwarder as forwarder
-from omnigent.claude_native_bridge import (
+import goalrail.claude_native_forwarder as forwarder
+from goalrail.claude_native_bridge import (
     BRIDGE_ID_LABEL_KEY,
     ClaudeMessageDelta,
     ClaudeTranscriptItem,
@@ -28,11 +28,11 @@ from omnigent.claude_native_bridge import (
     record_hook_event,
     write_active_session_id,
 )
-from omnigent.claude_native_forwarder import (
+from goalrail.claude_native_forwarder import (
     _persist_native_compaction_item,
     forward_claude_transcript_to_session,
 )
-from omnigent.reasoning_effort import CLAUDE_EFFORTS, EFFORT_CLEAR_VALUES
+from goalrail.reasoning_effort import CLAUDE_EFFORTS, EFFORT_CLEAR_VALUES
 
 
 @pytest.fixture(autouse=True)
@@ -44,8 +44,8 @@ def _allow_tmp_path_as_bridge_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Pat
     :param tmp_path: Per-test temp directory.
     :returns: None.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path)
 
 
 class _RecordingHTTPServer(ThreadingHTTPServer):
@@ -71,7 +71,7 @@ def _handler_factory(
     """
 
     class _Handler(BaseHTTPRequestHandler):
-        """Request handler for the test Omnigent endpoint."""
+        """Request handler for the test Goalrail endpoint."""
 
         def log_message(self, format: str, *args: Any) -> None:
             """
@@ -154,7 +154,7 @@ async def _get_recorded_request(
     """
     Await one recorded request from the test server, filtered by method.
 
-    The forwarder mirrors Claude's native session id to Omnigent via a
+    The forwarder mirrors Claude's native session id to Goalrail via a
     one-shot ``PATCH /v1/sessions/{id}`` (see
     :func:`_maybe_mirror_external_session_id`). Most tests in this
     file assert on POSTs to ``/events``; defaulting the filter to
@@ -234,7 +234,7 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Claude ``/clear`` creates a fresh Omnigent session and consumes the hook.
+    Claude ``/clear`` creates a fresh Goalrail session and consumes the hook.
 
     This exercises the rotation transaction directly: create the new
     session, bind the same runner, transfer the terminal, rewrite the
@@ -242,7 +242,7 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
     hook cursor past the clear record so the next poll does not fork
     again from the same hook line.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -260,10 +260,10 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Mock the Omnigent session-rotation endpoints.
+        Mock the Goalrail session-rotation endpoints.
 
         :param request: Incoming request.
-        :returns: Canned Omnigent response.
+        :returns: Canned Goalrail response.
         """
         body = json.loads(request.content.decode("utf-8")) if request.content else None
         calls.append((request.method, request.url.path, body))
@@ -275,7 +275,7 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
                     "agent_id": "ag_claude",
                     "runner_id": "runner_one",
                     "labels": {
-                        "omnigent.ui": "terminal",
+                        "goalrail.ui": "terminal",
                         BRIDGE_ID_LABEL_KEY: "bridge_shared",
                     },
                 },
@@ -284,7 +284,7 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
             assert body == {
                 "agent_id": "ag_claude",
                 "labels": {
-                    "omnigent.ui": "terminal",
+                    "goalrail.ui": "terminal",
                     BRIDGE_ID_LABEL_KEY: "bridge_shared",
                 },
             }
@@ -342,7 +342,7 @@ async def test_clear_hook_rotates_active_session_without_reprocessing(
             {
                 "agent_id": "ag_claude",
                 "labels": {
-                    "omnigent.ui": "terminal",
+                    "goalrail.ui": "terminal",
                     BRIDGE_ID_LABEL_KEY: "bridge_shared",
                 },
             },
@@ -371,7 +371,7 @@ async def test_clear_hook_rotation_survives_old_runner_clear_failure(
     is cleanup only; the executor active-session guard prevents stale
     old-session writes from reaching tmux.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -388,10 +388,10 @@ async def test_clear_hook_rotation_survives_old_runner_clear_failure(
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Mock Omnigent rotation endpoints with a failing old-session cleanup.
+        Mock Goalrail rotation endpoints with a failing old-session cleanup.
 
         :param request: Incoming request.
-        :returns: Canned Omnigent response.
+        :returns: Canned Goalrail response.
         """
         nonlocal create_count
         body = json.loads(request.content.decode("utf-8")) if request.content else None
@@ -466,7 +466,7 @@ async def test_clear_hook_consumes_hook_rotated_session_without_duplicate_fork(
     It annotates the hook record so the background forwarder only
     advances its durable cursor and resets transcript state.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -478,7 +478,7 @@ async def test_clear_hook_consumes_hook_rotated_session_without_duplicate_fork(
         {
             "hook_event_name": "SessionStart",
             "source": "clear",
-            "omnigent_clear_rotated_to": "conv_new",
+            "goalrail_clear_rotated_to": "conv_new",
         },
     )
 
@@ -489,7 +489,7 @@ async def test_clear_hook_consumes_hook_rotated_session_without_duplicate_fork(
         :param request: Incoming request.
         :returns: Never returns.
         """
-        raise AssertionError(f"unexpected Omnigent request: {request.method} {request.url}")
+        raise AssertionError(f"unexpected Goalrail request: {request.method} {request.url}")
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
@@ -523,19 +523,19 @@ async def test_clear_hook_consumes_hook_rotated_session_without_duplicate_fork(
 
 
 @pytest.mark.asyncio
-async def test_fork_hook_creates_omnigent_fork_and_consumes_hook(
+async def test_fork_hook_creates_goalrail_fork_and_consumes_hook(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Claude ``/fork`` creates an Omnigent fork and consumes the hook.
+    Claude ``/fork`` creates an Goalrail fork and consumes the hook.
 
     This exercises the branch/fork transaction directly: fork the AP
     session, bind the same runner, transfer the terminal, rewrite the
     active bridge session, clear the old runner binding, and advance
     the hook cursor so the same hook line is not processed again.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -555,7 +555,7 @@ async def test_fork_hook_creates_omnigent_fork_and_consumes_hook(
         + "\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("omnigent.claude_native_bridge.time.time", lambda: 1779922393.245)
+    monkeypatch.setattr("goalrail.claude_native_bridge.time.time", lambda: 1779922393.245)
     record_hook_event(
         bridge_dir,
         {
@@ -563,18 +563,18 @@ async def test_fork_hook_creates_omnigent_fork_and_consumes_hook(
             "source": "resume",
             "session_id": "claude_fork",
             "transcript_path": str(transcript_path),
-            "omnigent_previous_claude_session_id": "claude_old",
-            "omnigent_claude_session_was_seen": False,
+            "goalrail_previous_claude_session_id": "claude_old",
+            "goalrail_claude_session_was_seen": False,
         },
     )
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Mock the Omnigent fork-rotation endpoints.
+        Mock the Goalrail fork-rotation endpoints.
 
         :param request: Incoming request.
-        :returns: Canned Omnigent response.
+        :returns: Canned Goalrail response.
         """
         body = json.loads(request.content.decode("utf-8")) if request.content else None
         calls.append((request.method, request.url.path, body))
@@ -586,7 +586,7 @@ async def test_fork_hook_creates_omnigent_fork_and_consumes_hook(
                     "agent_id": "ag_claude",
                     "runner_id": "runner_one",
                     "labels": {
-                        "omnigent.ui": "terminal",
+                        "goalrail.ui": "terminal",
                         BRIDGE_ID_LABEL_KEY: "bridge_shared",
                     },
                 },
@@ -669,7 +669,7 @@ async def test_fork_hook_consumes_hook_rotated_session_without_duplicate_fork(
     cursor and seeds transcript state past Claude's copied fork
     history.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -695,8 +695,8 @@ async def test_fork_hook_consumes_hook_rotated_session_without_duplicate_fork(
             "hook_event_name": "SessionStart",
             "source": "resume",
             "transcript_path": str(transcript_path),
-            "omnigent_fork_detected": True,
-            "omnigent_fork_rotated_to": "conv_fork",
+            "goalrail_fork_detected": True,
+            "goalrail_fork_rotated_to": "conv_fork",
         },
     )
 
@@ -707,7 +707,7 @@ async def test_fork_hook_consumes_hook_rotated_session_without_duplicate_fork(
         :param request: Incoming request.
         :returns: Never returns.
         """
-        raise AssertionError(f"unexpected Omnigent request: {request.method} {request.url}")
+        raise AssertionError(f"unexpected Goalrail request: {request.method} {request.url}")
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
@@ -746,19 +746,19 @@ async def test_fork_hook_consumes_hook_rotated_session_without_duplicate_fork(
 
 
 @pytest.mark.asyncio
-async def test_resume_seen_claude_fork_does_not_create_second_omnigent_fork(
+async def test_resume_seen_claude_fork_does_not_create_second_goalrail_fork(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Resuming an already-seen Claude branch does not create another Omnigent fork.
+    Resuming an already-seen Claude branch does not create another Goalrail fork.
 
     Claude branch transcripts retain ``forkedFrom`` metadata forever.
     This test fails if the forwarder treats that historical marker
     alone as a fresh `/fork` command after the hook recorded that the
     incoming Claude session had already been seen.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_old",
         bridge_id="bridge_shared",
@@ -784,19 +784,19 @@ async def test_resume_seen_claude_fork_does_not_create_second_omnigent_fork(
             "source": "resume",
             "session_id": "claude_fork",
             "transcript_path": str(transcript_path),
-            "omnigent_previous_claude_session_id": "claude_old",
-            "omnigent_claude_session_was_seen": True,
+            "goalrail_previous_claude_session_id": "claude_old",
+            "goalrail_claude_session_was_seen": True,
         },
     )
 
     def handler(request: httpx.Request) -> httpx.Response:
         """
-        Fail if the forwarder tries to create another Omnigent fork.
+        Fail if the forwarder tries to create another Goalrail fork.
 
         :param request: Incoming request.
         :returns: Never returns.
         """
-        raise AssertionError(f"unexpected Omnigent request: {request.method} {request.url}")
+        raise AssertionError(f"unexpected Goalrail request: {request.method} {request.url}")
 
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
@@ -819,11 +819,11 @@ async def test_resume_seen_claude_fork_does_not_create_second_omnigent_fork(
 @pytest.mark.asyncio
 async def test_forwarder_posts_visible_transcript_items(tmp_path: Path) -> None:
     """
-    The background forwarder reads Claude JSONL and posts Omnigent items.
+    The background forwarder reads Claude JSONL and posts Goalrail items.
 
     This catches the real-Claude failure where a terminal-originated
     prompt/tool/output sequence was written to Claude's transcript
-    but no process tailed that transcript into the Omnigent session
+    but no process tailed that transcript into the Goalrail session
     stream.
     """
     bridge_dir = tmp_path / "bridge"
@@ -1112,7 +1112,7 @@ async def test_forwarder_posts_web_injected_terminal_transcript_items(tmp_path: 
     Web-injected messages still surface only after Claude records them.
 
     The ``claude-native`` executor no longer owns transcript streaming
-    for Omnigent turns. This fails if a leftover pause/cursor path suppresses
+    for Goalrail turns. This fails if a leftover pause/cursor path suppresses
     terminal-originated output after a web message was typed into Claude.
     """
     bridge_dir = tmp_path / "bridge"
@@ -1407,12 +1407,12 @@ async def test_forwarder_posts_compaction_in_progress_on_precompact_hook(
     Claude Code's ``PreCompact`` hook surfaces as ``in_progress``.
 
     Claude compacts its own context in the terminal (manual ``/compact``
-    or automatic overflow); the Omnigent server never runs the compaction for
+    or automatic overflow); the Goalrail server never runs the compaction for
     a claude-native session. Without forwarding ``PreCompact``, the web
     UI gets no signal while Claude compacts — the gap the user reported
     (the summary flushes in with no "Compacting…" spinner). The
     forwarder maps it to ``external_compaction_status: in_progress`` so
-    Omnigent can publish the spinner SSE.
+    Goalrail can publish the spinner SSE.
     """
     bridge_dir = tmp_path / "bridge"
     transcript_path = tmp_path / "session.jsonl"
@@ -1864,7 +1864,7 @@ async def test_forwarder_start_at_end_uses_byte_offset_for_new_lines(
         raise AssertionError("start_at_end should seed and poll with byte offsets")
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.read_transcript_items_since_with_position",
+        "goalrail.claude_native_forwarder.read_transcript_items_since_with_position",
         _fail_line_cursor_reader,
     )
 
@@ -2016,7 +2016,7 @@ async def test_forwarder_waits_for_missing_fresh_transcript_without_warning(
             "transcript_path": str(transcript_path),
         },
     )
-    caplog.set_level(logging.WARNING, logger="omnigent.claude_native_forwarder")
+    caplog.set_level(logging.WARNING, logger="goalrail.claude_native_forwarder")
 
     server, thread, base_url = _start_recording_server()
     task = asyncio.create_task(
@@ -2577,7 +2577,7 @@ async def test_forwarder_survives_unhandled_loop_exceptions(
         "_forward_available_items",
         _fail_once_forward_available_items,
     )
-    caplog.set_level(logging.ERROR, logger="omnigent.claude_native_forwarder")
+    caplog.set_level(logging.ERROR, logger="goalrail.claude_native_forwarder")
 
     server, thread, base_url = _start_recording_server()
     task = asyncio.create_task(
@@ -2617,7 +2617,7 @@ async def test_forwarder_drops_poison_item_after_bounded_permanent_retries(
     """
     Permanent item rejections eventually advance the transcript cursor.
 
-    A malformed transcript item that Omnigent rejects with a permanent 4xx
+    A malformed transcript item that Goalrail rejects with a permanent 4xx
     should not be reposted forever at the poll interval. After the
     retry budget is exhausted, the forwarder emits a failed status,
     marks the source id handled, and persists the new byte cursor.
@@ -2653,7 +2653,7 @@ async def test_forwarder_drops_poison_item_after_bounded_permanent_retries(
         Reject conversation items but accept failure status posts.
 
         :param request: Outbound HTTP request from the forwarder.
-        :returns: HTTP response for the mock Omnigent endpoint.
+        :returns: HTTP response for the mock Goalrail endpoint.
         """
         payload = json.loads(request.content.decode("utf-8"))
         assert isinstance(payload, dict)
@@ -2928,7 +2928,7 @@ async def test_forwarder_mirrors_external_session_id_after_hook_event(
     tmp_path: Path,
 ) -> None:
     """
-    Forwarder PATCHes the Omnigent conversation with Claude's session id.
+    Forwarder PATCHes the Goalrail conversation with Claude's session id.
 
     After the bridge records a hook event carrying ``session_id``
     (every hook from Claude does), the forwarder's first loop pass
@@ -3273,7 +3273,7 @@ async def test_forwarder_retries_model_post_after_transient_failure(tmp_path: Pa
     incremental window carries no fresh ``message.model`` (e.g. a plain
     user turn) reconciles the observed alias against the last POSTed one
     and re-attempts the drop. Guards the self-healing contract of the
-    model mirror against a single transient Omnigent error.
+    model mirror against a single transient Goalrail error.
     """
     bridge_dir = tmp_path / "bridge"
     transcript_path = tmp_path / "session.jsonl"
@@ -3378,7 +3378,7 @@ def test_validated_transcript_state_resets_legacy_byte_cursor_without_fingerprin
         + "\n",
         encoding="utf-8",
     )
-    caplog.set_level(logging.WARNING, logger="omnigent.claude_native_forwarder")
+    caplog.set_level(logging.WARNING, logger="goalrail.claude_native_forwarder")
 
     validated = forwarder._validated_transcript_state(
         forwarder.TranscriptForwardState(
@@ -3434,7 +3434,7 @@ def test_validated_transcript_state_adopts_fingerprint_at_offset_zero_without_re
         + "\n",
         encoding="utf-8",
     )
-    caplog.set_level(logging.WARNING, logger="omnigent.claude_native_forwarder")
+    caplog.set_level(logging.WARNING, logger="goalrail.claude_native_forwarder")
 
     pre_existing_seen = ("already-sent-id-1", "already-sent-id-2")
     state = forwarder.TranscriptForwardState(
@@ -3519,7 +3519,7 @@ def test_validated_transcript_state_preserves_seen_source_ids_on_stale_reset(
     )
     transcript_path.write_text(replacement_content, encoding="utf-8")
 
-    caplog.set_level(logging.WARNING, logger="omnigent.claude_native_forwarder")
+    caplog.set_level(logging.WARNING, logger="goalrail.claude_native_forwarder")
 
     pre_existing_seen = ("item-a", "item-b", "item-c")
     state = forwarder.TranscriptForwardState(
@@ -3699,7 +3699,7 @@ async def test_supervise_forwarder_backoff_grows_on_repeated_crashes(
     """
     Consecutive crashes use exponentially growing backoff, capped at the max.
 
-    Prevents a fast-failing forwarder from POST-storming the Omnigent server
+    Prevents a fast-failing forwarder from POST-storming the Goalrail server
     or burning CPU on tight-loop restarts.
     """
     # 6 crashes is enough to walk past the cap: 1, 2, 4, 8, 16, 30
@@ -4083,7 +4083,7 @@ def _start_recording_server_with_responses(
     a customizable response body.
 
     Variant of :func:`_start_recording_server` for tests that need
-    the Omnigent server's response (rather than just a generic 202 ``{}``)
+    the Goalrail server's response (rather than just a generic 202 ``{}``)
     — used by the sub-agent watcher tests because
     ``external_subagent_start`` returns ``{"child_session_id": "..."}``
     that the forwarder reads back.
@@ -4294,7 +4294,7 @@ async def test_subagent_watcher_forwards_transcript_items_to_child_session(
     """
     After registering a sub-agent, the forwarder tails its
     ``.jsonl`` and POSTs ``external_conversation_item`` events to
-    the Omnigent child session id (not the parent's).
+    the Goalrail child session id (not the parent's).
     """
     bridge_dir = tmp_path / "bridge"
     transcript_path = tmp_path / "session.jsonl"
@@ -4395,7 +4395,7 @@ async def test_subagent_watcher_retry_skips_previously_posted_items(
     when a later item fails, so the next poll re-reads the same JSONL
     window. This test pins the durable ``seen_source_ids`` guard: item
     A succeeds, item B fails once, and the retry must post only B.
-    Without that guard Omnigent live subscribers can see item A synced back
+    Without that guard Goalrail live subscribers can see item A synced back
     twice; the server no longer receives a ``source_id`` key that can
     dedupe the post on AP's side.
     """
@@ -4443,7 +4443,7 @@ async def test_subagent_watcher_retry_skips_previously_posted_items(
         Fail the assistant item once and accept everything else.
 
         :param request: Request issued by the forwarder.
-        :returns: Canned Omnigent response.
+        :returns: Canned Goalrail response.
         """
         body = json.loads(request.content.decode("utf-8"))
         if body.get("type") != "external_conversation_item":
@@ -4671,7 +4671,7 @@ async def test_subagent_watcher_preserves_parked_sentinel_across_restart(
 
 
 # ---------------------------------------------------------------------------
-# In-pane /effort → Omnigent session reasoning_effort mirroring
+# In-pane /effort → Goalrail session reasoning_effort mirroring
 # ---------------------------------------------------------------------------
 
 
@@ -4894,7 +4894,7 @@ async def test_forward_available_deltas_posts_each_and_advances_offset(tmp_path:
     Each appended chunk is POSTed as an ``external_output_text_delta``.
 
     Proves the forwarder turns deltas-file lines into the exact event
-    shape the Omnigent route expects (delta + message_id + index + final) and
+    shape the Goalrail route expects (delta + message_id + index + final) and
     advances+persists the byte offset so the next poll resumes after
     them. Fails if a field is dropped (UI can't scope/order the buffer)
     or the offset doesn't persist (chunks re-POST on restart).
@@ -4981,7 +4981,7 @@ async def test_forward_available_deltas_drops_on_http_error(tmp_path: Path) -> N
 
     Deltas are an ephemeral preview; the authoritative final message
     arrives via ``external_conversation_item`` regardless, so a transient
-    Omnigent blip must not raise or wedge the tail. Fails if the error
+    Goalrail blip must not raise or wedge the tail. Fails if the error
     propagates (would crash the forwarder loop) or the offset stalls
     (would re-POST the failed chunk forever).
     """
@@ -5963,7 +5963,7 @@ async def test_persist_native_compaction_item_posts_compaction_event(tmp_path: P
 
     with (
         patch(
-            "omnigent.claude_native_forwarder.read_claude_session_id",
+            "goalrail.claude_native_forwarder.read_claude_session_id",
             return_value="claude-uuid-1",
         ),
         patch(
@@ -6019,7 +6019,7 @@ async def test_persist_native_compaction_item_empty_items_uses_fallback(tmp_path
 
     with (
         patch(
-            "omnigent.claude_native_forwarder.read_claude_session_id",
+            "goalrail.claude_native_forwarder.read_claude_session_id",
             return_value=None,
         ),
     ):
@@ -6073,7 +6073,7 @@ async def test_compaction_completed_triggers_persist(tmp_path: Path) -> None:
 
     persist_mock = AsyncMock(side_effect=_persist_side_effect)
     with patch(
-        "omnigent.claude_native_forwarder._persist_native_compaction_item",
+        "goalrail.claude_native_forwarder._persist_native_compaction_item",
         persist_mock,
     ):
         task = asyncio.create_task(
@@ -6137,7 +6137,7 @@ async def test_compaction_in_progress_does_not_persist(tmp_path: Path) -> None:
     server, thread, base_url = _start_recording_server()
     persist_mock = AsyncMock()
     with patch(
-        "omnigent.claude_native_forwarder._persist_native_compaction_item",
+        "goalrail.claude_native_forwarder._persist_native_compaction_item",
         persist_mock,
     ):
         task = asyncio.create_task(

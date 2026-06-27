@@ -15,7 +15,7 @@ follow-up).
    bundle install
    ```
 3. **Create the app record** in [App Store Connect](https://appstoreconnect.apple.com)
-   for bundle ID `ai.omnigent.ios` (My Apps → +), if it doesn't exist yet.
+   for bundle ID `dev.goalrail.ios` (My Apps → +), if it doesn't exist yet.
 4. **Generate an App Store Connect API key**: Users and Access → Integrations →
    App Store Connect API → generate a key with the **App Manager** role.
    Download the `.p8` (you can only download it once) and place it in
@@ -48,7 +48,7 @@ Apple finishes processing.
   number with no version churn in git. Don't bump it by hand.
 - **Marketing version** (`CFBundleShortVersionString`, currently `0.1.0`) is set
   manually. Bump `MARKETING_VERSION` for both the Debug and Release
-  configurations of the legacy **Omnigent** target in Xcode (or via `fastlane
+  configurations of the legacy **Goalrail** target in Xcode (or via `fastlane
 increment_version_number`) when shipping a new user-facing version.
 
 ## App Store submission (later)
@@ -63,5 +63,5 @@ submission in the `release` lane when ready.
 
 ## Other commands
 
-- `bundle exec fastlane tests` — run the `OmnigentTests` unit suite.
+- `bundle exec fastlane tests` — run the `GoalrailTests` unit suite.
 - `bundle exec fastlane lanes` — list available lanes.

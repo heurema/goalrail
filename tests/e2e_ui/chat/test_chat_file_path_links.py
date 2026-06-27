@@ -18,7 +18,7 @@ mentions three paths in backticks:
 ``~`` expansion can only land inside the workspace when the root is itself
 under the runner's home. The default e2e workspace lives under ``$TMPDIR``
 (not home), so this test pins the agent's ``os_env.cwd`` to a fresh directory
-under ``Path.home()``: with no ``OMNIGENT_RUNNER_WORKSPACE`` set (the e2e
+under ``Path.home()``: with no ``GOALRAIL_RUNNER_WORKSPACE`` set (the e2e
 runner inherits none), ``compute_default_env_root`` uses that absolute cwd, so
 the root is deterministically under home in both CI and local runs. The tilde
 and absolute paths are still derived from the *live* ``metadata.root`` /
@@ -53,7 +53,7 @@ def _agent_bundle(cwd: str) -> bytes:
     Mirrors the executor block of the conftest test agent so the strict
     validator accepts it; the model is never invoked (output is seeded via
     ``external_assistant_message``). The ``*.yaml`` arcname routes the bundle
-    through the omnigent compat adapter, matching the conftest helpers.
+    through the goalrail compat adapter, matching the conftest helpers.
 
     :param cwd: Absolute workspace directory the runner should use as root.
     :returns: ``.tar.gz`` bytes for multipart upload.
@@ -105,7 +105,7 @@ def linkify_session(
     """
     # Under $HOME so the runner's default-env root is under home — the
     # precondition for "~" expansion to resolve inside the workspace.
-    ws = Path(tempfile.mkdtemp(prefix="omnigent-e2e-ui-links-", dir=Path.home()))
+    ws = Path(tempfile.mkdtemp(prefix="goalrail-e2e-ui-links-", dir=Path.home()))
     (ws / _ROOT_FILE).write_text(_README_CONTENT)
 
     create_resp = httpx.post(

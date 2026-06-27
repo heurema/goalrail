@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: omnigent
+namespace: goalrail
 
 resources:
   - ../../base
@@ -11,10 +11,10 @@ patches:
   - path: deployment-patch.yaml
   - target:
       kind: Ingress
-      name: omnigent
+      name: goalrail
     patch: |
       $patch: delete
       apiVersion: networking.k8s.io/v1
       kind: Ingress
       metadata:
-        name: omnigent
+        name: goalrail

@@ -2,7 +2,7 @@
 Integration tests for ``POST /v1/sessions/{id}/hooks/permission-request``.
 
 The endpoint receives Claude Code's ``PermissionRequest`` HTTP hook
-payload (when ``omnigent claude`` wraps the native TUI), parks
+payload (when ``goalrail claude`` wraps the native TUI), parks
 the call on the same in-memory elicitation registry the claude-sdk
 path uses, emits an SSE event for the web UI's :file:`ApprovalCard`,
 and returns Claude's expected ``hookSpecificOutput`` decision JSON
@@ -35,13 +35,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 
-from omnigent.codex_native_elicitation import codex_elicitation_id
-from omnigent.runtime import session_stream
-from omnigent.server._elicitation_registry import (
+from goalrail.codex_native_elicitation import codex_elicitation_id
+from goalrail.runtime import session_stream
+from goalrail.server._elicitation_registry import (
     _harness_pre_resolved_elicitations,
     _PreResolvedHarnessElicitation,
 )
-from omnigent.server.routes import sessions as sessions_route
+from goalrail.server.routes import sessions as sessions_route
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -196,7 +196,7 @@ async def test_permission_request_hook_accepts_kimi_namespaced_elicitation_id(
     client: httpx.AsyncClient,
 ) -> None:
     """
-    A kimi-native hook supplies ``_omnigent_elicitation_id = elicit_kimi_…`` on
+    A kimi-native hook supplies ``_goalrail_elicitation_id = elicit_kimi_…`` on
     every POST (stable re-attach id). The shared endpoint must accept any
     ``elicit_<harness>_`` namespace — not just ``elicit_claude_`` — or it 400s
     and the approval card is NEVER published.
@@ -208,7 +208,7 @@ async def test_permission_request_hook_accepts_kimi_namespaced_elicitation_id(
     session_id = await _create_session(client, agent["id"])
     elicitation_id = "elicit_kimi_" + "0" * 32
     payload = await _claude_permission_payload()
-    payload["_omnigent_elicitation_id"] = elicitation_id
+    payload["_goalrail_elicitation_id"] = elicitation_id
 
     drain_task = asyncio.create_task(_drain_until_elicitation(session_id))
     await asyncio.sleep(0.05)
@@ -236,7 +236,7 @@ async def test_cursor_permission_request_hook_allow_round_trip(
     """
     cursor-native TUI prompt → web ApprovalCard → accept → verdict.
 
-    The runner-side mirror (``omnigent.cursor_native_permissions``) POSTs a
+    The runner-side mirror (``goalrail.cursor_native_permissions``) POSTs a
     detected cursor TUI approval prompt to
     ``/hooks/cursor-permission-request``; the route publishes a
     ``response.elicitation_request`` (phase ``pre_tool_use``, policy
@@ -293,7 +293,7 @@ async def test_qwen_permission_request_hook_allow_round_trip(
     """
     qwen-native TUI ``can_use_tool`` → web ApprovalCard → accept → verdict.
 
-    The runner-side mirror (``omnigent.qwen_native_permissions``) reads a
+    The runner-side mirror (``goalrail.qwen_native_permissions``) reads a
     ``can_use_tool`` control request off qwen's ``--json-file`` and POSTs it to
     the generic ``/hooks/native-permission-request`` (shared with hermes-/goose-
     native) with ``agent="qwen"`` + ``policy_name="qwen_native_permission"``; the
@@ -402,7 +402,7 @@ async def test_top_level_elicitations_route_is_not_mounted(
     client: httpx.AsyncClient,
 ) -> None:
     """
-    Omnigent no longer exposes ``POST /v1/elicitations/{id}``.
+    Goalrail no longer exposes ``POST /v1/elicitations/{id}``.
 
     Approval verdicts must travel through the session event route so
     they share normal session scoping and authorization. If the AP
@@ -417,7 +417,7 @@ async def test_top_level_elicitations_route_is_not_mounted(
     - HTTP (``client`` fixture, same app): the live response is
       ``404`` *or* ``405``. The status varies by environment because
       ``create_app`` mounts a catch-all SPA at ``/`` only when a local
-      web-ui build exists at ``omnigent/server/static/web-ui/index.html``
+      web-ui build exists at ``goalrail/server/static/web-ui/index.html``
       (a gitignored dev artifact, absent on main/CI/fresh clones).
       With no build the unmatched POST is a plain ``404``; with the
       build present Starlette's ``StaticFiles`` matches the path but
@@ -952,7 +952,7 @@ async def test_permission_request_hook_forwards_cwd_and_permission_mode(
     the permission check). With no id, the terminal-resolved fast path
     correlates a mirrored tool result to a parked prompt by exact
     ``(tool_name, tool_input)`` (see
-    :func:`omnigent.server.routes.sessions._signal_terminal_resolved_harness_elicitation`),
+    :func:`goalrail.server.routes.sessions._signal_terminal_resolved_harness_elicitation`),
     and the web UI clears a card strictly by ``elicitation_id`` on the
     server's ``response.elicitation_resolved`` event — never by a
     "first pending" heuristic.
@@ -1498,7 +1498,7 @@ async def test_permission_request_hook_timeout_clears_pending_index(
     """
     The pending-elicitations index is decremented when the hook
     times out — Claude's fail-ask fallback (user answers in the
-    TUI instead of the web UI) is the ONLY signal the Omnigent server
+    TUI instead of the web UI) is the ONLY signal the Goalrail server
     gets that the prompt is done.
 
     Without this, the sidebar badge stays stuck forever: the
@@ -1511,7 +1511,7 @@ async def test_permission_request_hook_timeout_clears_pending_index(
     cleared" — i.e. the visible artifact is the index value
     flowing through ``GET /v1/sessions``.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     monkeypatch.setattr(
         sessions_route,
@@ -1677,7 +1677,7 @@ async def test_permission_request_hook_clears_index_on_client_disconnect(
     than wiring a real TCP teardown through the in-process ASGI
     transport — deterministic, no transport-layer timing dependence.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     async def _disconnect_immediately(_request: Any) -> None:
         # One short yield so the future-watcher in the asyncio.wait
@@ -1761,7 +1761,7 @@ async def test_permission_hook_repark_within_grace_keeps_card_pending(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A hook retry that re-parks the same ``_omnigent_elicitation_id``
+    A hook retry that re-parks the same ``_goalrail_elicitation_id``
     within the grace keeps the approval card pending and receives the
     eventual web verdict.
 
@@ -1769,7 +1769,7 @@ async def test_permission_hook_repark_within_grace_keeps_card_pending(
     blocked: the old code cleared the card the moment the long-poll was
     severed, while the prompt lived on in an unattended tmux pane.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     disconnect_calls = 0
 
@@ -1807,7 +1807,7 @@ async def test_permission_hook_repark_within_grace_keeps_card_pending(
     session_id = await _create_session(client, agent["id"])
     payload = {
         **(await _claude_permission_payload()),
-        "_omnigent_elicitation_id": _REATTACH_ELICITATION_ID,
+        "_goalrail_elicitation_id": _REATTACH_ELICITATION_ID,
     }
 
     resolved_events: list[dict[str, Any]] = []
@@ -1889,7 +1889,7 @@ async def test_permission_hook_verdict_during_gap_honored_on_repark(
     Without it the retry would re-publish and fail-ask later — the
     user's click silently dropped, the sub-agent still blocked.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     async def _disconnect_immediately(_request: Any) -> None:
         """
@@ -1915,7 +1915,7 @@ async def test_permission_hook_verdict_during_gap_honored_on_repark(
     session_id = await _create_session(client, agent["id"])
     payload = {
         **(await _claude_permission_payload()),
-        "_omnigent_elicitation_id": _REATTACH_ELICITATION_ID,
+        "_goalrail_elicitation_id": _REATTACH_ELICITATION_ID,
     }
 
     first = await client.post(
@@ -1954,7 +1954,7 @@ async def test_permission_hook_rejects_malformed_reattach_id(
     client: httpx.AsyncClient,
 ) -> None:
     """
-    A client-supplied ``_omnigent_elicitation_id`` outside the
+    A client-supplied ``_goalrail_elicitation_id`` outside the
     claude-hook namespace is rejected at the route boundary.
 
     The id is client-controlled; without the format gate a client
@@ -1965,7 +1965,7 @@ async def test_permission_hook_rejects_malformed_reattach_id(
     session_id = await _create_session(client, agent["id"])
     payload = {
         **(await _claude_permission_payload()),
-        "_omnigent_elicitation_id": "elicit_codex_squat",
+        "_goalrail_elicitation_id": "elicit_codex_squat",
     }
 
     resp = await client.post(
@@ -1973,7 +1973,7 @@ async def test_permission_hook_rejects_malformed_reattach_id(
         json=payload,
     )
     assert resp.status_code == 400, resp.text
-    assert "_omnigent_elicitation_id" in resp.text
+    assert "_goalrail_elicitation_id" in resp.text
 
 
 async def test_permission_hook_rejects_reattach_id_owned_by_other_session(
@@ -1991,7 +1991,7 @@ async def test_permission_hook_rejects_reattach_id_owned_by_other_session(
     session_b = await _create_session(client, agent["id"])
     payload = {
         **(await _claude_permission_payload()),
-        "_omnigent_elicitation_id": _REATTACH_ELICITATION_ID,
+        "_goalrail_elicitation_id": _REATTACH_ELICITATION_ID,
     }
 
     drain_task = asyncio.create_task(_drain_until_elicitation(session_a))
@@ -2103,7 +2103,7 @@ async def test_codex_pending_elicitation_survives_session_snapshot_refresh(
     :param client: Test HTTP client.
     :returns: None.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-codex-pending-refresh")
@@ -2165,7 +2165,7 @@ async def test_codex_elicitation_resolved_event_clears_hook_wait(
     when another Codex client answers the JSON-RPC request first. The
     server must resolve the parked hook wait and publish the standard
     ``response.elicitation_resolved`` SSE event for the deterministic
-    Omnigent elicitation id.
+    Goalrail elicitation id.
     """
     agent = await create_test_agent(client, "test-codex-resolved-event")
     session_id = await _create_session(client, agent["id"])
@@ -2688,7 +2688,7 @@ async def test_codex_elicitation_hook_timeout_clears_pending_index(
     Claude hook: return an empty body and decrement the pending
     elicitation index once the re-park grace elapses with no retry.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     monkeypatch.setattr(
         sessions_route,
@@ -2783,7 +2783,7 @@ async def test_permission_hook_finally_emits_elicitation_resolved_on_timeout(
     chat-store consumer is the visible artifact for the
     multi-tab path.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     monkeypatch.setattr(
         sessions_route,
@@ -2852,7 +2852,7 @@ async def test_approval_dispatch_publishes_elicitation_resolved(
     elicitation through the real ``PermissionRequest`` hook, then
     delivering an ``approval`` verdict from the test side.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-approval-dispatch-emits-resolved")
@@ -3023,7 +3023,7 @@ async def test_non_gated_tool_output_does_not_resolve_pending_elicitation(
     index still counts it. Fails if forwarded tool observations start
     resolving pending permissions again.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-1594-non-gated")
@@ -3139,7 +3139,7 @@ async def test_gated_tool_output_resolves_pending_elicitation(
     its TUI answer). Positive counterpart to
     ``test_non_gated_tool_output_does_not_resolve_pending_elicitation``.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-terminal-resolved")
@@ -3233,7 +3233,7 @@ async def test_tool_output_resolves_only_the_matching_same_name_prompt(
     matching the fast path would fall back to resolving an arbitrary
     same-named prompt — the kind of mis-resolution this guards against.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-terminal-resolved-match")
@@ -3336,7 +3336,7 @@ async def test_pre_permission_tool_call_does_not_deny_permission_hook(
     order: hook publishes approval, the transcript forwards ``Edit``,
     then the web UI accepts. The final hook response must still allow.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     pending_elicitations.reset_for_tests()
     agent = await create_test_agent(client, "test-permission-edit-pre-call")
@@ -3525,7 +3525,7 @@ async def test_codex_hook_repark_after_disconnect_keeps_card_pending(
     the card stays pending, and the verdict resolves the retried poll
     in Codex's JSON-RPC result shape.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     disconnect_calls = 0
 
@@ -3621,7 +3621,7 @@ async def test_codex_hook_gap_verdict_returned_on_repost(
     Without it the retry would re-publish the prompt and fail-ask
     later — the click dropped, the codex sub-agent still blocked.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     async def _disconnect_immediately(_request: Any) -> None:
         """
@@ -3799,7 +3799,7 @@ async def test_antigravity_elicitation_hook_timeout_returns_empty_200(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    from omnigent.runtime import pending_elicitations, session_stream
+    from goalrail.runtime import pending_elicitations, session_stream
 
     monkeypatch.setattr(
         sessions_route,

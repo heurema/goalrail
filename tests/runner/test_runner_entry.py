@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runner._entry import (
+from goalrail.runner._entry import (
     _DEFAULT_RUNNER_IDLE_TIMEOUT_S,
     _agent_cache_dest,
     _load_runner_idle_timeout_s_from_config,
@@ -30,7 +30,7 @@ from omnigent.runner._entry import (
     _server_url_from_env,
     main,
 )
-from omnigent.runner.transports.ws_tunnel.serve import RUNNER_TUNNEL_REJECTION_PREFIX
+from goalrail.runner.transports.ws_tunnel.serve import RUNNER_TUNNEL_REJECTION_PREFIX
 
 
 class _TrackingTerminalRegistry:
@@ -40,7 +40,7 @@ class _TrackingTerminalRegistry:
         """
         Initialize the terminal registry test double.
 
-        :param conversation_link_base_url: Omnigent server base URL passed
+        :param conversation_link_base_url: Goalrail server base URL passed
             through by the runner entry point, e.g.
             ``"http://runner.test"``.
         :returns: None.
@@ -122,7 +122,7 @@ def test_make_auth_token_factory_returns_factory_when_databricks_creds_available
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    from omnigent.inner.databricks_executor import _DatabricksBearerAuth
+    from goalrail.inner.databricks_executor import _DatabricksBearerAuth
 
     class _Cfg:
         """Config double whose authenticate() yields a Bearer header."""
@@ -134,7 +134,7 @@ def test_make_auth_token_factory_returns_factory_when_databricks_creds_available
     # once) and reads tokens through _DatabricksBearerAuth.current_token().
     monkeypatch.delenv("RUNNER_SERVER_URL", raising=False)  # skip OIDC branch
     monkeypatch.setattr(
-        "omnigent.inner.databricks_executor._resolve_databricks_auth",
+        "goalrail.inner.databricks_executor._resolve_databricks_auth",
         lambda profile=None: (_DatabricksBearerAuth(_Cfg(), profile_name=None), "https://ex.test"),
     )
 
@@ -159,7 +159,7 @@ def test_make_auth_token_factory_returns_none_without_databricks_creds(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    from omnigent.inner.databricks_executor import DatabricksAuthError
+    from goalrail.inner.databricks_executor import DatabricksAuthError
 
     def _no_creds(profile: str | None = None) -> tuple[Any, str]:
         """Stand in for _resolve_databricks_auth with no credentials."""
@@ -169,7 +169,7 @@ def test_make_auth_token_factory_returns_none_without_databricks_creds(
     # runner connects to a local unauthenticated server without a bearer.
     monkeypatch.delenv("RUNNER_SERVER_URL", raising=False)  # skip OIDC branch
     monkeypatch.setattr(
-        "omnigent.inner.databricks_executor._resolve_databricks_auth",
+        "goalrail.inner.databricks_executor._resolve_databricks_auth",
         _no_creds,
     )
 
@@ -182,7 +182,7 @@ def test_runner_databricks_auth_injects_fresh_token_per_request() -> None:
     This is the mechanism that keeps the runner's httpx client
     authenticated after the initial OAuth token expires. If the
     factory is called only once (cached), HTTP callbacks to the
-    Omnigent server break after 1 hour.
+    Goalrail server break after 1 hour.
 
     :returns: None.
     """
@@ -270,7 +270,7 @@ def _drive_auth_flow(
 @pytest.mark.parametrize(
     "location",
     [
-        # Real-world shape captured from the Omnigent HTTP path: the Apps
+        # Real-world shape captured from the Goalrail HTTP path: the Apps
         # front door redirects directly to ``/oidc/...authorize``
         # with a ``redirect_uri`` of ``.../.auth/callback``.
         (
@@ -422,7 +422,7 @@ async def test_runner_databricks_auth_end_to_end_through_mock_transport() -> Non
     isolation. Mirrors the production flow:
 
     1. Runner posts to ``/v1/sessions/{id}/mcp`` with stale bearer.
-    2. Omnigent front door bounces with ``302 → /oidc/...authorize``.
+    2. Goalrail front door bounces with ``302 → /oidc/...authorize``.
     3. Runner re-mints, retries with fresh bearer, server returns 200.
 
     Without the login-redirect branch in ``auth_flow``, step 3 never
@@ -491,7 +491,7 @@ def test_runner_tunnel_binding_token_from_env_returns_none_without_token(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.delenv("OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN", raising=False)
+    monkeypatch.delenv("GOALRAIL_RUNNER_TUNNEL_BINDING_TOKEN", raising=False)
 
     assert _runner_tunnel_binding_token_from_env() is None
 
@@ -504,7 +504,7 @@ def test_runner_tunnel_binding_token_from_env_rejects_empty_token(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN", "  ")
+    monkeypatch.setenv("GOALRAIL_RUNNER_TUNNEL_BINDING_TOKEN", "  ")
 
     with pytest.raises(RuntimeError, match="must not be empty"):
         _runner_tunnel_binding_token_from_env()
@@ -518,7 +518,7 @@ def test_runner_tunnel_binding_token_from_env_strips_value(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN", " bind-token ")
+    monkeypatch.setenv("GOALRAIL_RUNNER_TUNNEL_BINDING_TOKEN", " bind-token ")
 
     assert _runner_tunnel_binding_token_from_env() == "bind-token"
 
@@ -531,7 +531,7 @@ def test_runner_parent_pid_from_env_returns_none_without_pid(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.delenv("OMNIGENT_RUNNER_PARENT_PID", raising=False)
+    monkeypatch.delenv("GOALRAIL_RUNNER_PARENT_PID", raising=False)
 
     assert _runner_parent_pid_from_env() is None
 
@@ -547,9 +547,9 @@ def test_runner_parent_pid_from_env_rejects_invalid_pid(
     :param value: Invalid environment value under test.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_RUNNER_PARENT_PID", value)
+    monkeypatch.setenv("GOALRAIL_RUNNER_PARENT_PID", value)
 
-    with pytest.raises(RuntimeError, match="OMNIGENT_RUNNER_PARENT_PID"):
+    with pytest.raises(RuntimeError, match="GOALRAIL_RUNNER_PARENT_PID"):
         _runner_parent_pid_from_env()
 
 
@@ -561,7 +561,7 @@ def test_runner_parent_pid_from_env_strips_value(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_RUNNER_PARENT_PID", " 12345 ")
+    monkeypatch.setenv("GOALRAIL_RUNNER_PARENT_PID", " 12345 ")
 
     assert _runner_parent_pid_from_env() == 12345
 
@@ -576,7 +576,7 @@ def test_load_runner_idle_timeout_defaults_when_config_missing(
     :param tmp_path: Isolated config home.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
 
     assert _load_runner_idle_timeout_s_from_config() == float(_DEFAULT_RUNNER_IDLE_TIMEOUT_S)
 
@@ -591,7 +591,7 @@ def test_load_runner_idle_timeout_reads_nested_runner_config(
     :param tmp_path: Isolated config home.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text(
         "runner:\n  idle_timeout_s: 12.5\n",
         encoding="utf-8",
@@ -611,7 +611,6 @@ def test_load_runner_idle_timeout_reads_goalrail_config_home(
     :returns: None.
     """
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
     (tmp_path / "config.yaml").write_text(
         "runner:\n  idle_timeout_s: 8.5\n",
         encoding="utf-8",
@@ -630,7 +629,7 @@ def test_load_runner_idle_timeout_zero_disables_watchdog(
     :param tmp_path: Isolated config home.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text(
         "runner:\n  idle_timeout_s: 0\n",
         encoding="utf-8",
@@ -660,7 +659,7 @@ def test_load_runner_idle_timeout_rejects_invalid_values(
     :param config_text: Invalid config body under test.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     (tmp_path / "config.yaml").write_text(config_text, encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="runner"):
@@ -845,16 +844,16 @@ async def test_runner_shutdown_closes_terminal_registry(
     """The --server local runner shuts down terminal-owned resources.
 
     ``examples/databricks_coding_agent.yaml`` exposes terminal tools,
-    and in ``omnigent run --server`` mode those terminals are owned
+    and in ``goalrail run --server`` mode those terminals are owned
     by the local tunnel runner. This test drives the runner app
     startup/shutdown hooks directly and verifies shutdown includes the
     TerminalRegistry, not just harness subprocesses and MCPs.
     """
     import importlib
 
-    import omnigent.runner._entry as entry_mod
+    import goalrail.runner._entry as entry_mod
 
-    importlib.import_module("omnigent.runner.app")
+    importlib.import_module("goalrail.runner.app")
 
     process_managers: list[_FakeProcessManager] = []
     terminal_registries: list[_TrackingTerminalRegistry] = []
@@ -903,18 +902,18 @@ async def test_runner_shutdown_closes_terminal_registry(
 
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://runner.test")
     monkeypatch.setattr(
-        "omnigent.runtime.harnesses.process_manager.HarnessProcessManager",
+        "goalrail.runtime.harnesses.process_manager.HarnessProcessManager",
         _FakeProcessManager,
     )
     monkeypatch.setattr(
-        "omnigent.terminals.TerminalRegistry",
+        "goalrail.terminals.TerminalRegistry",
         _terminal_registry_factory,
     )
     monkeypatch.setattr(entry_mod.httpx, "AsyncClient", _async_client_factory)
     monkeypatch.setattr(entry_mod.httpx, "Client", _sync_client_factory)
     monkeypatch.setattr(entry_mod, "_make_auth_token_factory", lambda: None)
     monkeypatch.setattr(
-        "omnigent.runner.identity.get_stable_runner_id",
+        "goalrail.runner.identity.get_stable_runner_id",
         lambda: "runner-test-id",
     )
 
@@ -925,12 +924,12 @@ async def test_runner_shutdown_closes_terminal_registry(
     assert process_managers and process_managers[0].shutdown_called
     assert terminal_registries and terminal_registries[0].shutdown_called
     assert terminal_registries[0].conversation_link_base_url == "http://runner.test"
-    # In Omnigent mode (P1) the entry point passes mcp_manager=None; MCP calls are
+    # In Goalrail mode (P1) the entry point passes mcp_manager=None; MCP calls are
     # routed per-session through ProxyMcpManager (runner/proxy_mcp_manager.py)
     # instead of a shared RunnerMcpManager. No RunnerMcpManager is created on
     # startup, so mcp_managers is empty — that is the correct post-P1 behavior.
     assert not mcp_managers, (
-        "RunnerMcpManager should not be created by create_app() in Omnigent mode; "
+        "RunnerMcpManager should not be created by create_app() in Goalrail mode; "
         "MCP calls are proxied per-session through ProxyMcpManager"
     )
     assert async_clients and async_clients[0].closed
@@ -949,7 +948,7 @@ def test_runner_workspace_from_env_returns_none_without_value(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.delenv("OMNIGENT_RUNNER_WORKSPACE", raising=False)
+    monkeypatch.delenv("GOALRAIL_RUNNER_WORKSPACE", raising=False)
 
     assert _runner_workspace_from_env() is None
 
@@ -962,7 +961,7 @@ def test_runner_workspace_from_env_rejects_empty_value(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", "  ")
+    monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", "  ")
 
     with pytest.raises(RuntimeError, match="must not be empty"):
         _runner_workspace_from_env()
@@ -979,7 +978,7 @@ def test_runner_workspace_from_env_resolves_value(
     :returns: None.
     """
     workspace = tmp_path / "project"
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", f" {workspace} ")
+    monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", f" {workspace} ")
 
     assert _runner_workspace_from_env() == workspace.resolve()
 
@@ -1143,7 +1142,7 @@ def test_main_reports_tunnel_rejection_without_traceback(
         )
 
     monkeypatch.setattr(
-        "omnigent.runner._entry._run_tunnel_from_env",
+        "goalrail.runner._entry._run_tunnel_from_env",
         _raise_tunnel_rejection,
     )
 
@@ -1167,7 +1166,7 @@ def test_main_installs_timestamped_runner_log_format(
     Runner process logs include timestamps at the formatter boundary.
 
     Host-spawned runners redirect stderr to
-    ``~/.omnigent/logs/host-runner/runner-*.log``. The entrypoint's
+    ``~/.goalrail/logs/host-runner/runner-*.log``. The entrypoint's
     logging formatter therefore has to include ``asctime`` globally; adding
     timestamps to individual messages would miss library and framework logs.
 
@@ -1193,11 +1192,11 @@ def test_main_installs_timestamped_runner_log_format(
         """
 
     monkeypatch.setattr(
-        "omnigent.runner._entry.logging.basicConfig",
+        "goalrail.runner._entry.logging.basicConfig",
         _capture_basic_config,
     )
     monkeypatch.setattr(
-        "omnigent.runner._entry._run_tunnel_from_env",
+        "goalrail.runner._entry._run_tunnel_from_env",
         _stop_immediately,
     )
 
@@ -1229,7 +1228,7 @@ def test_main_preserves_unexpected_runtime_errors(
         raise RuntimeError("programming bug")
 
     monkeypatch.setattr(
-        "omnigent.runner._entry._run_tunnel_from_env",
+        "goalrail.runner._entry._run_tunnel_from_env",
         _raise_unexpected_runtime_error,
     )
 
@@ -1256,7 +1255,7 @@ def test_make_auth_token_factory_resolves_sdk_auth_once(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.inner.databricks_executor as dbx
+    import goalrail.inner.databricks_executor as dbx
 
     class _CountingConfig:
         """Config double whose authenticate() counts calls."""
@@ -1281,7 +1280,7 @@ def test_make_auth_token_factory_resolves_sdk_auth_once(
 
     monkeypatch.setattr(dbx, "_resolve_databricks_auth", _fake_resolve)
     # No stored OIDC token → the factory falls through to the SDK path.
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: None)
 
     factory = _make_auth_token_factory(server_url="https://ex.databricks.com")
     assert factory is not None

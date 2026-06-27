@@ -16,16 +16,16 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HostHelloFrame,
     HostRemoveWorktreeFrame,
     decode_host_frame,
 )
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.server.auth import RESERVED_USER_LOCAL
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
+from goalrail.stores.host_store import HostStore
 
 pytestmark = pytest.mark.asyncio
 

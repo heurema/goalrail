@@ -8,7 +8,7 @@ marker token.
 
 Run with Databricks credentials (opt-in via env var)::
 
-    OMNIGENT_E2E_CODEX_NATIVE=1 \
+    GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_codex_native_e2e.py \
         --profile oss \
         --llm-api-key "$(databricks auth token -p oss \
@@ -30,7 +30,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent.entities.session_resources import terminal_resource_id
+from goalrail.entities.session_resources import terminal_resource_id
 from tests._helpers.compat import apply_runner_env, compat_runner_cwd, runner_executable
 from tests.e2e.helpers import POLL_INTERVAL_S
 
@@ -54,7 +54,7 @@ def _spawn_host_daemon(
     live_server: str,
 ) -> subprocess.Popen[bytes]:
     """
-    Spawn an ``omnigent host`` daemon for the codex-native test.
+    Spawn an ``goalrail host`` daemon for the codex-native test.
 
     :param tmp_path: Per-test temp dir for the daemon log.
     :param live_server: Test server URL.
@@ -72,7 +72,7 @@ def _spawn_host_daemon(
             [
                 runner_executable(),
                 "-m",
-                "omnigent.host._daemon_entry",
+                "goalrail.host._daemon_entry",
                 "--server",
                 live_server,
             ],
@@ -501,15 +501,15 @@ def test_codex_native_builtin_session_can_be_created(
     session_data = session_resp.json()
     assert session_data["agent_id"] == agent_id
     labels = session_data.get("labels", {})
-    assert labels.get("omnigent.wrapper") == "codex-native-ui", (
-        f"Expected wrapper label 'codex-native-ui', got {labels.get('omnigent.wrapper')!r}"
+    assert labels.get("goalrail.wrapper") == "codex-native-ui", (
+        f"Expected wrapper label 'codex-native-ui', got {labels.get('goalrail.wrapper')!r}"
     )
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
-        "codex-native round-trip e2e needs `codex` on PATH and OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "codex-native round-trip e2e needs `codex` on PATH and GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_builtin_session_round_trip(
@@ -627,10 +627,10 @@ def test_codex_native_builtin_session_round_trip(
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
         "codex-native streaming-order e2e needs `codex` on PATH and "
-        "OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_user_message_streams_before_assistant_delta(
@@ -765,12 +765,12 @@ def test_codex_native_user_message_streams_before_assistant_delta(
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1"
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1"
     or shutil.which("codex") is None
     or shutil.which("git") is None,
     reason=(
         "codex-native worktree e2e needs `codex` + `git` on PATH and "
-        "OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_worktree_session_runs_in_worktree(
@@ -786,7 +786,7 @@ def test_codex_native_worktree_session_runs_in_worktree(
     dir (``runner-specs-<id>/ag_<id>-v<ver>``) — instead of the session
     workspace. Worktree sessions therefore launched Codex in a temp dir
     with no ``.git`` and never touched the worktree, while claude-native
-    worked because it reads ``OMNIGENT_RUNNER_WORKSPACE`` directly.
+    worked because it reads ``GOALRAIL_RUNNER_WORKSPACE`` directly.
 
     Golden path: init a real git repo with a committed marker file ->
     create a session with a git worktree branch -> ask Codex to read the
@@ -856,9 +856,9 @@ def test_codex_native_worktree_session_runs_in_worktree(
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
-        "codex-native workspace e2e needs `codex` on PATH and OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "codex-native workspace e2e needs `codex` on PATH and GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_session_uses_workspace_dir_without_worktree(
@@ -932,10 +932,10 @@ def test_codex_native_session_uses_workspace_dir_without_worktree(
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
         "codex-native image-routing e2e needs `codex` on PATH and "
-        "OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_image_routed_natively_not_as_base64_text(
@@ -1049,10 +1049,10 @@ def test_codex_native_image_routed_natively_not_as_base64_text(
 
 
 @pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
+    os.environ.get("GOALRAIL_E2E_CODEX_NATIVE") != "1" or shutil.which("codex") is None,
     reason=(
         "codex-native image-only persistence e2e needs `codex` on PATH and "
-        "OMNIGENT_E2E_CODEX_NATIVE=1 to run"
+        "GOALRAIL_E2E_CODEX_NATIVE=1 to run"
     ),
 )
 def test_codex_native_image_only_persists_user_bubble_and_does_not_bleed(

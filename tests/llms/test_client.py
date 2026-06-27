@@ -17,19 +17,19 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from omnigent.llms.client import Client
-from omnigent.llms.errors import (
+from goalrail.llms.client import Client
+from goalrail.llms.errors import (
     ContextWindowExceededError,
     LLMErrorDetail,
     PermanentLLMError,
     RetryableLLMError,
 )
-from omnigent.llms.types import (
+from goalrail.llms.types import (
     MessageOutput,
     OutputText,
     Response,
 )
-from omnigent.spec.types import RetryPolicy
+from goalrail.spec.types import RetryPolicy
 
 # ── Helpers ──────────────────────────────────────────────────
 
@@ -128,24 +128,24 @@ def _patch_client_deps(
     # Route model parsing to a fake routed model
     routed = MagicMock(provider="test", model="test-model")
     monkeypatch.setattr(
-        "omnigent.llms.client.parse_model_string",
+        "goalrail.llms.client.parse_model_string",
         lambda model: routed,
     )
 
     # Return the mock adapter (not OpenAIAdapter, so we hit
     # the chat_completions path instead of responses_create)
     monkeypatch.setattr(
-        "omnigent.llms.client.get_adapter",
+        "goalrail.llms.client.get_adapter",
         lambda provider: mock_adapter,
     )
 
     # Stub the responses-to-chat conversion helpers
     monkeypatch.setattr(
-        "omnigent.llms.client.responses_input_to_chat_messages",
+        "goalrail.llms.client.responses_input_to_chat_messages",
         lambda input, instructions: [{"role": "user", "content": "test"}],
     )
     monkeypatch.setattr(
-        "omnigent.llms.client.chat_response_to_response",
+        "goalrail.llms.client.chat_response_to_response",
         lambda result: _make_response(),
     )
 
@@ -162,7 +162,7 @@ def _patch_client_deps(
         tracker.calls.append(duration)
 
     monkeypatch.setattr(
-        "omnigent.llms.client._sleep",
+        "goalrail.llms.client._sleep",
         _fake_sleep,
     )
 
@@ -827,20 +827,20 @@ async def test_text_json_schema_translated_to_response_format(
     recognise it (e.g. Databricks). A failure here means the structured
     output schema is lost or malformed in the Chat Completions path.
     """
-    from omnigent.llms.routing import RoutedModel
+    from goalrail.llms.routing import RoutedModel
 
     captured: list[dict[str, Any]] = []
     adapter = _CapturingAdapter(captured)
     routed = RoutedModel(provider="databricks", model="test-model")
 
-    monkeypatch.setattr("omnigent.llms.client.parse_model_string", lambda model: routed)
-    monkeypatch.setattr("omnigent.llms.client.get_adapter", lambda provider: adapter)
+    monkeypatch.setattr("goalrail.llms.client.parse_model_string", lambda model: routed)
+    monkeypatch.setattr("goalrail.llms.client.get_adapter", lambda provider: adapter)
     monkeypatch.setattr(
-        "omnigent.llms.client.responses_input_to_chat_messages",
+        "goalrail.llms.client.responses_input_to_chat_messages",
         lambda input, instructions: [{"role": "user", "content": "test"}],
     )
     monkeypatch.setattr(
-        "omnigent.llms.client.chat_response_to_response",
+        "goalrail.llms.client.chat_response_to_response",
         lambda result: _make_response(),
     )
 
@@ -893,20 +893,20 @@ async def test_text_without_json_schema_not_translated(
     Only ``json_schema``-typed text should be translated. Other shapes
     (e.g. ``{"format": {"type": "text"}}``) must not be mangled.
     """
-    from omnigent.llms.routing import RoutedModel
+    from goalrail.llms.routing import RoutedModel
 
     captured: list[dict[str, Any]] = []
     adapter = _CapturingAdapter(captured)
     routed = RoutedModel(provider="databricks", model="test-model")
 
-    monkeypatch.setattr("omnigent.llms.client.parse_model_string", lambda model: routed)
-    monkeypatch.setattr("omnigent.llms.client.get_adapter", lambda provider: adapter)
+    monkeypatch.setattr("goalrail.llms.client.parse_model_string", lambda model: routed)
+    monkeypatch.setattr("goalrail.llms.client.get_adapter", lambda provider: adapter)
     monkeypatch.setattr(
-        "omnigent.llms.client.responses_input_to_chat_messages",
+        "goalrail.llms.client.responses_input_to_chat_messages",
         lambda input, instructions: [{"role": "user", "content": "test"}],
     )
     monkeypatch.setattr(
-        "omnigent.llms.client.chat_response_to_response",
+        "goalrail.llms.client.chat_response_to_response",
         lambda result: _make_response(),
     )
 

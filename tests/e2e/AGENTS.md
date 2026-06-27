@@ -1,6 +1,6 @@
 # `tests/e2e/` — prerequisites & how to run
 
-These tests start a real `omnigent` server subprocess, upload real agent bundles, and call real LLM APIs. They are **excluded from the default `pytest` run** via `addopts = --ignore=tests/e2e` in `pyproject.toml`. To exercise them you must opt in with `--llm-api-key` (and optionally `--profile`).
+These tests start a real `goalrail` server subprocess, upload real agent bundles, and call real LLM APIs. They are **excluded from the default `pytest` run** via `addopts = --ignore=tests/e2e` in `pyproject.toml`. To exercise them you must opt in with `--llm-api-key` (and optionally `--profile`).
 
 ## ALWAYS RUN INTEGRATION + UNIT TESTS IN THE BACKGROUND
 
@@ -64,10 +64,10 @@ Some tests gate on local binaries. Install whichever you need; tests for missing
 |---------|-------------------------------------------------------|--------------------------------------------------------|
 | `tmux`  | `test_sys_terminal_e2e.py`, `test_repl_terminal_overview_e2e.py`, `tests/inner/test_terminal*.py`, `tests/terminals/`, `tests/tools/builtins/test_sys_terminal.py` | `brew install tmux` (macOS) / `apt install tmux` (Debian) |
 | `claude` | `claude-sdk` harness rows (`test_per_harness_claude_sdk.py` and any `[claude-sdk]` parametrize) | Anthropic Claude CLI — see `claude-agent-sdk` docs    |
-| `codex`  | `codex` harness rows (`test_per_harness_codex.py`, `test_run_omnigent_coding_supervisor.py`)                              | OpenAI Codex CLI                                       |
+| `codex`  | `codex` harness rows (`test_per_harness_codex.py`, `test_run_goalrail_coding_supervisor.py`)                              | OpenAI Codex CLI                                       |
 | `pi`     | `pi` harness rows (`test_per_harness_pi.py`)                                                            | Internal CLI — see project docs                        |
 | `databricks` | Required only when using `--profile <name>`                                                         | `brew install databricks` (macOS) / official installer |
-| `omnigent` (formerly `ap`) | A handful of legacy tests (`test_repl_approval_e2e.py`, `test_dispatch_fork_repl_e2e.py`)        | `uv sync` makes the CLI available via `uv run omnigent …`. Tests checking for a standalone `ap` binary on PATH currently skip — that's pre-existing infra debt unrelated to this directory. |
+| `goalrail` | A handful of CLI-backed tests (`test_repl_approval_e2e.py`, `test_dispatch_fork_repl_e2e.py`)        | `uv sync` makes the CLI available via `uv run goalrail …`. |
 
 ### Python environment
 
@@ -107,5 +107,5 @@ When tests skip, check the `-rs` summary for one of these reasons:
 
 ## Parallel-safety notes
 
-- `patched_databrickscfg` (in `tests/e2e/omnigent/conftest.py`) acquires a cross-process `FileLock` on `~/.databrickscfg.e2e-lock` for the backup → patch → restore sequence, so xdist workers serialize on the rewrite. Tests not using that fixture parallelize freely.
+- `patched_databrickscfg` (in `tests/e2e/goalrail/conftest.py`) acquires a cross-process `FileLock` on `~/.databrickscfg.e2e-lock` for the backup → patch → restore sequence, so xdist workers serialize on the rewrite. Tests not using that fixture parallelize freely.
 - A few tests still write to fixed `/tmp/...` paths (`test_harness_wrap_e2e.py`, `test_example_agent_with_os_env_fork.py`). They serialize naturally because each is a single test, but if you add new tests that also write to those paths you'll need to coordinate.

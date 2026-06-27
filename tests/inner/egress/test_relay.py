@@ -1,4 +1,4 @@
-"""Tests for omnigent.inner.egress.relay (TCP-to-Unix bridge)."""
+"""Tests for goalrail.inner.egress.relay (TCP-to-Unix bridge)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.egress.relay import start_relay
+from goalrail.inner.egress.relay import start_relay
 
 
 def _pick_free_port() -> int:
@@ -24,7 +24,7 @@ def _pick_free_port() -> int:
 @pytest.fixture
 def short_tmp_parent() -> Iterator[Path]:
     """Short-pathed tmpdir under ``/tmp``. ``tmp_path`` overflows AF_UNIX on macOS."""
-    parent = Path("/tmp") / f"omni-relay-{uuid.uuid4().hex[:8]}"
+    parent = Path("/tmp") / f"goalrail-relay-{uuid.uuid4().hex[:8]}"
     parent.mkdir(mode=0o700)
     try:
         yield parent
@@ -143,7 +143,7 @@ async def test_s3_relay_forwards_plain_connection_without_proxy_auth(
     had two tests that the relay REJECTED unauth'd connections with
     HTTP 407 and STRIPPED the auth header on forwarding; both
     behaviors were removed when the token left the system. See the
-    docstring at :func:`omnigent.inner.egress.relay.start_relay`
+    docstring at :func:`goalrail.inner.egress.relay.start_relay`
     for why removing the token is strictly safer than keeping it
     (it leaked via argv to any same-UID process).
     """

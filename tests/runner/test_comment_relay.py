@@ -27,14 +27,14 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.claude_native_bridge import bridge_dir_for_bridge_id, prepare_bridge_dir
-from omnigent.entities.session_resources import SessionResourceView, terminal_resource_view
-from omnigent.inner.datamodel import TerminalEnvSpec
-from omnigent.runner import create_runner_app
-from omnigent.terminals import TerminalListEntry
+from goalrail.claude_native_bridge import bridge_dir_for_bridge_id, prepare_bridge_dir
+from goalrail.entities.session_resources import SessionResourceView, terminal_resource_view
+from goalrail.inner.datamodel import TerminalEnvSpec
+from goalrail.runner import create_runner_app
+from goalrail.terminals import TerminalListEntry
 from tests.runner.helpers import NullServerClient, make_test_terminal_instance
 
-# Matches ``_TOOL_RELAY_FILE`` in ``omnigent.claude_native_bridge``.
+# Matches ``_TOOL_RELAY_FILE`` in ``goalrail.claude_native_bridge``.
 _TOOL_RELAY_FILE = "tool_relay.json"
 
 
@@ -253,7 +253,7 @@ def _skip_tools_changed_notification(monkeypatch: pytest.MonkeyPatch) -> None:
 
     # The runner imports the name from this module at call time, so patching
     # the module attribute is picked up by _ensure_comment_relay_started.
-    monkeypatch.setattr("omnigent.claude_native_bridge.post_tools_changed", _noop)
+    monkeypatch.setattr("goalrail.claude_native_bridge.post_tools_changed", _noop)
 
 
 @pytest.fixture
@@ -289,7 +289,7 @@ async def relay_env(tmp_path: Path, client: httpx.AsyncClient) -> AsyncIterator[
     Prepare a bridge directory for a unique session and clean it up.
 
     ``start_tool_relay`` writes ``tool_relay.json`` into the bridge dir but
-    does not create it, so this mirrors what ``omnigent claude`` does on
+    does not create it, so this mirrors what ``goalrail claude`` does on
     the client (``prepare_bridge_dir``) before the terminal launches. On
     teardown it deletes the session (closing any relay and unbinding its
     localhost socket) and removes the bridge dir so tests do not leak.
@@ -316,7 +316,7 @@ async def _launch_terminal(
     bridge_inject_dir: bool,
 ) -> httpx.Response:
     """
-    POST the claude terminal-launch request used by ``omnigent claude``.
+    POST the claude terminal-launch request used by ``goalrail claude``.
 
     :param client: HTTP client bound to the runner app.
     :param session_id: Session/conversation identifier.
@@ -452,28 +452,28 @@ async def test_repeated_terminal_launch_keeps_single_relay(relay_env: _RelayEnv)
 
 
 @pytest.mark.asyncio
-async def test_relay_executor_routes_through_omnigent_in_omnigent_mode(
+async def test_relay_executor_routes_through_goalrail_in_goalrail_mode(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Route relay tool execution through Omnigent ``/mcp`` for policy enforcement.
+    """Route relay tool execution through Goalrail ``/mcp`` for policy enforcement.
 
     Verifies that when the runner is configured with a server_client (AP mode),
     the ``_relay_tool_executor`` closure routes calls through
-    :class:`~omnigent.runner.proxy_mcp_manager.ProxyMcpManager` instead of
+    :class:`~goalrail.runner.proxy_mcp_manager.ProxyMcpManager` instead of
     dispatching directly to comment/session-query handlers.  Policy enforcement
     on these relay tools was previously bypassed; this test pins the fix.
     """
-    import omnigent.claude_native_bridge as _bridge_mod
+    import goalrail.claude_native_bridge as _bridge_mod
 
-    # Records every POST sent to the fake Omnigent server.
+    # Records every POST sent to the fake Goalrail server.
     ap_mcp_posts: list[dict[str, Any]] = []
 
     class _FakeApClient:
-        """Fake Omnigent server client that captures /mcp calls and returns a fixed result.
+        """Fake Goalrail server client that captures /mcp calls and returns a fixed result.
 
         Appends each POST request body to the outer ``ap_mcp_posts`` list via
-        closure so the test can assert on what was sent to the Omnigent server.
+        closure so the test can assert on what was sent to the Goalrail server.
         """
 
         async def get(self, url: str, *, timeout: float = 10.0) -> httpx.Response:
@@ -564,8 +564,8 @@ async def test_relay_executor_routes_through_omnigent_in_omnigent_mode(
         # Call the relay executor directly (simulates Claude Code invoking list_comments).
         result = await executor("list_comments", {"status": "pending"})
 
-        # In Omnigent mode the executor must have POSTed a tools/call JSON-RPC to the
-        # Omnigent server's /mcp endpoint, not called the direct comment handler.
+        # In Goalrail mode the executor must have POSTed a tools/call JSON-RPC to the
+        # Goalrail server's /mcp endpoint, not called the direct comment handler.
         mcp_call = next(
             (
                 r
@@ -575,7 +575,7 @@ async def test_relay_executor_routes_through_omnigent_in_omnigent_mode(
             None,
         )
         assert mcp_call is not None, (
-            "No tools/call request reached the Omnigent /mcp endpoint. "
+            "No tools/call request reached the Goalrail /mcp endpoint. "
             "The relay executor is bypassing ProxyMcpManager and policy enforcement."
         )
         # Tool name and arguments must be forwarded verbatim.
@@ -583,13 +583,13 @@ async def test_relay_executor_routes_through_omnigent_in_omnigent_mode(
             "Wrong tool name forwarded; policy would be evaluated against the wrong tool."
         )
         assert mcp_call["json"]["params"]["arguments"] == {"status": "pending"}, (
-            "Arguments were not forwarded correctly to Omnigent /mcp."
+            "Arguments were not forwarded correctly to Goalrail /mcp."
         )
         # The request URL must be scoped to this session's /mcp endpoint.
         assert session_id in mcp_call["url"], (
             f"AP /mcp request URL {mcp_call['url']!r} does not contain session_id {session_id!r}."
         )
-        # The Omnigent response's text content must be parsed back to a dict.
-        assert result == {"items": []}, f"Expected parsed Omnigent response dict, got {result!r}."
+        # The Goalrail response's text content must be parsed back to a dict.
+        assert result == {"items": []}, f"Expected parsed Goalrail response dict, got {result!r}."
     finally:
         shutil.rmtree(bridge_dir, ignore_errors=True)

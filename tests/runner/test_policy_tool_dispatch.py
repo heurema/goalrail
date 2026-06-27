@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from omnigent.runner.tool_dispatch import _execute_policy_tool
+from goalrail.runner.tool_dispatch import _execute_policy_tool
 
 # ── Helpers ──────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ class _FakePostResponse:
             "id": "pol_abc123",
             "name": "block_shell",
             "type": "python",
-            "handler": "omnigent.policies.builtins.cel.cel_policy",
+            "handler": "goalrail.policies.builtins.cel.cel_policy",
             "enabled": True,
         }
 
@@ -61,7 +61,7 @@ async def test_add_policy_cel() -> None:
         json.dumps(
             {
                 "name": "block_shell",
-                "handler": "omnigent.policies.builtins.cel.cel_policy",
+                "handler": "goalrail.policies.builtins.cel.cel_policy",
                 "factory_params": {
                     "expression": 'event.type == "tool_call" && event.data.name == "sys_os_shell"',
                     "reason": "Shell blocked.",
@@ -79,7 +79,7 @@ async def test_add_policy_cel() -> None:
     url, body = client.post_calls[0]
     assert url == "/v1/sessions/conv_test/policies"
     assert body["type"] == "python"
-    assert body["handler"] == "omnigent.policies.builtins.cel.cel_policy"
+    assert body["handler"] == "goalrail.policies.builtins.cel.cel_policy"
     assert body["factory_params"]["expression"] == (
         'event.type == "tool_call" && event.data.name == "sys_os_shell"'
     )
@@ -94,7 +94,7 @@ async def test_add_policy_builtin() -> None:
         json.dumps(
             {
                 "name": "rate_limit",
-                "handler": "omnigent.policies.builtins.safety.max_tool_calls_per_session",
+                "handler": "goalrail.policies.builtins.safety.max_tool_calls_per_session",
                 "factory_params": {"limit": 50},
             }
         ),
@@ -102,7 +102,7 @@ async def test_add_policy_builtin() -> None:
         server_client=client,  # type: ignore[arg-type]
     )
     _, body = client.post_calls[0]
-    assert body["handler"] == "omnigent.policies.builtins.safety.max_tool_calls_per_session"
+    assert body["handler"] == "goalrail.policies.builtins.safety.max_tool_calls_per_session"
     assert body["factory_params"] == {"limit": 50}
 
 
@@ -115,7 +115,7 @@ async def test_add_policy_callable_no_factory_params() -> None:
         json.dumps(
             {
                 "name": "ask_os",
-                "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+                "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
             }
         ),
         conversation_id="conv_test",
@@ -177,7 +177,7 @@ async def test_policy_registry_returns_entries() -> None:
                 "object": "list",
                 "data": [
                     {
-                        "handler": "omnigent.policies.builtins.cel.cel_policy",
+                        "handler": "goalrail.policies.builtins.cel.cel_policy",
                         "kind": "factory",
                         "name": "CEL Expression Policy",
                         "description": "Evaluate a CEL expression...",
@@ -203,7 +203,7 @@ async def test_policy_registry_returns_entries() -> None:
     )
     parsed = json.loads(result)
     assert len(parsed["policies"]) == 1
-    assert parsed["policies"][0]["handler"] == "omnigent.policies.builtins.cel.cel_policy"
+    assert parsed["policies"][0]["handler"] == "goalrail.policies.builtins.cel.cel_policy"
     assert client.get_calls == ["/v1/policy-registry"]
 
 

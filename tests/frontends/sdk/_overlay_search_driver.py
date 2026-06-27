@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from omnigent_ui_sdk import Overlay, OverlayTarget, TerminalHost
+from goalrail_ui_sdk import Overlay, OverlayTarget, TerminalHost
 
 # A distinctive needle the test searches for. Deliberately
 # lowercase so we also verify case-insensitive matching (the

@@ -3,7 +3,7 @@ Unit tests for the JSON Content-Type guard dependencies.
 
 Covers :func:`require_json_content_type` and
 :func:`require_json_or_multipart_content_type` from
-``omnigent.server.routes._content_type`` across the full matrix of
+``goalrail.server.routes._content_type`` across the full matrix of
 Content-Type values: canonical JSON, the ``application/*+json``
 structured suffix, charset parameters, case insensitivity, a missing
 header, and the non-JSON / multipart types that must (or must not) be
@@ -21,7 +21,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
-from omnigent.server.routes._content_type import (
+from goalrail.server.routes._content_type import (
     require_json_content_type,
     require_json_or_multipart_content_type,
 )

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from omnigent.entities.conversation import (
+from goalrail.entities.conversation import (
     ITEM_TYPE_TO_DATA_CLS,
     NON_CONTENT_ITEM_TYPES,
     CompactionData,

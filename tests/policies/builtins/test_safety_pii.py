@@ -1,6 +1,6 @@
 """
 Tests for ``deny_pii_in_llm_request`` built-in policy
-(:mod:`omnigent.policies.builtins.safety`).
+(:mod:`goalrail.policies.builtins.safety`).
 
 Covers:
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.policies.builtins.safety import deny_pii_in_llm_request
+from goalrail.policies.builtins.safety import deny_pii_in_llm_request
 from tests.policies.builtins.helpers import llm_request_event, tool_call_event
 
 # ── Default patterns ─────────────────────────────────────────────────────────

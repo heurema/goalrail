@@ -35,7 +35,7 @@ verify spawn / health / round-trip behavior:
 Lives under ``tests/`` so it doesn't ship as production code; the
 test process registers the module path
 (``"tests.runtime.harnesses._test_harness"``) in
-:data:`omnigent.runtime.harnesses._HARNESS_MODULES` per test.
+:data:`goalrail.runtime.harnesses._HARNESS_MODULES` per test.
 """
 
 from __future__ import annotations
@@ -158,7 +158,7 @@ def create_app() -> FastAPI:
         """
         Accept a harness session event.
 
-        :param conversation_id: Omnigent conversation id, e.g.
+        :param conversation_id: Goalrail conversation id, e.g.
             ``"conv_cancel"``.
         :param request: FastAPI request handle.
         :returns: Empty ``204 No Content`` response.

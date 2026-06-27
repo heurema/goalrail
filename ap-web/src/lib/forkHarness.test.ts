@@ -79,7 +79,7 @@ describe("forkTargetCarriesHistory", () => {
 
   // Native targets carry from ANY source: the runner clones the source's
   // native transcript when the source is same-family native, else rebuilds
-  // the target's on-disk transcript from the copied Omnigent items. The
+  // the target's on-disk transcript from the copied Goalrail items. The
   // codex-native rebuild includes the session_meta fields codex ≥ 0.133
   // requires plus the event_msg mirrors it rebuilds visible turns from
   // (verified against codex 0.136.0), so cross-family forks into

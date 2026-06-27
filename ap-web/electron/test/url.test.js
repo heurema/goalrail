@@ -1,6 +1,6 @@
 // Tests for the shared desktop URL helpers (src/url.js), run with
 // `node --test` (no extra deps). Covers the scheme-defaulting that lets a
-// pasted workspace URL (schemeless, /omnigent suffix from the internal user
+// pasted workspace URL (schemeless, /goalrail suffix from the internal user
 // guide) connect, the plain-http warning, and the workspace probe/expansion.
 
 const { describe, it } = require("node:test");
@@ -16,7 +16,7 @@ const {
 
 describe("defaultSchemeFor", () => {
   it("defaults remote hosts to https", () => {
-    assert.equal(defaultSchemeFor("dbc-x.cloud.databricks.com/omnigent"), "https");
+    assert.equal(defaultSchemeFor("dbc-x.cloud.databricks.com/goalrail"), "https");
     assert.equal(defaultSchemeFor("example.com"), "https");
   });
 
@@ -32,10 +32,10 @@ describe("defaultSchemeFor", () => {
 });
 
 describe("normalizeUrl", () => {
-  it("defaults a schemeless workspace /omnigent URL to https", () => {
+  it("defaults a schemeless workspace /goalrail URL to https", () => {
     assert.equal(
-      normalizeUrl("dbc-a5d4177a-49dc.cloud.databricks.com/omnigent"),
-      "https://dbc-a5d4177a-49dc.cloud.databricks.com/omnigent",
+      normalizeUrl("dbc-a5d4177a-49dc.cloud.databricks.com/goalrail"),
+      "https://dbc-a5d4177a-49dc.cloud.databricks.com/goalrail",
     );
   });
 
@@ -59,7 +59,7 @@ describe("normalizeUrl", () => {
   });
 
   it("trims surrounding whitespace", () => {
-    assert.equal(normalizeUrl("  example.com/omnigent  "), "https://example.com/omnigent");
+    assert.equal(normalizeUrl("  example.com/goalrail  "), "https://example.com/goalrail");
   });
 
   it("rejects empty input", () => {
@@ -75,7 +75,7 @@ describe("normalizeUrl", () => {
 describe("isPlainHttpRemote", () => {
   it("does not warn for a bare remote host (now https)", () => {
     assert.equal(isPlainHttpRemote("example.databricks.com"), false);
-    assert.equal(isPlainHttpRemote("dbc-x.cloud.databricks.com/omnigent"), false);
+    assert.equal(isPlainHttpRemote("dbc-x.cloud.databricks.com/goalrail"), false);
   });
 
   it("warns for an explicit http:// to a remote host", () => {
@@ -154,7 +154,7 @@ describe("expandDatabricksWorkspaceUrl", () => {
         return fakeResponse("databricks");
       },
       async () => {
-        const url = "https://ws.cloud.databricks.com/omnigent";
+        const url = "https://ws.cloud.databricks.com/goalrail";
         assert.equal(await expandDatabricksWorkspaceUrl(url), url);
       },
     );

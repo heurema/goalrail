@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from omnigent_ui_sdk.terminal import RichBlockFormatter, TerminalHost
-from omnigent_ui_sdk.terminal._theme import LIGHT_THEME, get_theme
+from goalrail_ui_sdk.terminal import RichBlockFormatter, TerminalHost
+from goalrail_ui_sdk.terminal._theme import LIGHT_THEME, get_theme
 
 
 def test_formatter_defaults_to_light_markdown_theme() -> None:

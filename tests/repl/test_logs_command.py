@@ -6,10 +6,10 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from omnigent_ui_sdk import RichBlockFormatter
+from goalrail_ui_sdk import RichBlockFormatter
 
-from omnigent.repl._repl import COMMANDS, handle_slash_command
-from omnigent.repl._session_log import collect_log_files, write_logs_zip
+from goalrail.repl._repl import COMMANDS, handle_slash_command
+from goalrail.repl._session_log import collect_log_files, write_logs_zip
 from tests.repl.helpers import CapturingHost
 
 
@@ -96,7 +96,7 @@ async def test_logs_command_creates_current_session_zip_at_requested_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Passing a path to /logs bundles only current-session files."""
-    import omnigent.cli_diagnostics as cli_diagnostics
+    import goalrail.cli_diagnostics as cli_diagnostics
 
     logs = tmp_path / "logs"
     debug = tmp_path / "debug"
@@ -116,7 +116,7 @@ async def test_logs_command_creates_current_session_zip_at_requested_path(
 
     monkeypatch.setattr(cli_diagnostics, "current_cli_log_path", lambda: cli_current)
     # _cmd_logs imports write_session_log inside the function, so patch the source module.
-    import omnigent.repl._session_log as session_log
+    import goalrail.repl._session_log as session_log
 
     monkeypatch.setattr(session_log, "write_session_log", fake_write_session_log)
 

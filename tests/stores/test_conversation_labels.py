@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities import (
+from goalrail.entities import (
     MessageData,
     NewConversationItem,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -169,7 +169,7 @@ def test_labels_survive_item_compaction_proxy(
     a cascade pointed the wrong way, or someone routed
     ``delete_items`` through the label table by mistake.
     """
-    from omnigent.db.db_models import SqlConversationItem
+    from goalrail.db.db_models import SqlConversationItem
 
     conv = conversation_store.create_conversation()
     conversation_store.set_labels(conv.id, {"integrity": "1", "confidentiality": "0"})
@@ -233,7 +233,7 @@ async def test_delete_conversation_cascades_to_labels(
     # no label snapshot).
     from sqlalchemy import func, select
 
-    from omnigent.db.db_models import SqlConversationLabel
+    from goalrail.db.db_models import SqlConversationLabel
 
     with conversation_store._session() as session:
         count = session.execute(
@@ -346,7 +346,7 @@ def test_set_labels_honors_caller_timestamp(
     """
     from sqlalchemy import select
 
-    from omnigent.db.db_models import SqlConversationLabel
+    from goalrail.db.db_models import SqlConversationLabel
 
     conv = conversation_store.create_conversation()
     caller_stamp = 1_700_000_042  # arbitrary historical epoch
@@ -380,7 +380,7 @@ def test_upsert_refreshes_timestamp_on_overwrite(
     """
     from sqlalchemy import select
 
-    from omnigent.db.db_models import SqlConversationLabel
+    from goalrail.db.db_models import SqlConversationLabel
 
     conv = conversation_store.create_conversation()
     # Two deliberate timestamps far enough apart that any

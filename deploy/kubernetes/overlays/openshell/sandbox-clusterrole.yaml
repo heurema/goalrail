@@ -11,7 +11,7 @@ kind: ClusterRole
 metadata:
   name: openshell-sandbox-manager
   labels:
-    app: omnigent
+    app: goalrail
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/exec", "pods/log"]

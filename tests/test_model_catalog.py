@@ -1,4 +1,4 @@
-"""Unit tests for ``omnigent/model_catalog.py``.
+"""Unit tests for ``goalrail/model_catalog.py``.
 
 The catalog backs ``sys_list_models`` and the dispatch gate's
 canonical→local model-id normalization: provider resolution must mirror
@@ -20,15 +20,15 @@ import httpx
 import pytest
 from cachetools import TTLCache
 
-import omnigent.model_catalog as model_catalog
-from omnigent.model_catalog import (
+import goalrail.model_catalog as model_catalog
+from goalrail.model_catalog import (
     catalog_for_spec,
     list_models_for_worker,
     resolve_model_provider,
     spec_harness,
 )
-from omnigent.runtime.credentials.databricks import WorkspaceCreds
-from omnigent.spec.types import AgentSpec, ApiKeyAuth, DatabricksAuth, ExecutorSpec
+from goalrail.runtime.credentials.databricks import WorkspaceCreds
+from goalrail.spec.types import AgentSpec, ApiKeyAuth, DatabricksAuth, ExecutorSpec
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +52,7 @@ def _no_ambient_detection(monkeypatch: pytest.MonkeyPatch) -> None:
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    monkeypatch.setattr("omnigent.onboarding.detected.detect_providers", list)
+    monkeypatch.setattr("goalrail.onboarding.detected.detect_providers", list)
 
 
 def _isolate_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml_text: str) -> None:
@@ -62,8 +62,8 @@ def _isolate_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml_text: 
     :param tmp_path: Per-test temp dir to hold ``config.yaml``.
     :param yaml_text: The config file contents, e.g. a ``providers:`` block.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     (tmp_path / "config.yaml").write_text(yaml_text)
 
@@ -79,7 +79,7 @@ def _worker_spec(harness: str, **executor_kwargs: object) -> AgentSpec:
     return AgentSpec(
         spec_version=1,
         name="worker",
-        executor=ExecutorSpec(type="omnigent", config={"harness": harness}, **executor_kwargs),  # type: ignore[arg-type]
+        executor=ExecutorSpec(type="goalrail", config={"harness": harness}, **executor_kwargs),  # type: ignore[arg-type]
     )
 
 
@@ -234,7 +234,7 @@ def test_resolve_provider_legacy_profile(monkeypatch: pytest.MonkeyPatch, tmp_pa
         spec_version=1,
         name="worker",
         executor=ExecutorSpec(
-            type="omnigent", config={"harness": "codex-native", "profile": "legacy-prof"}
+            type="goalrail", config={"harness": "codex-native", "profile": "legacy-prof"}
         ),
     )
     provider = resolve_model_provider(spec, "codex-native")
@@ -259,7 +259,7 @@ def test_resolve_provider_databricks_model_prefix_uses_env_profile(
         spec_version=1,
         name="worker",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="goalrail",
             config={"harness": "pi"},
             model="databricks-claude-opus-4-8",
         ),
@@ -278,7 +278,7 @@ def test_resolve_provider_databricks_model_prefix_uses_env_profile(
         pytest.param(_worker_spec("unknown-harness"), "unknown-harness", id="unknown-harness"),
         # A structural stub without spec attributes must degrade, not raise.
         pytest.param(
-            SimpleNamespace(executor=SimpleNamespace(type="omnigent", config={})),
+            SimpleNamespace(executor=SimpleNamespace(type="goalrail", config={})),
             "claude-native",
             id="structural-stub",
         ),
@@ -913,7 +913,7 @@ def test_failed_auth_command_note_never_leaks_the_command(
     parent = AgentSpec(
         spec_version=1,
         name="orchestrator",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "pi"}),
         sub_agents=[_worker_spec("pi")],
     )
     catalog = catalog_for_spec(parent, transport=httpx.MockTransport(_handler))
@@ -959,13 +959,13 @@ def test_catalog_isolates_per_worker_failures(
     parent = AgentSpec(
         spec_version=1,
         name="orchestrator",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-sdk"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "claude-sdk"}),
         sub_agents=[
             _worker_spec("claude-native"),
             AgentSpec(
                 spec_version=1,
                 name="codex",
-                executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+                executor=ExecutorSpec(type="goalrail", config={"harness": "codex-native"}),
             ),
         ],
     )
@@ -1005,7 +1005,7 @@ def test_catalog_payload_is_json_serializable_and_omits_unknown_context(
     parent = AgentSpec(
         spec_version=1,
         name="orchestrator",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "pi"}),
         sub_agents=[_worker_spec("pi")],
     )
 

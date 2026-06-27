@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.native_policy_hook import (
+from goalrail.native_policy_hook import (
     evaluation_response_to_hook_output,
     fail_closed_hook_output,
     hook_payload_to_evaluation_request,
@@ -61,18 +61,18 @@ def test_post_tool_use_maps_to_phase_tool_result() -> None:
 
 
 @pytest.mark.parametrize("hook_event", ["PreToolUse", "PostToolUse"])
-def test_omnigent_mcp_tools_are_skipped(hook_event: str) -> None:
+def test_goalrail_mcp_tools_are_skipped(hook_event: str) -> None:
     """
-    Omnigent MCP tools return None and are never sent to /policies/evaluate.
+    Goalrail MCP tools return None and are never sent to /policies/evaluate.
 
-    Omnigent MCP tool calls are already policy-checked by the relay path
-    (ProxyMcpManager → Omnigent /mcp endpoint → _evaluate_tool_call_policy).
+    Goalrail MCP tool calls are already policy-checked by the relay path
+    (ProxyMcpManager → Goalrail /mcp endpoint → _evaluate_tool_call_policy).
     If this guard regressed, every MCP tool call would be evaluated
     twice — once via the relay, once via this hook.
     """
     result = hook_payload_to_evaluation_request(
         hook_event,
-        {"tool_name": "mcp__omnigent__list_comments", "tool_input": {}, "tool_output": "x"},
+        {"tool_name": "mcp__goalrail__list_comments", "tool_input": {}, "tool_output": "x"},
     )
     # None signals the caller to skip the POST entirely.
     assert result is None
@@ -87,7 +87,7 @@ def test_connector_native_mcp_tools_are_evaluated(hook_event: str, expected_type
     Connector-native MCP tools must not be skipped by the native pre-call hook.
 
     Tools such as ``mcp__github__*`` are injected by the connector layer and
-    do not round-trip through Omnigent's MCP proxy, so this hook is their
+    do not round-trip through Goalrail's MCP proxy, so this hook is their
     TOOL_CALL/TOOL_RESULT policy enforcement site.
     """
     result = hook_payload_to_evaluation_request(

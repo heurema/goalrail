@@ -33,9 +33,9 @@ from __future__ import annotations
 
 import sys
 
-from omnigent_client import BlockContext, TextChunk, TextDone
-from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from goalrail_client import BlockContext, TextChunk, TextDone
+from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
+from goalrail_ui_sdk.terminal._host import TerminalHost
 
 
 def _main() -> None:

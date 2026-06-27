@@ -8,9 +8,9 @@ dispatches by ``type``, (c) loose-by-default ``extra="ignore"``
 forward compatibility, and (d) MCP-style ``extra="allow"`` on the
 elicitation params block.
 
-The event models live in :mod:`omnigent.server.schemas`;
+The event models live in :mod:`goalrail.server.schemas`;
 this module only references the request/response schemas in
-:mod:`omnigent.server.schemas` for the embedded ``ResponseObject``.
+:mod:`goalrail.server.schemas` for the embedded ``ResponseObject``.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from omnigent.server.schemas import (
+from goalrail.server.schemas import (
     CancelledEvent,
     CompletedEvent,
     CreatedEvent,
@@ -483,7 +483,7 @@ def test_elicitation_request_params_preserves_unknown_fields() -> None:
     MCP's ElicitRequestParams allows arbitrary extras under params
     (the spec uses extra="allow") so MCP servers can attach context.
     Our params model preserves the same behavior so an MCP server's
-    elicitation/create call traversing harness → Omnigent → client doesn't
+    elicitation/create call traversing harness → Goalrail → client doesn't
     lose fields the MCP server attached.
     """
     params = ElicitationRequestParams(
@@ -587,7 +587,7 @@ def test_session_create_git_requires_host_id() -> None:
     failing late. If this validator is dropped, the request would
     validate and the error would surface deeper in the create flow.
     """
-    from omnigent.server.schemas import SessionCreateRequest, SessionGitOptions
+    from goalrail.server.schemas import SessionCreateRequest, SessionGitOptions
 
     with pytest.raises(ValidationError, match="git worktree creation requires host_id"):
         SessionCreateRequest(
@@ -598,7 +598,7 @@ def test_session_create_git_requires_host_id() -> None:
 
 def test_session_create_git_with_host_id_ok() -> None:
     """``git`` with ``host_id`` validates cleanly."""
-    from omnigent.server.schemas import SessionCreateRequest, SessionGitOptions
+    from goalrail.server.schemas import SessionCreateRequest, SessionGitOptions
 
     req = SessionCreateRequest(
         agent_id="ag_x",
@@ -615,7 +615,7 @@ def test_session_create_host_type_defaults_external() -> None:
     ``host_type`` defaults to ``"external"`` — the pre-existing
     contract for every client that doesn't send the field (backcompat).
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     req = SessionCreateRequest(agent_id="ag_x")
     assert req.host_type == "external"
@@ -627,7 +627,7 @@ def test_session_create_managed_rejects_host_id() -> None:
     contradiction (the server provisions the host) — must 422 at
     validation instead of silently ignoring the caller's host.
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     with pytest.raises(ValidationError, match="host_id must not be set"):
         SessionCreateRequest(agent_id="ag_x", host_type="managed", host_id="host_abc")
@@ -640,7 +640,7 @@ def test_session_create_managed_rejects_path_workspace() -> None:
     at. Managed workspaces are repository URLs; must 422 at
     validation with the URL form named.
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     with pytest.raises(ValidationError, match="takes a git repository URL"):
         SessionCreateRequest(agent_id="ag_x", host_type="managed", workspace="/tmp/w")
@@ -660,7 +660,7 @@ def test_session_create_managed_accepts_repo_url_workspace(workspace: str) -> No
     forms — the value passes through verbatim for the launch path to
     parse and clone.
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     req = SessionCreateRequest(agent_id="ag_x", host_type="managed", workspace=workspace)
     assert req.workspace == workspace
@@ -686,7 +686,7 @@ def test_session_create_managed_rejects_malformed_repo_workspace(
     error embedded) instead of failing mid-provision inside a
     half-launched sandbox.
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     with pytest.raises(ValidationError, match="") as exc:
         SessionCreateRequest(agent_id="ag_x", host_type="managed", workspace=workspace)
@@ -700,7 +700,7 @@ def test_session_create_external_rejects_repo_url_workspace() -> None:
     the URL as a path would fail later in workspace validation with a
     confusing "no such directory".
     """
-    from omnigent.server.schemas import SessionCreateRequest
+    from goalrail.server.schemas import SessionCreateRequest
 
     with pytest.raises(ValidationError, match="requires host_type 'managed'"):
         SessionCreateRequest(

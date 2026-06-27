@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-import omnigent.kiro_native_bridge as bridge
-from omnigent.kiro_native_bridge import (
+import goalrail.kiro_native_bridge as bridge
+from goalrail.kiro_native_bridge import (
     inject_user_message,
     write_forwarder_ready,
     write_tmux_target,
@@ -221,17 +221,17 @@ def test_draft_in_input_region_ignores_matching_history_and_baseline() -> None:
 def test_draft_in_input_region_ignores_kiro_chrome_for_short_messages() -> None:
     """One-character prompts must not match cwd, branch, or placeholder chrome."""
     baseline = (
-        "kiro_default · auto · ◔ 3%             ~/Work/omnigent · "
+        "kiro_default · auto · ◔ 3%             ~/Work/goalrail · "
         "(feat/kiro-cli-harness)\n\n ask a question or describe a task ↵"
     )
     pane_after_submit = (
         "c\n\n🙂\n────────────────\nkiro_default · auto · ◔ 4%             "
-        "~/Work/omnigent · (feat/kiro-cli-harness)\n\n "
+        "~/Work/goalrail · (feat/kiro-cli-harness)\n\n "
         "ask a question or describe a task ↵\n/copy to clipboard"
     )
     pane_with_draft = (
         "old answer\n────────────────\nkiro_default · auto · ◔ 3%             "
-        "~/Work/omnigent · (feat/kiro-cli-harness)\n\n c"
+        "~/Work/goalrail · (feat/kiro-cli-harness)\n\n c"
     )
 
     assert not bridge._draft_in_input_region(pane_after_submit, "c", baseline)

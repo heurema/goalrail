@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.llms.adapters.base import BaseAdapter
+from goalrail.llms.adapters.base import BaseAdapter
 
 
 def test_cannot_instantiate_base_adapter() -> None:

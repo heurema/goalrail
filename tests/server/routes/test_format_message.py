@@ -1,4 +1,4 @@
-"""Tests for :func:`omnigent.server.routes.comments._format_message`.
+"""Tests for :func:`goalrail.server.routes.comments._format_message`.
 
 ``_format_message`` is a pure function with non-trivial grouping and
 sorting logic — it groups comments by file path (alphabetical order)
@@ -11,8 +11,8 @@ without needing a running HTTP server.
 
 from __future__ import annotations
 
-from omnigent.entities import Comment
-from omnigent.server.routes.comments import _format_message
+from goalrail.entities import Comment
+from goalrail.server.routes.comments import _format_message
 
 
 def _make_comment(

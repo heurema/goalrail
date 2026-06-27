@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.manager (ToolManager)."""
+"""Tests for goalrail.tools.manager (ToolManager)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.spec.types import (
+from goalrail.errors import GoalrailError
+from goalrail.spec.types import (
     AgentSpec,
     BuiltinToolConfig,
     LLMConfig,
@@ -20,10 +20,10 @@ from omnigent.spec.types import (
     ToolRuntime,
     ToolsConfig,
 )
-from omnigent.tools import ToolManager
-from omnigent.tools.base import ToolContext
-from omnigent.tools.client_specified import ClientSideToolSpec
-from omnigent.tools.mcp import clear_discovery_cache
+from goalrail.tools import ToolManager
+from goalrail.tools.base import ToolContext
+from goalrail.tools.client_specified import ClientSideToolSpec
+from goalrail.tools.mcp import clear_discovery_cache
 
 _TEST_CTX = ToolContext(task_id="task_test", agent_id="agent_test")
 
@@ -136,11 +136,21 @@ def skill_no_resources() -> SkillSpec:
 
 
 @pytest.fixture(autouse=True)
-def _clean_mcp_cache() -> None:
+def _isolate_tool_manager_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     """
-    Clear the MCP discovery cache before each test.
+    Clear global caches and hide developer-local host skills from tests.
+
+    ToolManager discovers host-scope skills from cwd ancestors and
+    ``Path.home()``. Unit tests should only see skills declared in the
+    test spec, not whatever a developer has installed under ``~/.claude``
+    or this repository's ``.agents`` directory.
     """
     clear_discovery_cache()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
 def _make_spec(
@@ -585,7 +595,7 @@ def test_shutdown_skips_pre_resolved_os_env() -> None:
 
 def test_shutdown_calls_tool_shutdown() -> None:
     """``shutdown()`` calls ``shutdown()`` on every registered tool."""
-    from omnigent.tools.base import Tool
+    from goalrail.tools.base import Tool
 
     class _TrackingTool(Tool):
         shut_down = False
@@ -725,7 +735,7 @@ def test_client_tool_shadows_skill_tool(
     )
 
     # The registered tool is the client's ClientSideTool, not LoadSkillTool
-    from omnigent.tools.client_specified import ClientSideTool
+    from goalrail.tools.client_specified import ClientSideTool
 
     assert isinstance(mgr._tools["load_skill"], ClientSideTool), (
         "Expected ClientSideTool after client override, "
@@ -969,10 +979,10 @@ def test_client_tool_invalid_name_raises(
 ) -> None:
     """
     Client-specified tools with invalid names raise
-    ``OmnigentError`` at registration time.
+    ``GoalrailError`` at registration time.
     """
     spec = _make_spec()
-    with pytest.raises(OmnigentError, match="Invalid client tool name"):
+    with pytest.raises(GoalrailError, match="Invalid client tool name"):
         ToolManager(
             spec,
             client_tool_specs=[_make_client_side_spec(name)],
@@ -1000,7 +1010,7 @@ def _write_local_tool(
     py_dir.mkdir(parents=True, exist_ok=True)
     code = (
         '"""Test tool."""\n'
-        "from omnigent_client import tool\n"
+        "from goalrail_client import tool\n"
         "\n"
         "\n"
         "@tool\n"

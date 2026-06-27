@@ -23,7 +23,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.runner import create_runner_app
+from goalrail.runner import create_runner_app
 from tests.runner.helpers import NullServerClient
 
 # ── Fixtures ─────────────────────────────────────────────
@@ -50,8 +50,8 @@ def test_create_runner_app_returns_fresh_instance_each_call() -> None:
     """Each ``create_runner_app()`` call returns a NEW FastAPI app.
 
     The SERVER_HARNESS_CONTRACT.md:609-619 anti-recursion rule says
-    the runner app object MUST NOT equal the Omnigent app object. Since
-    we don't have visibility into the Omnigent app from this test, we
+    the runner app object MUST NOT equal the Goalrail app object. Since
+    we don't have visibility into the Goalrail app from this test, we
     verify the weaker but sufficient property: distinct calls to
     the factory yield distinct apps. If the factory ever started
     returning a cached singleton, this test would fail and signal

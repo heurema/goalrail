@@ -1,6 +1,6 @@
 name: Polly AI Review
 
-# Spins up a local Omnigent server + runner inside the CI runner, starts a
+# Spins up a local Goalrail server + runner inside the CI runner, starts a
 # Polly session with the PR diff, waits for the cross-vendor review to
 # complete, and posts the findings as a PR comment. Uses the same LLM
 # gateway secrets as the e2e suite (LLM_API_KEY + GATEWAY_BASE_URL).
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   UV_INDEX_URL: https://pypi.org/simple
   PIP_INDEX_URL: https://pypi.org/simple
 
@@ -209,12 +209,12 @@ jobs:
           "
           echo "DATABRICKS_BEARER=${LLM_API_KEY}" >> "$GITHUB_ENV"
 
-      - name: Write Omnigent provider config
+      - name: Write Goalrail provider config
         if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true'
         env:
           GATEWAY_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
         run: |
-          mkdir -p "$HOME/.omnigent"
+          mkdir -p "$HOME/.goalrail"
           # Use python to write the config safely — avoids interpolating
           # secrets/URLs into a heredoc where special chars could break YAML.
           # Uses json (stdlib) instead of yaml to avoid needing PyYAML on
@@ -242,7 +242,7 @@ jobs:
                   }
               }
           }
-          pathlib.Path.home().joinpath('.omnigent', 'config.yaml').write_text(
+          pathlib.Path.home().joinpath('.goalrail', 'config.yaml').write_text(
               json.dumps(cfg, indent=2)
           )
           "
@@ -346,11 +346,11 @@ jobs:
 
       - name: Mint App token
         id: app-token
-        if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true' && vars.OMNIGENT_BOT_APP_ID != ''
+        if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true' && vars.GOALRAIL_BOT_APP_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          client-id: ${{ vars.OMNIGENT_BOT_APP_ID }}
-          private-key: ${{ secrets.OMNIGENT_BOT_APP_KEY }}
+          client-id: ${{ vars.GOALRAIL_BOT_APP_ID }}
+          private-key: ${{ secrets.GOALRAIL_BOT_APP_KEY }}
 
       - name: Run Polly review
         if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true'
@@ -365,7 +365,7 @@ jobs:
           # Run Polly headlessly with -p; it starts a local server, sends
           # one turn, prints the assistant response, and exits.
           # --no-session: ephemeral run, no persistent session state.
-          uv run omnigent run examples/polly/ \
+          uv run goalrail run examples/polly/ \
             -p "$prompt" \
             --no-session \
             2>polly-stderr.log \
@@ -428,7 +428,7 @@ jobs:
           # (not expression interpolation) to avoid expression injection.
           {
             echo "<!-- polly-review-bot -->"
-            echo "## <img src=\"https://raw.githubusercontent.com/omnigent-ai/omnigent/main/docs/images/omnigent-logo.svg\" alt=\"\" height=\"20\" valign=\"middle\" /> Polly AI Review"
+            echo "## <img src=\"https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/goalrail-logo.svg\" alt=\"\" height=\"20\" valign=\"middle\" /> Polly AI Review"
             echo ""
             echo "$REVIEW_TEXT"
             echo ""

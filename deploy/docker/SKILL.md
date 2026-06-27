@@ -18,9 +18,9 @@ boundary clean (server doesn't execute user code), and the deploy
 shape consistent across hosts.
 
 The same Dockerfile also has a `host` target — the prebaked Goalrail
-HOST image (`omnigent-host`) that remote sandboxes boot from
+HOST image (`goalrail-host`) that remote sandboxes boot from
 (`goalrail sandbox create --provider modal`, server-launched managed
-hosts). It is the inverse profile: full omnigent install plus git +
+hosts). It is the inverse profile: full goalrail install plus git +
 tmux, no SPA, no psycopg, no server entrypoint. Both images are
 published by the same workflows with the same `:sha-<short>` /
 `:latest` / `:vX.Y.Z` tag scheme. See the "Host image" section in
@@ -32,7 +32,7 @@ published by the same workflows with the same `:sha-<short>` /
 cd deploy/docker
 cp .env.example .env             # edit POSTGRES_PASSWORD at minimum
 docker compose up -d --build
-docker compose logs -f omnigent   # Ctrl-C when you see "Uvicorn running"
+docker compose logs -f goalrail   # Ctrl-C when you see "Uvicorn running"
 ```
 
 Server is on http://localhost:8000.
@@ -41,18 +41,18 @@ Server is on http://localhost:8000.
 
 | | |
 |---|---|
-| `Dockerfile` | Multi-stage build with two final targets. `web-builder` (node:20) runs `npm install && npm run build` on `ap-web/`. `builder` (python:3.12) installs omnigent into `/opt/venv`; `server-builder` overlays the SPA bundle from `web-builder` and adds psycopg. The default target (`runtime`) copies the venv + `/build/` from `server-builder` and runs `entrypoint.py`. `--target host` builds the host image instead (from `builder`: omnigent + git/tmux, no SPA/psycopg/entrypoint). |
+| `Dockerfile` | Multi-stage build with two final targets. `web-builder` (node:20) runs `npm install && npm run build` on `ap-web/`. `builder` (python:3.12) installs goalrail into `/opt/venv`; `server-builder` overlays the SPA bundle from `web-builder` and adds psycopg. The default target (`runtime`) copies the venv + `/build/` from `server-builder` and runs `entrypoint.py`. `--target host` builds the host image instead (from `builder`: goalrail + git/tmux, no SPA/psycopg/entrypoint). |
 | `Dockerfile.dockerignore` | BuildKit-aware exclude. Trims `deploy/databricks/`, `deploy/aws/`, tests, dev tooling — keeps the build context small. |
 | `entrypoint.py` | Server process entrypoint. Reads `DATABASE_URL`, runs Alembic migrations, builds the SQLAlchemy stores, calls `create_app()`, runs uvicorn. Single source of truth for what env vars the container respects. |
-| `docker-compose.yaml` | Two services: `postgres` (16-alpine, persistent volume) and `omnigent` (built from the Dockerfile, depends on postgres healthcheck). Build context is `../..` (repo root). |
-| `.env.example` | Documents every env var the compose file passes through: `POSTGRES_PASSWORD`, `OMNIGENT_PORT`, all the `OMNIGENT_AUTH_*` and `OMNIGENT_OIDC_*` vars. |
+| `docker-compose.yaml` | Two services: `postgres` (16-alpine, persistent volume) and `goalrail` (built from the Dockerfile, depends on postgres healthcheck). Build context is `../..` (repo root). |
+| `.env.example` | Documents every env var the compose file passes through: `POSTGRES_PASSWORD`, `GOALRAIL_PORT`, all the `GOALRAIL_AUTH_*` and `GOALRAIL_OIDC_*` vars. |
 | `README.md` | Customer-facing quickstart + the OIDC walkthrough (GitHub OAuth, Google Workspace, generic OIDC). |
 
 ## Iterating on the image
 
 ```bash
 # Force a clean rebuild after a Dockerfile or source change
-docker compose build --no-cache omnigent
+docker compose build --no-cache goalrail
 
 # Reset everything (drops the DB + artifact volumes)
 docker compose down -v
@@ -68,7 +68,7 @@ cluster.
 
 | Symptom | Likely cause | First check |
 |---|---|---|
-| Root URL returns `{"service":"omnigent",…}` instead of the SPA | npm build didn't produce the bundle inside the container | `docker compose exec omnigent ls /build/omnigent/server/static/web-ui/` — empty = the `web-builder` stage didn't run cleanly. Rebuild with `--no-cache`. |
+| Root URL returns `{"service":"goalrail",…}` instead of the SPA | npm build didn't produce the bundle inside the container | `docker compose exec goalrail ls /build/goalrail/server/static/web-ui/` — empty = the `web-builder` stage didn't run cleanly. Rebuild with `--no-cache`. |
 | `ModuleNotFoundError: No module named 'uvicorn'` at startup | venv copy didn't pick up the install | Sanity-check the Dockerfile's `VIRTUAL_ENV=/opt/venv` is set before the `uv pip install` calls. |
 | `psycopg.OperationalError: password authentication failed` | `POSTGRES_PASSWORD` changed in `.env` after the data volume was initialized | `docker compose down -v` then `up -d` (wipes the DB). |
 | Web UI loads but new chats hang forever | Expected — runners are external. The UI's landing page prints the CLI command to launch a runner. |

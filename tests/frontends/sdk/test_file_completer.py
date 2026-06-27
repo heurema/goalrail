@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import pathlib
 
-from omnigent_ui_sdk.terminal._completer import (
+from goalrail_ui_sdk.terminal._completer import (
     FileMentionCompleter,
     _find_at_mention,
     _fuzzy_score,
@@ -20,7 +20,7 @@ from omnigent_ui_sdk.terminal._completer import (
     extract_at_mentions,
     strip_at_mentions,
 )
-from omnigent_ui_sdk.terminal._host import PendingAttachment
+from goalrail_ui_sdk.terminal._host import PendingAttachment
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 

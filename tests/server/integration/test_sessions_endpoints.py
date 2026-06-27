@@ -21,14 +21,14 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.llms.context_window import ModelPricing
-from omnigent.runtime.tool_output import MAX_TOOL_OUTPUT_BYTES
-from omnigent.spec.types import SkillSpec
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.llms.context_window import ModelPricing
+from goalrail.runtime.tool_output import MAX_TOOL_OUTPUT_BYTES
+from goalrail.spec.types import SkillSpec
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
-from omnigent.tools.builtins.load_skill import format_skill_meta_text
+from goalrail.stores.host_store import HostStore
+from goalrail.tools.builtins.load_skill import format_skill_meta_text
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -362,7 +362,7 @@ async def test_list_sessions_reflects_relay_status_cache(
     spinner reflects the runner-relayed live status, not the (mostly
     empty) ``tasks`` table that the NO_DBOS path no longer writes to.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -391,7 +391,7 @@ async def test_list_sessions_rolls_up_busy_child_status(
     parent roll-up happens in the shared list-item builder and that an
     unrelated sibling parent stays idle.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     parent = await _create_session(client, agent["id"], title="parent")
@@ -432,7 +432,7 @@ async def test_session_snapshot_defaults_terminal_pending_false(
     (not just truthiness) proves the snapshot builder ships the field
     with the right default rather than omitting it.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -449,12 +449,12 @@ async def test_session_snapshot_reflects_terminal_pending_cache(
     """The GET snapshot reads ``_session_terminal_pending_cache`` so a
     client connecting mid-spin-up sees ``terminal_pending=True``.
 
-    This is the reconnect channel: the Omnigent session stream has no replay
+    This is the reconnect channel: the Goalrail session stream has no replay
     buffer, so a client that connects after the runner emitted the
     pending event would otherwise miss it. Re-reading via GET proves
     the value travels cache → response builder → snapshot.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -477,7 +477,7 @@ async def test_external_session_status_event_lands_in_status_cache(
     this fix the handler only published to the SSE pub-sub, leaving the
     sidebar stuck on "idle" while the chat showed "Working…".
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -515,14 +515,14 @@ async def test_external_subagent_start_mints_child_session(
     ``GET /v1/sessions/{parent_id}/child_sessions``.
 
     The forwarder uses this signal to register Claude Code's own
-    Task-tool subagents (which never POST to Omnigent themselves) so the
+    Task-tool subagents (which never POST to Goalrail themselves) so the
     Subagents rail can show them.
     """
     agent = await create_test_agent(client)
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     resp = await client.post(
@@ -552,7 +552,7 @@ async def test_external_subagent_start_mints_child_session(
     child = matching[0]
     assert child["parent_session_id"] == parent["id"]
     assert child["kind"] == "sub_agent"
-    # Title format mirrors omnigent-spawned children (``tool:name``).
+    # Title format mirrors goalrail-spawned children (``tool:name``).
     # The session_name half encodes ``subagent_id`` so two children
     # with the same agent_type + description don't collide on the
     # ``(parent, title)`` unique index (the LLM routinely emits the
@@ -561,7 +561,7 @@ async def test_external_subagent_start_mints_child_session(
     assert child["session_name"] == "a5c7effac5a9a35ab"
     # Description is preserved on the row's labels for surfaces that
     # want it; the rail's row UI ignores ``session_name``.
-    assert child["labels"]["omnigent.claude_native.description"] == "Trace the auth flow"
+    assert child["labels"]["goalrail.claude_native.description"] == "Trace the auth flow"
 
 
 async def test_external_subagent_start_handles_duplicate_agent_type_and_description(
@@ -582,7 +582,7 @@ async def test_external_subagent_start_handles_duplicate_agent_type_and_descript
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     common_data = {
@@ -636,7 +636,7 @@ async def test_external_subagent_start_is_idempotent_on_subagent_id(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
     payload = {
         "type": "external_subagent_start",
@@ -679,7 +679,7 @@ async def test_external_subagent_start_adopts_unlabeled_title_collision(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     # Seed the wedge state through the public create endpoint: a
@@ -719,8 +719,8 @@ async def test_external_subagent_start_adopts_unlabeled_title_collision(
     assert child["id"] == seeded_id
     # Labels are healed so the NEXT delivery resolves via the fast
     # label lookup instead of re-tripping the unique index.
-    assert child["labels"]["omnigent.claude_native.subagent_id"] == "a5c7effac5a9a35ab"
-    assert child["labels"]["omnigent.claude_native.description"] == "Trace the auth flow"
+    assert child["labels"]["goalrail.claude_native.subagent_id"] == "a5c7effac5a9a35ab"
+    assert child["labels"]["goalrail.claude_native.description"] == "Trace the auth flow"
 
     # Redelivery now takes the label-lookup path to the same id.
     again = await client.post(f"/v1/sessions/{parent['id']}/events", json=payload)
@@ -744,7 +744,7 @@ async def test_external_subagent_start_idempotency_pages_beyond_first_100(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
 
     older = await client.post(
@@ -813,7 +813,7 @@ async def test_external_subagent_start_rejects_missing_required_keys(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
     data = {
         "subagent_id": "a5c7effac5a9a35ab",
@@ -847,7 +847,7 @@ async def test_skill_slash_command_persists_visible_item_and_hidden_meta_message
     with ``is_meta=True`` so runner resume/history replay still has
     the skill context without showing raw instructions to users.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     forwarded: list[dict[str, Any]] = []
     published: list[tuple[str, dict[str, Any]]] = []
@@ -882,7 +882,7 @@ async def test_skill_slash_command_persists_visible_item_and_hidden_meta_message
         return httpx.Response(202, json={"queued": True})
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     fake_runner = httpx.AsyncClient(
@@ -995,7 +995,7 @@ async def test_skill_slash_command_keeps_existing_title(
     invoked later — otherwise every mid-conversation ``/skill`` send
     would rename the session in the sidebar.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """
@@ -1072,11 +1072,11 @@ async def test_skill_slash_command_non_json_resolve_surfaces_controlled_error(
 ) -> None:
     """
     A non-JSON ``/skills/resolve`` body (e.g. an HTML error page injected
-    by a proxy) surfaces as a controlled ``OmnigentError`` (HTTP 500
+    by a proxy) surfaces as a controlled ``GoalrailError`` (HTTP 500
     with our message), not an uncaught crash with the generic
     "An internal error occurred." body.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """Return a non-JSON body for resolve; 202 otherwise."""
@@ -1132,7 +1132,7 @@ async def test_external_meta_user_message_persists_without_live_input_event(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -1182,7 +1182,7 @@ async def test_external_user_message_folds_pending_image_into_durable_item(
     assert the persisted item carries BOTH the image block and the text.
     Without the fold, the stored item is text-only and the image is gone.
     """
-    from omnigent.runtime import pending_inputs
+    from goalrail.runtime import pending_inputs
 
     pending_inputs.reset_for_tests()
     agent = await create_test_agent(client)
@@ -1252,11 +1252,11 @@ async def test_external_user_message_drain_publishes_cleared_pending_id(
     the recorded id. A regression here silently breaks the bubble swap
     (the client falls back to FIFO and the entry can strand).
     """
-    from omnigent.runtime import pending_inputs
+    from goalrail.runtime import pending_inputs
 
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     pending_inputs.reset_for_tests()
@@ -1789,8 +1789,8 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
         # Labels the route's _is_claude_native_terminal_session and the
         # UI's terminal-first layout key off of.
         labels={
-            "omnigent.ui": "terminal",
-            "omnigent.wrapper": "claude-code-native-ui",
+            "goalrail.ui": "terminal",
+            "goalrail.wrapper": "claude-code-native-ui",
         },
     )
     session_id = session["id"]
@@ -1809,8 +1809,8 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
     assert row is not None, f"session not in list: {list_resp.json()}"
     assert row["title"] == "universe @ lakebox"
     assert row["agent_name"] == "claude-native-ui"
-    assert row["labels"]["omnigent.wrapper"] == "claude-code-native-ui"
-    assert row["labels"]["omnigent.ui"] == "terminal"
+    assert row["labels"]["goalrail.wrapper"] == "claude-code-native-ui"
+    assert row["labels"]["goalrail.ui"] == "terminal"
     assert row["external_session_id"] == "11111111-2222-3333-4444-555555555555"
     assert row["status"] in ("idle", "running", "failed")
 
@@ -1818,8 +1818,8 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
     snap = (await client.get(f"/v1/sessions/{session_id}")).json()
     assert snap["title"] == "universe @ lakebox"
     assert snap["agent_name"] == "claude-native-ui"
-    assert snap["labels"]["omnigent.wrapper"] == "claude-code-native-ui"
-    assert snap["labels"]["omnigent.ui"] == "terminal"
+    assert snap["labels"]["goalrail.wrapper"] == "claude-code-native-ui"
+    assert snap["labels"]["goalrail.ui"] == "terminal"
     assert snap["external_session_id"] == "11111111-2222-3333-4444-555555555555"
 
 
@@ -1838,7 +1838,7 @@ async def test_get_session_agent_name_is_spec_name_after_switch(
     Drives the REAL switch route end-to-end: source session → seeded
     bindable built-in → ``POST .../switch-agent`` → ``GET`` snapshot.
     """
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
 
     # Source session bound to a session-scoped "nessie" agent.
     source_agent = await create_test_agent(client, name="nessie")
@@ -1899,7 +1899,7 @@ async def test_list_sessions_exposes_pending_elicitations_count(
     invisible to users until they realize sessions are blocked
     and they had no idea.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -2048,7 +2048,7 @@ async def test_get_session_replays_pending_elicitations(
     so the rendered card is byte-identical to what the live path
     would have produced.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -2216,7 +2216,7 @@ async def test_post_external_assistant_message_persists_and_streams(
     """
     External assistant output appends history without starting a task.
 
-    This is the path used by ``omnigent claude`` to mirror real
+    This is the path used by ``goalrail claude`` to mirror real
     Claude terminal transcript text into the web UI. It must publish
     a completed output item so connected clients render the text
     immediately without a duplicate synthetic text delta, while
@@ -2235,7 +2235,7 @@ async def test_post_external_assistant_message_persists_and_streams(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -2303,7 +2303,7 @@ async def test_post_external_conversation_item_persists_and_streams_visible_item
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -2437,7 +2437,7 @@ async def test_post_external_function_call_output_caps_oversized_output(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -2464,7 +2464,7 @@ async def test_post_external_function_call_output_caps_oversized_output(
     assert snap.status_code == 200
     persisted = snap.json()["items"][0]
     assert persisted["type"] == "function_call_output"
-    assert "[output truncated by omnigent:" in persisted["data"]["output"]
+    assert "[output truncated by goalrail:" in persisted["data"]["output"]
     assert len(persisted["data"]["output"].encode("utf-8")) <= MAX_TOOL_OUTPUT_BYTES + 200
     assert len(persisted["data"]["output"].encode("utf-8")) < len(big_output)
 
@@ -2479,7 +2479,7 @@ async def test_post_external_function_call_output_caps_oversized_output(
     assert len(fco_events) == 1, (
         f"expected one broadcast function_call_output; got {len(fco_events)}"
     )
-    assert "[output truncated by omnigent:" in fco_events[0]
+    assert "[output truncated by goalrail:" in fco_events[0]
     assert len(fco_events[0].encode("utf-8")) < len(big_output)
 
 
@@ -2492,7 +2492,7 @@ async def test_external_transcript_items_recoverable_via_snapshot_by_item_id(
     snapshot + live stream by item id sees each item exactly once."""
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -2582,9 +2582,9 @@ async def test_post_external_session_status_publishes_session_status(
 
     The native Claude forwarder posts this when Claude Code's Stop /
     StopFailure hooks fire so the web UI's idle/running indicator
-    updates without going through the Omnigent task lifecycle.
+    updates without going through the Goalrail task lifecycle.
     A regression here would break the idle indicator for
-    ``omnigent claude`` sessions: Omnigent would never learn Claude
+    ``goalrail claude`` sessions: Goalrail would never learn Claude
     finished and the UI would stay stuck on whatever transient
     state it last saw.
     """
@@ -2601,7 +2601,7 @@ async def test_post_external_session_status_publishes_session_status(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -2646,7 +2646,7 @@ async def test_post_external_session_status_carries_response_id(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -2685,11 +2685,11 @@ async def test_publish_status_keeps_failed_sticky_against_trailing_idle(
     error badge would flash for ~1s then revert to idle on every failed
     claude-native turn.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     published: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda _session_id, event: published.append(event),
     )
     sid = "conv_sticky_failed"
@@ -2722,13 +2722,13 @@ async def test_patch_runner_rebind_clears_stale_failed_status(
     """
     CLI resume rebind clears a stale failed status after runner init.
 
-    ``omnigent codex --resume`` binds a newly launched runner through
+    ``goalrail codex --resume`` binds a newly launched runner through
     ``PATCH /v1/sessions/{id}``. That path has its own runner-init POST,
     separate from ``_resume_session_on_host``. If it succeeds but does not
     publish the recovery transition, a stale ``failed`` cache entry keeps
     the session snapshot stuck on an old native-terminal startup error.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     class _RecoveringRunnerClient:
         """Runner client that records PATCH-path session init."""
@@ -2806,7 +2806,7 @@ async def test_patch_runner_rebind_clears_stale_failed_status(
     monkeypatch.setattr(sessions_module, "_get_runner_client", _get_runner_client)
     monkeypatch.setattr(sessions_module, "_ensure_runner_relay_ready", _ensure_runner_relay_ready)
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda _session_id, event: published.append(event),
     )
     agent = await create_test_agent(client)
@@ -2857,12 +2857,12 @@ async def test_post_external_session_status_idle_forwards_persisted_assistant_ou
     """
     Native idle status forwarding includes AP-persisted assistant text.
 
-    The native forwarder posts transcript items to Omnigent server, then posts
+    The native forwarder posts transcript items to Goalrail server, then posts
     ``external_session_status: idle``. The runner's sub-agent registry
     needs the durable assistant text in that status forward because it
-    may not have the Omnigent transcript in local memory.
+    may not have the Goalrail transcript in local memory.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     forwarded: list[dict[str, Any]] = []
 
@@ -2966,11 +2966,11 @@ async def test_post_external_session_status_propagates_runner_delivery_failure(
     Runner delivery failure for a non-Codex sub-agent is preserved by AP.
 
     Native child terminal status is only successful when the runner confirms
-    delivery to the parent's inbox. If Omnigent returned ``{"queued": false}`` after
+    delivery to the parent's inbox. If Goalrail returned ``{"queued": false}`` after
     a runner 503, the child forwarder would believe the result was ACKed while
     the parent never receives it.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """
@@ -3038,7 +3038,7 @@ async def test_post_external_session_status_propagates_runner_delivery_failure(
     error = status_resp.json()["error"]
     assert error["code"] == "runner_unavailable"
     # The runner's delivery-not-confirmed reason is retained in AP's error
-    # message. If absent, Omnigent flattened the failure and made diagnosis harder.
+    # message. If absent, Goalrail flattened the failure and made diagnosis harder.
     assert "missing_parent_inbox" in error["message"]
 
 
@@ -3067,7 +3067,7 @@ async def test_post_external_output_text_delta_publishes_transient_delta(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3118,7 +3118,7 @@ async def test_post_external_output_text_delta_rejects_malformed_delta(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
 
@@ -3158,7 +3158,7 @@ async def test_post_external_output_reasoning_delta_started_publishes_started_th
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3211,7 +3211,7 @@ async def test_post_external_output_reasoning_delta_continuation_publishes_delta
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3259,7 +3259,7 @@ async def test_post_external_output_reasoning_delta_rejects_malformed_delta(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
 
@@ -3282,7 +3282,7 @@ async def test_post_external_session_interrupted_publishes_session_interrupted(
     Codex-native uses this when app-server reports a terminal
     ``turn/completed`` status of ``interrupted``. The event must decorate
     the active web turn as cancelled, but must not persist a transcript item
-    or start / steer an Omnigent task.
+    or start / steer an Goalrail task.
     """
     published: list[tuple[str, dict[str, Any]]] = []
 
@@ -3297,7 +3297,7 @@ async def test_post_external_session_interrupted_publishes_session_interrupted(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3351,7 +3351,7 @@ async def test_post_interrupt_without_data_field_is_accepted(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3401,7 +3401,7 @@ async def test_post_external_output_text_delta_carries_streaming_identifiers(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3481,7 +3481,7 @@ async def test_post_external_output_text_delta_rejects_malformed_identifiers(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -3536,7 +3536,7 @@ async def test_post_external_session_usage_publishes_session_usage(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -3576,7 +3576,7 @@ async def test_external_session_usage_broadcasts_parent_subtree_cost_not_own(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -3622,7 +3622,7 @@ async def test_post_external_session_usage_dynamic_context_window_overrides_snap
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -3660,7 +3660,7 @@ async def test_post_external_session_usage_window_only_payload_persists_window(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -3692,7 +3692,7 @@ async def test_post_external_session_usage_rejects_empty_payload(
     A payload missing both context_tokens and context_window 400s.
 
     Defends against a forwarder logic bug or partial deploy that would
-    otherwise round-trip a no-op event to Omnigent every poll.
+    otherwise round-trip a no-op event to Goalrail every poll.
     """
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -3729,7 +3729,7 @@ async def test_external_session_usage_persists_cumulative_cost(
     A claude-native ``cumulative_cost_usd`` is persisted to ``session_usage``.
 
     claude-native can't produce a ``response.completed`` (Claude Code is a
-    separate process), so the Omnigent relay's ``_accumulate_session_usage`` never
+    separate process), so the Goalrail relay's ``_accumulate_session_usage`` never
     runs for it. Instead the forwarder sends Claude Code's own cumulative
     ``cost.total_cost_usd`` on this event; the server must persist it so a
     Cost-Ask policy reading ``event.context.usage.total_cost_usd`` sees a real
@@ -3830,7 +3830,7 @@ async def test_external_session_usage_cumulative_cost_is_set_not_added(
     Successive cumulative-cost posts SET (not accumulate) — native reports
     running totals, so two posts of 0.42 then 0.90 must leave 0.90, not 1.32.
 
-    A failure (1.32) would mean the native path wrongly reused the Omnigent relay's
+    A failure (1.32) would mean the native path wrongly reused the Goalrail relay's
     add-delta semantics, double-counting the session cost.
     """
     agent = await create_test_agent(client)
@@ -3906,7 +3906,7 @@ async def test_external_session_usage_codex_tokens_priced(
     """
     # 1e-6 / 2e-6 USD per input / output token.
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: ModelPricing(input_per_token=1e-6, output_per_token=2e-6),
     )
     agent = await create_test_agent(client)
@@ -3949,7 +3949,7 @@ async def test_external_session_usage_codex_cached_tokens_priced_at_cache_rate(
     """
     # Cache read is 10x cheaper than fresh input (1e-7 vs 1e-6).
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: ModelPricing(
             input_per_token=1e-6,
             output_per_token=2e-6,
@@ -4009,7 +4009,7 @@ async def test_external_session_usage_codex_cached_tokens_no_catalog_cache_rate(
     """
     # No cache_read_per_token ⇒ compute_llm_cost derives it as 0.10x input.
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: ModelPricing(input_per_token=1e-6, output_per_token=2e-6),
     )
     agent = await create_test_agent(client)
@@ -4055,10 +4055,10 @@ async def test_accumulate_session_usage_prices_from_usage_model(
     NOT — so a recorded cost proves the harness-reported model was used, not
     the spec model.
     """
-    from omnigent.server.routes import sessions as sessions_routes
+    from goalrail.server.routes import sessions as sessions_routes
 
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: (
             ModelPricing(input_per_token=1e-6, output_per_token=2e-6)
             if model == "harness-model"
@@ -4090,10 +4090,10 @@ async def test_accumulate_session_usage_unpriced_without_usage_model(
     contract: when neither the harness nor the catalog can price the turn, the
     cost key stays absent (so the UI shows "—", not a misleading $0.00).
     """
-    from omnigent.server.routes import sessions as sessions_routes
+    from goalrail.server.routes import sessions as sessions_routes
 
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: None,  # nothing is priceable
     )
     agent = await create_test_agent(client)
@@ -4121,10 +4121,10 @@ async def test_accumulate_session_usage_records_per_model_breakdown(
     relies on. If the per-model cost were attributed to the wrong model or
     double-counted, this sum would diverge from the flat total.
     """
-    from omnigent.server.routes import sessions as sessions_routes
+    from goalrail.server.routes import sessions as sessions_routes
 
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: (
             ModelPricing(input_per_token=1e-6, output_per_token=2e-6)
             if model in {"model-a", "model-b"}
@@ -4173,10 +4173,10 @@ async def test_accumulate_session_usage_unpriced_model_has_tokens_no_cost(
     per-model level: tokens are attributed even when the model isn't priceable
     (so the token view is complete), but the model's bucket carries no cost key.
     """
-    from omnigent.server.routes import sessions as sessions_routes
+    from goalrail.server.routes import sessions as sessions_routes
 
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: None,  # nothing priceable
     )
     agent = await create_test_agent(client)
@@ -4341,7 +4341,7 @@ async def test_external_session_usage_event_carries_priced_cost(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4373,7 +4373,7 @@ async def test_external_session_usage_event_carries_token_breakdown(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4418,12 +4418,12 @@ async def test_external_session_usage_unpriced_omits_cost(
     """
     # Pricing unavailable for the model — the unpriced path.
     monkeypatch.setattr(
-        "omnigent.llms.context_window.fetch_model_pricing",
+        "goalrail.llms.context_window.fetch_model_pricing",
         lambda model: None,
     )
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4513,7 +4513,7 @@ async def test_external_session_usage_rejects_malformed_cumulative(
 
 
 # Cost-budget policy. Enforcement moved to the ``tool_call`` gate (the
-# PreToolUse hook) — see omnigent/policies/builtins/cost.py. The old
+# PreToolUse hook) — see goalrail/policies/builtins/cost.py. The old
 # post-hoc ``output_logged`` path that stopped the whole session is gone:
 # an over-budget tool call is DENYed (prompting a /model downgrade), while
 # logged usage on its own never stops the session.
@@ -4522,7 +4522,7 @@ _COST_GUARD_GUARDRAILS = {
         "cost_guard": {
             "type": "function",
             "function": {
-                "path": "omnigent.policies.builtins.cost.cost_budget",
+                "path": "goalrail.policies.builtins.cost.cost_budget",
                 "arguments": {"max_cost_usd": 1.0},
             },
         },
@@ -4559,7 +4559,7 @@ async def test_external_session_usage_over_budget_does_not_stop_session(
     # Cost persisted so the tool-call gate can read it on the next tool call.
     assert conv.session_usage.get("total_cost_usd") == 2.5
     # ...but the session is NOT stopped (the post-hoc cost stop is gone).
-    assert conv.labels.get("omnigent.stopped") != "true"
+    assert conv.labels.get("goalrail.stopped") != "true"
 
 
 # Cost guard with a soft warning checkpoint, for the relay tool-call ASK
@@ -4570,7 +4570,7 @@ _COST_GUARD_SOFT_GUARDRAILS = {
         "cost_guard": {
             "type": "function",
             "function": {
-                "path": "omnigent.policies.builtins.cost.cost_budget",
+                "path": "goalrail.policies.builtins.cost.cost_budget",
                 "arguments": {"max_cost_usd": 1.0, "ask_thresholds_usd": [0.05]},
             },
         },
@@ -4621,7 +4621,7 @@ async def test_relay_tool_call_ask_approval_persists_checkpoint(
     checkpoint is never recorded and every later tool call re-asks (the bug
     this guards; the native path persisted it but the relay path dropped it).
     """
-    from omnigent.policies.builtins.cost import _ASK_APPROVED_KEY
+    from goalrail.policies.builtins.cost import _ASK_APPROVED_KEY
 
     agent = await create_test_agent(client, guardrails=_COST_GUARD_SOFT_GUARDRAILS)
     session = await _create_session(client, agent["id"])
@@ -4668,7 +4668,7 @@ async def test_relay_tool_call_ask_decline_does_not_record_checkpoint(
     persist the checkpoint — the next tool call re-asks (the user did not
     consent to continue past the threshold).
     """
-    from omnigent.policies.builtins.cost import _ASK_APPROVED_KEY
+    from goalrail.policies.builtins.cost import _ASK_APPROVED_KEY
 
     agent = await create_test_agent(client, guardrails=_COST_GUARD_SOFT_GUARDRAILS)
     session = await _create_session(client, agent["id"])
@@ -4710,7 +4710,7 @@ async def test_mcp_relay_tool_call_ask_approval_persists_checkpoint(
     The retry's tool execution fails here (no runner bound), but the policy
     write is applied before execution, which is what we assert.
     """
-    from omnigent.policies.builtins.cost import _ASK_APPROVED_KEY
+    from goalrail.policies.builtins.cost import _ASK_APPROVED_KEY
 
     agent = await create_test_agent(client, guardrails=_COST_GUARD_SOFT_GUARDRAILS)
     session = await _create_session(client, agent["id"])
@@ -4778,7 +4778,7 @@ async def test_post_external_model_change_publishes_session_model(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4815,7 +4815,7 @@ async def test_post_external_model_change_dedupes_when_unchanged(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4873,7 +4873,7 @@ async def test_post_external_model_change_does_not_forward_to_runner(
     (``update_session``), which DOES forward ``model_change`` to the
     runner. The ``session.model`` SSE still fires; the runner sees nothing.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     runner_paths: list[str] = []
 
@@ -4884,7 +4884,7 @@ async def test_post_external_model_change_does_not_forward_to_runner(
 
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -4899,8 +4899,8 @@ async def test_post_external_model_change_does_not_forward_to_runner(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
         runner_paths.clear()  # ignore any bind-time runner traffic
@@ -4935,7 +4935,7 @@ async def test_post_external_reasoning_effort_change_publishes_session_effort(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -4972,7 +4972,7 @@ async def test_post_external_reasoning_effort_change_clears_effort(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -5037,7 +5037,7 @@ async def test_post_external_codex_collaboration_mode_change_persists_label(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -5056,7 +5056,7 @@ async def test_post_external_codex_collaboration_mode_change_persists_label(
     assert published[0][1]["conversation_id"] == session["id"]
     assert published[0][1]["mode"] == "plan"
     snapshot = (await client.get(f"/v1/sessions/{session['id']}")).json()
-    assert snapshot["labels"]["omnigent.codex_native.collaboration_mode"] == "plan"
+    assert snapshot["labels"]["goalrail.codex_native.collaboration_mode"] == "plan"
 
 
 async def test_post_external_codex_collaboration_mode_change_rejects_unknown_mode(
@@ -5120,7 +5120,7 @@ async def test_patch_model_override_records_system_note_for_inprocess_session(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -5129,7 +5129,7 @@ async def test_patch_model_override_records_system_note_for_inprocess_session(
         return
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._forward_session_change_to_runner",
+        "goalrail.server.routes.sessions._forward_session_change_to_runner",
         _noop_forward,
     )
     agent = await create_test_agent(client)
@@ -5154,7 +5154,7 @@ async def test_patch_model_override_clear_records_reset_note(
     """Clearing the override (``default``) records a reset note, not a model name."""
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -5162,7 +5162,7 @@ async def test_patch_model_override_clear_records_reset_note(
         """Isolate the note logic from the live runner forward."""
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._forward_session_change_to_runner",
+        "goalrail.server.routes.sessions._forward_session_change_to_runner",
         _noop_forward,
     )
     agent = await create_test_agent(client)
@@ -5181,19 +5181,19 @@ async def test_patch_model_override_skips_note_for_native_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A native-wrapper session (``omnigent.wrapper`` set, here alongside
-    ``omnigent.ui == "terminal"``) must NOT get an injected note —
+    A native-wrapper session (``goalrail.wrapper`` set, here alongside
+    ``goalrail.ui == "terminal"``) must NOT get an injected note —
     claude-native uses the picker and codex-native pins its model at launch,
     so an AP-side ``[System: ...]`` item would be a stray/misleading record
     (and pollute the mirrored transcript). The gate keys on the wrapper
-    label, NOT ``omnigent.ui`` alone — see
+    label, NOT ``goalrail.ui`` alone — see
     ``test_patch_model_override_records_note_for_terminal_view_sdk_session``
-    for the chat-first SDK session that has ``omnigent.ui`` but no wrapper
+    for the chat-first SDK session that has ``goalrail.ui`` but no wrapper
     and DOES get the note.
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -5201,7 +5201,7 @@ async def test_patch_model_override_skips_note_for_native_session(
         """Isolate the note logic from the live runner forward."""
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._forward_session_change_to_runner",
+        "goalrail.server.routes.sessions._forward_session_change_to_runner",
         _noop_forward,
     )
     agent = await create_test_agent(client)
@@ -5209,8 +5209,8 @@ async def test_patch_model_override_skips_note_for_native_session(
         client,
         agent["id"],
         labels={
-            "omnigent.ui": "terminal",
-            "omnigent.wrapper": "claude-code-native-ui",
+            "goalrail.ui": "terminal",
+            "goalrail.wrapper": "claude-code-native-ui",
         },
     )
 
@@ -5229,20 +5229,20 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
 ) -> None:
     """
     A chat-first SDK session that merely exposes a REPL terminal view
-    (``omnigent.ui == "terminal"`` but NO ``omnigent.wrapper``) DOES get the
+    (``goalrail.ui == "terminal"`` but NO ``goalrail.wrapper``) DOES get the
     note.
 
     This is the polly / debby case: when such an agent is launched via
-    ``omnigent run``, the runner stamps ``omnigent.ui: terminal`` to enable
+    ``goalrail run``, the runner stamps ``goalrail.ui: terminal`` to enable
     the web Chat/Terminal toggle (runner ``app.py``), but the brain is an
-    in-process claude-sdk agent whose history Omnigent writes — so a web
+    in-process claude-sdk agent whose history Goalrail writes — so a web
     ``/model`` switch should land a durable ``[System: ...]`` note. Gating on
-    ``omnigent.ui`` (the pre-fix behavior) wrongly suppressed it; the gate
-    must key on the ``omnigent.wrapper`` native label instead.
+    ``goalrail.ui`` (the pre-fix behavior) wrongly suppressed it; the gate
+    must key on the ``goalrail.wrapper`` native label instead.
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -5250,7 +5250,7 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
         """Isolate the note logic from the live runner forward."""
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._forward_session_change_to_runner",
+        "goalrail.server.routes.sessions._forward_session_change_to_runner",
         _noop_forward,
     )
     agent = await create_test_agent(client)
@@ -5258,8 +5258,8 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
         client,
         agent["id"],
         # Terminal VIEW only — no native wrapper. Mirrors a polly/debby
-        # session launched via `omnigent run`.
-        labels={"omnigent.ui": "terminal"},
+        # session launched via `goalrail run`.
+        labels={"goalrail.ui": "terminal"},
     )
 
     patch = await client.patch(
@@ -5267,9 +5267,9 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
         json={"model_override": "databricks-claude-sonnet-4-6"},
     )
     assert patch.status_code == 200, patch.text
-    # Note IS recorded: ``omnigent.ui == "terminal"`` alone must not suppress
+    # Note IS recorded: ``goalrail.ui == "terminal"`` alone must not suppress
     # it. An empty list here means the gate regressed to keying on
-    # ``omnigent.ui``, re-breaking the polly/debby web ``/model`` feedback.
+    # ``goalrail.ui``, re-breaking the polly/debby web ``/model`` feedback.
     assert _model_change_notes(published) == [
         "[System: model changed to databricks-claude-sonnet-4-6]"
     ]
@@ -5285,7 +5285,7 @@ async def test_patch_model_override_silent_skips_note(
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -5329,13 +5329,13 @@ async def test_post_external_session_todos_publishes_session_todos(
 
     The claude-native forwarder posts this on every PostToolUse / TodoWrite
     hook so the ap-web todo panel updates in real time. A regression here
-    would break the panel for ``omnigent claude`` sessions: the UI would
+    would break the panel for ``goalrail claude`` sessions: the UI would
     never receive a ``session.todos`` broadcast and the panel would stay
     blank even when Claude has active tasks.
     """
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
     agent = await create_test_agent(client)
@@ -5374,7 +5374,7 @@ async def test_post_external_session_todos_updates_snapshot(
     As a result the snapshot always returned ``todos: []`` even when
     Claude had active tasks.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -5409,7 +5409,7 @@ async def test_post_external_session_todos_empty_list_clears_snapshot(
     disappear (renders nothing on empty); the snapshot must reflect the
     cleared list so a page refresh also shows the empty state.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from goalrail.server.routes import sessions as sessions_module
 
     agent = await create_test_agent(client)
     session = await _create_session(client, agent["id"])
@@ -5499,7 +5499,7 @@ async def test_post_external_conversation_item_auto_assigns_response_id(
         published.append((session_id, event))
 
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         capture_publish,
     )
     agent = await create_test_agent(client)
@@ -5538,7 +5538,7 @@ async def test_external_user_message_seeds_title_on_claude_native_session(
     """
     First forwarded user message seeds the title on a claude-native session.
 
-    With the placeholder carve-out removed, ``omnigent claude``
+    With the placeholder carve-out removed, ``goalrail claude``
     creates sessions without a title — same shape as every other
     untitled session. The transcript forwarder's first
     ``external_conversation_item`` user-message POST must trigger
@@ -5555,8 +5555,8 @@ async def test_external_user_message_seeds_title_on_claude_native_session(
         agent["id"],
         # No title — claude-native wrapper no longer stamps one.
         labels={
-            "omnigent.ui": "terminal",
-            "omnigent.wrapper": "claude-code-native-ui",
+            "goalrail.ui": "terminal",
+            "goalrail.wrapper": "claude-code-native-ui",
         },
     )
     # Precondition: the session was created with no title. If this fails,
@@ -5600,10 +5600,10 @@ async def test_interrupt_on_claude_native_session_skips_idle_publish_on_runner_f
 ) -> None:
     """
     If the runner couldn't deliver the Escape (e.g. tmux pane gone),
-    Omnigent must NOT lie to the UI by publishing idle. The spinner spins
+    Goalrail must NOT lie to the UI by publishing idle. The spinner spins
     is the right signal — it tells the user the cancel didn't land.
 
-    After the interrupt-unification refactor the Omnigent side no longer
+    After the interrupt-unification refactor the Goalrail side no longer
     publishes ``session.status: idle`` itself at all. Idle on a
     claude-native interrupt now comes from the runner's PTY activity
     watcher once the pane quiesces after the Escape (a failed Escape
@@ -5612,7 +5612,7 @@ async def test_interrupt_on_claude_native_session_skips_idle_publish_on_runner_f
     publish — if someone reintroduces the pre-refactor "publish idle on
     2xx" logic, the 503 path here would start leaking idle.
     """
-    from omnigent.runtime import session_stream, set_runner_client
+    from goalrail.runtime import session_stream, set_runner_client
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """Return 503 — the bridge-not-ready shape from the runner."""
@@ -5640,8 +5640,8 @@ async def test_interrupt_on_claude_native_session_skips_idle_publish_on_runner_f
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
 
@@ -5677,16 +5677,16 @@ async def test_stop_session_forwards_stop_session_event_to_runner(
     POST ``/events`` ``stop_session`` forwards the event verbatim to
     the bound runner's ``/events`` endpoint.
 
-    The Omnigent server stays harness-agnostic: it doesn't kill anything
+    The Goalrail server stays harness-agnostic: it doesn't kill anything
     itself, it relays a ``{"type": "stop_session"}`` event to the
     runner, whose dispatch decides what to do (hard-kill tmux for
-    claude-native, 204 for in-process). This pins that the Omnigent forward
+    claude-native, 204 for in-process). This pins that the Goalrail forward
     fires and addresses the runner's per-session ``/events`` path with
     the right body — a regression that dropped the forward, mangled
     the body, or hit the wrong URL would silently make the web UI's
     "Stop session" button a no-op.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     forwarded: list[_ForwardedEffort] = []
 
@@ -5709,8 +5709,8 @@ async def test_stop_session_forwards_stop_session_event_to_runner(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
 
@@ -5729,7 +5729,7 @@ async def test_stop_session_forwards_stop_session_event_to_runner(
         set_runner_client(None)
 
     # Exactly one POST to the session's /events path, carrying the
-    # stop_session type. 0 = the Omnigent branch didn't forward (no-op stop
+    # stop_session type. 0 = the Goalrail branch didn't forward (no-op stop
     # button); 2+ = a duplicate relay. Snapshot GETs are filtered out
     # by the handler, so this isolates the control-event forward.
     events_forwards = [
@@ -5764,16 +5764,16 @@ async def test_stop_session_surfaces_runner_failure_as_error(
 
     Unlike effort/model_change (where a dropped forward is benign), a
     failed ``stop_session`` means the session is still alive. If the
-    Omnigent server swallowed the runner's 503 and returned 202
+    Goalrail server swallowed the runner's 503 and returned 202
     ``{queued: false}``, the web UI would close its confirmation
     dialog as if the session stopped — the exact silent-failure the
-    review flagged. This pins that the Omnigent route raises (non-2xx)
+    review flagged. This pins that the Goalrail route raises (non-2xx)
     instead, so the frontend mutation lands in its error state and
     can tell the user the stop didn't land. The bare-ConnectionError
     leg pins the WS-tunnel transport error mapping to the same clean
     RUNNER_UNAVAILABLE 503 rather than leaking a raw 500.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """Snapshot GETs pass; the stop POST gets the runner failure."""
@@ -5797,8 +5797,8 @@ async def test_stop_session_surfaces_runner_failure_as_error(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
 
@@ -5819,7 +5819,7 @@ async def test_stop_session_surfaces_runner_failure_as_error(
     # The failed stop also lifts the just-installed turn fence: the turn
     # keeps running and nothing else would ever lift it, so leaving it set
     # would silently drop the rest of the turn (live + durable).
-    from omnigent.server.routes.sessions import _interrupt_fenced_sessions
+    from goalrail.server.routes.sessions import _interrupt_fenced_sessions
 
     assert session["id"] not in _interrupt_fenced_sessions, (
         "a failed stop_session must remove the interrupt fence it installed"
@@ -5839,8 +5839,8 @@ async def test_stop_session_no_runner_lifts_stop_fence(
     outlive that no-op: nothing else would ever lift it, and the
     interrupt branch already unfences in the same no-client situation.
     """
-    from omnigent.runtime import set_runner_client
-    from omnigent.server.routes.sessions import _interrupt_fenced_sessions
+    from goalrail.runtime import set_runner_client
+    from goalrail.server.routes.sessions import _interrupt_fenced_sessions
 
     # Pin the no-runner precondition: no global fallback client either.
     set_runner_client(None)
@@ -5893,8 +5893,8 @@ async def test_interrupt_forward_failure_lifts_stop_fence(
     until the next turn. The route must lift the fence when the interrupt
     demonstrably did not land.
     """
-    from omnigent.server.routes import sessions as sessions_module
-    from omnigent.server.routes.sessions import _interrupt_fenced_sessions
+    from goalrail.server.routes import sessions as sessions_module
+    from goalrail.server.routes.sessions import _interrupt_fenced_sessions
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """Fail the interrupt POST; let everything else pass through."""
@@ -5956,8 +5956,8 @@ async def test_interrupt_forward_success_keeps_stop_fence(
     turn's trailing deltas would leak into the transcript and live stream
     (the original stop-mid-stream bug).
     """
-    from omnigent.server.routes import sessions as sessions_module
-    from omnigent.server.routes.sessions import _interrupt_fenced_sessions
+    from goalrail.server.routes import sessions as sessions_module
+    from goalrail.server.routes.sessions import _interrupt_fenced_sessions
 
     def _handler(request: httpx.Request) -> httpx.Response:
         """Accept the interrupt POST (2xx) and all other requests."""
@@ -6005,8 +6005,8 @@ class _ForwardedEffort:
     """
     One forward of an effort change to the runner.
 
-    :param url: Fully-qualified runner URL the Omnigent server POSTed to.
-    :param body: Parsed JSON body the Omnigent server sent, or ``None``
+    :param url: Fully-qualified runner URL the Goalrail server POSTed to.
+    :param body: Parsed JSON body the Goalrail server sent, or ``None``
         when the request had no body.
     """
 
@@ -6027,12 +6027,12 @@ async def test_patch_collaboration_mode_persists_label_and_forwards_event(
     harness-agnostic ``plan_mode_change`` control event to the runner so the
     loaded Codex app-server switches modes immediately.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     captured: list[_ForwardedEffort] = []
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -6057,8 +6057,8 @@ async def test_patch_collaboration_mode_persists_label_and_forwards_event(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "codex-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "codex-native-ui",
             },
         )
         captured.clear()
@@ -6072,7 +6072,7 @@ async def test_patch_collaboration_mode_persists_label_and_forwards_event(
         set_runner_client(None)
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["labels"]["omnigent.codex_native.collaboration_mode"] == "plan"
+    assert resp.json()["labels"]["goalrail.codex_native.collaboration_mode"] == "plan"
     plan_forwards = [f for f in captured if f.url.endswith(f"/v1/sessions/{session['id']}/events")]
     assert len(plan_forwards) == 1, f"Expected one runner forward, got {captured!r}"
     assert plan_forwards[0].body == {"type": "plan_mode_change", "enabled": True}
@@ -6095,12 +6095,12 @@ async def test_patch_collaboration_mode_requires_live_runner_before_persisting(
     apply the update, the route must fail and leave the collaboration label
     absent so the web UI rolls back instead of showing a false Plan indicator.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     captured: list[_ForwardedEffort] = []
     published: list[tuple[str, dict[str, Any]]] = []
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.session_stream.publish",
+        "goalrail.server.routes.sessions.session_stream.publish",
         lambda sid, ev: published.append((sid, ev)),
     )
 
@@ -6138,8 +6138,8 @@ async def test_patch_collaboration_mode_requires_live_runner_before_persisting(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "codex-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "codex-native-ui",
             },
         )
 
@@ -6155,7 +6155,7 @@ async def test_patch_collaboration_mode_requires_live_runner_before_persisting(
 
     assert resp.status_code == 503, resp.text
     assert "Could not enter Plan mode" in resp.text
-    assert "omnigent.codex_native.collaboration_mode" not in snapshot["labels"]
+    assert "goalrail.codex_native.collaboration_mode" not in snapshot["labels"]
     assert published == []
     if runner_status is None:
         assert captured == []
@@ -6194,7 +6194,7 @@ async def test_patch_collaboration_mode_rejects_non_codex_session(
         # (1) Native + claude-accepted level → POSTs effort_change.
         # The motivating case: dropdown click on a running pane.
         (True, "high", "high", "high"),
-        # (2) Non-native + same level → Omnigent server is harness-agnostic
+        # (2) Non-native + same level → Goalrail server is harness-agnostic
         # so it ALSO POSTs effort_change. The runner's /events
         # dispatch will 204 no-op (covered by a runner-side test);
         # AP's job is just to forward.
@@ -6202,10 +6202,10 @@ async def test_patch_collaboration_mode_rejects_non_codex_session(
         # (3) Clear on native session → persisted None gets forwarded
         # as effort=None. The runner-side native handler decides to
         # skip injection (Claude has no slash for "use spawn default").
-        # Before refactor, Omnigent would short-circuit and not POST at all.
+        # Before refactor, Goalrail would short-circuit and not POST at all.
         (True, "default", None, None),
         # (4) Level in EFFORT_VALUES but not CLAUDE_EFFORTS (``none``,
-        # ``minimal``). After refactor Omnigent no longer filters — it
+        # ``minimal``). After refactor Goalrail no longer filters — it
         # forwards as-is, and the runner-side handler skips injection.
         (True, "none", "none", "none"),
     ],
@@ -6219,9 +6219,9 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
 ) -> None:
     """
     PATCH effort always forwards an ``effort_change`` event to
-    runner ``/events`` — harness-agnostic on the Omnigent side.
+    runner ``/events`` — harness-agnostic on the Goalrail side.
 
-    Before the refactor, Omnigent server made a native-only POST to
+    Before the refactor, Goalrail server made a native-only POST to
     ``/claude-native-effort`` and filtered out clear / unsupported
     values. After the refactor:
 
@@ -6230,7 +6230,7 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
     * The body is the new ``effort_change`` discriminator with the
       persisted level (or ``None`` for clear) — runner-side dispatch
       decides what to do with it.
-    * Omnigent server does not check ``_is_native_terminal_session``
+    * Goalrail server does not check ``_is_native_terminal_session``
       and does not filter on level — every PATCH that changes effort
       sends the event.
 
@@ -6240,7 +6240,7 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
     "doesn't POST" / "POSTs to claude-native-effort" assertion
     flipped to "POSTs effort_change to /events".
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     captured: list[_ForwardedEffort] = []
 
@@ -6267,8 +6267,8 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
         session_kwargs = (
             {
                 "labels": {
-                    "omnigent.ui": "terminal",
-                    "omnigent.wrapper": "claude-code-native-ui",
+                    "goalrail.ui": "terminal",
+                    "goalrail.wrapper": "claude-code-native-ui",
                 },
             }
             if native_session
@@ -6299,7 +6299,7 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
         await fake_runner.aclose()
         set_runner_client(None)
 
-    # Exactly one POST to the unified /events route. 0 = Omnigent server
+    # Exactly one POST to the unified /events route. 0 = Goalrail server
     # silently dropped the forward (regression in the harness-agnostic
     # always-forward path); 2+ = a legacy branch (e.g. the deleted
     # _forward_claude_native_effort helper) snuck back in alongside
@@ -6325,7 +6325,7 @@ async def test_patch_reasoning_effort_forwards_effort_change_event(
     )
 
     # No POST to the legacy ``/claude-native-effort`` route should
-    # happen anymore — its callsite is gone from Omnigent server. A non-
+    # happen anymore — its callsite is gone from Goalrail server. A non-
     # empty list here means the deleted ``_forward_claude_native_effort``
     # helper (or an equivalent native-only branch) was re-introduced.
     legacy_forwards = [f for f in captured if "/claude-native-effort" in f.url]
@@ -6349,7 +6349,7 @@ async def test_silent_patch_skips_effort_change_forward(
     has sent anything. The persisted value is still authoritative —
     the next spawn picks it up via ``--effort``.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     captured: list[_ForwardedEffort] = []
 
@@ -6377,8 +6377,8 @@ async def test_silent_patch_skips_effort_change_forward(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
         captured.clear()
@@ -6426,9 +6426,9 @@ async def test_patch_reasoning_effort_swallows_runner_failure(
     Updated for the unified-events refactor: the URL the runner
     rejects is now ``/events`` (not the deleted
     ``/claude-native-effort``), but the swallow-and-return-200
-    contract on the Omnigent side is unchanged.
+    contract on the Goalrail side is unchanged.
     """
-    from omnigent.runtime import set_runner_client
+    from goalrail.runtime import set_runner_client
 
     captured: list[_ForwardedEffort] = []
 
@@ -6462,8 +6462,8 @@ async def test_patch_reasoning_effort_swallows_runner_failure(
             client,
             agent["id"],
             labels={
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "claude-code-native-ui",
+                "goalrail.ui": "terminal",
+                "goalrail.wrapper": "claude-code-native-ui",
             },
         )
 
@@ -6481,7 +6481,7 @@ async def test_patch_reasoning_effort_swallows_runner_failure(
 
     # One effort_change forward was attempted (proves we got far
     # enough to talk to the runner — i.e. the failure was swallowed,
-    # not skipped). 0 = Omnigent server bailed before forwarding (regression
+    # not skipped). 0 = Goalrail server bailed before forwarding (regression
     # in the always-forward contract).
     events_forwards = [
         f
@@ -6544,7 +6544,7 @@ async def test_external_codex_subagent_start_mints_child_session(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
 
     resp = await client.post(
@@ -6582,11 +6582,11 @@ async def test_external_codex_subagent_start_mints_child_session(
         f"Expected session_name=thread_id; got {child['session_name']!r}"
     )
     labels = child["labels"]
-    assert labels["omnigent.codex_native.subagent_thread_id"] == "thread_child_alpha"
-    assert labels["omnigent.codex_native.parent_thread_id"] == "thread_parent"
-    assert labels["omnigent.codex_native.collab_tool_call_id"] == "collab_123"
-    assert labels["omnigent.codex_native.agent_nickname"] == "auth-auditor"
-    assert labels["omnigent.codex_native.agent_role"] == "reviewer"
+    assert labels["goalrail.codex_native.subagent_thread_id"] == "thread_child_alpha"
+    assert labels["goalrail.codex_native.parent_thread_id"] == "thread_parent"
+    assert labels["goalrail.codex_native.collab_tool_call_id"] == "collab_123"
+    assert labels["goalrail.codex_native.agent_nickname"] == "auth-auditor"
+    assert labels["goalrail.codex_native.agent_role"] == "reviewer"
     # Prompt must surface as the preview before real transcript arrives.
     assert child["last_message_preview"] == "Audit the auth flow", (
         f"Expected prompt preview before transcript exists; got {child['last_message_preview']!r}"
@@ -6610,7 +6610,7 @@ async def test_external_codex_subagent_start_is_idempotent_and_upserts_labels(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
 
     # First registration — sparse (no nickname yet).
@@ -6678,7 +6678,7 @@ async def test_external_codex_subagent_start_adopts_unlabeled_title_collision(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
 
     # Seed the wedge: the exact collision title, no codex labels.
@@ -6715,7 +6715,7 @@ async def test_external_codex_subagent_start_adopts_unlabeled_title_collision(
     # Thread-id label is healed so future deliveries resolve via the
     # normal label lookup.
     assert (
-        children[0]["labels"]["omnigent.codex_native.subagent_thread_id"] == "thread_child_gamma"
+        children[0]["labels"]["goalrail.codex_native.subagent_thread_id"] == "thread_child_gamma"
     )
 
     # Redelivery now takes the label-lookup path to the same id.
@@ -6747,7 +6747,7 @@ async def test_external_codex_subagent_start_rejects_missing_thread_id(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
 
     resp = await client.post(
@@ -6769,7 +6769,7 @@ async def test_external_codex_subagent_terminal_status_accepted_without_runner(
     ``external_session_status`` on a Codex internal child does not require
     runner delivery.
 
-    Omnigent-spawned native sub-agents must forward terminal status to the
+    Goalrail-spawned native sub-agents must forward terminal status to the
     parent runner inbox. Codex AgentControl children are tracked inside the
     same app-server thread tree and have no runner inbox entry, so the
     ``_require_external_status_forward`` guard must be bypassed for them.
@@ -6777,7 +6777,7 @@ async def test_external_codex_subagent_terminal_status_accepted_without_runner(
     :param client: The test HTTP client.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.server.routes import sessions as sessions_mod
+    from goalrail.server.routes import sessions as sessions_mod
 
     published: list[tuple[str, dict[str, Any]]] = []
 
@@ -6797,7 +6797,7 @@ async def test_external_codex_subagent_terminal_status_accepted_without_runner(
     parent = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"goalrail.wrapper": "codex-native-ui"},
     )
     start_resp = await client.post(
         f"/v1/sessions/{parent['id']}/events",
@@ -6847,7 +6847,7 @@ async def test_native_message_persisted_when_runner_offline(
     session = await _create_session(
         client,
         agent["id"],
-        labels={"omnigent.wrapper": "claude-code-native-ui"},
+        labels={"goalrail.wrapper": "claude-code-native-ui"},
     )
     sid = session["id"]
 

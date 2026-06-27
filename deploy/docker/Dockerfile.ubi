@@ -1,4 +1,4 @@
-# Omnigent UBI images: server (default target) + host (`--target host`).
+# Goalrail UBI images: server (default target) + host (`--target host`).
 #
 # Red Hat Universal Base Image (UBI 9) variant of the standard Dockerfile,
 # for RHEL/OpenShift environments that require UBI-compliant containers.
@@ -6,10 +6,10 @@
 #
 # Build (from repo root):
 #
-#   docker build -t omnigent-server:ubi \
+#   docker build -t goalrail-server:ubi \
 #                -f deploy/docker/Dockerfile.ubi .
 #
-#   docker build -t omnigent-host:ubi --target host \
+#   docker build -t goalrail-host:ubi --target host \
 #                -f deploy/docker/Dockerfile.ubi .
 
 ARG PYTHON_VERSION=3.12
@@ -47,7 +47,7 @@ WORKDIR /build
 COPY pyproject.toml setup.py ./
 COPY LICENSE NOTICE ./
 COPY sdks/ ./sdks/
-COPY omnigent/ ./omnigent/
+COPY goalrail/ ./goalrail/
 COPY examples/ ./examples/
 
 RUN python -m venv /opt/venv
@@ -61,8 +61,8 @@ FROM builder AS server-builder
 
 ARG PYPI_INDEX_URL=https://pypi.org/simple
 
-COPY --from=web-builder /web/omnigent/server/static/web-ui ./omnigent/server/static/web-ui
-RUN test -f ./omnigent/server/static/web-ui/index.html \
+COPY --from=web-builder /web/goalrail/server/static/web-ui ./goalrail/server/static/web-ui
+RUN test -f ./goalrail/server/static/web-ui/index.html \
     || (echo "ERROR: SPA bundle missing after web-builder stage — check the ap-web build." && exit 1)
 
 RUN uv pip install --no-cache-dir --index-url ${PYPI_INDEX_URL} 'psycopg[binary]>=3.1,<4'
@@ -112,7 +112,7 @@ RUN curl -fsSL https://cli.kiro.dev/install | bash \
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /build /build
 
-RUN echo 'export PATH="/opt/venv/bin:${PATH}"' > /etc/profile.d/omnigent-venv.sh
+RUN echo 'export PATH="/opt/venv/bin:${PATH}"' > /etc/profile.d/goalrail-venv.sh
 
 WORKDIR /root
 CMD ["sleep", "infinity"]

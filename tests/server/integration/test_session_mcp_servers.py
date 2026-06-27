@@ -10,7 +10,7 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.server.routes import session_mcp_servers as mcp_routes
+from goalrail.server.routes import session_mcp_servers as mcp_routes
 from tests.server.helpers import create_test_session
 
 pytestmark = pytest.mark.asyncio
@@ -174,7 +174,7 @@ async def test_create_mcp_server_rejects_duplicate_name(client: httpx.AsyncClien
 
 
 async def test_create_mcp_server_supports_single_yaml_bundle(client: httpx.AsyncClient) -> None:
-    """Single-file omnigent YAML bundles are updated inline."""
+    """Single-file goalrail YAML bundles are updated inline."""
     create_session = await client.post(
         "/v1/sessions",
         data={"metadata": "{}"},
@@ -227,7 +227,7 @@ def _mcp_file_from_bundle(bundle: bytes, filename: str) -> dict[str, Any]:
 
 
 def _single_yaml_bundle(yaml_text: str) -> bytes:
-    """Build a tar.gz bundle containing one omnigent YAML file."""
+    """Build a tar.gz bundle containing one goalrail YAML file."""
     buf = io.BytesIO()
     data = yaml_text.encode()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:

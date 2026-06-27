@@ -1,6 +1,6 @@
 """
 Tests for the built-in cost-budget policy
-(:mod:`omnigent.policies.builtins.cost`) — the ``cost_budget`` factory.
+(:mod:`goalrail.policies.builtins.cost`) — the ``cost_budget`` factory.
 
 The policy's hard limit gates both the ``request`` and ``tool_call``
 phases: once reached, DENY (the whole turn on ``request``, or each tool
@@ -32,14 +32,14 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.cost import _ASK_APPROVED_KEY, cost_budget
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent
-from omnigent.policies.types import EvaluationContext
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from goalrail.policies.builtins.cost import _ASK_APPROVED_KEY, cost_budget
+from goalrail.policies.function import FunctionPolicy, resolve_function_policy
+from goalrail.policies.registry import get_registry, load_registry, validate_factory_params
+from goalrail.policies.schema import PolicyEvent
+from goalrail.policies.types import EvaluationContext
+from goalrail.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
 
-_HANDLER = "omnigent.policies.builtins.cost.cost_budget"
+_HANDLER = "goalrail.policies.builtins.cost.cost_budget"
 
 
 def _tool(

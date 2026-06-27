@@ -8,13 +8,13 @@ The callable follows the Service Policies V0 contract:
 ``fn(event) -> {"result": ..., "reason": ...}``.
 
 Gates on the agent-facing tool name ``search_web`` rather than
-``web_search`` because the latter is a reserved Omnigent built-in (see
-``omnigent/tools/builtins/__init__.py:BUILTIN_NAMES``); the example
+``web_search`` because the latter is a reserved Goalrail built-in (see
+``goalrail/tools/builtins/__init__.py:BUILTIN_NAMES``); the example
 YAML names its local search tool ``search_web`` to avoid the
 collision.
 """
 
-from omnigent.policies.schema import PolicyEvent, PolicyResponse
+from goalrail.policies.schema import PolicyEvent, PolicyResponse
 
 # Agent-facing tool name the YAML declares (``tools.search_web``).
 # Kept as a module constant so a future YAML rename only touches

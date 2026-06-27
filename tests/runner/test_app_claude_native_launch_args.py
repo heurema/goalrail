@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.runner.app import _build_claude_native_base_args
+from goalrail.runner.app import _build_claude_native_base_args
 
 
 @pytest.mark.parametrize(

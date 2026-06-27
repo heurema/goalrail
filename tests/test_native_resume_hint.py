@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent._native_resume_hint import (
+from goalrail._native_resume_hint import (
     echo_native_cold_resume_hint,
     format_native_resume_command,
 )

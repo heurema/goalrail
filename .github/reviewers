@@ -26,23 +26,23 @@
 /ap-web/                     @SabhyaC26 @serena-ruan @daniellok-db
 
 # Core agent runtime & harnesses
-/omnigent/inner/             @SabhyaC26 @TomeHirata @dhruv0811 @dbczumar
-/omnigent/runner/            @SabhyaC26 @TomeHirata @serena-ruan @fanzeyi
-/omnigent/runtime/           @TomeHirata @SabhyaC26 @dhruv0811 @ckcuslife-source
-/omnigent/server/            @dbczumar @dhruv0811 @ckcuslife-source @TomeHirata
-/omnigent/onboarding/        @SabhyaC26 @fanzeyi @dhruv0811 @bbqiu
-/omnigent/policies/          @TomeHirata @dhruv0811 @ckcuslife-source
-/omnigent/spec/              @SabhyaC26 @dhruv0811 @ckcuslife-source
-/omnigent/llms/              @PattaraS @ckcuslife-source
-/omnigent/host/              @fanzeyi @dhruv0811 @dbczumar
-/omnigent/sandbox/           @SabhyaC26
-/omnigent/db/                @fanzeyi @SabhyaC26
-/omnigent/stores/            @serena-ruan @TomeHirata @fanzeyi
-/omnigent/terminals/         @dbczumar @Edwinhe03 @fanzeyi
-/omnigent/tools/             @dbczumar @PattaraS @TomeHirata
-/omnigent/entities/          @daniellok-db @TomeHirata
-/omnigent/repl/              @dhruv0811 @dbczumar
-/omnigent/resources/         @fanzeyi @serena-ruan
+/goalrail/inner/             @SabhyaC26 @TomeHirata @dhruv0811 @dbczumar
+/goalrail/runner/            @SabhyaC26 @TomeHirata @serena-ruan @fanzeyi
+/goalrail/runtime/           @TomeHirata @SabhyaC26 @dhruv0811 @ckcuslife-source
+/goalrail/server/            @dbczumar @dhruv0811 @ckcuslife-source @TomeHirata
+/goalrail/onboarding/        @SabhyaC26 @fanzeyi @dhruv0811 @bbqiu
+/goalrail/policies/          @TomeHirata @dhruv0811 @ckcuslife-source
+/goalrail/spec/              @SabhyaC26 @dhruv0811 @ckcuslife-source
+/goalrail/llms/              @PattaraS @ckcuslife-source
+/goalrail/host/              @fanzeyi @dhruv0811 @dbczumar
+/goalrail/sandbox/           @SabhyaC26
+/goalrail/db/                @fanzeyi @SabhyaC26
+/goalrail/stores/            @serena-ruan @TomeHirata @fanzeyi
+/goalrail/terminals/         @dbczumar @Edwinhe03 @fanzeyi
+/goalrail/tools/             @dbczumar @PattaraS @TomeHirata
+/goalrail/entities/          @daniellok-db @TomeHirata
+/goalrail/repl/              @dhruv0811 @dbczumar
+/goalrail/resources/         @fanzeyi @serena-ruan
 
 # Deploy targets
 /deploy/                     @dhruv0811 @PattaraS @dbczumar @SabhyaC26

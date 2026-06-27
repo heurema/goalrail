@@ -29,7 +29,7 @@ def unsafe_ui_base_url_reason(base_url: str) -> str | None:
         return "it has an invalid port"
     # No explicit port is not itself unsafe; host checks below still apply.
     if port is not None and port in DEV_PORTS:
-        return f"port {port} is a known Omnigent/Vite dev port"
+        return f"port {port} is a known Goalrail/Vite dev port"
     if host in DEV_HOSTNAMES:
         return f"host {host!r} is a local dev host"
 

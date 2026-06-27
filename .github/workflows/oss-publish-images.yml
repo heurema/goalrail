@@ -1,7 +1,7 @@
 # Builds + pushes two images to GHCR via GITHUB_TOKEN: the server image
-# (ghcr.io/omnigent-ai/omnigent-server, referenced by every deploy template)
+# (ghcr.io/heurema/goalrail-server, referenced by every deploy template)
 # and the host image (the `host` target of the same Dockerfile,
-# ghcr.io/omnigent-ai/omnigent-host — default for `sandbox create --provider
+# ghcr.io/heurema/goalrail-host — default for `sandbox create --provider
 # modal` and server-launched managed hosts). Dockerfile ARGs default to public
 # registries, so no build-args needed.
 #
@@ -9,7 +9,7 @@
 #   :sha-<short>    immutable per-commit pin, published on EVERY qualifying build.
 #   :vX.Y.Z[rcN]    immutable version pin, published for every release + pre-release tag.
 #   :latest         the highest FINAL release (max over vX.Y.Z) — tracks what
-#                   `pip install omnigent` resolves to. Pre-releases never move it.
+#                   `pip install goalrail` resolves to. Pre-releases never move it.
 #   :latest-rc      the highest version OVERALL, max(release, rc) — the newest
 #                   thing tagged, pre-release or not.
 #   :latest-dev     the most recent main build (bleeding edge); moves on every
@@ -32,7 +32,7 @@ on:
     paths:
       - 'deploy/docker/Dockerfile'
       - 'deploy/docker/entrypoint.py'
-      - 'omnigent/**'
+      - 'goalrail/**'
       - 'ap-web/**'
       - 'sdks/**'
       - 'pyproject.toml'
@@ -76,7 +76,7 @@ jobs:
     # Gated to this repository; inert in forks and mirrors. Skip the (re)build
     # on schedule, force_nightly, and reconcile_floating dispatches — those only
     # drive the promote-nightly / reconcile-floating jobs.
-    if: github.repository == 'omnigent-ai/omnigent' && github.event_name != 'schedule' && !inputs.force_nightly && !inputs.reconcile_floating
+    if: github.repository == 'heurema/goalrail' && github.event_name != 'schedule' && !inputs.force_nightly && !inputs.reconcile_floating
     runs-on: ubuntu-latest
     # Multi-arch: the linux/arm64 leg cross-builds under QEMU emulation on this
     # amd64 runner, which roughly doubles the host-image build time (emulated
@@ -121,9 +121,9 @@ jobs:
           BUMP_LATEST: ${{ inputs.bump_latest }}
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/omnigent-ai/omnigent-server"
-          HOST_IMAGE="ghcr.io/omnigent-ai/omnigent-host"
-          OPENSHELL_IMAGE="ghcr.io/omnigent-ai/omnigent-server-openshell"
+          IMAGE="ghcr.io/heurema/goalrail-server"
+          HOST_IMAGE="ghcr.io/heurema/goalrail-host"
+          OPENSHELL_IMAGE="ghcr.io/heurema/goalrail-server-openshell"
           SHORT_SHA=$(git rev-parse --short HEAD)
 
           # Immutable per-commit pin, always.
@@ -216,7 +216,7 @@ jobs:
           sbom: true
 
       # OpenShell server variant: the default server image plus the
-      # openshell SDK extra (OMNIGENT_EXTRAS=openshell). Used by the
+      # openshell SDK extra (GOALRAIL_EXTRAS=openshell). Used by the
       # deploy/kubernetes/overlays/openshell kustomize overlay. Reuses
       # the shared builder-stage layers from the gha cache.
       - name: Build and push openshell server image
@@ -229,7 +229,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.openshell_tags }}
           build-args: |
-            OMNIGENT_EXTRAS=openshell
+            GOALRAIL_EXTRAS=openshell
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -263,21 +263,21 @@ jobs:
       - name: Generate server SBOM
         run: |
           set -euo pipefail
-          syft "ghcr.io/omnigent-ai/omnigent-server@${{ needs.build-and-push.outputs.server-digest }}" \
+          syft "ghcr.io/heurema/goalrail-server@${{ needs.build-and-push.outputs.server-digest }}" \
             -o cyclonedx-json=server-sbom.cdx.json \
             -o spdx-json=server-sbom.spdx.json
 
       - name: Generate host SBOM
         run: |
           set -euo pipefail
-          syft "ghcr.io/omnigent-ai/omnigent-host@${{ needs.build-and-push.outputs.host-digest }}" \
+          syft "ghcr.io/heurema/goalrail-host@${{ needs.build-and-push.outputs.host-digest }}" \
             -o cyclonedx-json=host-sbom.cdx.json \
             -o spdx-json=host-sbom.spdx.json
 
       - name: Generate openshell server SBOM
         run: |
           set -euo pipefail
-          syft "ghcr.io/omnigent-ai/omnigent-server-openshell@${{ needs.build-and-push.outputs.openshell-digest }}" \
+          syft "ghcr.io/heurema/goalrail-server-openshell@${{ needs.build-and-push.outputs.openshell-digest }}" \
             -o cyclonedx-json=openshell-sbom.cdx.json \
             -o spdx-json=openshell-sbom.spdx.json
 
@@ -298,7 +298,7 @@ jobs:
     # Daily cron (or a manual force_nightly dispatch): move :latest-nightly to
     # the current main build by retagging :latest-dev with `crane tag`
     # (digest-preserving, no rebuild).
-    if: github.repository == 'omnigent-ai/omnigent' && (github.event_name == 'schedule' || inputs.force_nightly)
+    if: github.repository == 'heurema/goalrail' && (github.event_name == 'schedule' || inputs.force_nightly)
     permissions:
       contents: read
       packages: write # retag within GHCR via GITHUB_TOKEN
@@ -322,7 +322,7 @@ jobs:
           set -euo pipefail
           # crane tag points a new tag at an EXISTING manifest digest without
           # re-serializing it, so :latest-nightly keeps :latest-dev's exact digest.
-          for img in ghcr.io/omnigent-ai/omnigent-server ghcr.io/omnigent-ai/omnigent-host ghcr.io/omnigent-ai/omnigent-server-openshell; do
+          for img in ghcr.io/heurema/goalrail-server ghcr.io/heurema/goalrail-host ghcr.io/heurema/goalrail-server-openshell; do
             if crane digest "${img}:latest-dev" >/dev/null 2>&1; then
               crane tag "${img}:latest-dev" latest-nightly
               echo "promoted ${img}:latest-dev -> :latest-nightly ($(crane digest "${img}:latest-nightly"))"
@@ -337,7 +337,7 @@ jobs:
     # from the tag list with PEP 440 ordering. Retags with `crane tag`
     # (digest-preserving). Idempotent — also a "fix the floating tags if they drift"
     # button, and the way to backfill them for releases cut before this scheme.
-    if: github.repository == 'omnigent-ai/omnigent' && inputs.reconcile_floating
+    if: github.repository == 'heurema/goalrail' && inputs.reconcile_floating
     permissions:
       contents: read
       packages: write # retag within GHCR via GITHUB_TOKEN
@@ -393,7 +393,7 @@ jobs:
             fi
           }
 
-          for img in ghcr.io/omnigent-ai/omnigent-server ghcr.io/omnigent-ai/omnigent-host ghcr.io/omnigent-ai/omnigent-server-openshell; do
+          for img in ghcr.io/heurema/goalrail-server ghcr.io/heurema/goalrail-host ghcr.io/heurema/goalrail-server-openshell; do
             retag "${img}" "latest-rc" "${RC_TAG}"
             retag "${img}" "latest" "${LATEST_TAG}"
           done

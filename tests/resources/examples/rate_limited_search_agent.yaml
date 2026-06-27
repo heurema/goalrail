@@ -23,8 +23,8 @@ executor:
 
 tools:
   # ``search_web`` rather than ``web_search`` so the local-tool
-  # name does not collide with the reserved Omnigent built-in
-  # ``web_search`` (see omnigent/tools/builtins/__init__.py
+  # name does not collide with the reserved Goalrail built-in
+  # ``web_search`` (see goalrail/tools/builtins/__init__.py
   # ``BUILTIN_NAMES``). The Python callable target keeps its
   # original ``web_search`` name in the tool_functions module —
   # only the agent-facing tool key changes.

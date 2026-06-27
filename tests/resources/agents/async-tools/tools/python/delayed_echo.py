@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from omnigent_client.tools import tool
+from goalrail_client.tools import tool
 
 
 @tool

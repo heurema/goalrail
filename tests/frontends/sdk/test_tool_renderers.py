@@ -16,8 +16,8 @@ import io
 import json
 
 import pytest
-from omnigent_client import NativeToolBlock, ToolExecution
-from omnigent_ui_sdk.terminal._tool_renderers import (
+from goalrail_client import NativeToolBlock, ToolExecution
+from goalrail_ui_sdk.terminal._tool_renderers import (
     DEFAULT_TOOL_RENDERERS,
     FileReadResult,
     McpCallData,
@@ -702,8 +702,8 @@ def test_render_native_mcp_list_tools() -> None:
 
 def test_formatter_uses_specialized_tool_renderer() -> None:
     """RichBlockFormatter dispatches to specialized renderers for known tools."""
-    from omnigent_client._blocks import ToolGroup
-    from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
+    from goalrail_client._blocks import ToolGroup
+    from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
 
     fmt = RichBlockFormatter(show_tool_output=True)
     output = json.dumps(
@@ -742,8 +742,8 @@ def test_formatter_uses_specialized_tool_renderer() -> None:
 
 def test_formatter_result_block_preserves_arguments_for_edit_diff() -> None:
     """Result-only tool blocks still carry call arguments for diff rendering."""
-    from omnigent_client._blocks import ToolResultBlock
-    from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
+    from goalrail_client._blocks import ToolResultBlock
+    from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
 
     output = json.dumps({"path": "/tmp/f.py", "replacements": 1, "bytes_written": 20})
     block = ToolResultBlock(
@@ -766,8 +766,8 @@ def test_formatter_result_block_preserves_arguments_for_edit_diff() -> None:
 
 def test_formatter_falls_back_for_unknown_tool() -> None:
     """Unknown tool names fall back to the generic panel."""
-    from omnigent_client._blocks import ToolGroup
-    from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
+    from goalrail_client._blocks import ToolGroup
+    from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
 
     fmt = RichBlockFormatter(show_tool_output=True)
     group = ToolGroup(
@@ -791,8 +791,8 @@ def test_formatter_falls_back_for_unknown_tool() -> None:
 
 def test_formatter_custom_registry() -> None:
     """RichBlockFormatter accepts a custom tool_renderers registry."""
-    from omnigent_client._blocks import ToolGroup
-    from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
+    from goalrail_client._blocks import ToolGroup
+    from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
 
     custom = TerminalToolRendererRegistry()
 
@@ -826,8 +826,8 @@ def test_formatter_custom_registry() -> None:
 
 def test_formatter_native_tool_specialized() -> None:
     """RichBlockFormatter dispatches native tool blocks to specialized renderers."""
-    from omnigent_client._blocks import NativeToolBlock
-    from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
+    from goalrail_client._blocks import NativeToolBlock
+    from goalrail_ui_sdk.terminal._formatter import RichBlockFormatter
 
     fmt = RichBlockFormatter()
     block = NativeToolBlock(

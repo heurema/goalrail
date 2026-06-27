@@ -1,7 +1,7 @@
 # supervisor-terminal-test agent — exercises the REPL's
 # inferred terminal-supervision sidebar.
 #
-# Per ``designs/OMNIGENT_TERMINAL_BRIDGE.md`` §3 (non-goals):
+# Per ``designs/GOALRAIL_TERMINAL_BRIDGE.md`` §3 (non-goals):
 # inline ``tools.<name>.type: agent`` sub-agents do NOT own
 # terminals — the parent agent declares ``terminals:`` and
 # the LLM launches them as it spawns workers. This test

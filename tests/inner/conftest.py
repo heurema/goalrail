@@ -153,7 +153,7 @@ def model_name(request: pytest.FixtureRequest) -> str:
 
     Explicit choices skip :mod:`tests._model_pools` spreading but still
     rotate on ``llm_flaky`` reruns; the ``--model`` default is also
-    spread when ``OMNIGENT_TEST_MODEL_SPREAD`` is on.
+    spread when ``GOALRAIL_TEST_MODEL_SPREAD`` is on.
 
     :param request: Pytest fixture request for the consuming test.
     :returns: The model name to use, e.g. ``"databricks-claude-sonnet-4-6"``.
@@ -175,7 +175,7 @@ _OPENAI_CYBER_POLICY_HARNESSES = frozenset({"openai-agents", "codex"})
 @pytest.fixture(autouse=True)
 def _capture_codex_executor_diag(caplog: pytest.LogCaptureFixture) -> None:
     """Lower threshold so codex executor diag logs appear in junit failure reports."""
-    caplog.set_level(logging.INFO, logger="omnigent.inner.codex_executor")
+    caplog.set_level(logging.INFO, logger="goalrail.inner.codex_executor")
 
 
 @pytest.fixture(autouse=True)

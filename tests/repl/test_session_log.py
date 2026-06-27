@@ -1,6 +1,6 @@
 """
-Tests for :mod:`omnigent.repl._session_log` — the JSON dump
-helper that ports the legacy ``--log`` flag to Omnigent mode.
+Tests for :mod:`goalrail.repl._session_log` — the JSON dump
+helper that ports the legacy ``--log`` flag to Goalrail mode.
 
 Two layers:
 
@@ -16,7 +16,7 @@ Two layers:
 The SDK-backed :func:`write_session_log` runs in the same
 pagination loop just driven by an HTTP client; it's exercised
 by the REPL flow's e2e coverage rather than mocked here, since
-mocking OmnigentClient + responses correctly is heavier than
+mocking GoalrailClient + responses correctly is heavier than
 the value of testing it twice.
 """
 
@@ -25,17 +25,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from omnigent.entities import (
+from goalrail.entities import (
     FunctionCallOutputData,
     MessageData,
     NewConversationItem,
 )
-from omnigent.repl._session_log import (
+from goalrail.repl._session_log import (
     DEFAULT_LOG_DIR,
     default_log_path,
     write_session_log_from_store,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -44,7 +44,7 @@ from omnigent.stores.conversation_store.sqlalchemy_store import (
 
 def test_default_log_path_uses_default_dir_when_none() -> None:
     """
-    ``log_dir=None`` resolves to ``~/.omnigent/logs/`` — the same
+    ``log_dir=None`` resolves to ``~/.goalrail/logs/`` — the same
     directory the legacy non-AP path writes to. Keeps the
     user's mental model consistent across paths.
     """
@@ -89,7 +89,7 @@ def test_default_log_path_strips_path_separators(tmp_path: Path) -> None:
     Defensive: a conversation id that somehow contains a ``/``
     must not produce a file path that escapes the log directory.
     Mirrors the legacy ``session.id.replace("/", "_")`` defense in
-    ``omnigent/inner/cli.py::_default_session_log_path``.
+    ``goalrail/inner/cli.py::_default_session_log_path``.
     """
     path = default_log_path("conv/with/slashes", tmp_path)
     assert "/" not in path.name, (
@@ -146,7 +146,7 @@ def test_write_session_log_from_store_dumps_basic_conversation(
     assert payload["version"] == 1, (
         f"Schema version must be 1 — readers gate on it. Got {payload.get('version')!r}."
     )
-    assert payload["format"] == "omnigent-conversation"
+    assert payload["format"] == "goalrail-conversation"
     assert payload["agent_name"] == "resume_test"
     assert payload["conversation"]["id"] == conv.id
     assert payload["conversation"]["title"] == "hello"
@@ -309,7 +309,7 @@ def test_write_session_log_walks_sub_agent_children(
         f"handle, got {len(children)}: {children!r}. If 0, the parser "
         f"didn't recognize the sub_agent handle (check that the JSON "
         f"shape still matches `_parse_sub_agent_handle` in "
-        f"omnigent/repl/_repl.py — the format the spawn tool "
+        f"goalrail/repl/_repl.py — the format the spawn tool "
         f"persists may have changed)."
     )
     child_node = children[0]

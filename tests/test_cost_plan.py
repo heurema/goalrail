@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.cost_plan` — the advisor v3 verdict contract.
+"""Tests for :mod:`goalrail.cost_plan` — the advisor v3 verdict contract.
 
 Covers the single-verdict label round-trip (serialize → parse), the
 fail-loud paths for malformed v3 labels, the tolerated legacy-v2 label
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from omnigent.cost_plan import (
+from goalrail.cost_plan import (
     COST_CONTROL_PLAN_LABEL,
     PLAN_VERSION,
     TIER_ORDER,

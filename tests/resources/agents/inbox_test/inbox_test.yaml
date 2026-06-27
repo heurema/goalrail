@@ -8,7 +8,7 @@
 # ``INBOX_TEST_TAG[<label>]`` should appear in the drain output.
 #
 # Usage:
-#   .venv/bin/python -m omnigent \
+#   .venv/bin/python -m goalrail \
 #     tests/resources/agents/inbox_test/inbox_test.yaml \
 #     --profile <your-profile>
 #
@@ -30,7 +30,7 @@
 name: inbox-test
 prompt: |
   You are an inbox-test assistant. You have one local tool,
-  ``tag_label(label: str)``, plus the Omnigent system tools
+  ``tag_label(label: str)``, plus the Goalrail system tools
   ``sys_call_async``, ``sys_read_inbox``, and
   ``sys_cancel_async``.
 

@@ -1,4 +1,4 @@
-"""Tests for omnigent.runtime.content_resolver."""
+"""Tests for goalrail.runtime.content_resolver."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities import ConversationItem, StoredFile
-from omnigent.entities.conversation import (
+from goalrail.entities import ConversationItem, StoredFile
+from goalrail.entities.conversation import (
     FunctionCallData,
     MessageData,
 )
-from omnigent.runtime.content_resolver import resolve_content_references
+from goalrail.runtime.content_resolver import resolve_content_references
 
 # ── Fake stores ──────────────────────────────────────────────────────
 
@@ -672,7 +672,7 @@ def test_deleted_file_raises_clear_error(
 
 def test_resolve_content_type_uses_stored_type() -> None:
     """Stored content_type is used when it's not the generic fallback."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     assert _resolve_content_type("text/markdown", "test.md") == "text/markdown"
     assert _resolve_content_type("application/pdf", "report.pdf") == "application/pdf"
@@ -680,7 +680,7 @@ def test_resolve_content_type_uses_stored_type() -> None:
 
 def test_resolve_content_type_ignores_octet_stream() -> None:
     """application/octet-stream is treated as unresolved — falls through to filename."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     result = _resolve_content_type("application/octet-stream", "readme.md")
     assert result == "text/markdown", f"Expected text/markdown, got {result}"
@@ -688,7 +688,7 @@ def test_resolve_content_type_ignores_octet_stream() -> None:
 
 def test_resolve_content_type_falls_back_to_extra_map() -> None:
     """Extensions missing from mimetypes use the _EXTRA_MIME_TYPES fallback."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     # These extensions are NOT in Python 3.10's mimetypes module
     # (except .ts, which mimetypes maps to video/mp2t).
@@ -708,14 +708,14 @@ def test_resolve_content_type_falls_back_to_extra_map() -> None:
 
 def test_resolve_content_type_no_filename_uses_fallback() -> None:
     """When neither stored type nor filename is available, falls back to octet-stream."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     assert _resolve_content_type(None, None) == "application/octet-stream"
 
 
 def test_resolve_content_type_known_extension_uses_mimetypes() -> None:
     """Standard extensions (e.g. .pdf, .html) use mimetypes.guess_type."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     # .pdf and .html are universally known by mimetypes.
     result = _resolve_content_type(None, "report.pdf")
@@ -726,7 +726,7 @@ def test_resolve_content_type_known_extension_uses_mimetypes() -> None:
 
 def test_resolve_content_type_case_insensitive() -> None:
     """Extension matching is case-insensitive."""
-    from omnigent.runtime.content_resolver import _resolve_content_type
+    from goalrail.runtime.content_resolver import _resolve_content_type
 
     assert _resolve_content_type(None, "README.MD") == "text/markdown"
     assert _resolve_content_type(None, "config.YAML") == "text/yaml"
@@ -791,7 +791,7 @@ def test_safe_file_data_mime_passthrough(passthrough_mime: str) -> None:
     what the OpenAI Responses API will accept on file_data; that's a
     deliberate decision, not an accidental one.
     """
-    from omnigent.runtime.content_resolver import _safe_file_data_mime
+    from goalrail.runtime.content_resolver import _safe_file_data_mime
 
     assert _safe_file_data_mime(passthrough_mime) == passthrough_mime
 
@@ -826,7 +826,7 @@ def test_safe_file_data_mime_collapses_unrecognised_text(rejected_mime: str) -> 
     block's ``filename`` field still carries the original extension
     for the model.
     """
-    from omnigent.runtime.content_resolver import _safe_file_data_mime
+    from goalrail.runtime.content_resolver import _safe_file_data_mime
 
     assert _safe_file_data_mime(rejected_mime) == "text/plain"
 
@@ -838,7 +838,7 @@ def test_safe_file_data_mime_leaves_non_text_alone() -> None:
     "this image/audio/binary type is unsafe" would mislead providers.
     Pass them through and let the provider validate.
     """
-    from omnigent.runtime.content_resolver import _safe_file_data_mime
+    from goalrail.runtime.content_resolver import _safe_file_data_mime
 
     assert _safe_file_data_mime("image/png") == "image/png"
     assert _safe_file_data_mime("audio/mpeg") == "audio/mpeg"
@@ -940,7 +940,7 @@ def test_resolve_image_file_keeps_specific_mime(
 )
 def test_attachment_upload_limit_allowed_types(content_type: str, expected_mb: int) -> None:
     """Images, PDF, and text-like types get their per-type byte cap."""
-    from omnigent.runtime.content_resolver import attachment_upload_limit
+    from goalrail.runtime.content_resolver import attachment_upload_limit
 
     assert attachment_upload_limit(content_type) == expected_mb * 1024 * 1024
 
@@ -959,14 +959,14 @@ def test_attachment_upload_limit_allowed_types(content_type: str, expected_mb: i
 )
 def test_attachment_upload_limit_rejects_unsupported_types(content_type: str) -> None:
     """Office/binary/media types are not uploadable (None ⇒ caller 415s)."""
-    from omnigent.runtime.content_resolver import attachment_upload_limit
+    from goalrail.runtime.content_resolver import attachment_upload_limit
 
     assert attachment_upload_limit(content_type) is None
 
 
 def test_attachment_upload_limits_are_under_global_ceiling() -> None:
     """Every per-type limit stays within the global request-size backstop."""
-    from omnigent.runtime.content_resolver import (
+    from goalrail.runtime.content_resolver import (
         MAX_ATTACHMENT_UPLOAD_BYTES,
         MAX_IMAGE_UPLOAD_BYTES,
         MAX_PDF_UPLOAD_BYTES,
@@ -992,7 +992,7 @@ def test_attachment_upload_limits_are_under_global_ceiling() -> None:
 def test_attachment_text_type_for_extension_recognised(filename: str, expected: str) -> None:
     """Known text/code extensions resolve to a text-like MIME (the fallback
     used when the declared MIME mislabels them as binary)."""
-    from omnigent.runtime.content_resolver import attachment_text_type_for_extension
+    from goalrail.runtime.content_resolver import attachment_text_type_for_extension
 
     assert attachment_text_type_for_extension(filename) == expected
 
@@ -1004,7 +1004,7 @@ def test_attachment_text_type_for_extension_recognised(filename: str, expected: 
 def test_attachment_text_type_for_extension_rejects_binary(filename: str | None) -> None:
     """Real binaries (and missing/unknown extensions) get no text fallback,
     so they stay rejected even if the declared MIME is wrong."""
-    from omnigent.runtime.content_resolver import attachment_text_type_for_extension
+    from goalrail.runtime.content_resolver import attachment_text_type_for_extension
 
     assert attachment_text_type_for_extension(filename) is None
 
@@ -1013,7 +1013,7 @@ def test_text_code_extensions_resolve_to_allowed_text() -> None:
     """Every declared text/code extension resolves to a text-like type that
     has an upload limit — so the route's extension fallback admits it (no 415),
     regardless of the browser-reported MIME."""
-    from omnigent.runtime.content_resolver import (
+    from goalrail.runtime.content_resolver import (
         _TEXT_CODE_EXTENSIONS,
         attachment_text_type_for_extension,
         attachment_upload_limit,
@@ -1033,7 +1033,7 @@ def test_client_server_attachment_extension_parity() -> None:
     import re
     from pathlib import Path
 
-    from omnigent.runtime.content_resolver import (
+    from goalrail.runtime.content_resolver import (
         _resolve_content_type,
         attachment_text_type_for_extension,
         attachment_upload_limit,

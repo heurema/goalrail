@@ -1,6 +1,6 @@
 """Integration tests for the qwen agent fixture, with a mocked ACP subprocess.
 
-Drives :class:`omnigent.inner.qwen_executor.QwenExecutor` end-to-end using the
+Drives :class:`goalrail.inner.qwen_executor.QwenExecutor` end-to-end using the
 same harness / model / system prompt as the real agent
 (``tests/resources/examples/qwen_perm_test.yaml`` — the permanent twin of the
 manual ``tmp/qwen_perm_test.yaml``). The ``qwen --acp`` subprocess is faked via
@@ -23,9 +23,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from omnigent.inner.executor import TextChunk, TurnComplete
-from omnigent.inner.qwen_executor import QwenExecutor
-from omnigent.spec._omnigent_compat import load_omnigent_yaml
+from goalrail.inner.executor import TextChunk, TurnComplete
+from goalrail.inner.qwen_executor import QwenExecutor
+from goalrail.spec._goalrail_compat import load_goalrail_yaml
 
 _AGENT_YAML = (
     Path(__file__).resolve().parents[1] / "resources" / "examples" / "qwen_perm_test.yaml"
@@ -35,7 +35,7 @@ _SESSION_ID = "sess-int"
 
 def _load_agent() -> Any:
     """Load the qwen agent fixture as an AgentSpec."""
-    return load_omnigent_yaml(_AGENT_YAML)
+    return load_goalrail_yaml(_AGENT_YAML)
 
 
 def _executor_for_agent() -> QwenExecutor:

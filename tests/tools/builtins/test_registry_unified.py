@@ -16,9 +16,9 @@ from __future__ import annotations
 import importlib
 import pkgutil
 
-import omnigent.tools.builtins as _builtins_pkg
-from omnigent.tools.base import Tool
-from omnigent.tools.builtins import (
+import goalrail.tools.builtins as _builtins_pkg
+from goalrail.tools.base import Tool
+from goalrail.tools.builtins import (
     BUILTIN_NAMES,
     INSTANTIABLE_BUILTINS,
     get_builtin_tool,
@@ -146,7 +146,7 @@ def test_builtin_names_size_matches_registry() -> None:
 
 
 def _all_builtin_tool_subclasses() -> list[type[Tool]]:
-    """Concrete ``Tool`` subclasses defined under ``omnigent.tools.builtins``."""
+    """Concrete ``Tool`` subclasses defined under ``goalrail.tools.builtins``."""
     for mod_info in pkgutil.iter_modules(_builtins_pkg.__path__):
         importlib.import_module(f"{_builtins_pkg.__name__}.{mod_info.name}")
 
@@ -172,17 +172,17 @@ def test_async_builtins_override_dispatch_async_or_are_runner_dispatched() -> No
 
     The base ``Tool.dispatch_async`` raises ``NotImplementedError``,
     so any tool that flips ``is_async`` true without an override
-    would crash the in-process Omnigent loop. After the DBOS removal,
+    would crash the in-process Goalrail loop. After the DBOS removal,
     a class of async-namespace tools (``sys_call_async``,
     ``sys_read_inbox``, ``sys_cancel_async``) are dispatched by
-    the runner via ``omnigent/runner/tool_dispatch.py`` —
+    the runner via ``goalrail/runner/tool_dispatch.py`` —
     ``dispatch_async`` is never reached on those, so leaving them
     on the base implementation is correct. Pin the contract: an
     async tool is permitted iff it either overrides
     ``dispatch_async`` or is listed in the runner's
     ``_ALL_LOCAL_TOOLS`` set.
     """
-    from omnigent.runner.tool_dispatch import should_dispatch_locally
+    from goalrail.runner.tool_dispatch import should_dispatch_locally
 
     base_dispatch_async = Tool.dispatch_async
 

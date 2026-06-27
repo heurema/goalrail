@@ -15,13 +15,13 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import kimi_native_bridge
-from omnigent.inner.kimi_native_executor import (
+from goalrail import kimi_native_bridge
+from goalrail.inner.kimi_native_executor import (
     KimiNativeExecutor,
     _content_to_text,
     _latest_user_text,
 )
-from omnigent.kimi_native_bridge import (
+from goalrail.kimi_native_bridge import (
     APPROVE_KEY,
     BRIDGE_DIR_ENV_VAR,
     DENY_KEY,
@@ -177,7 +177,7 @@ class TestSettlePaneReadiness:
     def test_marker_matches_live_kimi_footer(self) -> None:
         # Footer chrome captured verbatim from a live K2.7 session.
         footer = (
-            " K2.7 Code thinking  ~/omnigent  pr521-kimi-native [+61 -8]"
+            " K2.7 Code thinking  ~/goalrail  pr521-kimi-native [+61 -8]"
             '   ask Kimi to schedule tasks, e.g. "remind me at 5pm"\n'
             "   context: 6.5% (17.0k/262.1k)"
         )
@@ -208,26 +208,26 @@ class TestSettlePaneReadiness:
 
 class TestRegistration:
     def test_harness_is_registered(self) -> None:
-        from omnigent.runtime.harnesses import _HARNESS_MODULES
+        from goalrail.runtime.harnesses import _HARNESS_MODULES
 
-        assert _HARNESS_MODULES["kimi-native"] == "omnigent.inner.kimi_native_harness"
+        assert _HARNESS_MODULES["kimi-native"] == "goalrail.inner.kimi_native_harness"
 
     def test_harness_is_allowlisted(self) -> None:
-        from omnigent.spec._omnigent_compat import OMNIGENT_HARNESSES
+        from goalrail.spec._goalrail_compat import GOALRAIL_HARNESSES
 
-        assert "kimi-native" in OMNIGENT_HARNESSES
+        assert "kimi-native" in GOALRAIL_HARNESSES
 
     def test_kimi_native_is_terminal_native(self) -> None:
-        # kimi-native launches the kimi TUI in an omnigent terminal (like
+        # kimi-native launches the kimi TUI in an goalrail terminal (like
         # claude/codex/cursor-native), so the runner must treat it as a native
         # terminal harness.
-        from omnigent.harness_aliases import is_native_harness
+        from goalrail.harness_aliases import is_native_harness
 
         assert is_native_harness("kimi-native") is True
         assert is_native_harness("native-kimi") is True
 
     def test_native_coding_agent_record(self) -> None:
-        from omnigent.native_coding_agents import native_coding_agent_for_harness
+        from goalrail.native_coding_agents import native_coding_agent_for_harness
 
         agent = native_coding_agent_for_harness("kimi-native")
         assert agent is not None
@@ -237,6 +237,6 @@ class TestRegistration:
     def test_distinct_from_headless_kimi_harness(self) -> None:
         # The bare ``kimi`` harness is the headless SDK path; ``kimi-native`` is
         # the TUI path. They must resolve to different harness modules.
-        from omnigent.runtime.harnesses import _HARNESS_MODULES
+        from goalrail.runtime.harnesses import _HARNESS_MODULES
 
         assert _HARNESS_MODULES["kimi"] != _HARNESS_MODULES["kimi-native"]

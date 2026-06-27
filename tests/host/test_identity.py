@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.host import identity as identity_mod
-from omnigent.host.identity import load_or_create_host_identity
+from goalrail.host import identity as identity_mod
+from goalrail.host.identity import load_or_create_host_identity
 
 
 def test_default_config_path_honors_goalrail_config_home(
@@ -19,7 +19,6 @@ def test_default_config_path_honors_goalrail_config_home(
     """Host identity default config path follows the Goalrail config home."""
     config_home = tmp_path / "goalrail-config"
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
 
     assert identity_mod.default_config_path() == config_home / "config.yaml"
 
@@ -32,7 +31,6 @@ def test_default_load_or_create_writes_goalrail_config_home(
     config_home = tmp_path / "goalrail-config"
     legacy_home = tmp_path / "home"
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
     monkeypatch.setenv("HOME", str(legacy_home))
 
     identity = load_or_create_host_identity()
@@ -40,7 +38,7 @@ def test_default_load_or_create_writes_goalrail_config_home(
     config_path = config_home / "config.yaml"
     assert identity.host_id.startswith("host_")
     assert config_path.is_file()
-    assert not (legacy_home / ".omnigent" / "config.yaml").exists()
+    assert not (legacy_home / ".goalrail" / "config.yaml").exists()
 
 
 def test_create_identity_when_no_config(tmp_path: Path) -> None:
@@ -144,8 +142,8 @@ def test_env_override_returns_identity_without_touching_config(
     must not read or write config.yaml (managed sandboxes are
     disposable; the server owns their identity).
     """
-    monkeypatch.setenv("OMNIGENT_HOST_ID", "host_env_override")
-    monkeypatch.setenv("OMNIGENT_HOST_NAME", "managed-env")
+    monkeypatch.setenv("GOALRAIL_HOST_ID", "host_env_override")
+    monkeypatch.setenv("GOALRAIL_HOST_NAME", "managed-env")
     config_path = tmp_path / "config.yaml"
 
     identity = load_or_create_host_identity(config_path)
@@ -161,8 +159,8 @@ def test_env_override_requires_both_vars(tmp_path: Path, monkeypatch: pytest.Mon
     Setting only one identity env var is a launcher bug — fail loud
     instead of mixing a server-chosen id with a generated name.
     """
-    monkeypatch.setenv("OMNIGENT_HOST_ID", "host_env_override")
-    monkeypatch.delenv("OMNIGENT_HOST_NAME", raising=False)
+    monkeypatch.setenv("GOALRAIL_HOST_ID", "host_env_override")
+    monkeypatch.delenv("GOALRAIL_HOST_NAME", raising=False)
 
     with pytest.raises(ValueError, match="must be set together"):
         load_or_create_host_identity(tmp_path / "config.yaml")

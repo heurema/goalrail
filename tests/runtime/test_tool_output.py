@@ -1,14 +1,14 @@
 """
-Tests for :func:`omnigent.runtime.tool_output.cap_tool_output` — the canonical
+Tests for :func:`goalrail.runtime.tool_output.cap_tool_output` — the canonical
 size cap applied to every ``function_call_output`` producer's ``output`` field.
 Each assertion is chosen so the corresponding production breakage turns it red.
 """
 
 from __future__ import annotations
 
-from omnigent.runtime.tool_output import MAX_TOOL_OUTPUT_BYTES, cap_tool_output
+from goalrail.runtime.tool_output import MAX_TOOL_OUTPUT_BYTES, cap_tool_output
 
-_TRUNCATION_MARKER = "[output truncated by omnigent:"
+_TRUNCATION_MARKER = "[output truncated by goalrail:"
 
 
 def test_cap_tool_output_passes_through_when_within_cap() -> None:

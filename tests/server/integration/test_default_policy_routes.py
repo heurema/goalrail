@@ -15,14 +15,14 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.app import create_app
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 from tests.server.conftest import ControllableMockClient
 
 pytestmark = pytest.mark.asyncio
@@ -44,7 +44,7 @@ def auth_app(
     :param tmp_path: Pytest temp dir for artifacts.
     :returns: A :class:`FastAPI` instance with auth and default policy routes.
     """
-    from omnigent.server.auth import UnifiedAuthProvider
+    from goalrail.server.auth import UnifiedAuthProvider
 
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
     return create_app(
@@ -75,8 +75,8 @@ async def auth_client(
     :param tmp_path: Pytest temp dir for the harness process manager.
     :yields: A ready-to-use :class:`httpx.AsyncClient`.
     """
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from goalrail.runtime import set_harness_process_manager
+    from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()
@@ -134,7 +134,7 @@ async def test_create_default_policy(
         json={
             "name": "block_push",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=_admin_headers(),
     )
@@ -144,7 +144,7 @@ async def test_create_default_policy(
     assert body["object"] == "default_policy"
     assert body["name"] == "block_push"
     assert body["type"] == "python"
-    assert body["handler"] == "omnigent.policies.builtins.safety.ask_on_os_tools"
+    assert body["handler"] == "goalrail.policies.builtins.safety.ask_on_os_tools"
     assert body["enabled"] is True
     assert body["id"].startswith("pol_")
     assert body["created_by"] == "admin@example.com"
@@ -189,7 +189,7 @@ async def test_list_default_policies(
         json={
             "name": "first",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -198,7 +198,7 @@ async def test_list_default_policies(
         json={
             "name": "second",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -225,7 +225,7 @@ async def test_get_default_policy(
         json={
             "name": "get_test",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -249,7 +249,7 @@ async def test_update_default_policy(
         json={
             "name": "updatable",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -286,7 +286,7 @@ async def test_admin_update_to_unregistered_handler_rejected(
         json={
             "name": "patchable",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -314,7 +314,7 @@ async def test_delete_default_policy(
         json={
             "name": "deletable",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -345,7 +345,7 @@ async def test_create_duplicate_name_returns_409(
         json={
             "name": "unique",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -355,7 +355,7 @@ async def test_create_duplicate_name_returns_409(
         json={
             "name": "unique",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -403,7 +403,7 @@ async def test_non_admin_cannot_create(
         json={
             "name": "blocked",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=_admin_headers("user@example.com"),
     )
@@ -424,7 +424,7 @@ async def test_non_admin_cannot_update(
         json={
             "name": "admin_only",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -452,7 +452,7 @@ async def test_non_admin_cannot_delete(
         json={
             "name": "protected",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -479,7 +479,7 @@ async def test_non_admin_can_list(
         json={
             "name": "visible",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=_admin_headers(),
     )
@@ -506,7 +506,7 @@ async def test_non_admin_can_get(
         json={
             "name": "readable",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=_admin_headers(),
     )
@@ -538,7 +538,7 @@ async def test_non_admin_create_returns_403(
         json={
             "name": "anon",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=_admin_headers("nonadmin@example.com"),
     )
@@ -559,7 +559,7 @@ async def test_non_admin_delete_returns_403(
         json={
             "name": "nodeletion",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -585,7 +585,7 @@ async def test_update_rename_duplicate_returns_409(
         json={
             "name": "existing",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )
@@ -594,7 +594,7 @@ async def test_update_rename_duplicate_returns_409(
         json={
             "name": "to_rename",
             "type": "python",
-            "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+            "handler": "goalrail.policies.builtins.safety.ask_on_os_tools",
         },
         headers=headers,
     )

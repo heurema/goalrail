@@ -75,7 +75,6 @@ def test_openapi_public_metadata_uses_goalrail_branding() -> None:
     """
     dump_module = _load_dump_openapi_module()
     generated_spec = dump_module.generate_spec()
-    generated_text = json.dumps(generated_spec, indent=2, sort_keys=True)
 
     description = generated_spec["info"]["description"]
     servers = generated_spec["servers"]
@@ -83,11 +82,7 @@ def test_openapi_public_metadata_uses_goalrail_branding() -> None:
     assert "Goalrail is an open-source meta-harness" in description
     assert "REST API exposed by the Goalrail server" in description
     assert "default (`goalrail server`)" in description
-    assert "Omnigent" not in description
     assert servers[0]["description"] == "Self-hosted Goalrail server (default local port)."
-    assert "Omnigent " not in generated_text
-    assert "omnigent claude" not in generated_text
-    assert "omnigent codex" not in generated_text
 
 
 def _summarize_path_changes(

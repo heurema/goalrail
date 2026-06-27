@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities import Conversation, ConversationItem, MessageData, PagedList
-from omnigent.server.routes import sessions as _sessions_mod
-from omnigent.server.routes.sessions import (
+from goalrail.entities import Conversation, ConversationItem, MessageData, PagedList
+from goalrail.server.routes import sessions as _sessions_mod
+from goalrail.server.routes.sessions import (
     SessionLiveness,
     _get_session_snapshot,
     _publish_subtree_cost_to_ancestors,
@@ -219,7 +219,7 @@ async def test_session_snapshot_surfaces_runner_exit_report_as_failed() -> None:
     the web's synthetic-error path renders. Without this, a reload after a
     runner crash shows no error.
     """
-    from omnigent.server.host_registry import RunnerExitReports
+    from goalrail.server.host_registry import RunnerExitReports
 
     conv = Conversation(
         id="conv_crashed",
@@ -269,8 +269,8 @@ async def test_session_snapshot_surfaces_status_error_labels_as_last_task_error(
         root_conversation_id="conv_failed_terminal",
         agent_id="ag_test",
         labels={
-            "omnigent.last_task_error_code": "required_terminal_exited",
-            "omnigent.last_task_error_message": "Required terminal exited unexpectedly",
+            "goalrail.last_task_error_code": "required_terminal_exited",
+            "goalrail.last_task_error_message": "Required terminal exited unexpectedly",
         },
     )
     conv_store = _ConversationStore(
@@ -296,7 +296,7 @@ async def test_session_snapshot_no_exit_report_stays_unfailed() -> None:
     Guards the override from firing for healthy/idle sessions — only a
     recorded crash for THIS session's runner should flip it.
     """
-    from omnigent.server.host_registry import RunnerExitReports
+    from goalrail.server.host_registry import RunnerExitReports
 
     conv = Conversation(
         id="conv_ok",
@@ -329,7 +329,7 @@ async def test_session_snapshot_queries_runner_on_cache_miss(
 ) -> None:
     """When _session_status_cache is empty, the snapshot should
     query the runner for live status."""
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
 
@@ -350,7 +350,7 @@ async def test_session_snapshot_queries_runner_on_cache_miss(
 
     fake_client = _FakeRunnerClient()
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_client",
+        "goalrail.runtime.get_runner_client",
         lambda: fake_client,
     )
 
@@ -390,17 +390,17 @@ async def test_session_snapshot_defaults_idle_when_runner_unreachable(
 ) -> None:
     """When the runner is unreachable on cache miss, status
     defaults to idle rather than crashing."""
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
 
     # No runner client available (both router and singleton).
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_client",
+        "goalrail.runtime.get_runner_client",
         lambda: None,
     )
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_router",
+        "goalrail.runtime.get_runner_router",
         lambda: None,
     )
 
@@ -426,7 +426,7 @@ async def test_session_snapshot_uses_router_when_singleton_unset(
     had an active turn — which is exactly the cold-start race that
     flaked ``test_native_session_happy_path_via_ws_tunnel``.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -446,7 +446,7 @@ async def test_session_snapshot_uses_router_when_singleton_unset(
             self.get_calls.append(url)
             return _FakeResponse()
 
-    from omnigent.runner.routing import RoutedRunner
+    from goalrail.runner.routing import RoutedRunner
 
     fake_client = _FakeRunnerClient()
 
@@ -463,11 +463,11 @@ async def test_session_snapshot_uses_router_when_singleton_unset(
     # Singleton stays None (production-shape router-only deployment);
     # router resolves the runner via the conversation's affinity.
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_client",
+        "goalrail.runtime.get_runner_client",
         lambda: None,
     )
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_router",
+        "goalrail.runtime.get_runner_router",
         lambda: fake_router,
     )
 
@@ -500,7 +500,7 @@ async def test_session_snapshot_includes_skills_from_runner(
     (discovered against the runner's filesystem), so the web composer
     can list them in its slash-command menu.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -532,8 +532,8 @@ async def test_session_snapshot_includes_skills_from_runner(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv_store = _ConversationStore([_message_item("item_1", "hi")])
     # First poll returns [] and kicks the background fetch; a later poll serves them.
@@ -566,7 +566,7 @@ async def test_session_snapshot_includes_model_options_from_runner(
     regresses to a hardcoded frontend list, this runner path would not be
     called and the snapshot would stay empty.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -613,8 +613,8 @@ async def test_session_snapshot_includes_model_options_from_runner(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv = Conversation(
         id="conv_codex_options",
@@ -666,7 +666,7 @@ async def test_session_snapshot_serves_static_cursor_model_options(
     runner-backed cache) is what keeps the picker from blanking on a
     ``refresh_state`` snapshot — the regression behind the effort-change bug.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -693,8 +693,8 @@ async def test_session_snapshot_serves_static_cursor_model_options(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv = Conversation(
         id="conv_cursor_options",
@@ -740,7 +740,7 @@ async def test_session_snapshot_refresh_state_reloads_model_options(
     once the background runner read lands, a later snapshot serves the live
     catalog.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -794,8 +794,8 @@ async def test_session_snapshot_refresh_state_reloads_model_options(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv = Conversation(
         id="conv_codex_refresh",
@@ -843,7 +843,7 @@ async def test_session_snapshot_retries_empty_model_options(
     Older runners returned ``200 {"models": []}`` for that window; caching
     that response permanently hid the picker until AP restart.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -891,8 +891,8 @@ async def test_session_snapshot_retries_empty_model_options(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv = Conversation(
         id="conv_codex_empty_then_ready",
@@ -942,7 +942,7 @@ async def test_session_snapshot_retries_503_model_options(
     should stay alive across that transient 503 and publish/cache the catalog
     once the next retry succeeds.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -1003,8 +1003,8 @@ async def test_session_snapshot_retries_503_model_options(
             return _FakeResponse({"status": "idle"})
 
     fake_client = _FakeRunnerClient()
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: fake_client)
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: fake_client)
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     conv = Conversation(
         id="conv_codex_503_then_ready",
@@ -1053,7 +1053,7 @@ async def test_session_snapshot_publishes_skills_event_when_fetch_resolves(
     empty until the next bind (the bug that motivated this event): the
     first snapshot poll serves ``[]`` and the web query does not poll.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -1075,14 +1075,14 @@ async def test_session_snapshot_publishes_skills_event_when_fetch_resolves(
                 )
             return _FakeResponse({"status": "idle"})
 
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: _FakeRunnerClient())
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: _FakeRunnerClient())
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
 
     # Capture session-stream publishes by rebinding the module's
     # ``session_stream`` reference to a recorder. Rebinding the name in
     # the sessions module's namespace (not patching ``publish`` through
     # the shared module singleton) keeps the mock from leaking into other
-    # tests — see omnigent-testing rule 14.
+    # tests — see goalrail-testing rule 14.
     published: list[dict[str, object]] = []
 
     class _RecordingStream:
@@ -1122,15 +1122,15 @@ async def test_session_snapshot_skills_empty_without_runner(
     client), skills come back ``[]`` rather than crashing — discovery
     is runner-owned and there is nothing to query.
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_client",
+        "goalrail.runtime.get_runner_client",
         lambda: None,
     )
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_router",
+        "goalrail.runtime.get_runner_router",
         lambda: None,
     )
     conv_store = _ConversationStore([_message_item("item_1", "hi")])
@@ -1152,7 +1152,7 @@ async def test_session_snapshot_skills_empty_on_malformed_runner_payload(
     or a non-JSON body) must not break the snapshot — skills fall back to
     ``[]`` (the documented best-effort contract).
     """
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
 
@@ -1171,8 +1171,8 @@ async def test_session_snapshot_skills_empty_on_malformed_runner_payload(
                 return _FakeResponse({"skills": [{"oops": "no name"}]})
             return _FakeResponse({"status": "idle"})
 
-    monkeypatch.setattr("omnigent.runtime.get_runner_client", lambda: _FakeRunnerClient())
-    monkeypatch.setattr("omnigent.runtime.get_runner_router", lambda: None)
+    monkeypatch.setattr("goalrail.runtime.get_runner_client", lambda: _FakeRunnerClient())
+    monkeypatch.setattr("goalrail.runtime.get_runner_router", lambda: None)
     conv_store = _ConversationStore([_message_item("item_1", "hi")])
 
     snapshot = await _get_session_snapshot(
@@ -1191,8 +1191,8 @@ async def test_session_snapshot_prefers_router_over_singleton(
     router wins — it knows the per-conversation runner affinity, the
     singleton is process-wide and only correct in single-runner mode.
     """
-    from omnigent.runner.routing import RoutedRunner
-    from omnigent.server.routes import sessions as _mod
+    from goalrail.runner.routing import RoutedRunner
+    from goalrail.server.routes import sessions as _mod
 
     _mod._session_status_cache.clear()
     _mod._runner_skills_cache.clear()
@@ -1223,11 +1223,11 @@ async def test_session_snapshot_prefers_router_over_singleton(
             return RoutedRunner(runner_id="runner_test", client=router_client)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_router",
+        "goalrail.runtime.get_runner_router",
         lambda: _FakeRouter(),
     )
     monkeypatch.setattr(
-        "omnigent.runtime.get_runner_client",
+        "goalrail.runtime.get_runner_client",
         lambda: singleton_client,
     )
 

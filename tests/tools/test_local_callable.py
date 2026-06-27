@@ -1,4 +1,4 @@
-"""Unit tests for omnigent-style in-process callable tools."""
+"""Unit tests for goalrail-style in-process callable tools."""
 
 from __future__ import annotations
 
@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.types import LocalToolInfo, ToolRuntime
-from omnigent.tools.base import ToolContext
-from omnigent.tools.local_callable import LocalCallableTool, load_local_callable_tools
+from goalrail.spec.types import LocalToolInfo, ToolRuntime
+from goalrail.tools.base import ToolContext
+from goalrail.tools.local_callable import LocalCallableTool, load_local_callable_tools
 
 _TEST_CTX = ToolContext(task_id="task_test", agent_id="agent_test")
-_CALLABLE_LANGUAGE = "omnigent-python-callable"
+_CALLABLE_LANGUAGE = "goalrail-python-callable"
 
 
 @pytest.fixture()
@@ -193,7 +193,7 @@ def test_resolution_failures_are_explicit(
         tool.get_schema()
 
 
-def test_load_local_callable_tools_filters_to_omnigent_server_callables() -> None:
+def test_load_local_callable_tools_filters_to_goalrail_server_callables() -> None:
     loaded = load_local_callable_tools(
         [
             _info("callable_tool", "pkg.mod.callable_tool"),

@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.e2b`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.e2b`."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 import pytest
 
-from omnigent.onboarding.sandboxes.base import SandboxCapabilityError
-from omnigent.onboarding.sandboxes.e2b import (
+from goalrail.onboarding.sandboxes.base import SandboxCapabilityError
+from goalrail.onboarding.sandboxes.e2b import (
     _HOBBY_FALLBACK_LIFETIME_S,
     DEFAULT_E2B_TEMPLATE,
     SANDBOX_ENV_PASSTHROUGH_ENV_VAR,
@@ -230,7 +230,7 @@ def test_prepare_raises_install_hint_when_sdk_missing(monkeypatch: pytest.Monkey
     # A None entry in sys.modules makes `import e2b` raise ImportError.
     monkeypatch.setitem(sys.modules, "e2b", None)
     monkeypatch.setenv("E2B_API_KEY", "k")
-    with pytest.raises(click.ClickException, match=r"pip install 'omnigent\[e2b\]'"):
+    with pytest.raises(click.ClickException, match=r"pip install 'goalrail\[e2b\]'"):
         E2BSandboxLauncher().prepare()
 
 
@@ -241,7 +241,7 @@ def test_provision_uses_default_template_and_max_timeout(sdk: _State) -> None:
     assert E2BSandboxLauncher().provision("managed-x") == "sb-e2b-1"
     assert sdk.create_kwargs["template"] == DEFAULT_E2B_TEMPLATE
     assert sdk.create_kwargs["timeout"] == resolve_max_lifetime_s()
-    assert sdk.create_kwargs["metadata"] == {"omnigent-name": "managed-x"}
+    assert sdk.create_kwargs["metadata"] == {"goalrail-name": "managed-x"}
     # No env configured → nothing injected.
     assert sdk.create_kwargs["envs"] is None
 
@@ -284,7 +284,7 @@ def test_provision_missing_template_points_at_build(sdk: _State) -> None:
     # A missing/unbuilt template is a PLAIN SandboxException ("404: template
     # '…' not found"), not TemplateException — the most common first-run
     # failure must still surface the build hint.
-    sdk.create_raises = _SandboxException("404: template 'omnigent-host' not found")
+    sdk.create_raises = _SandboxException("404: template 'goalrail-host' not found")
     with pytest.raises(click.ClickException, match="e2b template build"):
         E2BSandboxLauncher().provision("x")
 
@@ -314,7 +314,7 @@ def test_provision_clamps_lifetime_when_account_cap_rejects(sdk: _State) -> None
 
 def test_provision_env_override_skips_retry(sdk: _State, monkeypatch: pytest.MonkeyPatch) -> None:
     # With the lifetime pinned to the account cap, provision succeeds first try.
-    monkeypatch.setenv("OMNIGENT_E2B_MAX_LIFETIME_S", "3600")
+    monkeypatch.setenv("GOALRAIL_E2B_MAX_LIFETIME_S", "3600")
     sdk.reject_timeout_over = 3600
     E2BSandboxLauncher().provision("x")
     assert [call["timeout"] for call in sdk.create_calls] == [3600]
@@ -354,7 +354,7 @@ def test_lifetime_cap_from_error_branches(message: str, expected: int | None) ->
 @pytest.mark.parametrize(
     ("message", "expected"),
     [
-        ("404: template 'omnigent-host' not found", True),
+        ("404: template 'goalrail-host' not found", True),
         ("Template 'x' Not Found", True),  # case-insensitive
         ("400: Timeout cannot be greater than 1 hours", False),
         ("429: rate limited", False),
@@ -365,7 +365,7 @@ def test_is_missing_template_error(message: str, expected: bool) -> None:
 
 
 def test_resolve_max_lifetime_rejects_non_numeric(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OMNIGENT_E2B_MAX_LIFETIME_S", "soon")
+    monkeypatch.setenv("GOALRAIL_E2B_MAX_LIFETIME_S", "soon")
     with pytest.raises(click.ClickException, match="must be a number of seconds"):
         resolve_max_lifetime_s()
 
@@ -485,18 +485,18 @@ def test_exec_foreground_echoes_and_returns_exit_code(
     sdk: _State, capsys: pytest.CaptureFixture[str]
 ) -> None:
     sdk.stream_result = _FakeCommandResult(stdout="line-1\n", exit_code=0)
-    code = E2BSandboxLauncher().exec_foreground("sb-e2b-1", "omnigent host")
+    code = E2BSandboxLauncher().exec_foreground("sb-e2b-1", "goalrail host")
     assert code == 0
     assert "line-1" in capsys.readouterr().out
     # TERM is forced and the command is exec'd inside the login shell.
     foreground_cmd = sdk.run_calls[-1]["cmd"]
-    assert "TERM=xterm-256color exec omnigent host" in foreground_cmd
+    assert "TERM=xterm-256color exec goalrail host" in foreground_cmd
 
 
 def test_stream_exec_disables_per_command_timeout(sdk: _State) -> None:
     # The streaming path backs the long-lived foreground host; it must disable
     # the SDK's default 60s per-command cap (timeout=0), like run() does.
-    E2BSandboxLauncher().stream_exec("sb-e2b-1", "omnigent host")
+    E2BSandboxLauncher().stream_exec("sb-e2b-1", "goalrail host")
     assert sdk.run_calls[-1]["background"] is True
     assert sdk.run_calls[-1]["timeout"] == 0
 
@@ -560,7 +560,7 @@ def test_exec_foreground_kills_on_keyboard_interrupt(
         E2BSandboxLauncher, "stream_exec", lambda self, sid, cmd, *, pty=False: _Interrupting()
     )
     with pytest.raises(KeyboardInterrupt):
-        E2BSandboxLauncher().exec_foreground("sb-e2b-1", "omnigent host")
+        E2BSandboxLauncher().exec_foreground("sb-e2b-1", "goalrail host")
     assert closed == [True]
 
 

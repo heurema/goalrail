@@ -1,8 +1,8 @@
 """Tests for the FastAPI app lifespan hook.
 
 Exercises the ``_lifespan`` context manager in
-``omnigent.server.app`` to verify shutdown wiring for the
-:class:`TerminalRegistry`. Per ``designs/OMNIGENT_TERMINAL_BRIDGE.md``
+``goalrail.server.app`` to verify shutdown wiring for the
+:class:`TerminalRegistry`. Per ``designs/GOALRAIL_TERMINAL_BRIDGE.md``
 §4.4, every live tmux session must be closed when the server's
 lifespan exits.
 """
@@ -42,7 +42,7 @@ async def test_lifespan_shutdown_invokes_registry_shutdown(
     verifying the *call*. The terminal-side cleanup behavior
     itself is covered by ``tests/terminals/test_registry.py``.
     """
-    from omnigent.runtime import get_terminal_registry
+    from goalrail.runtime import get_terminal_registry
 
     registry = get_terminal_registry()
     real_shutdown = registry.shutdown
@@ -81,8 +81,8 @@ async def test_lifespan_starts_periodic_metrics_otel_publisher(
     If this wiring regresses, request/resource gauges stop exporting
     even though per-request duration histograms still work.
     """
-    from omnigent.server import app as server_app
-    from omnigent.server.performance_metrics import (
+    from goalrail.server import app as server_app
+    from goalrail.server.performance_metrics import (
         ServerMetricsOtelPublisher,
         ServerPerformanceMetrics,
     )

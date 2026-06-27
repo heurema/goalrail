@@ -5,7 +5,7 @@ runner tunnel drops, the open chat flips to ``local_stranded`` liveness
 (not host-bound → no host to relaunch it), and the composer area swaps in
 the "Agent disconnected — click to reconnect" banner
 (``data-testid="disconnected-indicator"``). Clicking it opens the
-reconnect dialog with the exact ``omnigent run … --resume <id>`` command
+reconnect dialog with the exact ``goalrail run … --resume <id>`` command
 to bring the session back from the user's own machine.
 
 The e2e harness binds a tunneled, non-host runner, so the sidebar kebab's
@@ -31,7 +31,7 @@ from playwright.sync_api import Page, expect
 
 
 def _find_runner_pids() -> list[int]:
-    """Find PIDs of the runner entry point (``omnigent.runner._entry``).
+    """Find PIDs of the runner entry point (``goalrail.runner._entry``).
 
     The runner is a sibling subprocess of the server (both spawned by the
     fixture), so we match on the command line rather than the parent PID.
@@ -39,7 +39,7 @@ def _find_runner_pids() -> list[int]:
     :returns: List of runner PIDs (may be empty).
     """
     result = subprocess.run(
-        ["pgrep", "-f", "omnigent.runner._entry"],
+        ["pgrep", "-f", "goalrail.runner._entry"],
         capture_output=True,
         text=True,
     )

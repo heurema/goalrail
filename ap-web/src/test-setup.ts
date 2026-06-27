@@ -55,3 +55,76 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => false,
   }),
 });
+
+// Node 25 exposes an experimental global Web Storage object that lacks the
+// browser Storage API methods unless Node is started with a localstorage file.
+// In that runtime Vitest's jsdom window inherits the broken object too, so
+// install a small Storage-compatible test double while keeping methods on
+// Storage.prototype for tests that spy on quota/access failures.
+if (typeof window.Storage !== "undefined" && typeof window.localStorage?.clear !== "function") {
+  const stores = new WeakMap<Storage, Map<string, string>>();
+
+  function dataFor(storage: Storage): Map<string, string> {
+    let data = stores.get(storage);
+    if (!data) {
+      data = new Map<string, string>();
+      stores.set(storage, data);
+    }
+    return data;
+  }
+
+  Object.defineProperties(window.Storage.prototype, {
+    clear: {
+      configurable: true,
+      value(this: Storage) {
+        dataFor(this).clear();
+      },
+    },
+    getItem: {
+      configurable: true,
+      value(this: Storage, key: string) {
+        return dataFor(this).get(String(key)) ?? null;
+      },
+    },
+    key: {
+      configurable: true,
+      value(this: Storage, index: number) {
+        return Array.from(dataFor(this).keys())[index] ?? null;
+      },
+    },
+    removeItem: {
+      configurable: true,
+      value(this: Storage, key: string) {
+        dataFor(this).delete(String(key));
+      },
+    },
+    setItem: {
+      configurable: true,
+      value(this: Storage, key: string, value: string) {
+        dataFor(this).set(String(key), String(value));
+      },
+    },
+  });
+
+  function createStorage(): Storage {
+    const storage = Object.create(window.Storage.prototype) as Storage;
+    stores.set(storage, new Map<string, string>());
+    Object.defineProperty(storage, "length", {
+      configurable: true,
+      get() {
+        return dataFor(storage).size;
+      },
+    });
+    return storage;
+  }
+
+  const localStorage = createStorage();
+  const sessionStorage = createStorage();
+  Object.defineProperty(window, "localStorage", { configurable: true, value: localStorage });
+  Object.defineProperty(window, "sessionStorage", { configurable: true, value: sessionStorage });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: localStorage });
+  Object.defineProperty(globalThis, "sessionStorage", {
+    configurable: true,
+    value: sessionStorage,
+  });
+}

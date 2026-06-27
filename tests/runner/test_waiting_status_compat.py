@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.runner.app import _version_supports_waiting_status
+from goalrail.runner.app import _version_supports_waiting_status
 
 
 @pytest.mark.parametrize(

@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import omnigent.onboarding.harness_install as hi
-from omnigent.onboarding.harness_readiness import (
+import goalrail.onboarding.harness_install as hi
+from goalrail.onboarding.harness_readiness import (
     configured_harness_map,
     harness_is_configured,
 )
@@ -25,7 +25,7 @@ def _isolate_cursor_credential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     ``GITHUB_TOKEN`` — otherwise a developer's real key would flip their verdict
     under these tests.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("CURSOR_API_KEY", raising=False)
     for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(var, raising=False)
@@ -79,7 +79,7 @@ def test_sdk_and_unknown_harnesses_are_never_gated(
 
 
 # CLI-wrapping harnesses are gated on their binary being on PATH. Native Cursor
-# (``omni cursor``) joins the list: it wraps the ``cursor-agent`` CLI, unlike the
+# (``goalrail cursor``) joins the list: it wraps the ``cursor-agent`` CLI, unlike the
 # SDK ``cursor`` harness which gates on a key (covered separately below). Native
 # Kiro wraps the standalone ``kiro-cli`` binary.
 @pytest.mark.parametrize(
@@ -145,13 +145,13 @@ def test_configured_harness_map_covers_all_spellings(
         "pi-native",
         "native-pi",
         "cursor",
-        # Native Cursor (``omni cursor``) — gates on the cursor-agent CLI.
+        # Native Cursor (``goalrail cursor``) — gates on the cursor-agent CLI.
         "cursor-native",
         "native-cursor",
-        # Native Kiro (``omni kiro``) — gates on the kiro-cli binary.
+        # Native Kiro (``goalrail kiro``) — gates on the kiro-cli binary.
         "kiro-native",
         "native-kiro",
-        # Goose — native TUI (``omni goose``) + headless ACP harness; both gate
+        # Goose — native TUI (``goalrail goose``) + headless ACP harness; both gate
         # on the goose CLI.
         "goose",
         "goose-native",
@@ -163,7 +163,7 @@ def test_configured_harness_map_covers_all_spellings(
         # Kimi Code CLI + alias.
         "kimi",
         "kimi-code",
-        # Native Kimi (``omnigent kimi``) — gates on the kimi CLI.
+        # Native Kimi (``goalrail kimi``) — gates on the kimi CLI.
         "kimi-native",
         "native-kimi",
         # Native Antigravity (agy) CLI-wrapping harness, both spellings.
@@ -255,7 +255,7 @@ def test_configured_harness_map_all_true_with_clis(
     gated) by a detected Gemini OAuth credential — so nothing is reported
     unconfigured.
     """
-    import omnigent.onboarding.gemini_auth as _ga
+    import goalrail.onboarding.gemini_auth as _ga
 
     _all_clis_installed(monkeypatch)
     monkeypatch.setenv("CURSOR_API_KEY", "crsr_ready")
@@ -318,7 +318,7 @@ def test_cursor_readiness_keys_off_api_key(
 def test_native_cursor_keys_off_binary_not_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Native Cursor (``omni cursor``) gates on the cursor-agent CLI, not a key.
+    """Native Cursor (``goalrail cursor``) gates on the cursor-agent CLI, not a key.
 
     The mirror image of :func:`test_cursor_readiness_keys_off_api_key`: native
     Cursor boots the ``cursor-agent`` TUI, so its readiness is the binary on

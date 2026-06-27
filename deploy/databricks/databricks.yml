@@ -1,15 +1,15 @@
-# Databricks Asset Bundle config for the Omnigent Databricks App.
+# Databricks Asset Bundle config for the Goalrail Databricks App.
 #
 # Every knob the app exposes lives here. deploy.py wraps `databricks
 # bundle deploy` + `bundle run`; per-app values are passed as `--var`
 # pairs (see deploy.py / README.md).
 
 bundle:
-  name: omnigent
+  name: goalrail
 
 variables:
   app_name:
-    description: "Databricks App name (e.g. omnigent)."
+    description: "Databricks App name (e.g. goalrail)."
   lakebase_branch:
     description: "projects/<app>/branches/production"
   lakebase_database:
@@ -20,15 +20,15 @@ variables:
     description: >
       UC schema (catalog.schema) holding the OTel destination tables.
       The platform writes to <schema>.otel_logs, otel_metrics, otel_spans.
-    default: main.omnigent_logs
+    default: main.goalrail_logs
 
 resources:
   apps:
     # Resource key must match _BUNDLE_RESOURCE_KEY in deploy.py. The app's
     # display name comes from ${var.app_name}.
-    omnigent:
+    goalrail:
       name: ${var.app_name}
-      description: "Omnigent server backed by Lakebase + UC Volumes."
+      description: "Goalrail server backed by Lakebase + UC Volumes."
       source_code_path: ./src
       # compute_size is intentionally NOT declared here. Terraform's
       # databricks_app provider uses an apps update API that rejects
@@ -69,7 +69,7 @@ targets:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${var.app_name}
     resources:
       apps:
-        omnigent:
+        goalrail:
           # Optional: Databricks Apps platform OTel export. The platform
           # auto-injects OTEL_EXPORTER_OTLP_ENDPOINT into the app container
           # so any OTLP emitter (including telemetry.init() in src/app.py)

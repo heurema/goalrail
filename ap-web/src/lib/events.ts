@@ -1,4 +1,4 @@
-// Mirrors sdks/python-client/omnigent_client/_events.py.
+// Mirrors sdks/python-client/goalrail_client/_events.py.
 //
 // Hand-ported. When _events.py changes, update this file and the
 // matching reducer logic in blockStream.ts. See ap-web/README.md
@@ -423,7 +423,7 @@ export interface ClientTaskCancel {
 // ── Session lifecycle events (session.*) ─────────────────
 //
 // Emitted on `GET /v1/sessions/{id}/stream`. Wire shapes vary —
-// see `omnigent/server/schemas.py` for canonical Pydantic models:
+// see `goalrail/server/schemas.py` for canonical Pydantic models:
 //
 // - `session.status` / `session.created` /
 //   `session.resource.created` / `session.resource.deleted` use a

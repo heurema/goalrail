@@ -18,8 +18,8 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.inner import codex_harness
-from omnigent.runtime.harnesses import _HARNESS_MODULES
+from goalrail.inner import codex_harness
+from goalrail.runtime.harnesses import _HARNESS_MODULES
 
 
 def test_harness_module_registered_in_module_registry() -> None:
@@ -28,7 +28,7 @@ def test_harness_module_registered_in_module_registry() -> None:
     Without this entry, the runner subprocess can't find the wrap
     when AP-side tries to spawn it for a ``harness: codex`` spec.
     """
-    assert _HARNESS_MODULES.get("codex") == "omnigent.inner.codex_harness"
+    assert _HARNESS_MODULES.get("codex") == "goalrail.inner.codex_harness"
 
 
 def test_create_app_returns_fastapi_with_required_routes() -> None:
@@ -110,7 +110,7 @@ def test_executor_factory_reads_env_vars(
         captured["disable_native_tools"] = disable_native_tools
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -146,7 +146,7 @@ def test_executor_factory_decodes_os_env_json(
 ) -> None:
     """``HARNESS_CODEX_OS_ENV`` decodes into the inner OSEnvSpec.
 
-    Omnigent serializes ``spec.os_env`` via :func:`dataclasses.asdict`
+    Goalrail serializes ``spec.os_env`` via :func:`dataclasses.asdict`
     and JSON-encodes the result; the wrap must reconstruct an
     :class:`OSEnvSpec` (with nested sandbox spec) so
     :class:`CodexExecutor` sees the same config a non-AP mode
@@ -180,7 +180,7 @@ def test_executor_factory_decodes_os_env_json(
         captured["os_env"] = kwargs["os_env"]
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -217,7 +217,7 @@ def test_executor_factory_falls_back_on_malformed_os_env_json(
         captured["os_env"] = kwargs["os_env"]
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -260,7 +260,7 @@ def test_databricks_env_var_truthy_parsing(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -304,7 +304,7 @@ def test_enable_web_search_default_is_true(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -344,7 +344,7 @@ def test_disable_native_tools_default_is_false(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -383,7 +383,7 @@ def test_skills_filter_env_var_decodes(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -402,7 +402,7 @@ def test_skills_filter_env_var_missing_falls_back_to_all(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -430,7 +430,7 @@ def test_bundle_dir_and_agent_name_env_vars_thread_through(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()
@@ -451,7 +451,7 @@ def test_bundle_dir_unset_passes_none(
         captured.update(kwargs)
 
     with patch(
-        "omnigent.inner.codex_harness.CodexExecutor.__init__",
+        "goalrail.inner.codex_harness.CodexExecutor.__init__",
         _fake_init,
     ):
         codex_harness._build_codex_executor()

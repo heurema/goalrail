@@ -17,14 +17,14 @@ from types import SimpleNamespace
 import click
 import pytest
 
-import omnigent.onboarding.sandboxes.kubernetes as k8s
-from omnigent.host.identity import (
+import goalrail.onboarding.sandboxes.kubernetes as k8s
+from goalrail.host.identity import (
     HOST_ID_ENV_VAR,
     HOST_NAME_ENV_VAR,
     HOST_TOKEN_ENV_VAR,
 )
-from omnigent.onboarding.sandboxes.base import SandboxCapabilityError
-from omnigent.onboarding.sandboxes.kubernetes import (
+from goalrail.onboarding.sandboxes.base import SandboxCapabilityError
+from goalrail.onboarding.sandboxes.kubernetes import (
     KubernetesSandboxLauncher,
     build_pod_manifest,
     build_token_secret_manifest,
@@ -32,18 +32,18 @@ from omnigent.onboarding.sandboxes.kubernetes import (
 
 _TOKEN = "launch-token-xyz"
 _MANIFEST_KW = {
-    "pod_name": "omnigent-managed-abc-1a2b3c",
-    "namespace": "omnigent-sandboxes",
-    "image": "ghcr.io/omnigent-ai/omnigent-host:latest",
-    "service_account": "omnigent-runner",
+    "pod_name": "goalrail-managed-abc-1a2b3c",
+    "namespace": "goalrail-sandboxes",
+    "image": "ghcr.io/heurema/goalrail-host:latest",
+    "service_account": "goalrail-runner",
     "host_id": "host_abcdef",
     "host_name": "managed-abcdef",
     "server_url": "http://srv.example.com",
-    "token_secret_name": "omnigent-managed-abc-1a2b3c-token",
-    "harness_secret": "omnigent-creds",
+    "token_secret_name": "goalrail-managed-abc-1a2b3c-token",
+    "harness_secret": "goalrail-creds",
     "env_literals": {},
     "node_selector": None,
-    "workspace": "/home/omnigent/workspace",
+    "workspace": "/home/goalrail/workspace",
 }
 
 
@@ -70,7 +70,7 @@ def test_build_pod_manifest_runs_host_under_reaper_as_container_command() -> Non
 def test_build_pod_manifest_init_container_prepares_and_clones_workspace() -> None:
     """The init container makes the workspace and clones the repo before the host."""
     manifest = build_pod_manifest(
-        **{**_MANIFEST_KW, "clone_dir": "/home/omnigent/workspace/repo"},
+        **{**_MANIFEST_KW, "clone_dir": "/home/goalrail/workspace/repo"},
         repo_url="https://github.com/org/repo.git",
         repo_branch="main",
     )
@@ -78,16 +78,16 @@ def test_build_pod_manifest_init_container_prepares_and_clones_workspace() -> No
     assert len(init) == 1
     assert init[0]["name"] == "workspace-prep"
     script = init[0]["command"][2]
-    assert "mkdir -p /home/omnigent/workspace" in script
+    assert "mkdir -p /home/goalrail/workspace" in script
     assert "git clone --branch main --single-branch -- " in script
-    assert "https://github.com/org/repo.git /home/omnigent/workspace/repo" in script
+    assert "https://github.com/org/repo.git /home/goalrail/workspace/repo" in script
 
 
 def test_build_pod_manifest_without_repo_has_no_clone() -> None:
     """No repo → the init container only makes the workspace, no git clone."""
     manifest = build_pod_manifest(**_MANIFEST_KW)
     script = manifest["spec"]["initContainers"][0]["command"][2]
-    assert "mkdir -p /home/omnigent/workspace" in script
+    assert "mkdir -p /home/goalrail/workspace" in script
     assert "git clone" not in script
 
 
@@ -97,7 +97,7 @@ def test_build_pod_manifest_token_rides_secret_ref_not_the_spec() -> None:
     host_env = manifest["spec"]["containers"][0]["env"]
     token_entry = next(e for e in host_env if e["name"] == HOST_TOKEN_ENV_VAR)
     assert token_entry["valueFrom"]["secretKeyRef"] == {
-        "name": "omnigent-managed-abc-1a2b3c-token",
+        "name": "goalrail-managed-abc-1a2b3c-token",
         "key": HOST_TOKEN_ENV_VAR,
     }
     assert "value" not in token_entry
@@ -110,10 +110,10 @@ def test_build_pod_manifest_token_rides_secret_ref_not_the_spec() -> None:
 def test_build_token_secret_manifest_carries_token_in_stringdata() -> None:
     """The token Secret holds the raw token under the host-token key, labeled for GC."""
     secret = build_token_secret_manifest(
-        secret_name="omnigent-pod-token", namespace="omnigent-sandboxes", token=_TOKEN
+        secret_name="goalrail-pod-token", namespace="goalrail-sandboxes", token=_TOKEN
     )
     assert secret["stringData"] == {HOST_TOKEN_ENV_VAR: _TOKEN}
-    assert secret["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "omnigent"
+    assert secret["metadata"]["labels"]["app.kubernetes.io/managed-by"] == "goalrail"
     assert secret["type"] == "Opaque"
 
 
@@ -122,8 +122,8 @@ def test_build_pod_manifest_harness_secret_projects_into_both_containers() -> No
     manifest = build_pod_manifest(**_MANIFEST_KW)
     init = manifest["spec"]["initContainers"][0]
     host = manifest["spec"]["containers"][0]
-    assert init["envFrom"] == [{"secretRef": {"name": "omnigent-creds"}}]
-    assert host["envFrom"] == [{"secretRef": {"name": "omnigent-creds"}}]
+    assert init["envFrom"] == [{"secretRef": {"name": "goalrail-creds"}}]
+    assert host["envFrom"] == [{"secretRef": {"name": "goalrail-creds"}}]
 
 
 def test_build_pod_manifest_omits_envfrom_without_harness_secret() -> None:
@@ -182,7 +182,7 @@ def test_render_workspace_prep_command(
 def test_new_pod_name_and_token_secret_name() -> None:
     """Pod names are DNS-label-safe and the token Secret is the pod name + suffix."""
     name = k8s._new_pod_name("Managed-ABC_123!")
-    assert name.startswith("omnigent-managed-abc-123-")
+    assert name.startswith("goalrail-managed-abc-123-")
     assert all(c.islower() or c.isdigit() or c == "-" for c in name)
     assert k8s._token_secret_name(name) == f"{name}-token"
 
@@ -347,7 +347,7 @@ def fake_core(monkeypatch: pytest.MonkeyPatch) -> _FakeCore:
 def _launcher() -> KubernetesSandboxLauncher:
     """A launcher pinned to in-cluster config with explicit, env-free settings."""
     return KubernetesSandboxLauncher(
-        in_cluster=True, namespace="omnigent-sandboxes", secret_name="omnigent-creds", env=()
+        in_cluster=True, namespace="goalrail-sandboxes", secret_name="goalrail-creds", env=()
     )
 
 
@@ -357,17 +357,17 @@ def test_launch_host_creates_secret_then_pod_and_returns_workspace(
     """The happy path creates the token Secret BEFORE the Pod and returns the workspace."""
     fake_core.read_queue = [_pod(phase="Running")]
     workspace = _launcher().start_host(
-        "omnigent-pod-1",
+        "goalrail-pod-1",
         token=_TOKEN,
         host_id="host_1",
         host_name="managed-1",
         server_url="http://srv.example.com",
     )
-    assert workspace == "/home/omnigent/workspace"
+    assert workspace == "/home/goalrail/workspace"
     # Secret is created before the Pod (so the secretKeyRef resolves immediately).
     assert fake_core.calls.index("create_secret") < fake_core.calls.index("create_pod")
     assert fake_core.created_secrets[0]["stringData"] == {HOST_TOKEN_ENV_VAR: _TOKEN}
-    assert fake_core.created_pods[0]["metadata"]["name"] == "omnigent-pod-1"
+    assert fake_core.created_pods[0]["metadata"]["name"] == "goalrail-pod-1"
     # Nothing torn down on success.
     assert fake_core.deleted_pods == []
 
@@ -376,7 +376,7 @@ def test_launch_host_with_repo_returns_clone_dir(fake_core: _FakeCore) -> None:
     """With a repo, the returned workspace is the cloned directory under the workspace."""
     fake_core.read_queue = [_pod(phase="Running")]
     workspace = _launcher().start_host(
-        "omnigent-pod-2",
+        "goalrail-pod-2",
         token=_TOKEN,
         host_id="host_2",
         host_name="managed-2",
@@ -384,7 +384,7 @@ def test_launch_host_with_repo_returns_clone_dir(fake_core: _FakeCore) -> None:
         repo_url="https://github.com/org/repo.git",
         repo_name="repo",
     )
-    assert workspace == "/home/omnigent/workspace/repo"
+    assert workspace == "/home/goalrail/workspace/repo"
 
 
 def test_launch_host_cleans_up_on_create_failure(fake_core: _FakeCore) -> None:
@@ -392,14 +392,14 @@ def test_launch_host_cleans_up_on_create_failure(fake_core: _FakeCore) -> None:
     fake_core.create_pod_error = _FakeApiException(status=500, reason="Internal Server Error")
     with pytest.raises(click.ClickException, match="create sandbox pod"):
         _launcher().start_host(
-            "omnigent-pod-3",
+            "goalrail-pod-3",
             token=_TOKEN,
             host_id="host_3",
             host_name="managed-3",
             server_url="http://srv.example.com",
         )
-    assert "omnigent-pod-3-token" in fake_core.deleted_secrets
-    assert "omnigent-pod-3" in fake_core.deleted_pods
+    assert "goalrail-pod-3-token" in fake_core.deleted_secrets
+    assert "goalrail-pod-3" in fake_core.deleted_pods
 
 
 def test_launch_host_fast_fails_on_clone_failure_with_log_tail(
@@ -415,7 +415,7 @@ def test_launch_host_fast_fails_on_clone_failure_with_log_tail(
     fake_core.logs["workspace-prep"] = "fatal: repository 'https://x/y.git' not found"
     with pytest.raises(click.ClickException) as exc:
         _launcher().start_host(
-            "omnigent-pod-4",
+            "goalrail-pod-4",
             token=_TOKEN,
             host_id="host_4",
             host_name="managed-4",
@@ -426,8 +426,8 @@ def test_launch_host_fast_fails_on_clone_failure_with_log_tail(
     assert "workspace prep failed (exit 128" in exc.value.message
     assert "repository 'https://x/y.git' not found" in exc.value.message
     # The orphaned Pod + Secret are reaped.
-    assert "omnigent-pod-4" in fake_core.deleted_pods
-    assert "omnigent-pod-4-token" in fake_core.deleted_secrets
+    assert "goalrail-pod-4" in fake_core.deleted_pods
+    assert "goalrail-pod-4-token" in fake_core.deleted_secrets
 
 
 def test_launch_host_times_out_with_reason(
@@ -449,7 +449,7 @@ def test_launch_host_times_out_with_reason(
     )
     with pytest.raises(click.ClickException, match="did not start within"):
         _launcher().start_host(
-            "omnigent-pod-5",
+            "goalrail-pod-5",
             token=_TOKEN,
             host_id="host_5",
             host_name="managed-5",
@@ -459,16 +459,16 @@ def test_launch_host_times_out_with_reason(
 
 def test_terminate_deletes_pod_and_secret(fake_core: _FakeCore) -> None:
     """Terminate deletes both the Pod and its token Secret."""
-    _launcher().terminate("omnigent-pod-6")
-    assert fake_core.deleted_pods == ["omnigent-pod-6"]
-    assert fake_core.deleted_secrets == ["omnigent-pod-6-token"]
+    _launcher().terminate("goalrail-pod-6")
+    assert fake_core.deleted_pods == ["goalrail-pod-6"]
+    assert fake_core.deleted_secrets == ["goalrail-pod-6-token"]
 
 
 def test_terminate_is_idempotent_on_404(fake_core: _FakeCore) -> None:
     """A Pod that no longer exists (404) is treated as success, and the Secret too."""
     fake_core.delete_pod_errors = [_FakeApiException(status=404, reason="Not Found")]
-    _launcher().terminate("omnigent-pod-7")  # must not raise
-    assert fake_core.deleted_secrets == ["omnigent-pod-7-token"]
+    _launcher().terminate("goalrail-pod-7")  # must not raise
+    assert fake_core.deleted_secrets == ["goalrail-pod-7-token"]
 
 
 def test_terminate_retries_transient_then_gives_up_best_effort(
@@ -478,10 +478,10 @@ def test_terminate_retries_transient_then_gives_up_best_effort(
     from urllib3.exceptions import HTTPError
 
     fake_core.delete_pod_errors = [HTTPError("timeout")] * k8s._POD_DELETE_MAX_ATTEMPTS
-    _launcher().terminate("omnigent-pod-8")  # best-effort: must not raise
-    assert "could not delete Kubernetes pod 'omnigent-pod-8'" in capsys.readouterr().err
+    _launcher().terminate("goalrail-pod-8")  # best-effort: must not raise
+    assert "could not delete Kubernetes pod 'goalrail-pod-8'" in capsys.readouterr().err
     # The Secret delete still runs after the Pod gives up.
-    assert fake_core.deleted_secrets == ["omnigent-pod-8-token"]
+    assert fake_core.deleted_secrets == ["goalrail-pod-8-token"]
 
 
 def test_provision_reserves_pod_name_and_run_is_unsupported() -> None:
@@ -489,7 +489,7 @@ def test_provision_reserves_pod_name_and_run_is_unsupported() -> None:
     launcher = _launcher()
     # provision reserves the id — it does NOT create a Pod and does NOT raise.
     name = launcher.provision("managed-abc")
-    assert name.startswith("omnigent-managed-abc-")
+    assert name.startswith("goalrail-managed-abc-")
     # run is unsupported: the host is the Pod entrypoint, there is no exec-in.
     with pytest.raises(SandboxCapabilityError):
         launcher.run("sb", "echo hi")

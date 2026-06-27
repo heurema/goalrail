@@ -2,10 +2,10 @@
 
 :func:`resolve_model` spreads pooled models across same-tier siblings
 (stable hash of the test nodeid; off unless
-``OMNIGENT_TEST_MODEL_SPREAD=1``, set in e2e CI) and rotates to a
+``GOALRAIL_TEST_MODEL_SPREAD=1``, set in e2e CI) and rotates to a
 different model on each ``@pytest.mark.llm_flaky`` rerun.
 ``@pytest.mark.model_pinned`` opts a test out of both. Pools are
-overridable via ``OMNIGENT_TEST_MODEL_POOL_<KEY>`` (comma-separated).
+overridable via ``GOALRAIL_TEST_MODEL_POOL_<KEY>`` (comma-separated).
 
 The current-test context (nodeid, attempt, pinned) is stamped by the
 ``pytest_runtest_setup`` hook in ``tests/conftest.py``, so helpers deep
@@ -18,8 +18,8 @@ import os
 import zlib
 from dataclasses import dataclass
 
-_SPREAD_ENV_VAR = "OMNIGENT_TEST_MODEL_SPREAD"
-_POOL_ENV_PREFIX = "OMNIGENT_TEST_MODEL_POOL_"
+_SPREAD_ENV_VAR = "GOALRAIL_TEST_MODEL_SPREAD"
+_POOL_ENV_PREFIX = "GOALRAIL_TEST_MODEL_POOL_"
 
 # Interchangeable same-tier models (mini is its own pool so spreading
 # never downgrades a test). Keys are the env-override suffixes.
@@ -88,7 +88,7 @@ def current_attempt() -> int:
 
 
 def spread_enabled() -> bool:
-    """Whether hash-spreading is enabled via ``OMNIGENT_TEST_MODEL_SPREAD``."""
+    """Whether hash-spreading is enabled via ``GOALRAIL_TEST_MODEL_SPREAD``."""
     return os.environ.get(_SPREAD_ENV_VAR, "").strip().lower() in {"1", "true", "yes"}
 
 

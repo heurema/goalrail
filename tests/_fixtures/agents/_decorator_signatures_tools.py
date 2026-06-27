@@ -1,4 +1,4 @@
-"""Test tools exercising the breadth of Omnigent tool signature handling.
+"""Test tools exercising the breadth of Goalrail tool signature handling.
 
 Covers:
 - Plain primitive ``str`` arg (``greet``).

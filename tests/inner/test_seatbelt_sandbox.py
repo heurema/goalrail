@@ -34,9 +34,9 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.sandbox import SandboxPolicy, with_denied_unix_sockets
-from omnigent.inner.seatbelt_sandbox import (
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.sandbox import SandboxPolicy, with_denied_unix_sockets
+from goalrail.inner.seatbelt_sandbox import (
     _DEFAULT_CWD_ALLOW_HIDDEN,
     _DEFAULT_READ_SUBPATHS,
     _SANDBOX_EXEC_PATH,
@@ -242,7 +242,7 @@ def test_resolve_raises_on_non_darwin() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="darwin_seatbelt"),
     )
-    with patch("omnigent.inner.seatbelt_sandbox.sys.platform", "linux"):
+    with patch("goalrail.inner.seatbelt_sandbox.sys.platform", "linux"):
         with pytest.raises(OSError, match="only available on macOS"):
             backend.resolve(spec, Path.cwd())
 
@@ -259,8 +259,8 @@ def test_resolve_raises_when_sandbox_exec_missing() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="darwin_seatbelt"),
     )
-    with patch("omnigent.inner.seatbelt_sandbox.sys.platform", "darwin"):
-        with patch("omnigent.inner.seatbelt_sandbox.shutil.which", return_value=None):
+    with patch("goalrail.inner.seatbelt_sandbox.sys.platform", "darwin"):
+        with patch("goalrail.inner.seatbelt_sandbox.shutil.which", return_value=None):
             with pytest.raises(OSError, match="sandbox-exec"):
                 backend.resolve(spec, Path.cwd())
 
@@ -312,7 +312,7 @@ def _safe_helper_argv(tmp_path: Path) -> list[str]:
         # ``/Users`` (macOS dev).
         interpreter.write_text("#!/usr/bin/env python3\n")
         interpreter.chmod(0o755)
-    return [str(interpreter), "-m", "omnigent.inner.os_env", "helper", "X"]
+    return [str(interpreter), "-m", "goalrail.inner.os_env", "helper", "X"]
 
 
 def test_wrap_launcher_argv_starts_with_sandbox_exec_and_appends_inner_argv(
@@ -534,7 +534,7 @@ def test_profile_scratch_tmpdir_gets_read_and_write_allows(tmp_path: Path) -> No
     import tempfile
 
     sys_tmp = Path(tempfile.gettempdir())
-    scratch = sys_tmp / "omnigent-test-scratch"
+    scratch = sys_tmp / "goalrail-test-scratch"
     policy = _make_policy(tmp_path, write_roots=[scratch])
     profile = _build_profile(policy, tmp_path.resolve(strict=False))
     canonical_scratch = str(scratch.resolve(strict=False))
@@ -662,7 +662,7 @@ def test_profile_network_section_for_active_egress_emits_narrow_allows(
     import tempfile
 
     sys_tmp = Path(tempfile.gettempdir())
-    scratch = sys_tmp / "omnigent-egress-test-scratch"
+    scratch = sys_tmp / "goalrail-egress-test-scratch"
     socket_path = scratch / ".egress.sock"
     policy = _make_policy(
         tmp_path,
@@ -898,7 +898,7 @@ def test_ensure_executable_visible_does_not_widen_when_venv_is_under_cwd() -> No
     """
     cwd = Path("/Users/me/proj")
     venv_python = cwd / ".venv" / "bin" / "python3"
-    argv = [str(venv_python), "-m", "omnigent.inner.os_env", "helper"]
+    argv = [str(venv_python), "-m", "goalrail.inner.os_env", "helper"]
     extras = _ensure_executable_visible(argv, cwd)
     assert extras == [], (
         f"Got extra_read_paths={extras!r} for a venv UNDER cwd; "
@@ -955,7 +955,7 @@ def test_helper_boots_when_cwd_lives_under_home_regression() -> None:
         pytest.skip("sandbox-exec not on PATH")
 
     home = Path.home()
-    cwd = home / f".omnigent-realpath-regression-{uuid.uuid4().hex}"
+    cwd = home / f".goalrail-realpath-regression-{uuid.uuid4().hex}"
     (cwd / ".venv" / "bin").mkdir(parents=True)
     try:
         # Symlink the test runner's interpreter under cwd. To
@@ -1070,7 +1070,7 @@ def test_helper_boots_when_interpreter_lives_under_home_uv_layout(
         pytest.skip("sandbox-exec not on PATH")
 
     home = Path.home()
-    fake_install_root = home / f".omnigent-uv-layout-regression-{uuid.uuid4().hex}"
+    fake_install_root = home / f".goalrail-uv-layout-regression-{uuid.uuid4().hex}"
     (fake_install_root / "bin").mkdir(parents=True)
     # ``lib/python<X>.<Y>`` is the marker the shape detector keys
     # off; the directory can be empty for the detection check.
@@ -1425,10 +1425,10 @@ def test_ensure_executable_visible_falls_back_to_install_root_for_uv_layout(
     # ``/tmp/...``. Either way the topmost is a real path on disk.
     topmost_str = "/" + str(install_root).lstrip("/").split("/", 1)[0]
     with patch(
-        "omnigent.inner.seatbelt_sandbox._UNSAFE_WIDEN_ANCESTORS",
+        "goalrail.inner.seatbelt_sandbox._UNSAFE_WIDEN_ANCESTORS",
         frozenset({topmost_str}),
     ):
-        with caplog.at_level("WARNING", logger="omnigent.inner.seatbelt_sandbox"):
+        with caplog.at_level("WARNING", logger="goalrail.inner.seatbelt_sandbox"):
             extras = _ensure_executable_visible(argv, cwd)
 
     assert extras, (
@@ -1490,7 +1490,7 @@ def test_ensure_executable_visible_still_raises_for_non_python_home_layouts(
 
     topmost_str = "/" + str(fake_root).lstrip("/").split("/", 1)[0]
     with patch(
-        "omnigent.inner.seatbelt_sandbox._UNSAFE_WIDEN_ANCESTORS",
+        "goalrail.inner.seatbelt_sandbox._UNSAFE_WIDEN_ANCESTORS",
         frozenset({topmost_str}),
     ):
         with pytest.raises(OSError) as exc:
@@ -1524,7 +1524,7 @@ def test_h4_resolve_root_does_not_expand_env_vars_and_warns(
     emitted so over-broad expansions stand out in logs.
     """
     monkeypatch.setenv("LOG_DIR", "/")
-    with caplog.at_level("WARNING", logger="omnigent.inner.seatbelt_sandbox"):
+    with caplog.at_level("WARNING", logger="goalrail.inner.seatbelt_sandbox"):
         resolved = _resolve_root(tmp_path, "$LOG_DIR/audit")
     # The literal ``$LOG_DIR`` survives — resolved path ends with
     # the unexpanded segment, NOT with ``/audit`` rooted at ``/``.
@@ -1550,7 +1550,7 @@ def test_l5_resolve_root_warns_on_broad_paths(
     ``/var``, …). Not blocked — some legitimate agents need a wide
     grant — but the warning makes the choice auditable in logs.
     """
-    with caplog.at_level("WARNING", logger="omnigent.inner.seatbelt_sandbox"):
+    with caplog.at_level("WARNING", logger="goalrail.inner.seatbelt_sandbox"):
         _resolve_root(tmp_path, "/")
     assert any("near-unrestricted" in record.message for record in caplog.records), (
         "Resolver should warn when a spec path resolves to a "
@@ -1773,7 +1773,7 @@ def test_m7_resolve_warns_when_cwd_allow_hidden_contains_sensitive_dotfile(
             cwd_allow_hidden=[".aws", ".ssh", ".venv"],
         ),
     )
-    with caplog.at_level("WARNING", logger="omnigent.inner.seatbelt_sandbox"):
+    with caplog.at_level("WARNING", logger="goalrail.inner.seatbelt_sandbox"):
         backend.resolve(spec, Path.cwd())
     msgs = " ".join(record.message for record in caplog.records)
     assert ".aws" in msgs and ".ssh" in msgs, (

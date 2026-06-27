@@ -278,7 +278,7 @@ describe("MarkdownRichTextViewer dirty banners", () => {
 // ── Link following ───────────────────────────────────────────────────────────
 
 describe("MarkdownRichTextViewer link following", () => {
-  const HREF = "https://golrail.dev/docs/build/harnesses";
+  const HREF = "https://goalrail.dev/docs/build/harnesses";
 
   // The TipTap editor (and the links it renders, incl. those in table cells)
   // is mocked to null here, so inject an anchor into the scroll container to

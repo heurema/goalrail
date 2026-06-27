@@ -3,15 +3,15 @@ Tests for the client-side elicitation wiring.
 
 Covers:
 
-- :func:`omnigent_client._sse._parse_event` —
+- :func:`goalrail_client._sse._parse_event` —
   ``response.elicitation_request`` events parse to
   :class:`ElicitationRequest` with the MCP-shape ``params``
   block surfaced as flat fields on the dataclass.
-- :func:`omnigent_client._sse._parse_output_item` — regular
+- :func:`goalrail_client._sse._parse_output_item` — regular
   ``function_call`` items still parse to :class:`ToolCall`
   (guards against accidental re-introduction of a
   reserved-name carve-out).
-- :func:`omnigent_client._responses._handle_elicitation_request`
+- :func:`goalrail_client._responses._handle_elicitation_request`
   — calls the registered hook, POSTs the verdict to the
   elicitation's dedicated resolve URL, and fail-closes when no hook
   is registered.
@@ -34,19 +34,19 @@ from typing import Any
 
 import pytest
 
-# The editable-install of ``omnigent_client`` points at the
+# The editable-install of ``goalrail_client`` points at the
 # sibling worktree. Load this worktree's copy under a distinct
 # module name so we're actually testing the code we just
 # edited. Same pattern the e2e suite uses via PYTHONPATH.
 _SDK_ROOT = (
-    Path(__file__).resolve().parents[2].parent / "sdks" / "python-client" / "omnigent_client"
+    Path(__file__).resolve().parents[2].parent / "sdks" / "python-client" / "goalrail_client"
 )
 
 
 def _load_sdk_module(name: str) -> Any:
     """
-    Load ``omnigent_client.<name>`` from this worktree
-    regardless of which ``omnigent_client`` is resolved
+    Load ``goalrail_client.<name>`` from this worktree
+    regardless of which ``goalrail_client`` is resolved
     globally. Registering under ``_apc_under_test.<name>``
     so parent-package resolution works for helpers that
     reference sibling submodules.
@@ -473,17 +473,17 @@ async def test_hook_accepts_sync_callable() -> None:
 
 def _load_repl_module() -> Any:
     """
-    Reload ``omnigent.repl._repl`` so these tests see the
+    Reload ``goalrail.repl._repl`` so these tests see the
     edited source. Multiple tests in this file touch the
     module; a stale import cache would silently test the old
     API.
 
-    :returns: The freshly-reloaded ``omnigent.repl._repl``
+    :returns: The freshly-reloaded ``goalrail.repl._repl``
         module.
     """
     import importlib
 
-    import omnigent.repl._repl as repl_mod
+    import goalrail.repl._repl as repl_mod
 
     importlib.reload(repl_mod)
     return repl_mod

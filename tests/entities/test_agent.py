@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from omnigent.entities.agent import Agent
+from goalrail.entities.agent import Agent
 
 
 def test_agent_minimal() -> None:

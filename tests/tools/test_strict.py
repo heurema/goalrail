@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from omnigent_client.tools._strict import ensure_strict_schema
+from goalrail_client.tools._strict import ensure_strict_schema
 
 
 def test_strict_object_schema_sets_additional_properties_false() -> None:

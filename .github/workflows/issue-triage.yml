@@ -1,6 +1,6 @@
 name: Issue Triage
 
-# AI-powered triage for new issues via Omnigent.
+# AI-powered triage for new issues via Goalrail.
 # Implements Stage 2 of the issue triage proposal (designs/issue-triage-proposal.md).
 #
 # Architecture (prompt injection resistant):
@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 env:
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   UV_INDEX_URL: https://pypi.org/simple
   PIP_INDEX_URL: https://pypi.org/simple
 
@@ -197,12 +197,12 @@ jobs:
           "
           echo "DATABRICKS_BEARER=${LLM_API_KEY}" >> "$GITHUB_ENV"
 
-      - name: Write Omnigent provider config
+      - name: Write Goalrail provider config
         if: steps.creds.outputs.available == 'true'
         env:
           GATEWAY_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
         run: |
-          mkdir -p "$HOME/.omnigent"
+          mkdir -p "$HOME/.goalrail"
           python3 -c "
           import pathlib, os, json
           gw = os.environ['GATEWAY_BASE_URL']
@@ -220,7 +220,7 @@ jobs:
                   }
               }
           }
-          pathlib.Path.home().joinpath('.omnigent', 'config.yaml').write_text(
+          pathlib.Path.home().joinpath('.goalrail', 'config.yaml').write_text(
               json.dumps(cfg, indent=2)
           )
           "
@@ -280,7 +280,7 @@ jobs:
 
           prompt=$(cat /tmp/triage_prompt.txt)
 
-          uv run omnigent run .github/triage/ \
+          uv run goalrail run .github/triage/ \
             -p "$prompt" \
             --no-session \
             2>triage-stderr.log \

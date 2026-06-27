@@ -14,9 +14,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from omnigent.entities import Agent, Conversation, ConversationItem, MessageData, PagedList
-from omnigent.errors import OmnigentError
-from omnigent.server.routes.sessions import create_sessions_router
+from goalrail.entities import Agent, Conversation, ConversationItem, MessageData, PagedList
+from goalrail.errors import GoalrailError
+from goalrail.server.routes.sessions import create_sessions_router
 
 # ── Minimal store stubs ──────────────────────────────────────────
 
@@ -304,7 +304,7 @@ def _build_app(
     Build a FastAPI app with the sessions router and error handler.
 
     Mirrors the error-handler registration in ``create_app()`` so
-    that ``OmnigentError`` is translated into the correct HTTP
+    that ``GoalrailError`` is translated into the correct HTTP
     status rather than surfacing as an unhandled 500.
 
     :param store: The conversation store stub.
@@ -330,12 +330,12 @@ def _build_app(
     )
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle_omnigent_error(
+    @app.exception_handler(GoalrailError)
+    async def _handle_goalrail_error(
         request: Request,
-        exc: OmnigentError,
+        exc: GoalrailError,
     ) -> JSONResponse:
-        """Translate OmnigentError to an HTTP error response."""
+        """Translate GoalrailError to an HTTP error response."""
         del request
         return JSONResponse(
             status_code=exc.http_status,
@@ -780,11 +780,11 @@ async def test_fork_switch_404_unknown_target() -> None:
             True,
             True,
             True,
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "claude-code-native-ui"},
+            {"goalrail.ui": "terminal", "goalrail.wrapper": "claude-code-native-ui"},
         ),
         # cross-family into a native target: model id is meaningless across
         # providers → reset. History still carries — the runner rebuilds the
-        # native transcript from the copied Omnigent items — but the source's
+        # native transcript from the copied Goalrail items — but the source's
         # native session id must NOT be stamped (wrong transcript format for
         # the target; a doomed clone attempt would launch fresh instead).
         # Still terminal-first, but the codex wrapper.
@@ -794,7 +794,7 @@ async def test_fork_switch_404_unknown_target() -> None:
             False,
             True,
             False,
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "codex-native-ui"},
+            {"goalrail.ui": "terminal", "goalrail.wrapper": "codex-native-ui"},
         ),
         # cursor target carries history via a text preamble (its conversation
         # is server-backed, so the runner can't seed a local store for --resume),
@@ -806,7 +806,7 @@ async def test_fork_switch_404_unknown_target() -> None:
             False,
             True,
             False,
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "cursor-native-ui"},
+            {"goalrail.ui": "terminal", "goalrail.wrapper": "cursor-native-ui"},
         ),
         # pi target is native terminal-first but has no carry-history path yet,
         # so it launches fresh — do not stamp carry_history_into_native.
@@ -816,7 +816,7 @@ async def test_fork_switch_404_unknown_target() -> None:
             False,
             False,
             False,
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "pi-native-ui"},
+            {"goalrail.ui": "terminal", "goalrail.wrapper": "pi-native-ui"},
         ),
         # native → SDK, same family: model carries, but an SDK target
         # replays the transcript itself so no native-rebuild marker is set.
@@ -832,7 +832,7 @@ async def test_fork_switch_404_unknown_target() -> None:
             False,
             True,
             False,
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "claude-code-native-ui"},
+            {"goalrail.ui": "terminal", "goalrail.wrapper": "claude-code-native-ui"},
         ),
     ],
 )
@@ -871,7 +871,7 @@ async def test_fork_switch_model_and_carry_gating(
     # Target every switch at ag_claude_native; the stub cache, not the
     # bundle, dictates the harness each agent reports.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_agent_cache",
+        "goalrail.server.routes.sessions.get_agent_cache",
         lambda: _StubAgentCache({"ag_test": source_harness, "ag_claude_native": target_harness}),
     )
     client = TestClient(_build_app(conv_store, agent_store=agent_store))
@@ -920,7 +920,7 @@ async def test_fork_no_switch_native_source_carries_history(
         items_by_conv={"conv_src": [_make_item("msg_1", "Hi")]},
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_agent_cache",
+        "goalrail.server.routes.sessions.get_agent_cache",
         lambda: _StubAgentCache({"ag_test": "claude-native"}),
     )
     client = TestClient(_build_app(conv_store))
@@ -966,7 +966,7 @@ async def test_fork_cursor_pi_native_carry_gating(
         items_by_conv={"conv_src": [_make_item("msg_1", "Hi")]},
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_agent_cache",
+        "goalrail.server.routes.sessions.get_agent_cache",
         lambda: _StubAgentCache({"ag_test": harness}),
     )
     client = TestClient(_build_app(conv_store))
@@ -1012,7 +1012,7 @@ async def test_fork_reversed_native_spelling_carry_gating(
         items_by_conv={"conv_src": [_make_item("msg_1", "Hi")]},
     )
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions.get_agent_cache",
+        "goalrail.server.routes.sessions.get_agent_cache",
         lambda: _StubAgentCache({"ag_test": harness}),
     )
     client = TestClient(_build_app(conv_store))

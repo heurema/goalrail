@@ -18,7 +18,7 @@ name: UI Snapshot Update
 # so PR-controlled code can never tamper with the binaries/PATH the privileged
 # push later uses.
 #
-# Re-trigger: the push uses the OMNIGENT_BOT_APP token (NOT GITHUB_TOKEN, whose
+# Re-trigger: the push uses the GOALRAIL_BOT_APP token (NOT GITHUB_TOKEN, whose
 # pushes GitHub suppresses to avoid loops), so it re-fires the PR's full check
 # suite on the new commit -- no manual "Re-run". Falls back to GITHUB_TOKEN if
 # the App isn't configured (lands, but a maintainer must push to re-run CI),
@@ -64,10 +64,10 @@ jobs:
         shell: bash
     timeout-minutes: 20
     env:
-      OMNIGENT_SKIP_WEB_UI: "true"
+      GOALRAIL_SKIP_WEB_UI: "true"
       # The pinned image runs as root, where Chromium needs --no-sandbox; the
       # e2e_ui conftest adds it (+ --disable-dev-shm-usage) when this is set.
-      OMNIGENT_PW_NO_SANDBOX: "1"
+      GOALRAIL_PW_NO_SANDBOX: "1"
       # Use the image's Python 3.12 (matches .python-version) rather than a uv
       # download -- no setup-python step needed inside the container.
       UV_PYTHON_PREFERENCE: only-system
@@ -190,11 +190,11 @@ jobs:
       # configured (push then falls back to GITHUB_TOKEN, which won't re-run CI).
       - name: Mint App token
         id: app-token
-        if: needs.render.result == 'success' && vars.OMNIGENT_BOT_APP_ID != ''
+        if: needs.render.result == 'success' && vars.GOALRAIL_BOT_APP_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
-          app-id: ${{ vars.OMNIGENT_BOT_APP_ID }}
-          private-key: ${{ secrets.OMNIGENT_BOT_APP_KEY }}
+          app-id: ${{ vars.GOALRAIL_BOT_APP_ID }}
+          private-key: ${{ secrets.GOALRAIL_BOT_APP_KEY }}
 
       # The push token authenticates inline (scoped to this step, never in
       # .git/config). An App-token push re-fires the PR's checks; a GITHUB_TOKEN
@@ -207,8 +207,8 @@ jobs:
           PUSH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          git config user.name "omnigent-ci[bot]"
-          git config user.email "294685417+omnigent-ci[bot]@users.noreply.github.com"
+          git config user.name "goalrail-ci[bot]"
+          git config user.email "294685417+goalrail-ci[bot]@users.noreply.github.com"
           git add tests/e2e_ui/visual/snapshots
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"

@@ -13,21 +13,21 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     encode_host_frame,
 )
-from omnigent.server.auth import LEVEL_OWNER
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.routes._host_launch import HostLaunchTarget, resolve_host_launch
-from omnigent.server.routes.host_tunnel import create_host_tunnel_router
-from omnigent.server.routes.hosts import create_hosts_router
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.server.auth import LEVEL_OWNER
+from goalrail.server.host_registry import HostRegistry
+from goalrail.server.routes._host_launch import HostLaunchTarget, resolve_host_launch
+from goalrail.server.routes.host_tunnel import create_host_tunnel_router
+from goalrail.server.routes.hosts import create_hosts_router
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.stores.host_store import HostStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 pytestmark = pytest.mark.asyncio
 
@@ -421,7 +421,7 @@ async def test_launch_runner_happy_path(
         assert conn is not None
         # Drain until we find the launch frame (skip pings).
 
-        from omnigent.host.frames import HostLaunchRunnerFrame, decode_host_frame
+        from goalrail.host.frames import HostLaunchRunnerFrame, decode_host_frame
 
         for _ in range(20):
             output = await comm.receive_output(timeout=2.0)
@@ -483,16 +483,16 @@ async def test_launch_runner_harness_not_configured_returns_412(
     machine-readable code (and the `goalrail setup` hint) on the
     fork-resume relaunch path.
     """
-    from omnigent.errors import OmnigentError
+    from goalrail.errors import GoalrailError
 
     app, registry, _hs, conv_store = host_api_app
 
     # The bare test app has no exception handlers; register the same
-    # OmnigentError → JSON handler create_app installs (app.py), so the
+    # GoalrailError → JSON handler create_app installs (app.py), so the
     # route's raise surfaces exactly as it would in production wiring.
-    @app.exception_handler(OmnigentError)
-    async def _handle(request: object, exc: OmnigentError) -> JSONResponse:
-        """Convert OmnigentError to the production JSON error shape.
+    @app.exception_handler(GoalrailError)
+    async def _handle(request: object, exc: GoalrailError) -> JSONResponse:
+        """Convert GoalrailError to the production JSON error shape.
 
         :param request: The incoming request (unused).
         :param exc: The application error raised by the route.
@@ -509,7 +509,7 @@ async def test_launch_runner_harness_not_configured_returns_412(
 
     async def _refuse_launch() -> None:
         """Reply 'failed' with the structured harness error code."""
-        from omnigent.host.frames import HostLaunchRunnerFrame, decode_host_frame
+        from goalrail.host.frames import HostLaunchRunnerFrame, decode_host_frame
 
         for _ in range(20):
             output = await comm.receive_output(timeout=2.0)
@@ -669,7 +669,7 @@ def multi_user_app(
         # local_single_user=False: this fixture models a deployed
         # multi-user server, so host_id re-own must be refused (the
         # behavior under test). Override the suite-wide single-user
-        # default from tests/conftest.py (OMNIGENT_LOCAL_SINGLE_USER=1),
+        # default from tests/conftest.py (GOALRAIL_LOCAL_SINGLE_USER=1),
         # which create_host_tunnel_router would otherwise read from env.
         create_host_tunnel_router(
             registry, host_store, auth_provider=auth, local_single_user=False
@@ -761,7 +761,7 @@ async def test_launch_runner_403_wrong_owner(
     """
     _app, registry, host_store, conv_store = multi_user_app
     host_store.upsert_on_connect("host_alice3", "alice-laptop", "alice@test.com")
-    from omnigent.host.frames import HostHelloFrame
+    from goalrail.host.frames import HostHelloFrame
 
     registry.register(
         "host_alice3",
@@ -807,10 +807,10 @@ async def test_launch_runner_validates_workspace_boundary(
     is covered by the session-create + e2e suites; here we assert the
     endpoint wires it in and maps failures to 400 before binding.
     """
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.server.routes import _workspace_validation
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
+    from goalrail.runtime.agent_cache import AgentCache
+    from goalrail.server.routes import _workspace_validation
+    from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from goalrail.stores.artifact_store.local import LocalArtifactStore
 
     registry = HostRegistry()
     host_store = HostStore(db_uri)
@@ -1145,9 +1145,9 @@ async def test_runner_exited_report_surfaces_in_runner_status(
     here means crashed runners regress to the blind 60s timeout with
     "check the logs directory".
     """
-    from omnigent.host.frames import HostRunnerExitedFrame
-    from omnigent.server.host_registry import RunnerExitReports
-    from omnigent.server.routes.runner_tunnel import create_runner_tunnel_router
+    from goalrail.host.frames import HostRunnerExitedFrame
+    from goalrail.server.host_registry import RunnerExitReports
+    from goalrail.server.routes.runner_tunnel import create_runner_tunnel_router
 
     registry = HostRegistry()
     host_store = HostStore(db_uri)
@@ -1157,7 +1157,7 @@ async def test_runner_exited_report_surfaces_in_runner_status(
         create_host_tunnel_router(registry, host_store, runner_exit_reports=reports),
         prefix="/v1",
     )
-    from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
+    from goalrail.runner.transports.ws_tunnel.registry import TunnelRegistry
 
     app.include_router(
         create_runner_tunnel_router(TunnelRegistry(), runner_exit_reports=reports),
@@ -1210,7 +1210,7 @@ async def test_runner_exited_invokes_callback_with_runner_and_error(
     sessions stay stuck "starting" with no error — the exact desktop
     bug this fixes.
     """
-    from omnigent.host.frames import HostRunnerExitedFrame
+    from goalrail.host.frames import HostRunnerExitedFrame
 
     registry = HostRegistry()
     host_store = HostStore(db_uri)

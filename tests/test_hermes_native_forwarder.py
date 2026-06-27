@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import hermes_native_forwarder as f
+from goalrail import hermes_native_forwarder as f
 
 _SCHEMA = """
 CREATE TABLE sessions (

@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.repl import _repl as repl_mod
+from goalrail.repl import _repl as repl_mod
 
 pytestmark = pytest.mark.asyncio
 

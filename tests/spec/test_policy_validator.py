@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.parser import parse
-from omnigent.spec.validator import validate
+from goalrail.spec.parser import parse
+from goalrail.spec.validator import validate
 
 
 @pytest.fixture()
@@ -80,7 +80,7 @@ guardrails:
       type: function
       on: [tool_call:web_search]
       function:
-        path: omnigent.policies.function.make_fixed_action_callable
+        path: goalrail.policies.function.make_fixed_action_callable
         arguments:
           action: allow
           set_labels:
@@ -89,7 +89,7 @@ guardrails:
     block_canada:
       type: function
       function:
-        path: omnigent.policies.builtins.prompt.prompt_policy
+        path: goalrail.policies.builtins.prompt.prompt_policy
         arguments:
           prompt: Deny if user mentions Canada.
     rate_limit:

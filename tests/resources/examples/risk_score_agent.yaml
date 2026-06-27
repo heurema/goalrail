@@ -13,7 +13,7 @@
 #
 # Usage:
 #   export DATABRICKS_CONFIG_PROFILE=<your-profile>
-#   python -m omnigent tests/resources/examples/risk_score_agent.yaml \
+#   python -m goalrail tests/resources/examples/risk_score_agent.yaml \
 #       --prompt "Search the web for our competitors, then email a summary."
 #   # The web searches raise the score; the gmail_message_send is escalated to
 #   # ASK once the score reaches the threshold.
@@ -46,7 +46,7 @@ tools:
 policies:
   session_risk:
     type: function
-    handler: omnigent.policies.builtins.risk_score.risk_score_policy
+    handler: goalrail.policies.builtins.risk_score.risk_score_policy
     factory_params:
       threshold: 50
       # Each of these tool calls adds risk.

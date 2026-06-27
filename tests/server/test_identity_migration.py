@@ -1,8 +1,8 @@
 """Tests for the accounts → OIDC identity remap.
 
-Covers :func:`omnigent.server.identity_migration.remap_identities` and
+Covers :func:`goalrail.server.identity_migration.remap_identities` and
 ``build_domain_mapping`` against a real SQLite database, plus the
-``omnigent debug migrate-accounts-to-oidc`` CLI wrapper via Click's
+``goalrail debug migrate-accounts-to-oidc`` CLI wrapper via Click's
 ``CliRunner``.
 
 The load-bearing properties: every user-id-bearing column is repointed,
@@ -18,19 +18,19 @@ from click.testing import CliRunner
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from omnigent.cli import cli
-from omnigent.db.db_models import (
+from goalrail.cli import cli
+from goalrail.db.db_models import (
     SqlAccountToken,
     SqlComment,
     SqlHost,
     SqlPolicy,
 )
-from omnigent.db.utils import get_or_create_engine
-from omnigent.server.accounts_store import SqlAlchemyAccountStore
-from omnigent.server.identity_migration import build_domain_mapping, remap_identities
-from omnigent.server.passwords import hash_password
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from goalrail.db.utils import get_or_create_engine
+from goalrail.server.accounts_store import SqlAlchemyAccountStore
+from goalrail.server.identity_migration import build_domain_mapping, remap_identities
+from goalrail.server.passwords import hash_password
+from goalrail.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from goalrail.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 
 def _conversation(db_uri: str) -> str:

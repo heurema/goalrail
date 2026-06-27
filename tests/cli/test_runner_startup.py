@@ -1,4 +1,4 @@
-"""Tests for ``omnigent._runner_startup`` (startup UX helpers).
+"""Tests for ``goalrail._runner_startup`` (startup UX helpers).
 
 These cover the two pieces of UX added when local-runner startup
 fails or stalls:
@@ -24,7 +24,7 @@ import sys
 
 import pytest
 
-from omnigent._runner_startup import (
+from goalrail._runner_startup import (
     _NO_SPINNER_ENV_VAR,
     STARTUP_PHASE_LABELS,
     _spinner_enabled,
@@ -113,7 +113,7 @@ def test_spinner_enabled_on_tty_default() -> None:
 
 @pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
 def test_spinner_disabled_by_env_var(value: str) -> None:
-    """Any truthy ``OMNIGENT_NO_SPINNER`` value disables the spinner.
+    """Any truthy ``GOALRAIL_NO_SPINNER`` value disables the spinner.
 
     Lets users with mis-detecting terminals (tmux quirks, ssh into
     bare containers) force the plain-echo fallback without code
@@ -126,7 +126,7 @@ def test_spinner_disabled_by_env_var(value: str) -> None:
 
 
 def test_spinner_not_disabled_by_falsy_env_var() -> None:
-    """``OMNIGENT_NO_SPINNER=0`` (or empty) leaves the spinner on.
+    """``GOALRAIL_NO_SPINNER=0`` (or empty) leaves the spinner on.
 
     Mirrors typical "0 is off, 1 is on" UX so users do not
     accidentally suppress the spinner by exporting the variable
@@ -166,8 +166,8 @@ def test_runner_startup_progress_plain_mode_prints_to_stderr(
     # to consumers that should see only the agent's reply).
     assert captured.out == ""
     # Both phases land on stderr with the standard prefix.
-    assert "omnigent: Starting local runner" in captured.err
-    assert "omnigent: Waiting for runner to register" in captured.err
+    assert "goalrail: Starting local runner" in captured.err
+    assert "goalrail: Waiting for runner to register" in captured.err
 
 
 def test_runner_startup_progress_plain_mode_does_not_swallow_exceptions(
@@ -190,7 +190,7 @@ def test_runner_startup_progress_plain_mode_does_not_swallow_exceptions(
             raise RuntimeError("boom")
     # The initial message still printed; the exception did not
     # suppress it.
-    assert "omnigent: Starting" in capsys.readouterr().err
+    assert "goalrail: Starting" in capsys.readouterr().err
 
 
 def test_runner_startup_progress_rich_mode_writes_only_to_stderr(
@@ -247,7 +247,7 @@ def test_startup_phase_labels_avoid_internal_jargon(label: str) -> None:
     """
     # Internal nouns that mean nothing to an end user staring at startup.
     # "server" is intentionally NOT here: "local server" is user-facing
-    # vocabulary (it is the ``omnigent server`` they may run directly).
+    # vocabulary (it is the ``goalrail server`` they may run directly).
     jargon = {
         "daemon",
         "host",
@@ -322,4 +322,4 @@ def test_runner_startup_progress_auto_detects_tty(monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys.stderr, "isatty", lambda: False, raising=False)
     with runner_startup_progress(initial_message="Starting\u2026"):
         pass
-    assert "omnigent: Starting" in capsys.readouterr().err
+    assert "goalrail: Starting" in capsys.readouterr().err

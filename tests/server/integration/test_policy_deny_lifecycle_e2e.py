@@ -23,16 +23,16 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.runtime.agent_cache import AgentCache
+from goalrail.server.app import create_app
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.stores.artifact_store.local import LocalArtifactStore
+from goalrail.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from goalrail.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from goalrail.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 from tests.server.conftest import ControllableMockClient
 from tests.server.helpers import create_test_agent
 
@@ -96,8 +96,8 @@ async def policy_client(
     :param monkeypatch: Pytest monkeypatch fixture.
     :yields: A ready-to-use async HTTP client.
     """
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from goalrail.runtime import set_harness_process_manager
+    from goalrail.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()
@@ -105,19 +105,19 @@ async def policy_client(
 
     # Patch the runtime global so the policy engine picks up session policies.
     policy_store = SqlAlchemyPolicyStore(db_uri)
-    monkeypatch.setattr("omnigent.runtime._globals._policy_store", policy_store)
+    monkeypatch.setattr("goalrail.runtime._globals._policy_store", policy_store)
 
     # Allow the make_fixed_action_callable factory through the registry
     # allowlist. In production this would be added via policy_modules config.
     # Patch at the use site (the route module imports the function directly).
-    from omnigent.server.routes import session_policies as _sp_mod
+    from goalrail.server.routes import session_policies as _sp_mod
 
     _original_is_registered = _sp_mod.is_registered_handler
     monkeypatch.setattr(
         _sp_mod,
         "is_registered_handler",
         lambda handler: (
-            handler == "omnigent.policies.function.make_fixed_action_callable"
+            handler == "goalrail.policies.function.make_fixed_action_callable"
             or _original_is_registered(handler)
         ),
     )
@@ -169,7 +169,7 @@ async def _attach_deny_policy(
         json={
             "name": name,
             "type": "python",
-            "handler": "omnigent.policies.function.make_fixed_action_callable",
+            "handler": "goalrail.policies.function.make_fixed_action_callable",
             "factory_params": params,
         },
     )

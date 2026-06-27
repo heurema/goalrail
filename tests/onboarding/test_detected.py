@@ -1,9 +1,9 @@
-"""Tests for omnigent.onboarding.detected — ambient → provider bridge.
+"""Tests for goalrail.onboarding.detected — ambient → provider bridge.
 
 Covers synthesizing config-shape provider entries from ambient detections,
 the read-time merge (explicit wins; detected auto-default per family), and
 the adopt set ``configure harnesses`` persists. Detections are constructed as
-real :class:`~omnigent.onboarding.ambient.DetectedProvider` objects (not
+real :class:`~goalrail.onboarding.ambient.DetectedProvider` objects (not
 mocks) so a regression in field handling surfaces here.
 """
 
@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.onboarding.ambient import DetectedProvider
-from omnigent.onboarding.detected import (
+from goalrail.onboarding.ambient import DetectedProvider
+from goalrail.onboarding.detected import (
     effective_config_with_detected,
     providers_to_adopt,
     synthesize_detected_entries,
 )
-from omnigent.onboarding.provider_config import (
+from goalrail.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     GEMINI_FAMILY,
     OPENAI_FAMILY,
@@ -358,7 +358,7 @@ def test_cli_config_detection_wins_codex_default_over_login() -> None:
     Detection priority (config provider first) mirrors codex's own
     resolution — config.toml's default provider beats auth.json. Failure
     means an isaac-configured machine with a stray auth.json would default
-    omnigents to the ChatGPT login while plain ``codex`` uses the gateway.
+    goalrail to the ChatGPT login while plain ``codex`` uses the gateway.
     """
     merged = effective_config_with_detected({}, [_codex_config_det(), _codex_login()])
     default = default_provider_for_harness(merged, "codex")
@@ -437,7 +437,7 @@ def test_malformed_dismissed_detections_treated_as_empty() -> None:
     accidentally dismiss everything; the next dismissal write self-heals
     the key into a proper list.
     """
-    from omnigent.onboarding.detected import dismissed_detection_names
+    from goalrail.onboarding.detected import dismissed_detection_names
 
     assert dismissed_detection_names({"dismissed_detections": "oops"}) == frozenset()
     # Non-string members are ignored; string members still count.

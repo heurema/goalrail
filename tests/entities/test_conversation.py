@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities.conversation import (
+from goalrail.entities.conversation import (
     ConversationItem,
     MessageData,
     synthesize_conversation_title,
@@ -93,7 +93,7 @@ def test_to_api_dict_exposes_interrupted_assistant_marker() -> None:
                 {
                     "type": "input_text",
                     "text": (
-                        "[Attached: /tmp/omnigent/claude-native/0a1b/uploads/shot.png]"
+                        "[Attached: /tmp/goalrail/claude-native/0a1b/uploads/shot.png]"
                         "\n\nfix this layout bug"
                     ),
                 }
@@ -104,7 +104,7 @@ def test_to_api_dict_exposes_interrupted_assistant_marker() -> None:
         # arrives as its own text block alongside the user's text.
         (
             [
-                {"type": "input_text", "text": "[Attached file: /tmp/omnigent/u/report.bin]"},
+                {"type": "input_text", "text": "[Attached file: /tmp/goalrail/u/report.bin]"},
                 {"type": "input_text", "text": "summarize this"},
             ],
             "summarize this",
@@ -112,7 +112,7 @@ def test_to_api_dict_exposes_interrupted_assistant_marker() -> None:
         # Image-only message: every line is a marker, so no title —
         # the next user message seeds it instead of a temp-file path.
         (
-            [{"type": "input_text", "text": "[Attached: /tmp/omnigent/u/img.png]"}],
+            [{"type": "input_text", "text": "[Attached: /tmp/goalrail/u/img.png]"}],
             None,
         ),
         # A marker mid-line is user prose, not an executor-emitted

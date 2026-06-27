@@ -1,4 +1,4 @@
-"""End-to-end tests for the Host API (``omnigent connect``).
+"""End-to-end tests for the Host API (``goalrail connect``).
 
 These tests start a real server subprocess, connect a real host
 daemon, create sessions via the REST API, and verify the full
@@ -89,7 +89,7 @@ def _spawn_host_daemon(
         ``"http://127.0.0.1:12345"``.
     :returns: The spawned daemon handle and its host_id.
     """
-    omni_dir = tmp_path / ".omnigent"
+    omni_dir = tmp_path / ".goalrail"
     omni_dir.mkdir(parents=True, exist_ok=True)
     host_id = f"host_{uuid.uuid4().hex}"
     host_name = f"e2e-host-{uuid.uuid4().hex[:12]}"
@@ -116,7 +116,7 @@ def _spawn_host_daemon(
             # else the test process's python. apply_runner_env drops the inherited
             # worktree PYTHONPATH in that mode; the old host launches old runners
             # (colocated) from its own venv.
-            [runner_executable(), "-m", "omnigent.host._daemon_entry", "--server", live_server],
+            [runner_executable(), "-m", "goalrail.host._daemon_entry", "--server", live_server],
             env=apply_runner_env(env),
             cwd=compat_runner_cwd(),
             stdout=subprocess.DEVNULL,
@@ -159,7 +159,7 @@ def _pid_alive(pid: int) -> bool:
 
 
 def _write_smoke_agent_yaml(tmp_path: Path) -> Path:
-    """Create a minimal Omnigent YAML for host e2e tests.
+    """Create a minimal Goalrail YAML for host e2e tests.
 
     :param tmp_path: Pytest temp directory.
     :returns: Path to the agent directory.
@@ -217,7 +217,7 @@ def test_host_connect_and_list(
     mock_llm_server_url: str,
 ) -> None:
     """
-    Start ``omnigent connect`` as a subprocess, verify the host
+    Start ``goalrail connect`` as a subprocess, verify the host
     appears in ``GET /v1/hosts`` with status online, stop it, and
     verify it goes offline.
 
@@ -679,7 +679,7 @@ def _spawn_host_daemon_for_mock_claude(
         ``"http://127.0.0.1:12345"``.
     :returns: The spawned daemon handle and its host_id.
     """
-    omni_dir = tmp_path / ".omnigent"
+    omni_dir = tmp_path / ".goalrail"
     omni_dir.mkdir(parents=True, exist_ok=True)
     host_id = f"host_{uuid.uuid4().hex}"
     host_name = f"e2e-host-{uuid.uuid4().hex[:12]}"
@@ -709,7 +709,7 @@ def _spawn_host_daemon_for_mock_claude(
             # else the test process's python. apply_runner_env drops the inherited
             # worktree PYTHONPATH in that mode; the old host launches old runners
             # (colocated) from its own venv.
-            [runner_executable(), "-m", "omnigent.host._daemon_entry", "--server", live_server],
+            [runner_executable(), "-m", "goalrail.host._daemon_entry", "--server", live_server],
             env=apply_runner_env(env),
             cwd=compat_runner_cwd(),
             stdout=subprocess.DEVNULL,
@@ -759,10 +759,10 @@ def _native_user_message_round_tripped(
 @pytest.mark.skipif(
     shutil.which("claude") is None
     or shutil.which("tmux") is None
-    or not os.environ.get("OMNIGENT_E2E_CLAUDE_NATIVE"),
+    or not os.environ.get("GOALRAIL_E2E_CLAUDE_NATIVE"),
     reason=(
         "claude-native host-restart e2e requires `claude` + `tmux` on PATH "
-        "and OMNIGENT_E2E_CLAUDE_NATIVE=1 (needs real claude CLI with mock auth)"
+        "and GOALRAIL_E2E_CLAUDE_NATIVE=1 (needs real claude CLI with mock auth)"
     ),
 )
 def test_host_native_session_round_trips_after_runner_death(
@@ -830,7 +830,7 @@ def test_host_native_session_round_trips_after_runner_death(
                 "agent_id": agent_id,
                 "host_id": host_id,
                 "workspace": str(workspace),
-                "labels": {"omnigent.wrapper": "claude-code-native-ui"},
+                "labels": {"goalrail.wrapper": "claude-code-native-ui"},
             },
             timeout=60.0,
         )

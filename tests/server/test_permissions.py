@@ -1,7 +1,7 @@
 """Unit tests for the session permission resolution function.
 
-Tests :func:`omnigent.server.permissions.check_session_access` and
-:func:`omnigent.server.permissions.check_is_manager` against all
+Tests :func:`goalrail.server.permissions.check_session_access` and
+:func:`goalrail.server.permissions.check_is_manager` against all
 resolution branches:
 
 1. Admin user -> allow
@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities.conversation import Conversation
-from omnigent.entities.permission import ResolvedAccess, SessionPermission
-from omnigent.server.auth import (
+from goalrail.entities.conversation import Conversation
+from goalrail.entities.permission import ResolvedAccess, SessionPermission
+from goalrail.server.auth import (
     LEVEL_EDIT,
     LEVEL_MANAGE,
     LEVEL_OWNER,
@@ -34,7 +34,7 @@ from omnigent.server.auth import (
     RESERVED_USER_PUBLIC,
     env_var_is_truthy,
 )
-from omnigent.server.permissions import (
+from goalrail.server.permissions import (
     check_is_manager,
     check_session_access,
     resolved_allows,
@@ -788,15 +788,15 @@ def test_header_mode_rejects_missing_header(
     Falling back to the shared ``"local"`` identity here would give
     every unauthenticated request OWNER access to every other
     unauthenticated user's sessions. The fallback is reserved for
-    explicit single-user local runtimes (OMNIGENT_LOCAL_SINGLE_USER=1).
+    explicit single-user local runtimes (GOALRAIL_LOCAL_SINGLE_USER=1).
     """
     from unittest.mock import MagicMock
 
-    from omnigent.server.auth import UnifiedAuthProvider
+    from goalrail.server.auth import UnifiedAuthProvider
 
     # Clear the single-user marker so an ambient value from the dev
     # shell can't flip the provider into the fallback path.
-    monkeypatch.delenv("OMNIGENT_LOCAL_SINGLE_USER", raising=False)
+    monkeypatch.delenv("GOALRAIL_LOCAL_SINGLE_USER", raising=False)
     provider = UnifiedAuthProvider(source="header")
     # Build a minimal mock request with no headers.
     # MagicMock is acceptable here: we only need
@@ -824,7 +824,7 @@ def test_header_mode_accepts_valid_header() -> None:
     """
     from unittest.mock import MagicMock
 
-    from omnigent.server.auth import UnifiedAuthProvider
+    from goalrail.server.auth import UnifiedAuthProvider
 
     provider = UnifiedAuthProvider(source="header")
     mock_request = MagicMock()
@@ -853,7 +853,7 @@ def test_header_mode_rejects_reserved_names(reserved_name: str) -> None:
     """
     from unittest.mock import MagicMock
 
-    from omnigent.server.auth import UnifiedAuthProvider
+    from goalrail.server.auth import UnifiedAuthProvider
 
     provider = UnifiedAuthProvider(source="header")
     mock_request = MagicMock()

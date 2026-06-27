@@ -22,17 +22,17 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from goalrail.policies.function import FunctionPolicy
+from goalrail.policies.types import EvaluationContext
+from goalrail.runtime.policies.engine import PolicyEngine
+from goalrail.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from goalrail.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy

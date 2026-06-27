@@ -24,10 +24,10 @@ npm run dev
 ```
 
 The Vite dev server proxies `/v1` and `/api` to `http://localhost:6767`. Set
-`OMNIGENT_URL` to override the proxy target:
+`GOALRAIL_URL` to override the proxy target:
 
 ```bash
-OMNIGENT_URL=http://localhost:9000 npm run dev
+GOALRAIL_URL=http://localhost:9000 npm run dev
 ```
 
 Additional `goalrail server` options:
@@ -49,9 +49,9 @@ cd ap-web
 npm run build
 ```
 
-Vite writes the bundle to `../omnigent/server/static/web-ui/` (configured in
+Vite writes the bundle to `../goalrail/server/static/web-ui/` (configured in
 `vite.config.ts`). When that directory exists and contains `index.html`, the
-FastAPI app in `omnigent/server/app.py` mounts it at `/`. After a build:
+FastAPI app in `goalrail/server/app.py` mounts it at `/`. After a build:
 
 ```bash
 .venv/bin/goalrail server --agent examples/hello_world.yaml
@@ -83,15 +83,15 @@ npm run test:watch    # vitest in watch mode
 
 The TypeScript reducer at `src/lib/blockStream.ts` is a hand-mirror of
 the Python reducer at
-`sdks/python-client/omnigent_client/_stream.py`. Same for:
+`sdks/python-client/goalrail_client/_stream.py`. Same for:
 
 | TS file                       | Mirrors                                       |
 | ----------------------------- | --------------------------------------------- |
-| `src/lib/blocks.ts`           | `omnigent_client/_blocks.py`                  |
-| `src/lib/events.ts`           | `omnigent_client/_events.py`                  |
-| `src/lib/types.ts`            | minimal subset of `omnigent_client/_types.py` |
-| `src/lib/sse.ts`              | `omnigent_client/_sse.py`                     |
-| `src/lib/blockStream.ts`      | `omnigent_client/_stream.py`                  |
+| `src/lib/blocks.ts`           | `goalrail_client/_blocks.py`                  |
+| `src/lib/events.ts`           | `goalrail_client/_events.py`                  |
+| `src/lib/types.ts`            | minimal subset of `goalrail_client/_types.py` |
+| `src/lib/sse.ts`              | `goalrail_client/_sse.py`                     |
+| `src/lib/blockStream.ts`      | `goalrail_client/_stream.py`                  |
 | `src/lib/blockStream.test.ts` | `tests/frontends/sdk/test_stream.py`          |
 
 There is **no cross-language CI gate** today. When `_stream.py`

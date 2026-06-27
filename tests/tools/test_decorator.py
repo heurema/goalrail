@@ -11,13 +11,13 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from omnigent_client.tools import (
+from goalrail_client.tools import (
     TOOL_MARKER_ATTR,
     ToolMetadata,
     get_tool_metadata,
     tool,
 )
-from omnigent_client.tools._decorator import _validate_decorator_target
+from goalrail_client.tools._decorator import _validate_decorator_target
 
 # ─── Module-level tool fixtures ──────────────────────────────────────
 

@@ -1,11 +1,11 @@
-"""Tests for omnigent.onboarding.ambient — machine credential detection.
+"""Tests for goalrail.onboarding.ambient — machine credential detection.
 
 Detection reads the environment, two CLI-login files under ``$HOME``, a single
 localhost TCP probe for Ollama, and — on macOS only — a ``claude auth status``
 fallback for the Keychain-stored Claude credential. These tests redirect
 ``$HOME`` to a tmp dir, control the environment explicitly, and monkeypatch
-both :func:`omnigent.onboarding.ambient._ollama_reachable` and
-:func:`omnigent.onboarding.harness_install.harness_cli_logged_in` so no real
+both :func:`goalrail.onboarding.ambient._ollama_reachable` and
+:func:`goalrail.onboarding.harness_install.harness_cli_logged_in` so no real
 network or subprocess I/O occurs. Each test asserts the exact
 :class:`DetectedProvider` fields (name / kind / family / source), not just the
 count, so a wrong field turns the test red.
@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.onboarding import ambient
-from omnigent.onboarding.ambient import DetectedProvider, detect_providers
+from goalrail.onboarding import ambient
+from goalrail.onboarding.ambient import DetectedProvider, detect_providers
 
 # Every provider env var ambient may read — cleared in the base fixture so
 # the host's own keys don't leak into the deterministic detection tests.
@@ -47,7 +47,7 @@ def clean_env(tmp_path, monkeypatch: pytest.MonkeyPatch):
     :param monkeypatch: pytest's env/attr patching fixture.
     :returns: The tmp HOME path, e.g. ``"/tmp/pytest-.../test_x0"``.
     """
-    from omnigent.onboarding import harness_install
+    from goalrail.onboarding import harness_install
 
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in _PROVIDER_ENV_VARS:
@@ -257,7 +257,7 @@ def test_claude_macos_keychain_login_detected(clean_env, monkeypatch: pytest.Mon
     # No ~/.claude/.credentials.json under the tmp HOME → file check is False,
     # forcing the macOS Keychain fallback. The fallback asks the CLI (which
     # reads the Keychain); stub it so no real ``claude auth status`` runs.
-    from omnigent.onboarding import harness_install
+    from goalrail.onboarding import harness_install
 
     seen_keys: list[str] = []
 
@@ -289,7 +289,7 @@ def test_claude_macos_keychain_absent_not_detected(
     fallback fabricates a subscription whenever the file happens to be missing.
     """
     monkeypatch.setattr(ambient.sys, "platform", "darwin")
-    from omnigent.onboarding import harness_install
+    from goalrail.onboarding import harness_install
 
     seen_keys: list[str] = []
 
@@ -312,7 +312,7 @@ def test_claude_linux_no_keychain_cli_fallback(clean_env, monkeypatch: pytest.Mo
     called, so any Linux invocation of the CLI fallback fails the test.
     """
     monkeypatch.setattr(ambient.sys, "platform", "linux")
-    from omnigent.onboarding import harness_install
+    from goalrail.onboarding import harness_install
 
     def _must_not_call(key: str) -> bool:
         raise AssertionError(f"CLI fallback must not run on Linux (key={key!r})")
@@ -333,7 +333,7 @@ def test_claude_macos_file_present_skips_cli_fallback(
     fallback fails the test.
     """
     monkeypatch.setattr(ambient.sys, "platform", "darwin")
-    from omnigent.onboarding import harness_install
+    from goalrail.onboarding import harness_install
 
     def _must_not_call(key: str) -> bool:
         raise AssertionError(f"file-present path must not invoke the CLI (key={key!r})")
@@ -468,7 +468,7 @@ def test_codex_config_detected_before_codex_login(clean_env) -> None:
 
     Detection order drives the auto-default in the read-time merge, and
     plain ``codex`` on such a machine uses config.toml's default provider
-    (it beats auth.json) — omnigents must match. Failure means the
+    (it beats auth.json) — goalrail must match. Failure means the
     subscription would auto-default and route differently from the user's
     own ``codex`` terminal.
     """

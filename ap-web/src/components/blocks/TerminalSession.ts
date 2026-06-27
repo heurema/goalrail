@@ -4,7 +4,7 @@
 // `TerminalView` mounts a session via a callback ref and tears it
 // down on the matching detach.
 //
-// Wire protocol (mirrors `omnigent/server/routes/terminal_attach.py`):
+// Wire protocol (mirrors `goalrail/server/routes/terminal_attach.py`):
 //   - Server → client: binary frames, raw PTY bytes → `term.write`.
 //   - Client → server: binary frames for keystrokes (`term.onData`);
 //     text frames for JSON control messages (currently only resize).
@@ -98,7 +98,7 @@ export type ConnectionState =
  * Deliberate closes — normal closure (1000), auth/policy rejections
  * (1008), and the app's own 4xxx codes (4404 terminal-not-found,
  * 4405 terminal-detached, 4500 internal error; see
- * ``omnigent/terminals/ws_bridge.py``) — mean the server decided the
+ * ``goalrail/terminals/ws_bridge.py``) — mean the server decided the
  * attach should end, so re-dialing would either loop on the same
  * answer or resurrect a terminal the user intentionally left.
  *

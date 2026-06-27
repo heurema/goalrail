@@ -1,8 +1,8 @@
 # timer-test agent — exercises the AP-side ``sys_timer_*`` tool family
 # (step 10 of the harness contract migration).
 #
-# This is an OMNIGENT-FLAVORED YAML (no ``spec_version: 1``) so the
-# omnigent-compat translator handles it; that path threads
+# This is an GOALRAIL-FLAVORED YAML (no ``spec_version: 1``) so the
+# goalrail-compat translator handles it; that path threads
 # ``AgentDef.timers`` → ``AgentSpec.timers`` so the
 # ``sys_timer_set`` / ``sys_timer_cancel`` builtins register on the
 # AP-side ToolManager.
@@ -13,7 +13,7 @@
 # ``tests/resources/agents/sys-terminal-test/sys-terminal-test.yaml``.
 #
 # Manual usage:
-#   .venv/bin/python -m omnigent \
+#   .venv/bin/python -m goalrail \
 #       tests/resources/agents/timer-test/timer-test.yaml \
 #       --profile <your-profile>
 #

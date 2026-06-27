@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from omnigent.host.frames import (
+from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
     HostCreateDirFrame,
     HostCreateDirResultFrame,

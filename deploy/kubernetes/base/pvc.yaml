@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: omnigent-artifacts
+  name: goalrail-artifacts
   labels:
-    app: omnigent
+    app: goalrail
 spec:
   accessModes:
     - ReadWriteOnce

@@ -20,13 +20,13 @@ import yaml
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
 
-from omnigent import claude_native
-from omnigent._runner_startup import RunnerStartupProgress
-from omnigent._startup_profile import StartupProfiler
-from omnigent._terminal_picker_theme import PICKER_ACCENT, PICKER_MUTED
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
-from omnigent.spec import load_omnigent_yaml
-from omnigent.terminals.ws_bridge import (
+from goalrail import claude_native
+from goalrail._runner_startup import RunnerStartupProgress
+from goalrail._startup_profile import StartupProfiler
+from goalrail._terminal_picker_theme import PICKER_ACCENT, PICKER_MUTED
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
+from goalrail.spec import load_goalrail_yaml
+from goalrail.terminals.ws_bridge import (
     WS_CLOSE_TERMINAL_DETACHED,
     WS_CLOSE_TERMINAL_NOT_FOUND,
 )
@@ -54,7 +54,7 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
     body = claude_native._claude_terminal_request(
         ("--resume", "claude-session", "-p", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/goalrail-test-bridge"),
     )
 
     assert body["terminal"] == "claude"
@@ -82,13 +82,13 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
     assert args[:4] == ["--resume", "claude-session", "-p", "hi"]
     mcp_index = args.index("--mcp-config")
     mcp_config = json.loads(args[mcp_index + 1])
-    assert mcp_config["mcpServers"]["omnigent"]["args"] == [
+    assert mcp_config["mcpServers"]["goalrail"]["args"] == [
         "-I",
         "-m",
-        "omnigent.claude_native_bridge",
+        "goalrail.claude_native_bridge",
         "serve-mcp",
         "--bridge-dir",
-        "/tmp/omnigent-test-bridge",
+        "/tmp/goalrail-test-bridge",
     ]
     # The experimental Claude Channels flag is blocked at the org
     # policy layer — the wrapper must not pass it. Web-UI input now
@@ -112,7 +112,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
     """
     Ucode config reaches the terminal env, settings, and model argv.
 
-    This test pins the native ``omnigent claude`` launch boundary:
+    This test pins the native ``goalrail claude`` launch boundary:
     a regression that reads ucode but forgets to pass the resulting
     Databricks gateway values to the terminal resource would leave
     Claude Code on its default provider path.
@@ -130,7 +130,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
     body = claude_native._claude_terminal_request(
         ("--print", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/goalrail-test-bridge"),
         claude_config=config,
     )
 
@@ -177,7 +177,7 @@ def test_claude_terminal_request_preserves_user_model_arg() -> None:
     body = claude_native._claude_terminal_request(
         ("--model", "user-model", "--print", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/goalrail-test-bridge"),
         claude_config=config,
     )
 
@@ -206,7 +206,7 @@ def test_ucode_config_for_profile_reads_allowlisted_claude_state(
     the native wrapper must not blindly forward arbitrary state-file
     environment values into the terminal launch body.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -224,11 +224,11 @@ def test_ucode_config_for_profile_reads_allowlisted_claude_state(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -258,7 +258,7 @@ def test_ucode_config_for_profile_sets_model_tier_env_vars(
     picker natively shows Databricks gateway model IDs instead of normalising
     them to canonical Anthropic names.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -277,11 +277,11 @@ def test_ucode_config_for_profile_sets_model_tier_env_vars(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -303,7 +303,7 @@ def test_ucode_config_for_profile_sets_only_present_tier_env_vars(
     If ``claude_models`` only has one tier (e.g. ``"sonnet"``), only
     ``ANTHROPIC_DEFAULT_SONNET_MODEL`` is set — the other three are absent.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -317,11 +317,11 @@ def test_ucode_config_for_profile_sets_only_present_tier_env_vars(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -343,7 +343,7 @@ def test_ucode_config_for_profile_omits_model_tier_vars_when_no_claude_models(
     Older ucode state files may not include ``claude_models``.  In that
     case the env dict must not gain any spurious default model overrides.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -357,11 +357,11 @@ def test_ucode_config_for_profile_omits_model_tier_vars_when_no_claude_models(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -386,7 +386,7 @@ def test_ucode_config_for_profile_defaults_model_when_ucode_omits_it(
     back to its host-config model (an Anthropic-direct id like ``opus[1m]``)
     that the Databricks gateway rejects with "model ... may not exist".
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -400,11 +400,11 @@ def test_ucode_config_for_profile_defaults_model_when_ucode_omits_it(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -419,18 +419,18 @@ def test_ucode_config_for_profile_fails_loud_on_malformed_claude_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A selected malformed Claude ucode entry surfaces a setup error."""
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
         agents={"claude": UcodeAgentState(auth_command="printf token")},
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "goalrail.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -467,17 +467,17 @@ def test_materialized_session_spec_is_valid_terminal_metadata(tmp_path: Path) ->
     assert raw["prompt"].startswith("Claude Code is running in the session terminal.")
     # ``context_window`` is the conservative pre-first-turn default;
     # the statusLine forwarder overrides it once the real number is
-    # observed (see ``omnigent.claude_native_status``).
+    # observed (see ``goalrail.claude_native_status``).
     assert raw["executor"] == {"harness": "claude-native", "context_window": 200_000}
     # os_env block is required for the runner's filesystem APIs not
-    # to 404 (see _require_os_env in omnigent/runner/app.py).
+    # to 404 (see _require_os_env in goalrail/runner/app.py).
     assert raw["os_env"] == {
         "type": "caller_process",
         "cwd": ".",
         "sandbox": {"type": "none"},
     }
-    spec = load_omnigent_yaml(path)
-    assert spec.executor.type == "omnigent"
+    spec = load_goalrail_yaml(path)
+    assert spec.executor.type == "goalrail"
     assert spec.executor.config["harness"] == "claude-native"
     assert spec.os_env is not None
     # The native wrapper opts into the spawn-write surface so the
@@ -660,7 +660,7 @@ def test_local_run_persists_launch_state_on_fresh_session(
     the call there would surface here without affecting the remote
     test (and vice versa).
     """
-    from omnigent.claude_native_state import read_launch_state
+    from goalrail.claude_native_state import read_launch_state
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -704,11 +704,11 @@ def test_local_run_persists_launch_state_on_fresh_session(
         return True
 
     monkeypatch.chdir(workspace)
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 12345)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("goalrail.chat._find_free_port", lambda: 12345)
+    monkeypatch.setattr("goalrail.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("goalrail.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("goalrail.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("goalrail.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal", fake_prepare)
     monkeypatch.setattr(claude_native, "attach_local_terminal", fake_attach)
     monkeypatch.setattr(
@@ -758,7 +758,7 @@ def test_local_resume_does_not_print_redundant_resume_hint(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    ``omnigent claude --resume`` does not echo another resume prompt.
+    ``goalrail claude --resume`` does not echo another resume prompt.
 
     The final hint is useful when a fresh launch creates a new
     conversation id. On an explicit resume, the user already supplied
@@ -820,10 +820,10 @@ def test_local_resume_does_not_print_redundant_resume_hint(
         del attach_url, headers, terminal_gone_probe
         return True
 
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 12346)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("goalrail.chat._find_free_port", lambda: 12346)
+    monkeypatch.setattr("goalrail.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("goalrail.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("goalrail.chat._wait_for_server", lambda *a, **k: None)
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal", fake_prepare)
     monkeypatch.setattr(claude_native, "attach_local_terminal", fake_attach)
 
@@ -845,7 +845,7 @@ def test_remote_daemon_run_attaches_without_cli_forwarder(
     tmp_path: Path,
 ) -> None:
     """
-    Daemon-routed ``omnigent claude`` leaves forwarding to the runner.
+    Daemon-routed ``goalrail claude`` leaves forwarding to the runner.
 
     The daemon path launches a runner, the runner auto-creates the
     Claude terminal, and that auto-create starts the transcript
@@ -893,15 +893,15 @@ def test_remote_daemon_run_attaches_without_cli_forwarder(
         captured_attach.update(kwargs)
         return claude_native._AttachOutcome.EXITED
 
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("goalrail.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "goalrail.chat._remote_headers",
         lambda server_url=None: {"Authorization": "Bearer tok"},
     )
-    monkeypatch.setattr("omnigent.chat._server_auth", lambda server_url=None: None)
-    monkeypatch.setattr("omnigent.cli._ensure_host_daemon", lambda base_url: None)
+    monkeypatch.setattr("goalrail.chat._server_auth", lambda server_url=None: None)
+    monkeypatch.setattr("goalrail.cli._ensure_host_daemon", lambda base_url: None)
     monkeypatch.setattr(
-        "omnigent.host.identity.load_or_create_host_identity",
+        "goalrail.host.identity.load_or_create_host_identity",
         lambda: SimpleNamespace(host_id="host_test"),
     )
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal_via_daemon", fake_prepare)
@@ -1134,7 +1134,7 @@ async def test_attach_profiles_direct_tmux_handoff(
     stream = io.StringIO()
     clock_values = iter([0.0, 0.1, 0.3])
     profiler = StartupProfiler(
-        name="omnigent claude",
+        name="goalrail claude",
         enabled=True,
         clock=lambda: next(clock_values),
         stream=stream,
@@ -1491,7 +1491,7 @@ async def test_prepare_reattaches_existing_claude_terminal(
     """
     Existing running ``claude/main`` terminals are reused before bind.
 
-    If this regresses, a second ``omnigent claude --session`` can
+    If this regresses, a second ``goalrail claude --session`` can
     rebind the session to a new local runner and launch a duplicate
     terminal instead of attaching to the live one.
     """
@@ -1550,7 +1550,7 @@ async def test_prepare_reattaches_existing_claude_terminal(
         :param _session_id: Existing session id.
         :returns: Labels containing the bridge id.
         """
-        return {"omnigent.claude_native.bridge_id": "bridge_abc"}
+        return {"goalrail.claude_native.bridge_id": "bridge_abc"}
 
     monkeypatch.setattr(claude_native, "_find_running_claude_terminal", fake_find)
     monkeypatch.setattr(claude_native, "_bind_session_runner", fail_bind)
@@ -1687,7 +1687,7 @@ async def test_read_claude_terminal_tmux_parses_metadata() -> None:
                 "type": "terminal",
                 "metadata": {
                     "running": True,
-                    "tmux_socket": "/tmp/omnigent-501/claude/tmux.sock",
+                    "tmux_socket": "/tmp/goalrail-501/claude/tmux.sock",
                     "tmux_target": "main",
                 },
             },
@@ -1697,7 +1697,7 @@ async def test_read_claude_terminal_tmux_parses_metadata() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="https://example.com") as client:
         result = await claude_native._read_claude_terminal_tmux(client, "conv_abc")
 
-    assert result.socket == Path("/tmp/omnigent-501/claude/tmux.sock")
+    assert result.socket == Path("/tmp/goalrail-501/claude/tmux.sock")
     assert result.target == "main"
 
 
@@ -1846,7 +1846,7 @@ async def test_ensure_local_claude_resume_transcript_uses_workspace_dir(
     the process cwd.
 
     This is what lets a runner-side cold resume work: the runner passes
-    its ``OMNIGENT_RUNNER_WORKSPACE`` (not the runner process's actual
+    its ``GOALRAIL_RUNNER_WORKSPACE`` (not the runner process's actual
     cwd), so the synthesized transcript sits where the ``claude``
     process — launched with that workspace as cwd — will look for it. If
     the helper ignored ``workspace`` and used ``Path.cwd()``, the file
@@ -1945,7 +1945,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
     ``_seed_missing_title_from_user_message`` on the first forwarded
     user message. The sidebar fills the create-to-first-message gap
     by rendering a default label off the
-    ``omnigent.wrapper = claude-code-native-ui`` label
+    ``goalrail.wrapper = claude-code-native-ui`` label
     (see ``ap-web/src/shell/sidebarNav.ts::conversationDisplayLabel``).
     The labels must still reach the server unchanged because that
     sidebar fallback keys off the wrapper label.
@@ -2007,7 +2007,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
 # ---------------------------------------------------------------------------
 # Reconnect tests
 #
-# These tests cover the reconnect loop that lets ``omnigent claude``
+# These tests cover the reconnect loop that lets ``goalrail claude``
 # survive a remote-server bounce. The bug they guard against:
 # previously, a single transient WebSocket close took down the entire
 # TUI session — the user had to relaunch and lost their live Claude
@@ -2127,7 +2127,7 @@ async def test_attach_with_reconnect_passes_terminal_gone_probe_to_attach(
     """
     Reconnect wiring enables the client-side terminal-gone watcher.
 
-    The production ``omnigent claude`` path passes
+    The production ``goalrail claude`` path passes
     :func:`attach_local_terminal` through ``_attach_with_reconnect``.
     This test pins the handoff: when client-side close-on-gone is
     enabled, the attach callable receives a probe that checks the
@@ -2982,7 +2982,7 @@ async def test_attach_reconnects_through_real_websocket_bounce(
     server closes its WebSocket mid-session.
 
     This is the regression test for the reconnect loop. The bug:
-    ``omnigent claude`` exited after the first WebSocket close, so
+    ``goalrail claude`` exited after the first WebSocket close, so
     a server redeploy ended the user's Claude session. The fix wraps
     the attach in a reconnect loop guarded by a recovery callback;
     this test drives that loop against a real websockets server that
@@ -3502,7 +3502,7 @@ def test_websocket_connect_sets_short_close_timeout(monkeypatch: pytest.MonkeyPa
         "url": "wss://example.com/attach",
         "additional_headers": {
             "Authorization": "Bearer tok",
-            "Origin": OMNIGENT_INTERNAL_WS_ORIGIN,
+            "Origin": GOALRAIL_INTERNAL_WS_ORIGIN,
         },
         "close_timeout": claude_native._CLAUDE_ATTACH_WS_CLOSE_TIMEOUT_S,
     }
@@ -3589,7 +3589,7 @@ def _conversation_response_body(
     ``external_session_id`` — so the fixture stays small.
 
     :param labels: ``labels`` field for the response payload, e.g.
-        ``{"omnigent.wrapper": "claude-code-native-ui"}``.
+        ``{"goalrail.wrapper": "claude-code-native-ui"}``.
     :param external_session_id: ``external_session_id`` field or
         ``None``.
     :returns: JSON-encodable response dict.
@@ -3699,7 +3699,7 @@ async def test_resolve_cold_resume_args_injects_external_session_id(
     monkeypatch.setattr(claude_native, "_CLAUDE_PROJECTS_DIR", tmp_path / "projects")
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
             external_session_id="claude-uuid-abc",
         ),
         200,
@@ -3732,7 +3732,7 @@ async def test_resolve_cold_resume_args_declines_resume_when_no_history(
     monkeypatch.setattr(claude_native, "_CLAUDE_PROJECTS_DIR", tmp_path / "projects")
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
             external_session_id="claude-uuid-abc",
         ),
         200,
@@ -3816,7 +3816,7 @@ async def test_resolve_cold_resume_args_bootstraps_missing_local_claude_transcri
             return httpx.Response(
                 200,
                 json=_conversation_response_body(
-                    labels={"omnigent.wrapper": "claude-code-native-ui"},
+                    labels={"goalrail.wrapper": "claude-code-native-ui"},
                     external_session_id="claude-uuid-abc",
                 ),
             )
@@ -3939,7 +3939,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
             return httpx.Response(
                 200,
                 json=_conversation_response_body(
-                    labels={"omnigent.wrapper": "claude-code-native-ui"},
+                    labels={"goalrail.wrapper": "claude-code-native-ui"},
                     external_session_id="claude-uuid-abc",
                 ),
             )
@@ -3978,7 +3978,7 @@ async def test_resolve_cold_resume_args_warns_when_external_session_id_missing(
     """
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
             external_session_id=None,
         ),
         200,
@@ -3995,7 +3995,7 @@ async def test_resolve_cold_resume_args_warns_when_external_session_id_missing(
 async def test_resolve_cold_resume_args_rejects_non_claude_native_conv() -> None:
     """
     A conv whose wrapper label is NOT claude-native is an
-    ``omnigent claude --resume <run-conv-id>`` programmer error.
+    ``goalrail claude --resume <run-conv-id>`` programmer error.
     Fail loud with a redirect hint rather than silently launching
     claude over a chat session whose state the wrapper doesn't
     own.
@@ -4063,7 +4063,7 @@ async def test_resolve_cold_resume_args_warning_lands_in_logger(
 
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"goalrail.wrapper": "claude-code-native-ui"},
             external_session_id=None,
         ),
         200,
@@ -4493,14 +4493,14 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    200 + ``omnigent.wrapper=claude-code-native-ui`` → True.
+    200 + ``goalrail.wrapper=claude-code-native-ui`` → True.
 
     This is the load-bearing decision for the chat-redirect path
     (``_chat_with_server`` calls this to decide whether to redirect
     a resume into the claude wrapper). A False negative here is
     exactly the resume misroute.
     """
-    from omnigent import chat
+    from goalrail import chat
 
     def _fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned 200 response with the claude-native wrapper label."""
@@ -4508,7 +4508,7 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
         return httpx.Response(
             200,
             json={
-                "labels": {"omnigent.wrapper": "claude-code-native-ui"},
+                "labels": {"goalrail.wrapper": "claude-code-native-ui"},
             },
         )
 
@@ -4528,7 +4528,7 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
     "labels",
     [
         {},
-        {"omnigent.wrapper": "some-other-wrapper"},
+        {"goalrail.wrapper": "some-other-wrapper"},
         {"unrelated": "x"},
     ],
 )
@@ -4542,7 +4542,7 @@ def test_is_claude_native_conversation_returns_false_on_non_matching_label(
     The chat REPL stays on its normal AP-REPL path for these
     conversations.
     """
-    from omnigent import chat
+    from goalrail import chat
 
     def _fake_get(_url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned 200 response with the parametrized labels."""
@@ -4576,7 +4576,7 @@ def test_is_claude_native_conversation_logs_warning_on_non_200(
     requires the right handler / propagation, which other tests'
     logging setup can disturb.
     """
-    from omnigent import chat
+    from goalrail import chat
 
     def _fake_get(_url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned error response at the parametrized status code."""
@@ -4617,7 +4617,7 @@ def test_is_claude_native_conversation_returns_false_on_transport_error(
     own connect-fail error; we just record what we saw so a flaky
     server doesn't cause a silent misroute.
     """
-    from omnigent import chat
+    from goalrail import chat
 
     def _raises(*_args: object, **_kwargs: object) -> httpx.Response:
         """Pretend the connect fails."""
@@ -4658,7 +4658,7 @@ def test_is_claude_native_conversation_returns_false_on_transport_error(
 # real state module, then drives the helper. The autouse
 # ``_isolate_claude_native_state`` fixture in ``tests/conftest.py``
 # redirects the state root to a per-test tmp dir so writes never
-# touch the developer's real ``~/.omnigent/``.
+# touch the developer's real ``~/.goalrail/``.
 
 
 @dataclass(frozen=True)
@@ -4821,7 +4821,7 @@ def test_align_working_directory_matching_cwd_silent_skip(
     ``/home/me/repo``) would prompt to chdir on every resume,
     which is noise the user has to dismiss every time.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from goalrail.claude_native_state import write_launch_state
 
     monkeypatch.chdir(tmp_path)
     starting_cwd = Path.cwd().resolve()
@@ -4850,14 +4850,14 @@ def test_align_working_directory_switch_action_chdirs(
     Mismatched cwd, recorded path exists, user chooses switch → chdir.
 
     This is the happy-path fix for the bug the user reported:
-    ``omnigent claude --resume`` invoked from a different
+    ``goalrail claude --resume`` invoked from a different
     directory than the session was started in must offer to
     switch, and on switch must actually mutate the process cwd so
     subsequent ``Path.cwd()`` reads in the launch flow see the
     new value. If chdir is missing or points elsewhere, Claude
     will still exit on launch.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from goalrail.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-ws"
     recorded.mkdir()
@@ -5118,7 +5118,7 @@ def test_align_working_directory_leave_action_cancels_resume(
     third action exits before launch instead. The wrapper must not
     mutate cwd when the user chooses to leave.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from goalrail.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-leave"
     recorded.mkdir()
@@ -5154,7 +5154,7 @@ def test_align_working_directory_move_without_external_id_fails_loud(
     but this runtime invariant must not rely on ``assert`` because
     Python strips asserts under ``-O``.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from goalrail.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-no-external"
     recorded.mkdir()
@@ -5194,7 +5194,7 @@ def test_align_working_directory_raises_when_recorded_path_missing(
     can choose to recreate it, move the project back, or start a
     fresh session.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from goalrail.claude_native_state import write_launch_state
 
     monkeypatch.chdir(tmp_path)
     missing = "/this/path/should/not/exist/anywhere/nope-abcxyz"
@@ -5236,7 +5236,7 @@ def test_align_working_directory_redirect_moves_transcript_and_updates_state(
     and update Goalrail launch state so future resumes treat the
     current cwd as the session home.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from goalrail.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     old_workspace = tmp_path / "old workspace"
@@ -5315,7 +5315,7 @@ def test_align_working_directory_redirect_replaces_stale_target(
     fail on the stale target; it should make the current project the
     only owner of the Claude session id.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from goalrail.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     old_workspace = tmp_path / "old"
@@ -5381,7 +5381,7 @@ def test_align_working_directory_redirect_works_when_recorded_path_missing(
     should offer redirect as the default and the helper should move
     the transcript instead of failing early.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from goalrail.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     current_workspace = tmp_path / "current"
@@ -5609,7 +5609,7 @@ def test_record_launch_for_fresh_session_writes_resolved_cwd(
     in ``/home/me/repo`` (a symlink) and resumed from
     ``/repo`` (the canonical) won't falsely flag as mismatched.
     """
-    from omnigent.claude_native_state import read_launch_state
+    from goalrail.claude_native_state import read_launch_state
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -5664,8 +5664,8 @@ def _seed_config(config_home: Path, providers: dict[str, object]) -> None:
 @pytest.fixture()
 def _isolated_provider_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Isolate config + ambient so provider resolution is deterministic."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(var, raising=False)
@@ -5675,13 +5675,13 @@ def _isolated_provider_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 def _no_auth_claude_spec() -> Any:
     """A minimal claude-sdk spec with no executor.auth/profile."""
-    from omnigent.spec.types import AgentSpec, ExecutorSpec
+    from goalrail.spec.types import AgentSpec, ExecutorSpec
 
     return AgentSpec(
         spec_version=1,
         name="t",
         instructions="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-sdk"}),
+        executor=ExecutorSpec(type="goalrail", config={"harness": "claude-sdk"}),
     )
 
 
@@ -5694,7 +5694,7 @@ def test_provider_config_for_native_claude_key_injects_base_url_and_helper() -> 
     the base_url + default model carried through. Failure means a native
     launch would ignore the configured provider.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5726,7 +5726,7 @@ def test_provider_config_for_native_claude_key_injects_base_url_and_helper() -> 
 
 def test_provider_config_for_native_claude_uses_auth_command_verbatim() -> None:
     """A provider ``auth_command`` is used as the apiKeyHelper verbatim."""
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5758,7 +5758,7 @@ def test_bedrock_config_for_native_claude_static_key() -> None:
     ignores ``apiKeyHelper``, so a static key must land in the env (never a
     helper) and the base_url maps to ``ANTHROPIC_BEDROCK_BASE_URL``.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5796,7 +5796,7 @@ def test_bedrock_config_for_native_claude_resolves_auth_command() -> None:
     tokens) silently fell back to Claude's own login. The command's stdout must
     become ``AWS_BEARER_TOKEN_BEDROCK`` since Bedrock mode ignores apiKeyHelper.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5825,7 +5825,7 @@ def test_bedrock_config_for_native_claude_non_anthropic_returns_none() -> None:
     The native Claude path only routes anthropic-surface providers; anything
     else falls back to Claude Code's own login.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5900,8 +5900,8 @@ def test_resolve_native_claude_config_global_databricks_auth_uses_ucode(
 
     Preserves the Databricks behavior after the ``--profile`` flag removal:
     a databricks user (no OSS provider configured) who set up a global
-    ``auth:`` block via ``omnigent setup`` still routes a bare
-    ``omnigent claude`` launch through ucode, keyed on the auth block's
+    ``auth:`` block via ``goalrail setup`` still routes a bare
+    ``goalrail claude`` launch through ucode, keyed on the auth block's
     own profile. We assert the resolver delegates to
     `_ucode_config_for_profile` with that profile.
     """
@@ -5952,7 +5952,7 @@ def test_resolve_native_claude_config_ambient_key(
 ) -> None:
     """Spec-less with only an ambient ANTHROPIC_API_KEY → provider config.
 
-    First run without configure: a native `omnigent claude` launch still
+    First run without configure: a native `goalrail claude` launch still
     routes through the detected env key. Failure means a fresh machine's
     native Claude would ignore the ambient credential.
     """
@@ -5967,7 +5967,7 @@ def test_resolve_native_claude_config_ambient_key(
 
 def test_bedrock_config_auth_command_failure_returns_none() -> None:
     """A failing bedrock auth_command falls back to Claude's own login (None)."""
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5994,7 +5994,7 @@ def test_bedrock_config_no_model_default_leaves_model_none() -> None:
     """
     import logging
 
-    from omnigent.onboarding.provider_config import load_providers
+    from goalrail.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {

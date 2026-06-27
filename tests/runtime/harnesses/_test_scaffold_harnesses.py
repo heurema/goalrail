@@ -20,8 +20,8 @@ import os
 
 from fastapi import FastAPI
 
-from omnigent.runtime.harnesses._scaffold import HarnessApp, TurnContext
-from omnigent.server.schemas import (
+from goalrail.runtime.harnesses._scaffold import HarnessApp, TurnContext
+from goalrail.server.schemas import (
     CreateResponseRequest,
     ElicitationRequestParams,
     OutputItemDoneEvent,
@@ -235,7 +235,7 @@ class _FastHeartbeatHarness(HarnessApp):
         # margin that a slow CI box still sees at least one before
         # ``run_turn`` returns and ``_teardown_turn`` cancels the
         # heartbeat task.
-        from omnigent.server.schemas import HeartbeatEvent
+        from goalrail.server.schemas import HeartbeatEvent
 
         while True:
             await asyncio.sleep(0.2)
@@ -298,7 +298,7 @@ class _SlowStreamHarness(HarnessApp):
     turn mid-stream.
 
     Used by the session-interrupt integration test to verify the
-    Omnigent server → runner → harness interrupt path actually cancels
+    Goalrail server → runner → harness interrupt path actually cancels
     the in-flight turn. ``_EchoHarness`` completes synchronously
     and is useless for this purpose because there is no turn left
     to interrupt by the time the test POSTs the interrupt event.
@@ -414,7 +414,7 @@ class _WedgedFastHeartbeatHarness(HarnessApp):
     """
 
     async def _heartbeat_loop(self, ctx: TurnContext) -> None:
-        from omnigent.server.schemas import HeartbeatEvent
+        from goalrail.server.schemas import HeartbeatEvent
 
         while True:
             await asyncio.sleep(0.2)

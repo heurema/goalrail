@@ -36,15 +36,15 @@ from unittest.mock import patch
 
 import pytest
 
-from omnigent.inner.bwrap_sandbox import (
+from goalrail.inner.bwrap_sandbox import (
     _ALLOWED_SOCKET_FAMILIES,
     _CLONE_NEW_FLAG_BITS,
     _DEFAULT_CWD_ALLOW_HIDDEN,
     BwrapSandboxBackend,
     _bwrap_extra_seccomp_rules,
 )
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.sandbox import SandboxPolicy, with_denied_unix_sockets
+from goalrail.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from goalrail.inner.sandbox import SandboxPolicy, with_denied_unix_sockets
 
 BWRAP_AVAILABLE = shutil.which("bwrap") is not None
 
@@ -78,6 +78,25 @@ def _make_backend() -> BwrapSandboxBackend:
     :returns: A new :class:`BwrapSandboxBackend` instance.
     """
     return BwrapSandboxBackend()
+
+
+def _resolve_as_linux(
+    backend: BwrapSandboxBackend,
+    spec: OSEnvSpec,
+    cwd: Path,
+) -> SandboxPolicy:
+    """
+    Resolve bwrap policy shape under a mocked Linux+bwrap host.
+
+    Resolver-shape tests do not need a real kernel namespace. Mocking the
+    availability gate keeps them runnable on macOS while the dedicated gate
+    tests below still assert the non-Linux and missing-bwrap errors.
+    """
+    with (
+        patch("goalrail.inner.bwrap_sandbox.sys.platform", "linux"),
+        patch("goalrail.inner.bwrap_sandbox.shutil.which", return_value="/usr/bin/bwrap"),
+    ):
+        return backend.resolve(spec, cwd)
 
 
 def _make_policy(
@@ -142,12 +161,12 @@ def _run_helper_probe(
 
     The probe runs as: ``[python, "-c", probe_script]`` wrapped by
     :meth:`wrap_launcher_argv`. Inside the script, the test must
-    call :func:`omnigent.inner.sandbox.activate_sandbox` with the
+    call :func:`goalrail.inner.sandbox.activate_sandbox` with the
     deserialised policy itself if it wants the seccomp profile to
     engage — :meth:`activate` is what installs the seccomp BPF.
 
     The repository root is added to the policy's ``read_roots`` so
-    the probe can ``import omnigent.*`` inside the sandbox even
+    the probe can ``import goalrail.*`` inside the sandbox even
     when ``cwd`` is a throwaway tempdir.
 
     :param cwd: Effective working directory; bind-mounted into the
@@ -167,7 +186,7 @@ def _run_helper_probe(
             sandbox=OSEnvSandboxSpec(
                 type="linux_bwrap",
                 # Make the repo root visible so the probe can import
-                # the omnigent package during tests run from a
+                # the goalrail package during tests run from a
                 # tempdir cwd.
                 read_paths=[str(_repo_root())],
             ),
@@ -217,9 +236,9 @@ def _encode_policy(policy: SandboxPolicy) -> str:
 def _repo_root() -> Path:
     """
     Return the repository root so probes can import
-    :mod:`omnigent` from a clean ``$PYTHONPATH``.
+    :mod:`goalrail` from a clean ``$PYTHONPATH``.
 
-    :returns: The directory containing the ``omnigent`` package.
+    :returns: The directory containing the ``goalrail`` package.
     """
     # tests/inner/test_bwrap_sandbox.py → tests/inner/ → tests/ → repo root
     return Path(__file__).resolve().parents[2]
@@ -246,7 +265,7 @@ def test_resolve_default_keeps_cwd_read_only() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="linux_bwrap"),
     )
-    policy = backend.resolve(spec, Path.cwd())
+    policy = _resolve_as_linux(backend, spec, Path.cwd())
     assert policy.backend_type == "linux_bwrap"
     assert policy.active is True
     assert policy.write_roots == [], (
@@ -269,7 +288,7 @@ def test_resolve_write_paths_dot_makes_cwd_writable() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="linux_bwrap", write_paths=["."]),
     )
-    policy = backend.resolve(spec, Path.cwd())
+    policy = _resolve_as_linux(backend, spec, Path.cwd())
     assert policy.write_roots == [Path.cwd().resolve(strict=False)]
 
 
@@ -286,7 +305,7 @@ def test_resolve_default_cwd_allow_hidden_is_dot_venv() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="linux_bwrap"),
     )
-    policy = backend.resolve(spec, Path.cwd())
+    policy = _resolve_as_linux(backend, spec, Path.cwd())
     assert policy.cwd_allow_hidden == list(_DEFAULT_CWD_ALLOW_HIDDEN), (
         "Default allowlist drift — _DEFAULT_CWD_ALLOW_HIDDEN is "
         "the documented baseline; if this fails, either the constant "
@@ -309,7 +328,7 @@ def test_resolve_explicit_cwd_allow_hidden_overrides_default() -> None:
             cwd_allow_hidden=[".cache", ".npmrc"],
         ),
     )
-    policy = backend.resolve(spec, Path.cwd())
+    policy = _resolve_as_linux(backend, spec, Path.cwd())
     assert policy.cwd_allow_hidden == [".cache", ".npmrc"]
 
 
@@ -323,7 +342,7 @@ def test_resolve_raises_on_non_linux() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="linux_bwrap"),
     )
-    with patch("omnigent.inner.bwrap_sandbox.sys.platform", "darwin"):
+    with patch("goalrail.inner.bwrap_sandbox.sys.platform", "darwin"):
         with pytest.raises(OSError, match="only available on Linux"):
             backend.resolve(spec, Path.cwd())
 
@@ -340,7 +359,10 @@ def test_resolve_raises_when_bwrap_missing() -> None:
         type="caller_process",
         sandbox=OSEnvSandboxSpec(type="linux_bwrap"),
     )
-    with patch("omnigent.inner.bwrap_sandbox.shutil.which", return_value=None):
+    with (
+        patch("goalrail.inner.bwrap_sandbox.sys.platform", "linux"),
+        patch("goalrail.inner.bwrap_sandbox.shutil.which", return_value=None),
+    ):
         with pytest.raises(OSError, match="bwrap"):
             backend.resolve(spec, Path.cwd())
 
@@ -366,7 +388,7 @@ def test_wrap_launcher_argv_starts_with_bwrap_and_ends_with_command(
     backend = _make_backend()
     policy = _make_policy(tmp_path)
     argv = backend.wrap_launcher_argv(
-        [sys.executable, "-m", "omnigent.inner.os_env", "helper", "X"],
+        [sys.executable, "-m", "goalrail.inner.os_env", "helper", "X"],
         policy,
         tmp_path,
     )
@@ -377,7 +399,7 @@ def test_wrap_launcher_argv_starts_with_bwrap_and_ends_with_command(
     assert argv[dash_idx + 1 :] == [
         sys.executable,
         "-m",
-        "omnigent.inner.os_env",
+        "goalrail.inner.os_env",
         "helper",
         "X",
     ]
@@ -886,8 +908,8 @@ def test_dotfile_masking_skips_target_that_vanished_after_scan(
     where coverage.py's transient ``.coverage.*`` files raced the scan).
     A persistent dotfile alongside it is still masked.
     """
-    from omnigent.inner import bwrap_sandbox
-    from omnigent.inner._cwd_scan import MaskedEntry
+    from goalrail.inner import bwrap_sandbox
+    from goalrail.inner._cwd_scan import MaskedEntry
 
     cwd = tmp_path.resolve(strict=False)
     (tmp_path / ".env").write_text("SECRET=42")
@@ -1085,7 +1107,7 @@ def test_seccomp_blocks_dangerous_socket_families_inside_helper(tmp_path: Path) 
     """
     probe = """
 import base64, json, socket, sys
-from omnigent.inner.sandbox import SandboxPolicy, activate_sandbox
+from goalrail.inner.sandbox import SandboxPolicy, activate_sandbox
 
 policy = SandboxPolicy.from_jsonable(
     json.loads(base64.urlsafe_b64decode(sys.argv[1]).decode("utf-8"))
@@ -1138,7 +1160,7 @@ def test_seccomp_blocks_unshare_and_setns_inside_helper(tmp_path: Path) -> None:
     """
     probe = """
 import base64, ctypes, errno, json, sys
-from omnigent.inner.sandbox import SandboxPolicy, activate_sandbox
+from goalrail.inner.sandbox import SandboxPolicy, activate_sandbox
 policy = SandboxPolicy.from_jsonable(
     json.loads(base64.urlsafe_b64decode(sys.argv[1]).decode("utf-8"))
 )
@@ -1191,7 +1213,7 @@ def test_seccomp_blocks_clone_with_namespace_flags_inside_helper(
     """
     probe = """
 import base64, ctypes, errno, json, signal, sys
-from omnigent.inner.sandbox import SandboxPolicy, activate_sandbox
+from goalrail.inner.sandbox import SandboxPolicy, activate_sandbox
 policy = SandboxPolicy.from_jsonable(
     json.loads(base64.urlsafe_b64decode(sys.argv[1]).decode("utf-8"))
 )
@@ -1267,7 +1289,7 @@ def test_seccomp_extra_rules_block_clone3_outright() -> None:
     """
     import errno
 
-    from omnigent.inner._seccomp import scmp_act_errno
+    from goalrail.inner._seccomp import scmp_act_errno
 
     rules = _bwrap_extra_seccomp_rules()
     clone3 = [r for r in rules if r.syscall == "clone3"]
@@ -1288,7 +1310,7 @@ def test_seccomp_extra_rules_socket_allowlist() -> None:
     using range-based deny rules: individual denies for the gaps plus
     a ``SCMP_CMP_GE`` rule that catches all families >= 11 (future-proof).
     """
-    from omnigent.inner._seccomp import SCMP_CMP_EQ, SCMP_CMP_GE
+    from goalrail.inner._seccomp import SCMP_CMP_EQ, SCMP_CMP_GE
 
     rules = _bwrap_extra_seccomp_rules()
     socket_rules = [r for r in rules if r.syscall == "socket"]

@@ -1,6 +1,6 @@
 """Tests for the shared onboarding interactive selectors.
 
-:mod:`omnigent.onboarding.interactive` provides the theme-picker-styled
+:mod:`goalrail.onboarding.interactive` provides the theme-picker-styled
 ``select`` arrow-key menu and the ``prompt_text`` text input. The
 raw-termios TTY path cannot be exercised in a headless test runner (no
 controlling terminal), so these tests cover the **non-TTY numbered
@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-from omnigent.onboarding import interactive
+from goalrail.onboarding import interactive
 
 
 @pytest.fixture()

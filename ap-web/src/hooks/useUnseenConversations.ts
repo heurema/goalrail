@@ -9,7 +9,7 @@
 
 import { useEffect } from "react";
 
-const STORAGE_KEY = "omnigent:last-seen-timestamps";
+const STORAGE_KEY = "goalrail:last-seen-timestamps";
 
 type LastSeenMap = Record<string, number>;
 

@@ -41,7 +41,7 @@ import { appendPromptHistoryEntry } from "@/hooks/usePromptHistory";
 import { CliCommandBlock } from "./CliCommandBlock";
 import { WorkspacePicker, isNavigablePath } from "./WorkspacePicker";
 import { getCliServerUrl } from "@/lib/host";
-import { getOmnigentHostConfig } from "@/lib/host";
+import { getGoalrailHostConfig } from "@/lib/host";
 import { readLastAgentId, writeLastAgentId } from "@/lib/agentPreferences";
 import { BRAIN_HARNESS_LABELS } from "@/lib/agentLabels";
 import { BUILTIN_AGENTS, sortAgentsForDisplay } from "@/lib/agentGrouping";
@@ -60,7 +60,6 @@ import { useRunnerHealthRegistration } from "@/hooks/RunnerHealthProvider";
 import { useHostFilesystem, type HostFilesystemEntry } from "@/hooks/useHostFilesystem";
 import { useNativeServerSwitcherForMainSurface } from "@/hooks/useNativeServerSwitcher";
 import type { Conversation } from "@/hooks/useConversations";
-import { OttoEyes } from "@/components/OttoEyes";
 import { SkillPills } from "@/components/SkillPills";
 import { ComposerMicButton } from "@/components/ComposerMicButton";
 import { IntelligentModelControl, type CostControlMode } from "@/components/CostRoutingControl";
@@ -219,7 +218,7 @@ export function ConnectHostInstructions({
 }) {
   // Databricks/internal deployments add the "Databricks Lakebox" connect
   // path; OSS deployments (where the lakebox launcher is excluded) show
-  // only the plain `omni host` command. Driven by /v1/info.
+  // only the plain `goalrail host` command. Driven by /v1/info.
   const info = useServerInfo();
   // "loading" before the boot probe resolves → treat as OSS (no Databricks
   // hints) until known, so the clean UI shows first and lakebox never flashes.
@@ -239,23 +238,26 @@ export function ConnectHostInstructions({
           </TabsList>
           <TabsContent value="local">
             <CliCommandBlock
-              command={`omni host --server ${serverUrl}`}
+              command={`goalrail host --server ${serverUrl}`}
               testIdPrefix="connect-host"
             />
           </TabsContent>
           <TabsContent value="lakebox" className="flex flex-col gap-1.5">
             <CliCommandBlock
-              command="omni sandbox create --provider lakebox"
+              command="goalrail sandbox create --provider lakebox"
               testIdPrefix="connect-lakebox-create"
             />
             <CliCommandBlock
-              command={`omni sandbox connect --provider lakebox --sandbox-id <id> --server ${serverUrl}`}
+              command={`goalrail sandbox connect --provider lakebox --sandbox-id <id> --server ${serverUrl}`}
               testIdPrefix="connect-lakebox-connect"
             />
           </TabsContent>
         </Tabs>
       ) : (
-        <CliCommandBlock command={`omni host --server ${serverUrl}`} testIdPrefix="connect-host" />
+        <CliCommandBlock
+          command={`goalrail host --server ${serverUrl}`}
+          testIdPrefix="connect-host"
+        />
       )}
     </div>
   );
@@ -356,7 +358,7 @@ export function sessionsSharingDirectory(
 /**
  * Best-effort human-readable message for a failed POST /v1/sessions.
  *
- * Recognizes the OmnigentError shape (``{error: {message}}``) and
+ * Recognizes the GoalrailError shape (``{error: {message}}``) and
  * FastAPI's ``{detail}``; falls back to the status code otherwise.
  *
  * @param res Non-OK response from the session-create call.
@@ -857,7 +859,7 @@ export function NewChatLandingScreen() {
   // Embed-only docs seam: when the host passes additional docs and managed
   // sandboxes are unavailable, keep the sandbox row visible but disabled and
   // attach a help tooltip with a clickable link.
-  const docsLinks = getOmnigentHostConfig().docsLinks;
+  const docsLinks = getGoalrailHostConfig().docsLinks;
   const newSandboxTooltipContent = docsLinks?.newSandbox;
   // Embed-only docs seam for Databricks git auth setup. Standalone leaves this
   // undefined, so no tooltip is rendered.
@@ -1388,12 +1390,9 @@ export function NewChatLandingScreen() {
           keeps the composer from feeling cramped against the viewport
           edges; widens to the full px-10 at the md breakpoint and up. */}
       <div className="flex w-full max-w-[840px] flex-col items-center gap-8 px-4 pt-8 pb-16 md:px-10">
-        <div className="flex flex-col items-center gap-3.5 sm:flex-row">
-          <OttoEyes className="h-18 w-auto shrink-0" />
-          <h1 className="text-center text-3xl font-medium tracking-[-0.03em] text-foreground sm:text-left">
-            What should we do?
-          </h1>
-        </div>
+        <h1 className="text-center text-3xl font-medium tracking-[-0.03em] text-foreground">
+          What should we do?
+        </h1>
         <div className="relative flex w-full flex-col gap-3">
           <form
             onSubmit={(e) => {

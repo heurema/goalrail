@@ -12,11 +12,11 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const getOmnigentHostConfig = vi.fn();
+const getGoalrailHostConfig = vi.fn();
 const hostFetch = vi.fn();
 
 vi.mock("@/lib/host", () => ({
-  getOmnigentHostConfig: () => getOmnigentHostConfig(),
+  getGoalrailHostConfig: () => getGoalrailHostConfig(),
   hostFetch: (path: string) => hostFetch(path),
 }));
 
@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe("SessionImage (standalone, no host fetcher)", () => {
   beforeEach(() => {
-    getOmnigentHostConfig.mockReturnValue({ fetcher: undefined });
+    getGoalrailHostConfig.mockReturnValue({ fetcher: undefined });
   });
 
   it("renders a plain same-origin <img> pointing at the raw path", () => {
@@ -61,7 +61,7 @@ describe("SessionImage (standalone, no host fetcher)", () => {
 
 describe("SessionImage (embedded, host fetcher present)", () => {
   beforeEach(() => {
-    getOmnigentHostConfig.mockReturnValue({ fetcher: () => {} });
+    getGoalrailHostConfig.mockReturnValue({ fetcher: () => {} });
   });
 
   it("shows the loading placeholder before the fetch resolves", () => {

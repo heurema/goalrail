@@ -38,7 +38,7 @@ the **server** process for managed sandboxes:
 ```bash
 curl -fsSL https://islo.dev/install.sh | sh   # install the islo CLI
 islo login                                     # browser OAuth (one-time)
-islo api-key create omnigent --show            # prints an islo_key_… value
+islo api-key create goalrail --show            # prints an islo_key_… value
 export ISLO_API_KEY=islo_key_…
 # Optional: a non-default API endpoint
 # export ISLO_BASE_URL=https://api.islo.dev
@@ -59,7 +59,7 @@ key is the only required credential — no SDK, no `~/.config` file.
 
 ## The host image
 
-Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published
+Sandboxes boot from `ghcr.io/heurema/goalrail-host:latest`, published
 by CI from the `host` target of
 [`deploy/docker/Dockerfile`](../docker/Dockerfile) with Goalrail and its
 dependencies preinstalled — including the coding-harness CLIs (`claude`,
@@ -72,11 +72,11 @@ same target and push it anywhere Islo can pull from:
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
   --platform linux/amd64 \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/goalrail-host:latest .
+docker push docker.io/<you>/goalrail-host:latest
 ```
 
-Then point Goalrail at it — `OMNIGENT_ISLO_HOST_IMAGE` for the CLI flow,
+Then point Goalrail at it — `GOALRAIL_ISLO_HOST_IMAGE` for the CLI flow,
 or `sandbox.islo.image` in the server config for the managed flow. For a
 private registry, configure the pull credentials on the Islo side (Islo
 pulls the image, not Goalrail).
@@ -122,7 +122,7 @@ sandbox keeps billing until removed via `islo rm <id>` or the
 [dashboard](https://app.islo.dev)).
 
 To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNIGENT_ISLO_SANDBOX_ENV` in your shell to a comma-separated list of
+`GOALRAIL_ISLO_SANDBOX_ENV` in your shell to a comma-separated list of
 variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
 `create` — the named variables are copied from your environment into the
 sandbox at provision time. A listed name that is **not** set fails the
@@ -135,11 +135,11 @@ auth failure inside the sandbox).
 present credentials when it dials back to a server that requires
 authentication. The interactive `goalrail login` browser flow can't run
 inside an Islo sandbox (no callback port forward), so inject the keys for
-the relevant server instead — name them in `OMNIGENT_ISLO_SANDBOX_ENV`
+the relevant server instead — name them in `GOALRAIL_ISLO_SANDBOX_ENV`
 before `create`:
 
 ```bash
-export OMNIGENT_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
+export GOALRAIL_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
 goalrail sandbox create --provider islo
 ```
 
@@ -208,7 +208,7 @@ The consequence:
   image, the launcher cleared the seeded `apiKeyHelper`, the host *and*
   runner tunnels connected, and a native Claude terminal ran on the
   injected `CLAUDE_CODE_OAUTH_TOKEN` subscription.
-- **The built-in `accounts` provider (`OMNIGENT_AUTH_ENABLED=1`)** — the
+- **The built-in `accounts` provider (`GOALRAIL_AUTH_ENABLED=1`)** — the
   runner tunnel additionally requires a *user* identity, which the
   per-launch host token does not carry, so the runner dial-back is refused
   (`403`) even though the host tunnel connects. This is a framework-level
@@ -230,7 +230,7 @@ sandbox:
   provider: islo
   server_url: https://your-host
   islo:
-    image: docker.io/<you>/omnigent-host:latest   # default: official image
+    image: docker.io/<you>/goalrail-host:latest   # default: official image
     env: [OPENAI_API_KEY, GIT_TOKEN]               # copy from server env
     base_url: https://api.islo.dev                 # non-default API endpoint
     gateway_profile: default                       # Islo gateway for egress + credential injection
@@ -335,7 +335,7 @@ Two consequences worth internalizing:
 
 ### Option B — Goalrail env injection (your own key or a subscription)
 
-Bring your own credential by naming it in `OMNIGENT_ISLO_SANDBOX_ENV`
+Bring your own credential by naming it in `GOALRAIL_ISLO_SANDBOX_ENV`
 (CLI) or `sandbox.islo.env` (managed); the launcher copies the value from
 the launching environment into the sandbox, and the in-sandbox host
 forwards the standard harness credential vars to its runners:
@@ -355,7 +355,7 @@ recipes](../modal/README.md#llm-credentials-for-managed-sandboxes). For a
 Claude **subscription** specifically, run `claude setup-token` on your own
 machine (one-time browser auth) and inject the resulting long-lived token
 as `CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the standard set, inject
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
+`GOALRAIL_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 > [!NOTE]
 > **Your injected Claude credential automatically wins over Islo's phantom
@@ -391,7 +391,7 @@ openai`, or inject `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN`).
 ### Git credentials (private repositories)
 
 Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`)
-via `OMNIGENT_ISLO_SANDBOX_ENV` / `sandbox.islo.env`. The host image's git
+via `GOALRAIL_ISLO_SANDBOX_ENV` / `sandbox.islo.env`. The host image's git
 credential helper answers HTTPS auth from it for both the launch-time
 clone and the agent's later `fetch` / `push`, writing nothing to disk. Use
 HTTPS repository URLs. Details by provider match the [Modal git
@@ -419,7 +419,7 @@ guide](../modal/README.md#git-credentials-private-repositories).
   (below) to keep the agent away from it.
 - **The agent terminal is sandboxed away from those secrets.** Native
   harness terminals run under a bubblewrap OS-sandbox that masks dotfiles
-  (`~/.ssh`, `~/.aws`, the injected `~/.omnigent` server token) and pins
+  (`~/.ssh`, `~/.aws`, the injected `~/.goalrail` server token) and pins
   the agent to its workspace — defense-in-depth *inside* the Islo sandbox,
   independent of Islo's own isolation. This is why the image must ship
   `bwrap` (see [the host image](#the-host-image)).
@@ -466,7 +466,7 @@ free credits. Rates: [islo.dev](https://islo.dev).
   `apiKeyHelper` set."** You injected your own Claude credential (Option B)
   but Islo's phantom `apiKeyHelper` is still present — the launcher strips it
   automatically at provision, so this means the strip didn't run: confirm the
-  credential is named in `OMNIGENT_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (the
+  credential is named in `GOALRAIL_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (the
   signal the launcher keys on), and check the provision log for the
   "clearing Islo's seeded apiKeyHelper" line.
 - **Requests retry then fail with no obvious error.** `islo status` shows
@@ -474,9 +474,9 @@ free credits. Rates: [islo.dev](https://islo.dev).
   nothing. Connect one (Option A) or switch to Option B.
 - **"managed host did not come online within 120s."** Check that
   `server_url` is publicly reachable from Islo's cloud, then inspect the
-  in-sandbox host log: `~/.omnigent/logs/host-runner/*.log`.
+  in-sandbox host log: `~/.goalrail/logs/host-runner/*.log`.
 - **Agent has no credentials.** Verify the injected var names match the
-  forwarded set above (or are named in `OMNIGENT_RUNNER_ENV_PASSTHROUGH`),
+  forwarded set above (or are named in `GOALRAIL_RUNNER_ENV_PASSTHROUGH`),
   and that each name was actually set in the launching environment.
 
 ## Environment variable reference
@@ -485,7 +485,7 @@ free credits. Rates: [islo.dev](https://islo.dev).
 |---|---|---|
 | `ISLO_API_KEY` | CLI machine / server | Islo API credentials (required) |
 | `ISLO_BASE_URL` | CLI machine / server | Non-default Islo API endpoint (default `https://api.islo.dev`) |
-| `OMNIGENT_ISLO_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.islo.image` takes precedence for managed) |
-| `OMNIGENT_ISLO_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.islo.env` takes precedence for managed) |
-| `OMNIGENT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
+| `GOALRAIL_ISLO_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.islo.image` takes precedence for managed) |
+| `GOALRAIL_ISLO_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.islo.env` takes precedence for managed) |
+| `GOALRAIL_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
 | `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |

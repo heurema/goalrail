@@ -1,7 +1,7 @@
-"""Custom setuptools build for omnigent.
+"""Custom setuptools build for goalrail.
 
-Generates ``omnigent/_build_info.py`` at wheel build time so the
-CLI's update-check (``omnigent/update_check.py``) can tell the user
+Generates ``goalrail/_build_info.py`` at wheel build time so the
+CLI's update-check (``goalrail/update_check.py``) can tell the user
 when their installed build is stale without having to consult
 ``git`` or hit a remote endpoint at startup.
 
@@ -44,19 +44,19 @@ class _GenerateBuildInfo(build_py):
     def _bundle_examples(self) -> None:
         """Copy bundled example agents into the wheel as real directories.
 
-        ``omnigent/resources/examples/{polly,debby}`` may exist as symlinks
+        ``goalrail/resources/examples/{polly,debby}`` may exist as symlinks
         into the top-level ``examples/`` tree (or not at all) depending on
         the checkout, and setuptools' ``package-data`` never materializes
         symlinks into the built wheel — a directory symlink is not walked.
         A plain ``pip install`` / ``uv tool install`` would then ship a
-        package whose ``omnigent.resources.examples`` has no ``polly`` /
-        ``debby`` subdir, and bare ``omnigent`` (first-run default → polly)
+        package whose ``goalrail.resources.examples`` has no ``polly`` /
+        ``debby`` subdir, and bare ``goalrail`` (first-run default → polly)
         dies with "Agent path not found".
 
         Fix: after ``build_py`` has populated ``build_lib``, copy the real
         example trees from the top-level ``examples/`` dir (present in every
         checkout) into
-        ``build_lib/omnigent/resources/examples/<name>`` so every wheel is
+        ``build_lib/goalrail/resources/examples/<name>`` so every wheel is
         self-contained. This honors the contract documented in cli.py's
         ``_bundled_polly_path``: a symlink in a checkout, a real directory in
         an installed wheel. Editable installs (``uv sync``) resolve the
@@ -65,7 +65,7 @@ class _GenerateBuildInfo(build_py):
         import shutil
 
         root = Path(__file__).resolve().parent
-        dest_root = Path(self.build_lib) / "omnigent" / "resources" / "examples"
+        dest_root = Path(self.build_lib) / "goalrail" / "resources" / "examples"
         for name in ("debby", "polly"):
             src = root / "examples" / name
             if not src.is_dir():
@@ -79,10 +79,10 @@ class _GenerateBuildInfo(build_py):
             shutil.copytree(src, dst)
 
     def _build_web_ui(self) -> None:
-        """Build the ap-web SPA into ``omnigent/server/static/web-ui/``.
+        """Build the ap-web SPA into ``goalrail/server/static/web-ui/``.
 
         The server mounts that directory at ``/`` when present
-        (``omnigent/server/app.py``); when absent it serves an
+        (``goalrail/server/app.py``); when absent it serves an
         API-only JSON landing page and the web UI is unreachable.
         The bundle is npm-build output, not tracked in git, so a
         plain ``pip install .`` / ``uv tool install`` from a checkout
@@ -93,7 +93,7 @@ class _GenerateBuildInfo(build_py):
         backend-only dev loop or breaking node-less CI:
 
         - Skip if ``ap-web/`` is absent (sdists that don't vendor it).
-        - Skip if ``OMNIGENT_SKIP_WEB_UI=true``. The hardened CI
+        - Skip if ``GOALRAIL_SKIP_WEB_UI=true``. The hardened CI
           runners ship a system ``npm`` but have no fast registry
           mirror configured for the lint/test shards, so ``npm
           install`` crawls against the public registry and hits the
@@ -101,12 +101,12 @@ class _GenerateBuildInfo(build_py):
           bundle those jobs never serve. They set this env var to opt
           out.
         - Skip if the bundle already exists, UNLESS
-          ``OMNIGENT_BUILD_WEB_UI=1`` forces a rebuild. This keeps
+          ``GOALRAIL_BUILD_WEB_UI=1`` forces a rebuild. This keeps
           repeat ``uv sync`` fast for backend devs (build once, reuse)
           while letting release builds force a fresh bundle.
         - Otherwise the build MUST succeed: a missing ``npm`` or a
           failing ``npm install`` / ``npm run build`` aborts the
-          install with an actionable error. Omnigent needs Node +
+          install with an actionable error. Goalrail needs Node +
           npm at runtime anyway (the Claude / Codex / Pi harness
           CLIs are npm packages), so a node-less machine would get a
           broken install either way — failing here, with a message
@@ -121,15 +121,15 @@ class _GenerateBuildInfo(build_py):
 
         root = Path(__file__).resolve().parent
         web_src = root / "ap-web"
-        bundle = root / "omnigent" / "server" / "static" / "web-ui" / "index.html"
+        bundle = root / "goalrail" / "server" / "static" / "web-ui" / "index.html"
 
         if not (web_src / "package.json").is_file():
             return
         # CI opt-out: exact "true" only — this is set by our own
         # workflows, not user-facing config.
-        if os.environ.get("OMNIGENT_SKIP_WEB_UI") == "true":
+        if os.environ.get("GOALRAIL_SKIP_WEB_UI") == "true":
             return
-        force_raw = os.environ.get("OMNIGENT_BUILD_WEB_UI")
+        force_raw = os.environ.get("GOALRAIL_BUILD_WEB_UI")
         force = force_raw is not None and force_raw.strip().lower() in (
             "1",
             "true",
@@ -140,38 +140,38 @@ class _GenerateBuildInfo(build_py):
         npm = shutil.which("npm")
         if npm is None:
             raise SystemExit(
-                "omnigent build: npm not found on PATH, so the web UI "
-                "cannot be built. Omnigent requires Node.js 22 LTS or "
+                "goalrail build: npm not found on PATH, so the web UI "
+                "cannot be built. Goalrail requires Node.js 22 LTS or "
                 "newer with npm (the Claude / Codex / Pi harness CLIs are "
                 "npm packages). Install it from "
                 "https://nodejs.org/en/download and rerun the install. "
                 "To deliberately install without the web UI (API-only "
-                "server), set OMNIGENT_SKIP_WEB_UI=true."
+                "server), set GOALRAIL_SKIP_WEB_UI=true."
             )
         try:
             subprocess.run([npm, "install"], cwd=web_src, check=True, timeout=600)
             subprocess.run([npm, "run", "build"], cwd=web_src, check=True, timeout=600)
         except (subprocess.SubprocessError, OSError) as exc:
             raise SystemExit(
-                f"omnigent build: web UI build failed ({exc}). Fix the "
+                f"goalrail build: web UI build failed ({exc}). Fix the "
                 "failure above (it usually means Node.js is older than the "
                 "required 22 LTS, or `npm install` could not reach the npm "
                 "registry) and rerun the install. To deliberately install "
                 "without the web UI (API-only server), set "
-                "OMNIGENT_SKIP_WEB_UI=true."
+                "GOALRAIL_SKIP_WEB_UI=true."
             ) from exc
 
     def _write_build_info(self) -> None:
-        """Write ``omnigent/_build_info.py`` into the source tree.
+        """Write ``goalrail/_build_info.py`` into the source tree.
 
         Writing to the source tree (rather than directly into the
         build dir) means editable installs (``pip install -e .``,
         ``uv sync``) also get the file — they're a single
         ``build_py`` invocation against an in-place package — and
-        any later non-build code path that does ``from omnigent
+        any later non-build code path that does ``from goalrail
         import _build_info`` works without re-running the build.
         """
-        target = Path(__file__).resolve().parent / "omnigent" / "_build_info.py"
+        target = Path(__file__).resolve().parent / "goalrail" / "_build_info.py"
         commit = _git_sha()
         # Use repr() for the SHA so quoting is always correct, even
         # for an empty fallback. The format is deliberately minimal
@@ -182,7 +182,7 @@ class _GenerateBuildInfo(build_py):
             "This module is created by ``setup.py`` immediately before\n"
             "``build_py`` packages the wheel, and is gitignored so it\n"
             "is recreated on every build. Consumers should import it\n"
-            "defensively (``try: from omnigent import _build_info``)\n"
+            "defensively (``try: from goalrail import _build_info``)\n"
             "because source checkouts that have never been built will\n"
             "not have it on disk.\n"
             '"""\n'

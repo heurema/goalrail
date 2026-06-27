@@ -1,10 +1,10 @@
 # sys-terminal-test agent — exercises the AP-side ``sys_terminal_*``
-# tool family through Omnigent mode integration.
+# tool family through Goalrail mode integration.
 #
-# This is an OMNIGENT-FLAVORED YAML (no ``spec_version: 1``).
-# Per ``designs/OMNIGENT_TERMINAL_BRIDGE.md`` §3 (Non-goals), AP-native
+# This is an GOALRAIL-FLAVORED YAML (no ``spec_version: 1``).
+# Per ``designs/GOALRAIL_TERMINAL_BRIDGE.md`` §3 (Non-goals), AP-native
 # YAML cannot declare ``terminals:`` — that grammar lives only on
-# the omnigent-compat path. The compat translator threads
+# the goalrail-compat path. The compat translator threads
 # ``AgentDef.terminals`` → ``AgentSpec.terminals`` so the
 # ``sys_terminal_*`` tools register on the AP-side ToolManager.
 #

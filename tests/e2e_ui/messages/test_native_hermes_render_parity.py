@@ -4,10 +4,10 @@ The native ``hermes-native`` ("Hermes") wrapper is terminal-first: the real
 ``hermes`` CLI runs in the session terminal, the SPA's **Terminal** view attaches
 to that live TUI over a WebSocket, and the SPA's **Chat** view renders the SAME
 canonical transcript the TUI prints. A native forwarder
-(:mod:`omnigent.hermes_native_forwarder`) tails Hermes' SQLite ``state.db`` and
+(:mod:`goalrail.hermes_native_forwarder`) tails Hermes' SQLite ``state.db`` and
 mirrors the transcript back OUT as conversation items; web-composer messages are
 injected INTO the TUI's tmux pane by
-:class:`omnigent.inner.hermes_native_executor.HermesNativeExecutor`. This suite is
+:class:`goalrail.inner.hermes_native_executor.HermesNativeExecutor`. This suite is
 the hermes sibling of ``test_native_goose_render_parity`` and asserts the same
 three properties:
 

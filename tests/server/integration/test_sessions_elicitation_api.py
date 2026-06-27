@@ -44,7 +44,7 @@ async def test_get_pending_elicitation_shape(client: httpx.AsyncClient) -> None:
     GET on a pending elicitation returns status "pending" with the
     expected top-level keys and correct types.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     agent = await create_test_agent(client, "test-get-pending-shape")
     session_id = await _create_session(client, agent["id"])
@@ -122,7 +122,7 @@ async def test_get_after_resolution_returns_resolved(
     Parks a real elicitation, resolves it, then asserts the GET
     endpoint no longer reports it as pending.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     agent = await create_test_agent(client, "test-get-after-resolve")
     session_id = await _create_session(client, agent["id"])
@@ -176,7 +176,7 @@ async def test_post_resolve_already_resolved_is_idempotent(
     The ``_resolve_elicitation`` helper skips a done Future gracefully,
     so a double-submit from the UI must not error.
     """
-    from omnigent.runtime import pending_elicitations
+    from goalrail.runtime import pending_elicitations
 
     agent = await create_test_agent(client, "test-double-resolve")
     session_id = await _create_session(client, agent["id"])

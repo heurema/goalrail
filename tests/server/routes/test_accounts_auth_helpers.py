@@ -6,7 +6,7 @@ so we test the pure-function helpers directly.
 
 from __future__ import annotations
 
-from omnigent.server.routes.accounts_auth import (
+from goalrail.server.routes.accounts_auth import (
     _redact_for_log,
     _validate_username,
 )

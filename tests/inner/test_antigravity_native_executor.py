@@ -18,13 +18,13 @@ from pathlib import Path
 
 import pytest
 
-import omnigent.inner.antigravity_native_executor as executor_mod
-from omnigent.antigravity_native_bridge import (
+import goalrail.inner.antigravity_native_executor as executor_mod
+from goalrail.antigravity_native_bridge import (
     AntigravityNativeBridgeState,
     write_bridge_state,
 )
-from omnigent.inner.antigravity_native_executor import AntigravityNativeExecutor
-from omnigent.inner.executor import ExecutorError, ExecutorEvent, TurnComplete
+from goalrail.inner.antigravity_native_executor import AntigravityNativeExecutor
+from goalrail.inner.executor import ExecutorError, ExecutorEvent, TurnComplete
 
 _CONVERSATION_ID = "90468e33-38c3-4e48-ae9f-03c843196227"
 _PLACEHOLDER_ID = "agy_conv_placeholder123"
@@ -544,7 +544,7 @@ def test_latest_requested_model_picks_latest_user_input() -> None:
     Echoing agy's CURRENT model means scanning for the LAST USER_INPUT step
     (a later turn may have switched models), not the first or the last step.
     """
-    from omnigent.inner.antigravity_native_executor import _latest_requested_model
+    from goalrail.inner.antigravity_native_executor import _latest_requested_model
 
     assert _latest_requested_model(_steps_with_model(_ECHOED_MODEL)) == _ECHOED_MODEL
 
@@ -556,7 +556,7 @@ def test_latest_requested_model_none_when_absent() -> None:
     An empty step list (first turn) or steps without a ``planModel`` must signal
     "nothing to echo" so the caller falls back to the recommended model.
     """
-    from omnigent.inner.antigravity_native_executor import _latest_requested_model
+    from goalrail.inner.antigravity_native_executor import _latest_requested_model
 
     assert _latest_requested_model([]) is None
     assert (
@@ -573,7 +573,7 @@ def test_latest_requested_model_falls_back_to_requested_model() -> None:
     TUI-origin step may still use the older ``requestedModel.model`` dict shape.
     The executor must honor that fallback so such a turn's model still echoes.
     """
-    from omnigent.inner.antigravity_native_executor import _latest_requested_model
+    from goalrail.inner.antigravity_native_executor import _latest_requested_model
 
     legacy_steps: list[dict[str, object]] = [
         {
@@ -596,7 +596,7 @@ def test_recommended_model_picks_recommended_entry() -> None:
     The fallback model must be the one agy marks ``recommended`` so a first turn
     uses agy's own default rather than an arbitrary catalog entry.
     """
-    from omnigent.inner.antigravity_native_executor import _recommended_model
+    from goalrail.inner.antigravity_native_executor import _recommended_model
 
     catalog: dict[str, object] = {
         "models": {
@@ -614,7 +614,7 @@ def test_recommended_model_none_when_absent() -> None:
     A catalog with no ``recommended`` model (or a malformed one) must signal
     "no model" so the caller surfaces a clear error instead of guessing.
     """
-    from omnigent.inner.antigravity_native_executor import _recommended_model
+    from goalrail.inner.antigravity_native_executor import _recommended_model
 
     assert _recommended_model({"models": {}}) is None
     assert _recommended_model({"models": {"a": {"model": "MODEL_A"}}}) is None
@@ -660,7 +660,7 @@ def test_run_turn_valid_effort_is_accepted(
     :param effort: One valid effort level to test.
     :returns: None.
     """
-    from omnigent.inner.executor import ExecutorConfig
+    from goalrail.inner.executor import ExecutorConfig
 
     _seed_state(tmp_path)
 
@@ -697,7 +697,7 @@ def test_run_turn_unsupported_effort_surfaces_error(
     :param bad_effort: An effort level that is invalid for Antigravity.
     :returns: None.
     """
-    from omnigent.inner.executor import ExecutorConfig
+    from goalrail.inner.executor import ExecutorConfig
 
     _seed_state(tmp_path)
 
@@ -733,7 +733,7 @@ def test_content_to_text_handles_string_blocks_none_and_other(tmp_path: Path) ->
     yields ``""``; any other shape falls back to a JSON encoding rather than
     crashing.
     """
-    from omnigent.inner.antigravity_native_executor import _content_to_text
+    from goalrail.inner.antigravity_native_executor import _content_to_text
 
     assert _content_to_text("  hello  ", tmp_path) == "hello"
     assert (

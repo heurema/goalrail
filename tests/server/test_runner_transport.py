@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.server import _runner_transport as rt
+from goalrail.server import _runner_transport as rt
 
 
 def test_build_uds_runner_returns_uds_client(tmp_path: Any) -> None:

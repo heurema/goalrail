@@ -1,8 +1,8 @@
 # Coding supervisor with delegated Claude and Codex worker sessions.
 #
 # Usage:
-#   cd omnigent
-#   .venv/bin/python -m omnigent examples/coding_supervisor.yaml --profile <your-profile>
+#   cd goalrail
+#   .venv/bin/python -m goalrail examples/coding_supervisor.yaml --profile <your-profile>
 
 name: coding_supervisor
 prompt: |

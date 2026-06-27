@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.codex_native_bridge import (
+from goalrail.codex_native_bridge import (
     CodexNativeBridgeState,
     bridge_dir_for_bridge_id,
     bridge_root,
@@ -29,7 +29,7 @@ def test_bridge_root_honors_goalrail_data_dir(
     tmp_path: Path,
 ) -> None:
     """Goalrail data-dir override moves the default codex-native bridge root."""
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
+    monkeypatch.delenv("GOALRAIL_DATA_DIR", raising=False)
     data_dir = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
 
@@ -67,7 +67,7 @@ def bridge_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     :param monkeypatch: pytest monkeypatch fixture.
     :returns: Prepared bridge directory.
     """
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", tmp_path / "codex-native")
     return prepare_bridge_dir("bridge_test")
 
 
@@ -116,10 +116,10 @@ def test_read_codex_config_model_none_when_unparsable(bridge_dir: Path) -> None:
 
 def test_policy_hook_config_round_trips(bridge_dir: Path) -> None:
     """
-    Written Omnigent coordinates read back verbatim for the policy hook.
+    Written Goalrail coordinates read back verbatim for the policy hook.
 
     The codex hook subprocess depends on this exact payload to reach the
-    Omnigent server. A failure (dropped/renamed field) would leave the hook
+    Goalrail server. A failure (dropped/renamed field) would leave the hook
     unable to POST, silently disabling enforcement.
     """
     write_policy_hook_config(
@@ -136,7 +136,7 @@ def test_policy_hook_config_round_trips(bridge_dir: Path) -> None:
 
 def test_policy_hook_config_absent_returns_none(bridge_dir: Path) -> None:
     """
-    Reading before any write returns None (no Omnigent server configured).
+    Reading before any write returns None (no Goalrail server configured).
 
     The hook treats None as "nothing to enforce" and no-ops. A failure
     (e.g. raising, or returning a partial dict) would crash the hook or

@@ -5,7 +5,7 @@ Run as a stdio MCP server:
     python -m tests.resources.examples._shared.sleep_mcp_server
 
 Used by ``tests/resources/examples/agent_with_policies.yaml`` so the
-sleep tool travels through the Omnigent server's MCP proxy endpoint and is
+sleep tool travels through the Goalrail server's MCP proxy endpoint and is
 subject to TOOL_CALL policy evaluation (``block_long_sleep``).
 
 :raises SystemExit: Delegates to ``mcp.run()`` which blocks until the

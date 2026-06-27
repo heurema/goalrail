@@ -20,8 +20,8 @@ from typing import Any, TextIO
 
 import pytest
 
-from omnigent import claude_native_bridge, native_cost_popup
-from omnigent.claude_native_bridge import (
+from goalrail import claude_native_bridge, native_cost_popup
+from goalrail.claude_native_bridge import (
     _claude_prompt_rendered,
     _hook_record_from_jsonl_record,
     _JsonlRecord,
@@ -47,7 +47,7 @@ from omnigent.claude_native_bridge import (
     stop_hook_seen_since,
     write_tmux_target,
 )
-from omnigent.reasoning_effort import CLAUDE_EFFORTS
+from goalrail.reasoning_effort import CLAUDE_EFFORTS
 
 
 @pytest.fixture(autouse=True)
@@ -59,8 +59,8 @@ def _trust_tmp_bridge_parent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     :param tmp_path: Per-test temp directory.
     :returns: None.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path)
 
 
 @pytest.fixture
@@ -70,11 +70,11 @@ def subprocess_bridge_root() -> Iterator[Path]:
 
     :yields: Temporary directory path under the production trusted
         Claude bridge root, so a child
-        ``python -m omnigent.claude_native_bridge`` accepts bridge
+        ``python -m goalrail.claude_native_bridge`` accepts bridge
         writes without inheriting pytest monkeypatches.
     """
     production_parent = Path(tempfile.gettempdir())
-    production_root = production_parent / f"omnigent-{os.getuid()}" / "claude-native"
+    production_root = production_parent / f"goalrail-{os.getuid()}" / "claude-native"
     production_root.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(production_root.parent, 0o700)
     os.chmod(production_root, 0o700)
@@ -205,13 +205,13 @@ def test_prepare_bridge_dir_preserves_token_and_updates_runtime(
     """
     Bridge setup is stable across wrapper re-runs for one session.
 
-    If this regresses, reattaching ``omnigent claude`` can rotate the
+    If this regresses, reattaching ``goalrail claude`` can rotate the
     bearer token while the already-running MCP server still expects the
     old token.
     """
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     first = prepare_bridge_dir(
         "conv_abc",
@@ -235,10 +235,10 @@ def test_prepare_bridge_dir_preserves_permission_hook_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Re-preparing a bridge keeps the permission command hook's Omnigent URL.
+    Re-preparing a bridge keeps the permission command hook's Goalrail URL.
 
     The claude-native ``PermissionRequest`` command hook reads
-    ``permission_hook.json`` at hook time to learn which Omnigent server to
+    ``permission_hook.json`` at hook time to learn which Goalrail server to
     POST to (the URL is not baked into Claude's launch args). A
     rebind/reattach that re-runs ``prepare_bridge_dir`` must NOT wipe
     that file — if it does, the permission subprocess bails with "AP
@@ -246,8 +246,8 @@ def test_prepare_bridge_dir_preserves_permission_hook_config(
     web UI (a regression we guard against).
     """
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     bridge_dir = prepare_bridge_dir("conv_abc", workspace=tmp_path)
     # ``augment_claude_args`` is the production path that writes
@@ -286,8 +286,8 @@ def test_prepare_bridge_dir_restricts_filesystem_permissions(
     """
     import stat
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
 
     bridge_dir = prepare_bridge_dir("conv_abc", workspace=tmp_path)
     bridge_json = bridge_dir / "bridge.json"
@@ -326,8 +326,8 @@ def test_prepare_bridge_dir_refuses_symlinked_ancestor(
     symlink = tmp_path / "claude-native"
     symlink.symlink_to(attacker_dir, target_is_directory=True)
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", symlink)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", symlink)
 
     with pytest.raises(RuntimeError, match="symlink"):
         prepare_bridge_dir("conv_abc", workspace=tmp_path)
@@ -348,19 +348,19 @@ def test_trusted_parent_accepts_qwen_native_bridge_dir(
     ``_trusted_parent_for_bridge_dir``) writes its JSON file under the
     harness's bridge dir, validating it lives below a known bridge root.
     qwen-native reuses this relay but keeps files under its own root
-    (``$TMPDIR/omnigent-<uid>/qwen-native``); if that root is missing from the
+    (``$TMPDIR/goalrail-<uid>/qwen-native``); if that root is missing from the
     allowlist, every qwen-native session raises ``not under an allowed bridge
     root`` and the relay never starts (observed in a live runner log). This
     pins the qwen-native branch so the regression can't return.
     """
-    from omnigent import qwen_native_bridge
+    from goalrail import qwen_native_bridge
 
     # Distinct claude root so the qwen target can't match the claude branch
     # first (the autouse fixture points the claude root at ``tmp_path``).
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     # qwen root mirrors production shape: <uid-scoped temp>/qwen-native.
-    qwen_root = tmp_path / "omnigent-test" / "qwen-native"
+    qwen_root = tmp_path / "goalrail-test" / "qwen-native"
     monkeypatch.setattr(qwen_native_bridge, "_BRIDGE_ROOT", qwen_root)
 
     target = claude_native_bridge._absolute_syntactic_path(qwen_root / "abc123")
@@ -381,12 +381,11 @@ def test_trusted_parent_validates_goalrail_data_dir_for_codex_native(
     ``goalrail-data/codex-native/<hash>`` as owner-only directories. Trusting the
     data dir itself would skip validation of a user-supplied shared ancestor.
     """
-    from omnigent import codex_native_bridge
+    from goalrail import codex_native_bridge
 
     data_dir = tmp_path / "goalrail-data"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_dir))
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", None)
 
     target = claude_native_bridge._absolute_syntactic_path(
@@ -402,13 +401,13 @@ def test_trusted_parent_rejects_path_outside_all_roots_and_names_qwen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A path under no known root is refused, and the error names the qwen root."""
-    from omnigent import qwen_native_bridge
+    from goalrail import qwen_native_bridge
 
     # Distinct claude root so ``outside`` below isn't swept under it (the autouse
     # fixture points the claude root at ``tmp_path``).
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    qwen_root = tmp_path / "omnigent-test" / "qwen-native"
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "claude-native")
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    qwen_root = tmp_path / "goalrail-test" / "qwen-native"
     monkeypatch.setattr(qwen_native_bridge, "_BRIDGE_ROOT", qwen_root)
 
     outside = claude_native_bridge._absolute_syntactic_path(tmp_path / "somewhere-else" / "x")
@@ -445,7 +444,7 @@ def test_read_assistant_text_since_parses_claude_jsonl(tmp_path: Path) -> None:
     Transcript parsing returns only assistant text after the cursor.
 
     The parser must not echo channel/user records back into the
-    Omnigent assistant stream.
+    Goalrail assistant stream.
     """
     transcript_path = tmp_path / "session.jsonl"
     transcript_path.write_text(
@@ -799,7 +798,7 @@ def test_read_transcript_line_cursor_migration_preserves_legacy_source_ids(
 
 def test_read_transcript_items_since_ignores_observed_status_records(tmp_path: Path) -> None:
     """
-    Non-conversation Claude JSONL records do not become Omnigent items.
+    Non-conversation Claude JSONL records do not become Goalrail items.
 
     The local transcript audit found status/UI records such as
     ``queue-operation``, ``branch-update``, ``progress``,
@@ -1973,7 +1972,7 @@ def test_read_transcript_items_from_offset_surfaces_skill_as_slash_command(
 
 def test_augment_claude_args_injects_mcp_and_hooks(tmp_path: Path) -> None:
     """
-    Claude receives the Omnigent MCP server and hook settings in one launch.
+    Claude receives the Goalrail MCP server and hook settings in one launch.
 
     This fails if the terminal starts Claude without the bridge pieces
     needed for tool dispatch / transcript discovery. Also asserts the
@@ -1987,7 +1986,7 @@ def test_augment_claude_args_injects_mcp_and_hooks(tmp_path: Path) -> None:
 
     assert args[:2] == ["--resume", "abc"]
     mcp_config = json.loads(args[args.index("--mcp-config") + 1])
-    server = mcp_config["mcpServers"]["omnigent"]
+    server = mcp_config["mcpServers"]["goalrail"]
     assert server["command"] == "/venv/bin/python"
     assert server["args"][-2:] == ["--bridge-dir", str(tmp_path)]
     # Web-UI input does not flow through Claude Channels — that
@@ -1995,7 +1994,7 @@ def test_augment_claude_args_injects_mcp_and_hooks(tmp_path: Path) -> None:
     # pass the development-channels flag.
     assert "--dangerously-load-development-channels" not in args
     settings = json.loads(args[args.index("--settings") + 1])
-    assert "omnigent.claude_native_hook" in settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+    assert "goalrail.claude_native_hook" in settings["hooks"]["Stop"][0]["hooks"][0]["command"]
     # ``PreCompact`` must be wired so the forwarder can surface
     # ``response.compaction.in_progress`` while Claude compacts in the
     # terminal. Missing it = no "Compacting…" spinner for claude-native.
@@ -2003,7 +2002,7 @@ def test_augment_claude_args_injects_mcp_and_hooks(tmp_path: Path) -> None:
         f"PreCompact hook must be registered; got hooks {sorted(settings['hooks'])!r}."
     )
     assert (
-        "omnigent.claude_native_hook" in settings["hooks"]["PreCompact"][0]["hooks"][0]["command"]
+        "goalrail.claude_native_hook" in settings["hooks"]["PreCompact"][0]["hooks"][0]["command"]
     )
     # No built-in tools are disabled anymore: ``AskUserQuestion``
     # routes through its dedicated PreToolUse hook (answers injected
@@ -2075,15 +2074,15 @@ def test_augment_claude_args_injects_plugin_dir_for_bundle_with_skills(
     assert "--mcp-config" in args
 
 
-def test_augment_claude_args_omits_permission_hook_without_omnigent_server(
+def test_augment_claude_args_omits_permission_hook_without_goalrail_server(
     tmp_path: Path,
 ) -> None:
     """
     No ``PermissionRequest`` hook is registered when the wrapper has
-    no Omnigent server URL to point Claude at.
+    no Goalrail server URL to point Claude at.
 
     This guards the default path: a call site that forgets to plumb
-    the Omnigent server URL must NOT silently fall through to Claude's TUI
+    the Goalrail server URL must NOT silently fall through to Claude's TUI
     prompt for every tool — but it also must not register an HTTP hook
     against an undefined URL. The expected behaviour is "no hook at
     all", which means Claude uses its built-in permission flow.
@@ -2103,7 +2102,7 @@ def test_augment_claude_args_registers_permission_command_hook(
     """
     Passing ``ap_server_url`` registers Claude's
     ``PermissionRequest`` hook as a command hook that resolves the
-    active Omnigent session at hook time.
+    active Goalrail session at hook time.
 
     If this regresses, Claude Code's built-in TUI permission prompt
     appears every time the user is supposed to approve from the web
@@ -2130,7 +2129,7 @@ def test_augment_claude_args_registers_permission_command_hook(
     # terminal prompt is still open. A failure here (missing key or a
     # short value) means that premature auto-resolve has regressed.
     assert hook["timeout"] == 86400
-    assert "omnigent.claude_native_hook permission-request" in hook["command"]
+    assert "goalrail.claude_native_hook permission-request" in hook["command"]
     assert "--bridge-dir" in hook["command"]
     assert "Bearer xyz" not in hook["command"]
     permission_config = json.loads((tmp_path / "permission_hook.json").read_text(encoding="utf-8"))
@@ -2143,7 +2142,7 @@ def test_augment_claude_args_registers_permission_command_hook(
     # statusLine is now intentionally injected (it's the only place
     # Claude Code surfaces ``context_window`` on stdin); ensure it
     # points at our wrapper module rather than something arbitrary.
-    assert "omnigent.claude_native_status" in settings["statusLine"]["command"]
+    assert "goalrail.claude_native_status" in settings["statusLine"]["command"]
 
 
 def test_augment_claude_args_registers_user_prompt_submit_policy_hook(
@@ -2185,7 +2184,7 @@ def test_augment_claude_args_omits_user_prompt_submit_policy_hook_without_server
     """
     Without ``ap_server_url`` the UserPromptSubmit policy hook is not wired.
 
-    Policy hooks only make sense when an Omnigent server is configured to
+    Policy hooks only make sense when an Goalrail server is configured to
     evaluate against; the forwarder's status hook still registers, but no
     evaluate-policy command should appear (mirrors PreToolUse/PostToolUse,
     which are also gated behind ``ap_server_url``).
@@ -2221,7 +2220,7 @@ def test_augment_claude_args_keeps_permission_hook_without_launch_session_id(
     session_start_command = settings["hooks"]["SessionStart"][0]["hooks"][0]["command"]
     assert "--conversation-url" not in session_start_command
     assert "companyAnnouncements" not in settings
-    assert "omnigent.claude_native_status" in settings["statusLine"]["command"]
+    assert "goalrail.claude_native_status" in settings["statusLine"]["command"]
 
 
 def test_mcp_server_initialize_omits_blocked_channel_capability(
@@ -2237,16 +2236,16 @@ def test_mcp_server_initialize_omits_blocked_channel_capability(
     org policy, breaking the native wrapper.
     """
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        "goalrail.claude_native_bridge._TRUSTED_PARENT",
         Path(tempfile.gettempdir()),
     )
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_abc", workspace=tmp_path)
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(bridge_dir),
@@ -2356,7 +2355,7 @@ def test_inject_user_message_pastes_content_then_submits(
     regresses to send-keys argv delivery, drops the trailing Enter, or
     stops clearing the stale buffer.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2423,7 +2422,7 @@ def test_inject_user_message_pastes_content_then_submits(
         "/tmp/example/tmux.sock",
         "load-buffer",
         "-b",
-        "omnigent-paste",
+        "goalrail-paste",
     ]
     # -p (bracketed-paste markers) dropped = newlines submit per-line in
     # the TUI; -d dropped = stale buffer copies accumulate server-side.
@@ -2435,7 +2434,7 @@ def test_inject_user_message_pastes_content_then_submits(
         "-p",
         "-d",
         "-b",
-        "omnigent-paste",
+        "goalrail-paste",
         "-t",
         "claude:0.0",
     ]
@@ -2457,7 +2456,7 @@ def test_inject_user_message_raises_when_tmux_target_never_published(
     """
     The injection helper fails loud when the runner has not written tmux.json.
 
-    Failing silently would let the Omnigent turn complete with no user
+    Failing silently would let the Goalrail turn complete with no user
     message ever reaching Claude — the executor needs the
     RuntimeError so it can surface an ExecutorError.
     """
@@ -2524,7 +2523,7 @@ def test_inject_user_message_waits_for_claude_prompt_before_typing(
     no send-keys is issued until ``capture-pane`` shows the prompt
     glyph, and that injection proceeds once it does.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2603,7 +2602,7 @@ def test_inject_user_message_raises_when_prompt_never_renders(
     the web UI stuck on "Working…". The RuntimeError surfaces as an
     ExecutorError instead. No keystrokes must be sent on this path.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2645,7 +2644,7 @@ def test_inject_user_message_ignores_prompt_glyph_in_scrollback(
     appears only in an early line, with later non-empty lines lacking
     it, so the gate must NOT treat the pane as ready.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2701,12 +2700,12 @@ def test_inject_user_message_resends_enter_when_first_submit_swallowed(
     fire-and-forget Enter would send exactly one and return "success"
     with the message undelivered.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     # Shrink the polling cadence so the retry happens in milliseconds —
     # the production defaults (1s retry spacing) would make this test slow.
-    monkeypatch.setattr("omnigent.claude_native_bridge._CLAUDE_READY_POLL_INTERVAL_S", 0.01)
-    monkeypatch.setattr("omnigent.claude_native_bridge._SUBMIT_RETRY_INTERVAL_S", 0.02)
-    monkeypatch.setattr("omnigent.claude_native_bridge._PASTE_SETTLE_S", 0.0)
+    monkeypatch.setattr("goalrail.claude_native_bridge._CLAUDE_READY_POLL_INTERVAL_S", 0.01)
+    monkeypatch.setattr("goalrail.claude_native_bridge._SUBMIT_RETRY_INTERVAL_S", 0.02)
+    monkeypatch.setattr("goalrail.claude_native_bridge._PASTE_SETTLE_S", 0.0)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2761,15 +2760,15 @@ def test_inject_user_message_raises_when_draft_never_submits(
     Injection fails loud when the draft never leaves the input box.
 
     If every submit Enter is swallowed (e.g. the pane is wedged in a
-    dialog), returning success would complete the Omnigent turn with
+    dialog), returning success would complete the Goalrail turn with
     the message still sitting unsent in Claude's input box. The
     RuntimeError surfaces as an ExecutorError instead.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._CLAUDE_READY_POLL_INTERVAL_S", 0.01)
-    monkeypatch.setattr("omnigent.claude_native_bridge._SUBMIT_RETRY_INTERVAL_S", 0.02)
-    monkeypatch.setattr("omnigent.claude_native_bridge._SUBMIT_VERIFY_TIMEOUT_S", 0.2)
-    monkeypatch.setattr("omnigent.claude_native_bridge._PASTE_SETTLE_S", 0.0)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("goalrail.claude_native_bridge._CLAUDE_READY_POLL_INTERVAL_S", 0.01)
+    monkeypatch.setattr("goalrail.claude_native_bridge._SUBMIT_RETRY_INTERVAL_S", 0.02)
+    monkeypatch.setattr("goalrail.claude_native_bridge._SUBMIT_VERIFY_TIMEOUT_S", 0.2)
+    monkeypatch.setattr("goalrail.claude_native_bridge._PASTE_SETTLE_S", 0.0)
     bridge_dir = tmp_path / "bridge"
     write_tmux_target(
         bridge_dir,
@@ -2812,7 +2811,7 @@ def test_inject_interrupt_sends_escape_keystroke(
 
     Without the ``-l`` flag, tmux interprets ``Escape`` as the key
     name (the single ASCII byte 0x1b). If the flag leaks in or the
-    keyword changes, Claude won't see a cancel and the Omnigent stop
+    keyword changes, Claude won't see a cancel and the Goalrail stop
     button silently degrades back to a no-op.
     """
     bridge_dir = tmp_path / "bridge"
@@ -2867,7 +2866,7 @@ def test_inject_interrupt_raises_when_tmux_target_never_published(
     inject_interrupt fails loud if tmux.json hasn't been written.
 
     The runner route catches RuntimeError and returns 503 so the
-    Omnigent server falls back to the DBOS cancel path. Swallowing this
+    Goalrail server falls back to the DBOS cancel path. Swallowing this
     silently would make the stop button appear to work while
     actually doing nothing.
     """
@@ -3154,7 +3153,7 @@ def test_inject_slash_command_raises_when_tmux_target_never_published(
 
 
 @pytest.mark.asyncio
-async def test_channel_server_relays_active_omnigent_tools(
+async def test_channel_server_relays_active_goalrail_tools(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     subprocess_bridge_root: Path,
@@ -3163,19 +3162,19 @@ async def test_channel_server_relays_active_omnigent_tools(
     Active turn tools are advertised to Claude and dispatched through AP.
 
     This fails if Claude Code can receive web-channel inputs but cannot
-    call the Omnigent tools made available to the server-side agent.
+    call the Goalrail tools made available to the server-side agent.
     """
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        "goalrail.claude_native_bridge._TRUSTED_PARENT",
         Path(tempfile.gettempdir()),
     )
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_tools", workspace=tmp_path)
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(bridge_dir),
@@ -3215,7 +3214,7 @@ async def test_channel_server_relays_active_omnigent_tools(
             tools=[
                 {
                     "name": "sys_custom",
-                    "description": "Test-only active Omnigent tool.",
+                    "description": "Test-only active Goalrail tool.",
                     "parameters": {
                         "type": "object",
                         "properties": {"value": {"type": "string"}},
@@ -3239,7 +3238,7 @@ async def test_channel_server_relays_active_omnigent_tools(
         assert custom_tools == [
             {
                 "name": "sys_custom",
-                "description": "Test-only active Omnigent tool.",
+                "description": "Test-only active Goalrail tool.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {"value": {"type": "string"}},
@@ -3376,10 +3375,10 @@ async def test_serve_mcp_survives_handler_exception_and_keeps_serving(
     ``_serve_mcp`` and the ``tools/list`` read below times out.
     """
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        "goalrail.claude_native_bridge._TRUSTED_PARENT",
         Path(tempfile.gettempdir()),
     )
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_crash", workspace=tmp_path)
 
     # A relay server that returns HTTP 200 with invalid UTF-8 bytes. This
@@ -3441,7 +3440,7 @@ async def test_serve_mcp_survives_handler_exception_and_keeps_serving(
         [
             sys.executable,
             "-m",
-            "omnigent.claude_native_bridge",
+            "goalrail.claude_native_bridge",
             "serve-mcp",
             "--bridge-dir",
             str(bridge_dir),
@@ -3522,10 +3521,10 @@ async def test_start_tool_relay_accepts_codex_native_bridge_root(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    from omnigent import codex_native_bridge
+    from goalrail import codex_native_bridge
 
-    codex_root = tmp_path / ".omnigent" / "codex-native"
-    monkeypatch.setattr("omnigent.codex_native_bridge._BRIDGE_ROOT", codex_root)
+    codex_root = tmp_path / ".goalrail" / "codex-native"
+    monkeypatch.setattr("goalrail.codex_native_bridge._BRIDGE_ROOT", codex_root)
     bridge_dir = codex_native_bridge.prepare_bridge_dir("conv_codex")
     relay_file = bridge_dir / claude_native_bridge._TOOL_RELAY_FILE
 
@@ -3584,10 +3583,10 @@ async def test_start_tool_relay_accepts_antigravity_native_bridge_root(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    from omnigent import antigravity_native_bridge
+    from goalrail import antigravity_native_bridge
 
-    antigravity_root = tmp_path / ".omnigent" / "antigravity-native"
-    monkeypatch.setattr("omnigent.antigravity_native_bridge._BRIDGE_ROOT", antigravity_root)
+    antigravity_root = tmp_path / ".goalrail" / "antigravity-native"
+    monkeypatch.setattr("goalrail.antigravity_native_bridge._BRIDGE_ROOT", antigravity_root)
     bridge_dir = antigravity_native_bridge.prepare_bridge_dir("conv_agy")
     relay_file = bridge_dir / claude_native_bridge._TOOL_RELAY_FILE
 
@@ -3609,7 +3608,7 @@ async def test_start_tool_relay_accepts_antigravity_native_bridge_root(
             tools=[
                 {
                     "name": "sys_session_create",
-                    "description": "Spawn an Omnigent sub-agent session.",
+                    "description": "Spawn an Goalrail sub-agent session.",
                     "parameters": {"type": "object", "properties": {}},
                 }
             ],
@@ -3645,10 +3644,10 @@ async def test_relay_close_keeps_advertisement_owned_by_newer_relay(
     still-active newer session's ``list_comments`` / ``update_comment``.
     """
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge._TRUSTED_PARENT",
+        "goalrail.claude_native_bridge._TRUSTED_PARENT",
         Path(tempfile.gettempdir()),
     )
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", subprocess_bridge_root)
     bridge_dir = prepare_bridge_dir("conv_shared_bridge", workspace=tmp_path)
     relay_file = bridge_dir / claude_native_bridge._TOOL_RELAY_FILE
 
@@ -4032,7 +4031,7 @@ def test_read_user_status_line_command_returns_string(
     The user's global statusLine.command is returned for chaining.
 
     The wrapper invokes it post-capture so claude-hud / the user's
-    custom status bar still renders for omnigent-launched sessions.
+    custom status bar still renders for goalrail-launched sessions.
     """
     fake_home = tmp_path
     settings = fake_home / ".claude" / "settings.json"
@@ -4107,7 +4106,7 @@ def test_prepare_bridge_dir_stores_launch_model(
 ) -> None:
     """``launch_model`` is persisted in bridge.json when provided."""
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -4124,7 +4123,7 @@ def test_prepare_bridge_dir_omits_launch_model_when_none(
 ) -> None:
     """``launch_model`` key is absent from bridge.json when not provided."""
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -4140,7 +4139,7 @@ def test_read_launch_model_returns_stored_value(
 ) -> None:
     """``read_launch_model`` round-trips the value stored by ``prepare_bridge_dir``."""
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -4156,7 +4155,7 @@ def test_read_launch_model_returns_none_when_absent(
 ) -> None:
     """``read_launch_model`` returns ``None`` when no launch model was stored."""
     root = tmp_path / "root"
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", root)
+    monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", root)
 
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -4471,7 +4470,7 @@ def test_ensure_trusted_creates_config_when_missing(
     """
     A fresh host (no ``~/.claude.json``) gets both first-run gates set.
 
-    This is the core workspace-trust case: an ``omnigent host`` machine that
+    This is the core workspace-trust case: an ``goalrail host`` machine that
     has never run Claude interactively. Both the global onboarding gate
     and the per-workspace trust gate must be pre-accepted so Claude does
     not block on its TUI prompts.
@@ -4609,9 +4608,9 @@ def test_display_cost_approval_popup_builds_detached_tmux_command(
     cost-popup module with all resolve inputs.
 
     Proves the modal targets the right tmux socket + pane + attached
-    client (``-c``), launches :mod:`omnigent.native_cost_popup`, and
+    client (``-c``), launches :mod:`goalrail.native_cost_popup`, and
     forwards the session/elicitation/message plus THIS bridge's
-    ``permission_hook.json`` (where the popup reads the Omnigent url/token). A
+    ``permission_hook.json`` (where the popup reads the Goalrail url/token). A
     failure means native approval would render at the wrong pane/client,
     run the wrong program, or omit an input the resolve POST needs — i.e.
     it silently wouldn't work.
@@ -4657,7 +4656,7 @@ def test_display_cost_approval_popup_builds_detached_tmux_command(
     assert args[args.index("-t") + 1] == "claude:0.0"
     # Inner command runs the popup module with every resolve input.
     inner = shlex.split(args[-1])
-    assert "omnigent.native_cost_popup" in inner
+    assert "goalrail.native_cost_popup" in inner
     assert "conv_abc123" in inner  # --session-id value
     assert "elicit_deadbeef" in inner  # --elicitation-id value
     assert "Cost $0.12 crossed the $0.10 checkpoint. Continue?" in inner  # --message
@@ -4958,10 +4957,10 @@ def test_compute_transcript_cumulative_cost_dedupes_by_request_id(
     double-bills (observed ~2x inflation, which leaked into the parent
     badge and the cost-budget gate). The cost must dedupe by ``requestId``.
     """
-    from omnigent.llms.context_window import ModelPricing
+    from goalrail.llms.context_window import ModelPricing
 
     pricing = ModelPricing(input_per_token=10.0, output_per_token=20.0)
-    monkeypatch.setattr("omnigent.llms.context_window.fetch_model_pricing", lambda model: pricing)
+    monkeypatch.setattr("goalrail.llms.context_window.fetch_model_pricing", lambda model: pricing)
     claude_native_bridge._TRANSCRIPT_PRICING_CACHE.clear()
     path = tmp_path / "transcript.jsonl"
     _write_transcript_jsonl(
@@ -4990,10 +4989,10 @@ def test_compute_transcript_cumulative_cost_sums_priced_messages(
     a regression in per-message summation or token pricing fails loudly —
     not just "some positive number".
     """
-    from omnigent.llms.context_window import ModelPricing
+    from goalrail.llms.context_window import ModelPricing
 
     pricing = ModelPricing(input_per_token=10.0, output_per_token=20.0)
-    monkeypatch.setattr("omnigent.llms.context_window.fetch_model_pricing", lambda model: pricing)
+    monkeypatch.setattr("goalrail.llms.context_window.fetch_model_pricing", lambda model: pricing)
     claude_native_bridge._TRANSCRIPT_PRICING_CACHE.clear()
     path = tmp_path / "transcript.jsonl"
     _write_transcript_jsonl(
@@ -5019,10 +5018,10 @@ def test_compute_transcript_cumulative_cost_excludes_parent_sidechains(
     own transcript would double-bill, so the parent path must drop them.
     The sub-agent path (``include_sidechains=True``) counts everything.
     """
-    from omnigent.llms.context_window import ModelPricing
+    from goalrail.llms.context_window import ModelPricing
 
     pricing = ModelPricing(input_per_token=10.0, output_per_token=0.0)
-    monkeypatch.setattr("omnigent.llms.context_window.fetch_model_pricing", lambda model: pricing)
+    monkeypatch.setattr("goalrail.llms.context_window.fetch_model_pricing", lambda model: pricing)
     claude_native_bridge._TRANSCRIPT_PRICING_CACHE.clear()
     path = tmp_path / "parent.jsonl"
     _write_transcript_jsonl(
@@ -5052,7 +5051,7 @@ def test_compute_transcript_cumulative_cost_none_when_nothing_priceable(
     model with no available pricing — each must yield ``None`` so the
     forwarder treats it as "no estimate" rather than "$0 spent".
     """
-    from omnigent.llms.context_window import ModelPricing
+    from goalrail.llms.context_window import ModelPricing
 
     claude_native_bridge._TRANSCRIPT_PRICING_CACHE.clear()
     # Missing file.
@@ -5064,7 +5063,7 @@ def test_compute_transcript_cumulative_cost_none_when_nothing_priceable(
     )
     # File with no assistant usage.
     pricing = ModelPricing(input_per_token=10.0, output_per_token=20.0)
-    monkeypatch.setattr("omnigent.llms.context_window.fetch_model_pricing", lambda model: pricing)
+    monkeypatch.setattr("goalrail.llms.context_window.fetch_model_pricing", lambda model: pricing)
     no_usage = tmp_path / "no_usage.jsonl"
     _write_transcript_jsonl(no_usage, [{"message": {"role": "user", "content": "hi"}}])
     assert (
@@ -5073,7 +5072,7 @@ def test_compute_transcript_cumulative_cost_none_when_nothing_priceable(
     )
     # Pricing unavailable for the model.
     claude_native_bridge._TRANSCRIPT_PRICING_CACHE.clear()
-    monkeypatch.setattr("omnigent.llms.context_window.fetch_model_pricing", lambda model: None)
+    monkeypatch.setattr("goalrail.llms.context_window.fetch_model_pricing", lambda model: None)
     priced = tmp_path / "priced.jsonl"
     _write_transcript_jsonl(priced, [_assistant_entry(model="m", input_tokens=5, output_tokens=5)])
     assert (
@@ -5111,7 +5110,7 @@ def test_format_terminal_failure_tail_caps_length(monkeypatch: pytest.MonkeyPatc
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TERMINAL_FAILURE_TAIL_CHARS", 50)
+    monkeypatch.setattr("goalrail.claude_native_bridge._TERMINAL_FAILURE_TAIL_CHARS", 50)
     pane = "\n".join(f"line {i}" for i in range(100))
     tail = claude_native_bridge._format_terminal_failure_tail(pane)
     body = tail.split("\n", 1)[1]
@@ -5141,7 +5140,7 @@ def test_wait_for_claude_prompt_ready_surfaces_terminal_output_on_timeout(
         "  at parse (unknown)\n"
     )
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge._capture_pane",
+        "goalrail.claude_native_bridge._capture_pane",
         lambda socket_path, tmux_target: crash_pane,
     )
     with pytest.raises(RuntimeError) as excinfo:

@@ -5,9 +5,9 @@ default_platform(:ios)
 # Connect API key supplied through env vars — see fastlane/.env.example.
 
 platform :ios do
-  desc "Run the OmnigentTests unit tests"
+  desc "Run the GoalrailTests unit tests"
   lane :tests do
-    run_tests(scheme: "Omnigent")
+    run_tests(scheme: "Goalrail")
   end
 
   desc "Build a signed Release .ipa and upload it to TestFlight"
@@ -45,7 +45,7 @@ platform :ios do
     xcargs = ["-allowProvisioningUpdates"]
     xcargs << "CURRENT_PROJECT_VERSION=#{options[:build_number]}" if options[:build_number]
     build_app(
-      scheme: "Omnigent",
+      scheme: "Goalrail",
       configuration: "Release",
       export_method: "app-store",
       xcargs: xcargs.join(" "),

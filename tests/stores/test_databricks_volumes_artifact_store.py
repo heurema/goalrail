@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.stores.artifact_store.databricks_volumes import (
+from goalrail.stores.artifact_store.databricks_volumes import (
     DatabricksVolumesArtifactStore,
     _parse_volume_root,
     _validate_key,
@@ -39,8 +39,8 @@ def test_parse_volume_root_with_prefix() -> None:
     **What breaks if wrong**: prefix is stripped, artifacts land
     in the volume root instead of the intended subdirectory.
     """
-    result = _parse_volume_root("dbfs:/Volumes/cat/schema/vol/omnigent/artifacts")
-    assert result == "/Volumes/cat/schema/vol/omnigent/artifacts"
+    result = _parse_volume_root("dbfs:/Volumes/cat/schema/vol/goalrail/artifacts")
+    assert result == "/Volumes/cat/schema/vol/goalrail/artifacts"
 
 
 def test_parse_volume_root_rejects_non_dbfs() -> None:
@@ -113,7 +113,7 @@ def test_resolve_constructs_full_path(
     operations target wrong location.
     """
     monkeypatch.setattr(
-        "omnigent.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
+        "goalrail.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
         lambda: None,
     )
     # Patch the SDK import inside __init__
@@ -199,7 +199,7 @@ def stub_store(monkeypatch: pytest.MonkeyPatch) -> DatabricksVolumesArtifactStor
     :returns: A store backed by in-memory stubs.
     """
     monkeypatch.setattr(
-        "omnigent.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
+        "goalrail.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
         lambda: None,
     )
     files_api = _StubFilesAPI()
@@ -312,7 +312,7 @@ def test_injected_workspace_client_used_as_is(monkeypatch: pytest.MonkeyPatch) -
     Volume operations run under the wrong identity.
     """
     monkeypatch.setattr(
-        "omnigent.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
+        "goalrail.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
         lambda: None,
     )
 
@@ -341,7 +341,7 @@ def test_ambient_workspace_client_built_when_not_injected(monkeypatch: pytest.Mo
     breaking every existing call site that relies on ambient credentials.
     """
     monkeypatch.setattr(
-        "omnigent.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
+        "goalrail.stores.artifact_store.databricks_volumes._ensure_databricks_sdk",
         lambda: None,
     )
 

@@ -4,7 +4,7 @@ Re-homes three suppressed e2e tests that lived in
 ``tests/e2e/test_sys_terminal_e2e.py`` and only stayed red because they
 drove the **removed** ``POST /v1/responses`` route (plus
 ``poll_until_terminal``'s ``GET /v1/responses/{id}``). That route no
-longer exists under ``omnigent/server/routes/``; the cited
+longer exists under ``goalrail/server/routes/``; the cited
 "500 / runner availability" reason on issue 532 was a stale
 misdiagnosis. These replacements drive the current runner-bound
 sessions API in mock-LLM mode instead — the same path the merged D6

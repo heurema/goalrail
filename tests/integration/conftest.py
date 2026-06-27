@@ -144,7 +144,7 @@ def model_name(request: pytest.FixtureRequest, harness_name: str) -> str:
     ``tests/inner/conftest.py``: explicit choices skip
     :mod:`tests._model_pools` spreading but still rotate on
     ``llm_flaky`` reruns. The workflow ``--model`` default is spread
-    when ``OMNIGENT_TEST_MODEL_SPREAD`` is on, except for Codex: that
+    when ``GOALRAIL_TEST_MODEL_SPREAD`` is on, except for Codex: that
     leg is deliberately pinned to the higher-headroom gateway model.
 
     :param request: Pytest fixture request.

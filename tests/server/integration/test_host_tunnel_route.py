@@ -10,16 +10,16 @@ from fastapi import FastAPI
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from omnigent.db.db_models import SqlHost
-from omnigent.db.utils import get_or_create_engine, now_epoch
-from omnigent.host.frames import (
+from goalrail.db.db_models import SqlHost
+from goalrail.db.utils import get_or_create_engine, now_epoch
+from goalrail.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     encode_host_frame,
 )
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.routes.host_tunnel import create_host_tunnel_router
-from omnigent.stores.host_store import HostStore
+from goalrail.server.host_registry import HostRegistry
+from goalrail.server.routes.host_tunnel import create_host_tunnel_router
+from goalrail.stores.host_store import HostStore
 
 pytestmark = pytest.mark.asyncio
 
@@ -209,7 +209,7 @@ async def test_host_tunnel_ping_loop_persists_heartbeat(
     into the past and assert the heartbeat drags it back while the host
     stays ``online``.
     """
-    import omnigent.server.routes.host_tunnel as tunnel_mod
+    import goalrail.server.routes.host_tunnel as tunnel_mod
 
     monkeypatch.setattr(tunnel_mod, "PING_INTERVAL_S", 0.02)
     # Never trip the ping-timeout path so the only writer of updated_at
@@ -439,7 +439,7 @@ def _managed_scope(path: str, token: str) -> dict[str, object]:
     :returns: ASGI WebSocket scope with the token header set.
     """
     scope = _websocket_scope(path)
-    scope["headers"] = [(b"x-omnigent-host-token", token.encode("ascii"))]
+    scope["headers"] = [(b"x-goalrail-host-token", token.encode("ascii"))]
     return scope
 
 

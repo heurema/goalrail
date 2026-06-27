@@ -32,7 +32,7 @@ from typing import Any
 import httpx
 
 # Load the coder tool set for client-side tool execution.
-from omnigent.client_tools import get_tool_set as _get_tool_set
+from goalrail.client_tools import get_tool_set as _get_tool_set
 from tests.e2e.conftest import (
     configure_mock_llm,
     create_runner_bound_session,
@@ -431,7 +431,7 @@ def test_openai_coder_writes_and_reads_file(
     uid = uuid.uuid4().hex[:6]
     model = f"mock-coder-write-{uid}"
     target_file = tmp_path / "agent_test_output.txt"
-    sentinel = "OMNIGENT_E2E_CANARY_2026"
+    sentinel = "GOALRAIL_E2E_CANARY_2026"
 
     reset_mock_llm(mock_llm_server_url)
     agent_name = register_inline_agent(

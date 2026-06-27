@@ -14,7 +14,7 @@ trusted Origin passes.)
 
 These tests drive the real routes through the shared ``client`` fixture
 (real stores + mock LLM, permissions disabled). The suite runs in local
-single-user mode (``OMNIGENT_LOCAL_SINGLE_USER=1`` from
+single-user mode (``GOALRAIL_LOCAL_SINGLE_USER=1`` from
 ``tests/conftest.py``), so the guard's local-mode branch is active, and an
 autouse fixture stamps the first-party sentinel ``Origin`` on in-process
 requests that don't set their own (emulating the SDK / runner). The tests
@@ -38,7 +38,7 @@ import json
 import httpx
 import pytest
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+from goalrail.runner.identity import GOALRAIL_INTERNAL_WS_ORIGIN
 from tests.server.helpers import build_agent_bundle, create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_create_session_multipart_rejects_cross_origin(
     "origin",
     [
         pytest.param(_LOOPBACK_ORIGIN, id="loopback"),
-        pytest.param(OMNIGENT_INTERNAL_WS_ORIGIN, id="sentinel"),
+        pytest.param(GOALRAIL_INTERNAL_WS_ORIGIN, id="sentinel"),
     ],
 )
 async def test_create_session_multipart_allows_trusted_origin(
@@ -156,7 +156,7 @@ async def test_upload_file_rejects_cross_origin(client: httpx.AsyncClient) -> No
     "origin",
     [
         pytest.param(_LOOPBACK_ORIGIN, id="loopback"),
-        pytest.param(OMNIGENT_INTERNAL_WS_ORIGIN, id="sentinel"),
+        pytest.param(GOALRAIL_INTERNAL_WS_ORIGIN, id="sentinel"),
     ],
 )
 async def test_upload_file_allows_trusted_origin(

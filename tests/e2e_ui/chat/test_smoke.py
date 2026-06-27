@@ -34,14 +34,14 @@ def test_send_message_renders_assistant_response(
     A failure here means one of:
 
     - The SPA didn't boot (build missing or static mount broken in
-      ``omnigent/server/app.py``'s ``_SPAStaticFiles``).
+      ``goalrail/server/app.py``'s ``_SPAStaticFiles``).
     - The composer is mis-wired (``ChatPage.tsx`` regression).
     - The agent never received the request (server / runtime
       regression — check the live_server log).
     - The LLM never responded (Databricks credentials missing or
       hello_world model unavailable).
     - The SDK reducer didn't render output (TS reducer parity drift
-      vs ``omnigent_client/_stream.py`` — see
+      vs ``goalrail_client/_stream.py`` — see
       ``ap-web/README.md`` § Reducer parity).
 
     Starts from ``/c/<id>`` rather than ``/`` because the home route

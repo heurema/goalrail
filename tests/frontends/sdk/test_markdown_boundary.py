@@ -9,7 +9,7 @@ chains.
 from __future__ import annotations
 
 import pytest
-from omnigent_ui_sdk.terminal._formatter import _find_stable_markdown_boundary
+from goalrail_ui_sdk.terminal._formatter import _find_stable_markdown_boundary
 
 
 def test_boundary_simple_paragraph_break() -> None:

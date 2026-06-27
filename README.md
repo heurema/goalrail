@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/omnigent-logo.svg" alt="" height="38" valign="middle" /> Goalrail
+# <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/goalrail-logo.svg" alt="" height="38" valign="middle" /> Goalrail
 
 ### The open-source AI agent framework and meta-harness for all your AI agents.
 
@@ -10,12 +10,12 @@ Goalrail is an open-source **AI agent framework** and meta-harness that gives yo
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](#1-install)
 
-[golrail.dev](https://golrail.dev) · Downloads coming soon
+[goalrail.dev](https://goalrail.dev) · Downloads coming soon
 
 </div>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/omnigent-hero.png" alt="A Goalrail orchestrator and its sub-agents in one shared session" width="520" />
+  <img src="https://raw.githubusercontent.com/heurema/goalrail/main/docs/images/goalrail-hero.png" alt="A Goalrail orchestrator and its sub-agents in one shared session" width="520" />
 </p>
 
 ---
@@ -68,16 +68,16 @@ curl -fsSL https://raw.githubusercontent.com/heurema/goalrail/main/scripts/insta
 <details>
 <summary>Prefer to install manually?</summary>
 
-Goalrail currently uses the `omnigent` Python package and needs **Python 3.12+**:
+Goalrail currently uses the `goalrail` Python package and needs **Python 3.12+**:
 
 ```bash
-uv tool install omnigent        # or: pip install "omnigent"
+uv tool install goalrail        # or: pip install "goalrail"
 ```
 
-Or with the current legacy [Homebrew tap](https://github.com/omnigent-ai/homebrew-tap):
+Or with the current legacy [Homebrew tap](https://github.com/heurema/homebrew-tap):
 
 ```bash
-brew install omnigent-ai/tap/omnigent
+brew install heurema/tap/goalrail
 ```
 
 Or install straight from the repo:
@@ -111,7 +111,7 @@ uv tool install -q --python 3.12 git+https://github.com/heurema/goalrail.git
   uses the built-in `seatbelt` sandbox and needs nothing extra.
 - **Databricks** (optional). To use a Databricks workspace as your model
   provider, install the current package with the `databricks` extra:
-  `uv tool install "omnigent[databricks]"` — or pass it to the bootstrap
+  `uv tool install "goalrail[databricks]"` — or pass it to the bootstrap
   installer with `... | sh -s -- --extra databricks`. Signing in to the
   workspace also uses the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install).
 
@@ -124,7 +124,7 @@ The current Goalrail build runs natively on Windows in a degraded mode. The `ins
 bootstrap is POSIX-only, so install with `uv` directly:
 
 ```powershell
-uv tool install --python 3.12 omnigent
+uv tool install --python 3.12 goalrail
 # or from the repo:
 uv tool install --python 3.12 git+https://github.com/heurema/goalrail.git
 ```
@@ -159,11 +159,11 @@ goalrail upgrade --check    # just report whether a newer release is available
 `goalrail upgrade` waits for in-flight agent sessions to finish before stopping
 the local server (pass `--force` to stop them immediately); the next `goalrail`
 command brings the server back up on the new version. Source checkouts update with
-`git pull` instead. Silence the notice with `OMNIGENT_NO_UPDATE_CHECK=1`.
+`git pull` instead. Silence the notice with `GOALRAIL_NO_UPDATE_CHECK=1`.
 
 The check queries your configured package index — honoring `UV_INDEX_URL` /
 `PIP_INDEX_URL` and your `uv.toml` / `pip.conf` (default PyPI), so private
-mirrors work out of the box; override with `OMNIGENT_INDEX_URL` if needed.
+mirrors work out of the box; override with `GOALRAIL_INDEX_URL` if needed.
 
 </details>
 
@@ -173,11 +173,10 @@ mirrors work out of the box; override with `OMNIGENT_INDEX_URL` if needed.
 also launches a local web UI at `http://localhost:6767` that shows the same
 session in the browser, or on a phone on your network (step 4). Desktop and
 mobile downloads are not published yet; they will live on
-[golrail.dev](https://golrail.dev).
+[goalrail.dev](https://goalrail.dev).
 
 > [!NOTE]
-> The install puts `goalrail` on your PATH. The legacy `omnigent` and `omni`
-> aliases remain available during the rename.
+> The install puts `goalrail` on your PATH.
 
 > [!TIP]
 > On first run, Goalrail picks up model credentials already in your
@@ -311,11 +310,11 @@ Goalrail supports **multi-user accounts**, controlled by one environment
 variable:
 
 ```bash
-OMNIGENT_AUTH_ENABLED=1 goalrail server start
+GOALRAIL_AUTH_ENABLED=1 goalrail server start
 ```
 
 The **Docker deploy in [step 4](#4-deploy-a-server-and-use-it-from-your-phone)
-turns it on for you** (`OMNIGENT_AUTH_ENABLED` defaults to `1` there).
+turns it on for you** (`GOALRAIL_AUTH_ENABLED` defaults to `1` there).
 
 #### Invite your teammates
 
@@ -353,7 +352,7 @@ and they're in. Signup is invite-only.
 
 > [!TIP]
 > Want your team to sign in with the logins they already have (**Google,
-> GitHub, Okta, Microsoft**)? Set `OMNIGENT_OIDC_ISSUER` plus a client ID
+> GitHub, Okta, Microsoft**)? Set `GOALRAIL_OIDC_ISSUER` plus a client ID
 > and secret on your deployed server and restart. The full walkthrough,
 > domain allowlists, and the proxy-only `header` auth mode are covered in
 > [`deploy/README.md#auth`](https://github.com/heurema/goalrail/blob/main/deploy/README.md#auth).
@@ -376,15 +375,15 @@ your server config or an agent's YAML:
 policies:
   approve_shell:
     type: function
-    handler: omnigent.policies.builtins.safety.ask_on_os_tools   # ask before shell / file writes
+    handler: goalrail.policies.builtins.safety.ask_on_os_tools   # ask before shell / file writes
   cap_calls:
     type: function
-    handler: omnigent.policies.builtins.safety.max_tool_calls_per_session
+    handler: goalrail.policies.builtins.safety.max_tool_calls_per_session
     factory_params:
       limit: 50                    # cap how many tools one session can call
   budget:
     type: function
-    handler: omnigent.policies.builtins.cost.cost_budget
+    handler: goalrail.policies.builtins.cost.cost_budget
     factory_params:
       max_cost_usd: 5.00           # hard spend cap...
       ask_thresholds_usd: [3.00]   # ...with a soft warning on the way

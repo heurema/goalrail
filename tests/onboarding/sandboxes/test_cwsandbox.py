@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.sandboxes.cwsandbox`."""
+"""Tests for :mod:`goalrail.onboarding.sandboxes.cwsandbox`."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 import pytest
 
-from omnigent.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
-from omnigent.onboarding.sandboxes.cwsandbox import (
+from goalrail.onboarding.sandboxes.base import DEFAULT_HOST_IMAGE
+from goalrail.onboarding.sandboxes.cwsandbox import (
     HOST_IMAGE_ENV_VAR,
     SANDBOX_ENV_PASSTHROUGH_ENV_VAR,
     CWSandboxLauncher,
@@ -157,7 +157,7 @@ def test_provision_requests_host_image_and_egress(sdk: _State) -> None:
     assert sdk.run_command == ("sleep", "infinity")
     assert sdk.run_kwargs["container_image"] == DEFAULT_HOST_IMAGE
     assert sdk.run_kwargs["network"].egress_mode == "internet"
-    assert sdk.run_kwargs["tags"] == ["omnigent", "managed-x"]
+    assert sdk.run_kwargs["tags"] == ["goalrail", "managed-x"]
 
 
 def test_provision_image_resolution_order(sdk: _State, monkeypatch: pytest.MonkeyPatch) -> None:

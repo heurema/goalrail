@@ -51,7 +51,7 @@ describe("parseCostRoutingVerdict", () => {
   });
 
   it("returns null when the plan label is absent (no advisor on this server)", () => {
-    expect(parseCostRoutingVerdict({ "omnigent.wrapper": "claude-code-native-ui" })).toBeNull();
+    expect(parseCostRoutingVerdict({ "goalrail.wrapper": "claude-code-native-ui" })).toBeNull();
   });
 
   it("returns null for unparseable JSON", () => {

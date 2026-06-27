@@ -1,5 +1,5 @@
 """
-Unit tests for the ``omnigent.runtime.telemetry`` helpers.
+Unit tests for the ``goalrail.runtime.telemetry`` helpers.
 
 Exercises pure helpers (no spans created) and the trace-context
 wrapper with an in-memory OTel exporter so the tests stay fast
@@ -35,7 +35,7 @@ from opentelemetry.trace import (
     set_span_in_context,
 )
 
-from omnigent.runtime import telemetry
+from goalrail.runtime import telemetry
 
 _RESP_HEX = "d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3"
 _RESP_ID = f"resp_{_RESP_HEX}"
@@ -360,7 +360,7 @@ def test_trace_context_for_response_root(
     """
     A span opened inside ``trace_context_for_response(response_id)``
     has the trace_id derived from ``response_id`` — the full
-    omnigent-to-trace-backend lookup chain works end-to-end.
+    goalrail-to-trace-backend lookup chain works end-to-end.
     """
     import mlflow
     from mlflow.entities import SpanType
@@ -778,16 +778,16 @@ def test_init_respects_capture_content_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``init`` reads ``OMNIGENT_OTEL_CAPTURE_CONTENT`` each call
+    ``init`` reads ``GOALRAIL_OTEL_CAPTURE_CONTENT`` each call
     so operators can toggle it after restart. Idempotent re-init
     refreshes the flag.
     """
     monkeypatch.setenv("OTEL_METRICS_EXPORTER", "none")
-    monkeypatch.setenv("OMNIGENT_OTEL_CAPTURE_CONTENT", "true")
+    monkeypatch.setenv("GOALRAIL_OTEL_CAPTURE_CONTENT", "true")
     telemetry.init()
     assert telemetry.should_capture_content() is True
 
-    monkeypatch.setenv("OMNIGENT_OTEL_CAPTURE_CONTENT", "false")
+    monkeypatch.setenv("GOALRAIL_OTEL_CAPTURE_CONTENT", "false")
     telemetry.init()
     assert telemetry.should_capture_content() is False
 
@@ -808,7 +808,7 @@ def test_instrument_fastapi_app_is_opt_in(
         """
         calls.append(app)
 
-    monkeypatch.delenv("OMNIGENT_OTEL_FASTAPI_INSTRUMENTATION", raising=False)
+    monkeypatch.delenv("GOALRAIL_OTEL_FASTAPI_INSTRUMENTATION", raising=False)
     monkeypatch.setattr(
         "opentelemetry.instrumentation.fastapi.FastAPIInstrumentor.instrument_app",
         fake_instrument_app,
@@ -836,7 +836,7 @@ def test_instrument_fastapi_app_calls_instrumentor_when_enabled(
         """
         calls.append(app_to_instrument)
 
-    monkeypatch.setenv("OMNIGENT_OTEL_FASTAPI_INSTRUMENTATION", "true")
+    monkeypatch.setenv("GOALRAIL_OTEL_FASTAPI_INSTRUMENTATION", "true")
     monkeypatch.setattr(
         "opentelemetry.instrumentation.fastapi.FastAPIInstrumentor.instrument_app",
         fake_instrument_app,

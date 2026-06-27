@@ -1,6 +1,6 @@
 name: policies-demo
 description: |
-  Ported from omnigent `examples/agent_with_policies.yaml`.
+  Ported from goalrail `examples/agent_with_policies.yaml`.
   Demonstrates FunctionPolicy (block long sleep) + taint-on-web
   composition.
 
@@ -21,7 +21,7 @@ policies:
     type: function
     on: [tool_call:web_search]
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: allow
         set_labels: {integrity: "0"}
@@ -35,7 +35,7 @@ policies:
     condition:
       integrity: "0"
     function:
-      path: omnigent.policies.function.make_fixed_action_callable
+      path: goalrail.policies.function.make_fixed_action_callable
       arguments:
         action: ask
         reason: |

@@ -1,6 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import {
   BookOpenIcon,
+  BotIcon,
   Code2Icon,
   CompassIcon,
   FileTextIcon,
@@ -10,7 +11,6 @@ import {
 } from "lucide-react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OttoIcon } from "@/components/icons/OttoIcon";
 import { type ChildSessionInfo, useChildSessions } from "@/hooks/useChildSessions";
 import { useSession } from "@/hooks/useSession";
 import { iconForAgentType, SubagentsPanel } from "./SubagentsPanel";
@@ -42,11 +42,6 @@ vi.mock("@/components/icons/OpenCodeIcon", () => ({
 vi.mock("@/components/icons/PiIcon", () => ({
   PiIcon: (props: Record<string, unknown>) => <svg {...props} data-icon="pi" />,
 }));
-// And for the Otto mascot — the generic sub-agent fallback icon.
-vi.mock("@/components/icons/OttoIcon", () => ({
-  OttoIcon: (props: Record<string, unknown>) => <svg {...props} data-icon="otto" />,
-}));
-
 const useChildSessionsMock = vi.mocked(useChildSessions);
 const useSessionMock = vi.mocked(useSession);
 
@@ -117,8 +112,8 @@ const ICON_CASES: Array<[string | null, ReturnType<typeof iconForAgentType>]> = 
   // dropped without a test failing.
   ["documentation", FileTextIcon],
   ["technical-writer", FileTextIcon],
-  ["general-purpose", OttoIcon],
-  [null, OttoIcon],
+  ["general-purpose", BotIcon],
+  [null, BotIcon],
 ];
 
 beforeEach(() => {
@@ -203,7 +198,7 @@ describe("SubagentsPanel", () => {
         status: "idle",
         createdAt: 0,
         title: null,
-        labels: { "omnigent.wrapper": "claude-code-native-ui" },
+        labels: { "goalrail.wrapper": "claude-code-native-ui" },
         items: [],
         pendingElicitations: [],
         permissionLevel: 4,
@@ -232,7 +227,7 @@ describe("SubagentsPanel", () => {
         status: "idle",
         createdAt: 0,
         title: null,
-        labels: { "omnigent.wrapper": "pi-native-ui" },
+        labels: { "goalrail.wrapper": "pi-native-ui" },
         items: [],
         pendingElicitations: [],
         permissionLevel: 4,
@@ -326,22 +321,22 @@ describe("SubagentsPanel", () => {
   }> = [
     {
       name: "claude-native wrapper → claude-native marker",
-      labels: { "omnigent.wrapper": "claude-code-native-ui" },
+      labels: { "goalrail.wrapper": "claude-code-native-ui" },
       expectedKind: "claude-native",
     },
     {
       name: "codex-native wrapper → codex-native marker",
-      labels: { "omnigent.wrapper": "codex-native-ui" },
+      labels: { "goalrail.wrapper": "codex-native-ui" },
       expectedKind: "codex-native",
     },
     {
       name: "opencode-native wrapper → opencode-native marker",
-      labels: { "omnigent.wrapper": "opencode-native-ui" },
+      labels: { "goalrail.wrapper": "opencode-native-ui" },
       expectedKind: "opencode-native",
     },
     {
       name: "pi-native wrapper → pi-native marker",
-      labels: { "omnigent.wrapper": "pi-native-ui" },
+      labels: { "goalrail.wrapper": "pi-native-ui" },
       expectedKind: "pi-native",
     },
     {
@@ -357,7 +352,7 @@ describe("SubagentsPanel", () => {
     },
     {
       name: "different wrapper label → generic agent marker",
-      labels: { "omnigent.wrapper": "some-other-wrapper" },
+      labels: { "goalrail.wrapper": "some-other-wrapper" },
       expectedKind: "agent",
     },
   ];
@@ -366,7 +361,7 @@ describe("SubagentsPanel", () => {
     "stamps the main row's data-agent-kind from the parent session's wrapper label / agent name ($name)",
     ({ labels, agentName, expectedKind }) => {
       // The leading icon on the main row swaps between Claude, nessie,
-      // and generic based on the parent session's `omnigent.wrapper`
+      // and generic based on the parent session's `goalrail.wrapper`
       // label (claude-native) and `agentName` (nessie). We assert via
       // the row's data-agent-kind attribute (set alongside the icon
       // swap) so the test isn't coupled to the SVG internals.
@@ -501,7 +496,7 @@ describe("SubagentsPanel", () => {
           title: "codex-native-ui-subagent:thread_child_alpha",
           tool: "auth-auditor",
           session_name: "thread_child_alpha",
-          labels: { "omnigent.wrapper": "codex-native-ui-subagent" },
+          labels: { "goalrail.wrapper": "codex-native-ui-subagent" },
         }),
       ],
     });
@@ -521,21 +516,21 @@ describe("SubagentsPanel", () => {
           title: "codex:auth-refactor",
           tool: "codex",
           session_name: "auth-refactor",
-          labels: { "omnigent.wrapper": "codex-native-ui" },
+          labels: { "goalrail.wrapper": "codex-native-ui" },
         }),
         childInfo({
           id: "conv_opencode",
           title: "opencode:port-auth-refactor",
           tool: "opencode",
           session_name: "port-auth-refactor",
-          labels: { "omnigent.wrapper": "opencode-native-ui" },
+          labels: { "goalrail.wrapper": "opencode-native-ui" },
         }),
         childInfo({
           id: "conv_claude",
           title: "claude_code:review-auth-refactor",
           tool: "claude_code",
           session_name: "review-auth-refactor",
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui" },
         }),
       ],
     });
@@ -555,23 +550,23 @@ describe("SubagentsPanel", () => {
     expect(claudeRow.querySelector(".lucide-code-2")).toBeNull();
   });
 
-  it("gives native sub-agent children role/Otto icons, not the brand logo", () => {
+  it("gives native sub-agent children role/generic icons, not the brand logo", () => {
     // A native session's sub-agents are all the same brand, so the logo
     // is reserved for full native sessions; sub-agent rows read by role,
-    // with the Otto mascot as the generic fallback.
+    // with the generic bot icon as the fallback.
     mockChildTree({
       conv_root: [
         childInfo({
           id: "conv_generic",
           title: "claude:tell-a-joke",
           tool: "claude",
-          labels: { "omnigent.wrapper": "claude-code-native-ui-subagent" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui-subagent" },
         }),
         childInfo({
           id: "conv_explore",
           title: "Explore:find-the-bug",
           tool: "Explore",
-          labels: { "omnigent.wrapper": "claude-code-native-ui-subagent" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui-subagent" },
         }),
       ],
     });
@@ -579,7 +574,9 @@ describe("SubagentsPanel", () => {
     const { container } = renderPanel({ rootSessionId: "conv_root" });
 
     const genericRow = childRow(container, "conv_generic");
-    expect(genericRow.querySelector('[data-icon="otto"]')).not.toBeNull();
+    expect(
+      genericRow.querySelector("svg:not([data-icon]):not(.lucide-corner-down-right)"),
+    ).not.toBeNull();
     expect(genericRow.querySelector('[data-icon="claude"]')).toBeNull();
 
     const exploreRow = childRow(container, "conv_explore");
@@ -635,10 +632,12 @@ describe("SubagentsPanel", () => {
     expect(piRow.querySelector('[data-icon="pi"]')).not.toBeNull();
 
     // A substring match (e.g. tool.includes("pi")) would wrongly brand this
-    // row; it must fall back to the generic Otto icon.
+    // row; it must fall back to the generic bot icon.
     const pipelineRow = childRow(container, "conv_pipeline");
     expect(pipelineRow.querySelector('[data-icon="pi"]')).toBeNull();
-    expect(pipelineRow.querySelector('[data-icon="otto"]')).not.toBeNull();
+    expect(
+      pipelineRow.querySelector("svg:not([data-icon]):not(.lucide-corner-down-right)"),
+    ).not.toBeNull();
   });
 
   it("native wrapper labels outrank the pi tool-name match", () => {
@@ -649,7 +648,7 @@ describe("SubagentsPanel", () => {
           title: "pi:port-fix",
           tool: "pi",
           session_name: "port-fix",
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "goalrail.wrapper": "claude-code-native-ui" },
         }),
       ],
     });

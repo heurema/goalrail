@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from omnigent.llms.client import Client
+from goalrail.llms.client import Client
 
 
 def _encode_sse(event_type: str, data: dict[str, Any]) -> bytes:
@@ -108,7 +108,7 @@ async def _run_turn(
 
 def create_app() -> FastAPI:
     """Harness FastAPI app — the entrypoint HarnessProcessManager spawns."""
-    app = FastAPI(title="omnigent-runner-test-harness")
+    app = FastAPI(title="goalrail-runner-test-harness")
     llm_client = Client()
 
     @app.get("/health")

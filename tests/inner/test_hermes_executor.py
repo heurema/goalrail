@@ -19,13 +19,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from omnigent.inner.executor import (
+from goalrail.inner.executor import (
     ExecutorConfig,
     ExecutorError,
     TextChunk,
     TurnComplete,
 )
-from omnigent.inner.hermes_executor import (
+from goalrail.inner.hermes_executor import (
     HermesExecutor,
     _build_hermes_args,
     _extract_last_user_message,
@@ -143,7 +143,7 @@ class TestPopulateHermesHome:
         assert config["hooks_auto_accept"] is True
         hooks = config["hooks"]["pre_tool_call"]
         assert len(hooks) == 1
-        assert "omnigent-policy-hook.sh" in hooks[0]["command"]
+        assert "goalrail-policy-hook.sh" in hooks[0]["command"]
 
     def test_creates_wrapper_script(self, tmp_path: pathlib.Path) -> None:
         """Wrapper script exports env vars and execs the Python hook."""
@@ -153,7 +153,7 @@ class TestPopulateHermesHome:
             "http://127.0.0.1:6767",
             "conv_test123",
         )
-        wrapper = tmp_path / "omnigent-policy-hook.sh"
+        wrapper = tmp_path / "goalrail-policy-hook.sh"
         assert wrapper.exists()
         content = wrapper.read_text()
         assert "http://127.0.0.1:6767" in content
@@ -174,7 +174,7 @@ class TestPopulateHermesHome:
         approvals = allowlist["approvals"]
         assert len(approvals) == 1
         assert approvals[0]["event"] == "pre_tool_call"
-        assert "omnigent-policy-hook.sh" in approvals[0]["command"]
+        assert "goalrail-policy-hook.sh" in approvals[0]["command"]
 
 
 # ---------------------------------------------------------------------------

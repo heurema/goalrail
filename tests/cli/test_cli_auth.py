@@ -1,7 +1,7 @@
-"""Unit tests for CLI OIDC token storage (omnigent/cli_auth.py).
+"""Unit tests for CLI OIDC token storage (goalrail/cli_auth.py).
 
 Tests the store/load/clear lifecycle for session tokens persisted
-by ``omnigent login``.
+by ``goalrail login``.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def token_dir(tmp_path, monkeypatch):
     :returns: The temp directory path.
     """
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "goalrail.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
     return tmp_path
@@ -33,10 +33,10 @@ def token_dir(tmp_path, monkeypatch):
 def test_store_and_load_token(token_dir) -> None:
     """A stored token can be loaded back by server URL.
 
-    This is the happy path: ``omnigent login`` stores a token,
-    ``omnigent run --server`` loads it.
+    This is the happy path: ``goalrail login`` stores a token,
+    ``goalrail run --server`` loads it.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -55,12 +55,11 @@ def test_store_token_uses_goalrail_data_dir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Auth token storage writes under the effective runtime data home."""
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     data_home = tmp_path / "goalrail-data"
     legacy_home = tmp_path / "home"
     monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
     monkeypatch.setenv("HOME", str(legacy_home))
 
     store_token(
@@ -73,16 +72,16 @@ def test_store_token_uses_goalrail_data_dir(
     token_file = data_home / "auth_tokens.json"
     assert token_file.is_file()
     assert load_token("http://localhost:8000") == "jwt-abc"
-    assert not (legacy_home / ".omnigent" / "auth_tokens.json").exists()
+    assert not (legacy_home / ".goalrail" / "auth_tokens.json").exists()
 
 
 def test_load_returns_none_when_no_file(token_dir) -> None:
     """load_token returns None when no token file exists.
 
-    The first time a user runs ``omnigent run --server`` without
-    having run ``omnigent login``, there should be no crash.
+    The first time a user runs ``goalrail run --server`` without
+    having run ``goalrail login``, there should be no crash.
     """
-    from omnigent.cli_auth import load_token
+    from goalrail.cli_auth import load_token
 
     assert load_token("http://localhost:8000") is None
 
@@ -92,7 +91,7 @@ def test_load_returns_none_for_unknown_server(token_dir) -> None:
 
     A token stored for one server must not leak to another.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -108,9 +107,9 @@ def test_load_returns_none_for_expired_token(token_dir) -> None:
     """load_token returns None when the stored token has expired.
 
     Expired tokens must not be used — the user needs to re-run
-    ``omnigent login``.
+    ``goalrail login``.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -127,7 +126,7 @@ def test_clear_token(token_dir) -> None:
 
     After clearing, load_token must return None.
     """
-    from omnigent.cli_auth import clear_token, load_token, store_token
+    from goalrail.cli_auth import clear_token, load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -146,7 +145,7 @@ def test_trailing_slash_normalization(token_dir) -> None:
     ``http://localhost:8000/`` and ``http://localhost:8000`` must
     resolve to the same stored token.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000/",
@@ -165,7 +164,7 @@ def test_file_permissions(token_dir) -> None:
     Tokens are sensitive — they must not be world-readable.
     """
 
-    from omnigent.cli_auth import store_token
+    from goalrail.cli_auth import store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -186,10 +185,10 @@ def test_file_permissions(token_dir) -> None:
 def test_store_overwrites_existing(token_dir) -> None:
     """Storing a token for the same server overwrites the old one.
 
-    Re-running ``omnigent login`` should update the token, not
+    Re-running ``goalrail login`` should update the token, not
     append.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -212,7 +211,7 @@ def test_multiple_servers(token_dir) -> None:
 
     A user may have accounts on multiple servers.
     """
-    from omnigent.cli_auth import load_token, store_token
+    from goalrail.cli_auth import load_token, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -237,10 +236,10 @@ def test_multiple_servers(token_dir) -> None:
 def test_store_and_load_databricks_record(token_dir) -> None:
     """A stored Databricks pointer record resolves back to its workspace.
 
-    ``omnigent login <apps-url>`` stores the record; the server-auth
+    ``goalrail login <apps-url>`` stores the record; the server-auth
     chain looks up the workspace host to mint fresh tokens.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host, store_databricks_auth
+    from goalrail.cli_auth import load_databricks_workspace_host, store_databricks_auth
 
     store_databricks_auth(
         server_url="https://myapp-123.aws.databricksapps.com",
@@ -262,7 +261,7 @@ def test_load_token_returns_none_for_databricks_record(token_dir) -> None:
     stores only the workspace host. If load_token returned anything here,
     the JWT path would send a garbage Authorization header.
     """
-    from omnigent.cli_auth import load_token, store_databricks_auth
+    from goalrail.cli_auth import load_token, store_databricks_auth
 
     store_databricks_auth(
         server_url="https://myapp-123.aws.databricksapps.com",
@@ -280,7 +279,7 @@ def test_load_databricks_host_returns_none_for_jwt_record(token_dir) -> None:
     """
     import time
 
-    from omnigent.cli_auth import load_databricks_workspace_host, store_token
+    from goalrail.cli_auth import load_databricks_workspace_host, store_token
 
     store_token(
         server_url="http://localhost:8000",
@@ -298,7 +297,7 @@ def test_databricks_record_normalizes_workspace_trailing_slash(token_dir) -> Non
     ``Config(host=...)`` treats ``https://ws`` and ``https://ws/`` as
     distinct cache keys in some SDK paths — store one canonical form.
     """
-    from omnigent.cli_auth import load_databricks_workspace_host, store_databricks_auth
+    from goalrail.cli_auth import load_databricks_workspace_host, store_databricks_auth
 
     store_databricks_auth(
         server_url="https://myapp-123.aws.databricksapps.com/",
@@ -319,7 +318,7 @@ def test_databricks_record_overwrites_jwt_record(token_dir) -> None:
     """
     import time
 
-    from omnigent.cli_auth import (
+    from goalrail.cli_auth import (
         load_databricks_workspace_host,
         load_token,
         store_databricks_auth,

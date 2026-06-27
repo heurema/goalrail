@@ -18,7 +18,7 @@ permissions:
 env:
   # No ap-web SPA build during `uv sync` (setup.py _build_web_ui): this job never
   # serves the bundle, and the build otherwise times out on public npm.
-  OMNIGENT_SKIP_WEB_UI: "true"
+  GOALRAIL_SKIP_WEB_UI: "true"
   # Route uv and pip at PyPI. pre-commit installs hook repos via pip (not uv),
   # so PIP_INDEX_URL is needed even though the workflow only invokes uv.
   UV_INDEX_URL: https://pypi.org/simple

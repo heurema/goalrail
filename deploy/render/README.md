@@ -7,7 +7,7 @@ handles SSL automatically. No local tooling required.
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/heurema/goalrail)
 
 > **Note:** The button points at the public repo `github.com/heurema/goalrail`.
-> It goes live once that repo **and** the `ghcr.io/omnigent-ai/omnigent-server`
+> It goes live once that repo **and** the `ghcr.io/heurema/goalrail-server`
 > package are public; until then it only works if you connect Render to the
 > (private) repo in the dashboard first.
 
@@ -15,12 +15,12 @@ handles SSL automatically. No local tooling required.
 
 The `render.yaml` blueprint at the repo root defines:
 
-- **omnigent** (Starter web service) — pulls the pre-built image
-  `ghcr.io/omnigent-ai/omnigent-server:latest` (CI-built; ships the web UI
-  bundle), served on `https://omnigent-<hash>.onrender.com`. While the GHCR
+- **goalrail** (Starter web service) — pulls the pre-built image
+  `ghcr.io/heurema/goalrail-server:latest` (CI-built; ships the web UI
+  bundle), served on `https://goalrail-<hash>.onrender.com`. While the GHCR
   package is private, add a Render registry credential and reference it from
   `render.yaml` (`image.creds`); once public, the pull is anonymous.
-- **omnigent-db** (`basic-256mb` managed Postgres) — `DATABASE_URL` is injected
+- **goalrail-db** (`basic-256mb` managed Postgres) — `DATABASE_URL` is injected
   into the service automatically
 - **artifact-data** (10 GB persistent disk) — mounted at `/data` so server
   config, first-boot credentials, cookie secrets, and agent artifacts survive
@@ -45,7 +45,7 @@ mints its own cookie secret and auto-detects its public URL from Render.
    invite teammates from **Members** in the web UI.
 
 > To set a known admin password instead of the generated one, add
-> `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD` in the dashboard before first boot.
+> `GOALRAIL_ACCOUNTS_INIT_ADMIN_PASSWORD` in the dashboard before first boot.
 
 ## Use your own IdP instead (OIDC)
 
@@ -56,23 +56,23 @@ automatically by Render.
 ### GitHub OAuth (simplest to register)
 
 1. Go to `github.com/settings/developers` → **New OAuth App**.
-   - Homepage URL: `https://omnigent-<hash>.onrender.com`
+   - Homepage URL: `https://goalrail-<hash>.onrender.com`
    - Authorization callback URL:
-     `https://omnigent-<hash>.onrender.com/auth/callback`
+     `https://goalrail-<hash>.onrender.com/auth/callback`
    - Click **Register application**, then **Generate a new client secret**.
 
-2. In the Render dashboard, open the **omnigent** service → **Environment**
+2. In the Render dashboard, open the **goalrail** service → **Environment**
    and add / update these variables:
 
    | Variable | Value |
    |---|---|
-   | `OMNIGENT_AUTH_PROVIDER` | `oidc` |
-   | `OMNIGENT_OIDC_ISSUER` | `https://github.com` |
-   | `OMNIGENT_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
-   | `OMNIGENT_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
-   | `OMNIGENT_OIDC_REDIRECT_URI` | `https://omnigent-<hash>.onrender.com/auth/callback` |
+   | `GOALRAIL_AUTH_PROVIDER` | `oidc` |
+   | `GOALRAIL_OIDC_ISSUER` | `https://github.com` |
+   | `GOALRAIL_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
+   | `GOALRAIL_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
+   | `GOALRAIL_OIDC_REDIRECT_URI` | `https://goalrail-<hash>.onrender.com/auth/callback` |
 
-   Also add `OMNIGENT_OIDC_COOKIE_SECRET` = a 64-hex-char value from
+   Also add `GOALRAIL_OIDC_COOKIE_SECRET` = a 64-hex-char value from
    `openssl rand -hex 32` — OIDC mode requires it and validates it as hex.
 
 3. Click **Save Changes**. Render redeploys automatically. Visit the URL —
@@ -82,30 +82,30 @@ automatically by Render.
 
 | Variable | Value |
 |---|---|
-| `OMNIGENT_AUTH_PROVIDER` | `oidc` |
-| `OMNIGENT_OIDC_ISSUER` | `https://accounts.google.com` |
-| `OMNIGENT_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
-| `OMNIGENT_OIDC_CLIENT_SECRET` | your client secret |
-| `OMNIGENT_OIDC_REDIRECT_URI` | `https://omnigent-<hash>.onrender.com/auth/callback` |
-| `OMNIGENT_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
+| `GOALRAIL_AUTH_PROVIDER` | `oidc` |
+| `GOALRAIL_OIDC_ISSUER` | `https://accounts.google.com` |
+| `GOALRAIL_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
+| `GOALRAIL_OIDC_CLIENT_SECRET` | your client secret |
+| `GOALRAIL_OIDC_REDIRECT_URI` | `https://goalrail-<hash>.onrender.com/auth/callback` |
+| `GOALRAIL_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
 
-> **Important:** Without `OMNIGENT_OIDC_ALLOWED_DOMAINS`, any Google account
+> **Important:** Without `GOALRAIL_OIDC_ALLOWED_DOMAINS`, any Google account
 > can log in when the OAuth consent screen is "External." Always restrict to
 > your domain.
 
 ### Generic OIDC (Okta, Auth0, Keycloak, Entra ID)
 
-Set `OMNIGENT_OIDC_ISSUER` to your IdP's base URL (the one that publishes
+Set `GOALRAIL_OIDC_ISSUER` to your IdP's base URL (the one that publishes
 `/.well-known/openid-configuration`). The rest of the variables are the same
 as above.
 
 ## Custom domain
 
-In the Render dashboard, open the **omnigent** service → **Settings** →
+In the Render dashboard, open the **goalrail** service → **Settings** →
 **Custom Domains** → **Add Custom Domain**. Point your DNS CNAME at the
 Render-assigned address. Render provisions a Let's Encrypt cert automatically.
 
-Update `OMNIGENT_OIDC_REDIRECT_URI` to use the custom domain after DNS
+Update `GOALRAIL_OIDC_REDIRECT_URI` to use the custom domain after DNS
 propagates.
 
 ## Upgrading
@@ -113,7 +113,7 @@ propagates.
 Render redeploys automatically when a new commit lands on the connected branch
 (if auto-deploy is enabled), or manually:
 
-1. In the Render dashboard, open the **omnigent** service.
+1. In the Render dashboard, open the **goalrail** service.
 2. Click **Manual Deploy** → **Deploy latest commit**.
 
 ## Cost

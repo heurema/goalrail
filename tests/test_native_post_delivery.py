@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from omnigent._native_post_delivery import post_may_have_been_delivered
+from goalrail._native_post_delivery import post_may_have_been_delivered
 
 
 @pytest.mark.parametrize(

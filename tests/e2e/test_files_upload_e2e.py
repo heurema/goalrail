@@ -52,7 +52,7 @@ def _bound_session_with_file(
     """
     Create a runner-bound session, upload the file.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param agent_name: Registered agent name.
     :param runner_id: Live runner id to bind the session to.
     :param file_path: Path to the file to upload.
@@ -85,7 +85,7 @@ def _send_and_poll(
     Post a user message (text + ``input_file``) to the session and
     poll the snapshot until terminal, returning lowercased text.
 
-    :param client: HTTP client pointed at the Omnigent server.
+    :param client: HTTP client pointed at the Goalrail server.
     :param session_id: Runner-bound session that owns the file.
     :param file_id: The uploaded file ID.
     :param question: The question to ask about the file.

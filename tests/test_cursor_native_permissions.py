@@ -29,9 +29,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import cursor_native_bridge as cnb
-from omnigent import cursor_native_permissions as cnp
-from omnigent.cursor_native_permissions import (
+from goalrail import cursor_native_bridge as cnb
+from goalrail import cursor_native_permissions as cnp
+from goalrail.cursor_native_permissions import (
     CursorApprovalPrompt,
     CursorPendingToolCall,
     cursor_tool_call_elicitation_id,
@@ -87,7 +87,7 @@ async def test_run_one_approval_posts_then_sends_verdict_keystroke(
     prompt = CursorApprovalPrompt(
         operation_type="shell",
         message="Cursor wants to run Shell",
-        preview="echo omnigent_probe > out.txt",
+        preview="echo goalrail_probe > out.txt",
         accept_key="y",
         decline_key="Escape",
     )
@@ -234,7 +234,7 @@ def test_iter_embedded_json_recovers_from_enclosing_garbage() -> None:
     jump past the whole failed span (which dropped genuinely-pending tool calls,
     e.g. MCP, in big frames).
     """
-    inner = _json.dumps(_pending_tool_call_obj("call_mcp\nfc", "omnigent-list_comments", {"x": 1}))
+    inner = _json.dumps(_pending_tool_call_obj("call_mcp\nfc", "goalrail-list_comments", {"x": 1}))
     # Leading "{"k": … <inner> … bad}" balances at the trailing brace but fails
     # to parse; the genuine object is nested inside it.
     raw = b'{"k": ' + inner.encode("utf-8") + b" trailing-bad}"
@@ -245,7 +245,7 @@ def test_iter_embedded_json_recovers_from_enclosing_garbage() -> None:
         for p in (o.get("content") or [])
         if isinstance(p, dict) and p.get("type") == "tool-call"
     ]
-    assert "omnigent-list_comments" in names
+    assert "goalrail-list_comments" in names
 
 
 def test_read_pending_detects_framed_gated_tool_call(tmp_path: Path) -> None:

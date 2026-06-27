@@ -9,9 +9,9 @@ description: >
 # executor.model and an executor.auth api-key block are stamped per-test by
 # register_dir_agent_with_mock_llm so the openai-agents harness hits the mock
 # LLM server. config.harness is required: without it the runner computes
-# harness="omnigent" and produces no output (see compaction-test fixture).
+# harness="goalrail" and produces no output (see compaction-test fixture).
 executor:
-  type: omnigent
+  type: goalrail
   model: mock-model
   config:
     harness: openai-agents

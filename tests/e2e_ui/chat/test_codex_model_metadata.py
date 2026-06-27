@@ -43,7 +43,7 @@ def _patch_session_as_codex_native(page: Page, session_id: str) -> list[dict]:
             payload = dict(latest_payload or {})
             if "collaboration_mode" in request_body:
                 labels = dict(payload.get("labels", {}))
-                labels["omnigent.codex_native.collaboration_mode"] = request_body[
+                labels["goalrail.codex_native.collaboration_mode"] = request_body[
                     "collaboration_mode"
                 ]
                 payload["labels"] = labels
@@ -53,7 +53,7 @@ def _patch_session_as_codex_native(page: Page, session_id: str) -> list[dict]:
 
         payload["labels"] = {
             **payload.get("labels", {}),
-            "omnigent.wrapper": "codex-native-ui",
+            "goalrail.wrapper": "codex-native-ui",
         }
         payload["harness"] = "codex"
         payload["llm_model"] = "gpt-5.5"
@@ -136,7 +136,7 @@ def test_codex_native_plan_mode_toggle_uses_codex_session_patch(
 
     The browser must expose the Plan button only for the codex-native wrapper,
     send the typed ``collaboration_mode`` field, and render the persistent status
-    badge from Codex's raw ``omnigent.codex_native.collaboration_mode`` label
+    badge from Codex's raw ``goalrail.codex_native.collaboration_mode`` label
     returned by the session snapshot.
 
     :param page: Playwright page fixture.

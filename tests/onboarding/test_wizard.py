@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.onboarding.wizard`."""
+"""Tests for :mod:`goalrail.onboarding.wizard`."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from omnigent.onboarding import wizard as wizard_mod
+from goalrail.onboarding import wizard as wizard_mod
 
 
 def test_agents_dir_uses_goalrail_config_home(
@@ -16,7 +16,6 @@ def test_agents_dir_uses_goalrail_config_home(
     """Wizard-generated agents live beside the effective user config."""
     config_home = tmp_path / "goalrail-config"
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
 
     assert wizard_mod._agents_dir() == config_home / "agents"
 
@@ -29,14 +28,13 @@ def test_save_yaml_uses_goalrail_config_home(
     config_home = tmp_path / "goalrail-config"
     legacy_home = tmp_path / "home"
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
     monkeypatch.setenv("HOME", str(legacy_home))
 
     path = wizard_mod._save_yaml("name: test\n", "agent.yaml")
 
     assert path == config_home / "agents" / "agent.yaml"
     assert path.read_text(encoding="utf-8") == "name: test\n"
-    assert not (legacy_home / ".omnigent" / "agents").exists()
+    assert not (legacy_home / ".goalrail" / "agents").exists()
 
 
 def test_global_auth_prompt_uses_goalrail_product_name(
@@ -60,4 +58,4 @@ def test_global_auth_prompt_uses_goalrail_product_name(
     printed = " ".join(str(call.args[0]) for call in console.print.call_args_list if call.args)
     assert auth == {"type": "api_key", "api_key": "sk-test"}
     assert "How will Goalrail authenticate with the LLM?" in printed
-    assert "omnigent authenticate" not in printed
+    assert "goalrail authenticate" not in printed

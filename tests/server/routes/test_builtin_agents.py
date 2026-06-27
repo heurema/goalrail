@@ -10,8 +10,8 @@ from __future__ import annotations
 import httpx
 import pytest_asyncio
 
-from omnigent.db.utils import generate_agent_id
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from goalrail.db.utils import generate_agent_id
+from goalrail.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
 
 
 @pytest_asyncio.fixture()

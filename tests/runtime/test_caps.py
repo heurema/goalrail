@@ -1,11 +1,11 @@
-"""Tests for omnigent.runtime.caps."""
+"""Tests for goalrail.runtime.caps."""
 
 from __future__ import annotations
 
 import pytest
 
-from omnigent.runtime.caps import RuntimeCaps
-from omnigent.spec.types import ExecutorSpec
+from goalrail.runtime.caps import RuntimeCaps
+from goalrail.spec.types import ExecutorSpec
 
 
 def test_runtime_caps_default_value() -> None:
