@@ -357,6 +357,11 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
+def _display_data_log_dir(name: str) -> str:
+    """Return the effective data-home log directory for user-facing messages."""
+    return f"{_display_path(data_home_path() / 'logs' / name)}/"
+
+
 def _display_config_path(path: Path) -> str:
     """
     Format a config path for display, collapsing the home prefix to ``~``.
@@ -2576,13 +2581,13 @@ def _discover_local_server_url(
         if not _host_daemon_alive():
             raise click.ClickException(
                 "The local daemon exited before its Goalrail server became ready. "
-                "See logs under ~/.omnigent/logs/host-daemon/ and "
-                "~/.omnigent/logs/server/."
+                f"See logs under {_display_data_log_dir('host-daemon')} and "
+                f"{_display_data_log_dir('server')}."
             )
         time.sleep(0.2)
     raise click.ClickException(
         f"Timed out after {timeout:.0f}s waiting for the local Goalrail server to "
-        "start. See ~/.omnigent/logs/server/ for details."
+        f"start. See {_display_data_log_dir('server')} for details."
     )
 
 

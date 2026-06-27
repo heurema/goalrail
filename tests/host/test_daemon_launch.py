@@ -11,6 +11,8 @@ refused status poll killed ``omnigent run`` with a bare
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 import httpx
 import pytest
@@ -241,6 +243,30 @@ async def test_wait_for_runner_online_deadline_reports_last_connect_error(
     # "did not connect" with no clue the server was refusing TCP.
     assert "Last connection error" in message
     assert "connection refused" in message
+
+
+async def test_wait_for_runner_online_timeout_reports_effective_log_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fast_poll: None,
+) -> None:
+    """Runner timeout guidance should name the effective host-runner log dir."""
+    data_home = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    handler = _FlakyThenOnline(
+        failures=0,
+        body={"runner_id": "runner_abc123", "online": False},
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), base_url="http://test"
+    ) as client:
+        with pytest.raises(click.ClickException) as excinfo:
+            await wait_for_runner_online(client, "runner_abc123", timeout_s=0.05)
+
+    message = str(excinfo.value)
+    assert str(data_home / "logs" / "host-runner") in message
+    assert "~/.omnigent/logs/host-runner" not in message
 
 
 async def test_wait_for_host_online_polls_through_transient_connect_errors(

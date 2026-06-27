@@ -15,15 +15,30 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import click
 import httpx
 
+from omnigent._env_compat import data_home_path
 from omnigent.claude_native_bridge import url_component
 
 # Poll cadence while waiting for a daemon-spawned runner to connect its
 # tunnel or for a resource to appear.
 DAEMON_POLL_INTERVAL_S = 0.5
+
+
+def _display_path(path: Path) -> str:
+    """Format a filesystem path for display, collapsing the home prefix to ``~``."""
+    try:
+        return f"~/{path.relative_to(Path.home())}"
+    except ValueError:
+        return str(path)
+
+
+def _display_host_runner_log_dir() -> str:
+    """Return the effective host-runner log directory for user-facing messages."""
+    return f"{_display_path(data_home_path() / 'logs' / 'host-runner')}/"
 
 
 def _json_body(resp: httpx.Response) -> dict[str, object]:
@@ -159,7 +174,7 @@ async def wait_for_runner_online(
     message = f"Runner {runner_id!r} did not connect within {timeout_s:.0f}s."
     if last_error is not None:
         message += f" Last connection error: {last_error!r}."
-    message += " Check the host-runner logs under ~/.omnigent/logs/host-runner/."
+    message += f" Check the host-runner logs under {_display_host_runner_log_dir()}."
     raise click.ClickException(message)
 
 

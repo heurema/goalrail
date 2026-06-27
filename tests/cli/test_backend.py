@@ -1282,6 +1282,25 @@ def test_discover_local_server_url_raises_when_daemon_dead(
     assert "Omnigent server" not in str(excinfo.value)
 
 
+def test_discover_local_server_url_dead_daemon_reports_effective_log_dirs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dead-daemon guidance should name the effective Goalrail data log dirs."""
+    data_home = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
+    monkeypatch.setattr(cli, "_host_daemon_alive", lambda: False)
+
+    with pytest.raises(click.ClickException) as excinfo:
+        _discover_local_server_url(timeout=5.0)
+
+    message = str(excinfo.value)
+    assert str(data_home / "logs" / "host-daemon") in message
+    assert str(data_home / "logs" / "server") in message
+    assert "~/.omnigent/logs" not in message
+
+
 def test_discover_local_server_url_timeout_uses_goalrail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1292,6 +1311,24 @@ def test_discover_local_server_url_timeout_uses_goalrail(
     with pytest.raises(click.ClickException, match="local Goalrail server") as excinfo:
         _discover_local_server_url(timeout=0.0)
     assert "local Omnigent server" not in str(excinfo.value)
+
+
+def test_discover_local_server_url_timeout_reports_effective_log_dir(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Timeout guidance should name the effective Goalrail server log dir."""
+    data_home = tmp_path / "goalrail-data"
+    monkeypatch.setenv("GOALRAIL_DATA_DIR", str(data_home))
+    monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
+    monkeypatch.setattr(cli, "_host_daemon_alive", lambda: True)
+
+    with pytest.raises(click.ClickException) as excinfo:
+        _discover_local_server_url(timeout=0.0)
+
+    message = str(excinfo.value)
+    assert str(data_home / "logs" / "server") in message
+    assert "~/.omnigent/logs" not in message
 
 
 def _fake_run_claude_native_capture(captured: dict[str, object]) -> Any:
