@@ -115,6 +115,10 @@ def _harnesses_installed(monkeypatch):
         lambda family: True,
     )
     monkeypatch.setattr(
+        "omnigent.onboarding.harness_install.harness_cli_logged_in",
+        lambda family: False,
+    )
+    monkeypatch.setattr(
         "omnigent.onboarding.harness_install.harness_logout",
         lambda family: True,
     )

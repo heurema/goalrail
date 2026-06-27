@@ -9,18 +9,38 @@ fails here.
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
-from scripts import update_versions
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_SCRIPT_PATH = _REPO_ROOT / "scripts" / "update_versions.py"
 _PYPROJECTS = [
     "pyproject.toml",
     "sdks/python-client/pyproject.toml",
     "sdks/ui/pyproject.toml",
 ]
+
+
+def _load_update_versions_module() -> ModuleType:
+    """Import ``scripts/update_versions.py`` directly from its file path."""
+    spec = importlib.util.spec_from_file_location(
+        "scripts_update_versions",
+        _SCRIPT_PATH,
+    )
+    assert spec is not None and spec.loader is not None, (
+        f"Could not locate update_versions.py at {_SCRIPT_PATH}."
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["scripts_update_versions"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+update_versions = _load_update_versions_module()
 
 
 @pytest.fixture
