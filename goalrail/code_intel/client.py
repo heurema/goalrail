@@ -29,15 +29,12 @@ this for compatibility but do not treat it as the desired end state —
 from __future__ import annotations
 
 import json
-import logging
 import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TypeAlias
-
-_logger = logging.getLogger(__name__)
 
 # Binary names to probe, in preference order. The engine is being
 # renamed ``codebase-memory-mcp`` -> ``code-intel-memory``; both are
@@ -71,7 +68,8 @@ class _SessionContext(Protocol):
     """
 
     @property
-    def sandbox_root(self) -> Path | None: ...
+    def sandbox_root(self) -> Path | None:
+        pass
 
 
 # ── Errors ────────────────────────────────────────────────

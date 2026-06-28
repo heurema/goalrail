@@ -5440,6 +5440,98 @@ def test_session_create_is_runner_local() -> None:
     assert should_dispatch_locally("sys_session_create") is True
 
 
+def test_code_intel_tools_are_runner_local_and_native_relayed_when_declared() -> None:
+    """
+    ``code_index_status`` / ``code_search`` are first-party builtins that the
+    runner must execute locally. Native harnesses see them through the relay
+    only when the spec declares them, matching ToolManager's builtin gate.
+    """
+    from goalrail.runner.tool_dispatch import _NATIVE_RELAY_BUILTIN_TOOLS, should_dispatch_locally
+    from goalrail.spec.types import BuiltinToolConfig, ToolsConfig
+    from goalrail.tools.manager import ToolManager
+
+    assert should_dispatch_locally("code_index_status") is True
+    assert should_dispatch_locally("code_search") is True
+
+    spec = AgentSpec(
+        spec_version=1,
+        tools=ToolsConfig(
+            builtins=[
+                BuiltinToolConfig(name="code_index_status"),
+                BuiltinToolConfig(name="code_search"),
+            ],
+        ),
+    )
+    schema_names = {schema["function"]["name"] for schema in ToolManager(spec).get_tool_schemas()}
+    relayed = schema_names & _NATIVE_RELAY_BUILTIN_TOOLS
+
+    assert {"code_index_status", "code_search"} <= relayed
+
+
+@pytest.mark.asyncio
+async def test_code_intel_dispatch_invokes_builtin_with_runner_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Runner dispatch executes code-intel builtins with ``runner_workspace`` as
+    the trusted sandbox root. A regression here falls through to
+    spec-callable dispatch and returns "not in local dispatch table".
+    """
+    from goalrail.code_intel.client import _BINARY_ENV_VAR
+    from goalrail.runner.tool_dispatch import execute_tool
+
+    repo = (tmp_path / "repo").resolve()
+    repo.mkdir()
+    fake_engine = tmp_path / "fake-code-intel"
+    fake_engine.write_text(
+        """#!/usr/bin/env python3
+import json
+import os
+import sys
+
+tool = sys.argv[2] if len(sys.argv) > 2 else ""
+args = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
+root = os.environ["FAKE_CODE_INTEL_ROOT"]
+
+if tool == "list_projects":
+    print(json.dumps({"projects": [{"name": "proj", "root_path": root, "nodes": 5, "edges": 8}]}))
+    sys.exit(0)
+
+if tool == "search_graph":
+    print(json.dumps({"total": 1, "results": [{
+        "name": args.get("name_pattern", ""),
+        "qualified_name": "pkg.mod." + args.get("name_pattern", ""),
+        "label": "Function",
+        "file_path": "pkg/mod.py",
+        "signature": "()",
+        "return_type": "int",
+    }]}))
+    sys.exit(0)
+
+print(json.dumps({"error": "unknown_tool", "message": tool}), file=sys.stderr)
+sys.exit(2)
+"""
+    )
+    fake_engine.chmod(0o755)
+    monkeypatch.setenv(_BINARY_ENV_VAR, str(fake_engine))
+    monkeypatch.setenv("FAKE_CODE_INTEL_ROOT", str(repo))
+
+    output = await execute_tool(
+        tool_name="code_search",
+        arguments=json.dumps({"query": "widget"}),
+        conversation_id="conv_code_intel",
+        task_id="task_code_intel",
+        agent_id="agent_code_intel",
+        runner_workspace=repo,
+    )
+
+    result = json.loads(output)
+    assert result["repo_root"] == str(repo)
+    assert result["query"] == "widget"
+    assert result["results"][0]["qualified_name"] == "pkg.mod.widget"
+
+
 @pytest.mark.asyncio
 async def test_session_list_global_sessions_filter_and_connectivity() -> None:
     """
