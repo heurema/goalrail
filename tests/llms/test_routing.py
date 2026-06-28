@@ -75,12 +75,6 @@ def test_unknown_provider_raises() -> None:
         parse_model_string("foobar/some-model")
 
 
-def test_removed_legacy_gateway_model_prefix_raises() -> None:
-    legacy_model = "databricks-gpt-5-4"
-    with pytest.raises(GoalrailError, match="Legacy gateway-prefixed model ids"):
-        parse_model_string(legacy_model)
-
-
 # ── infer_harness_from_model ─────────────────────────────────────────────────
 
 

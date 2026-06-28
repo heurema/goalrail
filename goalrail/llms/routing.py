@@ -31,7 +31,6 @@ PROVIDER_CONFIGS: dict[str, str | None] = {
 }
 
 _DEFAULT_PROVIDER = "openai"
-_REMOVED_LEGACY_MODEL_PREFIXES = ("databricks-",)
 
 
 @dataclass
@@ -60,13 +59,6 @@ def parse_model_string(model: str) -> RoutedModel:
     :returns: A :class:`RoutedModel` with ``provider`` and ``model``.
     :raises GoalrailError: If the provider prefix is not recognized.
     """
-    if model.lower().startswith(_REMOVED_LEGACY_MODEL_PREFIXES):
-        raise GoalrailError(
-            "Legacy gateway-prefixed model ids are no longer supported. Configure an explicit "
-            "provider/model id or a provider-backed base_url instead.",
-            code=ErrorCode.INVALID_INPUT,
-        )
-
     if "/" in model:
         provider, model_name = model.split("/", 1)
     else:
