@@ -4,9 +4,8 @@ import { ThemeProvider as NextThemesProvider } from "next-themes";
 /**
  * App-wide theme provider configured for Tailwind's `.dark` class variant.
  *
- * Defaults to system preference and stores explicit user selection under
- * an ap-web-specific key so it does not collide with unrelated local apps
- * on the same host.
+ * Forces Goalrail's single Dracula palette and stores under an ap-web-specific
+ * key so it does not collide with unrelated local apps on the same host.
  *
  * @param children React tree that should inherit theme context.
  * @returns React provider wrapping the app.
@@ -15,8 +14,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return (
     <NextThemesProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      forcedTheme="dark"
+      enableSystem={false}
       disableTransitionOnChange
       storageKey="ap-web-theme"
     >

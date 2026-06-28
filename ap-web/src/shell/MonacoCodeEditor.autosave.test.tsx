@@ -97,7 +97,7 @@ vi.mock("./monacoSetup", () => ({
   ensureMonacoReady: vi.fn(() => Promise.resolve()),
   ensureLanguage: vi.fn(() => Promise.resolve()),
   monacoLanguageId: vi.fn((lang: string) => lang),
-  resolvedThemeToMonaco: vi.fn(() => "github-light"),
+  resolvedThemeToMonaco: vi.fn(() => "dracula"),
 }));
 // Comment layer is unrelated to save wiring and needs a large editor surface.
 vi.mock("./useMonacoCommentLayer", () => ({ useMonacoCommentLayer: () => null }));

@@ -83,7 +83,7 @@ vi.mock("./monacoSetup", () => ({
   ensureMonacoReady: vi.fn(() => Promise.resolve()),
   ensureLanguage: vi.fn(() => Promise.resolve()),
   monacoLanguageId: vi.fn((lang: string) => lang),
-  resolvedThemeToMonaco: vi.fn(() => "github-light"),
+  resolvedThemeToMonaco: vi.fn(() => "dracula"),
 }));
 vi.mock("./useMonacoCommentLayer", () => ({ useMonacoCommentLayer: () => null }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));

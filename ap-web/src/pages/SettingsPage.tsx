@@ -9,8 +9,7 @@
  *
  * Sections:
  *
- * - **Appearance** — theme mode (System / Light / Dark). This is the new
- *   home of the theme control that used to sit in the sidebar header.
+ * - **Appearance** — current app theme.
  * - **Keyboard shortcuts** — the full shortcuts reference, shown inline.
  * - **Account** — only when the accounts auth provider is active. Absorbs
  *   the old sidebar AccountMenu: signed-in identity, admin-only Members /
@@ -24,13 +23,12 @@ import {
   ArchiveRestoreIcon,
   KeyRoundIcon,
   LogOutIcon,
+  MoonIcon,
   ShieldCheckIcon,
   Trash2Icon,
   UserCogIcon,
   UsersIcon,
 } from "lucide-react";
-import { LaptopMinimalIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { Link } from "@/lib/routing";
 import { PageScroll } from "@/components/PageScroll";
 import { Button } from "@/components/ui/button";
@@ -55,9 +53,6 @@ import {
 import { conversationDisplayLabel } from "@/shell/sidebarNav";
 import { absoluteTime } from "@/lib/relativeTime";
 import { useSettingsRoute } from "@/shell/settingsNav";
-import { type ThemeMode, normalizeThemeMode } from "@/components/theme/themeMode";
-import { useIsEmbedded } from "@/lib/embedded";
-import { cn } from "@/lib/utils";
 
 /**
  * Settings content panel. The section nav lives in the sidebar card
@@ -100,49 +95,21 @@ function Section({
   );
 }
 
-const themeCards: { mode: ThemeMode; label: string; icon: typeof SunIcon }[] = [
-  { mode: "system", label: "System", icon: LaptopMinimalIcon },
-  { mode: "light", label: "Light", icon: SunIcon },
-  { mode: "dark", label: "Dark", icon: MoonIcon },
-];
-
 function AppearanceSection() {
-  // Embedded: the host owns the theme (embed.tsx forces light), so the
-  // selector would be a no-op — match ThemeModeMenu and hide it.
-  const isEmbedded = useIsEmbedded();
-  const { theme, setTheme } = useTheme();
-  const mode = normalizeThemeMode(theme);
-
   return (
-    <Section title="Appearance" description="Choose how Goalrail looks on this device.">
-      {isEmbedded ? (
-        <p className="text-sm text-muted-foreground">
-          Appearance is controlled by the host application.
-        </p>
-      ) : (
-        <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Theme">
-          {themeCards.map(({ mode: cardMode, label, icon: Icon }) => {
-            const selected = mode === cardMode;
-            return (
-              <button
-                key={cardMode}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                data-testid={`theme-${cardMode}`}
-                onClick={() => setTheme(cardMode)}
-                className={cn(
-                  "flex flex-col items-center gap-2 rounded-lg border-2 p-4 transition-colors hover:bg-muted",
-                  selected ? "border-primary bg-primary/5" : "border-border",
-                )}
-              >
-                <Icon className="size-6 text-muted-foreground" />
-                <span className="text-sm font-medium">{label}</span>
-              </button>
-            );
-          })}
+    <Section title="Appearance" description="Current Goalrail theme.">
+      <div
+        data-testid="theme-dracula"
+        className="flex items-center gap-3 rounded-lg border border-border bg-card p-4"
+      >
+        <div className="flex size-10 items-center justify-center rounded-md bg-accent/15 text-brand-accent">
+          <MoonIcon className="size-5" />
         </div>
-      )}
+        <div>
+          <p className="text-sm font-medium">Dracula</p>
+          <p className="text-sm text-muted-foreground">#282A36 / #FF79C6 / #F8F8F2</p>
+        </div>
+      </div>
     </Section>
   );
 }

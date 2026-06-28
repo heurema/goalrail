@@ -8,28 +8,16 @@
       /* Design tokens lifted from ap-web/src/index.css (:root and .dark) so
          this bundled page matches the web UI it hands off to. */
       :root {
-        color-scheme: light dark;
-        --background: #fff;
-        --foreground: #11171c;
-        --muted-foreground: #6f6f6f;
-        --border: #e8ecf0;
-        --primary: #11171c;
-        --primary-foreground: #fff;
-        --destructive: #c8324c;
-        --ring: #11171c;
+        color-scheme: dark;
+        --background: #282a36;
+        --foreground: #f8f8f2;
+        --muted-foreground: #cfcfc7;
+        --border: #44475a;
+        --primary: #f8f8f2;
+        --primary-foreground: #282a36;
+        --destructive: #ff5555;
+        --ring: #ff79c6;
         --radius-lg: 0.5rem;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --background: #1e1927;
-          --foreground: oklch(0.965 0.003 240);
-          --muted-foreground: #92a4b3;
-          --border: oklch(0.28 0.005 240);
-          --primary: #e8ecf0;
-          --primary-foreground: #11171c;
-          --destructive: #e65b77;
-          --ring: #e8ecf0;
-        }
       }
       * {
         box-sizing: border-box;
@@ -41,7 +29,7 @@
         align-items: center;
         justify-content: center;
         font-family:
-          ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+          "Satoshi", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
           "Segoe UI Symbol", "Noto Color Emoji";
         background: var(--background);
         color: var(--foreground);

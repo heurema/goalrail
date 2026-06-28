@@ -138,31 +138,26 @@ describe("loadWebglRenderer", () => {
 });
 
 describe("terminalTheme", () => {
-  it("uses a light ANSI bright-black in light mode", () => {
+  it("uses Dracula tokens in light mode too", () => {
     const theme = terminalTheme(false);
 
-    // Codex paints its prompt/input band with ANSI gray. In the web light
-    // theme that gray must be a pale surface so dark prompt text remains
-    // readable.
-    expect(theme.background).toBe("#ffffff");
-    expect(theme.foreground).toBe("#18181b");
-    expect(theme.brightBlack).toBe("#e4e4e7");
-
-    // CLIs that assume a dark terminal paint primary text with ANSI
-    // white / bright-white. On the white card background those slots must
-    // be dark, or the text renders white-on-white and disappears.
-    expect(theme.white).toBe("#3f3f46");
-    expect(theme.brightWhite).toBe("#18181b");
+    // Goalrail is dark-only now, so even callers that still pass `false`
+    // must get the same Dracula terminal palette.
+    expect(theme.background).toBe("#282a36");
+    expect(theme.foreground).toBe("#f8f8f2");
+    expect(theme.cursor).toBe("#ff79c6");
+    expect(theme.green).toBe("#50fa7b");
+    expect(theme.red).toBe("#ff5555");
   });
 
-  it("keeps dark mode terminal surfaces dark", () => {
+  it("uses Dracula tokens in dark mode", () => {
     const theme = terminalTheme(true);
 
-    // Dark mode should retain the terminal-like contrast the rest of the
-    // app expects rather than inheriting the light prompt-band treatment.
-    expect(theme.background).toBe("#131517");
-    expect(theme.foreground).toBe("#e4e4e7");
-    expect(theme.brightBlack).toBe("#71717a");
+    expect(theme.background).toBe("#282a36");
+    expect(theme.foreground).toBe("#f8f8f2");
+    expect(theme.cursor).toBe("#ff79c6");
+    expect(theme.brightGreen).toBe("#50fa7b");
+    expect(theme.brightRed).toBe("#ff5555");
   });
 });
 

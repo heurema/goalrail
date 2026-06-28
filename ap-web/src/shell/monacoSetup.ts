@@ -6,7 +6,7 @@
 //      network-restricted deployments, so @monaco-editor/react's default
 //      CDN AMD loader would fail; loader.config({ monaco }) points it at the
 //      bundled ESM instance instead.
-//   2. Drive tokenization and theming from Shiki (github-light/github-dark)
+//   2. Drive tokenization and theming from Shiki (Dracula)
 //      via @shikijs/monaco so editor colors match the read-only Shiki views
 //      and chat code blocks. Monaco's own Monarch tokenizers and language
 //      services are left unused.
@@ -35,8 +35,8 @@ import "monaco-editor/esm/vs/editor/edcore.main.js";
 import type { ResolvedThemeMode } from "@/components/theme/themeMode";
 
 // Shiki theme ids registered into Monaco; identical to the read-only viewer.
-const LIGHT_THEME = "github-light";
-const DARK_THEME = "github-dark";
+const LIGHT_THEME = "dracula";
+const DARK_THEME = "dracula";
 
 // Monaco reads this global to construct its workers. The global is declared by
 // monaco's own types (editor.api.d.ts), so no augmentation is needed. Set once
@@ -76,7 +76,7 @@ export { monaco };
 export type MonacoModule = typeof monaco;
 
 /**
- * Create the Shiki highlighter (github light + dark) once and register its
+ * Create the Shiki highlighter (Dracula) once and register its
  * themes with Monaco. Idempotent — repeated calls return the same promise, so
  * every editor instance shares one highlighter.
  *
@@ -85,11 +85,11 @@ export type MonacoModule = typeof monaco;
 export function ensureMonacoReady(): Promise<ShikiHighlighter> {
   if (!readyPromise) {
     readyPromise = createHighlighter({
-      themes: [LIGHT_THEME, DARK_THEME],
+      themes: [DARK_THEME],
       langs: [],
     })
       .then((hl) => {
-        // Registers the github themes under their ids so the editor's `theme`
+        // Registers the Dracula theme under its id so the editor's `theme`
         // option and monaco.editor.setTheme resolve them.
         shikiToMonaco(hl, monaco);
         return hl;
@@ -147,7 +147,7 @@ export function monacoLanguageId(lang: BundledLanguage | "text"): string {
  * Map the app's resolved palette to the Monaco theme id to apply.
  *
  * @param resolved Concrete palette from `normalizeResolvedTheme`, e.g. `"dark"`.
- * @returns The registered Monaco theme id, e.g. `"github-dark"`.
+ * @returns The registered Monaco theme id, e.g. `"dracula"`.
  */
 export function resolvedThemeToMonaco(resolved: ResolvedThemeMode): string {
   return resolved === "dark" ? DARK_THEME : LIGHT_THEME;

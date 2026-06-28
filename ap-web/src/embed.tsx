@@ -11,9 +11,8 @@
 //   - injects the host transport config (API fetcher + WebSocket URL),
 //   - tags a root element with `.goalrail-app` so the scoped stylesheet
 //     applies and Radix overlays portal back into this subtree,
-//   - applies the host-provided color scheme (`isDarkMode`): the embed is not
-//     user-toggleable (the theme switcher is hidden via `useIsEmbedded`); the
-//     host drives light/dark and the embed mirrors it,
+//   - applies Goalrail's single Dracula color scheme; the embed does not drift
+//     with the host page theme,
 //   - owns its OWN QueryClient (react-query is bundled, not shared).
 //
 // Only React/ReactDOM, react/jsx-runtime, and react-router(-dom) are left as
@@ -80,9 +79,8 @@ export interface GoalrailAppProps extends GoalrailHostConfig {
    */
   routing?: Partial<RoutingApi>;
   /**
-   * Host-provided color scheme. The embed has no theme switcher of its own
-   * (see `useIsEmbedded`); the host owns the theme and passes it here (e.g.
-   * `theme.isDarkMode` from `useDesignSystemTheme`). Defaults to light.
+   * Kept for API compatibility with existing hosts. Goalrail now renders
+   * its single Dracula dark theme regardless of this value.
    */
   isDarkMode?: boolean;
 }
@@ -143,7 +141,6 @@ function EmbedCapabilitiesProvider({ children }: { children: ReactNode }) {
 function GoalrailProviders({
   routing,
   basename,
-  isDarkMode,
 }: {
   routing: RoutingApi;
   basename?: string;
@@ -175,24 +172,18 @@ function GoalrailProviders({
     //     `.goalrail-app .dark`, so the dark class must be a DESCENDANT of the
     //     scope root, not the root itself.
     //   - the inner div carries the host-driven `dark` class (when dark) and is
-    //     the Radix portal root, so both the app and its overlays read the dark
-    //     token overrides. Light mode = no class → inherits the scope root's
-    //     light tokens.
+    //     the Radix portal root, so both the app and its overlays read the single
+    //     Dracula token set.
     <div className="goalrail-app" style={{ height: "100%", width: "100%" }}>
-      <div
-        ref={scopeRef}
-        className={isDarkMode ? "dark" : undefined}
-        style={{ height: "100%", width: "100%" }}
-      >
+      <div ref={scopeRef} className="dark" style={{ height: "100%", width: "100%" }}>
         <EmbeddedProvider>
           {/* next-themes is kept as the JS source of truth for `resolvedTheme`
-              (Monaco + the xterm terminal read it via `useTheme()`); the host
-              drives the value via `forcedTheme`. A private attribute +
+              (Monaco + the xterm terminal read it via `useTheme()`). A private attribute +
               `enableColorScheme={false}` keep it from mutating the host's
               `<html>` class or `color-scheme`. */}
           <NextThemesProvider
             attribute="data-goalrail-theme"
-            forcedTheme={isDarkMode ? "dark" : "light"}
+            forcedTheme="dark"
             enableColorScheme={false}
             disableTransitionOnChange
           >
