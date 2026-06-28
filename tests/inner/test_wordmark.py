@@ -1,4 +1,4 @@
-"""Tests for the Goalrail brand wordmark and Otto lockup."""
+"""Tests for the Goalrail brand wordmark and terminal-mark lockup."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from goalrail.inner.mascots import MASCOT_ART_COLOR, MASCOT_ART_LINES
 
 
 def test_wordmark_is_five_rows_of_equal_display_width() -> None:
-    """The wordmark renders as five columns-aligned rows (Otto's height)."""
+    """The wordmark renders as five columns-aligned rows (mark height)."""
 
     assert len(wordmark.WORDMARK_LINES) == 5
     widths = {cell_len(line) for line in wordmark.WORDMARK_LINES}
@@ -32,12 +32,12 @@ def test_every_letter_in_goalrail_has_a_glyph() -> None:
     assert all(not any(c.isalnum() for c in line) for line in wordmark.WORDMARK_LINES)
 
 
-def test_lockup_lines_pair_otto_with_wordmark() -> None:
-    """The lockup is Otto (5 rows) with the 5-row wordmark aligned 1:1."""
+def test_lockup_lines_pair_terminal_mark_with_wordmark() -> None:
+    """The lockup is the terminal mark with the 5-row wordmark aligned 1:1."""
 
     lines = wordmark.lockup_lines()
     assert len(lines) == len(MASCOT_ART_LINES) == 5
-    # Every row pairs Otto with a wordmark row; the cap and body rows carry
+    # Every row pairs the mark with a wordmark row; the cap and body rows carry
     # block glyphs (the final row is the all-line-art drop shadow).
     assert "█" in lines[0]
     assert "█" in lines[2]
@@ -75,7 +75,7 @@ def test_render_compact_includes_name() -> None:
     out = console.file.getvalue()  # type: ignore[attr-defined]
     assert "goalrail" in out
     assert "0.4.2" in out
-    assert "✦" in out
+    assert "GR" in out
 
 
 class _StringFile:

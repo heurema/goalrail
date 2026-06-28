@@ -31,7 +31,7 @@ from rich.theme import Theme
 
 from . import wordmark
 
-#: Brand accent — Otto's magenta-pink, shared with the mascot and banner.
+#: Brand accent, shared with the terminal mark and banner.
 ACCENT = wordmark.WORDMARK_COLOR
 
 #: Env var that force-disables the brand banner even on a TTY. Mirrors the
@@ -203,7 +203,7 @@ def print_landing(
     tagline: str | None = None,
 ) -> None:
     """
-    Print the full Otto + wordmark lockup (the hero banner), TTY-gated.
+    Print the full terminal mark + wordmark lockup, TTY-gated.
 
     Drawn on stderr so it never lands in piped stdout. No-op when the
     banner is suppressed (non-TTY or ``GOALRAIL_NO_BANNER``).
@@ -222,7 +222,7 @@ def print_landing(
 
 def print_brandmark(subtitle: str | None = None) -> None:
     """
-    Print the compact one-line brandmark (``✦ goalrail``), TTY-gated.
+    Print the compact one-line brandmark (``GR goalrail``), TTY-gated.
 
     For non-interactive commands that want a branded header without the
     full banner. Drawn on stderr; no-op when the banner is suppressed.

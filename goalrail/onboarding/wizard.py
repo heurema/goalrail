@@ -34,8 +34,8 @@ console = Console()
 _GREEN = "\033[32m"
 _DIM = "\033[90m"
 _BOLD = "\033[1m"
-# Brand accent — Otto's magenta-pink (#F43BA6), matching goalrail.inner.ui so
-# the setup picker's selection pointer reads as the same brand as the banner.
+# Brand accent (#F43BA6), matching goalrail.inner.ui so the setup picker's
+# selection pointer reads as the same brand as the banner.
 _ACCENT = "\033[38;2;244;59;166m"
 _RESET = "\033[0m"
 _CHECK = f"{_GREEN}\u2713{_RESET}"
